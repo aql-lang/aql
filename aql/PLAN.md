@@ -1,174 +1,165 @@
-# AQL Core Execution Loop - Implementation Plan
+# AQL Core Execution Loop — Implementation Plan
 
 ## Analysis
 
-AQL is a **concatenative stack machine**, not a traditional expression-based
-language. The current scaffolding follows a lexer → parser → AST → evaluator
-pipeline modeled on languages like Monkey/Lox. This is the wrong architecture
-for AQL. In a concatenative language:
+AQL is a **concatenative stack machine**. The core engine takes the next item,
+interprets it as a function, which modifies the stack. Literals self-insert.
 
-- There is no AST tree — the program is a flat sequence of tokens.
-- "Parsing" is trivial — just tokenization.
-- The real work is the **stack machine engine** that processes tokens one at a
-  time, matching typed function signatures against the stack.
+This plan focuses **only on the engine**. The input is not source text or
+tokens — it is a slice of typed `Value` structs. This lets us build and test
+the execution loop directly against internal data structures, without needing
+a lexer or parser.
 
-The existing packages will be substantially reworked:
+### What exists today
 
-| Package     | Current                          | Becomes                                  |
-|-------------|----------------------------------|------------------------------------------|
-| `token/`    | C-like tokens (let, fn, if, ...) | AQL tokens (WORD, INTEGER, STRING, ...)  |
-| `lexer/`    | Stub returning EOF               | AQL tokenizer (whitespace-delimited)     |
-| `ast/`      | Tree-structured AST nodes        | **Removed** — not needed for concatenative |
-| `parser/`   | Recursive-descent stub           | **Removed** — lexer feeds engine directly |
-| `evaluator/`| AST walker stub                  | **Replaced** by `engine/` stack machine  |
-| `object/`   | Simple value wrappers            | Typed stack values with hierarchical types |
-| (new)       | —                                | `engine/` — the core execution loop      |
+The current scaffolding (`token/`, `lexer/`, `parser/`, `ast/`, `evaluator/`,
+`object/`) follows a traditional expression-language pipeline. None of this is
+used by the engine plan. The existing packages are **left untouched** — they
+will be revisited when a lexer is added later.
+
+### What we are building
+
+A new `internal/engine/` package containing:
+
+| File              | Purpose                                         |
+|-------------------|-------------------------------------------------|
+| `types.go`        | Hierarchical type system                        |
+| `value.go`        | Typed stack values (string, integer, word, forward) |
+| `signature.go`    | Function signatures and matching algorithm      |
+| `registry.go`     | Function registry and built-in primitives       |
+| `engine.go`       | The core execution loop (stack machine)         |
+| `engine_test.go`  | Tests against all ENGINE.md examples            |
 
 ---
 
 ## Steps
 
-### Step 1: Redefine Token Types (`internal/token/`)
+### Step 1: Hierarchical Type System (`types.go`)
 
-Replace the current C-like token set with tokens appropriate for AQL.
-
-**Tokens needed:**
-
-| Token     | Examples               | Notes                                   |
-|-----------|------------------------|-----------------------------------------|
-| `WORD`    | `upper`, `lower`, `a`  | Unquoted identifier or function name    |
-| `INTEGER` | `1`, `99`              | Numeric literal                         |
-| `STRING`  | `"hello"`, `'hello'`   | Quoted string literal                   |
-| `SLASH`   | `/`                    | Arg count modifier (e.g. `lower/1`)     |
-| `EQUALS`  | `=`                    | Prefix/suffix forcing modifier          |
-| `COLON`   | `:`                    | Jsonic key:value separator              |
-| `COMMA`   | `,`                    | Jsonic list separator                   |
-| `LBRACKET`| `[`                    | Jsonic array open                       |
-| `RBRACKET`| `]`                    | Jsonic array close                      |
-| `LBRACE`  | `{`                    | Jsonic map open                         |
-| `RBRACE`  | `}`                    | Jsonic map close                        |
-| `GT`      | `>`                    | For set predicates (e.g. `>2`)          |
-| `EOF`     |                        | End of input                            |
-| `ILLEGAL` |                        | Unrecognized character                  |
-
-Remove all current keywords (`LET`, `FUNCTION`, `IF`, `ELSE`, `RETURN`, etc.)
-and operators (`==`, `!=`, `+`, `-`, `*`, `!`) that belong to expression-based
-languages.
-
-Update `LookupIdent` to recognize AQL built-in words (`upper`, `lower`, `dup`,
-`swap`, `drop`, `set`, `get`, `list`, `uniq`), returning `WORD` for all of
-them — the function registry handles dispatch, not the token system.
-
-**Files:** `internal/token/token.go`, `internal/token/token_test.go`
-
----
-
-### Step 2: Implement the Lexer (`internal/lexer/`)
-
-The AQL lexer tokenizes whitespace-delimited input:
-
-- **Whitespace** separates tokens (spaces, tabs, newlines).
-- **Quoted strings:** `"hello"` and `'hello'` — read until matching close quote.
-- **Integers:** sequences of digits.
-- **Words:** sequences of non-whitespace, non-delimiter characters. A word may
-  contain embedded `/` and `=` for modifiers (e.g. `lower/1`, `lower=`,
-  `=lower`). The lexer emits these as a single `WORD` token; modifier parsing
-  happens in the engine.
-- **Single-char delimiters:** `:`, `,`, `[`, `]`, `{`, `}`, `>` emitted
-  individually.
-
-The lexer should handle the full modifier syntax within words:
-- `lower/1` → WORD "lower/1"
-- `lower=` → WORD "lower="
-- `=lower` → WORD "=lower"
-- `lower/1=` → WORD "lower/1="
-- `F =lower/1` → WORD "F", then WORD "=lower/1"
-
-**Files:** `internal/lexer/lexer.go`, `internal/lexer/lexer_test.go`
-
-**Tests:** tokenize the ENGINE.md examples:
-- `a upper` → [WORD "a", WORD "upper", EOF]
-- `lower B` → [WORD "lower", WORD "B", EOF]
-- `99 lower` → [INTEGER "99", WORD "lower", EOF]
-- `lower/1 D` → [WORD "lower/1", WORD "D", EOF]
-
----
-
-### Step 3: Define the Type System (`internal/types/` — new package)
-
-AQL types are **hierarchical paths**: `string`, `string/proper`, `string/empty`,
+AQL types are **path-like hierarchies**: `string`, `string/proper`,
 `number/integer`, `data/map`.
 
 ```go
 type Type struct {
     Parts []string // e.g. ["string", "proper"]
 }
+
+func NewType(path string) Type            // "string/proper" → {["string","proper"]}
+func (t Type) Matches(pattern Type) bool  // child matches parent, not vice versa
+func (t Type) Specificity() int           // len(Parts)
+func (t Type) String() string             // "string/proper"
 ```
 
-**Key operations:**
-- `Matches(pattern Type) bool` — does this type satisfy a signature type?
-  A value of type `string/proper` matches pattern `string` (child matches
-  parent). A value of type `string` does NOT match pattern `string/proper`.
-- `Specificity() int` — number of parts. More parts = more specific.
-- `String() string` — `"string/proper"`.
+**Matching rules:**
+- `string/proper` matches pattern `string` (a child satisfies a parent).
+- `string` does NOT match pattern `string/proper` (parent is less specific).
+- `any` matches everything.
+- Exact match is the most specific.
 
-**Special types:**
-- `any` — matches everything (used in `dup`, `swap`, `drop`).
-- `forward` — the forward primitive marker type.
+**Well-known types (constants):**
 
-**Files:** `internal/types/types.go`, `internal/types/types_test.go`
+| Constant       | Path              |
+|----------------|-------------------|
+| `TAny`         | `any`             |
+| `TString`      | `string`          |
+| `TStringProper`| `string/proper`   |
+| `TStringEmpty` | `string/empty`    |
+| `TInteger`     | `number/integer`  |
+| `TWord`        | `word`            |
+| `TForward`     | `forward`         |
 
 ---
 
-### Step 4: Rework the Object System (`internal/object/`)
+### Step 2: Typed Stack Values (`value.go`)
 
-Stack values need to carry hierarchical type information. Rework the object
-system:
+Every entry on the stack is a `Value` with a hierarchical type and a payload.
 
 ```go
 type Value struct {
-    VType  types.Type
-    Data   interface{} // Go value: int64, string, map, etc.
+    VType Type
+    Data  interface{}
 }
 ```
 
-**Value constructors:**
-- `NewInteger(n int64) Value` — type `number/integer`
-- `NewString(s string) Value` — type `string/proper` (or `string/empty` if `""`)
-- `NewMap(m map[string]interface{}) Value` — type `data/map`
-- `NewForward(fn string, args int, arg int) Value` — type `forward`, data
-  holds forward accounting struct
+**Constructors:**
 
-**Forward accounting struct:**
+```go
+func NewString(s string) Value       // VType: string/proper (or string/empty if "")
+func NewInteger(n int64) Value       // VType: number/integer
+func NewWord(name string) Value      // VType: word — a function reference
+func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value
+func NewForward(info ForwardInfo) Value  // VType: forward
+```
+
+**Word payload** (for function references with optional modifiers):
+
+```go
+type WordInfo struct {
+    Name        string
+    ArgCount    int   // -1 = unspecified
+    ForcePrefix bool  // =lower
+    ForceSuffix bool  // lower=
+}
+```
+
+**Forward payload** (for suffix argument tracking):
+
 ```go
 type ForwardInfo struct {
-    FuncName   string // the deferred function name
-    ExpectedArgs int  // how many suffix args needed
-    CollectedArg int  // how many have been collected so far
+    FuncName     string  // the deferred function
+    ExpectedArgs int     // how many suffix args needed
+    CollectedArgs int    // how many collected so far
 }
 ```
 
-The `Forward` value gets placed on the stack when a suffix signature wins.
-It tracks how many arguments still need to be resolved before the deferred
-function can execute.
+Tests construct values directly:
+```go
+// Represents the input for "a upper"
+input := []Value{NewString("a"), NewWord("upper")}
 
-**Files:** `internal/object/object.go`, `internal/object/object_test.go`
+// Represents the input for "lower B"
+input := []Value{NewWord("lower"), NewString("B")}
+
+// Represents the input for "99 lower"
+input := []Value{NewInteger(99), NewWord("lower")}
+```
 
 ---
 
-### Step 5: Function Signatures and Registry (`internal/engine/registry.go` — new)
+### Step 3: Function Signatures and Matching (`signature.go`)
 
-A function in AQL has a name and one or more **signatures**. Each signature
-specifies the types it expects and whether they come from prefix (stack) or
-suffix (future) positions.
+A function has a name and one or more **signatures**. Each signature specifies
+the types it consumes from prefix (already on the stack) and/or suffix (future
+values) positions.
 
 ```go
 type Signature struct {
-    Prefix  []types.Type // types expected on the stack (rightmost = top)
-    Suffix  []types.Type // types expected from future tokens
-    Handler func(args []Value) ([]Value, error)
+    Prefix  []Type                              // types on the stack (rightmost = top)
+    Suffix  []Type                              // types from future values
+    Handler func(args []Value) ([]Value, error) // execution
 }
+```
 
+**Matching algorithm** — given a function name, the resolved stack, and
+optional modifiers (forcePrefix, forceSuffix, argCount):
+
+1. Collect all signatures for the function.
+2. Filter by modifiers: if `forcePrefix`, discard signatures with suffix args;
+   if `forceSuffix`, discard signatures with only prefix args;
+   if `argCount >= 0`, discard signatures where total args != argCount.
+3. For each remaining signature, check if the prefix portion matches the top
+   of the resolved stack (type matching from Step 1).
+4. Suffix signatures are **always candidates** — they don't require the future
+   values to exist yet (those will be collected by the forward mechanism).
+5. Rank matches by **specificity**: total arg count (longer wins), then sum of
+   type specificities (narrower wins). Prefix-only wins over suffix on ties.
+6. Return the best match, or nil if none.
+
+---
+
+### Step 4: Function Registry and Built-ins (`registry.go`)
+
+```go
 type Function struct {
     Name       string
     Signatures []Signature
@@ -177,268 +168,220 @@ type Function struct {
 type Registry struct {
     funcs map[string]*Function
 }
+
+func NewRegistry() *Registry
+func (r *Registry) Register(name string, sigs ...Signature)
+func (r *Registry) Lookup(name string) *Function
+func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *Signature
 ```
 
-**Signature matching algorithm:**
-1. For a given function name and current stack state, iterate all signatures.
-2. For each prefix-only signature: check if the top N stack values match the
-   required types (rightmost = top of stack).
-3. For each suffix signature: these are candidate forward matches.
-4. Among all matching signatures, pick the **most specific**: longest total
-   arg count, then narrowest types (highest total specificity).
-5. Ties are broken by preferring prefix over suffix.
+**Initial built-in functions:**
 
-**Built-in function registrations** (initial set):
-- `upper`: prefix `[string] → [string]`
-- `lower`: prefix `[string] → [string]`, suffix `[|string] → [string]`
-- `dup`: prefix `[any] → [any, any]`
-- `swap`: prefix `[any, any] → [any, any]`
-- `drop`: prefix `[any] → []`
+| Function | Prefix Signature         | Suffix Signature      | Behavior                  |
+|----------|--------------------------|-----------------------|---------------------------|
+| `upper`  | `[string] → [string]`    | —                     | Uppercase the string      |
+| `lower`  | `[string] → [string]`    | `[|string] → [string]`| Lowercase the string      |
+| `dup`    | `[any] → [any, any]`     | —                     | Duplicate top of stack    |
+| `swap`   | `[any, any] → [any, any]`| —                     | Swap top two values       |
+| `drop`   | `[any] → []`             | —                     | Remove top of stack       |
 
-**Files:** `internal/engine/registry.go`, `internal/engine/registry_test.go`
+Built-ins are registered in a `DefaultRegistry()` constructor.
 
 ---
 
-### Step 6: Implement the Core Execution Loop (`internal/engine/engine.go` — new)
+### Step 5: Core Execution Loop (`engine.go`)
 
-This is the heart of AQL. The engine maintains a **unified stack** where past
-(resolved) values and future (unresolved) tokens coexist, separated by a
-stack pointer.
+The engine holds a **unified stack** of Values. A **pointer** separates the
+resolved past (left) from the unresolved future (right).
 
 ```
-[resolved values ... | ^pointer ... unresolved tokens]
+stack:   [ resolved ... | ^ ... unresolved ]
+index:     0  1  ...  p   p+1  ...  n-1
 ```
 
-**Data structures:**
 ```go
 type Engine struct {
-    stack    []StackEntry  // unified stack
-    pointer  int           // index separating past from future
+    stack    []Value
+    pointer  int
     registry *Registry
 }
 
-type StackEntry struct {
-    Kind     EntryKind     // Resolved or Unresolved
-    Value    *Value        // set when resolved
-    Token    *token.Token  // set when unresolved
-}
+func New(registry *Registry) *Engine
+func (e *Engine) Run(input []Value) ([]Value, error)
 ```
 
-**Core loop (pseudocode):**
+**Core loop** (follows ENGINE.md examples step-by-step):
+
 ```
-func (e *Engine) Run(tokens []token.Token) (Value, error):
-    // Initialize: all tokens on the stack as unresolved
-    for each token in tokens:
-        stack.push(StackEntry{Kind: Unresolved, Token: &token})
-    pointer = 0
+Run(input):
+    e.stack = copy of input
+    e.pointer = 0
 
     loop:
         if pointer >= len(stack):
-            break  // no more future tokens
+            return stack (done)
 
-        entry = stack[pointer]
+        val = stack[pointer]
 
-        if entry is unresolved:
-            resolve entry:
-                if token is INTEGER literal:
-                    replace with resolved Value(number/integer)
-                    pointer++
-                    continue
-                if token is STRING literal:
-                    replace with resolved Value(string/proper or string/empty)
-                    pointer++
-                    continue
-                if token is WORD:
-                    // First: check if this is a plain value or a function
-                    parse word for modifiers (name, argCount, forcePrefix, forceSuffix)
-                    lookup function in registry
+        CASE 1 — Literal (string, integer, etc.):
+            // Already resolved. Advance.
+            pointer++
 
-                    if not a registered function:
-                        // treat as a bare identifier / string value
-                        replace with resolved Value(string/proper)
-                        pointer++
-                        continue
+        CASE 2 — Word (function reference):
+            lookup function in registry
 
-                    // Try signature matching
-                    match = registry.Match(name, stack[:pointer], stack[pointer+1:],
-                                           forcePrefix, forceSuffix, argCount)
+            if not found:
+                // Unknown word: treat as a bare string value
+                stack[pointer] = NewString(word.Name)
+                pointer++
+                continue
 
-                    if match is prefix:
-                        // Extract prefix args from stack, execute handler
-                        args = pop match.Prefix count from stack before pointer
-                        results = match.Handler(args)
-                        // Replace function entry with results
-                        splice results into stack at pointer position
-                        adjust pointer
-                        continue
+            match = registry.Match(name, stack[:pointer], word modifiers)
 
-                    if match is suffix:
-                        // Insert forward primitive
-                        insert ForwardInfo{name, len(match.Suffix), 0} before pointer
-                        pointer++ // skip past the forward
-                        continue
+            if match is nil:
+                return SignatureError
 
-                    if no match:
-                        return SignatureError
+            if match has only prefix args (or prefix matched):
+                // Pop prefix args from stack before pointer
+                args = stack[pointer - len(match.Prefix) : pointer]
+                results, err = match.Handler(args)
+                // Splice: remove args + word, insert results
+                stack = stack[:pointer-len(match.Prefix)] + results + stack[pointer+1:]
+                // Adjust pointer to re-examine position after results
+                pointer = pointer - len(match.Prefix) + len(results)
+                continue
 
-        if entry is resolved AND entry.Value is Forward:
-            // The implicit forward-check: a resolved value appeared after
-            // a forward primitive. Rearrange the stack.
-            forward = find the nearest Forward entry before pointer
-            move this resolved value to before the forward's function
-            forward.CollectedArg++
-            if forward.CollectedArg == forward.ExpectedArgs:
-                // All suffix args collected; now retry the function
-                // with a prefix match
-                remove the forward entry
-                set pointer back to the function position
-            continue
+            if match has suffix args:
+                // Insert forward primitive after the word
+                fwd = NewForward(ForwardInfo{
+                    FuncName:     name,
+                    ExpectedArgs: len(match.Suffix),
+                })
+                // Stack becomes: [..., word, fwd, | ^rest...]
+                splice fwd into stack at pointer+1
+                pointer += 2  // skip past word and forward
+                continue
 
-        // Regular resolved value — just advance
-        pointer++
+        CASE 3 — Forward:
+            // Should not be at the pointer directly during normal flow.
+            // This is handled by Case 4.
+            pointer++
 
-    // Output: top of resolved stack
-    return stack[len(stack)-1].Value
+        CASE 4 — After resolving/advancing past a literal, check for
+                  pending forward:
+            When a non-word value at position pointer has been advanced past,
+            scan backwards for the nearest Forward value.
+            If found:
+                // A suffix arg has been resolved.
+                fwd.CollectedArgs++
+                // Move this value to before the function word
+                // (the word is just before the forward in the stack)
+                move stack[pointer-1] to before the word position
+                if fwd.CollectedArgs == fwd.ExpectedArgs:
+                    // All args collected. Remove forward, reset pointer
+                    // to the word so it retries as a prefix match.
+                    remove forward from stack
+                    pointer = position of the word
+                continue
 ```
 
-**Files:** `internal/engine/engine.go`, `internal/engine/engine_test.go`
+**ENGINE.md `upper` walkthrough** — input: `[NewString("a"), NewWord("upper")]`
+
+```
+1. [| ^'a' upper]        pointer=0, val='a'(string)
+2. ['a' | ^upper]        pointer=1, val=upper(word), prefix match [string]→[string]
+3. args=['a'], handler→'A'
+4. ['A' |^]              pointer=1, done
+   output: ['A']
+```
+
+**ENGINE.md `lower B` walkthrough** — input: `[NewWord("lower"), NewString("B")]`
+
+```
+1. [| ^lower 'B']           pointer=0, val=lower(word), no prefix match (stack empty)
+                             suffix match [|string]→[string]
+2. [lower fwd{1,0} | ^'B']  insert forward, pointer=2
+3. val='B'(string), advance  pointer=3, but check for pending forward
+4. fwd found. CollectedArgs=1 == ExpectedArgs=1.
+   Move 'B' before lower:   ['B' lower | ^]
+   Remove forward, pointer→lower
+5. pointer at lower, prefix match [string]→[string]
+   args=['B'], handler→'b'
+6. ['b' |^]                  done
+   output: ['b']
+```
 
 ---
 
-### Step 7: Implement the Forward Mechanism (within engine)
+### Step 6: Tests (`engine_test.go`)
 
-The forward mechanism is the trickiest part. It's integrated into Step 6 but
-deserves explicit attention.
+All tests use typed Values directly — no lexing or parsing.
 
-**The forward protocol:**
-1. When `lower B` is processed, `lower` has no prefix match (stack is empty).
-   The suffix signature `[|string] → [string]` matches.
-2. The engine inserts: `[lower, forward{args:1, arg:0} | ^'B']`
-3. When `B` is resolved to a string value, the engine detects a forward entry
-   behind the pointer.
-4. The forward mechanism moves `'B'` to before `lower`:
-   `['B', lower | ^]`
-5. The pointer resets to `lower`. Now `lower` has a prefix match: `[string]`.
-6. `lower` executes normally, producing `['b' | ^]`.
-
-**The implicit forward signature:**
-All functions must have an implicit, very-low-precedence signature that checks
-for a Forward value on the stack. This is handled by the engine loop itself
-(Step 6), not by individual function registrations.
-
-**Files:** Part of `internal/engine/engine.go`
-
----
-
-### Step 8: Remove Unused Packages and Wire Up
-
-- **Remove** `internal/ast/` — concatenative language has no tree structure.
-- **Remove** `internal/parser/` — lexer feeds the engine directly.
-- **Remove** `internal/evaluator/` — replaced by `internal/engine/`.
-- **Update** `cmd/aql/main.go`:
-  - `run()` becomes: lexer.New(source) → lexer.Tokenize() → engine.New(registry) → engine.Run(tokens)
-  - `-ast` flag removed (or repurposed to show stack trace).
-  - `-tokens` flag still works (lexer output).
-- **Update** `internal/repl/repl.go`:
-  - REPL loop: read line → tokenize → engine.Run → print result.
-  - The engine instance persists across REPL lines (maintaining store state).
-
-**Files:** `cmd/aql/main.go`, `internal/repl/repl.go`, delete `internal/ast/`,
-`internal/parser/`, `internal/evaluator/`
-
----
-
-### Step 9: Implement Initial Built-in Primitives
-
-Register these in the default registry to validate the architecture:
-
-| Function | Signatures                          | Behavior                        |
-|----------|-------------------------------------|---------------------------------|
-| `upper`  | `[string] → [string]`               | Uppercase the string            |
-| `lower`  | `[string] → [string]`               | Lowercase the string            |
-|          | `[\|string] → [string]`             | (suffix variant)                |
-| `dup`    | `[any] → [any, any]`                | Duplicate top of stack          |
-| `swap`   | `[any, any] → [any, any]`           | Swap top two values             |
-| `drop`   | `[any] → []`                        | Remove top of stack             |
-| `set`    | `[\|word, any] → []`                | Store key=value                 |
-| `get`    | `[\|word] → [any]`                  | Retrieve stored value           |
-
-**Files:** `internal/engine/builtins.go`
-
----
-
-### Step 10: End-to-End Tests
-
-Validate the complete ENGINE.md examples:
-
+**Literal self-insert tests:**
 ```go
-// Prefix: simple case
-{"a upper", "A"}
-
-// Suffix: forward mechanism
-{"lower B", "b"}
-
-// Prefix: already on stack
-{"C lower", "c"}
-
-// Signature error
-{"99 lower", ERROR}
-
-// Arg count disambiguation
-{"lower/1 D", "d"}
-
-// Force suffix
-{"lower= E", "e"}
-
-// Force prefix
-{"F =lower", "f"}
-
-// Literals self-insert
-{"42", "42"}
-{"hello", "hello"}
+{name: "integer literal", input: []Value{NewInteger(42)}, want: []Value{NewInteger(42)}}
+{name: "string literal",  input: []Value{NewString("a")}, want: []Value{NewString("a")}}
 ```
 
-**Files:** `internal/engine/engine_test.go` (integration tests)
+**Prefix function tests:**
+```go
+{name: "a upper",   input: []Value{NewString("a"), NewWord("upper")},  want: []Value{NewString("A")}}
+{name: "C lower",   input: []Value{NewString("C"), NewWord("lower")},  want: []Value{NewString("c")}}
+```
+
+**Suffix (forward) function tests:**
+```go
+{name: "lower B",   input: []Value{NewWord("lower"), NewString("B")},  want: []Value{NewString("b")}}
+```
+
+**Signature error tests:**
+```go
+{name: "99 lower",  input: []Value{NewInteger(99), NewWord("lower")},  wantErr: true}
+```
+
+**Modifier tests:**
+```go
+{name: "lower/1 D", input: []Value{NewWordModified("lower",1,false,true), NewString("D")}, want: []Value{NewString("d")}}
+{name: "lower= E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
+{name: "F =lower",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
+```
+
+**Forth primitive tests:**
+```go
+{name: "dup",  input: []Value{NewInteger(1), NewWord("dup")},  want: []Value{NewInteger(1), NewInteger(1)}}
+{name: "swap", input: []Value{NewInteger(1), NewInteger(2), NewWord("swap")}, want: []Value{NewInteger(2), NewInteger(1)}}
+{name: "drop", input: []Value{NewInteger(1), NewWord("drop")}, want: []Value{}}
+```
 
 ---
 
 ## Execution Order
 
 ```
-Step 1: Token types          ─┐
-Step 2: Lexer                 ├─ Foundation (no dependencies between 1-3)
-Step 3: Type system          ─┘
-Step 4: Object system        ← depends on Step 3
-Step 5: Function registry    ← depends on Steps 3, 4
-Step 6: Core execution loop  ← depends on Steps 1, 2, 4, 5
-Step 7: Forward mechanism    ← part of Step 6, can be incremental
-Step 8: Wire up + cleanup    ← depends on Steps 1-7
-Step 9: Built-in primitives  ← depends on Steps 5, 6
-Step 10: End-to-end tests    ← depends on everything
+Step 1: Type system         ─┐
+Step 2: Stack values         ├─ Foundation (independent)
+                             │
+Step 3: Signatures          ─┘
+Step 4: Registry + builtins  ← depends on 1, 2, 3
+Step 5: Core execution loop  ← depends on 1, 2, 3, 4
+Step 6: Tests                ← depends on everything
 ```
 
-Steps 1, 2, and 3 can be implemented in parallel. Steps 4 and 5 follow.
-Step 6 is the critical path. Steps 8-10 finalize.
+Steps 1-3 have no interdependencies and can be built in parallel.
+Step 5 is the critical path.
 
 ---
 
-## Risks and Open Questions
+## Scope Boundary
 
-1. **Modifier parsing complexity**: Should `lower/1=` be a single WORD token
-   or should the lexer split it? Plan says single token, engine parses
-   modifiers. This keeps the lexer simple.
+**In scope:** The stack machine engine, typed values, signatures, matching,
+forward mechanism, and the initial built-in primitives listed above. All
+tested with Go structs directly.
 
-2. **Jsonic literals**: The SAMPLES.md shows `a:1,b:c,d:[{e:"f"}]` as a single
-   expression producing `data/map`. This requires the lexer/engine to recognize
-   jsonic syntax. This can be deferred to a follow-up — not needed for the core
-   loop.
-
-3. **Set predicates**: `>2` producing `uniq/predicate/number/integer` is a
-   higher-level feature. Deferred.
-
-4. **Store persistence**: `set`/`get` need a key-value store in the engine.
-   Simple `map[string]Value` suffices initially.
-
-5. **Multiple return values**: Functions like `dup` return multiple values.
-   The handler signature `func(args []Value) ([]Value, error)` handles this —
-   results are spliced onto the stack.
+**Out of scope (for now):**
+- Lexer / tokenizer / parser — input is typed values, not text
+- REPL / CLI wiring — the engine is a library, called from tests
+- Jsonic literals (`a:1,b:c`)
+- Set predicates (`>2`)
+- Storage (`set`/`get`) — can be added later as more builtins
+- The existing scaffolding packages — left untouched
