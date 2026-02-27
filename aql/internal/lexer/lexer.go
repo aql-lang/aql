@@ -1,7 +1,7 @@
 package lexer
 
 import (
-	"github.com/metsitaba/voxgig-exp/hay/internal/token"
+	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
 // Lexer performs lexical analysis on input source code.

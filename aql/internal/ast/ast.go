@@ -3,7 +3,7 @@ package ast
 import (
 	"bytes"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/token"
+	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
 // Node is the interface all AST nodes implement.

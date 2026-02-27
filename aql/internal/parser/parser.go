@@ -1,9 +1,9 @@
 package parser
 
 import (
-	"github.com/metsitaba/voxgig-exp/hay/internal/ast"
-	"github.com/metsitaba/voxgig-exp/hay/internal/lexer"
-	"github.com/metsitaba/voxgig-exp/hay/internal/token"
+	"github.com/metsitaba/voxgig-exp/aql/internal/ast"
+	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
 // Parser produces an AST from a sequence of tokens.

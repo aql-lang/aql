@@ -1,4 +1,4 @@
-module github.com/metsitaba/voxgig-exp/hay
+module github.com/metsitaba/voxgig-exp/aql
 
 go 1.24.7
 

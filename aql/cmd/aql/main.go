@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/evaluator"
-	"github.com/metsitaba/voxgig-exp/hay/internal/lexer"
-	"github.com/metsitaba/voxgig-exp/hay/internal/parser"
-	"github.com/metsitaba/voxgig-exp/hay/internal/repl"
+	"github.com/metsitaba/voxgig-exp/aql/internal/evaluator"
+	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
 
 // Version is set at build time via ldflags.
@@ -21,14 +21,14 @@ func main() {
 	showTokens := flag.Bool("tokens", false, "print tokens and exit")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: hay [options] [script.hay]\n\nOptions:\n")
+		fmt.Fprintf(os.Stderr, "Usage: aql [options] [script.aql]\n\nOptions:\n")
 		flag.PrintDefaults()
 	}
 
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("hay %s\n", Version)
+		fmt.Printf("aql %s\n", Version)
 		return
 	}
 
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// No source provided: start the REPL.
-	fmt.Printf("hay %s\n", Version)
+	fmt.Printf("aql %s\n", Version)
 	repl.Start(os.Stdin, os.Stdout)
 }
 

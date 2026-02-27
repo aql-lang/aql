@@ -1,8 +1,8 @@
 package evaluator
 
 import (
-	"github.com/metsitaba/voxgig-exp/hay/internal/ast"
-	"github.com/metsitaba/voxgig-exp/hay/internal/object"
+	"github.com/metsitaba/voxgig-exp/aql/internal/ast"
+	"github.com/metsitaba/voxgig-exp/aql/internal/object"
 )
 
 // NULL is a shared Null singleton.

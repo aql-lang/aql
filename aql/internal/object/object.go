@@ -13,7 +13,7 @@ const (
 	STRING_OBJ  ObjectType = "STRING"
 )
 
-// Object is the interface all hay values implement.
+// Object is the interface all aql values implement.
 type Object interface {
 	Type() ObjectType
 	Inspect() string

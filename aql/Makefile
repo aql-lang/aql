@@ -1,7 +1,7 @@
 .PHONY: build test clean install run vet fmt
 
-BINARY := bin/hay
-CMD := ./cmd/hay
+BINARY := bin/aql
+CMD := ./cmd/aql
 VERSION := 0.1.0-dev
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 

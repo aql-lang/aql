@@ -3,9 +3,9 @@ package evaluator
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/lexer"
-	"github.com/metsitaba/voxgig-exp/hay/internal/object"
-	"github.com/metsitaba/voxgig-exp/hay/internal/parser"
+	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/object"
+	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
 func testEval(input string) object.Object {

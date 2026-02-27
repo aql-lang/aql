@@ -8,9 +8,9 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/evaluator"
-	"github.com/metsitaba/voxgig-exp/hay/internal/lexer"
-	"github.com/metsitaba/voxgig-exp/hay/internal/parser"
+	"github.com/metsitaba/voxgig-exp/aql/internal/evaluator"
+	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
 // PROMPT is the REPL prompt string.
@@ -69,7 +69,7 @@ func historyFile() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".hay_history")
+	return filepath.Join(home, ".aql_history")
 }
 
 // toReadCloser wraps an io.Reader in an io.ReadCloser if needed.

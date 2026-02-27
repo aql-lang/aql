@@ -3,7 +3,7 @@ package lexer
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/token"
+	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
 func TestNextToken(t *testing.T) {

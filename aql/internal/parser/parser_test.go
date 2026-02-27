@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/hay/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
 )
 
 func TestParseProgram(t *testing.T) {
