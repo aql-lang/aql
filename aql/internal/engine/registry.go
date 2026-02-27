@@ -107,16 +107,17 @@ func registerBuiltins(r *Registry) {
 	})
 
 	// Arithmetic: each has prefix [int, int] and infix [int | int].
-	registerBinaryIntOp(r, "add", func(a, b int64) (int64, error) { return a + b, nil })
-	registerBinaryIntOp(r, "sub", func(a, b int64) (int64, error) { return a - b, nil })
-	registerBinaryIntOp(r, "mul", func(a, b int64) (int64, error) { return a * b, nil })
-	registerBinaryIntOp(r, "div", func(a, b int64) (int64, error) {
+	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
+	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })
+	registerBinaryIntOp(r, "sub", 1, func(a, b int64) (int64, error) { return a - b, nil })
+	registerBinaryIntOp(r, "mul", 2, func(a, b int64) (int64, error) { return a * b, nil })
+	registerBinaryIntOp(r, "div", 2, func(a, b int64) (int64, error) {
 		if b == 0 {
 			return 0, fmt.Errorf("division by zero")
 		}
 		return a / b, nil
 	})
-	registerBinaryIntOp(r, "mod", func(a, b int64) (int64, error) {
+	registerBinaryIntOp(r, "mod", 2, func(a, b int64) (int64, error) {
 		if b == 0 {
 			return 0, fmt.Errorf("modulo by zero")
 		}
@@ -126,7 +127,7 @@ func registerBuiltins(r *Registry) {
 
 // registerBinaryIntOp registers a binary integer operation with both a
 // prefix signature [int, int] → [int] and an infix signature [int | int] → [int].
-func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
+func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value) ([]Value, error) {
 		result, err := op(args[0].AsInteger(), args[1].AsInteger())
 		if err != nil {
@@ -137,14 +138,16 @@ func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, e
 	r.Register(name,
 		// Prefix (Forth-style): 1 2 add → 3
 		Signature{
-			Prefix:  []Type{TInteger, TInteger},
-			Handler: handler,
+			Prefix:     []Type{TInteger, TInteger},
+			Precedence: prec,
+			Handler:    handler,
 		},
 		// Infix (via forward): 1 add 2 → 3
 		Signature{
-			Prefix:  []Type{TInteger},
-			Suffix:  []Type{TInteger},
-			Handler: handler,
+			Prefix:     []Type{TInteger},
+			Suffix:     []Type{TInteger},
+			Precedence: prec,
+			Handler:    handler,
 		},
 	)
 }

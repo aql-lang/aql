@@ -112,8 +112,9 @@ func (e *Engine) execPrefix(match *MatchResult) error {
 	newStack = append(newStack, e.stack[e.pointer+1:]...)
 	e.stack = newStack
 
-	// Pointer moves to position after the inserted results.
-	e.pointer = argStart + len(results)
+	// Pointer moves to start of results so they re-enter the main loop.
+	// This allows results to be collected by any pending forward.
+	e.pointer = argStart
 	return nil
 }
 
@@ -124,6 +125,7 @@ func (e *Engine) insertForward(w WordInfo, match *MatchResult) error {
 		FuncName:     w.Name,
 		ExpectedArgs: len(match.Sig.Suffix),
 		FuncIndex:    e.pointer,
+		Precedence:   match.Sig.Precedence,
 	})
 
 	// Insert fwd after the word at e.pointer.
@@ -161,6 +163,13 @@ func (e *Engine) stepLiteral() error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
+	// Peek ahead: if the next item is a higher-precedence infix operator,
+	// defer collection and let that operator execute first.
+	if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
+		e.pointer++
+		return nil
+	}
+
 	// Remove the value from its current position.
 	val := e.stack[valIdx]
 	e.stack = append(e.stack[:valIdx], e.stack[valIdx+1:]...)
@@ -196,6 +205,31 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	return nil
+}
+
+// peekPrecedence returns the highest infix precedence of the word at stack[idx],
+// or 0 if idx is out of range or the entry is not an infix word.
+func (e *Engine) peekPrecedence(idx int) int {
+	if idx >= len(e.stack) {
+		return 0
+	}
+	v := e.stack[idx]
+	if !v.IsWord() {
+		return 0
+	}
+	w := v.AsWord()
+	fn := e.registry.Lookup(w.Name)
+	if fn == nil {
+		return 0
+	}
+	var maxPrec int
+	for i := range fn.Signatures {
+		sig := &fn.Signatures[i]
+		if len(sig.Suffix) > 0 && sig.Precedence > maxPrec {
+			maxPrec = sig.Precedence
+		}
+	}
+	return maxPrec
 }
 
 // matchSuffixOnly finds a suffix-only signature, ignoring prefix requirements.

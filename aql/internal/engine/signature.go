@@ -4,9 +4,10 @@ package engine
 // Prefix types are consumed from the resolved stack (rightmost = top).
 // Suffix types are consumed from future values via the forward mechanism.
 type Signature struct {
-	Prefix  []Type
-	Suffix  []Type
-	Handler func(args []Value) ([]Value, error)
+	Prefix     []Type
+	Suffix     []Type
+	Precedence int // higher binds tighter; 0 = default (no precedence)
+	Handler    func(args []Value) ([]Value, error)
 }
 
 // IsPrefixOnly reports whether this signature takes only prefix args.

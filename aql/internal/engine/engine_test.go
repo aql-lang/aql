@@ -419,6 +419,100 @@ func TestArithmeticChaining(t *testing.T) {
 	}
 }
 
+// --- Engine tests: operator precedence ---
+
+func TestPrecedenceMulBeforeAdd(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 2 add 3 mul 4 → 2+(3*4) = 14
+		{"add then mul", []Value{
+			NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
+		}, 14},
+		// 2 mul 3 add 4 → (2*3)+4 = 10
+		{"mul then add", []Value{
+			NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("add"), NewInteger(4),
+		}, 10},
+		// 1 add 2 mul 3 add 4 → 1+(2*3)+4 = 11
+		{"add mul add", []Value{
+			NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
+			NewWord("add"), NewInteger(4),
+		}, 11},
+		// 2 add 3 mul 4 mul 5 → 2+(3*4*5) = 62
+		{"add mul mul", []Value{
+			NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
+			NewWord("mul"), NewInteger(5),
+		}, 62},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestPrecedenceSameLevel(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 10 sub 3 sub 1 → (10-3)-1 = 6 (left-to-right)
+		{"sub sub", []Value{
+			NewInteger(10), NewWord("sub"), NewInteger(3), NewWord("sub"), NewInteger(1),
+		}, 6},
+		// 2 mul 6 div 3 → (2*6)/3 = 4 (left-to-right)
+		{"mul div", []Value{
+			NewInteger(2), NewWord("mul"), NewInteger(6), NewWord("div"), NewInteger(3),
+		}, 4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestPrecedencePrefixUnaffected(t *testing.T) {
+	// Prefix (Forth-style) should still work: 2 3 mul 4 add → 10
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(2), NewInteger(3), NewWord("mul"),
+		NewWord("add"), NewInteger(4),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 10 {
+		t.Errorf("got %d, want 10", result[0].AsInteger())
+	}
+}
+
 // --- Engine tests: multiple operations ---
 
 func TestChainedOps(t *testing.T) {
