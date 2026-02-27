@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Function groups all signatures for a named function.
 type Function struct {
@@ -102,4 +105,46 @@ func registerBuiltins(r *Registry) {
 			return nil, nil
 		},
 	})
+
+	// Arithmetic: each has prefix [int, int] and infix [int | int].
+	registerBinaryIntOp(r, "add", func(a, b int64) (int64, error) { return a + b, nil })
+	registerBinaryIntOp(r, "sub", func(a, b int64) (int64, error) { return a - b, nil })
+	registerBinaryIntOp(r, "mul", func(a, b int64) (int64, error) { return a * b, nil })
+	registerBinaryIntOp(r, "div", func(a, b int64) (int64, error) {
+		if b == 0 {
+			return 0, fmt.Errorf("division by zero")
+		}
+		return a / b, nil
+	})
+	registerBinaryIntOp(r, "mod", func(a, b int64) (int64, error) {
+		if b == 0 {
+			return 0, fmt.Errorf("modulo by zero")
+		}
+		return a % b, nil
+	})
+}
+
+// registerBinaryIntOp registers a binary integer operation with both a
+// prefix signature [int, int] → [int] and an infix signature [int | int] → [int].
+func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
+	handler := func(args []Value) ([]Value, error) {
+		result, err := op(args[0].AsInteger(), args[1].AsInteger())
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewInteger(result)}, nil
+	}
+	r.Register(name,
+		// Prefix (Forth-style): 1 2 add → 3
+		Signature{
+			Prefix:  []Type{TInteger, TInteger},
+			Handler: handler,
+		},
+		// Infix (via forward): 1 add 2 → 3
+		Signature{
+			Prefix:  []Type{TInteger},
+			Suffix:  []Type{TInteger},
+			Handler: handler,
+		},
+	)
 }

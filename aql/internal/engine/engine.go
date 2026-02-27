@@ -85,11 +85,11 @@ func (e *Engine) stepWord(val Value) error {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
 
-	if match.Sig.IsPrefixOnly() || len(match.Sig.Prefix) > 0 {
+	if match.Sig.IsPrefixOnly() {
 		return e.execPrefix(match)
 	}
 
-	// Pure suffix signature matched (no prefix args).
+	// Signature has suffix args — use forward mechanism to collect them.
 	return e.insertForward(w, match)
 }
 

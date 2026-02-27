@@ -270,6 +270,155 @@ func TestUnknownWordBecomesString(t *testing.T) {
 	}
 }
 
+// --- Engine tests: arithmetic (prefix / Forth-style) ---
+
+func TestArithmeticPrefix(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 1 2 add → 3
+		{"add", []Value{NewInteger(1), NewInteger(2), NewWord("add")}, 3},
+		// 10 3 sub → 7
+		{"sub", []Value{NewInteger(10), NewInteger(3), NewWord("sub")}, 7},
+		// 4 5 mul → 20
+		{"mul", []Value{NewInteger(4), NewInteger(5), NewWord("mul")}, 20},
+		// 10 3 div → 3
+		{"div", []Value{NewInteger(10), NewInteger(3), NewWord("div")}, 3},
+		// 10 3 mod → 1
+		{"mod", []Value{NewInteger(10), NewInteger(3), NewWord("mod")}, 1},
+		// negative: 3 10 sub → -7
+		{"sub negative", []Value{NewInteger(3), NewInteger(10), NewWord("sub")}, -7},
+		// zero: 0 5 add → 5
+		{"add zero", []Value{NewInteger(0), NewInteger(5), NewWord("add")}, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+// --- Engine tests: arithmetic (infix via forward mechanism) ---
+
+func TestArithmeticInfix(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 1 add 2 → 3
+		{"add", []Value{NewInteger(1), NewWord("add"), NewInteger(2)}, 3},
+		// 10 sub 3 → 7
+		{"sub", []Value{NewInteger(10), NewWord("sub"), NewInteger(3)}, 7},
+		// 4 mul 5 → 20
+		{"mul", []Value{NewInteger(4), NewWord("mul"), NewInteger(5)}, 20},
+		// 10 div 3 → 3
+		{"div", []Value{NewInteger(10), NewWord("div"), NewInteger(3)}, 3},
+		// 10 mod 3 → 1
+		{"mod", []Value{NewInteger(10), NewWord("mod"), NewInteger(3)}, 1},
+		// 1 sub 2 → -1
+		{"sub negative", []Value{NewInteger(1), NewWord("sub"), NewInteger(2)}, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+// --- Engine tests: arithmetic errors ---
+
+func TestArithmeticErrors(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	tests := []struct {
+		name  string
+		input []Value
+	}{
+		// division by zero
+		{"div by zero prefix", []Value{NewInteger(10), NewInteger(0), NewWord("div")}},
+		{"div by zero infix", []Value{NewInteger(10), NewWord("div"), NewInteger(0)}},
+		// modulo by zero
+		{"mod by zero prefix", []Value{NewInteger(10), NewInteger(0), NewWord("mod")}},
+		{"mod by zero infix", []Value{NewInteger(10), NewWord("mod"), NewInteger(0)}},
+		// type mismatch: string with add
+		{"string add", []Value{NewString("a"), NewInteger(1), NewWord("add")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := e.Run(tt.input)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+		})
+	}
+}
+
+// --- Engine tests: arithmetic chaining ---
+
+func TestArithmeticChaining(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 1 2 add 3 add → 6 (prefix then infix)
+		{"prefix then infix", []Value{
+			NewInteger(1), NewInteger(2), NewWord("add"),
+			NewWord("add"), NewInteger(3),
+		}, 6},
+		// 2 3 mul 4 add → 10 (prefix mul, then infix add)
+		{"mul then add", []Value{
+			NewInteger(2), NewInteger(3), NewWord("mul"),
+			NewWord("add"), NewInteger(4),
+		}, 10},
+		// 10 sub 3 → 7, then dup → [7, 7], then mul → 49
+		{"infix sub, dup, prefix mul", []Value{
+			NewInteger(10), NewWord("sub"), NewInteger(3),
+			NewWord("dup"),
+			NewWord("mul"),
+		}, 49},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
 // --- Engine tests: multiple operations ---
 
 func TestChainedOps(t *testing.T) {
