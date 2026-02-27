@@ -42,15 +42,20 @@ _[] -> [data/map]_
 
 `>2` - numbers greater than 2
 
-_[] -> [set/predicate]_
+_[] -> [uniq/predicate/number/integer]_
 
 
 
-`set [a,b]` - set of strings "a", "b"
+`uniq [a,b]` - set of strings "a", "b"
 
-_[] -> [set/extant]_
+_[] -> [uniq/extant/string]_
 
 
+
+# Storage
+
+`set foo 99` - sets store key foo to value 99
+`get foo` - gets value of store key foo
 
 
 ## Seneca REPL inspired
