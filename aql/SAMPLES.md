@@ -37,6 +37,12 @@ _[] -> [string/empty]_
 _[] -> [data/map]_
 
 
+# Control
+
+end - terminates current prefix args and forces remaining 
+args to be got from stack
+
+
 ## Sets
 
 
@@ -64,7 +70,25 @@ future tokens, in reverse order.
 examples:
 
 set foo 99
-[|] -> [99] - the value is left on the stack
+
+[|foo 99] -> [99|] - the value is left on the stack
+
+
+set foo - assumes value is already on stack
+
+[99 | foo] -> [99|]
+
+
+set - all args on stack - note order
+
+[99 foo|] -> [99|]
+
+
+set foo end 88 - shows usage of end
+
+[99 | foo end 88] -> [99 88|] - and store contains foo:99
+
+
 
 `get foo` - gets value of store key foo
 
