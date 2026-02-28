@@ -30,6 +30,10 @@ func NewType(path string) Type {
 //   - A parent does NOT match a child: string does not match string/proper.
 func (t Type) Matches(pattern Type) bool {
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "any" {
+		// "any" matches all data types but not internal types (word, forward).
+		if t.Parts[0] == "word" || t.Parts[0] == "forward" {
+			return false
+		}
 		return true
 	}
 	if len(t.Parts) < len(pattern.Parts) {

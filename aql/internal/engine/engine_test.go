@@ -513,6 +513,178 @@ func TestPrecedencePrefixUnaffected(t *testing.T) {
 	}
 }
 
+// --- Engine tests: storage (set/get) ---
+
+func TestSetGetSuffix(t *testing.T) {
+	// set foo 99 end get foo → [99]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("end"),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("got %d, want 99", result[0].AsInteger())
+	}
+}
+
+func TestSetGetWithoutEnd(t *testing.T) {
+	// set foo 99 get foo → [99] (end is optional)
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("got %d, want 99", result[0].AsInteger())
+	}
+}
+
+func TestSetGetPrefix(t *testing.T) {
+	// "foo" 99 set → stores foo=99, then "foo" get → [99]
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewString("bar"), NewInteger(42), NewWord("set"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+	result, err := e.Run([]Value{
+		NewString("bar"), NewWord("get"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on get: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestSetGetString(t *testing.T) {
+	// set name hello end get name → ['hello']
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("name"), NewString("hello"),
+		NewWord("end"),
+		NewWord("get"), NewWord("name"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsString() != "hello" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "hello")
+	}
+}
+
+func TestSetOverwrite(t *testing.T) {
+	// set x 1 end set x 2 end get x → [2]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("x"), NewInteger(1),
+		NewWord("end"),
+		NewWord("set"), NewWord("x"), NewInteger(2),
+		NewWord("end"),
+		NewWord("get"), NewWord("x"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 2 {
+		t.Errorf("got %d, want 2", result[0].AsInteger())
+	}
+}
+
+func TestGetUnknownKey(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("get"), NewWord("missing")})
+	if err == nil {
+		t.Fatal("expected error for unknown key, got nil")
+	}
+}
+
+func TestEndNoOp(t *testing.T) {
+	// 42 end → [42] (end just removes itself)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(42), NewWord("end")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestEndMultiple(t *testing.T) {
+	// 1 end 2 end 3 → [1, 2, 3]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("end"),
+		NewInteger(2), NewWord("end"),
+		NewInteger(3),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, want := range []int64{1, 2, 3} {
+		if result[i].AsInteger() != want {
+			t.Errorf("result[%d] = %d, want %d", i, result[i].AsInteger(), want)
+		}
+	}
+}
+
+func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
+	// Store persists across multiple Run calls on the same registry
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewWord("set"), NewWord("key"), NewInteger(100),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+	result, err := e.Run([]Value{
+		NewWord("get"), NewWord("key"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on get: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 100 {
+		t.Errorf("got %v, want [100]", result)
+	}
+}
+
 // --- Engine tests: multiple operations ---
 
 func TestChainedOps(t *testing.T) {

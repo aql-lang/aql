@@ -14,11 +14,15 @@ type Function struct {
 // Registry maps function names to their definitions.
 type Registry struct {
 	funcs map[string]*Function
+	Store map[string]Value // key-value store for set/get
 }
 
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{funcs: make(map[string]*Function)}
+	return &Registry{
+		funcs: make(map[string]*Function),
+		Store: make(map[string]Value),
+	}
 }
 
 // Register adds one or more signatures to a named function.
@@ -123,6 +127,66 @@ func registerBuiltins(r *Registry) {
 		}
 		return a % b, nil
 	})
+
+	registerStorage(r)
+
+	// end: [] -> [] (no-op separator, just removes itself from the stack)
+	r.Register("end", Signature{
+		Handler: func(args []Value) ([]Value, error) {
+			return nil, nil
+		},
+	})
+}
+
+// storeKey converts a Value to a string key for the store.
+func storeKey(v Value) string {
+	if v.VType.Matches(TString) {
+		return v.AsString()
+	}
+	return fmt.Sprintf("%v", v.Data)
+}
+
+func registerStorage(r *Registry) {
+	setHandler := func(args []Value) ([]Value, error) {
+		key := storeKey(args[0])
+		r.Store[key] = args[1]
+		return nil, nil
+	}
+
+	// set: [any, any] -> [] (prefix)
+	//      [| any, any] -> [] (suffix)
+	r.Register("set",
+		Signature{
+			Prefix:  []Type{TAny, TAny},
+			Handler: setHandler,
+		},
+		Signature{
+			Suffix:  []Type{TAny, TAny},
+			Handler: setHandler,
+		},
+	)
+
+	getHandler := func(args []Value) ([]Value, error) {
+		key := storeKey(args[0])
+		val, ok := r.Store[key]
+		if !ok {
+			return nil, fmt.Errorf("unknown key: %s", key)
+		}
+		return []Value{val}, nil
+	}
+
+	// get: [any] -> [any] (prefix)
+	//      [| any] -> [any] (suffix)
+	r.Register("get",
+		Signature{
+			Prefix:  []Type{TAny},
+			Handler: getHandler,
+		},
+		Signature{
+			Suffix:  []Type{TAny},
+			Handler: getHandler,
+		},
+	)
 }
 
 // registerBinaryIntOp registers a binary integer operation with both a

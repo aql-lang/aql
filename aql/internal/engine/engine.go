@@ -68,8 +68,9 @@ func (e *Engine) stepWord(val Value) error {
 
 	if fn == nil {
 		// Unknown word — treat as a bare string value.
+		// Don't advance pointer so stepLiteral runs on the next iteration
+		// and can collect this value for any pending forward.
 		e.stack[e.pointer] = NewString(w.Name)
-		e.pointer++
 		return nil
 	}
 
