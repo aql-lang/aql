@@ -921,3 +921,1587 @@ func TestParenWithPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// ==========================================================================
+// Edge case tests — exhaustive coverage of all language elements
+// ==========================================================================
+
+// --- Edge: type system ---
+
+func TestEdgeTypeAnyDoesNotMatchWord(t *testing.T) {
+	if TWord.Matches(TAny) {
+		t.Error("word should not match any")
+	}
+}
+
+func TestEdgeTypeAnyDoesNotMatchForward(t *testing.T) {
+	if TForward.Matches(TAny) {
+		t.Error("forward should not match any")
+	}
+}
+
+func TestEdgeTypeAnyDoesNotMatchOpenParen(t *testing.T) {
+	if TOpenParen.Matches(TAny) {
+		t.Error("paren/open should not match any")
+	}
+}
+
+func TestEdgeTypeWordMatchesItself(t *testing.T) {
+	if !TWord.Matches(TWord) {
+		t.Error("word should match word")
+	}
+}
+
+func TestEdgeTypeForwardMatchesItself(t *testing.T) {
+	if !TForward.Matches(TForward) {
+		t.Error("forward should match forward")
+	}
+}
+
+func TestEdgeTypeOpenParenMatchesParen(t *testing.T) {
+	// paren/open should match pattern "paren"
+	tParen := NewType("paren")
+	if !TOpenParen.Matches(tParen) {
+		t.Error("paren/open should match paren")
+	}
+}
+
+func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
+	if !TStringEmpty.Matches(TAny) {
+		t.Error("string/empty should match any")
+	}
+}
+
+func TestEdgeTypeUnrelatedTypes(t *testing.T) {
+	tFoo := NewType("foo/bar")
+	tBaz := NewType("baz")
+	if tFoo.Matches(tBaz) {
+		t.Error("foo/bar should not match baz")
+	}
+}
+
+func TestEdgeTypeDeeplyNested(t *testing.T) {
+	tDeep := NewType("a/b/c/d")
+	tShallow := NewType("a/b")
+	if !tDeep.Matches(tShallow) {
+		t.Error("a/b/c/d should match a/b")
+	}
+	if tShallow.Matches(tDeep) {
+		t.Error("a/b should not match a/b/c/d")
+	}
+}
+
+func TestEdgeTypeSelfMatch(t *testing.T) {
+	types := []Type{TAny, TString, TStringProper, TStringEmpty, TInteger}
+	for _, typ := range types {
+		if !typ.Matches(typ) {
+			t.Errorf("%s should match itself", typ)
+		}
+	}
+}
+
+// --- Edge: value constructors ---
+
+func TestEdgeNewIntegerZero(t *testing.T) {
+	v := NewInteger(0)
+	if v.AsInteger() != 0 {
+		t.Errorf("got %d, want 0", v.AsInteger())
+	}
+}
+
+func TestEdgeNewIntegerNegative(t *testing.T) {
+	v := NewInteger(-999)
+	if v.AsInteger() != -999 {
+		t.Errorf("got %d, want -999", v.AsInteger())
+	}
+}
+
+func TestEdgeNewIntegerMaxMin(t *testing.T) {
+	vMax := NewInteger(9223372036854775807) // max int64
+	if vMax.AsInteger() != 9223372036854775807 {
+		t.Errorf("got %d, want max int64", vMax.AsInteger())
+	}
+	vMin := NewInteger(-9223372036854775808) // min int64
+	if vMin.AsInteger() != -9223372036854775808 {
+		t.Errorf("got %d, want min int64", vMin.AsInteger())
+	}
+}
+
+func TestEdgeNewStringSpecialChars(t *testing.T) {
+	v := NewString("hello\nworld\ttab")
+	if v.AsString() != "hello\nworld\ttab" {
+		t.Errorf("got %q, want string with newline and tab", v.AsString())
+	}
+}
+
+func TestEdgeNewOpenParen(t *testing.T) {
+	v := NewOpenParen()
+	if !v.IsOpenParen() {
+		t.Error("IsOpenParen() = false for NewOpenParen()")
+	}
+	if v.IsWord() {
+		t.Error("IsWord() = true for open paren")
+	}
+	if v.IsForward() {
+		t.Error("IsForward() = true for open paren")
+	}
+	if v.String() != "(" {
+		t.Errorf("String() = %q, want '('", v.String())
+	}
+}
+
+func TestEdgeValueStringRepresentations(t *testing.T) {
+	tests := []struct {
+		name string
+		val  Value
+		want string
+	}{
+		{"word", NewWord("test"), "word(test)"},
+		{"integer", NewInteger(42), "42"},
+		{"string", NewString("hi"), "'hi'"},
+		{"empty string", NewString(""), "''"},
+		{"open paren", NewOpenParen(), "("},
+		{"forward", NewForward(ForwardInfo{FuncName: "add", ExpectedArgs: 1, CollectedArgs: 0}), "forward(add,0/1)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.val.String(); got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Edge: empty input ---
+
+func TestEdgeEmptyInput(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+// --- Edge: multiple literals ---
+
+func TestEdgeMultipleLiterals(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewInteger(3),
+		NewString("a"), NewString("b"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 5 {
+		t.Fatalf("got %d values, want 5: %v", len(result), result)
+	}
+}
+
+// --- Edge: unknown words ---
+
+func TestEdgeMultipleUnknownWords(t *testing.T) {
+	// foo bar baz → ['foo', 'bar', 'baz']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("foo"), NewWord("bar"), NewWord("baz"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, want := range []string{"foo", "bar", "baz"} {
+		if result[i].AsString() != want {
+			t.Errorf("result[%d] = %q, want %q", i, result[i].AsString(), want)
+		}
+	}
+}
+
+func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
+	// lower foo → 'foo' (foo becomes string, then lower collects it)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewWord("lower"), NewWord("foo")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsString() != "foo" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "foo")
+	}
+}
+
+func TestEdgeUnknownWordAsSetKey(t *testing.T) {
+	// set mykey 42 end get mykey → [42]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("mykey"), NewInteger(42),
+		NewWord("end"),
+		NewWord("get"), NewWord("mykey"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+// --- Edge: upper ---
+
+func TestEdgeUpperAlreadyUpper(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("ABC"), NewWord("upper")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsString() != "ABC" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "ABC")
+	}
+}
+
+func TestEdgeUpperEmptyString(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString(""), NewWord("upper")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsString() != "" {
+		t.Errorf("got %q, want empty", result[0].AsString())
+	}
+}
+
+func TestEdgeUpperOnInteger(t *testing.T) {
+	// 42 upper → signature error (integer doesn't match string)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewInteger(42), NewWord("upper")})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Edge: lower ---
+
+func TestEdgeLowerAlreadyLower(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("abc"), NewWord("lower")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsString() != "abc" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "abc")
+	}
+}
+
+func TestEdgeLowerSuffixOnInteger(t *testing.T) {
+	// lower 42 → signature error (forward can't collect integer for string param)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("lower"), NewInteger(42)})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Edge: dup ---
+
+func TestEdgeDupString(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("hello"), NewWord("dup")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2", len(result))
+	}
+	if result[0].AsString() != "hello" || result[1].AsString() != "hello" {
+		t.Errorf("got [%v, %v], want ['hello', 'hello']", result[0], result[1])
+	}
+}
+
+func TestEdgeDupNoArgs(t *testing.T) {
+	// dup with nothing on stack → error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("dup")})
+	if err == nil {
+		t.Fatal("expected error for dup with no args, got nil")
+	}
+}
+
+// --- Edge: swap ---
+
+func TestEdgeSwapMixedTypes(t *testing.T) {
+	// "hello" 42 swap → [42, 'hello']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("hello"), NewInteger(42), NewWord("swap")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2", len(result))
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("result[0] = %v, want 42", result[0])
+	}
+	if result[1].AsString() != "hello" {
+		t.Errorf("result[1] = %v, want 'hello'", result[1])
+	}
+}
+
+func TestEdgeSwapNoArgs(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("swap")})
+	if err == nil {
+		t.Fatal("expected error for swap with no args, got nil")
+	}
+}
+
+func TestEdgeSwapOneArg(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewInteger(1), NewWord("swap")})
+	if err == nil {
+		t.Fatal("expected error for swap with one arg, got nil")
+	}
+}
+
+// --- Edge: drop ---
+
+func TestEdgeDropNoArgs(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("drop")})
+	if err == nil {
+		t.Fatal("expected error for drop with no args, got nil")
+	}
+}
+
+func TestEdgeDropString(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("gone"), NewWord("drop")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+func TestEdgeDropPreservesOthers(t *testing.T) {
+	// 1 2 3 drop → [1, 2]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 1 || result[1].AsInteger() != 2 {
+		t.Errorf("got [%v, %v], want [1, 2]", result[0], result[1])
+	}
+}
+
+// --- Edge: arithmetic boundary conditions ---
+
+func TestEdgeArithmeticLargeNumbers(t *testing.T) {
+	e := New(DefaultRegistry())
+	// 1000000 mul 1000000 → 1000000000000
+	result, err := e.Run([]Value{
+		NewInteger(1000000), NewWord("mul"), NewInteger(1000000),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 1000000000000 {
+		t.Errorf("got %d, want 1000000000000", result[0].AsInteger())
+	}
+}
+
+func TestEdgeArithmeticNegativeResults(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// -5 mul 3 → -15
+		{"neg mul pos", []Value{NewInteger(-5), NewWord("mul"), NewInteger(3)}, -15},
+		// -5 mul -3 → 15
+		{"neg mul neg", []Value{NewInteger(-5), NewWord("mul"), NewInteger(-3)}, 15},
+		// -10 div 3 → -3 (truncated)
+		{"neg div pos", []Value{NewInteger(-10), NewWord("div"), NewInteger(3)}, -3},
+		// -10 mod 3 → -1
+		{"neg mod pos", []Value{NewInteger(-10), NewWord("mod"), NewInteger(3)}, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestEdgeArithmeticZeroOperations(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		{"zero add zero", []Value{NewInteger(0), NewWord("add"), NewInteger(0)}, 0},
+		{"zero sub zero", []Value{NewInteger(0), NewWord("sub"), NewInteger(0)}, 0},
+		{"zero mul anything", []Value{NewInteger(0), NewWord("mul"), NewInteger(999)}, 0},
+		{"anything mul zero", []Value{NewInteger(999), NewWord("mul"), NewInteger(0)}, 0},
+		{"zero div anything", []Value{NewInteger(0), NewWord("div"), NewInteger(5)}, 0},
+		{"zero mod anything", []Value{NewInteger(0), NewWord("mod"), NewInteger(5)}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestEdgeArithmeticIdentity(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		{"add identity", []Value{NewInteger(42), NewWord("add"), NewInteger(0)}, 42},
+		{"sub identity", []Value{NewInteger(42), NewWord("sub"), NewInteger(0)}, 42},
+		{"mul identity", []Value{NewInteger(42), NewWord("mul"), NewInteger(1)}, 42},
+		{"div identity", []Value{NewInteger(42), NewWord("div"), NewInteger(1)}, 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestEdgeArithmeticNoArgs(t *testing.T) {
+	// add with no args → error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("add")})
+	if err == nil {
+		t.Fatal("expected error for add with no args, got nil")
+	}
+}
+
+func TestEdgeArithmeticOneArg(t *testing.T) {
+	// 1 add → should use suffix signature and wait for arg
+	// Since there's no next arg, it should be an orphaned forward error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewInteger(1), NewWord("add")})
+	if err == nil {
+		t.Fatal("expected error for add with one arg and no suffix arg, got nil")
+	}
+}
+
+func TestEdgeArithmeticStringOperands(t *testing.T) {
+	// "hello" add "world" → error (strings can't be added)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
+	if err == nil {
+		t.Fatal("expected error for string add, got nil")
+	}
+}
+
+// --- Edge: long arithmetic chains ---
+
+func TestEdgeLongInfixChain(t *testing.T) {
+	// 1 add 2 add 3 add 4 add 5 → 15 (left-to-right)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(2),
+		NewWord("add"), NewInteger(3),
+		NewWord("add"), NewInteger(4),
+		NewWord("add"), NewInteger(5),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 15 {
+		t.Errorf("got %d, want 15", result[0].AsInteger())
+	}
+}
+
+func TestEdgeLongMixedPrecedence(t *testing.T) {
+	// 1 add 2 mul 3 add 4 mul 5 → 1+(2*3)+(4*5) = 1+6+20 = 27
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
+		NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 27 {
+		t.Errorf("got %d, want 27", result[0].AsInteger())
+	}
+}
+
+func TestEdgePrefixChain(t *testing.T) {
+	// 1 2 add 3 4 add mul → (1+2)*(3+4) = 3*7 = 21
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewWord("add"),
+		NewInteger(3), NewInteger(4), NewWord("add"),
+		NewWord("mul"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 21 {
+		t.Errorf("got %d, want 21", result[0].AsInteger())
+	}
+}
+
+// --- Edge: modifiers ---
+
+func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
+	// =lower with no prefix arg → error (force prefix but no string on stack)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWordModified("lower", -1, true, false),
+		NewString("X"),
+	})
+	if err == nil {
+		t.Fatal("expected error for force prefix with no prefix arg, got nil")
+	}
+}
+
+func TestEdgeForceSuffixWithPrefixAvailable(t *testing.T) {
+	// "A" lower= "B" → should use suffix, returning 'b', with 'a' remaining
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewString("A"),
+		NewWordModified("lower", -1, false, true),
+		NewString("B"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsString() != "A" {
+		t.Errorf("result[0] = %q, want 'A'", result[0].AsString())
+	}
+	if result[1].AsString() != "b" {
+		t.Errorf("result[1] = %q, want 'b'", result[1].AsString())
+	}
+}
+
+func TestEdgeArgCountMismatch(t *testing.T) {
+	// lower/2 "X" → error (no signature with 2 args)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewString("X"),
+		NewWordModified("lower", 2, false, false),
+	})
+	if err == nil {
+		t.Fatal("expected error for arg count mismatch, got nil")
+	}
+}
+
+func TestEdgeForcePrefixAdd(t *testing.T) {
+	// 1 2 =add → 3 (force prefix on add)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2),
+		NewWordModified("add", -1, true, false),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+// --- Edge: end keyword ---
+
+func TestEdgeEndAtStart(t *testing.T) {
+	// end → [] (no forward, no-op, removes itself)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewWord("end")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+func TestEdgeEndConsecutive(t *testing.T) {
+	// end end end → []
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("end"), NewWord("end"), NewWord("end"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+func TestEdgeEndTerminatesGetForward(t *testing.T) {
+	// "mykey" 42 set end → stores, then get mykey end → [42]
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewString("mykey"), NewInteger(42), NewWord("set"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewWord("get"), NewWord("mykey"), NewWord("end"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on get: %v", err)
+	}
+	// get collects 1 suffix arg, then end should be no-op since forward is done
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestEdgeEndWithMultipleForwards(t *testing.T) {
+	// 99 set a end 88 set b end (get a) (get b) → [99, 88]
+	// Parentheses isolate each get so the first result doesn't become
+	// a prefix argument for the second get.
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewInteger(99), NewWord("set"), NewWord("a"), NewWord("end"),
+		NewInteger(88), NewWord("set"), NewWord("b"), NewWord("end"),
+		NewWord("("), NewWord("get"), NewWord("a"), NewWord(")"),
+		NewWord("("), NewWord("get"), NewWord("b"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("result[0] = %d, want 99", result[0].AsInteger())
+	}
+	if result[1].AsInteger() != 88 {
+		t.Errorf("result[1] = %d, want 88", result[1].AsInteger())
+	}
+}
+
+func TestEdgeEndBetweenLiterals(t *testing.T) {
+	// 1 2 end 3 → [1, 2, 3]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewWord("end"), NewInteger(3),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+}
+
+// --- Edge: set/get ---
+
+func TestEdgeSetWithIntegerKey(t *testing.T) {
+	// 42 100 set → uses integer as key
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewInteger(42), NewInteger(100), NewWord("set"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// get 42 → 100
+	result, err := e.Run([]Value{
+		NewInteger(42), NewWord("get"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 100 {
+		t.Errorf("got %v, want [100]", result)
+	}
+}
+
+func TestEdgeSetEmptyString(t *testing.T) {
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewString(""), NewInteger(1), NewWord("set"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	result, err := e.Run([]Value{
+		NewString(""), NewWord("get"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 1 {
+		t.Errorf("got %d, want 1", result[0].AsInteger())
+	}
+}
+
+func TestEdgeSetValueIsString(t *testing.T) {
+	// set greeting hello end get greeting → ['hello']
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("greeting"), NewString("hello"),
+		NewWord("end"),
+		NewWord("get"), NewWord("greeting"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsString() != "hello" {
+		t.Errorf("got %q, want 'hello'", result[0].AsString())
+	}
+}
+
+func TestEdgeSetThenUseValue(t *testing.T) {
+	// set x 10 end get x add 5 → [15]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("x"), NewInteger(10),
+		NewWord("end"),
+		NewWord("get"), NewWord("x"),
+		NewWord("add"), NewInteger(5),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 15 {
+		t.Errorf("got %v, want [15]", result)
+	}
+}
+
+func TestEdgeSetComputedValue(t *testing.T) {
+	// set total (3 mul 7) end get total → [21]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("total"),
+		NewWord("("), NewInteger(3), NewWord("mul"), NewInteger(7), NewWord(")"),
+		NewWord("end"),
+		NewWord("get"), NewWord("total"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 21 {
+		t.Errorf("got %v, want [21]", result)
+	}
+}
+
+// --- Edge: precedence interactions ---
+
+func TestEdgePrecedenceSubMul(t *testing.T) {
+	// 10 sub 2 mul 3 → 10-(2*3) = 4
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(10), NewWord("sub"), NewInteger(2), NewWord("mul"), NewInteger(3),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 4 {
+		t.Errorf("got %d, want 4", result[0].AsInteger())
+	}
+}
+
+func TestEdgePrecedenceMulSub(t *testing.T) {
+	// 2 mul 3 sub 1 → (2*3)-1 = 5
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("sub"), NewInteger(1),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 5 {
+		t.Errorf("got %d, want 5", result[0].AsInteger())
+	}
+}
+
+func TestEdgePrecedenceDivAdd(t *testing.T) {
+	// 1 add 10 div 2 → 1+(10/2) = 6
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("div"), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 6 {
+		t.Errorf("got %d, want 6", result[0].AsInteger())
+	}
+}
+
+func TestEdgePrecedenceModAdd(t *testing.T) {
+	// 1 add 10 mod 3 → 1+(10%3) = 1+1 = 2
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("mod"), NewInteger(3),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 2 {
+		t.Errorf("got %d, want 2", result[0].AsInteger())
+	}
+}
+
+func TestEdgePrecedenceAllOps(t *testing.T) {
+	// 1 add 2 mul 3 sub 4 div 2 → 1+(2*3)-(4/2) = 1+6-2 = 5
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
+		NewWord("sub"), NewInteger(4), NewWord("div"), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsInteger() != 5 {
+		t.Errorf("got %d, want 5", result[0].AsInteger())
+	}
+}
+
+// --- Edge: parentheses ---
+
+func TestEdgeEmptyParens(t *testing.T) {
+	// () → [] (empty parens produce no values)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+func TestEdgeParenMultipleValues(t *testing.T) {
+	// (1 2 3) → [1, 2, 3]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(1), NewInteger(2), NewInteger(3), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, want := range []int64{1, 2, 3} {
+		if result[i].AsInteger() != want {
+			t.Errorf("result[%d] = %d, want %d", i, result[i].AsInteger(), want)
+		}
+	}
+}
+
+func TestEdgeParenDeeplyNested(t *testing.T) {
+	// ((( 5 ))) → [5]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewWord("("), NewWord("("),
+		NewInteger(5),
+		NewWord(")"), NewWord(")"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 5 {
+		t.Errorf("got %v, want [5]", result)
+	}
+}
+
+func TestEdgeParenNestedArithmetic(t *testing.T) {
+	// ((2 add 3) mul (4 sub 1)) → (5 * 3) = 15
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("),
+		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		NewWord("mul"),
+		NewWord("("), NewInteger(4), NewWord("sub"), NewInteger(1), NewWord(")"),
+		NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 15 {
+		t.Errorf("got %v, want [15]", result)
+	}
+}
+
+func TestEdgeParenWithFunction(t *testing.T) {
+	// (hello upper) → ['HELLO']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewString("hello"), NewWord("upper"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "HELLO" {
+		t.Errorf("got %v, want ['HELLO']", result)
+	}
+}
+
+func TestEdgeParenWithDup(t *testing.T) {
+	// (1 dup) → [1, 1]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(1), NewWord("dup"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+}
+
+func TestEdgeParenAfterLiteral(t *testing.T) {
+	// 10 (5) → [10, 5]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(10), NewWord("("), NewInteger(5), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 10 || result[1].AsInteger() != 5 {
+		t.Errorf("got %v, want [10, 5]", result)
+	}
+}
+
+func TestEdgeParenCloseWithNoOpen(t *testing.T) {
+	// ) → error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord(")")})
+	if err == nil {
+		t.Fatal("expected error for ) with no (, got nil")
+	}
+}
+
+func TestEdgeParenMultipleOpenUnmatched(t *testing.T) {
+	// (( 1 ) → error (one ( left unmatched)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("("), NewWord("("), NewInteger(1), NewWord(")"),
+	})
+	if err == nil {
+		t.Fatal("expected error for unmatched (, got nil")
+	}
+}
+
+func TestEdgeParenConsecutive(t *testing.T) {
+	// (1) (2) add → 1+2 = 3
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(1), NewWord(")"),
+		NewWord("("), NewInteger(2), NewWord(")"),
+		NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestEdgeParenWithUnknownWord(t *testing.T) {
+	// (foo) → ['foo']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewWord("foo"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "foo" {
+		t.Errorf("got %v, want ['foo']", result)
+	}
+}
+
+func TestEdgeParenOrphanedForwardInside(t *testing.T) {
+	// (add 1) → error: add creates forward inside paren, but only 1 arg collected
+	// There's not enough to resolve
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("("), NewWord("add"), NewInteger(1), NewWord(")"),
+	})
+	if err == nil {
+		t.Fatal("expected error for orphaned forward inside parens, got nil")
+	}
+}
+
+func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
+	// 1 add (2) → the forward for add should not cross the paren barrier.
+	// Instead, (2) resolves to 2, which then gets collected by add's forward.
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("add"),
+		NewWord("("), NewInteger(2), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestEdgeParenWithEndNoOp(t *testing.T) {
+	// (1 end) → end acts as no-op inside parens (no forward), yields [1]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(1), NewWord("end"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("got %v, want [1]", result)
+	}
+}
+
+func TestEdgeParenComplexExpression(t *testing.T) {
+	// 2 mul (3 add 4 mul 5) → 2*(3+(4*5)) = 2*(3+20) = 2*23 = 46
+	// Inside parens: precedence still applies: 3 add 4 mul 5 → 3+(4*5) = 23
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("mul"),
+		NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 46 {
+		t.Errorf("got %v, want [46]", result)
+	}
+}
+
+func TestEdgeParenSiblingExpressions(t *testing.T) {
+	// (1 add 2) mul (3 add 4) → 3*7 = 21
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewWord("mul"),
+		NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 21 {
+		t.Errorf("got %v, want [21]", result)
+	}
+}
+
+// --- Edge: combined features ---
+
+func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
+	// set (lower KEY) (2 add 3) end get key → [5]
+	// (lower KEY) → 'key', (2 add 3) → 5
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"),
+		NewWord("("), NewWord("lower"), NewString("KEY"), NewWord(")"),
+		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		NewWord("end"),
+		NewWord("get"), NewWord("key"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 5 {
+		t.Errorf("got %v, want [5]", result)
+	}
+}
+
+func TestEdgeDupThenAdd(t *testing.T) {
+	// 5 dup add → 5+5 = 10
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(5), NewWord("dup"), NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestEdgeSwapThenSub(t *testing.T) {
+	// 3 10 swap sub → 10-3 = 7 (swap makes 10 first arg)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(3), NewInteger(10), NewWord("swap"), NewWord("sub"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 7 {
+		t.Errorf("got %v, want [7]", result)
+	}
+}
+
+func TestEdgeDropThenOp(t *testing.T) {
+	// 1 2 3 drop add → 1+2 = 3
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"), NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestEdgeUpperInParens(t *testing.T) {
+	// (abc upper) → ['ABC']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "ABC" {
+		t.Errorf("got %v, want ['ABC']", result)
+	}
+}
+
+func TestEdgeMixedStringAndIntOnStack(t *testing.T) {
+	// "hello" 42 "world" → ['hello', 42, 'world']
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewString("hello"), NewInteger(42), NewString("world"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+}
+
+func TestEdgeChainUpperLower(t *testing.T) {
+	// "Hello" upper lower → 'hello'
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewString("Hello"), NewWord("upper"), NewWord("lower"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "hello" {
+		t.Errorf("got %v, want ['hello']", result)
+	}
+}
+
+func TestEdgeSuffixUpperThenLower(t *testing.T) {
+	// lower (upper abc) → lower 'ABC' → 'abc'
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("lower"),
+		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "abc" {
+		t.Errorf("got %v, want ['abc']", result)
+	}
+}
+
+// --- Edge: signature matching specifics ---
+
+func TestEdgeAddWithStringAndInt(t *testing.T) {
+	// "hello" 1 add → error (string doesn't match int for add's first arg)
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewString("hello"), NewInteger(1), NewWord("add"),
+	})
+	if err == nil {
+		t.Fatal("expected error for string+int add, got nil")
+	}
+}
+
+func TestEdgePrefixMatchSpecificity(t *testing.T) {
+	// Verify that more specific signatures win
+	// upper takes [string], which matches "hello" (string/proper)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("test"), NewWord("upper")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].AsString() != "TEST" {
+		t.Errorf("got %q, want 'TEST'", result[0].AsString())
+	}
+}
+
+// --- Edge: effectiveResolved scoping ---
+
+func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
+	// 1 ( 2 add ) → error: inside paren, add sees only [2] as prefix, needs 2 ints
+	// Actually 2 add: prefix [int,int] needs 2 ints, but only 1 inside paren.
+	// So it falls through to suffix (infix) match: [int|int], but then needs suffix arg.
+	// ')' closes paren, orphaned forward error.
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewInteger(1),
+		NewWord("("), NewInteger(2), NewWord("add"), NewWord(")"),
+	})
+	if err == nil {
+		t.Fatal("expected error for add with insufficient args in paren scope, got nil")
+	}
+}
+
+// --- Edge: registry ---
+
+func TestEdgeLookupUnknown(t *testing.T) {
+	r := DefaultRegistry()
+	fn := r.Lookup("nonexistent")
+	if fn != nil {
+		t.Errorf("expected nil for unknown function, got %v", fn)
+	}
+}
+
+func TestEdgeEmptyRegistry(t *testing.T) {
+	r := NewRegistry()
+	e := New(r)
+	// Everything becomes unknown word → string
+	result, err := e.Run([]Value{NewWord("foo"), NewWord("bar")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsString() != "foo" || result[1].AsString() != "bar" {
+		t.Errorf("got %v, want ['foo', 'bar']", result)
+	}
+}
+
+func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
+	r := NewRegistry()
+	e := New(r)
+	result, err := e.Run([]Value{NewInteger(1), NewWord("end")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("got %v, want [1]", result)
+	}
+}
+
+func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
+	r := NewRegistry()
+	e := New(r)
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(42), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+// --- Edge: function results re-examination ---
+
+func TestEdgeResultCollectedByPendingForward(t *testing.T) {
+	// lower (upper abc) → forward for lower should collect result of (upper abc)
+	// (upper abc) → 'ABC', then lower's forward collects it → 'abc'
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("lower"),
+		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "abc" {
+		t.Errorf("got %v, want ['abc']", result)
+	}
+}
+
+func TestEdgePrefixResultFeedsInfix(t *testing.T) {
+	// 2 3 add add 4 → (2+3) produces 5 via prefix, then 5 add 4 → but wait,
+	// the second add sees 5 on stack as prefix match [int], and sets up forward for 4
+	// Result: 9
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(2), NewInteger(3), NewWord("add"),
+		NewWord("add"), NewInteger(4),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Errorf("got %v, want [9]", result)
+	}
+}
+
+// --- Edge: store isolation ---
+
+func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
+	// Two different registries should have separate stores
+	reg1 := DefaultRegistry()
+	reg2 := DefaultRegistry()
+	e1 := New(reg1)
+	e2 := New(reg2)
+
+	_, err := e1.Run([]Value{
+		NewWord("set"), NewWord("key"), NewInteger(111),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+
+	_, err = e2.Run([]Value{
+		NewWord("get"), NewWord("key"),
+	})
+	if err == nil {
+		t.Fatal("expected error: key should not exist in separate registry")
+	}
+}
+
+// --- Edge: single-element inputs ---
+
+func TestEdgeSingleInteger(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(0)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 0 {
+		t.Errorf("got %v, want [0]", result)
+	}
+}
+
+func TestEdgeSingleString(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("x")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "x" {
+		t.Errorf("got %v, want ['x']", result)
+	}
+}
+
+func TestEdgeSingleEmptyString(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewString("")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "" {
+		t.Errorf("got %v, want ['']", result)
+	}
+}
+
+// --- Edge: forward details ---
+
+func TestEdgeForwardInfoFields(t *testing.T) {
+	info := ForwardInfo{
+		FuncName:      "test",
+		ExpectedArgs:  3,
+		CollectedArgs: 1,
+		FuncIndex:     5,
+		Precedence:    2,
+	}
+	v := NewForward(info)
+	got := v.AsForward()
+	if got.FuncName != "test" {
+		t.Errorf("FuncName = %q, want 'test'", got.FuncName)
+	}
+	if got.ExpectedArgs != 3 {
+		t.Errorf("ExpectedArgs = %d, want 3", got.ExpectedArgs)
+	}
+	if got.CollectedArgs != 1 {
+		t.Errorf("CollectedArgs = %d, want 1", got.CollectedArgs)
+	}
+	if got.FuncIndex != 5 {
+		t.Errorf("FuncIndex = %d, want 5", got.FuncIndex)
+	}
+	if got.Precedence != 2 {
+		t.Errorf("Precedence = %d, want 2", got.Precedence)
+	}
+}
+
+// --- Edge: signature edge cases ---
+
+func TestEdgeSignatureNoPrefix(t *testing.T) {
+	// A function with only suffix should work when called with no prefix stack
+	r := NewRegistry()
+	r.Register("echo", Signature{
+		Suffix:  []Type{TAny},
+		Handler: func(args []Value) ([]Value, error) { return args, nil },
+	})
+	e := New(r)
+	result, err := e.Run([]Value{NewWord("echo"), NewInteger(42)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestEdgeSignatureMultipleSuffix(t *testing.T) {
+	// A function that takes 2 suffix args
+	r := NewRegistry()
+	r.Register("pair", Signature{
+		Suffix: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return args, nil
+		},
+	})
+	e := New(r)
+	result, err := e.Run([]Value{
+		NewWord("pair"), NewInteger(1), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+}
+
+func TestEdgeSignatureReturnsMultiple(t *testing.T) {
+	// A function that returns multiple values
+	r := NewRegistry()
+	r.Register("triple", Signature{
+		Prefix: []Type{TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[0], args[0]}, nil
+		},
+	})
+	e := New(r)
+	result, err := e.Run([]Value{NewInteger(7), NewWord("triple")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, v := range result {
+		if v.AsInteger() != 7 {
+			t.Errorf("result[%d] = %d, want 7", i, v.AsInteger())
+		}
+	}
+}
+
+func TestEdgeSignatureReturnsNothing(t *testing.T) {
+	// A function that returns nothing (like drop)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewInteger(2), NewWord("drop"), NewWord("drop"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %v, want []", result)
+	}
+}
+
+// --- Edge: interactions between end and parens ---
+
+func TestEdgeEndInsideParenNoForward(t *testing.T) {
+	// (42 end) → end is no-op inside parens, gives [42]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(42), NewWord("end"), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
+	// set a (1 add 2) end get a → set has forward, (1 add 2)=3 is collected,
+	// end terminates the forward for set, get a → [3]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("a"),
+		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewWord("end"),
+		NewWord("get"), NewWord("a"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}

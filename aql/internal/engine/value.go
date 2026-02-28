@@ -17,7 +17,8 @@ type ForwardInfo struct {
 	CollectedArgs int
 	// FuncIndex records where the deferred function word sits in the stack.
 	FuncIndex  int
-	Precedence int // copied from matched Signature
+	Precedence int        // copied from matched Signature
+	Sig        *Signature // the matched signature, for direct execution on completion
 }
 
 // Value is a typed entry on the AQL stack.
