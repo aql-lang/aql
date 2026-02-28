@@ -147,6 +147,7 @@ func (e *Engine) insertForward(w WordInfo, match *MatchResult) error {
 		ExpectedArgs: len(match.Sig.Suffix),
 		FuncIndex:    e.pointer,
 		Precedence:   match.Sig.Precedence,
+		Sig:          match.Sig,
 	})
 
 	// Insert fwd after the word at e.pointer.
@@ -189,9 +190,14 @@ func (e *Engine) stepLiteral() error {
 
 	// Peek ahead: if the next item is a higher-precedence infix operator,
 	// defer collection and let that operator execute first.
-	if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
-		e.pointer++
-		return nil
+	// Only applies when the forward itself participates in precedence (> 0).
+	// Non-arithmetic forwards (get, set, etc.) have precedence 0 and should
+	// not be affected by upcoming operators.
+	if fwd.Precedence > 0 {
+		if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
+			e.pointer++
+			return nil
+		}
 	}
 
 	// Remove the value from its current position.
@@ -213,15 +219,44 @@ func (e *Engine) stepLiteral() error {
 	fwd.FuncIndex = funcIdx
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
-		// All suffix args collected. Remove the forward, retry the function.
+		// All suffix args collected. Remove the forward and execute directly.
 		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
 		// fwdIdx was after funcIdx, so funcIdx is unaffected by the removal.
-		// Clear modifiers on the word so prefix matching works on retry.
-		if e.stack[funcIdx].IsWord() {
-			w := e.stack[funcIdx].AsWord()
-			e.stack[funcIdx] = NewWord(w.Name)
+
+		// The stack now has [... | prefix_args | suffix_args | func_word | ...].
+		// Execute the handler directly with all args.
+		totalArgs := len(fwd.Sig.Prefix) + len(fwd.Sig.Suffix)
+		argStart := funcIdx - totalArgs
+		args := make([]Value, totalArgs)
+		copy(args, e.stack[argStart:funcIdx])
+
+		// Validate arg types — the suffix args were collected without type checks.
+		for i, arg := range args {
+			var expectedType Type
+			if i < len(fwd.Sig.Prefix) {
+				expectedType = fwd.Sig.Prefix[i]
+			} else {
+				expectedType = fwd.Sig.Suffix[i-len(fwd.Sig.Prefix)]
+			}
+			if !arg.VType.Matches(expectedType) {
+				return fmt.Errorf("signature error: no matching signature for %s", fwd.FuncName)
+			}
 		}
-		e.pointer = funcIdx
+
+		results, err := fwd.Sig.Handler(args)
+		if err != nil {
+			return err
+		}
+
+		// Splice: remove args + word, insert results.
+		newStack := make([]Value, 0, len(e.stack)-totalArgs-1+len(results))
+		newStack = append(newStack, e.stack[:argStart]...)
+		newStack = append(newStack, results...)
+		newStack = append(newStack, e.stack[funcIdx+1:]...)
+		e.stack = newStack
+
+		// Pointer moves to start of results for re-examination.
+		e.pointer = argStart
 	} else {
 		// Update the forward in the stack.
 		e.stack[fwdIdx] = NewForward(fwd)

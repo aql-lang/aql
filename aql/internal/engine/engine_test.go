@@ -1607,14 +1607,16 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 }
 
 func TestEdgeEndWithMultipleForwards(t *testing.T) {
-	// 99 set a end 88 set b end get a get b → [99, 88]
+	// 99 set a end 88 set b end (get a) (get b) → [99, 88]
+	// Parentheses isolate each get so the first result doesn't become
+	// a prefix argument for the second get.
 	reg := DefaultRegistry()
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(99), NewWord("set"), NewWord("a"), NewWord("end"),
 		NewInteger(88), NewWord("set"), NewWord("b"), NewWord("end"),
-		NewWord("get"), NewWord("a"),
-		NewWord("get"), NewWord("b"),
+		NewWord("("), NewWord("get"), NewWord("a"), NewWord(")"),
+		NewWord("("), NewWord("get"), NewWord("b"), NewWord(")"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
