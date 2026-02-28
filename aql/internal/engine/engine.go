@@ -64,6 +64,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 // stepWord handles a word (function reference) at the current pointer.
 func (e *Engine) stepWord(val Value) error {
 	w := val.AsWord()
+
+	// "end" is a language keyword handled directly by the engine.
+	if w.Name == "end" {
+		return e.stepEnd()
+	}
+
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
@@ -205,6 +211,73 @@ func (e *Engine) stepLiteral() error {
 		e.pointer = fwdIdx + 1
 	}
 
+	return nil
+}
+
+// stepEnd handles the "end" keyword. If a forward is pending, it terminates
+// the forward early by pulling remaining args from the prefix stack and
+// rearranging so the function retries with correct arg order. If no forward
+// is pending, it simply removes itself (no-op).
+func (e *Engine) stepEnd() error {
+	endIdx := e.pointer
+
+	// Find nearest pending forward.
+	fwdIdx := -1
+	for i := endIdx - 1; i >= 0; i-- {
+		if e.stack[i].IsForward() {
+			fwdIdx = i
+			break
+		}
+	}
+
+	if fwdIdx < 0 {
+		// No pending forward — just remove end (no-op).
+		e.stack = append(e.stack[:endIdx], e.stack[endIdx+1:]...)
+		return nil
+	}
+
+	fwd := e.stack[fwdIdx].AsForward()
+	funcIdx := fwd.FuncIndex
+	collected := fwd.CollectedArgs
+	remaining := fwd.ExpectedArgs - collected
+	suffixStart := funcIdx - collected
+
+	// Check if enough prefix args available for the remaining suffix args.
+	if suffixStart < remaining {
+		return fmt.Errorf("end: insufficient arguments for %s (need %d more, have %d)",
+			fwd.FuncName, remaining, suffixStart)
+	}
+
+	takenStart := suffixStart - remaining
+
+	// Rebuild the stack with rearranged args:
+	//   [untouched_prefix | collected_suffix | taken_prefix | func | rest...]
+	// The taken prefix args are moved after the collected suffix args so the
+	// prefix handler sees them in the correct order (suffix args deepest).
+	newStack := make([]Value, 0, len(e.stack)-2) // -2 for forward and end
+	newStack = append(newStack, e.stack[:takenStart]...)          // untouched prefix
+	newStack = append(newStack, e.stack[suffixStart:funcIdx]...)  // collected suffix
+	newStack = append(newStack, e.stack[takenStart:suffixStart]...) // taken prefix
+	newStack = append(newStack, e.stack[funcIdx])                 // function word
+	// Everything after forward, excluding end.
+	for i := fwdIdx + 1; i < len(e.stack); i++ {
+		if i == endIdx {
+			continue
+		}
+		newStack = append(newStack, e.stack[i])
+	}
+	e.stack = newStack
+
+	// funcIdx in the new stack: same total items before the function word.
+	newFuncIdx := takenStart + collected + remaining
+
+	// Clear modifiers on the function word for retry.
+	if e.stack[newFuncIdx].IsWord() {
+		w := e.stack[newFuncIdx].AsWord()
+		e.stack[newFuncIdx] = NewWord(w.Name)
+	}
+
+	e.pointer = newFuncIdx
 	return nil
 }
 

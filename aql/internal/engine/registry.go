@@ -130,12 +130,8 @@ func registerBuiltins(r *Registry) {
 
 	registerStorage(r)
 
-	// end: [] -> [] (no-op separator, just removes itself from the stack)
-	r.Register("end", Signature{
-		Handler: func(args []Value) ([]Value, error) {
-			return nil, nil
-		},
-	})
+	// Note: "end" is handled directly by the engine as a keyword,
+	// not registered here. It terminates any pending forward early.
 }
 
 // storeKey converts a Value to a string key for the store.

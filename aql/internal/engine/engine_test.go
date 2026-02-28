@@ -664,6 +664,65 @@ func TestEndMultiple(t *testing.T) {
 	}
 }
 
+func TestEndTerminatesForward(t *testing.T) {
+	// 99 set foo end 88 → stores foo=99, result=[88]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"), NewInteger(88),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 88 {
+		t.Errorf("got %d, want 88", result[0].AsInteger())
+	}
+	// Verify the stored value
+	val, ok := reg.Store["foo"]
+	if !ok {
+		t.Fatal("expected store key 'foo' to exist")
+	}
+	if val.AsInteger() != 99 {
+		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
+	}
+}
+
+func TestEndTerminatesForwardNoRemainder(t *testing.T) {
+	// 99 set foo end → stores foo=99, result=[]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+	val, ok := reg.Store["foo"]
+	if !ok {
+		t.Fatal("expected store key 'foo' to exist")
+	}
+	if val.AsInteger() != 99 {
+		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
+	}
+}
+
+func TestEndInsufficientArgs(t *testing.T) {
+	// set foo end → forward expects 2, collected 1, no prefix → error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewWord("end"),
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
 	// Store persists across multiple Run calls on the same registry
 	reg := DefaultRegistry()
