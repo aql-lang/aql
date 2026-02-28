@@ -41,6 +41,11 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			// after a forward.
 			e.pointer++
 
+		case val.IsOpenParen():
+			// Open-paren markers are skipped during normal traversal.
+			// They act as barriers for forward search and prefix matching.
+			e.pointer++
+
 		default:
 			// Literal / resolved value.
 			if err := e.stepLiteral(); err != nil {
@@ -56,6 +61,9 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			return nil, fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
 				fwd.FuncName, fwd.ExpectedArgs)
 		}
+		if v.IsOpenParen() {
+			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		}
 	}
 
 	return e.stack, nil
@@ -65,9 +73,15 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 func (e *Engine) stepWord(val Value) error {
 	w := val.AsWord()
 
-	// "end" is a language keyword handled directly by the engine.
+	// Language keywords handled directly by the engine.
 	if w.Name == "end" {
 		return e.stepEnd()
+	}
+	if w.Name == "(" {
+		return e.stepOpenParen()
+	}
+	if w.Name == ")" {
+		return e.stepCloseParen()
 	}
 
 	fn := e.registry.Lookup(w.Name)
@@ -80,7 +94,7 @@ func (e *Engine) stepWord(val Value) error {
 		return nil
 	}
 
-	resolved := e.stack[:e.pointer]
+	resolved := e.effectiveResolved()
 	match := MatchSignature(fn.Signatures, resolved, w)
 
 	if match == nil {
@@ -152,9 +166,12 @@ func (e *Engine) insertForward(w WordInfo, match *MatchResult) error {
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
-	// Look backwards for the nearest forward entry.
+	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break // open-paren marker acts as a barrier
+		}
 		if e.stack[i].IsForward() {
 			fwdIdx = i
 			break
@@ -221,9 +238,12 @@ func (e *Engine) stepLiteral() error {
 func (e *Engine) stepEnd() error {
 	endIdx := e.pointer
 
-	// Find nearest pending forward.
+	// Find nearest pending forward, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := endIdx - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break // open-paren marker acts as a barrier
+		}
 		if e.stack[i].IsForward() {
 			fwdIdx = i
 			break
@@ -279,6 +299,84 @@ func (e *Engine) stepEnd() error {
 
 	e.pointer = newFuncIdx
 	return nil
+}
+
+// stepOpenParen replaces the "(" word at the current pointer with an open-paren
+// marker and advances past it.
+func (e *Engine) stepOpenParen() error {
+	e.stack[e.pointer] = NewOpenParen()
+	e.pointer++
+	return nil
+}
+
+// stepCloseParen handles the ")" word. It finds the nearest open-paren marker,
+// checks for orphaned forwards inside the paren scope, collapses the
+// sub-expression results, removes the marker and ")", and sets the pointer
+// so results re-enter the main loop.
+func (e *Engine) stepCloseParen() error {
+	closeIdx := e.pointer
+
+	// Find the nearest open-paren marker scanning backwards.
+	openIdx := -1
+	for i := closeIdx - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			openIdx = i
+			break
+		}
+	}
+
+	if openIdx < 0 {
+		return fmt.Errorf("syntax error: unmatched closing parenthesis")
+	}
+
+	// Check for orphaned forwards inside the paren scope.
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
+				fwd.FuncName, fwd.ExpectedArgs)
+		}
+	}
+
+	// Collect resolved values between open marker and close paren.
+	results := make([]Value, 0, closeIdx-openIdx-1)
+	for i := openIdx + 1; i < closeIdx; i++ {
+		results = append(results, e.stack[i])
+	}
+
+	// Splice: remove open marker + contents + close paren, insert results.
+	newStack := make([]Value, 0, len(e.stack)-(closeIdx-openIdx+1)+len(results))
+	newStack = append(newStack, e.stack[:openIdx]...)
+	newStack = append(newStack, results...)
+	newStack = append(newStack, e.stack[closeIdx+1:]...)
+	e.stack = newStack
+
+	// Set pointer to start of results so they re-enter the main loop.
+	// This lets them be collected by any pending forward before the paren.
+	e.pointer = openIdx
+	return nil
+}
+
+// effectiveResolved returns the resolved portion of the stack visible for
+// prefix matching. It starts from after the last open-paren marker (if any)
+// up to the current pointer, excluding internal values (forwards, markers).
+func (e *Engine) effectiveResolved() []Value {
+	start := 0
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			start = i + 1
+			break
+		}
+	}
+	// Filter out forward entries from the resolved range.
+	var resolved []Value
+	for i := start; i < e.pointer; i++ {
+		v := e.stack[i]
+		if !v.IsForward() && !v.IsOpenParen() {
+			resolved = append(resolved, v)
+		}
+	}
+	return resolved
 }
 
 // peekPrecedence returns the highest infix precedence of the word at stack[idx],

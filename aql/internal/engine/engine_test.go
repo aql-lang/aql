@@ -764,3 +764,160 @@ func TestChainedOps(t *testing.T) {
 		t.Errorf("got [%v, %v], want ['A', 'A']", result[0], result[1])
 	}
 }
+
+// --- Engine tests: parentheses ---
+
+func TestParenSimpleArithmetic(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 1 mul (2 add 3) → 1*(2+3) = 5
+		{"mul paren add", []Value{
+			NewInteger(1), NewWord("mul"),
+			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		}, 5},
+		// (2 add 3) → 5
+		{"just paren", []Value{
+			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		}, 5},
+		// (2 mul 3) add 4 → 6+4 = 10
+		{"paren mul then add", []Value{
+			NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
+			NewWord("add"), NewInteger(4),
+		}, 10},
+		// 2 mul (3 add 4) → 2*7 = 14
+		{"mul paren add 2", []Value{
+			NewInteger(2), NewWord("mul"),
+			NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord(")"),
+		}, 14},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestParenWithSet(t *testing.T) {
+	// set foo (1 add 2) end get foo → [3]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"),
+		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewWord("end"),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 3 {
+		t.Errorf("got %d, want 3", result[0].AsInteger())
+	}
+}
+
+func TestParenNested(t *testing.T) {
+	// (1 add (2 mul 3)) → 1+6 = 7
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("),
+		NewInteger(1), NewWord("add"),
+		NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
+		NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 7 {
+		t.Errorf("got %d, want 7", result[0].AsInteger())
+	}
+}
+
+func TestParenLiteral(t *testing.T) {
+	// (42) → [42]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(42), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestParenUnmatchedOpen(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("("), NewInteger(1),
+	})
+	if err == nil {
+		t.Fatal("expected error for unmatched open paren, got nil")
+	}
+}
+
+func TestParenUnmatchedClose(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewInteger(1), NewWord(")"),
+	})
+	if err == nil {
+		t.Fatal("expected error for unmatched close paren, got nil")
+	}
+}
+
+func TestParenWithPrecedence(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// (1 add 2) mul 3 → 3*3 = 9 (parens override precedence)
+		{"paren overrides precedence", []Value{
+			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+			NewWord("mul"), NewInteger(3),
+		}, 9},
+		// 3 mul (1 add 2) → 3*3 = 9
+		{"mul paren overrides", []Value{
+			NewInteger(3), NewWord("mul"),
+			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		}, 9},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
