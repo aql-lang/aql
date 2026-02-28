@@ -55,7 +55,12 @@ _[] -> [uniq/extant/string]_
 # Storage
 
 `set foo 99` - sets store key foo to value 99
+set has signature: set [string any]=
+where [string any] means 
+
 `get foo` - gets value of store key foo
+
+
 
 
 ## Seneca REPL inspired
