@@ -513,6 +513,237 @@ func TestPrecedencePrefixUnaffected(t *testing.T) {
 	}
 }
 
+// --- Engine tests: storage (set/get) ---
+
+func TestSetGetSuffix(t *testing.T) {
+	// set foo 99 end get foo → [99]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("end"),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("got %d, want 99", result[0].AsInteger())
+	}
+}
+
+func TestSetGetWithoutEnd(t *testing.T) {
+	// set foo 99 get foo → [99] (end is optional)
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("got %d, want 99", result[0].AsInteger())
+	}
+}
+
+func TestSetGetPrefix(t *testing.T) {
+	// "foo" 99 set → stores foo=99, then "foo" get → [99]
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewString("bar"), NewInteger(42), NewWord("set"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+	result, err := e.Run([]Value{
+		NewString("bar"), NewWord("get"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on get: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestSetGetString(t *testing.T) {
+	// set name hello end get name → ['hello']
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("name"), NewString("hello"),
+		NewWord("end"),
+		NewWord("get"), NewWord("name"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsString() != "hello" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "hello")
+	}
+}
+
+func TestSetOverwrite(t *testing.T) {
+	// set x 1 end set x 2 end get x → [2]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("x"), NewInteger(1),
+		NewWord("end"),
+		NewWord("set"), NewWord("x"), NewInteger(2),
+		NewWord("end"),
+		NewWord("get"), NewWord("x"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 2 {
+		t.Errorf("got %d, want 2", result[0].AsInteger())
+	}
+}
+
+func TestGetUnknownKey(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewWord("get"), NewWord("missing")})
+	if err == nil {
+		t.Fatal("expected error for unknown key, got nil")
+	}
+}
+
+func TestEndNoOp(t *testing.T) {
+	// 42 end → [42] (end just removes itself)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(42), NewWord("end")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestEndMultiple(t *testing.T) {
+	// 1 end 2 end 3 → [1, 2, 3]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("end"),
+		NewInteger(2), NewWord("end"),
+		NewInteger(3),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, want := range []int64{1, 2, 3} {
+		if result[i].AsInteger() != want {
+			t.Errorf("result[%d] = %d, want %d", i, result[i].AsInteger(), want)
+		}
+	}
+}
+
+func TestEndTerminatesForward(t *testing.T) {
+	// 99 set foo end 88 → stores foo=99, result=[88]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"), NewInteger(88),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 88 {
+		t.Errorf("got %d, want 88", result[0].AsInteger())
+	}
+	// Verify the stored value
+	val, ok := reg.Store["foo"]
+	if !ok {
+		t.Fatal("expected store key 'foo' to exist")
+	}
+	if val.AsInteger() != 99 {
+		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
+	}
+}
+
+func TestEndTerminatesForwardNoRemainder(t *testing.T) {
+	// 99 set foo end → stores foo=99, result=[]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+	val, ok := reg.Store["foo"]
+	if !ok {
+		t.Fatal("expected store key 'foo' to exist")
+	}
+	if val.AsInteger() != 99 {
+		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
+	}
+}
+
+func TestEndInsufficientArgs(t *testing.T) {
+	// set foo end → forward expects 2, collected 1, no prefix → error
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"), NewWord("end"),
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
+	// Store persists across multiple Run calls on the same registry
+	reg := DefaultRegistry()
+	e := New(reg)
+	_, err := e.Run([]Value{
+		NewWord("set"), NewWord("key"), NewInteger(100),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on set: %v", err)
+	}
+	result, err := e.Run([]Value{
+		NewWord("get"), NewWord("key"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on get: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 100 {
+		t.Errorf("got %v, want [100]", result)
+	}
+}
+
 // --- Engine tests: multiple operations ---
 
 func TestChainedOps(t *testing.T) {
@@ -531,5 +762,162 @@ func TestChainedOps(t *testing.T) {
 	}
 	if result[0].AsString() != "A" || result[1].AsString() != "A" {
 		t.Errorf("got [%v, %v], want ['A', 'A']", result[0], result[1])
+	}
+}
+
+// --- Engine tests: parentheses ---
+
+func TestParenSimpleArithmetic(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// 1 mul (2 add 3) → 1*(2+3) = 5
+		{"mul paren add", []Value{
+			NewInteger(1), NewWord("mul"),
+			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		}, 5},
+		// (2 add 3) → 5
+		{"just paren", []Value{
+			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		}, 5},
+		// (2 mul 3) add 4 → 6+4 = 10
+		{"paren mul then add", []Value{
+			NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
+			NewWord("add"), NewInteger(4),
+		}, 10},
+		// 2 mul (3 add 4) → 2*7 = 14
+		{"mul paren add 2", []Value{
+			NewInteger(2), NewWord("mul"),
+			NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord(")"),
+		}, 14},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
+	}
+}
+
+func TestParenWithSet(t *testing.T) {
+	// set foo (1 add 2) end get foo → [3]
+	reg := DefaultRegistry()
+	e := New(reg)
+	result, err := e.Run([]Value{
+		NewWord("set"), NewWord("foo"),
+		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewWord("end"),
+		NewWord("get"), NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 3 {
+		t.Errorf("got %d, want 3", result[0].AsInteger())
+	}
+}
+
+func TestParenNested(t *testing.T) {
+	// (1 add (2 mul 3)) → 1+6 = 7
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("),
+		NewInteger(1), NewWord("add"),
+		NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
+		NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 7 {
+		t.Errorf("got %d, want 7", result[0].AsInteger())
+	}
+}
+
+func TestParenLiteral(t *testing.T) {
+	// (42) → [42]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWord("("), NewInteger(42), NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 42 {
+		t.Errorf("got %d, want 42", result[0].AsInteger())
+	}
+}
+
+func TestParenUnmatchedOpen(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewWord("("), NewInteger(1),
+	})
+	if err == nil {
+		t.Fatal("expected error for unmatched open paren, got nil")
+	}
+}
+
+func TestParenUnmatchedClose(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{
+		NewInteger(1), NewWord(")"),
+	})
+	if err == nil {
+		t.Fatal("expected error for unmatched close paren, got nil")
+	}
+}
+
+func TestParenWithPrecedence(t *testing.T) {
+	e := New(DefaultRegistry())
+	tests := []struct {
+		name  string
+		input []Value
+		want  int64
+	}{
+		// (1 add 2) mul 3 → 3*3 = 9 (parens override precedence)
+		{"paren overrides precedence", []Value{
+			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+			NewWord("mul"), NewInteger(3),
+		}, 9},
+		// 3 mul (1 add 2) → 3*3 = 9
+		{"mul paren overrides", []Value{
+			NewInteger(3), NewWord("mul"),
+			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		}, 9},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1: %v", len(result), result)
+			}
+			if result[0].AsInteger() != tt.want {
+				t.Errorf("got %d, want %d", result[0].AsInteger(), tt.want)
+			}
+		})
 	}
 }

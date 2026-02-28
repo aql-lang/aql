@@ -17,6 +17,7 @@ var (
 	TInteger     = NewType("number/integer")
 	TWord        = NewType("word")
 	TForward     = NewType("forward")
+	TOpenParen   = NewType("paren/open")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".
@@ -30,6 +31,10 @@ func NewType(path string) Type {
 //   - A parent does NOT match a child: string does not match string/proper.
 func (t Type) Matches(pattern Type) bool {
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "any" {
+		// "any" matches all data types but not internal types (word, forward).
+		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" {
+			return false
+		}
 		return true
 	}
 	if len(t.Parts) < len(pattern.Parts) {

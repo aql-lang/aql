@@ -65,6 +65,11 @@ func NewForward(info ForwardInfo) Value {
 	return Value{VType: TForward, Data: info}
 }
 
+// NewOpenParen creates an open-paren marker value for sub-expression scoping.
+func NewOpenParen() Value {
+	return Value{VType: TOpenParen, Data: nil}
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -73,6 +78,11 @@ func (v Value) IsWord() bool {
 // IsForward reports whether this value is a forward primitive.
 func (v Value) IsForward() bool {
 	return v.VType.Equal(TForward)
+}
+
+// IsOpenParen reports whether this value is an open-paren marker.
+func (v Value) IsOpenParen() bool {
+	return v.VType.Equal(TOpenParen)
 }
 
 // AsWord returns the WordInfo, panics if not a word.
@@ -104,6 +114,8 @@ func (v Value) String() string {
 	case v.IsForward():
 		f := v.AsForward()
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
+	case v.IsOpenParen():
+		return "("
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Matches(TInteger):
