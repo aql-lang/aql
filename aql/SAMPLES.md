@@ -56,7 +56,15 @@ _[] -> [uniq/extant/string]_
 
 `set foo 99` - sets store key foo to value 99
 set has signature: set [string any]=
-where [string any] means 
+where [string any] means expect to find
+a string cell follower by an any cell at the top
+of the stack. however the = suffix means give precedence to 
+future tokens, in reverse order.
+
+examples:
+
+set foo 99
+[|] -> [99] - the value is left on the stack
 
 `get foo` - gets value of store key foo
 
