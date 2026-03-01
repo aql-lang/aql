@@ -56,10 +56,10 @@ __lower__:
 > `C lower` -> _['c']_
 > `99 lower` -> _[99 lower]_ SIGNATURE ERROR
 > `lower/1 D` -> _['d']_ - disambiguate expected arg count
-> `lower= E` -> _['e']_ - force suffix args
-> `F =lower` -> _['f']_ - force prefix args
-> `lower/1= E` -> _['e']_ - force suffix args, fix args
-> `F =lower/1` -> _['f']_ - force prefix args, fix args
+> `lower/s E` -> _['e']_ - force suffix args
+> `F lower/p` -> _['f']_ - force prefix args
+> `lower/1s E` -> _['e']_ - force suffix args, fix args
+> `F lower/1p` -> _['f']_ - force prefix args, fix args
 
 
 

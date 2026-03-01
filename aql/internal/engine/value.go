@@ -6,8 +6,8 @@ import "fmt"
 type WordInfo struct {
 	Name        string
 	ArgCount    int  // -1 = unspecified
-	ForcePrefix bool // =lower
-	ForceSuffix bool // lower=
+	ForcePrefix bool // lower/p
+	ForceSuffix bool // lower/s
 }
 
 // ForwardInfo tracks suffix argument collection for a deferred function call.

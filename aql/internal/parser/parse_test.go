@@ -256,23 +256,30 @@ func TestParseArgCountModifier(t *testing.T) {
 }
 
 func TestParseForceSuffixModifier(t *testing.T) {
-	// lower=
-	assertParse(t, "lower=", []engine.Value{
+	// lower/s
+	assertParse(t, "lower/s", []engine.Value{
 		engine.NewWordModified("lower", -1, false, true),
 	})
 }
 
 func TestParseForcePrefixModifier(t *testing.T) {
-	// =lower
-	assertParse(t, "=lower", []engine.Value{
+	// lower/p
+	assertParse(t, "lower/p", []engine.Value{
 		engine.NewWordModified("lower", -1, true, false),
 	})
 }
 
 func TestParseArgCountAndSuffixModifier(t *testing.T) {
-	// lower/1=
-	assertParse(t, "lower/1=", []engine.Value{
+	// lower/1s
+	assertParse(t, "lower/1s", []engine.Value{
 		engine.NewWordModified("lower", 1, false, true),
+	})
+}
+
+func TestParseArgCountAndPrefixModifier(t *testing.T) {
+	// lower/1p
+	assertParse(t, "lower/1p", []engine.Value{
+		engine.NewWordModified("lower", 1, true, false),
 	})
 }
 
@@ -291,8 +298,8 @@ func TestParseArgCountTwo(t *testing.T) {
 }
 
 func TestParseModifierInExpression(t *testing.T) {
-	// B lower= → word then modified word
-	assertParse(t, "B lower=", []engine.Value{
+	// B lower/s → word then modified word
+	assertParse(t, "B lower/s", []engine.Value{
 		engine.NewWord("B"),
 		engine.NewWordModified("lower", -1, false, true),
 	})

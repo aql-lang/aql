@@ -91,31 +91,55 @@ func Parse(src string) ([]engine.Value, error) {
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling
-// modifier syntax: =name (forcePrefix), name= (forceSuffix), name/N (argCount).
+// modifier syntax: name/s (forceSuffix), name/p (forcePrefix), name/N (argCount),
+// and combinations like name/1s or name/2p.
 func parseWord(text string) (engine.Value, error) {
 	name := text
 	argCount := -1
 	forcePrefix := false
 	forceSuffix := false
 
-	// Check for = prefix (forcePrefix modifier).
-	if strings.HasPrefix(name, "=") && len(name) > 1 {
-		forcePrefix = true
-		name = name[1:]
-	}
-
-	// Check for = suffix (forceSuffix modifier).
-	if strings.HasSuffix(name, "=") && len(name) > 1 {
-		forceSuffix = true
-		name = name[:len(name)-1]
-	}
-
-	// Check for /N (argCount modifier).
+	// Check for /... modifier suffix.
 	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
-		countStr := name[idx+1:]
-		if n, err := strconv.Atoi(countStr); err == nil && n >= 0 {
-			argCount = n
-			name = name[:idx]
+		mod := name[idx+1:]
+		name = name[:idx]
+
+		// Parse optional digits followed by optional 's' or 'p'.
+		digits := ""
+		rest := mod
+		for i, c := range rest {
+			if c >= '0' && c <= '9' {
+				digits += string(c)
+			} else {
+				rest = rest[i:]
+				break
+			}
+			if i == len(rest)-1 {
+				rest = ""
+			}
+		}
+
+		if digits != "" {
+			n, err := strconv.Atoi(digits)
+			if err == nil && n >= 0 {
+				argCount = n
+			}
+		}
+
+		switch rest {
+		case "s":
+			forceSuffix = true
+		case "p":
+			forcePrefix = true
+		case "":
+			// digits only, no mode flag
+			if digits == "" {
+				// No digits and no flag — not a valid modifier; restore name
+				name = text
+			}
+		default:
+			// Unrecognized modifier — treat entire token as plain word
+			name = text
 		}
 	}
 
