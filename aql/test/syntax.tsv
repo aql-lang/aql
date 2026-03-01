@@ -242,9 +242,9 @@ unify number string end	'~unify-fail' false
 [1,2,3]	[1,2,3]
 ["a","b"]	['a','b']
 []	[]
-[true,false]	[true,false]
-[1,"a",true]	[1,'a',true]
-[number,string]	[number,string]
+[true,false]	[word(true),word(false)]
+[1,"a",true]	[1,'a',word(true)]
+[number,string]	[word(number),word(string)]
 
 # === Map literals ===
 {x:1}	{x:1}
@@ -260,7 +260,7 @@ unify number string end	'~unify-fail' false
 {a:[1,2,3]}	{a:[1,2,3]}
 
 # === Unify - lists ===
-[1,string] unify [number,"a"]	[1,'a'] true
+[1,string] unify [number,"a"]	'~unify-fail' false
 [1,"a"] unify [1,"a"]	[1,'a'] true
 [] unify []	[] true
 [1,2] unify [1,3]	'~unify-fail' false
@@ -283,7 +283,7 @@ map unify map	map true
 # === Unify - nested structures ===
 {x:[1,string]} unify {x:[number,"a"]}	{x:[1,'a']} true
 [{a:1},{b:string}] unify [{a:number},{b:"z"}]	[{a:1},{b:'z'}] true
-[[string]] unify [["hello"]]	[['hello']] true
+[[string]] unify [["hello"]]	'~unify-fail' false
 {a:{b:number}} unify {a:{b:42}}	{a:{b:42}} true
 
 # === Unify - list/map vs incompatible types ===

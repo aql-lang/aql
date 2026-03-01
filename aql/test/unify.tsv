@@ -67,12 +67,12 @@ boolean	none	false
 [1,2,3]	[1,2,3]	true	[1,2,3]
 ["a","b"]	["a","b"]	true	['a','b']
 []	[]	true	[]
-[true,false]	[true,false]	true	[true,false]
+[true,false]	[true,false]	true	[word(true),word(false)]
 
 # List element-wise narrowing
-[1,string]	[number,"a"]	true	[1,'a']
-[number,number]	[1,2]	true	[1,2]
-[string,string]	["x","y"]	true	['x','y']
+[1,string]	[number,"a"]	false
+[number,number]	[1,2]	false
+[string,string]	["x","y"]	false
 
 # List length mismatch (fail)
 [1]	[1,2]	false
@@ -90,7 +90,7 @@ list	[]	true	[]
 
 # Nested lists
 [[1,2],[3,4]]	[[1,2],[3,4]]	true	[[1,2],[3,4]]
-[[string],[number]]	[["a"],[1]]	true	[['a'],[1]]
+[[string],[number]]	[["a"],[1]]	false
 [[1]]	[[2]]	false
 
 # Identical maps
