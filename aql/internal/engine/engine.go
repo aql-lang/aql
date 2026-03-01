@@ -87,6 +87,16 @@ func (e *Engine) stepWord(val Value) error {
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
+		// Check for boolean literals.
+		if w.Name == "true" {
+			e.stack[e.pointer] = NewBoolean(true)
+			return nil
+		}
+		if w.Name == "false" {
+			e.stack[e.pointer] = NewBoolean(false)
+			return nil
+		}
+
 		// Unknown word — treat as a bare string value.
 		// Don't advance pointer so stepLiteral runs on the next iteration
 		// and can collect this value for any pending forward.

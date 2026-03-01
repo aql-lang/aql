@@ -129,6 +129,7 @@ func registerBuiltins(r *Registry) {
 	})
 
 	registerStorage(r)
+	registerUnify(r)
 
 	// Note: "end" is handled directly by the engine as a keyword,
 	// not registered here. It terminates any pending forward early.

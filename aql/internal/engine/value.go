@@ -40,6 +40,14 @@ func NewInteger(n int64) Value {
 	return Value{VType: TInteger, Data: n}
 }
 
+// NewBoolean creates a boolean/true or boolean/false value.
+func NewBoolean(b bool) Value {
+	if b {
+		return Value{VType: TBooleanTrue, Data: b}
+	}
+	return Value{VType: TBooleanFalse, Data: b}
+}
+
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
 	return Value{
@@ -81,6 +89,11 @@ func (v Value) IsForward() bool {
 	return v.VType.Equal(TForward)
 }
 
+// IsBoolean reports whether this value is a boolean type.
+func (v Value) IsBoolean() bool {
+	return v.VType.Matches(TBoolean)
+}
+
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
@@ -106,6 +119,11 @@ func (v Value) AsInteger() int64 {
 	return v.Data.(int64)
 }
 
+// AsBoolean returns the bool payload, panics if not a boolean type.
+func (v Value) AsBoolean() bool {
+	return v.Data.(bool)
+}
+
 // String returns a human-readable representation.
 func (v Value) String() string {
 	switch {
@@ -121,6 +139,11 @@ func (v Value) String() string {
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
+	case v.VType.Matches(TBoolean):
+		if v.AsBoolean() {
+			return "true"
+		}
+		return "false"
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}
