@@ -440,3 +440,71 @@ func TestParseUnterminatedString(t *testing.T) {
 func TestParseUnterminatedSingleQuote(t *testing.T) {
 	assertParseError(t, `'hello`)
 }
+
+// --- Multiline tests ---
+
+func TestParseNewlines(t *testing.T) {
+	assertParse(t, "1\nadd\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseCRLF(t *testing.T) {
+	assertParse(t, "1\r\nadd\r\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseBlankLines(t *testing.T) {
+	assertParse(t, "1\n\n\nadd\n\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineWithTabs(t *testing.T) {
+	assertParse(t, "\t1\n\tadd\n\t2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineWithComments(t *testing.T) {
+	src := "1 # first value\nadd # operator\n2 # second value"
+	assertParse(t, src, []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineScript(t *testing.T) {
+	src := `
+		set x 10 end
+		set y 20 end
+		get x
+		add
+		get y
+	`
+	assertParse(t, src, []engine.Value{
+		engine.NewWord("set"),
+		engine.NewWord("x"),
+		engine.NewInteger(10),
+		engine.NewWord("end"),
+		engine.NewWord("set"),
+		engine.NewWord("y"),
+		engine.NewInteger(20),
+		engine.NewWord("end"),
+		engine.NewWord("get"),
+		engine.NewWord("x"),
+		engine.NewWord("add"),
+		engine.NewWord("get"),
+		engine.NewWord("y"),
+	})
+}
