@@ -49,6 +49,14 @@ func Unify(a, b Value) (Value, bool) {
 
 // valuesEqual compares the data payloads of two values with the same type.
 func valuesEqual(a, b Value) bool {
+	// Type literals (Data == nil) with equal types are always equal.
+	if a.Data == nil && b.Data == nil {
+		return true
+	}
+	// One is a type literal and the other is a concrete value — not equal.
+	if a.Data == nil || b.Data == nil {
+		return false
+	}
 	switch {
 	case a.VType.Matches(TString):
 		return a.AsString() == b.AsString()
@@ -71,8 +79,9 @@ func registerUnify(r *Registry) {
 		return []Value{NewString("~unify-fail"), NewBoolean(false)}, nil
 	}
 
-	// unify: [any, any] -> [any, boolean]  (prefix)
-	//        [any | any] -> [any, boolean]  (infix)
+	// unify: [any, any] -> [any, boolean]    (prefix)
+	//        [any | any] -> [any, boolean]    (infix)
+	//        [| any, any] -> [any, boolean]   (suffix)
 	r.Register("unify",
 		Signature{
 			Prefix:  []Type{TAny, TAny},
@@ -81,6 +90,10 @@ func registerUnify(r *Registry) {
 		Signature{
 			Prefix:  []Type{TAny},
 			Suffix:  []Type{TAny},
+			Handler: unifyHandler,
+		},
+		Signature{
+			Suffix:  []Type{TAny, TAny},
 			Handler: unifyHandler,
 		},
 	)

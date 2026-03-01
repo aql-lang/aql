@@ -48,6 +48,12 @@ func NewBoolean(b bool) Value {
 	return Value{VType: TBooleanFalse, Data: b}
 }
 
+// NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
+// The Data is nil since type literals have no specific literal value.
+func NewTypeLiteral(t Type) Value {
+	return Value{VType: t, Data: nil}
+}
+
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
 	return Value{
@@ -135,6 +141,9 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.Data == nil:
+		// Type literal with no specific value (e.g. "number", "string").
+		return v.VType.String()
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Matches(TInteger):
