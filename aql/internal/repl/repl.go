@@ -5,11 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chzyer/readline"
 
-	"github.com/metsitaba/voxgig-exp/aql/internal/evaluator"
-	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -32,6 +32,9 @@ func Start(in io.Reader, out io.Writer) {
 	}
 	defer rl.Close()
 
+	// Shared registry so set/get state persists across REPL lines.
+	registry := engine.DefaultRegistry()
+
 	for {
 		line, err := rl.Readline()
 		if err != nil { // EOF or interrupt
@@ -42,25 +45,26 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		l := lexer.New(line)
-		p := parser.New(l)
-		program := p.ParseProgram()
-
-		if len(p.Errors()) > 0 {
-			printParserErrors(out, p.Errors())
+		values, err := parser.Parse(line)
+		if err != nil {
+			fmt.Fprintf(out, "  parse error: %s\n", err)
 			continue
 		}
 
-		result := evaluator.Eval(program)
-		if result != nil {
-			fmt.Fprintln(out, result.Inspect())
+		eng := engine.New(registry)
+		result, err := eng.Run(values)
+		if err != nil {
+			fmt.Fprintf(out, "  error: %s\n", err)
+			continue
 		}
-	}
-}
 
-func printParserErrors(out io.Writer, errors []string) {
-	for _, msg := range errors {
-		fmt.Fprintf(out, "\tparse error: %s\n", msg)
+		if len(result) > 0 {
+			parts := make([]string, len(result))
+			for i, v := range result {
+				parts[i] = v.String()
+			}
+			fmt.Fprintln(out, strings.Join(parts, " "))
+		}
 	}
 }
 

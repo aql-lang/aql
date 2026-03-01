@@ -256,23 +256,30 @@ func TestParseArgCountModifier(t *testing.T) {
 }
 
 func TestParseForceSuffixModifier(t *testing.T) {
-	// lower=
-	assertParse(t, "lower=", []engine.Value{
+	// lower/s
+	assertParse(t, "lower/s", []engine.Value{
 		engine.NewWordModified("lower", -1, false, true),
 	})
 }
 
 func TestParseForcePrefixModifier(t *testing.T) {
-	// =lower
-	assertParse(t, "=lower", []engine.Value{
+	// lower/p
+	assertParse(t, "lower/p", []engine.Value{
 		engine.NewWordModified("lower", -1, true, false),
 	})
 }
 
 func TestParseArgCountAndSuffixModifier(t *testing.T) {
-	// lower/1=
-	assertParse(t, "lower/1=", []engine.Value{
+	// lower/1s
+	assertParse(t, "lower/1s", []engine.Value{
 		engine.NewWordModified("lower", 1, false, true),
+	})
+}
+
+func TestParseArgCountAndPrefixModifier(t *testing.T) {
+	// lower/1p
+	assertParse(t, "lower/1p", []engine.Value{
+		engine.NewWordModified("lower", 1, true, false),
 	})
 }
 
@@ -291,8 +298,8 @@ func TestParseArgCountTwo(t *testing.T) {
 }
 
 func TestParseModifierInExpression(t *testing.T) {
-	// B lower= → word then modified word
-	assertParse(t, "B lower=", []engine.Value{
+	// B lower/s → word then modified word
+	assertParse(t, "B lower/s", []engine.Value{
 		engine.NewWord("B"),
 		engine.NewWordModified("lower", -1, false, true),
 	})
@@ -439,4 +446,72 @@ func TestParseUnterminatedString(t *testing.T) {
 
 func TestParseUnterminatedSingleQuote(t *testing.T) {
 	assertParseError(t, `'hello`)
+}
+
+// --- Multiline tests ---
+
+func TestParseNewlines(t *testing.T) {
+	assertParse(t, "1\nadd\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseCRLF(t *testing.T) {
+	assertParse(t, "1\r\nadd\r\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseBlankLines(t *testing.T) {
+	assertParse(t, "1\n\n\nadd\n\n2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineWithTabs(t *testing.T) {
+	assertParse(t, "\t1\n\tadd\n\t2", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineWithComments(t *testing.T) {
+	src := "1 # first value\nadd # operator\n2 # second value"
+	assertParse(t, src, []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+	})
+}
+
+func TestParseMultilineScript(t *testing.T) {
+	src := `
+		set x 10 end
+		set y 20 end
+		get x
+		add
+		get y
+	`
+	assertParse(t, src, []engine.Value{
+		engine.NewWord("set"),
+		engine.NewWord("x"),
+		engine.NewInteger(10),
+		engine.NewWord("end"),
+		engine.NewWord("set"),
+		engine.NewWord("y"),
+		engine.NewInteger(20),
+		engine.NewWord("end"),
+		engine.NewWord("get"),
+		engine.NewWord("x"),
+		engine.NewWord("add"),
+		engine.NewWord("get"),
+		engine.NewWord("y"),
+	})
 }

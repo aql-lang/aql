@@ -87,7 +87,7 @@ type Value struct {
 func NewString(s string) Value       // VType: string/proper (or string/empty if "")
 func NewInteger(n int64) Value       // VType: number/integer
 func NewWord(name string) Value      // VType: word — a function reference
-func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value
+func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value // e.g. lower/1s, lower/p
 func NewForward(info ForwardInfo) Value  // VType: forward
 ```
 
@@ -97,8 +97,8 @@ func NewForward(info ForwardInfo) Value  // VType: forward
 type WordInfo struct {
     Name        string
     ArgCount    int   // -1 = unspecified
-    ForcePrefix bool  // =lower
-    ForceSuffix bool  // lower=
+    ForcePrefix bool  // lower/p
+    ForceSuffix bool  // lower/s
 }
 ```
 
@@ -141,12 +141,12 @@ type Signature struct {
 ```
 
 **Matching algorithm** — given a function name, the resolved stack, and
-optional modifiers (forcePrefix, forceSuffix, argCount):
+optional modifiers (forcePrefix via /p, forceSuffix via /s, argCount via /N):
 
 1. Collect all signatures for the function.
-2. Filter by modifiers: if `forcePrefix`, discard signatures with suffix args;
-   if `forceSuffix`, discard signatures with only prefix args;
-   if `argCount >= 0`, discard signatures where total args != argCount.
+2. Filter by modifiers: if `forcePrefix` (word/p), discard signatures with suffix args;
+   if `forceSuffix` (word/s), discard signatures with only prefix args;
+   if `argCount >= 0` (word/N), discard signatures where total args != argCount.
 3. For each remaining signature, check if the prefix portion matches the top
    of the resolved stack (type matching from Step 1).
 4. Suffix signatures are **always candidates** — they don't require the future
@@ -342,8 +342,8 @@ All tests use typed Values directly — no lexing or parsing.
 **Modifier tests:**
 ```go
 {name: "lower/1 D", input: []Value{NewWordModified("lower",1,false,true), NewString("D")}, want: []Value{NewString("d")}}
-{name: "lower= E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
-{name: "F =lower",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
+{name: "lower/s E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
+{name: "F lower/p",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
 ```
 
 **Forth primitive tests:**

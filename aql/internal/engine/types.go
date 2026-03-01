@@ -14,7 +14,11 @@ var (
 	TString      = NewType("string")
 	TStringProper = NewType("string/proper")
 	TStringEmpty = NewType("string/empty")
+	TNumber      = NewType("number")
 	TInteger     = NewType("number/integer")
+	TBoolean     = NewType("boolean")
+	TBooleanTrue = NewType("boolean/true")
+	TBooleanFalse = NewType("boolean/false")
 	TWord        = NewType("word")
 	TForward     = NewType("forward")
 	TOpenParen   = NewType("paren/open")
@@ -56,6 +60,21 @@ func (t Type) Specificity() int {
 // String returns the slash-separated type path.
 func (t Type) String() string {
 	return strings.Join(t.Parts, "/")
+}
+
+// IsSubtypeOf reports whether t is a strict subtype of parent.
+// For example: string/proper is a subtype of string, number/integer is a subtype of number.
+// A type is NOT a subtype of itself.
+func (t Type) IsSubtypeOf(parent Type) bool {
+	if len(t.Parts) <= len(parent.Parts) {
+		return false
+	}
+	for i, p := range parent.Parts {
+		if t.Parts[i] != p {
+			return false
+		}
+	}
+	return true
 }
 
 // Equal reports whether two types are identical.

@@ -61,10 +61,10 @@ _[] -> [uniq/extant/string]_
 # Storage
 
 `set foo 99` - sets store key foo to value 99
-set has signature: set [string any]=
+set has signature: set/s [string any]
 where [string any] means expect to find
-a string cell follower by an any cell at the top
-of the stack. however the = suffix means give precedence to 
+a string cell followed by an any cell at the top
+of the stack. however the /s suffix means give precedence to
 future tokens, in reverse order.
 
 examples:

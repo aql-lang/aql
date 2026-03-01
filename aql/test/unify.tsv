@@ -1,0 +1,41 @@
+# Unify test cases
+# Format: left_val<TAB>right_val<TAB>boolean_result<TAB>out_val
+# Each left_val and right_val is an AQL expression evaluated to produce a value.
+# boolean_result is true or false.
+# out_val is the expected unified value (ignored when boolean_result is false).
+
+# Identical integers
+1	1	true	1
+0	0	true	0
+42	42	true	42
+
+# Different integers (same type, different literal values)
+1	2	false
+0	1	false
+
+# Identical strings
+"hello"	"hello"	true	'hello'
+""	""	true	''
+
+# Different strings (same type, different literals)
+"hello"	"world"	false
+"a"	"b"	false
+
+# Identical booleans
+true	true	true	true
+false	false	true	false
+
+# Different booleans (boolean/true vs boolean/false)
+true	false	false
+
+# Incompatible types: string vs integer
+"hello"	1	false
+1	"hello"	false
+
+# Incompatible types: string vs boolean
+"hello"	true	false
+false	"world"	false
+
+# Incompatible types: integer vs boolean
+1	true	false
+false	42	false

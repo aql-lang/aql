@@ -62,8 +62,8 @@ lower B	'b'
 1 2 add 3 add	6
 
 # Modifiers
-lower= "E"	'e'
-"F" =lower	'f'
+lower/s "E"	'e'
+"F" lower/p	'f'
 
 # Set/Get
 set foo 99 end get foo	99

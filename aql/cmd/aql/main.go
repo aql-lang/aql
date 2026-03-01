@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/metsitaba/voxgig-exp/aql/internal/evaluator"
-	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
@@ -17,8 +17,6 @@ var Version = "0.1.0-dev"
 func main() {
 	evalExpr := flag.String("e", "", "evaluate expression")
 	showVersion := flag.Bool("version", false, "print version and exit")
-	showAST := flag.Bool("ast", false, "print AST and exit")
-	showTokens := flag.Bool("tokens", false, "print tokens and exit")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: aql [options] [script.aql]\n\nOptions:\n")
@@ -51,7 +49,7 @@ func main() {
 	}
 
 	if hasSource {
-		run(source, *showTokens, *showAST)
+		run(source)
 		return
 	}
 
@@ -60,34 +58,25 @@ func main() {
 	repl.Start(os.Stdin, os.Stdout)
 }
 
-func run(source string, showTokens bool, showAST bool) {
-	if showTokens {
-		l := lexer.New(source)
-		tokens := l.Tokenize()
-		for _, tok := range tokens {
-			fmt.Printf("%+v\n", tok)
-		}
-		return
-	}
-
-	l := lexer.New(source)
-	p := parser.New(l)
-	program := p.ParseProgram()
-
-	if len(p.Errors()) > 0 {
-		for _, msg := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "parse error: %s\n", msg)
-		}
+func run(source string) {
+	values, err := parser.Parse(source)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse error: %s\n", err)
 		os.Exit(1)
 	}
 
-	if showAST {
-		fmt.Println(program.String())
-		return
+	eng := engine.New(engine.DefaultRegistry())
+	result, err := eng.Run(values)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
 	}
 
-	result := evaluator.Eval(program)
-	if result != nil {
-		fmt.Println(result.Inspect())
+	if len(result) > 0 {
+		parts := make([]string, len(result))
+		for i, v := range result {
+			parts[i] = v.String()
+		}
+		fmt.Println(strings.Join(parts, " "))
 	}
 }

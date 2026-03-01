@@ -201,7 +201,7 @@ func TestDrop(t *testing.T) {
 // --- Engine tests: modifier forcing ---
 
 func TestForceSuffix(t *testing.T) {
-	// lower= E -> 'e' (force suffix even though prefix exists)
+	// lower/s E -> 'e' (force suffix even though prefix exists)
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
 		NewWordModified("lower", -1, false, true),
@@ -219,7 +219,7 @@ func TestForceSuffix(t *testing.T) {
 }
 
 func TestForcePrefix(t *testing.T) {
-	// F =lower -> 'f' (force prefix, no suffix considered)
+	// F lower/p -> 'f' (force prefix, no suffix considered)
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
 		NewString("F"),
@@ -1495,7 +1495,7 @@ func TestEdgePrefixChain(t *testing.T) {
 // --- Edge: modifiers ---
 
 func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
-	// =lower with no prefix arg → error (force prefix but no string on stack)
+	// lower/p with no prefix arg → error (force prefix but no string on stack)
 	e := New(DefaultRegistry())
 	_, err := e.Run([]Value{
 		NewWordModified("lower", -1, true, false),
@@ -1507,7 +1507,7 @@ func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
 }
 
 func TestEdgeForceSuffixWithPrefixAvailable(t *testing.T) {
-	// "A" lower= "B" → should use suffix, returning 'b', with 'a' remaining
+	// "A" lower/s "B" → should use suffix, returning 'b', with 'a' remaining
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
 		NewString("A"),
@@ -1541,7 +1541,7 @@ func TestEdgeArgCountMismatch(t *testing.T) {
 }
 
 func TestEdgeForcePrefixAdd(t *testing.T) {
-	// 1 2 =add → 3 (force prefix on add)
+	// 1 2 add/p → 3 (force prefix on add)
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2),
