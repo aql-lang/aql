@@ -1,0 +1,82 @@
+package test
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+)
+
+func TestBasic(t *testing.T) {
+	f, err := os.Open("basic.tsv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	ran := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Skip empty lines and comments.
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "\t", 2)
+		expr := parts[0]
+		expected := ""
+		if len(parts) > 1 {
+			expected = parts[1]
+		}
+
+		ran++
+		t.Run(fmt.Sprintf("L%d_%s", lineNum, expr), func(t *testing.T) {
+			// Parse the expression into engine values.
+			values, err := parser.Parse(expr)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+
+			// Run through the engine with a fresh registry.
+			eng := engine.New(engine.DefaultRegistry())
+			result, err := eng.Run(values)
+			if err != nil {
+				t.Fatalf("engine error: %v", err)
+			}
+
+			got := formatStack(result)
+			if got != expected {
+				t.Errorf("\n  expr: %s\n  got:  %q\n  want: %q", expr, got, expected)
+			}
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if ran == 0 {
+		t.Fatal("no test cases found in basic.tsv")
+	}
+
+	t.Logf("ran %d test cases", ran)
+}
+
+// formatStack converts a result stack to a string for comparison.
+// Each value uses Value.String(), joined by spaces.
+func formatStack(values []engine.Value) string {
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = v.String()
+	}
+	return strings.Join(parts, " ")
+}
