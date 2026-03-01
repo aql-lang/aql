@@ -1,6 +1,53 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// OrderedMap is a map that preserves insertion order of keys.
+type OrderedMap struct {
+	keys []string
+	vals map[string]Value
+}
+
+// NewOrderedMap creates an empty OrderedMap.
+func NewOrderedMap() *OrderedMap {
+	return &OrderedMap{vals: make(map[string]Value)}
+}
+
+// Set adds or updates a key-value pair, preserving insertion order.
+func (m *OrderedMap) Set(key string, val Value) {
+	if _, exists := m.vals[key]; !exists {
+		m.keys = append(m.keys, key)
+	}
+	m.vals[key] = val
+}
+
+// Get retrieves a value by key.
+func (m *OrderedMap) Get(key string) (Value, bool) {
+	v, ok := m.vals[key]
+	return v, ok
+}
+
+// Keys returns the keys in insertion order.
+func (m *OrderedMap) Keys() []string {
+	return m.keys
+}
+
+// SortedKeys returns the keys in sorted order (for deterministic comparison).
+func (m *OrderedMap) SortedKeys() []string {
+	sorted := make([]string, len(m.keys))
+	copy(sorted, m.keys)
+	sort.Strings(sorted)
+	return sorted
+}
+
+// Len returns the number of entries.
+func (m *OrderedMap) Len() int {
+	return len(m.keys)
+}
 
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
@@ -46,6 +93,16 @@ func NewBoolean(b bool) Value {
 		return Value{VType: TBooleanTrue, Data: b}
 	}
 	return Value{VType: TBooleanFalse, Data: b}
+}
+
+// NewList creates a list value from a slice of Values.
+func NewList(elems []Value) Value {
+	return Value{VType: TList, Data: elems}
+}
+
+// NewMap creates a map value from an ordered map of string keys to Values.
+func NewMap(entries *OrderedMap) Value {
+	return Value{VType: TMap, Data: entries}
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
@@ -130,6 +187,16 @@ func (v Value) AsBoolean() bool {
 	return v.Data.(bool)
 }
 
+// AsList returns the []Value payload, panics if not a list type.
+func (v Value) AsList() []Value {
+	return v.Data.([]Value)
+}
+
+// AsMap returns the OrderedMap payload, panics if not a map type.
+func (v Value) AsMap() *OrderedMap {
+	return v.Data.(*OrderedMap)
+}
+
 // String returns a human-readable representation.
 func (v Value) String() string {
 	switch {
@@ -153,6 +220,21 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
+	case v.VType.Equal(TList):
+		elems := v.AsList()
+		parts := make([]string, len(elems))
+		for i, e := range elems {
+			parts[i] = e.String()
+		}
+		return "[" + strings.Join(parts, ",") + "]"
+	case v.VType.Equal(TMap):
+		m := v.AsMap()
+		parts := make([]string, 0, m.Len())
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		return "{" + strings.Join(parts, ",") + "}"
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}

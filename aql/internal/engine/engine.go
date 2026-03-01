@@ -10,6 +10,8 @@ var typeNames = map[string]Type{
 	"number":  TNumber,
 	"string":  TString,
 	"boolean": TBoolean,
+	"list":    TList,
+	"map":     TMap,
 }
 
 // Engine is the AQL stack machine.

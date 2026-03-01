@@ -41,11 +41,32 @@ func Parse(src string) ([]engine.Value, error) {
 	cfg := newConfig()
 	lex := jsonic.NewLex(src, cfg)
 
+	values, err := parseTokens(lex, jsonic.TinZZ)
+	if err != nil {
+		return nil, err
+	}
+
+	if lex.Err != nil {
+		return nil, fmt.Errorf("parse error: %v", lex.Err)
+	}
+
+	return values, nil
+}
+
+// parseTokens reads tokens from the lexer until it encounters stopTin.
+// It handles recursive map ({...}) and list ([...]) literals.
+func parseTokens(lex *jsonic.Lex, stopTin jsonic.Tin) ([]engine.Value, error) {
 	var values []engine.Value
 
 	for {
 		tok := lex.Next()
+		if tok.Tin == stopTin {
+			break
+		}
 		if tok.Tin == jsonic.TinZZ {
+			if stopTin != jsonic.TinZZ {
+				return nil, fmt.Errorf("parse error: unexpected end of input")
+			}
 			break
 		}
 
@@ -77,17 +98,176 @@ func Parse(src string) ([]engine.Value, error) {
 		case tinCP:
 			values = append(values, engine.NewWord(")"))
 
+		case jsonic.TinOS:
+			// List literal: [elem, elem, ...]
+			listVal, err := parseList(lex)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, listVal)
+
+		case jsonic.TinOB:
+			// Map literal: {key:val, key:val, ...}
+			mapVal, err := parseMap(lex)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, mapVal)
+
+		case jsonic.TinCA:
+			// Commas are separators inside lists/maps; at top level, skip.
+			continue
+
 		default:
 			return nil, fmt.Errorf("parse error at %d:%d: unexpected token %s %q",
 				tok.RI, tok.CI, tok.Name, tok.Src)
 		}
 	}
 
-	if lex.Err != nil {
-		return nil, fmt.Errorf("parse error: %v", lex.Err)
+	return values, nil
+}
+
+// parseList reads list elements until ] is encountered.
+// Elements are separated by commas or whitespace.
+func parseList(lex *jsonic.Lex) (engine.Value, error) {
+	var elems []engine.Value
+
+	for {
+		tok := lex.Next()
+		if tok.Tin == jsonic.TinZZ {
+			return engine.Value{}, fmt.Errorf("parse error: unterminated list literal")
+		}
+		if tok.Tin == jsonic.TinCS {
+			break
+		}
+		if tok.Tin == jsonic.TinCA {
+			continue // skip commas
+		}
+
+		val, err := parseValueToken(tok, lex)
+		if err != nil {
+			return engine.Value{}, err
+		}
+		elems = append(elems, val)
 	}
 
-	return values, nil
+	return engine.NewList(elems), nil
+}
+
+// parseMap reads key:value pairs until } is encountered.
+// Pairs are separated by commas or whitespace.
+func parseMap(lex *jsonic.Lex) (engine.Value, error) {
+	entries := engine.NewOrderedMap()
+
+	for {
+		// Read key.
+		keyTok := lex.Next()
+		if keyTok.Tin == jsonic.TinZZ {
+			return engine.Value{}, fmt.Errorf("parse error: unterminated map literal")
+		}
+		if keyTok.Tin == jsonic.TinCB {
+			break
+		}
+		if keyTok.Tin == jsonic.TinCA {
+			continue // skip commas
+		}
+
+		var key string
+		switch keyTok.Tin {
+		case jsonic.TinTX:
+			key = keyTok.Src
+		case jsonic.TinST:
+			s, ok := keyTok.Val.(string)
+			if !ok {
+				return engine.Value{}, fmt.Errorf("parse error at %d:%d: expected string key", keyTok.RI, keyTok.CI)
+			}
+			key = s
+		default:
+			return engine.Value{}, fmt.Errorf("parse error at %d:%d: expected map key, got %s", keyTok.RI, keyTok.CI, keyTok.Name)
+		}
+
+		// Expect colon.
+		colonTok := lex.Next()
+		if colonTok.Tin != jsonic.TinCL {
+			return engine.Value{}, fmt.Errorf("parse error at %d:%d: expected ':' after map key %q", colonTok.RI, colonTok.CI, key)
+		}
+
+		// Read value.
+		valTok := lex.Next()
+		if valTok.Tin == jsonic.TinZZ {
+			return engine.Value{}, fmt.Errorf("parse error: unterminated map literal")
+		}
+
+		val, err := parseValueToken(valTok, lex)
+		if err != nil {
+			return engine.Value{}, err
+		}
+
+		entries.Set(key, val)
+	}
+
+	return engine.NewMap(entries), nil
+}
+
+// parseValueToken converts a single token into an engine.Value.
+// It handles recursive structures (nested maps and lists).
+func parseValueToken(tok *jsonic.Token, lex *jsonic.Lex) (engine.Value, error) {
+	switch tok.Tin {
+	case jsonic.TinNR:
+		n, ok := tok.Val.(float64)
+		if !ok {
+			return engine.Value{}, fmt.Errorf("parse error at %d:%d: expected number", tok.RI, tok.CI)
+		}
+		return engine.NewInteger(int64(n)), nil
+
+	case jsonic.TinST:
+		s, ok := tok.Val.(string)
+		if !ok {
+			return engine.Value{}, fmt.Errorf("parse error at %d:%d: expected string", tok.RI, tok.CI)
+		}
+		return engine.NewString(s), nil
+
+	case jsonic.TinTX:
+		return parseValueWord(tok.Src), nil
+
+	case jsonic.TinOS:
+		return parseList(lex)
+
+	case jsonic.TinOB:
+		return parseMap(lex)
+
+	default:
+		return engine.Value{}, fmt.Errorf("parse error at %d:%d: unexpected token %s in structure", tok.RI, tok.CI, tok.Name)
+	}
+}
+
+// parseValueWord converts a bare word inside a map/list to the appropriate value.
+// Type names and boolean literals are resolved; other words become strings.
+func parseValueWord(text string) engine.Value {
+	// Boolean literals.
+	if text == "true" {
+		return engine.NewBoolean(true)
+	}
+	if text == "false" {
+		return engine.NewBoolean(false)
+	}
+
+	// Well-known type names resolve to type literals.
+	typeNames := map[string]engine.Type{
+		"any":     engine.TAny,
+		"none":    engine.TNone,
+		"number":  engine.TNumber,
+		"string":  engine.TString,
+		"boolean": engine.TBoolean,
+		"list":    engine.TList,
+		"map":     engine.TMap,
+	}
+	if t, ok := typeNames[text]; ok {
+		return engine.NewTypeLiteral(t)
+	}
+
+	// Unknown words become strings (matching AQL engine behavior).
+	return engine.NewString(text)
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling

@@ -32,6 +32,8 @@ string	string
 boolean	boolean
 any	any
 none	none
+list	list
+map	map
 
 # === Unknown words become strings ===
 foo	'foo'
@@ -235,6 +237,72 @@ unify number string end	'~unify-fail' false
 (2 mul 3) unify number	6 true
 (1 add 1) unify (3 sub 1)	2 true
 (1 add 1) unify (3 sub 2)	'~unify-fail' false
+
+# === List literals ===
+[1,2,3]	[1,2,3]
+["a","b"]	['a','b']
+[]	[]
+[true,false]	[true,false]
+[1,"a",true]	[1,'a',true]
+[number,string]	[number,string]
+
+# === Map literals ===
+{x:1}	{x:1}
+{x:1,y:2}	{x:1,y:2}
+{}	{}
+{a:"hello"}	{a:'hello'}
+{x:string,y:number}	{x:string,y:number}
+
+# === Nested structures ===
+[[1,2],[3,4]]	[[1,2],[3,4]]
+{a:{b:1}}	{a:{b:1}}
+[{x:1},{y:2}]	[{x:1},{y:2}]
+{a:[1,2,3]}	{a:[1,2,3]}
+
+# === Unify - lists ===
+[1,string] unify [number,"a"]	[1,'a'] true
+[1,"a"] unify [1,"a"]	[1,'a'] true
+[] unify []	[] true
+[1,2] unify [1,3]	'~unify-fail' false
+[1] unify [1,2]	'~unify-fail' false
+list unify [1,2]	[1,2] true
+[1,2] unify list	[1,2] true
+list unify list	list true
+
+# === Unify - maps ===
+{x:string} unify {x:"hello"}	{x:'hello'} true
+{x:1} unify {x:1}	{x:1} true
+{x:1} unify {x:2}	'~unify-fail' false
+{x:1} unify {x:1,y:2}	'~unify-fail' false
+{x:1} unify {y:1}	'~unify-fail' false
+{} unify {}	{} true
+map unify {x:1}	{x:1} true
+{x:1} unify map	{x:1} true
+map unify map	map true
+
+# === Unify - nested structures ===
+{x:[1,string]} unify {x:[number,"a"]}	{x:[1,'a']} true
+[{a:1},{b:string}] unify [{a:number},{b:"z"}]	[{a:1},{b:'z'}] true
+[[string]] unify [["hello"]]	[['hello']] true
+{a:{b:number}} unify {a:{b:42}}	{a:{b:42}} true
+
+# === Unify - list/map vs incompatible types ===
+[1] unify {x:1}	'~unify-fail' false
+list unify map	'~unify-fail' false
+[1] unify 1	'~unify-fail' false
+{x:1} unify "hello"	'~unify-fail' false
+
+# === Unify - any with list/map ===
+any unify [1,2]	[1,2] true
+[1,2] unify any	[1,2] true
+any unify {x:1}	{x:1} true
+{x:1} unify any	{x:1} true
+
+# === Unify - none with list/map ===
+none unify [1]	'~unify-fail' false
+none unify {x:1}	'~unify-fail' false
+none unify list	'~unify-fail' false
+none unify map	'~unify-fail' false
 
 # === Error cases ===
 
