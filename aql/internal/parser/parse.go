@@ -39,6 +39,7 @@ func Parse(src string) ([]engine.Value, error) {
 
 	j := jsonic.Make(jsonic.Options{
 		TextInfo: boolPtr(true),
+		ListRef:  boolPtr(true),
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
@@ -51,19 +52,21 @@ func Parse(src string) ([]engine.Value, error) {
 		return nil, nil
 	}
 
-	// jsonic returns []any for both explicit lists [1,2,3] and implicit
-	// lists (1 2 3). Check the source to disambiguate: if the entire
-	// source is a single bracketed expression, it is one list value.
+	// With ListRef enabled, jsonic returns ListRef for all lists.
+	// ListRef.Implicit distinguishes implicit lists (space/comma separated)
+	// from explicit lists (bracketed with []).
 	switch val := result.(type) {
-	case []any:
-		if isSingleExplicitList(processed) {
-			lv, err := convertWordList(val)
+	case jsonic.ListRef:
+		if !val.Implicit {
+			// Explicit list [...]  — a single list value (quotation).
+			lv, err := convertWordList(val.Val)
 			if err != nil {
 				return nil, err
 			}
 			return []engine.Value{lv}, nil
 		}
-		return convertTopLevel(val)
+		// Implicit list — top-level stack values.
+		return convertTopLevel(val.Val)
 	default:
 		v, err := convertTopLevelValue(val)
 		if err != nil {
@@ -120,70 +123,6 @@ func preprocessParens(src string) string {
 	return out.String()
 }
 
-// isSingleExplicitList checks whether the source string represents a single
-// explicit list literal [...]. It returns true only if the outermost balanced
-// brackets span the entire source (ignoring trailing whitespace/comments).
-func isSingleExplicitList(src string) bool {
-	trimmed := strings.TrimSpace(src)
-	if len(trimmed) == 0 || trimmed[0] != '[' {
-		return false
-	}
-
-	depth := 0
-	inString := false
-	var quote byte
-
-	for i := 0; i < len(trimmed); i++ {
-		c := trimmed[i]
-
-		if inString {
-			if c == '\\' && i+1 < len(trimmed) {
-				i++ // skip escaped char
-			} else if c == quote {
-				inString = false
-			}
-			continue
-		}
-
-		if c == '"' || c == '\'' || c == '`' {
-			inString = true
-			quote = c
-			continue
-		}
-
-		if c == '[' || c == '{' {
-			depth++
-		} else if c == ']' || c == '}' {
-			depth--
-			if depth == 0 {
-				// Check that everything after the closing bracket is
-				// only whitespace or comments.
-				return isTrailingOnly(trimmed[i+1:])
-			}
-		}
-	}
-	return false
-}
-
-// isTrailingOnly returns true if s contains only whitespace and line comments.
-func isTrailingOnly(s string) bool {
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
-			continue
-		}
-		// Line comment: skip to end of line.
-		if c == '#' || (c == '/' && i+1 < len(s) && s[i+1] == '/') {
-			for i < len(s) && s[i] != '\n' {
-				i++
-			}
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 // convertTopLevel converts a top-level implicit list from jsonic into
 // a slice of engine.Value using word context.
 func convertTopLevel(items []any) ([]engine.Value, error) {
@@ -214,8 +153,8 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 	case map[string]any:
 		return convertMapData(val)
 
-	case []any:
-		return convertWordList(val)
+	case jsonic.ListRef:
+		return convertWordList(val.Val)
 
 	case bool:
 		return engine.NewBoolean(val), nil
@@ -271,8 +210,8 @@ func convertDataValue(v any) (engine.Value, error) {
 	case map[string]any:
 		return convertMapData(val)
 
-	case []any:
-		return convertDataList(val)
+	case jsonic.ListRef:
+		return convertDataList(val.Val)
 
 	case bool:
 		return engine.NewBoolean(val), nil
