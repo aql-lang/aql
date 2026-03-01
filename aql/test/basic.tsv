@@ -1,0 +1,69 @@
+# Basic AQL expression tests
+# Format: expression<TAB>expected result
+# String values shown as 'text', integers as digits.
+# Multiple stack values are space-separated.
+# Empty expected means empty stack.
+
+# Integer literals
+1	1
+0	0
+42	42
+-5	-5
+999	999
+
+# String literals
+"hello"	'hello'
+'world'	'world'
+""	''
+
+# Unknown words become strings
+foo	'foo'
+abc	'abc'
+
+# Multiple values on stack
+1 2 3	1 2 3
+1 "hello"	1 'hello'
+
+# String functions - prefix
+"hello" upper	'HELLO'
+"WORLD" lower	'world'
+a upper	'A'
+
+# String functions - suffix
+lower "ABC"	'abc'
+lower B	'b'
+
+# Arithmetic - prefix
+1 2 add	3
+10 3 sub	7
+4 5 mul	20
+10 3 div	3
+10 3 mod	1
+
+# Arithmetic - infix
+1 add 2	3
+10 sub 3	7
+4 mul 5	20
+
+# Operator precedence
+2 add 3 mul 4	14
+2 mul 3 add 4	10
+1 add 2 mul 3 add 4	11
+10 sub 3 sub 1	6
+
+# Parentheses
+(1 add 2)	3
+(1 add 2) mul 3	9
+2 mul (3 add 4)	14
+(2 add 3) mul (4 add 1)	25
+
+# Stack operations
+1 drop
+1 2 add 3 add	6
+
+# Modifiers
+lower= "E"	'e'
+"F" =lower	'f'
+
+# Set/Get
+set foo 99 end get foo	99
