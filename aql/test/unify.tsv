@@ -39,3 +39,26 @@ false	"world"	false
 # Incompatible types: integer vs boolean
 1	true	false
 false	42	false
+
+# None unifies only with itself
+none	none	true	none
+
+# None does not unify with any
+none	any	false
+any	none	false
+
+# None does not unify with scalars
+none	1	false
+1	none	false
+none	"hello"	false
+"hello"	none	false
+none	true	false
+false	none	false
+
+# None does not unify with parent types
+none	number	false
+number	none	false
+none	string	false
+string	none	false
+none	boolean	false
+boolean	none	false

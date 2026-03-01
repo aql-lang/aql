@@ -11,6 +11,7 @@ type Type struct {
 // Well-known types.
 var (
 	TAny         = NewType("any")
+	TNone        = NewType("none")
 	TString      = NewType("string")
 	TStringProper = NewType("string/proper")
 	TStringEmpty = NewType("string/empty")

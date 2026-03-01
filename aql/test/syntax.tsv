@@ -31,6 +31,7 @@ number	number
 string	string
 boolean	boolean
 any	any
+none	none
 
 # === Unknown words become strings ===
 foo	'foo'
@@ -178,6 +179,28 @@ number unify string	'~unify-fail' false
 string unify number	'~unify-fail' false
 number unify boolean	'~unify-fail' false
 boolean unify string	'~unify-fail' false
+
+# === Unify - none only unifies with itself ===
+none unify none	none true
+none unify any	'~unify-fail' false
+any unify none	'~unify-fail' false
+none unify 1	'~unify-fail' false
+1 unify none	'~unify-fail' false
+none unify "hello"	'~unify-fail' false
+"hello" unify none	'~unify-fail' false
+none unify true	'~unify-fail' false
+false unify none	'~unify-fail' false
+none unify number	'~unify-fail' false
+number unify none	'~unify-fail' false
+none unify string	'~unify-fail' false
+string unify none	'~unify-fail' false
+none unify boolean	'~unify-fail' false
+boolean unify none	'~unify-fail' false
+
+# === Unify - none with arg forms ===
+none none unify	none true
+none unify none	none true
+unify none none end	none true
 
 # === Unify - prefix/infix/suffix arg forms ===
 

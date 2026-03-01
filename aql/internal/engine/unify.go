@@ -7,6 +7,7 @@ import "fmt"
 // Otherwise it returns an error description and false.
 //
 // Unification rules for scalar types:
+//   - "none" only unifies with "none", nothing else (not even "any")
 //   - Equal types with equal data: return either value, true
 //   - One type is a subtype of the other: return the narrower (more specific) value, true
 //   - One type is "any": return the other (more specific) value, true
@@ -15,6 +16,16 @@ import "fmt"
 func Unify(a, b Value) (Value, bool) {
 	aType := a.VType
 	bType := b.VType
+
+	// "none" only unifies with "none".
+	aNone := aType.Equal(TNone)
+	bNone := bType.Equal(TNone)
+	if aNone || bNone {
+		if aNone && bNone {
+			return a, true
+		}
+		return Value{}, false
+	}
 
 	// If both types are exactly equal, compare literal values.
 	if aType.Equal(bType) {

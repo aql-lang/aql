@@ -6,6 +6,7 @@ import "fmt"
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
 	"any":     TAny,
+	"none":    TNone,
 	"number":  TNumber,
 	"string":  TString,
 	"boolean": TBoolean,
