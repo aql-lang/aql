@@ -41,8 +41,25 @@ type increment fn [
   [integer] [integer]
   [float] [float]
   ]
-``` - multiple signatures
+``` 
+
+- multiple signatures
   
+
+child elements:
+
+`[:string]` - list of strings
+`[:{x:number}]` - of of `{x:number}` maps
+
+`{:integer}` - map of integers
+`{:[:string]}` - map of string lists
+
+
+disjunctions
+
+
+`type foo disjunct [string none]` - optional string 
+
 
 
 ## Literals
@@ -86,6 +103,25 @@ _[] -> [uniq/predicate/number/integer]_
 `uniq [a,b]` - set of strings "a", "b"
 
 _[] -> [uniq/extant/string]_
+
+
+
+## Operators
+
+boolean: and or not xor nand implies
+
+numeric: add sub mul div mod pow fact ln upper lower
+
+string: cat slice upper lower repeat pad
+
+list: map reduce filter
+
+map (on values): map reduce filter items
+
+
+# Constants
+
+numberic: pi euler
 
 
 
@@ -234,3 +270,31 @@ def square fn/s [
 ```
 
 (needs jsonic option where [x:a] -> [{"a":1}])
+
+
+## Stack jumps
+
+`mark name` - mark a position in stack (past or future)
+`unmark` - remove mark at top of stack
+`move name` - move stack pointer to mark, remove mark
+`jump name` - move stack pointer to mark, leave mark
+
+
+
+## Iteration
+
+
+`for [10] [print i]` - '0\n1\n..9\n' - iterates 0..9, i is convenience var
+`for [k:1,10] [print k]` - '1\n2\n..9\n' - [start,end], named iterator
+`for [0,10,2] [print args.0]` - '0\n2\n..8\n' - [start,end,step], loop args
+
+implement by repeatedly copying body to future stack 
+
+`break` and `continue` as per js
+
+implement using `move` and `mark`
+
+
+
+
+
