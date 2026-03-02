@@ -2,6 +2,18 @@ package engine
 
 import "fmt"
 
+// typeNames maps well-known type names to their Type, so bare words like
+// "number" or "string" resolve to type-literal values instead of strings.
+var typeNames = map[string]Type{
+	"any":     TAny,
+	"none":    TNone,
+	"number":  TNumber,
+	"string":  TString,
+	"boolean": TBoolean,
+	"list":    TList,
+	"map":     TMap,
+}
+
 // Engine is the AQL stack machine.
 type Engine struct {
 	stack    []Value
@@ -94,6 +106,12 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		if w.Name == "false" {
 			e.stack[e.pointer] = NewBoolean(false)
+			return nil
+		}
+
+		// Check for well-known type names.
+		if t, ok := typeNames[w.Name]; ok {
+			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
 

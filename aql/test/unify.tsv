@@ -39,3 +39,118 @@ false	"world"	false
 # Incompatible types: integer vs boolean
 1	true	false
 false	42	false
+
+# None unifies only with itself
+none	none	true	none
+
+# None does not unify with any
+none	any	false
+any	none	false
+
+# None does not unify with scalars
+none	1	false
+1	none	false
+none	"hello"	false
+"hello"	none	false
+none	true	false
+false	none	false
+
+# None does not unify with parent types
+none	number	false
+number	none	false
+none	string	false
+string	none	false
+none	boolean	false
+boolean	none	false
+
+# Identical lists
+[1,2,3]	[1,2,3]	true	[1,2,3]
+["a","b"]	["a","b"]	true	['a','b']
+[]	[]	true	[]
+[true,false]	[true,false]	true	[word(true),word(false)]
+
+# List element-wise narrowing
+[1,string]	[number,"a"]	false
+[number,number]	[1,2]	false
+[string,string]	["x","y"]	false
+
+# List length mismatch (fail)
+[1]	[1,2]	false
+[1,2,3]	[1,2]	false
+
+# List element mismatch (fail)
+[1,2]	[1,3]	false
+[1,"a"]	[1,2]	false
+
+# List with type literal
+list	[1,2]	true	[1,2]
+[1,2]	list	true	[1,2]
+list	list	true	list
+list	[]	true	[]
+
+# Nested lists
+[[1,2],[3,4]]	[[1,2],[3,4]]	true	[[1,2],[3,4]]
+[[string],[number]]	[["a"],[1]]	false
+[[1]]	[[2]]	false
+
+# Identical maps
+{x:1}	{x:1}	true	{x:1}
+{x:1,y:2}	{x:1,y:2}	true	{x:1,y:2}
+{}	{}	true	{}
+{a:"hello"}	{a:"hello"}	true	{a:'hello'}
+
+# Map value narrowing
+{x:string}	{x:"hello"}	true	{x:'hello'}
+{x:number,y:string}	{x:1,y:"a"}	true	{x:1,y:'a'}
+{a:number}	{a:42}	true	{a:42}
+
+# Map key mismatch - closed (fail)
+{x:1}	{y:1}	false
+{x:1}	{x:1,y:2}	false
+{x:1,y:2}	{x:1}	false
+
+# Map value mismatch (fail)
+{x:1}	{x:2}	false
+{x:1}	{x:"a"}	false
+
+# Map with type literal
+map	{x:1}	true	{x:1}
+{x:1}	map	true	{x:1}
+map	map	true	map
+map	{}	true	{}
+
+# Nested maps
+{a:{b:1}}	{a:{b:1}}	true	{a:{b:1}}
+{a:{b:string}}	{a:{b:"z"}}	true	{a:{b:'z'}}
+{a:{b:1}}	{a:{b:2}}	false
+
+# Mixed nesting: maps in lists, lists in maps
+[{a:1},{b:string}]	[{a:number},{b:"z"}]	true	[{a:1},{b:'z'}]
+{x:[1,string]}	{x:[number,"a"]}	true	{x:[1,'a']}
+{x:[1]}	{x:[2]}	false
+
+# Cross-type failures: list vs map vs scalar
+[1]	{x:1}	false
+{x:1}	[1]	false
+list	map	false
+map	list	false
+list	1	false
+map	"hello"	false
+[1]	1	false
+{x:1}	"hello"	false
+
+# None does not unify with list or map
+none	[1]	false
+[1]	none	false
+none	{x:1}	false
+{x:1}	none	false
+none	list	false
+list	none	false
+none	map	false
+map	none	false
+
+# Any unifies with list and map
+any	[1,2]	true	[1,2]
+[1,2]	any	true	[1,2]
+any	{x:1}	true	{x:1}
+{x:1}	any	true	{x:1}

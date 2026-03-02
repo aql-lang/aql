@@ -9,85 +9,262 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// Custom Tin values for AQL-specific fixed tokens.
-var (
-	tinOP = jsonic.TinMAX     // Open parenthesis (
-	tinCP = jsonic.TinMAX + 1 // Close parenthesis )
-)
-
-// newConfig returns a jsonic LexConfig customized for AQL tokenization.
-func newConfig() *jsonic.LexConfig {
-	cfg := jsonic.DefaultLexConfig()
-
-	// Register ( and ) as fixed tokens so they delimit adjacent text.
-	cfg.FixedTokens["("] = tinOP
-	cfg.FixedTokens[")"] = tinCP
-	cfg.TinNames = map[jsonic.Tin]string{
-		tinOP: "#OP",
-		tinCP: "#CP",
-	}
-	cfg.SortFixedTokens()
-
-	// Disable value-keyword recognition so true, false, null become plain words.
-	cfg.ValueLex = false
-
-	return cfg
+// typeNames maps well-known type names to their engine Type.
+var typeNames = map[string]engine.Type{
+	"any":     engine.TAny,
+	"none":    engine.TNone,
+	"number":  engine.TNumber,
+	"string":  engine.TString,
+	"boolean": engine.TBoolean,
+	"list":    engine.TList,
+	"map":     engine.TMap,
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 // Parse tokenizes the AQL source string into a slice of engine.Value.
-// The input is treated as an implicit list: each token in the source becomes
-// one element in the returned slice.
+// The input is treated as a top-level implicit list: jsonic.Parse handles
+// the entire source. The TextInfo option distinguishes quoted strings from
+// unquoted text (words).
+//
+// Context rules:
+//   - Top level: unquoted text → words, quoted text → strings.
+//   - Inside maps (including implicit): all text → scalar data.
+//   - Inside lists at the top level: unquoted text → words (quotation).
+//   - Inside lists inside maps: all text → scalar data.
 func Parse(src string) ([]engine.Value, error) {
-	cfg := newConfig()
-	lex := jsonic.NewLex(src, cfg)
+	// Ensure ( and ) are space-separated so they become distinct tokens
+	// in the top-level implicit list.
+	processed := preprocessParens(src)
 
-	var values []engine.Value
+	j := jsonic.Make(jsonic.Options{
+		TextInfo: boolPtr(true),
+		ListRef:  boolPtr(true),
+		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
+	})
 
-	for {
-		tok := lex.Next()
-		if tok.Tin == jsonic.TinZZ {
-			break
-		}
+	result, err := j.Parse(processed)
+	if err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
 
-		switch tok.Tin {
-		case jsonic.TinNR:
-			n, ok := tok.Val.(float64)
-			if !ok {
-				return nil, fmt.Errorf("parse error at %d:%d: expected number", tok.RI, tok.CI)
-			}
-			values = append(values, engine.NewInteger(int64(n)))
+	if result == nil {
+		return nil, nil
+	}
 
-		case jsonic.TinST:
-			s, ok := tok.Val.(string)
-			if !ok {
-				return nil, fmt.Errorf("parse error at %d:%d: expected string", tok.RI, tok.CI)
-			}
-			values = append(values, engine.NewString(s))
-
-		case jsonic.TinTX:
-			v, err := parseWord(tok.Src)
+	// With ListRef enabled, jsonic returns ListRef for all lists.
+	// ListRef.Implicit distinguishes implicit lists (space/comma separated)
+	// from explicit lists (bracketed with []).
+	switch val := result.(type) {
+	case jsonic.ListRef:
+		if !val.Implicit {
+			// Explicit list [...]  — a single list value (quotation).
+			lv, err := convertWordList(val.Val)
 			if err != nil {
-				return nil, fmt.Errorf("parse error at %d:%d: %w", tok.RI, tok.CI, err)
+				return nil, err
 			}
-			values = append(values, v)
+			return []engine.Value{lv}, nil
+		}
+		// Implicit list — top-level stack values.
+		return convertTopLevel(val.Val)
+	default:
+		v, err := convertTopLevelValue(val)
+		if err != nil {
+			return nil, err
+		}
+		return []engine.Value{v}, nil
+	}
+}
 
-		case tinOP:
-			values = append(values, engine.NewWord("("))
+// preprocessParens inserts spaces around ( and ) that are outside quoted
+// strings, so jsonic treats each parenthesis as a separate text token.
+func preprocessParens(src string) string {
+	// Quick check: skip allocation if no parens present.
+	if !strings.ContainsAny(src, "()") {
+		return src
+	}
 
-		case tinCP:
-			values = append(values, engine.NewWord(")"))
+	var out strings.Builder
+	out.Grow(len(src) + 10)
+	inString := false
+	var quote byte
 
-		default:
-			return nil, fmt.Errorf("parse error at %d:%d: unexpected token %s %q",
-				tok.RI, tok.CI, tok.Name, tok.Src)
+	for i := 0; i < len(src); i++ {
+		c := src[i]
+
+		if inString {
+			out.WriteByte(c)
+			if c == '\\' && i+1 < len(src) {
+				i++
+				out.WriteByte(src[i])
+			} else if c == quote {
+				inString = false
+			}
+			continue
+		}
+
+		if c == '"' || c == '\'' || c == '`' {
+			inString = true
+			quote = c
+			out.WriteByte(c)
+			continue
+		}
+
+		if c == '(' || c == ')' {
+			out.WriteByte(' ')
+			out.WriteByte(c)
+			out.WriteByte(' ')
+			continue
+		}
+
+		out.WriteByte(c)
+	}
+
+	return out.String()
+}
+
+// convertTopLevel converts a top-level implicit list from jsonic into
+// a slice of engine.Value using word context.
+func convertTopLevel(items []any) ([]engine.Value, error) {
+	values := make([]engine.Value, 0, len(items))
+	for _, item := range items {
+		v, err := convertTopLevelValue(item)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, v)
+	}
+	return values, nil
+}
+
+// convertTopLevelValue converts a single value in word context.
+// Unquoted text → word, quoted text → string.
+func convertTopLevelValue(v any) (engine.Value, error) {
+	switch val := v.(type) {
+	case jsonic.Text:
+		if val.Quote == "" {
+			return parseWord(val.Str)
+		}
+		return engine.NewString(val.Str), nil
+
+	case float64:
+		return engine.NewInteger(int64(val)), nil
+
+	case map[string]any:
+		return convertMapData(val)
+
+	case jsonic.ListRef:
+		return convertWordList(val.Val)
+
+	case bool:
+		return engine.NewBoolean(val), nil
+
+	case nil:
+		return engine.NewTypeLiteral(engine.TNone), nil
+
+	default:
+		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
+	}
+}
+
+// convertWordList converts a list in word context (top-level list).
+// Square brackets at the top level are a quotation operator for program
+// fragments: unquoted text → words, maps use data context.
+func convertWordList(items []any) (engine.Value, error) {
+	elems := make([]engine.Value, len(items))
+	for i, item := range items {
+		v, err := convertTopLevelValue(item)
+		if err != nil {
+			return engine.Value{}, err
+		}
+		elems[i] = v
+	}
+	return engine.NewList(elems), nil
+}
+
+// convertMapData converts a map in data context. All text values are
+// scalar data regardless of quoting.
+func convertMapData(m map[string]any) (engine.Value, error) {
+	om := engine.NewOrderedMap()
+	for _, key := range sortedKeys(m) {
+		child, err := convertDataValue(m[key])
+		if err != nil {
+			return engine.Value{}, err
+		}
+		om.Set(key, child)
+	}
+	return engine.NewMap(om), nil
+}
+
+// convertDataValue converts a value in data context (inside maps and
+// lists that are inside maps). All text → resolved scalar values
+// (type names, booleans, or plain strings).
+func convertDataValue(v any) (engine.Value, error) {
+	switch val := v.(type) {
+	case jsonic.Text:
+		return resolveTextValue(val.Str), nil
+
+	case float64:
+		return engine.NewInteger(int64(val)), nil
+
+	case map[string]any:
+		return convertMapData(val)
+
+	case jsonic.ListRef:
+		return convertDataList(val.Val)
+
+	case bool:
+		return engine.NewBoolean(val), nil
+
+	case nil:
+		return engine.NewTypeLiteral(engine.TNone), nil
+
+	default:
+		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
+	}
+}
+
+// convertDataList converts a list in data context (inside maps).
+// All text → scalar data.
+func convertDataList(items []any) (engine.Value, error) {
+	elems := make([]engine.Value, len(items))
+	for i, item := range items {
+		v, err := convertDataValue(item)
+		if err != nil {
+			return engine.Value{}, err
+		}
+		elems[i] = v
+	}
+	return engine.NewList(elems), nil
+}
+
+// resolveTextValue converts a bare text string into the appropriate
+// AQL value — type literal, boolean, or plain string.
+func resolveTextValue(text string) engine.Value {
+	if text == "true" {
+		return engine.NewBoolean(true)
+	}
+	if text == "false" {
+		return engine.NewBoolean(false)
+	}
+	if t, ok := typeNames[text]; ok {
+		return engine.NewTypeLiteral(t)
+	}
+	return engine.NewString(text)
+}
+
+// sortedKeys returns the keys of a map in sorted order for deterministic output.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
 		}
 	}
-
-	if lex.Err != nil {
-		return nil, fmt.Errorf("parse error: %v", lex.Err)
-	}
-
-	return values, nil
+	return keys
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling

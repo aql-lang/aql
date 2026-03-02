@@ -1,0 +1,334 @@
+# Comprehensive AQL syntax tests
+# Format: expression<TAB>expected_result<TAB>error_code
+# Column 1: AQL expression
+# Column 2: string representation of stack top value(s), space-separated
+# Column 3 (optional): error code (syntax_error, signature_error)
+# When column 3 is present, column 2 is ignored (may be empty).
+# Empty column 2 means empty stack.
+
+# === Integer literals ===
+1	1
+0	0
+42	42
+-5	-5
+999	999
+-1	-1
+100	100
+
+# === String literals ===
+"hello"	'hello'
+'world'	'world'
+""	''
+"abc def"	'abc def'
+'single'	'single'
+
+# === Boolean literals ===
+true	true
+false	false
+
+# === Type literals ===
+number	number
+string	string
+boolean	boolean
+any	any
+none	none
+list	list
+map	map
+
+# === Unknown words become strings ===
+foo	'foo'
+abc	'abc'
+xyz	'xyz'
+
+# === Multiple values on stack ===
+1 2 3	1 2 3
+1 "hello"	1 'hello'
+1 2	1 2
+"a" "b" "c"	'a' 'b' 'c'
+true false	true false
+1 true "a"	1 true 'a'
+
+# === String functions - prefix ===
+"hello" upper	'HELLO'
+"WORLD" lower	'world'
+a upper	'A'
+"abc" upper	'ABC'
+"MiXeD" lower	'mixed'
+
+# === String functions - suffix ===
+lower "ABC"	'abc'
+lower B	'b'
+# upper has no suffix signature, so this errors
+upper "abc"		signature_error
+lower "XYZ"	'xyz'
+
+# === Arithmetic - prefix (Forth style) ===
+1 2 add	3
+10 3 sub	7
+4 5 mul	20
+10 3 div	3
+10 3 mod	1
+0 0 add	0
+-1 1 add	0
+100 99 sub	1
+
+# === Arithmetic - infix ===
+1 add 2	3
+10 sub 3	7
+4 mul 5	20
+10 div 3	3
+10 mod 3	1
+0 add 0	0
+
+# === Operator precedence ===
+2 add 3 mul 4	14
+2 mul 3 add 4	10
+1 add 2 mul 3 add 4	11
+10 sub 3 sub 1	6
+1 add 1 add 1	3
+2 mul 2 mul 2	8
+1 add 2 mul 3	7
+
+# === Parentheses ===
+(1 add 2)	3
+(1 add 2) mul 3	9
+2 mul (3 add 4)	14
+(2 add 3) mul (4 add 1)	25
+(1)	1
+((1 add 2))	3
+(1 add (2 mul 3))	7
+((2 add 3) mul (4 sub 1))	15
+
+# === Stack operations ===
+1 drop
+1 2 add 3 add	6
+1 dup	1 1
+1 2 swap	2 1
+"a" dup	'a' 'a'
+
+# === Modifiers ===
+lower/s "E"	'e'
+"F" lower/p	'f'
+lower/1 "G"	'g'
+lower/1s "H"	'h'
+
+# === Set/Get ===
+set foo 99 end get foo	99
+set bar "hello" end get bar	'hello'
+
+# === Unify - identical scalars (prefix: left right unify) ===
+1 1 unify	1 true
+0 0 unify	0 true
+42 42 unify	42 true
+"hello" "hello" unify	'hello' true
+"" "" unify	'' true
+true true unify	true true
+false false unify	false true
+
+# === Unify - identical scalars (infix: left unify right) ===
+1 unify 1	1 true
+"hello" unify "hello"	'hello' true
+true unify true	true true
+
+# === Unify - different literals same type (fail) ===
+1 unify 2	'~unify-fail' false
+"hello" unify "world"	'~unify-fail' false
+true unify false	'~unify-fail' false
+0 unify 1	'~unify-fail' false
+
+# === Unify - incompatible types (fail) ===
+1 unify "hello"	'~unify-fail' false
+"hello" unify 1	'~unify-fail' false
+1 unify true	'~unify-fail' false
+true unify 1	'~unify-fail' false
+"hello" unify true	'~unify-fail' false
+false unify "world"	'~unify-fail' false
+
+# === Unify - type narrowing with parent types ===
+1 unify number	1 true
+number unify 1	1 true
+42 unify number	42 true
+"hello" unify string	'hello' true
+string unify "hello"	'hello' true
+"" unify string	'' true
+true unify boolean	true true
+boolean unify false	false true
+
+# === Unify - type with any ===
+1 unify any	1 true
+any unify 1	1 true
+"hello" unify any	'hello' true
+any unify "hello"	'hello' true
+true unify any	true true
+any unify false	false true
+
+# === Unify - parent type with parent type ===
+number unify number	number true
+string unify string	string true
+boolean unify boolean	boolean true
+any unify any	any true
+
+# === Unify - any narrows to parent type ===
+any unify number	number true
+number unify any	number true
+any unify string	string true
+string unify any	string true
+any unify boolean	boolean true
+boolean unify any	boolean true
+
+# === Unify - incompatible parent types ===
+number unify string	'~unify-fail' false
+string unify number	'~unify-fail' false
+number unify boolean	'~unify-fail' false
+boolean unify string	'~unify-fail' false
+
+# === Unify - none only unifies with itself ===
+none unify none	none true
+none unify any	'~unify-fail' false
+any unify none	'~unify-fail' false
+none unify 1	'~unify-fail' false
+1 unify none	'~unify-fail' false
+none unify "hello"	'~unify-fail' false
+"hello" unify none	'~unify-fail' false
+none unify true	'~unify-fail' false
+false unify none	'~unify-fail' false
+none unify number	'~unify-fail' false
+number unify none	'~unify-fail' false
+none unify string	'~unify-fail' false
+string unify none	'~unify-fail' false
+none unify boolean	'~unify-fail' false
+boolean unify none	'~unify-fail' false
+
+# === Unify - none with arg forms ===
+none none unify	none true
+none unify none	none true
+unify none none end	none true
+
+# === Unify - prefix/infix/suffix arg forms ===
+
+# Prefix form: left right unify
+1 number unify	1 true
+
+# Infix form: left unify right
+1 unify number	1 true
+
+# Suffix form: unify left right end
+unify 1 number end	1 true
+
+# All three forms produce same result
+"hello" string unify	'hello' true
+"hello" unify string	'hello' true
+unify "hello" string end	'hello' true
+
+true boolean unify	true true
+true unify boolean	true true
+unify true boolean end	true true
+
+42 42 unify	42 true
+42 unify 42	42 true
+unify 42 42 end	42 true
+
+# Suffix with end, failing unification
+unify 1 "hello" end	'~unify-fail' false
+unify number string end	'~unify-fail' false
+
+# === Unify with expressions ===
+(1 add 2) unify 3	3 true
+(2 mul 3) unify number	6 true
+(1 add 1) unify (3 sub 1)	2 true
+(1 add 1) unify (3 sub 2)	'~unify-fail' false
+
+# === List literals ===
+[1,2,3]	[1,2,3]
+["a","b"]	['a','b']
+[]	[]
+[true,false]	[word(true),word(false)]
+[1,"a",true]	[1,'a',word(true)]
+[number,string]	[word(number),word(string)]
+
+# === Map literals ===
+{x:1}	{x:1}
+{x:1,y:2}	{x:1,y:2}
+{}	{}
+{a:"hello"}	{a:'hello'}
+{x:string,y:number}	{x:string,y:number}
+
+# === Nested structures ===
+[[1,2],[3,4]]	[[1,2],[3,4]]
+{a:{b:1}}	{a:{b:1}}
+[{x:1},{y:2}]	[{x:1},{y:2}]
+{a:[1,2,3]}	{a:[1,2,3]}
+
+# === Unify - lists ===
+[1,string] unify [number,"a"]	'~unify-fail' false
+[1,"a"] unify [1,"a"]	[1,'a'] true
+[] unify []	[] true
+[1,2] unify [1,3]	'~unify-fail' false
+[1] unify [1,2]	'~unify-fail' false
+list unify [1,2]	[1,2] true
+[1,2] unify list	[1,2] true
+list unify list	list true
+
+# === Unify - maps ===
+{x:string} unify {x:"hello"}	{x:'hello'} true
+{x:1} unify {x:1}	{x:1} true
+{x:1} unify {x:2}	'~unify-fail' false
+{x:1} unify {x:1,y:2}	'~unify-fail' false
+{x:1} unify {y:1}	'~unify-fail' false
+{} unify {}	{} true
+map unify {x:1}	{x:1} true
+{x:1} unify map	{x:1} true
+map unify map	map true
+
+# === Unify - nested structures ===
+{x:[1,string]} unify {x:[number,"a"]}	{x:[1,'a']} true
+[{a:1},{b:string}] unify [{a:number},{b:"z"}]	[{a:1},{b:'z'}] true
+[[string]] unify [["hello"]]	'~unify-fail' false
+{a:{b:number}} unify {a:{b:42}}	{a:{b:42}} true
+
+# === Unify - list/map vs incompatible types ===
+[1] unify {x:1}	'~unify-fail' false
+list unify map	'~unify-fail' false
+[1] unify 1	'~unify-fail' false
+{x:1} unify "hello"	'~unify-fail' false
+
+# === Unify - any with list/map ===
+any unify [1,2]	[1,2] true
+[1,2] unify any	[1,2] true
+any unify {x:1}	{x:1} true
+{x:1} unify any	{x:1} true
+
+# === Unify - none with list/map ===
+none unify [1]	'~unify-fail' false
+none unify {x:1}	'~unify-fail' false
+none unify list	'~unify-fail' false
+none unify map	'~unify-fail' false
+
+# === Error cases ===
+
+# Unmatched closing parenthesis
+)		syntax_error
+
+# Unmatched opening parenthesis
+(1		syntax_error
+
+# Nested unmatched opening parenthesis
+((1)		syntax_error
+
+# Missing suffix argument for add
+1 add		signature_error
+
+# Missing all arguments for add
+add		signature_error
+
+# Wrong type for upper (integer instead of string)
+1 upper		signature_error
+
+# Too many prefix args for upper
+1 2 upper		signature_error
+
+# Division by zero
+10 div 0		division_by_zero
+
+# Modulo by zero
+10 mod 0		modulo_by_zero

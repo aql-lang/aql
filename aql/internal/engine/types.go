@@ -11,6 +11,7 @@ type Type struct {
 // Well-known types.
 var (
 	TAny         = NewType("any")
+	TNone        = NewType("none")
 	TString      = NewType("string")
 	TStringProper = NewType("string/proper")
 	TStringEmpty = NewType("string/empty")
@@ -19,6 +20,8 @@ var (
 	TBoolean     = NewType("boolean")
 	TBooleanTrue = NewType("boolean/true")
 	TBooleanFalse = NewType("boolean/false")
+	TList        = NewType("list")
+	TMap         = NewType("map")
 	TWord        = NewType("word")
 	TForward     = NewType("forward")
 	TOpenParen   = NewType("paren/open")
