@@ -33,11 +33,11 @@ Type definition:
 `type foo {x:['a' 'b' add]}` - complex type, also quoted code
 
 
-`type increment fn [[integer] [integer]]` - 
-  function type, accepting an integer, returning an integer
+`type increment word [[integer] [integer]]` - 
+  word type, accepting an integer, returning an integer
 
 ```
-type increment fn [
+type increment word [
   [integer] [integer]
   [float] [float]
   ]
@@ -128,11 +128,7 @@ numberic: pi euler
 ## Storage
 
 `set foo 99` - sets store key foo to value 99
-set has signature: set/s [string any]
-where [string any] means expect to find
-a string cell followed by an any cell at the top
-of the stack. however the /s suffix means give precedence to
-future tokens, in reverse order.
+set has signature: set [string any]
 
 examples:
 
@@ -175,19 +171,35 @@ _[] -> [table/entity]_
 
 
 
+## Comments
+
+The character # marks a line comment, all characters to the end of the line are ignored
+Multi-line, or inline comments use syntax ## commented ##, with both start and end
+markers being ##
+
 
 
 ## Word definitions
 
 Quoted source is directly placed onto future token strea,
 
+The built in def has suffix precedence with signature: 
+```
+[
+  [word any] []
+  [string any] []
+  [word] []        # takes top of stack for body 
+  [string] []      # takes top of stack for body
+]
+```
+
 
 ```
-def increment [1 add]
-2 increment # result <3>
+def increment [[1 add]]
+2 increment # result [3|]
 
-def decrement [1 sub] 
-decrement 3 # result <2>, works because sub allows suffix args
+def decrement [[1 sub]] 
+decrement 3 # result <2|>, works because sub allows suffix args
 ```
 
 New words defined with `def` can only handle prefix args in general, and have no type checking.
@@ -206,22 +218,24 @@ returns <3 7 6>
 
 ## Function definitions
 
-`def square fn [ [number] [number] [dup mul]]`
+`def square [ [number] [number] [dup mul]]`
 
-`fn` defines a function. Takes one argument, suffix precendence. The argument can be:
+Words are effectively functions. Thus square takes one argument, suffix precendence. 
+The argument can be:
+
 - list with 3n entries
 
 The first two words define the signature, third the implemenation. 
 Multiples of three define other signatures
 
 
-`def square fn/s [ number number [dup mul]]` - same as above, 
+`def square [ number number [dup mul]]` - same as above, 
 except function square now has suffix precedence, abbreviate signatures for single args and returns.
 
 Recursion is possible using defined name, or `recur`
 
 ```
-def square fn/s [ 
+def square [ 
   [number] [number] [dup mul]
   [float] [float] square
   [integer] [integer] recur
@@ -250,7 +264,7 @@ undef at the end of its clause.
 Use in function definition to name parameters:
 
 ```
-def square fn/s [ 
+def square [ 
   [number] [number] [ 
     var [ [x] 
       x mul x] 
@@ -263,7 +277,7 @@ def square fn/s [
 And as a convenience:
 
 ```
-def square fn/s [ 
+def square [ 
   [x:number] [number] [x mul x] 
 ]
 
