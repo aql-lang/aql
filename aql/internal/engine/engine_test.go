@@ -237,19 +237,13 @@ func TestSwapSuffix(t *testing.T) {
 }
 
 func TestSwapInfix(t *testing.T) {
-	// 1 swap 2 → [2, 1]
+	// 1 swap 2 → error (swap is prefix-only in the new model)
 	e := New(DefaultRegistry())
-	result, err := e.Run([]Value{
+	_, err := e.Run([]Value{
 		NewInteger(1), NewWord("swap"), NewInteger(2),
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("got %d values, want 2: %v", len(result), result)
-	}
-	if result[0].AsInteger() != 2 || result[1].AsInteger() != 1 {
-		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
+	if err == nil {
+		t.Fatal("expected error for swap infix (swap is prefix-only), got nil")
 	}
 }
 
@@ -2469,7 +2463,7 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 	// A function with only suffix should work when called with no prefix stack
 	r := NewRegistry()
 	r.Register("echo", Signature{
-		Suffix:  []Type{TAny},
+		Args:    []Type{TAny},
 		Handler: func(args []Value) ([]Value, error) { return args, nil },
 	})
 	e := New(r)
@@ -2486,7 +2480,7 @@ func TestEdgeSignatureMultipleSuffix(t *testing.T) {
 	// A function that takes 2 suffix args
 	r := NewRegistry()
 	r.Register("pair", Signature{
-		Suffix: []Type{TAny, TAny},
+		Args: []Type{TAny, TAny},
 		Handler: func(args []Value) ([]Value, error) {
 			return args, nil
 		},
@@ -2507,7 +2501,7 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 	// A function that returns multiple values
 	r := NewRegistry()
 	r.Register("triple", Signature{
-		Prefix: []Type{TAny},
+		Args: []Type{TAny},
 		Handler: func(args []Value) ([]Value, error) {
 			return []Value{args[0], args[0], args[0]}, nil
 		},
@@ -2648,6 +2642,30 @@ func TestDefStringName(t *testing.T) {
 	}
 	if len(result) != 1 || result[0].AsInteger() != 10 {
 		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestDefPrefixBodyStringName(t *testing.T) {
+	// [1 add] def "inc" 10 inc → 11
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("def"), NewString("inc"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(10), NewWord("inc"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("got %v, want [11]", result)
 	}
 }
 

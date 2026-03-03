@@ -333,22 +333,9 @@ func registerUnify(r *Registry) {
 		return []Value{NewString("~unify-fail"), NewBoolean(false)}, nil
 	}
 
-	// unify: [any, any] -> [any, boolean]    (prefix)
-	//        [any | any] -> [any, boolean]    (infix)
-	//        [| any, any] -> [any, boolean]   (suffix)
-	r.Register("unify",
-		Signature{
-			Prefix:  []Type{TAny, TAny},
-			Handler: unifyHandler,
-		},
-		Signature{
-			Prefix:  []Type{TAny},
-			Suffix:  []Type{TAny},
-			Handler: unifyHandler,
-		},
-		Signature{
-			Suffix:  []Type{TAny, TAny},
-			Handler: unifyHandler,
-		},
-	)
+	// unify: [any, any] -> [any, boolean]
+	r.Register("unify", Signature{
+		Args:    []Type{TAny, TAny},
+		Handler: unifyHandler,
+	})
 }

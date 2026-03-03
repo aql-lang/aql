@@ -7,8 +7,9 @@ import (
 
 // Function groups all signatures for a named function.
 type Function struct {
-	Name       string
-	Signatures []Signature
+	Name             string
+	Signatures       []Signature
+	SuffixPrecedence bool // true = engine tries suffix-first; false = prefix-only
 }
 
 // Registry maps function names to their definitions.
@@ -25,11 +26,21 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register adds one or more signatures to a named function.
+// Register adds one or more signatures to a named function with suffix precedence.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	fn, ok := r.funcs[name]
 	if !ok {
-		fn = &Function{Name: name}
+		fn = &Function{Name: name, SuffixPrecedence: true}
+		r.funcs[name] = fn
+	}
+	fn.Signatures = append(fn.Signatures, sigs...)
+}
+
+// RegisterPrefixOnly adds signatures to a named function without suffix precedence.
+func (r *Registry) RegisterPrefixOnly(name string, sigs ...Signature) {
+	fn, ok := r.funcs[name]
+	if !ok {
+		fn = &Function{Name: name, SuffixPrecedence: false}
 		r.funcs[name] = fn
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
@@ -60,87 +71,50 @@ func DefaultRegistry() *Registry {
 func registerBuiltins(r *Registry) {
 	// upper: [string] -> [string]
 	r.Register("upper", Signature{
-		Prefix: []Type{TString},
+		Args: []Type{TString},
 		Handler: func(args []Value) ([]Value, error) {
 			s := args[0].AsString()
 			return []Value{NewString(strings.ToUpper(s))}, nil
 		},
 	})
 
-	// lower: [string] -> [string]  (prefix)
-	//        [|string] -> [string] (suffix)
-	r.Register("lower",
-		Signature{
-			Prefix: []Type{TString},
-			Handler: func(args []Value) ([]Value, error) {
-				s := args[0].AsString()
-				return []Value{NewString(strings.ToLower(s))}, nil
-			},
+	// lower: [string] -> [string]
+	r.Register("lower", Signature{
+		Args: []Type{TString},
+		Handler: func(args []Value) ([]Value, error) {
+			s := args[0].AsString()
+			return []Value{NewString(strings.ToLower(s))}, nil
 		},
-		Signature{
-			Suffix: []Type{TString},
-			Handler: func(args []Value) ([]Value, error) {
-				s := args[0].AsString()
-				return []Value{NewString(strings.ToLower(s))}, nil
-			},
-		},
-	)
+	})
 
-	// dup: [any] -> [any, any] (prefix)
-	//      [|any] -> [any, any] (suffix)
+	// dup: [any] -> [any, any] (prefix-only)
 	dupHandler := func(args []Value) ([]Value, error) {
 		return []Value{args[0], args[0]}, nil
 	}
-	r.Register("dup",
-		Signature{
-			Prefix:  []Type{TAny},
-			Handler: dupHandler,
-		},
-		Signature{
-			Suffix:  []Type{TAny},
-			Handler: dupHandler,
-		},
-	)
+	r.RegisterPrefixOnly("dup", Signature{
+		Args:    []Type{TAny},
+		Handler: dupHandler,
+	})
 
-	// swap: [any, any] -> [any, any] (prefix)
-	//       [|any, any] -> [any, any] (suffix)
-	//       [any|any] -> [any, any]   (infix)
+	// swap: [any, any] -> [any, any] (prefix-only)
 	swapHandler := func(args []Value) ([]Value, error) {
 		return []Value{args[1], args[0]}, nil
 	}
-	r.Register("swap",
-		Signature{
-			Prefix:  []Type{TAny, TAny},
-			Handler: swapHandler,
-		},
-		Signature{
-			Suffix:  []Type{TAny, TAny},
-			Handler: swapHandler,
-		},
-		Signature{
-			Prefix:  []Type{TAny},
-			Suffix:  []Type{TAny},
-			Handler: swapHandler,
-		},
-	)
+	r.RegisterPrefixOnly("swap", Signature{
+		Args:    []Type{TAny, TAny},
+		Handler: swapHandler,
+	})
 
-	// drop: [any] -> [] (prefix)
-	//       [|any] -> [] (suffix)
+	// drop: [any] -> [] (prefix-only)
 	dropHandler := func(args []Value) ([]Value, error) {
 		return nil, nil
 	}
-	r.Register("drop",
-		Signature{
-			Prefix:  []Type{TAny},
-			Handler: dropHandler,
-		},
-		Signature{
-			Suffix:  []Type{TAny},
-			Handler: dropHandler,
-		},
-	)
+	r.RegisterPrefixOnly("drop", Signature{
+		Args:    []Type{TAny},
+		Handler: dropHandler,
+	})
 
-	// Arithmetic: each has prefix [int, int] and infix [int | int].
+	// Arithmetic: each has Args:[int, int] with suffix precedence.
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
 	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })
 	registerBinaryIntOp(r, "sub", 1, func(a, b int64) (int64, error) { return a - b, nil })
@@ -161,13 +135,13 @@ func registerBuiltins(r *Registry) {
 	registerStorage(r)
 	registerUnify(r)
 	registerDef(r)
-
-	// Note: "end" is handled directly by the engine as a keyword,
-	// not registered here. It terminates any pending forward early.
 }
 
 // storeKey converts a Value to a string key for the store.
 func storeKey(v Value) string {
+	if v.IsWord() {
+		return v.AsWord().Name
+	}
 	if v.VType.Matches(TString) {
 		return v.AsString()
 	}
@@ -181,15 +155,26 @@ func registerStorage(r *Registry) {
 		return nil, nil
 	}
 
-	// set: [any, any] -> [] (prefix)
-	//      [| any, any] -> [] (suffix)
+	// set: key and value → store[key] = value
+	// Three signatures for different key types:
+	//   [TString, TAny] — string key (also handles coerced words)
+	//   [TWord, TAny]   — word key (unknown word collected as word literal)
+	//   [TAny, TAny]    — fallback for integer/other keys
+	// Flexible matching handles reordering: "99 set foo end" →
+	// [99, foo_word] → swap → [foo_word, 99] matching [TWord, TAny].
+	// Registration order matters for tiebreaking: TString first so it wins
+	// when peeking gives no disambiguation (e.g. paren expressions).
 	r.Register("set",
 		Signature{
-			Prefix:  []Type{TAny, TAny},
+			Args:    []Type{TString, TAny},
 			Handler: setHandler,
 		},
 		Signature{
-			Suffix:  []Type{TAny, TAny},
+			Args:    []Type{TWord, TAny},
+			Handler: setHandler,
+		},
+		Signature{
+			Args:    []Type{TAny, TAny},
 			Handler: setHandler,
 		},
 	)
@@ -203,22 +188,15 @@ func registerStorage(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	// get: [any] -> [any] (prefix)
-	//      [| any] -> [any] (suffix)
-	r.Register("get",
-		Signature{
-			Prefix:  []Type{TAny},
-			Handler: getHandler,
-		},
-		Signature{
-			Suffix:  []Type{TAny},
-			Handler: getHandler,
-		},
-	)
+	// get: [any] -> [any]
+	r.Register("get", Signature{
+		Args:    []Type{TAny},
+		Handler: getHandler,
+	})
 }
 
-// registerBinaryIntOp registers a binary integer operation with both a
-// prefix signature [int, int] → [int] and an infix signature [int | int] → [int].
+// registerBinaryIntOp registers a binary integer operation with a single
+// signature Args:[int, int] and suffix precedence.
 func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value) ([]Value, error) {
 		result, err := op(args[0].AsInteger(), args[1].AsInteger())
@@ -227,21 +205,11 @@ func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64)
 		}
 		return []Value{NewInteger(result)}, nil
 	}
-	r.Register(name,
-		// Prefix (Forth-style): 1 2 add → 3
-		Signature{
-			Prefix:     []Type{TInteger, TInteger},
-			Precedence: prec,
-			Handler:    handler,
-		},
-		// Infix (via forward): 1 add 2 → 3
-		Signature{
-			Prefix:     []Type{TInteger},
-			Suffix:     []Type{TInteger},
-			Precedence: prec,
-			Handler:    handler,
-		},
-	)
+	r.Register(name, Signature{
+		Args:       []Type{TInteger, TInteger},
+		Precedence: prec,
+		Handler:    handler,
+	})
 }
 
 // defName extracts a word name from a Value that is either a word or a string.
@@ -258,51 +226,32 @@ func defName(v Value) string {
 // evaluation. If the body is a list, its elements are spliced into the
 // stack. Otherwise the single value is pushed.
 //
-// Signatures:
+// Single handler, two signatures:
 //
-//	def name body    – suffix only, word name:    [| word, any]
-//	def "name" body  – suffix only, string name:  [| string, any]
-//	body def name    – prefix body, suffix name:  [any | word]
-//	body def "name"  – prefix body, suffix name:  [any | string]
+//	Args:[TWord, TAny]   – def name body  or  body def name
+//	Args:[TString, TAny] – def "name" body  or  body def "name"
+//
+// Flexible matching handles reordering: in "body def name", suffix collects
+// name(TWord), pushes it, then prefix sees [body, name] and flexible match
+// reorders to [name, body] matching [TWord, TAny].
 func registerDef(r *Registry) {
-	// Handler for suffix-only: def name body → args = [name, body]
-	defSuffixHandler := func(args []Value) ([]Value, error) {
+	defHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
 		installDef(r, name, body)
 		return nil, nil
 	}
 
-	// Handler for prefix+suffix: body def name → args = [body, name]
-	defPrefixSuffixHandler := func(args []Value) ([]Value, error) {
-		body := args[0]
-		name := defName(args[1])
-		installDef(r, name, body)
-		return nil, nil
-	}
-
 	r.Register("def",
-		// def name body (word name, suffix only)
+		// Args:[TWord, TAny] — word name
 		Signature{
-			Suffix:  []Type{TWord, TAny},
-			Handler: defSuffixHandler,
+			Args:    []Type{TWord, TAny},
+			Handler: defHandler,
 		},
-		// def "name" body (string name, suffix only)
+		// Args:[TString, TAny] — string name
 		Signature{
-			Suffix:  []Type{TString, TAny},
-			Handler: defSuffixHandler,
-		},
-		// body def name (prefix body, suffix word name)
-		Signature{
-			Prefix:  []Type{TAny},
-			Suffix:  []Type{TWord},
-			Handler: defPrefixSuffixHandler,
-		},
-		// body def "name" (prefix body, suffix string name)
-		Signature{
-			Prefix:  []Type{TAny},
-			Suffix:  []Type{TString},
-			Handler: defPrefixSuffixHandler,
+			Args:    []Type{TString, TAny},
+			Handler: defHandler,
 		},
 	)
 }

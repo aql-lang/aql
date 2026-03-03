@@ -202,8 +202,8 @@ def decrement [[1 sub]]
 decrement 3 # result <2|>, works because sub allows suffix args
 ```
 
-New words defined with `def` can only handle prefix args in general, and have no type checking.
-They are literal substitutions.
+New words defined with `def` can only handle prefix args internally.
+Suffix args are an engine convenience. See ENGINES.md for an explanation.
 
 
 `def x` means use top of stack as value

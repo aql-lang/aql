@@ -48,31 +48,24 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			}
 
 		case val.IsForward():
-			// Forward entries are skipped during normal traversal.
-			// They are consumed by stepLiteral when a value is resolved
-			// after a forward.
 			e.pointer++
 
 		case val.IsOpenParen():
-			// Open-paren markers are skipped during normal traversal.
-			// They act as barriers for forward search and prefix matching.
 			e.pointer++
 
 		default:
-			// Literal / resolved value.
 			if err := e.stepLiteral(); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	// Check for orphaned forward entries — suffix args were never collected.
+	// Implicit end-of-input: resolve any pending forwards from the stack.
+	if err := e.resolveOrphanedForwards(); err != nil {
+		return nil, err
+	}
+
 	for _, v := range e.stack {
-		if v.IsForward() {
-			fwd := v.AsForward()
-			return nil, fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
-				fwd.FuncName, fwd.ExpectedArgs)
-		}
 		if v.IsOpenParen() {
 			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
 		}
@@ -81,11 +74,65 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	return e.stack, nil
 }
 
+// resolveOrphanedForwards handles end-of-input by resolving pending forwards.
+func (e *Engine) resolveOrphanedForwards() error {
+	for attempt := 0; attempt < 100; attempt++ {
+		fwdIdx := -1
+		for i, v := range e.stack {
+			if v.IsForward() {
+				fwdIdx = i
+				break
+			}
+		}
+		if fwdIdx < 0 {
+			return nil
+		}
+
+		fwd := e.stack[fwdIdx].AsForward()
+		funcIdx := fwd.FuncIndex
+
+		// Remove the forward marker.
+		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		if fwdIdx < funcIdx {
+			funcIdx--
+		}
+
+		// Force prefix on the function word.
+		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
+			w := e.stack[funcIdx].AsWord()
+			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+		}
+
+		// Retry from the function word.
+		e.pointer = funcIdx
+		for step := 0; step < 100; step++ {
+			if e.pointer >= len(e.stack) {
+				break
+			}
+			val := e.stack[e.pointer]
+			switch {
+			case val.IsWord():
+				if err := e.stepWord(val); err != nil {
+					return err
+				}
+			case val.IsForward():
+				e.pointer++
+			case val.IsOpenParen():
+				e.pointer++
+			default:
+				if err := e.stepLiteral(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // stepWord handles a word (function reference) at the current pointer.
 func (e *Engine) stepWord(val Value) error {
 	w := val.AsWord()
 
-	// Language keywords handled directly by the engine.
 	if w.Name == "end" {
 		return e.stepEnd()
 	}
@@ -99,7 +146,6 @@ func (e *Engine) stepWord(val Value) error {
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
-		// Check for boolean literals.
 		if w.Name == "true" {
 			e.stack[e.pointer] = NewBoolean(true)
 			return nil
@@ -108,97 +154,250 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewBoolean(false)
 			return nil
 		}
-
-		// Check for well-known type names.
 		if t, ok := typeNames[w.Name]; ok {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
-
-		// Unknown word — check if a pending forward expects a TWord argument.
-		// If so, preserve the word value so the forward can collect it.
-		// Otherwise, coerce to a bare string for backward compatibility.
 		if e.hasPendingForwardExpectingWord() {
-			// Leave the word value as-is and let stepLiteral collect it
-			// for the pending forward.
 			return e.stepLiteral()
 		}
-		// Don't advance pointer so stepLiteral runs on the next iteration
-		// and can collect this value for any pending forward.
 		e.stack[e.pointer] = NewString(w.Name)
 		return nil
 	}
 
+	if w.ForcePrefix {
+		resolved := e.effectiveResolved()
+		match := MatchSignature(fn.Signatures, resolved, w)
+		if match == nil {
+			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
+		}
+		return e.execMatch(match)
+	}
+
+	if w.ForceSuffix {
+		// Force suffix: skip prefix attempt, collect all args from suffix.
+		resolved := e.effectiveResolved()
+		bestSig, _ := e.bestSigForForward(fn, w, resolved)
+		if bestSig == nil {
+			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
+		}
+		return e.insertForward(w, bestSig, len(bestSig.Args))
+	}
+
+	if fn.SuffixPrecedence {
+		// Try prefix first (if all args are on stack already).
+		resolved := e.effectiveResolved()
+		match := MatchSignature(fn.Signatures, resolved, w)
+		if match != nil {
+			return e.execMatch(match)
+		}
+
+		// No full prefix match — create forward to collect remaining suffix args.
+		// Count how many prefix args are already available on the resolved stack.
+		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+		if bestSig == nil {
+			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
+		}
+		suffixNeeded := len(bestSig.Args) - prefixCount
+		if suffixNeeded <= 0 {
+			suffixNeeded = len(bestSig.Args)
+		}
+		return e.insertForward(w, bestSig, suffixNeeded)
+	}
+
+	// Prefix-only function (dup, swap, drop).
 	resolved := e.effectiveResolved()
 	match := MatchSignature(fn.Signatures, resolved, w)
-
 	if match == nil {
-		// No prefix match. Check if any suffix signature exists.
-		suffixMatch := matchSuffixOnly(fn.Signatures, w)
-		if suffixMatch != nil {
-			return e.insertForward(w, suffixMatch)
-		}
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
-
-	if match.Sig.IsPrefixOnly() {
-		return e.execPrefix(match)
-	}
-
-	// Signature has suffix args — use forward mechanism to collect them.
-	return e.insertForward(w, match)
+	return e.execMatch(match)
 }
 
-// execPrefix executes a prefix-matched signature.
-func (e *Engine) execPrefix(match *MatchResult) error {
-	n := match.PrefixLen
-	argStart := e.pointer - n
-	args := make([]Value, n)
-	copy(args, e.stack[argStart:e.pointer])
+// bestSigForForward finds the best signature for creating a forward and how
+// many prefix args from the resolved stack can be consumed.
+func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
+	var best *Signature
+	var bestScore int
+	var bestPrefixCount int
 
-	results, err := match.Sig.Handler(args)
+	// Peek at the first potential suffix value to help disambiguate sigs.
+	// Skip special words ("(", ")", "end") since they're not real suffix args.
+	var peekVal *Value
+	peekIdx := e.pointer + 1
+	if peekIdx < len(e.stack) {
+		v := e.stack[peekIdx]
+		if !v.IsForward() && !v.IsOpenParen() {
+			skip := false
+			if v.IsWord() {
+				w := v.AsWord()
+				if w.Name == "(" || w.Name == ")" || w.Name == "end" {
+					skip = true
+				}
+			}
+			if !skip {
+				peekVal = &v
+			}
+		}
+	}
+
+	for i := range fn.Signatures {
+		sig := &fn.Signatures[i]
+		if len(sig.Args) == 0 {
+			continue
+		}
+		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
+			continue
+		}
+
+		// Count how many args from the top of the resolved stack match
+		// the END of sig.Args (prefix portion). In the suffix-first model,
+		// suffix fills Args[0..S-1] and prefix fills Args[S..N-1].
+		// So prefix args match against the last slots.
+		prefixCount := 0
+		for tryN := len(sig.Args); tryN >= 1; tryN-- {
+			if tryN > len(resolved) {
+				continue
+			}
+			match := true
+			for j := 0; j < tryN; j++ {
+				rIdx := len(resolved) - tryN + j
+				sigIdx := len(sig.Args) - tryN + j
+				if !resolved[rIdx].VType.Matches(sig.Args[sigIdx]) {
+					match = false
+					break
+				}
+			}
+			if match {
+				prefixCount = tryN
+				break
+			}
+		}
+
+		score := signatureScore(sig)
+
+		// Bonus: if the peeked suffix value matches the first expected
+		// suffix arg type, boost this sig's score to prefer it.
+		// In the suffix-first model, suffix always fills from Args[0].
+		if peekVal != nil && prefixCount < len(sig.Args) {
+			firstSuffixType := sig.Args[0]
+			if peekVal.VType.Matches(firstSuffixType) {
+				score += 50
+			}
+		}
+
+		if best == nil || score > bestScore {
+			best = sig
+			bestScore = score
+			bestPrefixCount = prefixCount
+		}
+	}
+	return best, bestPrefixCount
+}
+
+// execMatch executes a matched signature, splicing args and results.
+func (e *Engine) execMatch(match *MatchResult) error {
+	n := len(match.Sig.Args)
+
+	// Find the indices of the n resolved values before the pointer.
+	indices := e.resolvedIndicesBefore(n)
+
+	results, err := match.Sig.Handler(match.Args)
 	if err != nil {
 		return err
 	}
 
-	// Splice: remove args + word, insert results.
-	newStack := make([]Value, 0, len(e.stack)-n-1+len(results))
-	newStack = append(newStack, e.stack[:argStart]...)
-	newStack = append(newStack, results...)
-	newStack = append(newStack, e.stack[e.pointer+1:]...)
-	e.stack = newStack
+	if len(indices) == n && n > 0 {
+		firstArgIdx := indices[0]
 
-	// Pointer moves to start of results so they re-enter the main loop.
-	// This allows results to be collected by any pending forward.
-	e.pointer = argStart
+		// Build new stack: keep everything before first arg, skip arg indices
+		// and the word, keep internal forwards, insert results.
+		skipSet := make(map[int]bool, n+1)
+		for _, idx := range indices {
+			skipSet[idx] = true
+		}
+		skipSet[e.pointer] = true // skip the word itself
+
+		newStack := make([]Value, 0, len(e.stack)-n-1+len(results))
+		newStack = append(newStack, e.stack[:firstArgIdx]...)
+
+		// Copy non-arg, non-word items between first arg and after word.
+		for i := firstArgIdx; i <= e.pointer; i++ {
+			if !skipSet[i] {
+				newStack = append(newStack, e.stack[i])
+			}
+		}
+
+		newStack = append(newStack, results...)
+		newStack = append(newStack, e.stack[e.pointer+1:]...)
+		e.stack = newStack
+		e.pointer = firstArgIdx
+	} else if n == 0 {
+		// No args, just replace the word with results.
+		newStack := make([]Value, 0, len(e.stack)-1+len(results))
+		newStack = append(newStack, e.stack[:e.pointer]...)
+		newStack = append(newStack, results...)
+		newStack = append(newStack, e.stack[e.pointer+1:]...)
+		e.stack = newStack
+		// Pointer stays at same position to re-examine results.
+	} else {
+		// Fallback: simple contiguous splice.
+		argStart := e.pointer - n
+		if argStart < 0 {
+			argStart = 0
+		}
+		newStack := make([]Value, 0, len(e.stack)-n-1+len(results))
+		newStack = append(newStack, e.stack[:argStart]...)
+		newStack = append(newStack, results...)
+		newStack = append(newStack, e.stack[e.pointer+1:]...)
+		e.stack = newStack
+		e.pointer = argStart
+	}
+
 	return nil
 }
 
-// insertForward handles a suffix signature by placing a forward primitive
-// after the word on the stack.
-func (e *Engine) insertForward(w WordInfo, match *MatchResult) error {
+// resolvedIndicesBefore returns the indices of the last n resolved values
+// before the current pointer, stopping at open-paren barriers.
+func (e *Engine) resolvedIndicesBefore(n int) []int {
+	var indices []int
+	for i := e.pointer - 1; i >= 0 && len(indices) < n; i-- {
+		if e.stack[i].IsOpenParen() {
+			break
+		}
+		if !e.stack[i].IsForward() {
+			indices = append(indices, i)
+		}
+	}
+	// Reverse so indices are in stack order (ascending).
+	for i, j := 0, len(indices)-1; i < j; i, j = i+1, j-1 {
+		indices[i], indices[j] = indices[j], indices[i]
+	}
+	return indices
+}
+
+// insertForward handles a suffix-precedence word by placing a forward
+// primitive after the word on the stack.
+func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int) error {
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
-		ExpectedArgs: len(match.Sig.Suffix),
+		ExpectedArgs: suffixNeeded,
 		FuncIndex:    e.pointer,
-		Precedence:   match.Sig.Precedence,
-		Sig:          match.Sig,
+		Precedence:   sig.Precedence,
+		Sig:          sig,
 	})
 
-	// Insert fwd after the word at e.pointer.
 	newStack := make([]Value, 0, len(e.stack)+1)
 	newStack = append(newStack, e.stack[:e.pointer+1]...)
 	newStack = append(newStack, fwd)
 	newStack = append(newStack, e.stack[e.pointer+1:]...)
 	e.stack = newStack
 
-	// Advance past word and forward.
 	e.pointer += 2
 	return nil
 }
 
 // stepLiteral handles a resolved (non-word, non-forward) value at the pointer.
-// After advancing, it checks whether a pending forward should consume this value.
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
@@ -206,7 +405,7 @@ func (e *Engine) stepLiteral() error {
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
-			break // open-paren marker acts as a barrier
+			break
 		}
 		if e.stack[i].IsForward() {
 			fwdIdx = i
@@ -215,7 +414,6 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
-		// No pending forward — just advance.
 		e.pointer++
 		return nil
 	}
@@ -223,11 +421,20 @@ func (e *Engine) stepLiteral() error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
+	// Check if the value matches the next expected suffix type.
+	// In the suffix-first model, suffix fills Args[0..S-1] in order.
+	nextArgIdx := fwd.CollectedArgs
+	if nextArgIdx < len(fwd.Sig.Args) {
+		expectedType := fwd.Sig.Args[nextArgIdx]
+		val := e.stack[valIdx]
+		if !val.VType.Matches(expectedType) {
+			// Type mismatch — implicit end: resolve forward from stack.
+			return e.implicitEnd(fwdIdx)
+		}
+	}
+
 	// Peek ahead: if the next item is a higher-precedence infix operator,
 	// defer collection and let that operator execute first.
-	// Only applies when the forward itself participates in precedence (> 0).
-	// Non-arithmetic forwards (get, set, etc.) have precedence 0 and should
-	// not be affected by upcoming operators.
 	if fwd.Precedence > 0 {
 		if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
 			e.pointer++
@@ -239,14 +446,26 @@ func (e *Engine) stepLiteral() error {
 	val := e.stack[valIdx]
 	e.stack = append(e.stack[:valIdx], e.stack[valIdx+1:]...)
 
-	// Insert the value before the function word.
+	// After removal, adjust indices if valIdx was before them.
+	if valIdx < funcIdx {
+		funcIdx--
+	}
+	if valIdx < fwdIdx {
+		fwdIdx--
+	}
+
+	// Insert the suffix value right before the function word (on top of the
+	// stack relative to prefix args). This means after collection, the stack is:
+	// [..., prefix_args..., suffix0, suffix1, ..., func_word, fwd, ...]
+	// The word retries as prefix with args in their natural order.
+	insertIdx := funcIdx
+
 	newStack := make([]Value, 0, len(e.stack)+1)
-	newStack = append(newStack, e.stack[:funcIdx]...)
+	newStack = append(newStack, e.stack[:insertIdx]...)
 	newStack = append(newStack, val)
-	newStack = append(newStack, e.stack[funcIdx:]...)
+	newStack = append(newStack, e.stack[insertIdx:]...)
 	e.stack = newStack
 
-	// The forward and function word shifted right by 1.
 	funcIdx++
 	fwdIdx++
 
@@ -254,38 +473,17 @@ func (e *Engine) stepLiteral() error {
 	fwd.FuncIndex = funcIdx
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
-		// All suffix args collected. Remove the forward and execute directly.
+		// All suffix args collected. Remove forward, force prefix, retry.
 		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
-		// fwdIdx was after funcIdx, so funcIdx is unaffected by the removal.
+		// fwdIdx is after funcIdx, so funcIdx is unaffected.
 
-		// The stack now has [... | prefix_args | suffix_args | func_word | ...].
-		// Execute the handler directly with all args.
-		totalArgs := len(fwd.Sig.Prefix) + len(fwd.Sig.Suffix)
-		argStart := funcIdx - totalArgs
-		args := make([]Value, totalArgs)
-		copy(args, e.stack[argStart:funcIdx])
-
-		// Validate arg types and execute. If the original signature's types
-		// don't match, try alternative signatures of the same function.
-		results, err, ok := e.tryExecuteForward(fwd, args)
-		if !ok {
-			return fmt.Errorf("signature error: no matching signature for %s", fwd.FuncName)
-		}
-		if err != nil {
-			return err
+		if e.stack[funcIdx].IsWord() {
+			w := e.stack[funcIdx].AsWord()
+			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
-		// Splice: remove args + word, insert results.
-		newStack := make([]Value, 0, len(e.stack)-totalArgs-1+len(results))
-		newStack = append(newStack, e.stack[:argStart]...)
-		newStack = append(newStack, results...)
-		newStack = append(newStack, e.stack[funcIdx+1:]...)
-		e.stack = newStack
-
-		// Pointer moves to start of results for re-examination.
-		e.pointer = argStart
+		e.pointer = funcIdx
 	} else {
-		// Update the forward in the stack.
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
 	}
@@ -293,10 +491,26 @@ func (e *Engine) stepLiteral() error {
 	return nil
 }
 
-// stepEnd handles the "end" keyword. If a forward is pending, it terminates
-// the forward early by pulling remaining args from the prefix stack and
-// rearranging so the function retries with correct arg order. If no forward
-// is pending, it simply removes itself (no-op).
+// implicitEnd resolves a forward early when a type mismatch occurs.
+func (e *Engine) implicitEnd(fwdIdx int) error {
+	fwd := e.stack[fwdIdx].AsForward()
+	funcIdx := fwd.FuncIndex
+
+	e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+	if fwdIdx < funcIdx {
+		funcIdx--
+	}
+
+	if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
+		w := e.stack[funcIdx].AsWord()
+		e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	}
+
+	e.pointer = funcIdx
+	return nil
+}
+
+// stepEnd handles the "end" keyword.
 func (e *Engine) stepEnd() error {
 	endIdx := e.pointer
 
@@ -304,7 +518,7 @@ func (e *Engine) stepEnd() error {
 	fwdIdx := -1
 	for i := endIdx - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
-			break // open-paren marker acts as a barrier
+			break
 		}
 		if e.stack[i].IsForward() {
 			fwdIdx = i
@@ -313,72 +527,60 @@ func (e *Engine) stepEnd() error {
 	}
 
 	if fwdIdx < 0 {
-		// No pending forward — just remove end (no-op).
 		e.stack = append(e.stack[:endIdx], e.stack[endIdx+1:]...)
 		return nil
 	}
 
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
-	collected := fwd.CollectedArgs
-	remaining := fwd.ExpectedArgs - collected
-	suffixStart := funcIdx - collected
 
-	// Check if enough prefix args available for the remaining suffix args.
-	if suffixStart < remaining {
-		return fmt.Errorf("end: insufficient arguments for %s (need %d more, have %d)",
-			fwd.FuncName, remaining, suffixStart)
-	}
-
-	takenStart := suffixStart - remaining
-
-	// Rebuild the stack with rearranged args:
-	//   [untouched_prefix | collected_suffix | taken_prefix | func | rest...]
-	// The taken prefix args are moved after the collected suffix args so the
-	// prefix handler sees them in the correct order (suffix args deepest).
-	newStack := make([]Value, 0, len(e.stack)-2) // -2 for forward and end
-	newStack = append(newStack, e.stack[:takenStart]...)          // untouched prefix
-	newStack = append(newStack, e.stack[suffixStart:funcIdx]...)  // collected suffix
-	newStack = append(newStack, e.stack[takenStart:suffixStart]...) // taken prefix
-	newStack = append(newStack, e.stack[funcIdx])                 // function word
-	// Everything after forward, excluding end.
-	for i := fwdIdx + 1; i < len(e.stack); i++ {
-		if i == endIdx {
-			continue
+	// Remove forward and end from the stack.
+	// Remove higher index first to preserve lower indices.
+	if endIdx > fwdIdx {
+		e.stack = append(e.stack[:endIdx], e.stack[endIdx+1:]...)
+		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		if fwdIdx < funcIdx {
+			funcIdx-- // forward removal
 		}
-		newStack = append(newStack, e.stack[i])
+		// end was already removed (endIdx > fwdIdx), endIdx > funcIdx always
+	} else {
+		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		newEndIdx := endIdx
+		if fwdIdx < endIdx {
+			newEndIdx--
+		}
+		e.stack = append(e.stack[:newEndIdx], e.stack[newEndIdx+1:]...)
+		if fwdIdx < funcIdx {
+			funcIdx--
+		}
+		if newEndIdx < funcIdx {
+			funcIdx--
+		}
 	}
-	e.stack = newStack
 
-	// funcIdx in the new stack: same total items before the function word.
-	newFuncIdx := takenStart + collected + remaining
+	_ = fwd // consumed above
 
-	// Clear modifiers on the function word for retry.
-	if e.stack[newFuncIdx].IsWord() {
-		w := e.stack[newFuncIdx].AsWord()
-		e.stack[newFuncIdx] = NewWord(w.Name)
+	if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
+		w := e.stack[funcIdx].AsWord()
+		e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 	}
 
-	e.pointer = newFuncIdx
+	e.pointer = funcIdx
 	return nil
 }
 
-// stepOpenParen replaces the "(" word at the current pointer with an open-paren
-// marker and advances past it.
+// stepOpenParen replaces the "(" word with an open-paren marker.
 func (e *Engine) stepOpenParen() error {
 	e.stack[e.pointer] = NewOpenParen()
 	e.pointer++
 	return nil
 }
 
-// stepCloseParen handles the ")" word. It finds the nearest open-paren marker,
-// checks for orphaned forwards inside the paren scope, collapses the
-// sub-expression results, removes the marker and ")", and sets the pointer
-// so results re-enter the main loop.
+// stepCloseParen handles the ")" word. It resolves any pending forwards
+// inside the paren scope via implicit end, then collapses the sub-expression.
 func (e *Engine) stepCloseParen() error {
 	closeIdx := e.pointer
 
-	// Find the nearest open-paren marker scanning backwards.
 	openIdx := -1
 	for i := closeIdx - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
@@ -391,7 +593,66 @@ func (e *Engine) stepCloseParen() error {
 		return fmt.Errorf("syntax error: unmatched closing parenthesis")
 	}
 
-	// Check for orphaned forwards inside the paren scope.
+	// Resolve any forwards inside the paren scope via implicit end.
+	// We loop because resolving a forward may cause re-evaluation.
+	for attempt := 0; attempt < 50; attempt++ {
+		hasFwd := false
+		for i := openIdx + 1; i < closeIdx; i++ {
+			if e.stack[i].IsForward() {
+				hasFwd = true
+				fwd := e.stack[i].AsForward()
+				funcIdx := fwd.FuncIndex
+
+				// Remove the forward.
+				e.stack = append(e.stack[:i], e.stack[i+1:]...)
+				closeIdx--
+				if i < funcIdx {
+					funcIdx--
+				}
+
+				// Force prefix on the function word.
+				if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
+					w := e.stack[funcIdx].AsWord()
+					e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+				}
+
+				// Re-evaluate from funcIdx up to closeIdx.
+				e.pointer = funcIdx
+				for e.pointer < closeIdx {
+					val := e.stack[e.pointer]
+					switch {
+					case val.IsWord():
+						if err := e.stepWord(val); err != nil {
+							return err
+						}
+						// Recalculate closeIdx: stack may have changed.
+						closeIdx = e.findCloseParenAfter(openIdx)
+						if closeIdx < 0 {
+							return fmt.Errorf("syntax error: unmatched closing parenthesis")
+						}
+					case val.IsForward():
+						e.pointer++
+					case val.IsOpenParen():
+						e.pointer++
+					default:
+						if err := e.stepLiteral(); err != nil {
+							return err
+						}
+						closeIdx = e.findCloseParenAfter(openIdx)
+						if closeIdx < 0 {
+							return fmt.Errorf("syntax error: unmatched closing parenthesis")
+						}
+					}
+				}
+				break // restart the outer loop to check for more forwards
+			}
+		}
+		if !hasFwd {
+			break
+		}
+	}
+
+	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
@@ -400,28 +661,41 @@ func (e *Engine) stepCloseParen() error {
 		}
 	}
 
-	// Collect resolved values between open marker and close paren.
+	// Collect resolved values.
 	results := make([]Value, 0, closeIdx-openIdx-1)
 	for i := openIdx + 1; i < closeIdx; i++ {
 		results = append(results, e.stack[i])
 	}
 
-	// Splice: remove open marker + contents + close paren, insert results.
+	// Splice.
 	newStack := make([]Value, 0, len(e.stack)-(closeIdx-openIdx+1)+len(results))
 	newStack = append(newStack, e.stack[:openIdx]...)
 	newStack = append(newStack, results...)
 	newStack = append(newStack, e.stack[closeIdx+1:]...)
 	e.stack = newStack
 
-	// Set pointer to start of results so they re-enter the main loop.
-	// This lets them be collected by any pending forward before the paren.
 	e.pointer = openIdx
 	return nil
 }
 
+// findCloseParenAfter finds the index of the ")" word after the given openIdx.
+func (e *Engine) findCloseParenAfter(openIdx int) int {
+	depth := 0
+	for i := openIdx + 1; i < len(e.stack); i++ {
+		if e.stack[i].IsOpenParen() {
+			depth++
+		} else if e.stack[i].IsWord() && e.stack[i].AsWord().Name == ")" {
+			if depth == 0 {
+				return i
+			}
+			depth--
+		}
+	}
+	return -1
+}
+
 // effectiveResolved returns the resolved portion of the stack visible for
-// prefix matching. It starts from after the last open-paren marker (if any)
-// up to the current pointer, excluding internal values (forwards, markers).
+// prefix matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
 	for i := e.pointer - 1; i >= 0; i-- {
@@ -430,7 +704,6 @@ func (e *Engine) effectiveResolved() []Value {
 			break
 		}
 	}
-	// Filter out forward entries from the resolved range.
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
@@ -441,8 +714,7 @@ func (e *Engine) effectiveResolved() []Value {
 	return resolved
 }
 
-// peekPrecedence returns the highest infix precedence of the word at stack[idx],
-// or 0 if idx is out of range or the entry is not an infix word.
+// peekPrecedence returns the highest precedence of the word at stack[idx].
 func (e *Engine) peekPrecedence(idx int) int {
 	if idx >= len(e.stack) {
 		return 0
@@ -453,50 +725,21 @@ func (e *Engine) peekPrecedence(idx int) int {
 	}
 	w := v.AsWord()
 	fn := e.registry.Lookup(w.Name)
-	if fn == nil {
+	if fn == nil || !fn.SuffixPrecedence {
 		return 0
 	}
 	var maxPrec int
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
-		if len(sig.Suffix) > 0 && sig.Precedence > maxPrec {
+		if sig.Precedence > maxPrec {
 			maxPrec = sig.Precedence
 		}
 	}
 	return maxPrec
 }
 
-// matchSuffixOnly finds a suffix-only signature, ignoring prefix requirements.
-func matchSuffixOnly(sigs []Signature, modifiers WordInfo) *MatchResult {
-	var best *MatchResult
-	var bestScore int
-
-	for i := range sigs {
-		sig := &sigs[i]
-		if len(sig.Suffix) == 0 {
-			continue
-		}
-		if modifiers.ForcePrefix {
-			continue
-		}
-		if modifiers.ArgCount >= 0 && sig.TotalArgs() != modifiers.ArgCount {
-			continue
-		}
-
-		score := signatureScore(sig)
-		if best == nil || score > bestScore {
-			best = &MatchResult{Sig: sig, PrefixLen: 0}
-			bestScore = score
-		}
-	}
-
-	return best
-}
-
 // hasPendingForwardExpectingWord checks if there is a pending forward
-// behind the current pointer whose next expected suffix argument is TWord.
-// This is used to decide whether an undefined word should be preserved as
-// a word value (for def-like functions) or coerced to a string.
+// whose next expected argument is TWord.
 func (e *Engine) hasPendingForwardExpectingWord() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
@@ -505,63 +748,11 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
 			nextIdx := fwd.CollectedArgs
-			if nextIdx < len(fwd.Sig.Suffix) {
-				return fwd.Sig.Suffix[nextIdx].Equal(TWord)
+			if nextIdx < len(fwd.Sig.Args) {
+				return fwd.Sig.Args[nextIdx].Equal(TWord)
 			}
 			break
 		}
 	}
 	return false
-}
-
-// allArgsMatchSig checks whether all collected args match a signature's types.
-func allArgsMatchSig(sig *Signature, args []Value) bool {
-	for i, arg := range args {
-		var expectedType Type
-		if i < len(sig.Prefix) {
-			expectedType = sig.Prefix[i]
-		} else {
-			expectedType = sig.Suffix[i-len(sig.Prefix)]
-		}
-		if !arg.VType.Matches(expectedType) {
-			return false
-		}
-	}
-	return true
-}
-
-// tryExecuteForward attempts to validate and execute the forward's signature
-// with the collected args. If the original signature's types don't match,
-// it tries alternative signatures of the same function with the same
-// prefix/suffix split.
-func (e *Engine) tryExecuteForward(fwd ForwardInfo, args []Value) ([]Value, error, bool) {
-	// Try the original signature first.
-	if allArgsMatchSig(fwd.Sig, args) {
-		results, err := fwd.Sig.Handler(args)
-		return results, err, true
-	}
-
-	// Retry with alternative signatures that have the same prefix/suffix split.
-	fn := e.registry.Lookup(fwd.FuncName)
-	if fn == nil {
-		return nil, nil, false
-	}
-	for i := range fn.Signatures {
-		altSig := &fn.Signatures[i]
-		if altSig == fwd.Sig {
-			continue
-		}
-		if len(altSig.Prefix) != len(fwd.Sig.Prefix) {
-			continue
-		}
-		if len(altSig.Suffix) != len(fwd.Sig.Suffix) {
-			continue
-		}
-		if allArgsMatchSig(altSig, args) {
-			results, err := altSig.Handler(args)
-			return results, err, true
-		}
-	}
-
-	return nil, nil, false
 }

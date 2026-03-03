@@ -58,8 +58,8 @@ a upper	'A'
 # === String functions - suffix ===
 lower "ABC"	'abc'
 lower B	'b'
-# upper has no suffix signature, so this errors
-upper "abc"		signature_error
+# upper now has suffix precedence (unified model)
+upper "abc"	'ABC'
 lower "XYZ"	'xyz'
 
 # === Arithmetic - prefix (Forth style) ===
@@ -488,6 +488,7 @@ def "inc" [1 add] 10 inc	11
 # def with prefix body (body def name form)
 [1 add] def inc2 10 inc2	11
 [1 sub] def dec2 5 dec2	4
+[1 add] def "inc3" 10 inc3	11
 
 # def with prefix scalar body
 42 def answer answer	42

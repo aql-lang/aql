@@ -1,29 +1,26 @@
 package engine
 
 // Signature describes one way a function can be called.
-// Prefix types are consumed from the resolved stack (rightmost = top).
-// Suffix types are consumed from future values via the forward mechanism.
+// Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
+// on the stack, Args[last] = top of the stack for prefix matching).
+//
+// For suffix-precedence words the engine collects future values into Args[0],
+// Args[1], ... in order, then pushes them onto the stack and retries as prefix.
 type Signature struct {
-	Prefix     []Type
-	Suffix     []Type
+	Args       []Type
 	Precedence int // higher binds tighter; 0 = default (no precedence)
 	Handler    func(args []Value) ([]Value, error)
 }
 
-// IsPrefixOnly reports whether this signature takes only prefix args.
-func (s *Signature) IsPrefixOnly() bool {
-	return len(s.Suffix) == 0
-}
-
-// TotalArgs returns the total number of arguments (prefix + suffix).
+// TotalArgs returns the number of arguments.
 func (s *Signature) TotalArgs() int {
-	return len(s.Prefix) + len(s.Suffix)
+	return len(s.Args)
 }
 
-// MatchResult holds a matched signature and how it was matched.
+// MatchResult holds a matched signature and the reordered args.
 type MatchResult struct {
-	Sig       *Signature
-	PrefixLen int // number of prefix args consumed from the stack
+	Sig  *Signature
+	Args []Value // args reordered to match Sig.Args types
 }
 
 // MatchSignature finds the best matching signature for a function given the
@@ -40,77 +37,70 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	for i := range sigs {
 		sig := &sigs[i]
 
-		// Filter by modifiers.
-		if modifiers.ForcePrefix && len(sig.Suffix) > 0 {
-			continue
-		}
-		if modifiers.ForceSuffix && sig.IsPrefixOnly() {
-			continue
-		}
 		if modifiers.ArgCount >= 0 && sig.TotalArgs() != modifiers.ArgCount {
 			continue
 		}
 
-		// Check prefix match against the top of the stack.
-		if !prefixMatches(sig.Prefix, stack) {
-			// If this signature has suffix args, it can still match even
-			// with no prefix args (pure suffix signature).
-			if len(sig.Prefix) > 0 {
-				continue
-			}
+		n := len(sig.Args)
+		if len(stack) < n {
+			continue
+		}
+
+		// Extract top n values from the stack.
+		base := len(stack) - n
+		top := stack[base:]
+
+		// Try flexible match.
+		ordered, ok := flexibleMatch(top, sig.Args)
+		if !ok {
+			continue
 		}
 
 		score := signatureScore(sig)
 
-		// Tie-breaking on equal score:
-		// 1. Prefer signatures that consume more prefix args (more grounded).
-		// 2. Prefer prefix-only over mixed prefix+suffix.
-		//
-		// ENGINE.md states "all words have suffix precedence" (meaning words
-		// are eligible for suffix matching). However, when prefix args ARE
-		// available on the stack, prefix matching is tried first and wins via
-		// the PrefixLen tie-break below. When insufficient prefix args exist,
-		// the engine falls through to matchSuffixOnly (engine.go). This
-		// produces correct behavior for all documented examples.
-		if best != nil && score == bestScore {
-			if len(sig.Prefix) > best.PrefixLen {
-				// More prefix args consumed → more specific match.
-			} else if sig.IsPrefixOnly() && !best.Sig.IsPrefixOnly() {
-				// Prefix-only wins over infix.
-			} else {
-				continue
-			}
-		} else if best != nil && score < bestScore {
+		if best != nil && score <= bestScore {
 			continue
 		}
 
-		best = &MatchResult{Sig: sig, PrefixLen: len(sig.Prefix)}
+		args := make([]Value, n)
+		copy(args, ordered)
+		best = &MatchResult{Sig: sig, Args: args}
 		bestScore = score
 	}
 
 	return best
 }
 
-// prefixMatches checks whether the top of the stack satisfies the prefix types.
-// Prefix[0] is the deepest arg, Prefix[last] is the top of the stack.
-//
-// Note on argument ordering:
-// The implementation uses stack order: Prefix[0] = deepest, Prefix[last] = top.
-// ENGINE.md describes types in "reverse stack order" (first type = top of stack).
-// All built-in handlers follow the implementation convention.
-// Future typed def should translate at the boundary.
-func prefixMatches(prefix []Type, stack []Value) bool {
-	if len(prefix) == 0 {
-		return true
+// flexibleMatch checks whether values can be reordered to match the given types.
+// - Try positional (identity) first.
+// - For 2 args with distinct types, try swap.
+// Returns the values reordered to match types, or false.
+func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
+	n := len(types)
+	if len(values) < n {
+		return nil, false
 	}
-	if len(stack) < len(prefix) {
-		return false
+
+	// Try positional first.
+	if positionalMatch(values, types) {
+		return values, true
 	}
-	// The top of the stack is stack[len(stack)-1].
-	// Prefix[len-1] should match stack top, Prefix[0] matches deeper.
-	base := len(stack) - len(prefix)
-	for i, pt := range prefix {
-		if !stack[base+i].VType.Matches(pt) {
+
+	// For 2 args, try swap.
+	if n == 2 {
+		swapped := []Value{values[1], values[0]}
+		if positionalMatch(swapped, types) {
+			return swapped, true
+		}
+	}
+
+	return nil, false
+}
+
+// positionalMatch checks whether values match types in order.
+func positionalMatch(values []Value, types []Type) bool {
+	for i, t := range types {
+		if !values[i].VType.Matches(t) {
 			return false
 		}
 	}
@@ -121,10 +111,7 @@ func prefixMatches(prefix []Type, stack []Value) bool {
 // Higher is better: more args and more specific types win.
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 100 // arg count dominates
-	for _, t := range sig.Prefix {
-		score += t.Specificity()
-	}
-	for _, t := range sig.Suffix {
+	for _, t := range sig.Args {
 		score += t.Specificity()
 	}
 	return score
