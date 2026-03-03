@@ -78,7 +78,7 @@ func Unify(a, b Value) (Value, bool) {
 
 // unifyLists handles unification when at least one side is a list.
 func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
-	// Type literal "list" (Data==nil) unifies with any concrete list.
+	// Type literal "list" (Data==nil) unifies with any list type.
 	if aIsList && a.Data == nil {
 		if bIsList {
 			return b, true
@@ -92,11 +92,37 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 		return Value{}, false
 	}
 
-	// Both must be concrete lists.
+	// Both must be list types.
 	if !aIsList || !bIsList {
 		return Value{}, false
 	}
 
+	// Check for typed lists (child type constraints).
+	aTyped := a.IsTypedList()
+	bTyped := b.IsTypedList()
+
+	if aTyped && bTyped {
+		// Both typed lists: unify child types.
+		aChild := a.AsChildType().Child
+		bChild := b.AsChildType().Child
+		unified, ok := Unify(aChild, bChild)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTypedList(unified), true
+	}
+
+	if aTyped {
+		// a is typed, b is concrete: each element must unify with the child type.
+		return unifyTypedWithConcrete(a.AsChildType().Child, b.AsList())
+	}
+
+	if bTyped {
+		// b is typed, a is concrete: each element must unify with the child type.
+		return unifyTypedWithConcrete(b.AsChildType().Child, a.AsList())
+	}
+
+	// Both concrete lists: element-by-element unification.
 	aElems := a.AsList()
 	bElems := b.AsList()
 
@@ -115,6 +141,20 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 		result[i] = unified
 	}
 
+	return NewList(result), true
+}
+
+// unifyTypedWithConcrete unifies a child type constraint against each element
+// of a concrete list. Every element must unify with the child type.
+func unifyTypedWithConcrete(childType Value, elems []Value) (Value, bool) {
+	result := make([]Value, len(elems))
+	for i, elem := range elems {
+		unified, ok := Unify(childType, elem)
+		if !ok {
+			return Value{}, false
+		}
+		result[i] = unified
+	}
 	return NewList(result), true
 }
 
@@ -187,6 +227,14 @@ func valuesEqual(a, b Value) bool {
 	case a.VType.Matches(TBoolean):
 		return a.AsBoolean() == b.AsBoolean()
 	case a.VType.Equal(TList):
+		aCT, aOk := a.Data.(ChildTypeInfo)
+		bCT, bOk := b.Data.(ChildTypeInfo)
+		if aOk && bOk {
+			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+		}
+		if aOk != bOk {
+			return false
+		}
 		return listsEqual(a.AsList(), b.AsList())
 	case a.VType.Equal(TMap):
 		return mapsEqual(a.AsMap(), b.AsMap())

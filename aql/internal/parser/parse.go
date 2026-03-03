@@ -41,7 +41,7 @@ func Parse(src string) ([]engine.Value, error) {
 		TextInfo: boolPtr(true),
 		ListRef:  boolPtr(true),
 		MapRef:   boolPtr(true),
-		List:     &jsonic.ListOptions{Pair: boolPtr(true)},
+		List:     &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
@@ -59,6 +59,13 @@ func Parse(src string) ([]engine.Value, error) {
 	// implicit structures from explicit ones.
 	switch val := result.(type) {
 	case jsonic.ListRef:
+		if val.Child != nil {
+			tv, err := convertTypedList(val)
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{tv}, nil
+		}
 		if !val.Implicit {
 			// Explicit list [...]  — a single list value (quotation).
 			lv, err := convertWordList(val.Val)
@@ -162,6 +169,9 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
+		if val.Child != nil {
+			return convertTypedList(val)
+		}
 		return convertWordList(val.Val)
 
 	case bool:
@@ -219,6 +229,9 @@ func convertDataValue(v any) (engine.Value, error) {
 		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
+		if val.Child != nil {
+			return convertTypedList(val)
+		}
 		return convertDataList(val.Val)
 
 	case bool:
@@ -230,6 +243,16 @@ func convertDataValue(v any) (engine.Value, error) {
 	default:
 		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
 	}
+}
+
+// convertTypedList converts a ListRef with a Child into a typed list value.
+// The child value is converted in data context (type names resolve to type literals).
+func convertTypedList(lr jsonic.ListRef) (engine.Value, error) {
+	childVal, err := convertDataValue(lr.Child)
+	if err != nil {
+		return engine.Value{}, err
+	}
+	return engine.NewTypedList(childVal), nil
 }
 
 // convertDataList converts a list in data context (inside maps).

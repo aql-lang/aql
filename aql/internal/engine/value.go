@@ -49,6 +49,12 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
+// ChildTypeInfo holds the child type constraint for a typed list.
+// For example, [:string] constrains all elements to be strings.
+type ChildTypeInfo struct {
+	Child Value
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -98,6 +104,12 @@ func NewBoolean(b bool) Value {
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
 	return Value{VType: TList, Data: elems}
+}
+
+// NewTypedList creates a typed list value with a child type constraint.
+// For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
+func NewTypedList(child Value) Value {
+	return Value{VType: TList, Data: ChildTypeInfo{Child: child}}
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
@@ -162,6 +174,17 @@ func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
 }
 
+// IsTypedList reports whether this value is a typed list (has child type constraint).
+func (v Value) IsTypedList() bool {
+	_, ok := v.Data.(ChildTypeInfo)
+	return ok && v.VType.Equal(TList)
+}
+
+// AsChildType returns the ChildTypeInfo, panics if not a typed list.
+func (v Value) AsChildType() ChildTypeInfo {
+	return v.Data.(ChildTypeInfo)
+}
+
 // AsWord returns the WordInfo, panics if not a word.
 func (v Value) AsWord() WordInfo {
 	return v.Data.(WordInfo)
@@ -221,6 +244,9 @@ func (v Value) String() string {
 		}
 		return "false"
 	case v.VType.Equal(TList):
+		if ct, ok := v.Data.(ChildTypeInfo); ok {
+			return "[:" + ct.Child.String() + "]"
+		}
 		elems := v.AsList()
 		parts := make([]string, len(elems))
 		for i, e := range elems {

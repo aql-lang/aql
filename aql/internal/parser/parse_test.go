@@ -515,3 +515,95 @@ func TestParseMultilineScript(t *testing.T) {
 		engine.NewWord("y"),
 	})
 }
+
+// --- Typed list tests (list.child) ---
+
+func TestParseTypedListString(t *testing.T) {
+	// [:string] → typed list with child type string
+	assertParse(t, "[:string]", []engine.Value{
+		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
+	})
+}
+
+func TestParseTypedListNumber(t *testing.T) {
+	// [:number] → typed list with child type number
+	assertParse(t, "[:number]", []engine.Value{
+		engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)),
+	})
+}
+
+func TestParseTypedListBoolean(t *testing.T) {
+	assertParse(t, "[:boolean]", []engine.Value{
+		engine.NewTypedList(engine.NewTypeLiteral(engine.TBoolean)),
+	})
+}
+
+func TestParseTypedListAny(t *testing.T) {
+	assertParse(t, "[:any]", []engine.Value{
+		engine.NewTypedList(engine.NewTypeLiteral(engine.TAny)),
+	})
+}
+
+func TestParseTypedListMap(t *testing.T) {
+	// [:{x:number}] → typed list with child type {x:number}
+	got, err := Parse("[:{x:number}]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].IsTypedList() {
+		t.Fatalf("expected typed list, got %s", got[0])
+	}
+	child := got[0].AsChildType().Child
+	if !child.VType.Equal(engine.TMap) {
+		t.Errorf("expected child type map, got %s", child.VType)
+	}
+	m := child.AsMap()
+	xVal, ok := m.Get("x")
+	if !ok {
+		t.Fatalf("expected key 'x' in child map")
+	}
+	if !xVal.VType.Equal(engine.TNumber) {
+		t.Errorf("expected x to be number type, got %s", xVal.VType)
+	}
+}
+
+func TestParseTypedListNested(t *testing.T) {
+	// [:[:string]] → typed list of typed lists of strings
+	assertParse(t, "[:[:string]]", []engine.Value{
+		engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TString))),
+	})
+}
+
+func TestParseTypedListDeepNested(t *testing.T) {
+	// [:[:[:number]]] → three levels deep
+	assertParse(t, "[:[:[:number]]]", []engine.Value{
+		engine.NewTypedList(engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)))),
+	})
+}
+
+func TestParseTypedListInExpression(t *testing.T) {
+	// 1 [:string] → integer then typed list
+	assertParse(t, "1 [:string]", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
+	})
+}
+
+func TestParseTypedListMapChild(t *testing.T) {
+	// [:{a:string,b:number}] → typed list with multi-key map child
+	got, err := Parse("[:{a:string,b:number}]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsTypedList() {
+		t.Fatalf("expected 1 typed list, got %v", got)
+	}
+	child := got[0].AsChildType().Child
+	m := child.AsMap()
+	if m.Len() != 2 {
+		t.Errorf("expected 2 keys, got %d", m.Len())
+	}
+}

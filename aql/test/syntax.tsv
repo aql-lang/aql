@@ -304,6 +304,75 @@ none unify {x:1}	'~unify-fail' false
 none unify list	'~unify-fail' false
 none unify map	'~unify-fail' false
 
+# === Typed list literals ===
+[:string]	[:string]
+[:number]	[:number]
+[:boolean]	[:boolean]
+[:any]	[:any]
+[:list]	[:list]
+[:map]	[:map]
+[:{x:number}]	[:{x:number}]
+[:{a:string,b:number}]	[:{a:string,b:number}]
+[:[:string]]	[:[:string]]
+[:[:number]]	[:[:number]]
+[:[:{x:number}]]	[:[:{x:number}]]
+[:[:[:number]]]	[:[:[:number]]]
+
+# === Unify - typed lists with identical child types ===
+[:string] unify [:string]	[:string] true
+[:number] unify [:number]	[:number] true
+[:boolean] unify [:boolean]	[:boolean] true
+
+# === Unify - typed lists with concrete lists ===
+[:number] unify [1,2,3]	[1,2,3] true
+[:string] unify ["a","b"]	['a','b'] true
+[:number] unify [42]	[42] true
+[:string] unify []	[] true
+[:number] unify []	[] true
+
+# === Unify - typed lists with concrete (fail) ===
+[:string] unify [1,2]	'~unify-fail' false
+[:number] unify ["hello"]	'~unify-fail' false
+
+# === Unify - typed list narrowing ===
+[:any] unify [:number]	[:number] true
+[:any] unify [:string]	[:string] true
+[:number] unify [:any]	[:number] true
+
+# === Unify - typed list child type mismatch ===
+[:string] unify [:number]	'~unify-fail' false
+[:number] unify [:boolean]	'~unify-fail' false
+
+# === Unify - typed list with type literal ===
+list unify [:string]	[:string] true
+[:string] unify list	[:string] true
+list unify [:number]	[:number] true
+
+# === Unify - typed list with any ===
+any unify [:string]	[:string] true
+[:number] unify any	[:number] true
+
+# === Unify - typed list with none ===
+none unify [:string]	'~unify-fail' false
+[:number] unify none	'~unify-fail' false
+
+# === Unify - typed list with map child type ===
+[:{x:number}] unify [{x:1},{x:2}]	[{x:1},{x:2}] true
+[:{x:string}] unify [{x:"a"},{x:"b"}]	[{x:'a'},{x:'b'}] true
+[:{x:number}] unify [{x:1},{y:1}]	'~unify-fail' false
+[:{x:number}] unify []	[] true
+
+# === Unify - deeper typed lists ===
+[:[:number]] unify [[1,2],[3]]	[[1,2],[3]] true
+[:[:string]] unify [["a"],["b","c"]]	[['a'],['b','c']] true
+[:[:number]] unify [["a"]]	'~unify-fail' false
+[:[:number]] unify [[1],[2,3],[]]	[[1],[2,3],[]] true
+
+# === Unify - typed list symmetry ===
+[1,2,3] unify [:number]	[1,2,3] true
+["a","b"] unify [:string]	['a','b'] true
+[1,2] unify [:string]	'~unify-fail' false
+
 # === Error cases ===
 
 # Unmatched closing parenthesis
