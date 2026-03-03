@@ -454,6 +454,106 @@ def inc [1 add]
 1 inc inc inc               => 4
 ```
 
+Definitions stack: a second `def` for the same name shadows the
+previous one.
+
+```
+def foo 1
+def foo 2
+foo                         => 2
+```
+
+#### `undef`
+
+Remove the most recent definition of a word. If definitions were
+stacked, the previous one is revealed.
+
+*Signatures:*
+- `[word] -> []`
+- `[string] -> []`
+
+*Precedence:* suffix
+
+```
+def foo 1 foo undef foo foo             => 1 'foo'
+
+def foo 1 def foo 2 foo undef foo foo   => 2 1
+```
+
+### Variable Words
+
+#### `var`
+
+Define scoped variables. `var` takes one list argument whose first
+element is a list of variable declarations and whose remaining
+elements form the body. After the body executes, all variables are
+automatically undefined.
+
+*Signature:* `[list] -> [results...]`
+*Precedence:* suffix
+
+Each declaration is one of:
+
+| Form       | Meaning                             |
+|------------|-------------------------------------|
+| `x`        | Bare word — takes value from stack  |
+| `[x 2]`    | List — defines x with value 2       |
+
+The expansion `var [[x] body...]` is equivalent to
+`def x end body... undef x`.
+
+**Variable from stack:**
+
+```
+5 var [[x] x mul x]                    => 25
+```
+
+Here `x` is bound to 5 (the top of the stack). The body `x mul x`
+computes 5 * 5 = 25. After execution, `x` is undefined.
+
+**Inline value:**
+
+```
+var [[[x 2]] x mul x]                  => 4
+```
+
+`x` is bound to 2 directly inside the declaration.
+
+**Multiple variables:**
+
+```
+3 5 var [[x y] x add y]               => 8
+```
+
+`x` binds to the top of the stack (5), `y` to the next (3).
+Wait — each `def name end` in the expansion peels the topmost value:
+first `x` gets 5, then `y` gets 3.
+
+**Mixed inline and stack:**
+
+```
+10 var [[[x 2] y] x add y]            => 12
+```
+
+`x` = 2 (inline), `y` = 10 (from stack).
+
+**Variables do not leak:**
+
+```
+5 var [[x] x mul x] x                 => 25 'x'
+```
+
+After `var` completes, `x` reverts to an unknown word (string `'x'`).
+
+**Preserves existing definitions:**
+
+```
+def foo 99
+5 var [[x] x add foo] foo             => 104 99
+```
+
+`foo` remains defined after `var` completes.
+
 
 ## Type System
 

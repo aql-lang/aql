@@ -143,6 +143,14 @@ func (e *Engine) stepWord(val Value) error {
 		return e.stepCloseParen()
 	}
 
+	// If there is a pending forward whose next expected argument is TWord,
+	// collect this word as-is rather than executing it. This lets words
+	// like def, undef, and var receive word names even for already-defined
+	// words (e.g. "undef foo" when foo is defined).
+	if e.hasPendingForwardExpectingWord() {
+		return e.stepLiteral()
+	}
+
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
@@ -157,9 +165,6 @@ func (e *Engine) stepWord(val Value) error {
 		if t, ok := typeNames[w.Name]; ok {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
-		}
-		if e.hasPendingForwardExpectingWord() {
-			return e.stepLiteral()
 		}
 		e.stack[e.pointer] = NewString(w.Name)
 		return nil

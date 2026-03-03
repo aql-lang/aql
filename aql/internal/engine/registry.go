@@ -14,15 +14,17 @@ type Function struct {
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	funcs map[string]*Function
-	Store map[string]Value // key-value store for set/get
+	funcs     map[string]*Function
+	Store     map[string]Value   // key-value store for set/get
+	DefStacks map[string][]Value // stacked bodies for def-defined words
 }
 
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		funcs: make(map[string]*Function),
-		Store: make(map[string]Value),
+		funcs:     make(map[string]*Function),
+		Store:     make(map[string]Value),
+		DefStacks: make(map[string][]Value),
 	}
 }
 
@@ -135,6 +137,8 @@ func registerBuiltins(r *Registry) {
 	registerStorage(r)
 	registerUnify(r)
 	registerDef(r)
+	registerUndef(r)
+	registerVar(r)
 }
 
 // storeKey converts a Value to a string key for the store.
@@ -257,16 +261,160 @@ func registerDef(r *Registry) {
 }
 
 // installDef registers a new word as a literal substitution.
+// Multiple defs for the same name stack; undef pops the top.
 func installDef(r *Registry, name string, body Value) {
-	r.Register(name, Signature{
-		Handler: func(_ []Value) ([]Value, error) {
-			if body.VType.Equal(TList) {
-				elems := body.AsList()
-				result := make([]Value, len(elems))
-				copy(result, elems)
-				return result, nil
+	if len(r.DefStacks[name]) == 0 {
+		// First definition: register one signature whose handler
+		// always reads the top of the definition stack.
+		r.Register(name, Signature{
+			Handler: func(_ []Value) ([]Value, error) {
+				stack := r.DefStacks[name]
+				if len(stack) == 0 {
+					return nil, fmt.Errorf("undefined: %s", name)
+				}
+				top := stack[len(stack)-1]
+				if top.VType.Equal(TList) {
+					elems := top.AsList()
+					result := make([]Value, len(elems))
+					copy(result, elems)
+					return result, nil
+				}
+				return []Value{top}, nil
+			},
+		})
+	}
+	r.DefStacks[name] = append(r.DefStacks[name], body)
+}
+
+// uninstallDef removes the most recent def for a word. If no definitions
+// remain, the function entry is removed so the word falls through to
+// normal resolution (unknown word → string).
+func uninstallDef(r *Registry, name string) {
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return
+	}
+	r.DefStacks[name] = stack[:len(stack)-1]
+	if len(r.DefStacks[name]) == 0 {
+		// Remove the def-installed signature (the last one added).
+		fn := r.funcs[name]
+		if fn != nil && len(fn.Signatures) > 0 {
+			fn.Signatures = fn.Signatures[:len(fn.Signatures)-1]
+			if len(fn.Signatures) == 0 {
+				delete(r.funcs, name)
 			}
-			return []Value{body}, nil
+		}
+		delete(r.DefStacks, name)
+	}
+}
+
+// registerUndef registers the "undef" word for removing word definitions.
+// undef removes the most recent definition, potentially revealing a
+// shadowed one. Signature: [word|string] -> [].
+func registerUndef(r *Registry) {
+	undefHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		uninstallDef(r, name)
+		return nil, nil
+	}
+
+	r.Register("undef",
+		Signature{
+			Args:    []Type{TWord},
+			Handler: undefHandler,
 		},
+		Signature{
+			Args:    []Type{TString},
+			Handler: undefHandler,
+		},
+	)
+}
+
+// registerVar registers the "var" word for scoped variable definitions.
+//
+// var takes one list argument. The first element is a list of variable
+// declarations. The remaining elements form the body. After the body,
+// all variables are automatically undefined.
+//
+// Each declaration is either:
+//   - A bare word: takes its value from the stack (def name end)
+//   - A list [name value]: defines with the given value (def name value end)
+//
+// Example: var [[x] x mul x]  means  def x end x mul x undef x
+// Example: var [[[x 2] y] x add y]  means  def x 2 end def y end x add y undef y undef x
+func registerVar(r *Registry) {
+	varHandler := func(args []Value) ([]Value, error) {
+		list := args[0]
+		if !list.VType.Equal(TList) {
+			return nil, fmt.Errorf("var: argument must be a list")
+		}
+		elems := list.AsList()
+		if len(elems) == 0 {
+			return nil, fmt.Errorf("var: empty list")
+		}
+
+		// First element must be a list of variable declarations.
+		declVal := elems[0]
+		if !declVal.VType.Equal(TList) {
+			return nil, fmt.Errorf("var: first element must be a list of variable declarations")
+		}
+		decls := declVal.AsList()
+		body := elems[1:]
+
+		var result []Value
+		var varNames []string
+
+		for _, decl := range decls {
+			switch {
+			case decl.IsWord():
+				// Bare word: take value from stack.
+				name := decl.AsWord().Name
+				varNames = append(varNames, name)
+				result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
+
+			case decl.VType.Equal(TList):
+				// List [name value...]: define with given value.
+				declElems := decl.AsList()
+				if len(declElems) < 2 {
+					return nil, fmt.Errorf("var: declaration list must have name and value")
+				}
+				var name string
+				if declElems[0].IsWord() {
+					name = declElems[0].AsWord().Name
+				} else if declElems[0].VType.Matches(TString) {
+					name = declElems[0].AsString()
+				} else {
+					return nil, fmt.Errorf("var: declaration name must be a word or string")
+				}
+				varNames = append(varNames, name)
+				result = append(result, NewWord("def"), NewWord(name))
+				result = append(result, declElems[1:]...)
+				result = append(result, NewWord("end"))
+
+			case decl.VType.Matches(TString):
+				// String name: take value from stack.
+				name := decl.AsString()
+				varNames = append(varNames, name)
+				result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
+
+			default:
+				return nil, fmt.Errorf("var: invalid declaration: %s", decl.String())
+			}
+		}
+
+		// Append body.
+		result = append(result, body...)
+
+		// Append undefs in reverse order.
+		for i := len(varNames) - 1; i >= 0; i-- {
+			result = append(result, NewWord("undef"), NewWord(varNames[i]))
+		}
+
+		return result, nil
+	}
+
+	r.Register("var", Signature{
+		Args:    []Type{TList},
+		Handler: varHandler,
 	})
 }

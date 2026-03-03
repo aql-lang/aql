@@ -528,3 +528,49 @@ add		signature_error
 
 # Modulo by zero
 10 mod 0		modulo_by_zero
+
+# === undef - remove word definitions ===
+
+# Basic undef removes a definition
+def foo 1 foo undef foo foo	1 'foo'
+
+# Nested defs: undef reveals the shadowed definition
+def foo 1 def foo 2 foo undef foo foo	2 1
+
+# Multiple undefs peel off all layers
+def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo	3 2 1 'foo'
+
+# undef with string name
+def "bar" 42 bar undef "bar" bar	42 'bar'
+
+# Shadowed def with parenthesized expressions
+(def foo 1) (add foo 2) (def foo 3) (add foo 4) (undef foo) (add foo 5) (undef foo)	3 7 6
+
+# === var - scoped variable definitions ===
+
+# Basic var: take x from stack
+5 var [[x] x mul x]	25
+
+# var with inline value
+var [[[x 2]] x mul x]	4
+
+# var with multiple variables from stack
+3 5 var [[x y] x add y]	8
+
+# var with mixed inline and stack variables
+10 var [[[x 2] y] x add y]	12
+
+# var cleans up: word reverts to string after var
+5 var [[x] x mul x] x	25 'x'
+
+# var with arithmetic body
+7 var [[n] n mul n add n]	56
+
+# var with single inline value in body
+var [[[a 3] [b 4]] a mul a add b mul b]	25
+
+# var preserves existing definitions
+def foo 99 5 var [[x] x add foo] foo	104 99
+
+# Nested var does not leak
+3 var [[x] x add 1] x	4 'x'
