@@ -49,8 +49,9 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
-// ChildTypeInfo holds the child type constraint for a typed list.
-// For example, [:string] constrains all elements to be strings.
+// ChildTypeInfo holds the child type constraint for a typed list or typed map.
+// For example, [:string] constrains all list elements to be strings,
+// and {:string} constrains all map values to be strings.
 type ChildTypeInfo struct {
 	Child Value
 }
@@ -117,6 +118,12 @@ func NewMap(entries *OrderedMap) Value {
 	return Value{VType: TMap, Data: entries}
 }
 
+// NewTypedMap creates a typed map value with a child type constraint.
+// For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
+func NewTypedMap(child Value) Value {
+	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
+}
+
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
@@ -180,7 +187,13 @@ func (v Value) IsTypedList() bool {
 	return ok && v.VType.Equal(TList)
 }
 
-// AsChildType returns the ChildTypeInfo, panics if not a typed list.
+// IsTypedMap reports whether this value is a typed map (has child type constraint).
+func (v Value) IsTypedMap() bool {
+	_, ok := v.Data.(ChildTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
 func (v Value) AsChildType() ChildTypeInfo {
 	return v.Data.(ChildTypeInfo)
 }
@@ -254,6 +267,9 @@ func (v Value) String() string {
 		}
 		return "[" + strings.Join(parts, ",") + "]"
 	case v.VType.Equal(TMap):
+		if ct, ok := v.Data.(ChildTypeInfo); ok {
+			return "{:" + ct.Child.String() + "}"
+		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {

@@ -607,3 +607,83 @@ func TestParseTypedListMapChild(t *testing.T) {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
 }
+
+// --- Typed map tests (map.child) ---
+
+func TestParseTypedMapString(t *testing.T) {
+	// {:string} → typed map with child type string
+	assertParse(t, "{:string}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
+	})
+}
+
+func TestParseTypedMapNumber(t *testing.T) {
+	// {:number} → typed map with child type number
+	assertParse(t, "{:number}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)),
+	})
+}
+
+func TestParseTypedMapBoolean(t *testing.T) {
+	assertParse(t, "{:boolean}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypeLiteral(engine.TBoolean)),
+	})
+}
+
+func TestParseTypedMapAny(t *testing.T) {
+	assertParse(t, "{:any}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypeLiteral(engine.TAny)),
+	})
+}
+
+func TestParseTypedMapList(t *testing.T) {
+	// {:[:number]} → typed map with child type [:number]
+	assertParse(t, "{:[:number]}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber))),
+	})
+}
+
+func TestParseTypedMapNested(t *testing.T) {
+	// {:{:string}} → typed map of typed maps of strings
+	assertParse(t, "{:{:string}}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TString))),
+	})
+}
+
+func TestParseTypedMapDeepNested(t *testing.T) {
+	// {:{:{:number}}} → three levels deep
+	assertParse(t, "{:{:{:number}}}", []engine.Value{
+		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)))),
+	})
+}
+
+func TestParseTypedMapInExpression(t *testing.T) {
+	// 1 {:string} → integer then typed map
+	assertParse(t, "1 {:string}", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
+	})
+}
+
+func TestParseTypedMapConcreteChild(t *testing.T) {
+	// {:{x:number}} → typed map with map child type
+	got, err := Parse("{:{x:number}}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsTypedMap() {
+		t.Fatalf("expected 1 typed map, got %v", got)
+	}
+	child := got[0].AsChildType().Child
+	if !child.VType.Equal(engine.TMap) {
+		t.Errorf("expected child type map, got %s", child.VType)
+	}
+	m := child.AsMap()
+	xVal, ok := m.Get("x")
+	if !ok {
+		t.Fatalf("expected key 'x' in child map")
+	}
+	if !xVal.VType.Equal(engine.TNumber) {
+		t.Errorf("expected x to be number type, got %s", xVal.VType)
+	}
+}

@@ -42,6 +42,7 @@ func Parse(src string) ([]engine.Value, error) {
 		ListRef:  boolPtr(true),
 		MapRef:   boolPtr(true),
 		List:     &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
+		Map:      &jsonic.MapOptions{Child: boolPtr(true)},
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
@@ -77,6 +78,13 @@ func Parse(src string) ([]engine.Value, error) {
 		// Implicit list — top-level stack values.
 		return convertTopLevel(val.Val)
 	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			tv, err := convertTypedMap(val.Val)
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{tv}, nil
+		}
 		mv, err := convertMapData(val.Val)
 		if err != nil {
 			return nil, err
@@ -166,6 +174,9 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		return engine.NewInteger(int64(val)), nil
 
 	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			return convertTypedMap(val.Val)
+		}
 		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
@@ -226,6 +237,9 @@ func convertDataValue(v any) (engine.Value, error) {
 		return engine.NewInteger(int64(val)), nil
 
 	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			return convertTypedMap(val.Val)
+		}
 		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
@@ -253,6 +267,23 @@ func convertTypedList(lr jsonic.ListRef) (engine.Value, error) {
 		return engine.Value{}, err
 	}
 	return engine.NewTypedList(childVal), nil
+}
+
+// hasMapChild reports whether a jsonic map contains the "child$" key
+// set by the map.child option (bare colon syntax {:value}).
+func hasMapChild(m map[string]any) bool {
+	_, ok := m["child$"]
+	return ok
+}
+
+// convertTypedMap converts a map with a "child$" key into a typed map value.
+// The child value is converted in data context (type names resolve to type literals).
+func convertTypedMap(m map[string]any) (engine.Value, error) {
+	childVal, err := convertDataValue(m["child$"])
+	if err != nil {
+		return engine.Value{}, err
+	}
+	return engine.NewTypedMap(childVal), nil
 }
 
 // convertDataList converts a list in data context (inside maps).

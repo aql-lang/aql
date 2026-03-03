@@ -373,6 +373,101 @@ none unify [:string]	'~unify-fail' false
 ["a","b"] unify [:string]	['a','b'] true
 [1,2] unify [:string]	'~unify-fail' false
 
+# === Typed map literals ===
+{:string}	{:string}
+{:number}	{:number}
+{:boolean}	{:boolean}
+{:any}	{:any}
+{:list}	{:list}
+{:map}	{:map}
+{:{x:number}}	{:{x:number}}
+{:{a:string,b:number}}	{:{a:string,b:number}}
+{:[:string]}	{:[:string]}
+{:[:number]}	{:[:number]}
+{:{:string}}	{:{:string}}
+{:{:number}}	{:{:number}}
+{:[:{x:number}]}	{:[:{x:number}]}
+{:{:{:number}}}	{:{:{:number}}}
+
+# === Unify - typed maps with identical child types ===
+{:string} unify {:string}	{:string} true
+{:number} unify {:number}	{:number} true
+{:boolean} unify {:boolean}	{:boolean} true
+
+# === Unify - typed maps with concrete maps ===
+{:number} unify {a:1,b:2}	{a:1,b:2} true
+{:string} unify {x:"a",y:"b"}	{x:'a',y:'b'} true
+{:number} unify {x:42}	{x:42} true
+{:string} unify {a:"hello"}	{a:'hello'} true
+
+# === Unify - typed maps with empty concrete map ===
+{:string} unify {}	{} true
+{:number} unify {}	{} true
+{:{x:number}} unify {}	{} true
+
+# === Unify - typed maps with concrete (fail - type mismatch) ===
+{:string} unify {a:1}	'~unify-fail' false
+{:number} unify {x:"hello"}	'~unify-fail' false
+{:boolean} unify {x:1}	'~unify-fail' false
+
+# === Unify - typed map narrowing ===
+{:any} unify {:number}	{:number} true
+{:any} unify {:string}	{:string} true
+{:number} unify {:any}	{:number} true
+{:string} unify {:any}	{:string} true
+
+# === Unify - typed map child type mismatch ===
+{:string} unify {:number}	'~unify-fail' false
+{:number} unify {:boolean}	'~unify-fail' false
+{:string} unify {:boolean}	'~unify-fail' false
+
+# === Unify - typed map symmetry ===
+{a:1,b:2} unify {:number}	{a:1,b:2} true
+{x:"hello"} unify {:string}	{x:'hello'} true
+{a:1} unify {:string}	'~unify-fail' false
+{x:"hello"} unify {:number}	'~unify-fail' false
+
+# === Unify - typed map with type literal ===
+map unify {:string}	{:string} true
+{:string} unify map	{:string} true
+map unify {:number}	{:number} true
+{:number} unify map	{:number} true
+map unify {:{x:number}}	{:{x:number}} true
+
+# === Unify - typed map with any ===
+any unify {:string}	{:string} true
+{:string} unify any	{:string} true
+any unify {:number}	{:number} true
+{:number} unify any	{:number} true
+
+# === Unify - typed map with none ===
+none unify {:string}	'~unify-fail' false
+{:string} unify none	'~unify-fail' false
+none unify {:number}	'~unify-fail' false
+{:number} unify none	'~unify-fail' false
+
+# === Unify - typed map with map child type ===
+{:{x:number}} unify {a:{x:1},b:{x:2}}	{a:{x:1},b:{x:2}} true
+{:{x:string}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'},b:{x:'b'}} true
+{:{x:number}} unify {a:{x:1},b:{y:1}}	'~unify-fail' false
+{:{x:number}} unify {}	{} true
+
+# === Unify - deeper typed maps ===
+{:{:number}} unify {a:{x:1},b:{y:2}}	{a:{x:1},b:{y:2}} true
+{:{:string}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'},b:{y:'b'}} true
+{:{:number}} unify {a:{x:"a"}}	'~unify-fail' false
+{:{:number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
+
+# === Unify - deeper typed map child type unification ===
+{:{:string}} unify {:{:string}}	{:{:string}} true
+{:{:number}} unify {:{:any}}	{:{:number}} true
+{:{:string}} unify {:{:number}}	'~unify-fail' false
+
+# === Unify - typed map vs incompatible types ===
+{:string} unify [1]	'~unify-fail' false
+{:number} unify "hello"	'~unify-fail' false
+{:string} unify 1	'~unify-fail' false
+
 # === Error cases ===
 
 # Unmatched closing parenthesis

@@ -161,7 +161,7 @@ func unifyTypedWithConcrete(childType Value, elems []Value) (Value, bool) {
 // unifyMaps handles unification when at least one side is a map.
 // Maps are closed: both must have exactly the same set of keys.
 func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
-	// Type literal "map" (Data==nil) unifies with any concrete map.
+	// Type literal "map" (Data==nil) unifies with any map type.
 	if aIsMap && a.Data == nil {
 		if bIsMap {
 			return b, true
@@ -175,11 +175,37 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 		return Value{}, false
 	}
 
-	// Both must be concrete maps.
+	// Both must be map types.
 	if !aIsMap || !bIsMap {
 		return Value{}, false
 	}
 
+	// Check for typed maps (child type constraints).
+	aTyped := a.IsTypedMap()
+	bTyped := b.IsTypedMap()
+
+	if aTyped && bTyped {
+		// Both typed maps: unify child types.
+		aChild := a.AsChildType().Child
+		bChild := b.AsChildType().Child
+		unified, ok := Unify(aChild, bChild)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTypedMap(unified), true
+	}
+
+	if aTyped {
+		// a is typed, b is concrete: each value must unify with the child type.
+		return unifyTypedMapWithConcrete(a.AsChildType().Child, b.AsMap())
+	}
+
+	if bTyped {
+		// b is typed, a is concrete: each value must unify with the child type.
+		return unifyTypedMapWithConcrete(b.AsChildType().Child, a.AsMap())
+	}
+
+	// Both concrete maps: key-by-key unification.
 	aMap := a.AsMap()
 	bMap := b.AsMap()
 
@@ -206,6 +232,21 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 		result.Set(key, unified)
 	}
 
+	return NewMap(result), true
+}
+
+// unifyTypedMapWithConcrete unifies a child type constraint against each value
+// of a concrete map. Every value must unify with the child type.
+func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
+	result := NewOrderedMap()
+	for _, key := range m.Keys() {
+		val, _ := m.Get(key)
+		unified, ok := Unify(childType, val)
+		if !ok {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
 	return NewMap(result), true
 }
 
@@ -237,6 +278,14 @@ func valuesEqual(a, b Value) bool {
 		}
 		return listsEqual(a.AsList(), b.AsList())
 	case a.VType.Equal(TMap):
+		aCT, aOk := a.Data.(ChildTypeInfo)
+		bCT, bOk := b.Data.(ChildTypeInfo)
+		if aOk && bOk {
+			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+		}
+		if aOk != bOk {
+			return false
+		}
 		return mapsEqual(a.AsMap(), b.AsMap())
 	default:
 		return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)
