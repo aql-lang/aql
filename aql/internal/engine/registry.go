@@ -86,29 +86,59 @@ func registerBuiltins(r *Registry) {
 		},
 	)
 
-	// dup: [any] -> [any, any]
-	r.Register("dup", Signature{
-		Prefix: []Type{TAny},
-		Handler: func(args []Value) ([]Value, error) {
-			return []Value{args[0], args[0]}, nil
+	// dup: [any] -> [any, any] (prefix)
+	//      [|any] -> [any, any] (suffix)
+	dupHandler := func(args []Value) ([]Value, error) {
+		return []Value{args[0], args[0]}, nil
+	}
+	r.Register("dup",
+		Signature{
+			Prefix:  []Type{TAny},
+			Handler: dupHandler,
 		},
-	})
+		Signature{
+			Suffix:  []Type{TAny},
+			Handler: dupHandler,
+		},
+	)
 
-	// swap: [any, any] -> [any, any]
-	r.Register("swap", Signature{
-		Prefix: []Type{TAny, TAny},
-		Handler: func(args []Value) ([]Value, error) {
-			return []Value{args[1], args[0]}, nil
+	// swap: [any, any] -> [any, any] (prefix)
+	//       [|any, any] -> [any, any] (suffix)
+	//       [any|any] -> [any, any]   (infix)
+	swapHandler := func(args []Value) ([]Value, error) {
+		return []Value{args[1], args[0]}, nil
+	}
+	r.Register("swap",
+		Signature{
+			Prefix:  []Type{TAny, TAny},
+			Handler: swapHandler,
 		},
-	})
+		Signature{
+			Suffix:  []Type{TAny, TAny},
+			Handler: swapHandler,
+		},
+		Signature{
+			Prefix:  []Type{TAny},
+			Suffix:  []Type{TAny},
+			Handler: swapHandler,
+		},
+	)
 
-	// drop: [any] -> []
-	r.Register("drop", Signature{
-		Prefix: []Type{TAny},
-		Handler: func(args []Value) ([]Value, error) {
-			return nil, nil
+	// drop: [any] -> [] (prefix)
+	//       [|any] -> [] (suffix)
+	dropHandler := func(args []Value) ([]Value, error) {
+		return nil, nil
+	}
+	r.Register("drop",
+		Signature{
+			Prefix:  []Type{TAny},
+			Handler: dropHandler,
 		},
-	})
+		Signature{
+			Suffix:  []Type{TAny},
+			Handler: dropHandler,
+		},
+	)
 
 	// Arithmetic: each has prefix [int, int] and infix [int | int].
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).

@@ -198,6 +198,76 @@ func TestDrop(t *testing.T) {
 	}
 }
 
+// --- Engine tests: suffix Forth primitives ---
+
+func TestDupSuffix(t *testing.T) {
+	// dup/s 1 → [1, 1]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWordModified("dup", -1, false, true),
+		NewInteger(1),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 1 || result[1].AsInteger() != 1 {
+		t.Errorf("got [%v, %v], want [1, 1]", result[0], result[1])
+	}
+}
+
+func TestSwapSuffix(t *testing.T) {
+	// swap/s 1 2 → [2, 1]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWordModified("swap", -1, false, true),
+		NewInteger(1), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 2 || result[1].AsInteger() != 1 {
+		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
+	}
+}
+
+func TestSwapInfix(t *testing.T) {
+	// 1 swap 2 → [2, 1]
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewInteger(1), NewWord("swap"), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 2 || result[1].AsInteger() != 1 {
+		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
+	}
+}
+
+func TestDropSuffix(t *testing.T) {
+	// drop/s 1 → []
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewWordModified("drop", -1, false, true),
+		NewInteger(1),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
 // --- Engine tests: modifier forcing ---
 
 func TestForceSuffix(t *testing.T) {
@@ -240,7 +310,7 @@ func TestArgCountSuffix(t *testing.T) {
 	// lower/1 D -> 'd' (arg count 1 picks the suffix signature)
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
-		NewWordModified("lower", 1, false, true),
+		NewWordModified("lower", 1, false, false),
 		NewString("D"),
 	})
 	if err != nil {

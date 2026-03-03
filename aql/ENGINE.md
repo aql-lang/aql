@@ -84,7 +84,7 @@ __upper__: [string] -> [string]
 __lower__: 
 * [string] -> [string]
 * [|string] -> [string]
-> `lower B` -> _['c']_
+> `lower B` -> _['b']_
 > `C lower` -> _['c']_
 > `99 lower` -> _[99 lower]_ SIGNATURE ERROR
 
@@ -107,8 +107,11 @@ Tokens from the future stack are called suffix arguments.
 A word can accept one or more type signatures. These are specified as
 lists in reverse stack order.
 
-By default all words have suffix precedence. When invoked, to force
-prefix only, append /p to the word name. To force suffix only, use /s.
+By default all words have suffix precedence. This means they are
+eligible to collect arguments from future tokens. When prefix arguments
+are available on the stack, prefix matching is tried first; suffix
+matching acts as a fallback. When invoked, to force prefix only, append
+/p to the word name. To force suffix only, use /s.
 
 This can also be used when defining the word, to indicate default behaviour. But this can
 always be overridden in situ.

@@ -65,6 +65,13 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		// Tie-breaking on equal score:
 		// 1. Prefer signatures that consume more prefix args (more grounded).
 		// 2. Prefer prefix-only over mixed prefix+suffix.
+		//
+		// ENGINE.md states "all words have suffix precedence" (meaning words
+		// are eligible for suffix matching). However, when prefix args ARE
+		// available on the stack, prefix matching is tried first and wins via
+		// the PrefixLen tie-break below. When insufficient prefix args exist,
+		// the engine falls through to matchSuffixOnly (engine.go). This
+		// produces correct behavior for all documented examples.
 		if best != nil && score == bestScore {
 			if len(sig.Prefix) > best.PrefixLen {
 				// More prefix args consumed → more specific match.
@@ -86,6 +93,12 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 
 // prefixMatches checks whether the top of the stack satisfies the prefix types.
 // Prefix[0] is the deepest arg, Prefix[last] is the top of the stack.
+//
+// Note on argument ordering:
+// The implementation uses stack order: Prefix[0] = deepest, Prefix[last] = top.
+// ENGINE.md describes types in "reverse stack order" (first type = top of stack).
+// All built-in handlers follow the implementation convention.
+// Future typed def should translate at the boundary.
 func prefixMatches(prefix []Type, stack []Value) bool {
 	if len(prefix) == 0 {
 		return true
