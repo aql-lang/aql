@@ -2505,3 +2505,188 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 		t.Errorf("got %v, want [3]", result)
 	}
 }
+
+// --- Engine tests: def (word definition) ---
+
+func TestDefBasicListBody(t *testing.T) {
+	// def increment [1 add]  2 increment → 3
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	// First run: define increment
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("increment"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	// Second run: use increment
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("increment"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestDefScalarBody(t *testing.T) {
+	// def myval 42  myval → 42
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("myval"), NewInteger(42),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewWord("myval"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestDefStringName(t *testing.T) {
+	// def "double" [dup add]  5 double → 10
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewString("double"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(5), NewWord("double"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestDefPrefixBody(t *testing.T) {
+	// [1 sub] def decrement  3 decrement → 2
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewList([]Value{NewInteger(1), NewWord("sub")}),
+		NewWord("def"), NewWord("decrement"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("decrement"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("got %v, want [2]", result)
+	}
+}
+
+func TestDefAndUseSameRun(t *testing.T) {
+	// def triple [dup dup add add] 4 triple → 12
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("triple"),
+		NewList([]Value{NewWord("dup"), NewWord("dup"), NewWord("add"), NewWord("add")}),
+		NewInteger(4), NewWord("triple"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("got %v, want [12]", result)
+	}
+}
+
+func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
+	// Unknown words without a pending TWord forward still coerce to strings.
+	// a upper → "A"
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewString("a"), NewWord("upper"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "A" {
+		t.Errorf("got %v, want ['A']", result)
+	}
+}
+
+func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
+	// Undefined word "foo" is preserved as TWord when def's forward expects it.
+	// def foo 99  foo → 99
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("foo"), NewInteger(99),
+		NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("got %v, want [99]", result)
+	}
+}
+
+func TestDefStringBody(t *testing.T) {
+	// def greeting "hello"  greeting → "hello"
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("greeting"), NewString("hello"),
+		NewWord("greeting"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "hello" {
+		t.Errorf("got %v, want ['hello']", result)
+	}
+}
+
+func TestDefUsedMultipleTimes(t *testing.T) {
+	// def inc [1 add]  1 inc inc inc → 4
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("inc"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewInteger(1), NewWord("inc"), NewWord("inc"), NewWord("inc"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 4 {
+		t.Errorf("got %v, want [4]", result)
+	}
+}
