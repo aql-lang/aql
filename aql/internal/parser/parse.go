@@ -40,6 +40,8 @@ func Parse(src string) ([]engine.Value, error) {
 	j := jsonic.Make(jsonic.Options{
 		TextInfo: boolPtr(true),
 		ListRef:  boolPtr(true),
+		MapRef:   boolPtr(true),
+		List:     &jsonic.ListOptions{Pair: boolPtr(true)},
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
@@ -52,9 +54,9 @@ func Parse(src string) ([]engine.Value, error) {
 		return nil, nil
 	}
 
-	// With ListRef enabled, jsonic returns ListRef for all lists.
-	// ListRef.Implicit distinguishes implicit lists (space/comma separated)
-	// from explicit lists (bracketed with []).
+	// With ListRef and MapRef enabled, jsonic returns ListRef/MapRef for
+	// all lists and maps. ListRef.Implicit and MapRef.Implicit distinguish
+	// implicit structures from explicit ones.
 	switch val := result.(type) {
 	case jsonic.ListRef:
 		if !val.Implicit {
@@ -67,6 +69,12 @@ func Parse(src string) ([]engine.Value, error) {
 		}
 		// Implicit list — top-level stack values.
 		return convertTopLevel(val.Val)
+	case jsonic.MapRef:
+		mv, err := convertMapData(val.Val)
+		if err != nil {
+			return nil, err
+		}
+		return []engine.Value{mv}, nil
 	default:
 		v, err := convertTopLevelValue(val)
 		if err != nil {
@@ -150,8 +158,8 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 	case float64:
 		return engine.NewInteger(int64(val)), nil
 
-	case map[string]any:
-		return convertMapData(val)
+	case jsonic.MapRef:
+		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
 		return convertWordList(val.Val)
@@ -207,8 +215,8 @@ func convertDataValue(v any) (engine.Value, error) {
 	case float64:
 		return engine.NewInteger(int64(val)), nil
 
-	case map[string]any:
-		return convertMapData(val)
+	case jsonic.MapRef:
+		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
 		return convertDataList(val.Val)
