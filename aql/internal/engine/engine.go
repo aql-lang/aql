@@ -190,24 +190,32 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	if fn.SuffixPrecedence {
-		// Try prefix first (if all args are on stack already).
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
+
+		// Use prefix match only if it has args (typed signature).
+		// Defer 0-arg matches (generic def handler) so suffix-mode
+		// typed signatures get a chance to collect arguments first.
+		if match != nil && len(match.Sig.Args) > 0 {
+			return e.execMatch(match)
+		}
+
+		// Try suffix: create forward to collect remaining args.
+		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+		if bestSig != nil {
+			suffixNeeded := len(bestSig.Args) - prefixCount
+			if suffixNeeded <= 0 {
+				suffixNeeded = len(bestSig.Args)
+			}
+			return e.insertForward(w, bestSig, suffixNeeded)
+		}
+
+		// Fall back to 0-arg match (generic def handler).
 		if match != nil {
 			return e.execMatch(match)
 		}
 
-		// No full prefix match — create forward to collect remaining suffix args.
-		// Count how many prefix args are already available on the resolved stack.
-		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
-		if bestSig == nil {
-			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
-		}
-		suffixNeeded := len(bestSig.Args) - prefixCount
-		if suffixNeeded <= 0 {
-			suffixNeeded = len(bestSig.Args)
-		}
-		return e.insertForward(w, bestSig, suffixNeeded)
+		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
 
 	// Prefix-only function (dup, swap, drop).

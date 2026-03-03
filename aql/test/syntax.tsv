@@ -574,3 +574,29 @@ def foo 99 5 var [[x] x add foo] foo	104 99
 
 # Nested var does not leak
 3 var [[x] x add 1] x	4 'x'
+
+# === def with function signatures ===
+
+# Named parameter function
+def square [[x:number] [number] [x mul x]] 5 square	25
+
+# Multiple named parameters
+def add2 [[x:number,y:number] [number] [x add y]] 3 5 add2	8
+
+# Unnamed parameters (positional, no pair syntax)
+def double [[number] [number] [dup add]] 7 double	14
+
+# Named parameters don't leak after call
+def sq [[x:number] [number] [x mul x]] 4 sq x	16 'x'
+
+# undef removes function def
+def sq [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 'sq'
+
+# Function def with infix call
+def sq [[x:number] [number] [x mul x]] sq 6	36
+
+# Multiple calls to function def
+def inc [[x:number] [number] [x add 1]] 1 inc inc inc	4
+
+# Function def shadows regular def
+(def foo 42) (def foo [[number] [number] [dup mul]]) (3 foo) (undef foo) foo	9 42

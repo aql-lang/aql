@@ -179,6 +179,14 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		}
 		return convertMapData(val.Val)
 
+	case map[string]any:
+		// Raw map from list.pair syntax (e.g., [x:number] produces
+		// map[string]any{"x": Text("number")} inside the list).
+		if hasMapChild(val) {
+			return convertTypedMap(val)
+		}
+		return convertMapData(val)
+
 	case jsonic.ListRef:
 		if val.Child != nil {
 			return convertTypedList(val)
@@ -241,6 +249,12 @@ func convertDataValue(v any) (engine.Value, error) {
 			return convertTypedMap(val.Val)
 		}
 		return convertMapData(val.Val)
+
+	case map[string]any:
+		if hasMapChild(val) {
+			return convertTypedMap(val)
+		}
+		return convertMapData(val)
 
 	case jsonic.ListRef:
 		if val.Child != nil {

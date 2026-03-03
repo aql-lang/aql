@@ -56,6 +56,23 @@ type ChildTypeInfo struct {
 	Child Value
 }
 
+// FnParam describes one parameter in a function signature.
+type FnParam struct {
+	Name string // empty for unnamed positional parameters
+	Type Type
+}
+
+// FnSig describes one overload of a function definition.
+type FnSig struct {
+	Params []FnParam
+	Body   []Value
+}
+
+// FnDefInfo holds the parsed function specification for a def-defined function.
+type FnDefInfo struct {
+	Sigs []FnSig
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -159,6 +176,11 @@ func NewForward(info ForwardInfo) Value {
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
 	return Value{VType: TOpenParen, Data: nil}
+}
+
+// NewFnDef creates a function definition value for storage on DefStacks.
+func NewFnDef(info FnDefInfo) Value {
+	return Value{VType: TFnDef, Data: info}
 }
 
 // IsWord reports whether this value is a word (function reference).

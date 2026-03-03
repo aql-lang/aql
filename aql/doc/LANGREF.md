@@ -463,6 +463,64 @@ def foo 2
 foo                         => 2
 ```
 
+#### Function Signatures
+
+When the body of `def` is a list of signature triples, `def` creates a
+typed function instead of a literal substitution. Each triple consists
+of an input signature, an output signature, and a body:
+
+```
+def name [[input-params] [output-types] [body]]
+```
+
+**Unnamed parameters** list the expected types positionally:
+
+```
+def double [[number] [number] [dup add]]
+7 double                    => 14
+```
+
+**Named parameters** use pair syntax (`name:type`) and are bound as
+scoped variables during execution:
+
+```
+def square [[x:number] [number] [x mul x]]
+5 square                    => 25
+```
+
+Multiple parameters are comma-separated:
+
+```
+def add2 [[x:number,y:number] [number] [x add y]]
+3 5 add2                    => 8
+```
+
+Named parameters are automatically undefined after the body executes,
+so they do not leak:
+
+```
+def sq [[x:number] [number] [x mul x]]
+4 sq x                      => 16 'x'
+```
+
+Function definitions support all argument styles (prefix, suffix,
+infix):
+
+```
+def sq [[x:number] [number] [x mul x]]
+5 sq                        => 25       # prefix
+sq 6                        => 36       # suffix
+```
+
+Multiple overloaded signatures can be specified as consecutive triples:
+
+```
+def op [[number] [number] [dup mul] [string] [string] [dup]]
+```
+
+Supported type names in signatures: `any`, `none`, `number`,
+`integer`, `string`, `boolean`, `list`, `map`.
+
 #### `undef`
 
 Remove the most recent definition of a word. If definitions were

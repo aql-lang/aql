@@ -260,12 +260,17 @@ func registerDef(r *Registry) {
 	)
 }
 
-// installDef registers a new word as a literal substitution.
-// Multiple defs for the same name stack; undef pops the top.
+// installDef registers a new word as a literal substitution or a typed
+// function definition. Multiple defs for the same name stack; undef pops
+// the top.
+//
+// If body is a function specification (list of signature triples where
+// the first element is a list), installDef parses it and registers typed
+// signatures. Otherwise, body is stored directly as a literal substitution.
 func installDef(r *Registry, name string, body Value) {
 	if len(r.DefStacks[name]) == 0 {
-		// First definition: register one signature whose handler
-		// always reads the top of the definition stack.
+		// First definition: register one generic fallback handler
+		// that reads the top of the definition stack.
 		r.Register(name, Signature{
 			Handler: func(_ []Value) ([]Value, error) {
 				stack := r.DefStacks[name]
@@ -273,6 +278,11 @@ func installDef(r *Registry, name string, body Value) {
 					return nil, fmt.Errorf("undefined: %s", name)
 				}
 				top := stack[len(stack)-1]
+				// Guard: function definitions have typed signatures;
+				// the generic handler should not expand them as literals.
+				if _, ok := top.Data.(FnDefInfo); ok {
+					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+				}
 				if top.VType.Equal(TList) {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
@@ -283,6 +293,19 @@ func installDef(r *Registry, name string, body Value) {
 			},
 		})
 	}
+
+	// Detect function specification: body is a list with 3n elements
+	// whose first element is itself a list (the input signature).
+	if isFnDef(body) {
+		fnDef, err := parseFnDef(body.AsList())
+		if err == nil {
+			installFnDef(r, name, fnDef)
+			r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+			return
+		}
+		// Parse failed — fall through to regular def.
+	}
+
 	r.DefStacks[name] = append(r.DefStacks[name], body)
 }
 
@@ -294,15 +317,33 @@ func uninstallDef(r *Registry, name string) {
 	if len(stack) == 0 {
 		return
 	}
+
+	top := stack[len(stack)-1]
 	r.DefStacks[name] = stack[:len(stack)-1]
+
+	// Count typed signatures to remove (function defs register N typed sigs).
+	sigsToRemove := 0
+	if fnDef, ok := top.Data.(FnDefInfo); ok {
+		sigsToRemove = len(fnDef.Sigs)
+	}
+
+	fn := r.funcs[name]
+	if fn == nil {
+		return
+	}
+
+	// Remove typed signatures from the end.
+	if sigsToRemove > 0 && len(fn.Signatures) >= sigsToRemove {
+		fn.Signatures = fn.Signatures[:len(fn.Signatures)-sigsToRemove]
+	}
+
+	// If DefStacks is now empty, also remove the generic fallback handler.
 	if len(r.DefStacks[name]) == 0 {
-		// Remove the def-installed signature (the last one added).
-		fn := r.funcs[name]
-		if fn != nil && len(fn.Signatures) > 0 {
+		if len(fn.Signatures) > 0 {
 			fn.Signatures = fn.Signatures[:len(fn.Signatures)-1]
-			if len(fn.Signatures) == 0 {
-				delete(r.funcs, name)
-			}
+		}
+		if len(fn.Signatures) == 0 {
+			delete(r.funcs, name)
 		}
 		delete(r.DefStacks, name)
 	}
@@ -417,4 +458,162 @@ func registerVar(r *Registry) {
 		Args:    []Type{TList},
 		Handler: varHandler,
 	})
+}
+
+// --- Function specification helpers ---
+
+// isFnDef reports whether body looks like a function specification:
+// a list with 3n elements whose first element is a list (input signature).
+func isFnDef(body Value) bool {
+	if !body.VType.Equal(TList) {
+		return false
+	}
+	elems := body.AsList()
+	if len(elems) == 0 || len(elems)%3 != 0 {
+		return false
+	}
+	return elems[0].VType.Equal(TList)
+}
+
+// parseFnDef parses a function specification list into FnDefInfo.
+// The list contains signature triples: [input-sig, output-sig, body] ...
+func parseFnDef(list []Value) (FnDefInfo, error) {
+	var sigs []FnSig
+	for i := 0; i < len(list); i += 3 {
+		inputSig := list[i]
+		// list[i+1] is the output signature — informational only
+		body := list[i+2]
+
+		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnDefInfo{}, err
+		}
+
+		if !body.VType.Equal(TList) {
+			return FnDefInfo{}, fmt.Errorf("function spec: body must be a list")
+		}
+
+		sigs = append(sigs, FnSig{
+			Params: params,
+			Body:   body.AsList(),
+		})
+	}
+	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// parseFnParams extracts parameters from an input signature list.
+// Each element is either:
+//   - A map with one key (named param from pair syntax): {x: type}
+//   - A word (unnamed param): type name
+//   - A type literal (Data==nil): already resolved type
+func parseFnParams(inputSig Value) ([]FnParam, error) {
+	if !inputSig.VType.Equal(TList) {
+		return nil, fmt.Errorf("function spec: input signature must be a list")
+	}
+	elems := inputSig.AsList()
+	var params []FnParam
+
+	for _, elem := range elems {
+		switch {
+		case elem.VType.Equal(TMap):
+			// Named parameter from pair syntax: {name: type}
+			m := elem.AsMap()
+			keys := m.Keys()
+			if len(keys) != 1 {
+				return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+			}
+			name := keys[0]
+			typeVal, _ := m.Get(name)
+			paramType := resolveSigType(typeVal)
+			params = append(params, FnParam{Name: name, Type: paramType})
+
+		case elem.IsWord():
+			// Unnamed parameter: bare word is a type name
+			typeName := elem.AsWord().Name
+			paramType := resolveTypeName(typeName)
+			params = append(params, FnParam{Type: paramType})
+
+		case elem.Data == nil:
+			// Type literal (already resolved by parser)
+			params = append(params, FnParam{Type: elem.VType})
+
+		default:
+			return nil, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
+		}
+	}
+
+	return params, nil
+}
+
+// resolveSigType converts a Value (from a pair's value side) to a Type.
+func resolveSigType(v Value) Type {
+	if v.Data == nil {
+		// Type literal (e.g., number, string) — already resolved by parser
+		return v.VType
+	}
+	if v.IsWord() {
+		return resolveTypeName(v.AsWord().Name)
+	}
+	if v.VType.Matches(TString) {
+		return resolveTypeName(v.AsString())
+	}
+	return TAny
+}
+
+// resolveTypeName maps a type name string to its engine Type.
+func resolveTypeName(name string) Type {
+	switch name {
+	case "any":
+		return TAny
+	case "none":
+		return TNone
+	case "number":
+		return TNumber
+	case "integer":
+		return TInteger
+	case "string":
+		return TString
+	case "boolean":
+		return TBoolean
+	case "list":
+		return TList
+	case "map":
+		return TMap
+	default:
+		return NewType(name)
+	}
+}
+
+// installFnDef registers typed signatures for a function definition.
+// For each signature, it creates a handler that binds named parameters
+// via installDef, returns body tokens, and appends undef cleanup.
+func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
+	for _, sig := range fnDef.Sigs {
+		argTypes := make([]Type, len(sig.Params))
+		for i, p := range sig.Params {
+			argTypes[i] = p.Type
+		}
+		s := sig // capture for closure
+		handler := func(args []Value) ([]Value, error) {
+			var result []Value
+			var names []string
+			for i, p := range s.Params {
+				if p.Name != "" {
+					installDef(r, p.Name, args[i])
+					names = append(names, p.Name)
+				} else {
+					// Unnamed parameter: push value back for the body to use
+					result = append(result, args[i])
+				}
+			}
+			body := make([]Value, len(s.Body))
+			copy(body, s.Body)
+			result = append(result, body...)
+			for i := len(names) - 1; i >= 0; i-- {
+				result = append(result, NewWord("undef"), NewWord(names[i]))
+			}
+			return result, nil
+		}
+		r.Register(name, Signature{Args: argTypes, Handler: handler})
+	}
 }
