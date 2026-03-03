@@ -62,10 +62,18 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 
 		score := signatureScore(sig)
 
-		// Prefer prefix-only on equal score.
-		if best != nil && score == bestScore && sig.IsPrefixOnly() && !best.Sig.IsPrefixOnly() {
-			// Prefix wins tie.
-		} else if best != nil && score <= bestScore {
+		// Tie-breaking on equal score:
+		// 1. Prefer signatures that consume more prefix args (more grounded).
+		// 2. Prefer prefix-only over mixed prefix+suffix.
+		if best != nil && score == bestScore {
+			if len(sig.Prefix) > best.PrefixLen {
+				// More prefix args consumed → more specific match.
+			} else if sig.IsPrefixOnly() && !best.Sig.IsPrefixOnly() {
+				// Prefix-only wins over infix.
+			} else {
+				continue
+			}
+		} else if best != nil && score < bestScore {
 			continue
 		}
 

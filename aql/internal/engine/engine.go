@@ -115,7 +115,14 @@ func (e *Engine) stepWord(val Value) error {
 			return nil
 		}
 
-		// Unknown word — treat as a bare string value.
+		// Unknown word — check if a pending forward expects a TWord argument.
+		// If so, preserve the word value so the forward can collect it.
+		// Otherwise, coerce to a bare string for backward compatibility.
+		if e.hasPendingForwardExpectingWord() {
+			// Leave the word value as-is and let stepLiteral collect it
+			// for the pending forward.
+			return e.stepLiteral()
+		}
 		// Don't advance pointer so stepLiteral runs on the next iteration
 		// and can collect this value for any pending forward.
 		e.stack[e.pointer] = NewString(w.Name)
@@ -258,20 +265,12 @@ func (e *Engine) stepLiteral() error {
 		args := make([]Value, totalArgs)
 		copy(args, e.stack[argStart:funcIdx])
 
-		// Validate arg types — the suffix args were collected without type checks.
-		for i, arg := range args {
-			var expectedType Type
-			if i < len(fwd.Sig.Prefix) {
-				expectedType = fwd.Sig.Prefix[i]
-			} else {
-				expectedType = fwd.Sig.Suffix[i-len(fwd.Sig.Prefix)]
-			}
-			if !arg.VType.Matches(expectedType) {
-				return fmt.Errorf("signature error: no matching signature for %s", fwd.FuncName)
-			}
+		// Validate arg types and execute. If the original signature's types
+		// don't match, try alternative signatures of the same function.
+		results, err, ok := e.tryExecuteForward(fwd, args)
+		if !ok {
+			return fmt.Errorf("signature error: no matching signature for %s", fwd.FuncName)
 		}
-
-		results, err := fwd.Sig.Handler(args)
 		if err != nil {
 			return err
 		}
@@ -492,4 +491,77 @@ func matchSuffixOnly(sigs []Signature, modifiers WordInfo) *MatchResult {
 	}
 
 	return best
+}
+
+// hasPendingForwardExpectingWord checks if there is a pending forward
+// behind the current pointer whose next expected suffix argument is TWord.
+// This is used to decide whether an undefined word should be preserved as
+// a word value (for def-like functions) or coerced to a string.
+func (e *Engine) hasPendingForwardExpectingWord() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break
+		}
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			nextIdx := fwd.CollectedArgs
+			if nextIdx < len(fwd.Sig.Suffix) {
+				return fwd.Sig.Suffix[nextIdx].Equal(TWord)
+			}
+			break
+		}
+	}
+	return false
+}
+
+// allArgsMatchSig checks whether all collected args match a signature's types.
+func allArgsMatchSig(sig *Signature, args []Value) bool {
+	for i, arg := range args {
+		var expectedType Type
+		if i < len(sig.Prefix) {
+			expectedType = sig.Prefix[i]
+		} else {
+			expectedType = sig.Suffix[i-len(sig.Prefix)]
+		}
+		if !arg.VType.Matches(expectedType) {
+			return false
+		}
+	}
+	return true
+}
+
+// tryExecuteForward attempts to validate and execute the forward's signature
+// with the collected args. If the original signature's types don't match,
+// it tries alternative signatures of the same function with the same
+// prefix/suffix split.
+func (e *Engine) tryExecuteForward(fwd ForwardInfo, args []Value) ([]Value, error, bool) {
+	// Try the original signature first.
+	if allArgsMatchSig(fwd.Sig, args) {
+		results, err := fwd.Sig.Handler(args)
+		return results, err, true
+	}
+
+	// Retry with alternative signatures that have the same prefix/suffix split.
+	fn := e.registry.Lookup(fwd.FuncName)
+	if fn == nil {
+		return nil, nil, false
+	}
+	for i := range fn.Signatures {
+		altSig := &fn.Signatures[i]
+		if altSig == fwd.Sig {
+			continue
+		}
+		if len(altSig.Prefix) != len(fwd.Sig.Prefix) {
+			continue
+		}
+		if len(altSig.Suffix) != len(fwd.Sig.Suffix) {
+			continue
+		}
+		if allArgsMatchSig(altSig, args) {
+			results, err := altSig.Handler(args)
+			return results, err, true
+		}
+	}
+
+	return nil, nil, false
 }

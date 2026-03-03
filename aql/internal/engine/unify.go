@@ -78,7 +78,7 @@ func Unify(a, b Value) (Value, bool) {
 
 // unifyLists handles unification when at least one side is a list.
 func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
-	// Type literal "list" (Data==nil) unifies with any concrete list.
+	// Type literal "list" (Data==nil) unifies with any list type.
 	if aIsList && a.Data == nil {
 		if bIsList {
 			return b, true
@@ -92,11 +92,37 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 		return Value{}, false
 	}
 
-	// Both must be concrete lists.
+	// Both must be list types.
 	if !aIsList || !bIsList {
 		return Value{}, false
 	}
 
+	// Check for typed lists (child type constraints).
+	aTyped := a.IsTypedList()
+	bTyped := b.IsTypedList()
+
+	if aTyped && bTyped {
+		// Both typed lists: unify child types.
+		aChild := a.AsChildType().Child
+		bChild := b.AsChildType().Child
+		unified, ok := Unify(aChild, bChild)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTypedList(unified), true
+	}
+
+	if aTyped {
+		// a is typed, b is concrete: each element must unify with the child type.
+		return unifyTypedWithConcrete(a.AsChildType().Child, b.AsList())
+	}
+
+	if bTyped {
+		// b is typed, a is concrete: each element must unify with the child type.
+		return unifyTypedWithConcrete(b.AsChildType().Child, a.AsList())
+	}
+
+	// Both concrete lists: element-by-element unification.
 	aElems := a.AsList()
 	bElems := b.AsList()
 
@@ -118,10 +144,24 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 	return NewList(result), true
 }
 
+// unifyTypedWithConcrete unifies a child type constraint against each element
+// of a concrete list. Every element must unify with the child type.
+func unifyTypedWithConcrete(childType Value, elems []Value) (Value, bool) {
+	result := make([]Value, len(elems))
+	for i, elem := range elems {
+		unified, ok := Unify(childType, elem)
+		if !ok {
+			return Value{}, false
+		}
+		result[i] = unified
+	}
+	return NewList(result), true
+}
+
 // unifyMaps handles unification when at least one side is a map.
 // Maps are closed: both must have exactly the same set of keys.
 func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
-	// Type literal "map" (Data==nil) unifies with any concrete map.
+	// Type literal "map" (Data==nil) unifies with any map type.
 	if aIsMap && a.Data == nil {
 		if bIsMap {
 			return b, true
@@ -135,11 +175,37 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 		return Value{}, false
 	}
 
-	// Both must be concrete maps.
+	// Both must be map types.
 	if !aIsMap || !bIsMap {
 		return Value{}, false
 	}
 
+	// Check for typed maps (child type constraints).
+	aTyped := a.IsTypedMap()
+	bTyped := b.IsTypedMap()
+
+	if aTyped && bTyped {
+		// Both typed maps: unify child types.
+		aChild := a.AsChildType().Child
+		bChild := b.AsChildType().Child
+		unified, ok := Unify(aChild, bChild)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTypedMap(unified), true
+	}
+
+	if aTyped {
+		// a is typed, b is concrete: each value must unify with the child type.
+		return unifyTypedMapWithConcrete(a.AsChildType().Child, b.AsMap())
+	}
+
+	if bTyped {
+		// b is typed, a is concrete: each value must unify with the child type.
+		return unifyTypedMapWithConcrete(b.AsChildType().Child, a.AsMap())
+	}
+
+	// Both concrete maps: key-by-key unification.
 	aMap := a.AsMap()
 	bMap := b.AsMap()
 
@@ -169,6 +235,21 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 	return NewMap(result), true
 }
 
+// unifyTypedMapWithConcrete unifies a child type constraint against each value
+// of a concrete map. Every value must unify with the child type.
+func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
+	result := NewOrderedMap()
+	for _, key := range m.Keys() {
+		val, _ := m.Get(key)
+		unified, ok := Unify(childType, val)
+		if !ok {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+	return NewMap(result), true
+}
+
 // valuesEqual compares the data payloads of two values with the same type.
 func valuesEqual(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
@@ -187,8 +268,24 @@ func valuesEqual(a, b Value) bool {
 	case a.VType.Matches(TBoolean):
 		return a.AsBoolean() == b.AsBoolean()
 	case a.VType.Equal(TList):
+		aCT, aOk := a.Data.(ChildTypeInfo)
+		bCT, bOk := b.Data.(ChildTypeInfo)
+		if aOk && bOk {
+			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+		}
+		if aOk != bOk {
+			return false
+		}
 		return listsEqual(a.AsList(), b.AsList())
 	case a.VType.Equal(TMap):
+		aCT, aOk := a.Data.(ChildTypeInfo)
+		bCT, bOk := b.Data.(ChildTypeInfo)
+		if aOk && bOk {
+			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+		}
+		if aOk != bOk {
+			return false
+		}
 		return mapsEqual(a.AsMap(), b.AsMap())
 	default:
 		return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)

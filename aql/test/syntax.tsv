@@ -304,6 +304,201 @@ none unify {x:1}	'~unify-fail' false
 none unify list	'~unify-fail' false
 none unify map	'~unify-fail' false
 
+# === Typed list literals ===
+[:string]	[:string]
+[:number]	[:number]
+[:boolean]	[:boolean]
+[:any]	[:any]
+[:list]	[:list]
+[:map]	[:map]
+[:{x:number}]	[:{x:number}]
+[:{a:string,b:number}]	[:{a:string,b:number}]
+[:[:string]]	[:[:string]]
+[:[:number]]	[:[:number]]
+[:[:{x:number}]]	[:[:{x:number}]]
+[:[:[:number]]]	[:[:[:number]]]
+
+# === Unify - typed lists with identical child types ===
+[:string] unify [:string]	[:string] true
+[:number] unify [:number]	[:number] true
+[:boolean] unify [:boolean]	[:boolean] true
+
+# === Unify - typed lists with concrete lists ===
+[:number] unify [1,2,3]	[1,2,3] true
+[:string] unify ["a","b"]	['a','b'] true
+[:number] unify [42]	[42] true
+[:string] unify []	[] true
+[:number] unify []	[] true
+
+# === Unify - typed lists with concrete (fail) ===
+[:string] unify [1,2]	'~unify-fail' false
+[:number] unify ["hello"]	'~unify-fail' false
+
+# === Unify - typed list narrowing ===
+[:any] unify [:number]	[:number] true
+[:any] unify [:string]	[:string] true
+[:number] unify [:any]	[:number] true
+
+# === Unify - typed list child type mismatch ===
+[:string] unify [:number]	'~unify-fail' false
+[:number] unify [:boolean]	'~unify-fail' false
+
+# === Unify - typed list with type literal ===
+list unify [:string]	[:string] true
+[:string] unify list	[:string] true
+list unify [:number]	[:number] true
+
+# === Unify - typed list with any ===
+any unify [:string]	[:string] true
+[:number] unify any	[:number] true
+
+# === Unify - typed list with none ===
+none unify [:string]	'~unify-fail' false
+[:number] unify none	'~unify-fail' false
+
+# === Unify - typed list with map child type ===
+[:{x:number}] unify [{x:1},{x:2}]	[{x:1},{x:2}] true
+[:{x:string}] unify [{x:"a"},{x:"b"}]	[{x:'a'},{x:'b'}] true
+[:{x:number}] unify [{x:1},{y:1}]	'~unify-fail' false
+[:{x:number}] unify []	[] true
+
+# === Unify - deeper typed lists ===
+[:[:number]] unify [[1,2],[3]]	[[1,2],[3]] true
+[:[:string]] unify [["a"],["b","c"]]	[['a'],['b','c']] true
+[:[:number]] unify [["a"]]	'~unify-fail' false
+[:[:number]] unify [[1],[2,3],[]]	[[1],[2,3],[]] true
+
+# === Unify - typed list symmetry ===
+[1,2,3] unify [:number]	[1,2,3] true
+["a","b"] unify [:string]	['a','b'] true
+[1,2] unify [:string]	'~unify-fail' false
+
+# === Typed map literals ===
+{:string}	{:string}
+{:number}	{:number}
+{:boolean}	{:boolean}
+{:any}	{:any}
+{:list}	{:list}
+{:map}	{:map}
+{:{x:number}}	{:{x:number}}
+{:{a:string,b:number}}	{:{a:string,b:number}}
+{:[:string]}	{:[:string]}
+{:[:number]}	{:[:number]}
+{:{:string}}	{:{:string}}
+{:{:number}}	{:{:number}}
+{:[:{x:number}]}	{:[:{x:number}]}
+{:{:{:number}}}	{:{:{:number}}}
+
+# === Unify - typed maps with identical child types ===
+{:string} unify {:string}	{:string} true
+{:number} unify {:number}	{:number} true
+{:boolean} unify {:boolean}	{:boolean} true
+
+# === Unify - typed maps with concrete maps ===
+{:number} unify {a:1,b:2}	{a:1,b:2} true
+{:string} unify {x:"a",y:"b"}	{x:'a',y:'b'} true
+{:number} unify {x:42}	{x:42} true
+{:string} unify {a:"hello"}	{a:'hello'} true
+
+# === Unify - typed maps with empty concrete map ===
+{:string} unify {}	{} true
+{:number} unify {}	{} true
+{:{x:number}} unify {}	{} true
+
+# === Unify - typed maps with concrete (fail - type mismatch) ===
+{:string} unify {a:1}	'~unify-fail' false
+{:number} unify {x:"hello"}	'~unify-fail' false
+{:boolean} unify {x:1}	'~unify-fail' false
+
+# === Unify - typed map narrowing ===
+{:any} unify {:number}	{:number} true
+{:any} unify {:string}	{:string} true
+{:number} unify {:any}	{:number} true
+{:string} unify {:any}	{:string} true
+
+# === Unify - typed map child type mismatch ===
+{:string} unify {:number}	'~unify-fail' false
+{:number} unify {:boolean}	'~unify-fail' false
+{:string} unify {:boolean}	'~unify-fail' false
+
+# === Unify - typed map symmetry ===
+{a:1,b:2} unify {:number}	{a:1,b:2} true
+{x:"hello"} unify {:string}	{x:'hello'} true
+{a:1} unify {:string}	'~unify-fail' false
+{x:"hello"} unify {:number}	'~unify-fail' false
+
+# === Unify - typed map with type literal ===
+map unify {:string}	{:string} true
+{:string} unify map	{:string} true
+map unify {:number}	{:number} true
+{:number} unify map	{:number} true
+map unify {:{x:number}}	{:{x:number}} true
+
+# === Unify - typed map with any ===
+any unify {:string}	{:string} true
+{:string} unify any	{:string} true
+any unify {:number}	{:number} true
+{:number} unify any	{:number} true
+
+# === Unify - typed map with none ===
+none unify {:string}	'~unify-fail' false
+{:string} unify none	'~unify-fail' false
+none unify {:number}	'~unify-fail' false
+{:number} unify none	'~unify-fail' false
+
+# === Unify - typed map with map child type ===
+{:{x:number}} unify {a:{x:1},b:{x:2}}	{a:{x:1},b:{x:2}} true
+{:{x:string}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'},b:{x:'b'}} true
+{:{x:number}} unify {a:{x:1},b:{y:1}}	'~unify-fail' false
+{:{x:number}} unify {}	{} true
+
+# === Unify - deeper typed maps ===
+{:{:number}} unify {a:{x:1},b:{y:2}}	{a:{x:1},b:{y:2}} true
+{:{:string}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'},b:{y:'b'}} true
+{:{:number}} unify {a:{x:"a"}}	'~unify-fail' false
+{:{:number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
+
+# === Unify - deeper typed map child type unification ===
+{:{:string}} unify {:{:string}}	{:{:string}} true
+{:{:number}} unify {:{:any}}	{:{:number}} true
+{:{:string}} unify {:{:number}}	'~unify-fail' false
+
+# === Unify - typed map vs incompatible types ===
+{:string} unify [1]	'~unify-fail' false
+{:number} unify "hello"	'~unify-fail' false
+{:string} unify 1	'~unify-fail' false
+
+# === def - word definition ===
+
+# Basic def with list body (literal substitution)
+def increment [1 add] 2 increment	3
+def decrement [1 sub] 3 decrement	2
+
+# def with dup-based word
+def double [dup add] 5 double	10
+def triple [dup dup add add] 4 triple	12
+
+# def with scalar body
+def myval 42 myval	42
+def greeting "hello" greeting	'hello'
+
+# def with string name (quoted)
+def "inc" [1 add] 10 inc	11
+
+# def with prefix body (body def name form)
+[1 add] def inc2 10 inc2	11
+[1 sub] def dec2 5 dec2	4
+
+# def with prefix scalar body
+42 def answer answer	42
+
+# Use defined word multiple times
+def inc [1 add] 1 inc inc inc	4
+
+# def does not break existing word coercion
+a upper	'A'
+lower B	'b'
+
 # === Error cases ===
 
 # Unmatched closing parenthesis

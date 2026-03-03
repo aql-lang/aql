@@ -130,6 +130,7 @@ func registerBuiltins(r *Registry) {
 
 	registerStorage(r)
 	registerUnify(r)
+	registerDef(r)
 
 	// Note: "end" is handled directly by the engine as a keyword,
 	// not registered here. It terminates any pending forward early.
@@ -211,4 +212,82 @@ func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64)
 			Handler:    handler,
 		},
 	)
+}
+
+// defName extracts a word name from a Value that is either a word or a string.
+func defName(v Value) string {
+	if v.IsWord() {
+		return v.AsWord().Name
+	}
+	return v.AsString()
+}
+
+// registerDef registers the "def" word for defining new words.
+//
+// def creates literal substitutions: the body replaces the word during
+// evaluation. If the body is a list, its elements are spliced into the
+// stack. Otherwise the single value is pushed.
+//
+// Signatures:
+//
+//	def name body    – suffix only, word name:    [| word, any]
+//	def "name" body  – suffix only, string name:  [| string, any]
+//	body def name    – prefix body, suffix name:  [any | word]
+//	body def "name"  – prefix body, suffix name:  [any | string]
+func registerDef(r *Registry) {
+	// Handler for suffix-only: def name body → args = [name, body]
+	defSuffixHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		body := args[1]
+		installDef(r, name, body)
+		return nil, nil
+	}
+
+	// Handler for prefix+suffix: body def name → args = [body, name]
+	defPrefixSuffixHandler := func(args []Value) ([]Value, error) {
+		body := args[0]
+		name := defName(args[1])
+		installDef(r, name, body)
+		return nil, nil
+	}
+
+	r.Register("def",
+		// def name body (word name, suffix only)
+		Signature{
+			Suffix:  []Type{TWord, TAny},
+			Handler: defSuffixHandler,
+		},
+		// def "name" body (string name, suffix only)
+		Signature{
+			Suffix:  []Type{TString, TAny},
+			Handler: defSuffixHandler,
+		},
+		// body def name (prefix body, suffix word name)
+		Signature{
+			Prefix:  []Type{TAny},
+			Suffix:  []Type{TWord},
+			Handler: defPrefixSuffixHandler,
+		},
+		// body def "name" (prefix body, suffix string name)
+		Signature{
+			Prefix:  []Type{TAny},
+			Suffix:  []Type{TString},
+			Handler: defPrefixSuffixHandler,
+		},
+	)
+}
+
+// installDef registers a new word as a literal substitution.
+func installDef(r *Registry, name string, body Value) {
+	r.Register(name, Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if body.VType.Equal(TList) {
+				elems := body.AsList()
+				result := make([]Value, len(elems))
+				copy(result, elems)
+				return result, nil
+			}
+			return []Value{body}, nil
+		},
+	})
 }

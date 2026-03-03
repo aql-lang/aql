@@ -49,6 +49,13 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
+// ChildTypeInfo holds the child type constraint for a typed list or typed map.
+// For example, [:string] constrains all list elements to be strings,
+// and {:string} constrains all map values to be strings.
+type ChildTypeInfo struct {
+	Child Value
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -100,9 +107,21 @@ func NewList(elems []Value) Value {
 	return Value{VType: TList, Data: elems}
 }
 
+// NewTypedList creates a typed list value with a child type constraint.
+// For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
+func NewTypedList(child Value) Value {
+	return Value{VType: TList, Data: ChildTypeInfo{Child: child}}
+}
+
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
 	return Value{VType: TMap, Data: entries}
+}
+
+// NewTypedMap creates a typed map value with a child type constraint.
+// For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
+func NewTypedMap(child Value) Value {
+	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
@@ -160,6 +179,23 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsTypedList reports whether this value is a typed list (has child type constraint).
+func (v Value) IsTypedList() bool {
+	_, ok := v.Data.(ChildTypeInfo)
+	return ok && v.VType.Equal(TList)
+}
+
+// IsTypedMap reports whether this value is a typed map (has child type constraint).
+func (v Value) IsTypedMap() bool {
+	_, ok := v.Data.(ChildTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
+func (v Value) AsChildType() ChildTypeInfo {
+	return v.Data.(ChildTypeInfo)
 }
 
 // AsWord returns the WordInfo, panics if not a word.
@@ -221,6 +257,9 @@ func (v Value) String() string {
 		}
 		return "false"
 	case v.VType.Equal(TList):
+		if ct, ok := v.Data.(ChildTypeInfo); ok {
+			return "[:" + ct.Child.String() + "]"
+		}
 		elems := v.AsList()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
@@ -228,6 +267,9 @@ func (v Value) String() string {
 		}
 		return "[" + strings.Join(parts, ",") + "]"
 	case v.VType.Equal(TMap):
+		if ct, ok := v.Data.(ChildTypeInfo); ok {
+			return "{:" + ct.Child.String() + "}"
+		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {

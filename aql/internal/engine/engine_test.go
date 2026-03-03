@@ -2505,3 +2505,687 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 		t.Errorf("got %v, want [3]", result)
 	}
 }
+
+// --- Engine tests: def (word definition) ---
+
+func TestDefBasicListBody(t *testing.T) {
+	// def increment [1 add]  2 increment → 3
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	// First run: define increment
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("increment"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	// Second run: use increment
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("increment"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestDefScalarBody(t *testing.T) {
+	// def myval 42  myval → 42
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("myval"), NewInteger(42),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewWord("myval"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestDefStringName(t *testing.T) {
+	// def "double" [dup add]  5 double → 10
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewString("double"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(5), NewWord("double"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestDefPrefixBody(t *testing.T) {
+	// [1 sub] def decrement  3 decrement → 2
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewList([]Value{NewInteger(1), NewWord("sub")}),
+		NewWord("def"), NewWord("decrement"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("decrement"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("got %v, want [2]", result)
+	}
+}
+
+func TestDefAndUseSameRun(t *testing.T) {
+	// def triple [dup dup add add] 4 triple → 12
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("triple"),
+		NewList([]Value{NewWord("dup"), NewWord("dup"), NewWord("add"), NewWord("add")}),
+		NewInteger(4), NewWord("triple"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("got %v, want [12]", result)
+	}
+}
+
+func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
+	// Unknown words without a pending TWord forward still coerce to strings.
+	// a upper → "A"
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{
+		NewString("a"), NewWord("upper"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "A" {
+		t.Errorf("got %v, want ['A']", result)
+	}
+}
+
+func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
+	// Undefined word "foo" is preserved as TWord when def's forward expects it.
+	// def foo 99  foo → 99
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("foo"), NewInteger(99),
+		NewWord("foo"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("got %v, want [99]", result)
+	}
+}
+
+func TestDefStringBody(t *testing.T) {
+	// def greeting "hello"  greeting → "hello"
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("greeting"), NewString("hello"),
+		NewWord("greeting"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "hello" {
+		t.Errorf("got %v, want ['hello']", result)
+	}
+}
+
+func TestDefUsedMultipleTimes(t *testing.T) {
+	// def inc [1 add]  1 inc inc inc → 4
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("inc"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewInteger(1), NewWord("inc"), NewWord("inc"), NewWord("inc"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 4 {
+		t.Errorf("got %v, want [4]", result)
+	}
+}
+
+// --- Engine tests: def (traditional Forth-style word definitions) ---
+
+func TestDefForthSquare(t *testing.T) {
+	// : square dup mul ;
+	// Classic Forth square: duplicates top of stack and multiplies.
+	// def square [dup mul]  5 square → 25
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("square"),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewInteger(5), NewWord("square"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("got %v, want [25]", result)
+	}
+}
+
+func TestDefForthNegate(t *testing.T) {
+	// : negate 0 swap sub ;
+	// Negates a number: 0 - n.
+	// def negate [0 swap sub]  7 negate → -7
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("negate"),
+		NewList([]Value{NewInteger(0), NewWord("swap"), NewWord("sub")}),
+		NewInteger(7), NewWord("negate"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != -7 {
+		t.Errorf("got %v, want [-7]", result)
+	}
+}
+
+func TestDefForthOver(t *testing.T) {
+	// : over swap dup rot ;
+	// In standard Forth, over copies the second item to the top.
+	// Without rot, we simulate: over = [swap dup] gives (a b → b a a)
+	// which isn't over. Instead test the concept of building combinators.
+	// def dup2 [dup dup]  3 dup2 → 3 3 3
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("dup2"),
+		NewList([]Value{NewWord("dup"), NewWord("dup")}),
+		NewInteger(3), NewWord("dup2"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3: %v", len(result), result)
+	}
+	for i, v := range result {
+		if v.AsInteger() != 3 {
+			t.Errorf("result[%d] = %d, want 3", i, v.AsInteger())
+		}
+	}
+}
+
+func TestDefForthComposition(t *testing.T) {
+	// Define words in terms of other defined words.
+	// : double dup add ;
+	// : quadruple double double ;
+	// 3 quadruple → 12
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	// Define double
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("double"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def double: %v", err)
+	}
+
+	// Define quadruple in terms of double
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("quadruple"),
+		NewList([]Value{NewWord("double"), NewWord("double")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def quadruple: %v", err)
+	}
+
+	// Use quadruple
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("quadruple"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("got %v, want [12]", result)
+	}
+}
+
+func TestDefForthThreeDeepComposition(t *testing.T) {
+	// : inc 1 add ;
+	// : inc2 inc inc ;
+	// : inc6 inc2 inc2 inc2 ;
+	// 0 inc6 → 6
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("inc"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def inc: %v", err)
+	}
+
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("inc2"),
+		NewList([]Value{NewWord("inc"), NewWord("inc")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def inc2: %v", err)
+	}
+
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("inc6"),
+		NewList([]Value{NewWord("inc2"), NewWord("inc2"), NewWord("inc2")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def inc6: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(0), NewWord("inc6"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 6 {
+		t.Errorf("got %v, want [6]", result)
+	}
+}
+
+func TestDefForthSumOfSquares(t *testing.T) {
+	// : square dup mul ;
+	// 3 square 4 square add → 9 + 16 = 25
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("square"),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("square"),
+		NewInteger(4), NewWord("square"),
+		NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("got %v, want [25]", result)
+	}
+}
+
+func TestDefForthCube(t *testing.T) {
+	// : square dup mul ;
+	// : cube dup square mul ;
+	// Note: cube duplicates n, squares one copy, then multiplies: n * n^2 = n^3
+	// 3 cube → 27
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("square"),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def square: %v", err)
+	}
+
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("cube"),
+		NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def cube: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("cube"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 27 {
+		t.Errorf("got %v, want [27]", result)
+	}
+}
+
+func TestDefForthWithInfixOps(t *testing.T) {
+	// Defined words work with infix operators from the calling context.
+	// : double dup add ;
+	// 3 double mul 2 → 6 * 2 = 12
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("double"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewInteger(3), NewWord("double"),
+		NewWord("mul"), NewInteger(2),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("got %v, want [12]", result)
+	}
+}
+
+func TestDefForthConstant(t *testing.T) {
+	// : pi 3 ;   (Forth-style constant as a word that pushes a value)
+	// pi pi add → 6
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("pi"), NewInteger(3),
+		NewWord("pi"), NewWord("pi"), NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 6 {
+		t.Errorf("got %v, want [6]", result)
+	}
+}
+
+func TestDefForthStackEffectMultipleValues(t *testing.T) {
+	// A word that pushes multiple values onto the stack.
+	// : pair1 1 2 ;
+	// pair1 add → 3
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("pair1"),
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+		NewWord("pair1"), NewWord("add"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestDefForthSwapSub(t *testing.T) {
+	// : nip swap drop ;
+	// Nip removes second element: (a b → b)
+	// 10 20 nip → 20
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("nip"),
+		NewList([]Value{NewWord("swap"), NewWord("drop")}),
+		NewInteger(10), NewInteger(20), NewWord("nip"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 20 {
+		t.Errorf("got %v, want [20]", result)
+	}
+}
+
+func TestDefForthAbsDiff(t *testing.T) {
+	// Absolute difference using two defined words.
+	// : monus swap sub ;  (reversed subtraction: a b → b-a)
+	// Then compute |3-7| by choosing the larger minus smaller.
+	// 7 3 monus → 7 - 3 = 4  (swap makes it 3 7, then sub gives 7-3=4)
+	// Wait: swap sub on (7, 3) → swap gives (3, 7), sub gives 3-7=-4.
+	// Actually sub is prefix [a, b] → a - b, so (3, 7) → 3 - 7 = -4.
+	// Let me reconsider: just demonstrate sub with swap.
+	// def rsub [swap sub]  3 7 rsub → swap gives (7,3), sub gives 7-3=4
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("rsub"),
+		NewList([]Value{NewWord("swap"), NewWord("sub")}),
+		NewInteger(3), NewInteger(7), NewWord("rsub"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 4 {
+		t.Errorf("got %v, want [4]", result)
+	}
+}
+
+func TestDefForthMultipleDefsInSameRun(t *testing.T) {
+	// Define multiple words in a single run, then use them together.
+	// : inc 1 add ;
+	// : dec 1 sub ;
+	// 10 inc inc dec → 11
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("inc"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("def"), NewWord("dec"),
+		NewList([]Value{NewInteger(1), NewWord("sub")}),
+		NewInteger(10), NewWord("inc"), NewWord("inc"), NewWord("dec"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("got %v, want [11]", result)
+	}
+}
+
+func TestDefForthStringWord(t *testing.T) {
+	// A word that pushes a string and operates on it.
+	// : shout upper ;
+	// "hello" shout → "HELLO"
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("shout"),
+		NewList([]Value{NewWord("upper")}),
+		NewString("hello"), NewWord("shout"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "HELLO" {
+		t.Errorf("got %v, want ['HELLO']", result)
+	}
+}
+
+func TestDefForthPersistsAcrossRuns(t *testing.T) {
+	// Definitions persist in the registry across Run calls,
+	// mirroring how Forth words persist once defined.
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	// Run 1: define square
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("square"),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def: %v", err)
+	}
+
+	// Run 2: define cube using square
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("cube"),
+		NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def cube: %v", err)
+	}
+
+	// Run 3: use cube (tests both definitions persisted)
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("cube"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 8 {
+		t.Errorf("got %v, want [8]", result)
+	}
+
+	// Run 4: use square independently
+	result, err = e.Run([]Value{
+		NewInteger(7), NewWord("square"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 49 {
+		t.Errorf("got %v, want [49]", result)
+	}
+}
+
+func TestDefForthDefWithEnd(t *testing.T) {
+	// Using end to terminate def's suffix collection early,
+	// with the body coming from the prefix stack.
+	// [dup add] def double end 5 double → 10
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("def"), NewWord("double"), NewWord("end"),
+		NewInteger(5), NewWord("double"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestDefForthFactorial5(t *testing.T) {
+	// Compute 5! = 120 iteratively using defined words.
+	// Without loops, we manually unroll:
+	// : mul5 5 mul ;    (just multiply by a constant)
+	// 1 mul5 → 5, then 4 mul → 20, then 3 mul → 60, then 2 mul → 120
+	// This tests defined words mixed with inline operations.
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	result, err := e.Run([]Value{
+		NewWord("def"), NewWord("mul5"),
+		NewList([]Value{NewInteger(5), NewWord("mul")}),
+		NewInteger(1), NewWord("mul5"),
+		NewInteger(4), NewWord("mul"),
+		NewInteger(3), NewWord("mul"),
+		NewInteger(2), NewWord("mul"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 120 {
+		t.Errorf("got %v, want [120]", result)
+	}
+}
+
+func TestDefForthDefInteractsWithStore(t *testing.T) {
+	// Defined words that use set/get to interact with the store.
+	// : save-x set x end ;
+	// : load-x get x ;
+	// 42 save-x load-x → 42
+	reg := DefaultRegistry()
+	e := New(reg)
+
+	_, err := e.Run([]Value{
+		NewWord("def"), NewWord("save-x"),
+		NewList([]Value{NewWord("set"), NewWord("x"), NewWord("end")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def save-x: %v", err)
+	}
+
+	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("load-x"),
+		NewList([]Value{NewWord("get"), NewWord("x")}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on def load-x: %v", err)
+	}
+
+	_, err = e.Run([]Value{
+		NewInteger(42), NewWord("save-x"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on save-x: %v", err)
+	}
+
+	result, err := e.Run([]Value{
+		NewWord("load-x"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on load-x: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("got %v, want [42]", result)
+	}
+}

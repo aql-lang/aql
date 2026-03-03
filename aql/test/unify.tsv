@@ -154,3 +154,169 @@ any	[1,2]	true	[1,2]
 [1,2]	any	true	[1,2]
 any	{x:1}	true	{x:1}
 {x:1}	any	true	{x:1}
+
+# Typed list - identical child types
+[:string]	[:string]	true	[:string]
+[:number]	[:number]	true	[:number]
+[:boolean]	[:boolean]	true	[:boolean]
+
+# Typed list - child type narrowing
+[:any]	[:number]	true	[:number]
+[:any]	[:string]	true	[:string]
+[:number]	[:any]	true	[:number]
+[:string]	[:any]	true	[:string]
+
+# Typed list - incompatible child types
+[:string]	[:number]	false
+[:number]	[:boolean]	false
+[:string]	[:boolean]	false
+
+# Typed list vs concrete list (success)
+[:number]	[1,2,3]	true	[1,2,3]
+[:string]	["a","b"]	true	['a','b']
+[:number]	[42]	true	[42]
+[:string]	["hello"]	true	['hello']
+
+# Typed list vs empty concrete list
+[:string]	[]	true	[]
+[:number]	[]	true	[]
+[:{x:number}]	[]	true	[]
+
+# Typed list vs concrete list (fail - type mismatch)
+[:string]	[1,2]	false
+[:number]	["hello"]	false
+[:boolean]	[1]	false
+
+# Typed list vs concrete list (symmetry)
+[1,2,3]	[:number]	true	[1,2,3]
+["a","b"]	[:string]	true	['a','b']
+[1,2]	[:string]	false
+["hello"]	[:number]	false
+
+# Typed list with map child type
+[:{x:number}]	[{x:1},{x:2}]	true	[{x:1},{x:2}]
+[:{x:string}]	[{x:"a"},{x:"b"}]	true	[{x:'a'},{x:'b'}]
+[:{x:number}]	[{x:1},{y:1}]	false
+
+# Typed list vs bare list type literal
+list	[:string]	true	[:string]
+[:string]	list	true	[:string]
+list	[:number]	true	[:number]
+[:number]	list	true	[:number]
+list	[:{x:number}]	true	[:{x:number}]
+
+# Typed list vs any
+any	[:string]	true	[:string]
+[:string]	any	true	[:string]
+any	[:number]	true	[:number]
+[:number]	any	true	[:number]
+
+# Typed list vs none
+none	[:string]	false
+[:string]	none	false
+none	[:number]	false
+[:number]	none	false
+
+# Deeper typed lists
+[:[:number]]	[[1,2],[3]]	true	[[1,2],[3]]
+[:[:string]]	[["a"],["b","c"]]	true	[['a'],['b','c']]
+[:[:number]]	[["a"]]	false
+[:[:number]]	[[1],[2,3],[]]	true	[[1],[2,3],[]]
+
+# Deeper typed list child type unification
+[:[:string]]	[:[:string]]	true	[:[:string]]
+[:[:number]]	[:[:any]]	true	[:[:number]]
+[:[:string]]	[:[:number]]	false
+
+# Typed list vs incompatible types
+[:string]	{x:1}	false
+[:number]	"hello"	false
+[:string]	1	false
+
+# Typed map - identical child types
+{:string}	{:string}	true	{:string}
+{:number}	{:number}	true	{:number}
+{:boolean}	{:boolean}	true	{:boolean}
+
+# Typed map - child type narrowing
+{:any}	{:number}	true	{:number}
+{:any}	{:string}	true	{:string}
+{:number}	{:any}	true	{:number}
+{:string}	{:any}	true	{:string}
+
+# Typed map - incompatible child types
+{:string}	{:number}	false
+{:number}	{:boolean}	false
+{:string}	{:boolean}	false
+
+# Typed map vs concrete map (success)
+{:number}	{a:1,b:2}	true	{a:1,b:2}
+{:string}	{x:"a",y:"b"}	true	{x:'a',y:'b'}
+{:number}	{x:42}	true	{x:42}
+{:string}	{a:"hello"}	true	{a:'hello'}
+
+# Typed map vs empty concrete map
+{:string}	{}	true	{}
+{:number}	{}	true	{}
+{:{x:number}}	{}	true	{}
+
+# Typed map vs concrete map (fail - type mismatch)
+{:string}	{a:1}	false
+{:number}	{x:"hello"}	false
+{:boolean}	{x:1}	false
+
+# Typed map vs concrete map (symmetry)
+{a:1,b:2}	{:number}	true	{a:1,b:2}
+{x:"a",y:"b"}	{:string}	true	{x:'a',y:'b'}
+{a:1}	{:string}	false
+{x:"hello"}	{:number}	false
+
+# Typed map with map child type
+{:{x:number}}	{a:{x:1},b:{x:2}}	true	{a:{x:1},b:{x:2}}
+{:{x:string}}	{a:{x:"a"},b:{x:"b"}}	true	{a:{x:'a'},b:{x:'b'}}
+{:{x:number}}	{a:{x:1},b:{y:1}}	false
+
+# Typed map vs bare map type literal
+map	{:string}	true	{:string}
+{:string}	map	true	{:string}
+map	{:number}	true	{:number}
+{:number}	map	true	{:number}
+map	{:{x:number}}	true	{:{x:number}}
+
+# Typed map vs any
+any	{:string}	true	{:string}
+{:string}	any	true	{:string}
+any	{:number}	true	{:number}
+{:number}	any	true	{:number}
+
+# Typed map vs none
+none	{:string}	false
+{:string}	none	false
+none	{:number}	false
+{:number}	none	false
+
+# Deeper typed maps
+{:{:number}}	{a:{x:1},b:{y:2}}	true	{a:{x:1},b:{y:2}}
+{:{:string}}	{a:{x:"a"},b:{y:"b"}}	true	{a:{x:'a'},b:{y:'b'}}
+{:{:number}}	{a:{x:"a"}}	false
+{:{:number}}	{a:{x:1,y:2},b:{z:3}}	true	{a:{x:1,y:2},b:{z:3}}
+
+# Deeper typed map child type unification
+{:{:string}}	{:{:string}}	true	{:{:string}}
+{:{:number}}	{:{:any}}	true	{:{:number}}
+{:{:string}}	{:{:number}}	false
+
+# Typed map vs incompatible types
+{:string}	[1]	false
+{:number}	"hello"	false
+{:string}	1	false
+
+# Mixed: typed list of typed maps
+[:{:number}]	[{a:1},{b:2}]	true	[{a:1},{b:2}]
+[:{:string}]	[{x:"a"},{y:"b"}]	true	[{x:'a'},{y:'b'}]
+[:{:number}]	[{a:"x"}]	false
+
+# Mixed: typed map of typed lists
+{:[:number]}	{a:[1,2],b:[3]}	true	{a:[1,2],b:[3]}
+{:[:string]}	{x:["a"],y:["b","c"]}	true	{x:['a'],y:['b','c']}
+{:[:number]}	{a:["x"]}	false

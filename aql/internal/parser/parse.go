@@ -40,6 +40,9 @@ func Parse(src string) ([]engine.Value, error) {
 	j := jsonic.Make(jsonic.Options{
 		TextInfo: boolPtr(true),
 		ListRef:  boolPtr(true),
+		MapRef:   boolPtr(true),
+		List:     &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
+		Map:      &jsonic.MapOptions{Child: boolPtr(true)},
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
@@ -52,11 +55,18 @@ func Parse(src string) ([]engine.Value, error) {
 		return nil, nil
 	}
 
-	// With ListRef enabled, jsonic returns ListRef for all lists.
-	// ListRef.Implicit distinguishes implicit lists (space/comma separated)
-	// from explicit lists (bracketed with []).
+	// With ListRef and MapRef enabled, jsonic returns ListRef/MapRef for
+	// all lists and maps. ListRef.Implicit and MapRef.Implicit distinguish
+	// implicit structures from explicit ones.
 	switch val := result.(type) {
 	case jsonic.ListRef:
+		if val.Child != nil {
+			tv, err := convertTypedList(val)
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{tv}, nil
+		}
 		if !val.Implicit {
 			// Explicit list [...]  — a single list value (quotation).
 			lv, err := convertWordList(val.Val)
@@ -67,6 +77,19 @@ func Parse(src string) ([]engine.Value, error) {
 		}
 		// Implicit list — top-level stack values.
 		return convertTopLevel(val.Val)
+	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			tv, err := convertTypedMap(val.Val)
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{tv}, nil
+		}
+		mv, err := convertMapData(val.Val)
+		if err != nil {
+			return nil, err
+		}
+		return []engine.Value{mv}, nil
 	default:
 		v, err := convertTopLevelValue(val)
 		if err != nil {
@@ -150,10 +173,16 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 	case float64:
 		return engine.NewInteger(int64(val)), nil
 
-	case map[string]any:
-		return convertMapData(val)
+	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			return convertTypedMap(val.Val)
+		}
+		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
+		if val.Child != nil {
+			return convertTypedList(val)
+		}
 		return convertWordList(val.Val)
 
 	case bool:
@@ -207,10 +236,16 @@ func convertDataValue(v any) (engine.Value, error) {
 	case float64:
 		return engine.NewInteger(int64(val)), nil
 
-	case map[string]any:
-		return convertMapData(val)
+	case jsonic.MapRef:
+		if hasMapChild(val.Val) {
+			return convertTypedMap(val.Val)
+		}
+		return convertMapData(val.Val)
 
 	case jsonic.ListRef:
+		if val.Child != nil {
+			return convertTypedList(val)
+		}
 		return convertDataList(val.Val)
 
 	case bool:
@@ -222,6 +257,33 @@ func convertDataValue(v any) (engine.Value, error) {
 	default:
 		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
 	}
+}
+
+// convertTypedList converts a ListRef with a Child into a typed list value.
+// The child value is converted in data context (type names resolve to type literals).
+func convertTypedList(lr jsonic.ListRef) (engine.Value, error) {
+	childVal, err := convertDataValue(lr.Child)
+	if err != nil {
+		return engine.Value{}, err
+	}
+	return engine.NewTypedList(childVal), nil
+}
+
+// hasMapChild reports whether a jsonic map contains the "child$" key
+// set by the map.child option (bare colon syntax {:value}).
+func hasMapChild(m map[string]any) bool {
+	_, ok := m["child$"]
+	return ok
+}
+
+// convertTypedMap converts a map with a "child$" key into a typed map value.
+// The child value is converted in data context (type names resolve to type literals).
+func convertTypedMap(m map[string]any) (engine.Value, error) {
+	childVal, err := convertDataValue(m["child$"])
+	if err != nil {
+		return engine.Value{}, err
+	}
+	return engine.NewTypedMap(childVal), nil
 }
 
 // convertDataList converts a list in data context (inside maps).
