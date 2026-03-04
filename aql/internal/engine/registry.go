@@ -134,6 +134,23 @@ func registerBuiltins(r *Registry) {
 		return a % b, nil
 	})
 
+	// Boolean: binary ops have Args:[boolean, boolean] with suffix precedence.
+	// Precedence: or/xor/implies=1, and/nand=2 (higher binds tighter).
+	// not is unary with suffix precedence and no precedence level.
+	registerBinaryBoolOp(r, "or", 1, func(a, b bool) bool { return a || b })
+	registerBinaryBoolOp(r, "and", 2, func(a, b bool) bool { return a && b })
+	registerBinaryBoolOp(r, "xor", 1, func(a, b bool) bool { return a != b })
+	registerBinaryBoolOp(r, "nand", 2, func(a, b bool) bool { return !(a && b) })
+	registerBinaryBoolOp(r, "implies", 1, func(a, b bool) bool { return !a || b })
+
+	// not: [boolean] -> [boolean]
+	r.Register("not", Signature{
+		Args: []Type{TBoolean},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewBoolean(!args[0].AsBoolean())}, nil
+		},
+	})
+
 	registerStorage(r)
 	registerUnify(r)
 	registerDef(r)
@@ -212,6 +229,19 @@ func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64)
 	}
 	r.Register(name, Signature{
 		Args:       []Type{TInteger, TInteger},
+		Precedence: prec,
+		Handler:    handler,
+	})
+}
+
+// registerBinaryBoolOp registers a binary boolean operation with a single
+// signature Args:[boolean, boolean] and suffix precedence.
+func registerBinaryBoolOp(r *Registry, name string, prec int, op func(a, b bool) bool) {
+	handler := func(args []Value) ([]Value, error) {
+		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil
+	}
+	r.Register(name, Signature{
+		Args:       []Type{TBoolean, TBoolean},
 		Precedence: prec,
 		Handler:    handler,
 	})

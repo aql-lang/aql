@@ -278,6 +278,76 @@ Modulo. Precedence 2. Modulo by zero is an error.
 10 mod 0            => ERROR: modulo_by_zero
 ```
 
+### Boolean Words
+
+#### `or`
+
+Logical OR. Precedence 1.
+
+*Signature:* `[boolean, boolean] -> [boolean]`
+
+```
+true or false           => true
+false or false          => false
+```
+
+#### `and`
+
+Logical AND. Precedence 2 (binds tighter than `or`).
+
+*Signature:* `[boolean, boolean] -> [boolean]`
+
+```
+true and false          => false
+true and true           => true
+true or false and false => true       # and binds first
+```
+
+#### `not`
+
+Logical NOT (unary).
+
+*Signature:* `[boolean] -> [boolean]`
+
+```
+true not                => false
+not false               => true
+```
+
+#### `xor`
+
+Exclusive OR. Precedence 1.
+
+*Signature:* `[boolean, boolean] -> [boolean]`
+
+```
+true xor false          => true
+true xor true           => false
+```
+
+#### `nand`
+
+Logical NAND (NOT AND). Precedence 2.
+
+*Signature:* `[boolean, boolean] -> [boolean]`
+
+```
+true nand true          => false
+true nand false         => true
+```
+
+#### `implies`
+
+Logical implication (a → b). False only when the first argument is
+true and the second is false. Precedence 1.
+
+*Signature:* `[boolean, boolean] -> [boolean]`
+
+```
+true implies false      => false
+false implies true      => true
+```
+
 ### Stack Words
 
 Stack words are prefix-only by default.
