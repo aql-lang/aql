@@ -121,6 +121,154 @@ contents are the result.
 ```
 
 
+## Execution Model
+
+AQL is a stack machine. The program is a sequence of tokens read left
+to right. Each token either pushes a value onto the stack or names a
+word that consumes values and pushes results.
+
+### Prefix evaluation
+
+In the simplest case, arguments sit on the stack before the word
+executes. This is the classic stack-machine style:
+
+```
+1 2 add         => 3
+```
+
+Step by step:
+
+1. `1` — push 1 onto the stack. Stack: `[1]`
+2. `2` — push 2. Stack: `[1, 2]`
+3. `add` — consume two values, push their sum. Stack: `[3]`
+
+Any values left on the stack at the end are the result.
+
+### Suffix collection
+
+Most words also accept arguments that appear *after* them. When a word
+does not yet have enough arguments on the stack, it waits: each
+subsequent value is collected as a suffix argument until the word has
+everything it needs. Then the word executes.
+
+```
+add 1 2         => 3
+```
+
+1. `add` — needs two arguments, stack is empty. Wait for suffix values.
+2. `1` — collected as first argument to `add`.
+3. `2` — collected as second argument. `add` now has both; it executes.
+
+This is why the same word works in prefix, suffix, and infix position:
+
+```
+1 2 add         => 3       # prefix: both args already on the stack
+add 1 2         => 3       # suffix: both args collected after the word
+1 add 2         => 3       # infix: 1 from the stack, 2 collected after
+```
+
+### Nested suffix collection
+
+When one word is waiting for arguments and encounters another word,
+the inner word collects *its* arguments first. The inner word's result
+then becomes an argument to the outer word.
+
+```
+def Point record [x:number y:number]
+```
+
+1. `def` — needs a name and a body. Waits.
+2. `Point` — collected as the name (first argument to `def`).
+3. `record` — this is a word, not a literal. It needs its own argument.
+4. `[x:number y:number]` — collected by `record`, which executes and
+   produces a record type value.
+5. That record type value becomes the second argument to `def`. Now
+   `def` executes.
+
+### Type-directed collection
+
+Each word declares the types of arguments it accepts. Suffix collection
+checks each incoming value against the expected type. If the type does
+not match, collection stops — the word executes with whatever prefix
+arguments it already had, and the unmatched value stays on the stack.
+
+```
+upper "hello" 42
+```
+
+1. `upper` — needs one string. Waits.
+2. `"hello"` — matches string. Collected. `upper` executes → `'HELLO'`.
+3. `42` — pushed onto the stack.
+
+Result: `'HELLO' 42`. The `42` was never consumed because `upper`
+was satisfied after one argument.
+
+### Competing words and precedence
+
+When two words are both waiting for suffix arguments, *operator
+precedence* determines who gets the value. A higher-precedence word
+captures the value before a lower-precedence word, even if the
+lower-precedence word started waiting first.
+
+```
+2 add 3 mul 4           => 14
+```
+
+`add` (precedence 1) is waiting for its second argument. It sees `3`,
+but `mul` (precedence 2) appears next — and `mul` binds tighter. So
+`mul` captures `3` and `4`, producing 12. That result becomes the
+second argument to `add`: 2 + 12 = 14.
+
+```
+2 mul 3 add 4           => 10
+```
+
+Here `mul` (higher precedence) captures `3` immediately. It executes:
+2 * 3 = 6. Then `add` gets 6 from the stack and captures `4`: 6 + 4 = 10.
+
+### The `end` keyword
+
+Sometimes you need to stop suffix collection early — for example, when
+a word's argument is followed by more tokens that should not be
+consumed.
+
+```
+set foo 99 end get foo      => 99
+```
+
+Without `end`, the `set` word would try to collect `get` and `foo` as
+additional arguments. The `end` keyword forces the nearest waiting word
+to stop collecting and execute immediately.
+
+### Lists are quotation
+
+Square brackets create a list of *unevaluated* values. Words inside a
+list are stored literally — they are not executed.
+
+```
+[1 add 2]               => [1,add,2]       # add is NOT executed
+def inc [1 add]
+5 inc                    => 6               # now the list body executes
+```
+
+When a defined word's body is a list, its elements are spliced into the
+token stream on use. This is how `def` creates reusable code fragments.
+
+The `do` word explicitly evaluates a list as if its elements were
+tokens in the main program:
+
+```
+do [1 add 2]            => 3
+```
+
+For maps, `do` evaluates any list values (depth-first), leaving
+non-list values unchanged:
+
+```
+do {x:[3 add 4], y:[upper "a"]}    => {x:7, y:'A'}
+```
+
+
 ## Argument Passing
 
 Words accept arguments in three styles.
@@ -796,10 +944,10 @@ record [x:number y:string]                => record{x:number,y:string}
 record [{x:{z:boolean}} "y":1]            => record{x:{z:boolean},y:1}
 ```
 
-Use with `def` to create named record types:
+Use with `type` to create named record types:
 
 ```
-def Point record [x:number y:number]
+type Point record [x:number y:number]
 Point                                      => record{x:number,y:number}
 ```
 
@@ -824,8 +972,66 @@ map unify record [x:number]                   => '~unify-fail' false
 Nested record types are supported:
 
 ```
-def Inner record [z:string]
-def Outer record [x:number y:Inner]
+type Inner record [z:string]
+type Outer record [x:number y:Inner]
+```
+
+#### `type`
+
+Define a named type. The body must be a type value: a record type,
+disjunct, type literal, typed list, or typed map. Unlike `def`, `type`
+validates that the body is actually a type.
+
+*Signatures:*
+- `[word, any] -> []`
+- `[string, any] -> []`
+
+*Precedence:* suffix
+
+```
+type Point record [x:number y:number]
+make Point [1 2]                           => {x:1,y:2}
+
+type OptNum (number or none)
+OptNum unify 5                             => 5 true
+OptNum unify none                          => none true
+
+type Nums [:number]
+Nums unify [1,2,3]                         => [1,2,3] true
+
+type Num number
+Num unify 42                               => 42 true
+```
+
+### Evaluation Words
+
+#### `do`
+
+Evaluate quoted list or map contents. Lists are evaluated as a token
+stream; maps have their list values evaluated depth-first.
+
+*Signatures:*
+- `[list] -> [results...]`
+- `[map] -> [map]`
+
+*Precedence:* suffix
+
+**List evaluation** — elements are executed as if they were tokens in
+the main program:
+
+```
+do [1 add 2]                               => 3
+do [upper "hello"]                         => 'HELLO'
+do [1 2 3]                                 => 1 2 3
+```
+
+**Map evaluation** — list values are evaluated, non-list values pass
+through unchanged. Nested maps are processed recursively:
+
+```
+do {x:[3 add 4], y:[upper "a"]}           => {x:7, y:'A'}
+do {x:1, y:"hello"}                        => {x:1, y:'hello'}
+do {m:{x:[5 mul 2]}}                       => {m:{x:10}}
 ```
 
 
