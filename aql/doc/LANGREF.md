@@ -463,20 +463,23 @@ def foo 2
 foo                         => 2
 ```
 
-#### Function Signatures
+#### Function Signatures with `fn`
 
-When the body of `def` is a list of signature triples, `def` creates a
-typed function instead of a literal substitution. Each triple consists
-of an input signature, an output signature, and a body:
+The `fn` word parses a list of signature triples into a typed function
+definition. Use it with `def` to create functions with typed
+parameters:
 
 ```
-def name [[input-params] [output-types] [body]]
+def name fn [[input-params] [output-types] [body]]
 ```
+
+Each triple consists of an input signature, an output signature
+(informational), and a body.
 
 **Unnamed parameters** list the expected types positionally:
 
 ```
-def double [[number] [number] [dup add]]
+def double fn [[number] [number] [dup add]]
 7 double                    => 14
 ```
 
@@ -484,14 +487,14 @@ def double [[number] [number] [dup add]]
 scoped variables during execution:
 
 ```
-def square [[x:number] [number] [x mul x]]
+def square fn [[x:number] [number] [x mul x]]
 5 square                    => 25
 ```
 
 Multiple parameters are comma-separated:
 
 ```
-def add2 [[x:number,y:number] [number] [x add y]]
+def add2 fn [[x:number,y:number] [number] [x add y]]
 3 5 add2                    => 8
 ```
 
@@ -499,7 +502,7 @@ Named parameters are automatically undefined after the body executes,
 so they do not leak:
 
 ```
-def sq [[x:number] [number] [x mul x]]
+def sq fn [[x:number] [number] [x mul x]]
 4 sq x                      => 16 'x'
 ```
 
@@ -507,7 +510,7 @@ Function definitions support all argument styles (prefix, suffix,
 infix):
 
 ```
-def sq [[x:number] [number] [x mul x]]
+def sq fn [[x:number] [number] [x mul x]]
 5 sq                        => 25       # prefix
 sq 6                        => 36       # suffix
 ```
@@ -515,7 +518,7 @@ sq 6                        => 36       # suffix
 Multiple overloaded signatures can be specified as consecutive triples:
 
 ```
-def op [[number] [number] [dup mul] [string] [string] [dup]]
+def op fn [[number] [number] [dup mul] [string] [string] [dup]]
 ```
 
 Supported type names in signatures: `any`, `none`, `number`,
@@ -611,6 +614,30 @@ def foo 99
 ```
 
 `foo` remains defined after `var` completes.
+
+### Function Words
+
+#### `fn`
+
+Parse a list of signature triples into a typed function definition
+value. Used with `def` to create functions with typed and/or named
+parameters.
+
+*Signature:* `[list] -> [fndef]`
+*Precedence:* suffix
+
+The list argument must contain one or more triples of
+`[input-sig] [output-sig] [body]`. The `fn` word returns an internal
+function definition value which `def` recognizes and installs as typed
+signatures.
+
+```
+def square fn [[x:number] [number] [x mul x]]
+5 square                    => 25
+```
+
+See [Function Signatures with `fn`](#function-signatures-with-fn)
+above for full details.
 
 
 ## Type System

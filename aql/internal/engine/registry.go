@@ -139,6 +139,7 @@ func registerBuiltins(r *Registry) {
 	registerDef(r)
 	registerUndef(r)
 	registerVar(r)
+	registerFn(r)
 }
 
 // storeKey converts a Value to a string key for the store.
@@ -264,9 +265,9 @@ func registerDef(r *Registry) {
 // function definition. Multiple defs for the same name stack; undef pops
 // the top.
 //
-// If body is a function specification (list of signature triples where
-// the first element is a list), installDef parses it and registers typed
-// signatures. Otherwise, body is stored directly as a literal substitution.
+// When body is a FnDefInfo value (produced by the fn word), installDef
+// registers typed signatures. Otherwise, body is stored directly as a
+// literal substitution.
 func installDef(r *Registry, name string, body Value) {
 	if len(r.DefStacks[name]) == 0 {
 		// First definition: register one generic fallback handler
@@ -294,16 +295,12 @@ func installDef(r *Registry, name string, body Value) {
 		})
 	}
 
-	// Detect function specification: body is a list with 3n elements
-	// whose first element is itself a list (the input signature).
-	if isFnDef(body) {
-		fnDef, err := parseFnDef(body.AsList())
-		if err == nil {
-			installFnDef(r, name, fnDef)
-			r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
-			return
-		}
-		// Parse failed — fall through to regular def.
+	// FnDefInfo body (from fn word): install typed signatures.
+	if body.VType.Equal(TFnDef) {
+		fnDef := body.Data.(FnDefInfo)
+		installFnDef(r, name, fnDef)
+		r.DefStacks[name] = append(r.DefStacks[name], body)
+		return
 	}
 
 	r.DefStacks[name] = append(r.DefStacks[name], body)
@@ -462,17 +459,29 @@ func registerVar(r *Registry) {
 
 // --- Function specification helpers ---
 
-// isFnDef reports whether body looks like a function specification:
-// a list with 3n elements whose first element is a list (input signature).
-func isFnDef(body Value) bool {
-	if !body.VType.Equal(TList) {
-		return false
+// registerFn registers the "fn" word, which parses a list of signature
+// triples into a FnDefInfo value. Use with def: def name fn [[params] [out] [body]].
+func registerFn(r *Registry) {
+	fnHandler := func(args []Value) ([]Value, error) {
+		list := args[0]
+		if !list.VType.Equal(TList) {
+			return nil, fmt.Errorf("fn: argument must be a list")
+		}
+		elems := list.AsList()
+		if len(elems) == 0 || len(elems)%3 != 0 {
+			return nil, fmt.Errorf("fn: list must contain signature triples (length must be a multiple of 3)")
+		}
+		fnDef, err := parseFnDef(elems)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewFnDef(fnDef)}, nil
 	}
-	elems := body.AsList()
-	if len(elems) == 0 || len(elems)%3 != 0 {
-		return false
-	}
-	return elems[0].VType.Equal(TList)
+
+	r.Register("fn", Signature{
+		Args:    []Type{TList},
+		Handler: fnHandler,
+	})
 }
 
 // parseFnDef parses a function specification list into FnDefInfo.
