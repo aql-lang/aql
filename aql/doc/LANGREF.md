@@ -969,11 +969,37 @@ Records do not unify with maps:
 map unify record [x:number]                   => '~unify-fail' false
 ```
 
-Nested record types are supported:
+**User-defined types as field constraints.** Record field values can
+reference types defined with `type`. This is how you express optional
+fields — define a disjunction and use it by name:
+
+```
+type OptStr (string or none)
+type Person record [name:string nick:OptStr]
+Person                          => record{name:string,nick:string|none}
+```
+
+The disjunction narrows on unification:
+
+```
+Person unify record [name:string nick:string]   => record{name:string,nick:string} true
+Person unify record [name:string nick:none]     => record{name:string,nick:none} true
+```
+
+`make` accepts `none` for optional fields:
+
+```
+make Person ["Alice" "ace"]     => {name:'Alice',nick:'ace'}
+make Person ["Bob" none]        => {name:'Bob',nick:none}
+```
+
+Nested record types are also supported — define inner records
+separately and reference them by name:
 
 ```
 type Inner record [z:string]
 type Outer record [x:number y:Inner]
+Outer                          => record{x:number,y:record{z:string}}
 ```
 
 #### `table`

@@ -103,6 +103,24 @@ type foo record [x:number] type bar record [y:number] (table foo) unify (table b
 # Table does not unify with list
 list unify table record [x:number]	'~unify-fail' false
 
+# Record with user-defined type field (disjunct for optional)
+type OptStr (string or none) type foo record [x:number y:OptStr] foo	record{x:number,y:string|none}
+
+# Record with user-defined type - unification narrows disjunct
+type OptStr (string or none) type foo record [x:number y:OptStr] foo unify record [x:number y:string]	record{x:number,y:string} true
+
+# Make record with optional field - string value
+type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
+
+# Make record with optional field - none value
+type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 none]	{x:42,y:none}
+
+# Table with optional field - mixed string and none values
+type OptStr (string or none) type foo record [x:number y:OptStr] type bar table foo make bar [[1 "a"] [2 none]]	[{x:1,y:'a'},{x:2,y:none}]
+
+# Record with nested user-defined record type
+type Inner record [z:string] type Outer record [a:number b:Inner] Outer	record{a:number,b:record{z:string}}
+
 # Do - evaluate list contents
 do [1 add 2]	3
 

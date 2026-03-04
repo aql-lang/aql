@@ -887,6 +887,7 @@ func registerRecord(r *Registry) {
 			}
 			for _, key := range m.Keys() {
 				val, _ := m.Get(key)
+				val = resolveFieldType(r, val)
 				fields.Set(key, val)
 			}
 		}
@@ -1183,7 +1184,7 @@ func makeFieldValue(val Value, constraint Value) (Value, error) {
 }
 
 // resolveWordValue converts a word value to its semantic value.
-// Words named "true"/"false" become booleans, type names become type literals,
+// Words named "true"/"false" become booleans, "none" becomes a type literal,
 // and other words become atoms (bare strings).
 func resolveWordValue(v Value) Value {
 	if !v.IsWord() {
@@ -1195,9 +1196,34 @@ func resolveWordValue(v Value) Value {
 		return NewBoolean(true)
 	case "false":
 		return NewBoolean(false)
+	case "none":
+		return NewTypeLiteral(TNone)
 	default:
 		return NewAtom(name)
 	}
+}
+
+// resolveFieldType resolves a record field's type constraint value.
+// If the value is a string that matches a user-defined type name in DefStacks,
+// it is replaced with the defined type value. This allows record definitions
+// to reference user-defined types (e.g., disjunctions) by name:
+//
+//	type OptStr (string or none)
+//	type foo record [x:number y:OptStr]    => record{x:number,y:string|none}
+func resolveFieldType(r *Registry, v Value) Value {
+	if v.Data == nil || !v.VType.Matches(TString) {
+		return v
+	}
+	name := v.AsString()
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return v
+	}
+	top := stack[len(stack)-1]
+	if isTypeValue(top) {
+		return top
+	}
+	return v
 }
 
 // registerTypeDef registers the "type" word for defining custom types.
