@@ -735,25 +735,46 @@ make string true	'true'
 make string false	'false'
 
 # make record: positional fields
-def Point record [x:number y:number] make Point [1 2]	{x:1,y:2}
+type Point record [x:number y:number] make Point [1 2]	{x:1,y:2}
 
 # make record: named fields in declaration order
-def Point record [x:number y:number] make Point [x:1 y:2]	{x:1,y:2}
+type Point record [x:number y:number] make Point [x:1 y:2]	{x:1,y:2}
 
 # make record: named fields in different order
-def Point record [x:number y:number] make Point [y:3 x:4]	{x:4,y:3}
+type Point record [x:number y:number] make Point [y:3 x:4]	{x:4,y:3}
 
 # make record: type conversion applied to fields
-def bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # make record: named fields reordered with type conversion
-def bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # make record: field value conversion (string to number)
-def Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
+type Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
 
 # make with infix form
-def P record [x:number y:number] P make [1 2]	{x:1,y:2}
+type P record [x:number y:number] P make [1 2]	{x:1,y:2}
+
+# === type - custom type definitions ===
+
+# type with record
+type Vec record [x:number y:number] make Vec [3 4]	{x:3,y:4}
+
+# type with disjunct
+type OptNum (number or none) OptNum unify 5	5 true
+type OptNum (number or none) OptNum unify none	none true
+type OptNum (number or none) OptNum unify "hi"	'~unify-fail' false
+
+# type with type alias
+type Num number Num unify 42	42 true
+type Num number Num unify "hi"	'~unify-fail' false
+
+# type with typed list
+type Nums [:number] Nums unify [1,2,3]	[1,2,3] true
+type Nums [:number] Nums unify ["a"]	'~unify-fail' false
+
+# type with typed map
+type NumMap {:number} NumMap unify {a:1,b:2}	{a:1,b:2} true
 
 # === disjunct - union types via or ===
 

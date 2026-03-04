@@ -77,10 +77,10 @@ make boolean 1	true
 make boolean 0	false
 
 # Make - record type (positional)
-def bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # Make - record type (named fields, reordered)
-def bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # Disjunct - union types via or
 string or none	string|none
