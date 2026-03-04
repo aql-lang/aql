@@ -199,6 +199,7 @@ func registerBuiltins(r *Registry) {
 	registerFn(r)
 	registerConvert(r)
 	registerRecord(r)
+	registerTable(r)
 	registerMake(r)
 	registerTypeDef(r)
 	registerDo(r)
@@ -381,7 +382,7 @@ func installDef(r *Registry, name string, body Value) {
 				if _, ok := top.Data.(FnDefInfo); ok {
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
-				if top.VType.Equal(TList) && !top.IsTypedList() {
+				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
 					copy(result, elems)
@@ -898,6 +899,30 @@ func registerRecord(r *Registry) {
 	})
 }
 
+// registerTable registers the "table" word for creating table type values.
+//
+// table takes a single argument which must be a record type value. It produces
+// a table type that represents a list of record instances conforming to that
+// record schema.
+//
+//	type foo record [x:integer y:string]
+//	type bar table foo                        => defines bar as table{x:number/integer,y:string}
+//	table record [x:number]                   => table{x:number}
+func registerTable(r *Registry) {
+	tableHandler := func(args []Value) ([]Value, error) {
+		target := args[0]
+		if !target.IsRecordType() {
+			return nil, fmt.Errorf("table: argument must be a record type, got %s", target.String())
+		}
+		return []Value{NewTableType(target.AsRecordType())}, nil
+	}
+
+	r.Register("table", Signature{
+		Args:    []Type{TAny},
+		Handler: tableHandler,
+	})
+}
+
 // registerMake registers the "make" word for creating typed instances.
 //
 // Scalar forms:
@@ -986,6 +1011,86 @@ func registerMake(r *Registry) {
 			}
 
 			return []Value{NewMap(result)}, nil
+		}
+
+		// Table type instance creation.
+		if targetVal.IsTableType() {
+			tableType := targetVal.AsTableType()
+			recType := tableType.Record
+
+			if !srcVal.VType.Equal(TList) {
+				return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
+			}
+			rows := srcVal.AsList()
+			fieldKeys := recType.Fields.Keys()
+			resultRows := make([]Value, 0, len(rows))
+
+			for rowIdx, rowVal := range rows {
+				if !rowVal.VType.Equal(TList) {
+					return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
+				}
+				rowElems := rowVal.AsList()
+
+				// Check if named or positional.
+				isNamed := len(rowElems) > 0 && rowElems[0].VType.Equal(TMap)
+				if isNamed {
+					if _, ok := rowElems[0].Data.(*OrderedMap); !ok {
+						isNamed = false
+					}
+				}
+
+				result := NewOrderedMap()
+				if isNamed {
+					provided := NewOrderedMap()
+					for _, elem := range rowElems {
+						if !elem.VType.Equal(TMap) {
+							return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
+						}
+						m, ok := elem.Data.(*OrderedMap)
+						if !ok {
+							return nil, fmt.Errorf("make: table row %d: expected concrete map pair, got %s", rowIdx, elem.String())
+						}
+						for _, key := range m.Keys() {
+							val, _ := m.Get(key)
+							provided.Set(key, val)
+						}
+					}
+					for _, key := range fieldKeys {
+						val, ok := provided.Get(key)
+						if !ok {
+							return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
+						}
+						constraint, _ := recType.Fields.Get(key)
+						converted, err := makeFieldValue(val, constraint)
+						if err != nil {
+							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+						}
+						result.Set(key, converted)
+					}
+					for _, key := range provided.Keys() {
+						if _, ok := recType.Fields.Get(key); !ok {
+							return nil, fmt.Errorf("make: table row %d: unknown field %q", rowIdx, key)
+						}
+					}
+				} else {
+					if len(rowElems) != len(fieldKeys) {
+						return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
+							rowIdx, len(fieldKeys), len(rowElems))
+					}
+					for i, key := range fieldKeys {
+						constraint, _ := recType.Fields.Get(key)
+						converted, err := makeFieldValue(rowElems[i], constraint)
+						if err != nil {
+							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+						}
+						result.Set(key, converted)
+					}
+				}
+
+				resultRows = append(resultRows, NewMap(result))
+			}
+
+			return []Value{NewList(resultRows)}, nil
 		}
 
 		// Scalar type conversion.
@@ -1175,7 +1280,7 @@ func registerDo(r *Registry) {
 
 	var evalMapValue func(v Value) (Value, error)
 	evalMapValue = func(v Value) (Value, error) {
-		if v.VType.Equal(TList) && !v.IsTypedList() {
+		if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
 			results, err := evalDataList(v.AsList())
 			if err != nil {
 				return Value{}, err
@@ -1229,6 +1334,10 @@ func isTypeValue(v Value) bool {
 	}
 	// Record type
 	if v.IsRecordType() {
+		return true
+	}
+	// Table type
+	if v.IsTableType() {
 		return true
 	}
 	// Disjunct

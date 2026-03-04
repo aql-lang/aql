@@ -976,11 +976,57 @@ type Inner record [z:string]
 type Outer record [x:number y:Inner]
 ```
 
+#### `table`
+
+Create a table type from a record type. A table represents a list of
+record instances — each row is a map conforming to the record schema.
+
+*Signature:* `[record-type] -> [table-type]`
+*Precedence:* suffix
+
+```
+table record [x:number y:string]          => table{x:number,y:string}
+```
+
+Use with `type` to create named table types:
+
+```
+type foo record [x:integer y:string]
+type bar table foo
+bar                                        => table{x:number/integer,y:string}
+```
+
+Tables only unify with other tables, never with plain lists. Two table
+types unify by unifying their underlying record schemas.
+
+```
+type A record [x:any]
+type B record [x:number]
+(table A) unify (table B)                  => table{x:number} true
+```
+
+Tables do not unify with `list`:
+
+```
+list unify table record [x:number]         => '~unify-fail' false
+```
+
+Use `make` to create table instances from a list of row lists. Each
+inner list provides the values for one row, either positionally or by
+name:
+
+```
+type foo record [x:integer y:string]
+type bar table foo
+make bar [[1 a] [2 b]]                    => [{x:1,y:'a'},{x:2,y:'b'}]
+make bar [[x:1 y:a] [x:2 y:b]]           => [{x:1,y:'a'},{x:2,y:'b'}]
+```
+
 #### `type`
 
 Define a named type. The body must be a type value: a record type,
-disjunct, type literal, typed list, or typed map. Unlike `def`, `type`
-validates that the body is actually a type.
+table type, disjunct, type literal, typed list, or typed map. Unlike
+`def`, `type` validates that the body is actually a type.
 
 *Signatures:*
 - `[word, any] -> []`

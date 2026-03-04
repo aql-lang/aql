@@ -64,6 +64,13 @@ type RecordTypeInfo struct {
 	Fields *OrderedMap // field name → type-constraint Value
 }
 
+// TableTypeInfo holds the record schema for a table type.
+// A table represents a list of record instances that all conform to the
+// same record type.
+type TableTypeInfo struct {
+	Record RecordTypeInfo // the record type that each row must match
+}
+
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
 	Name string // empty for unnamed positional parameters
@@ -161,6 +168,13 @@ func NewTypedMap(child Value) Value {
 // keys x and y with number-typed values.
 func NewRecordType(fields *OrderedMap) Value {
 	return Value{VType: TMap, Data: RecordTypeInfo{Fields: fields}}
+}
+
+// NewTableType creates a table type value from a record type.
+// A table type constrains a list so that each element is a map conforming
+// to the given record schema.
+func NewTableType(record RecordTypeInfo) Value {
+	return Value{VType: TList, Data: TableTypeInfo{Record: record}}
 }
 
 // NewAtom creates an atom value from a bare unquoted word.
@@ -279,6 +293,17 @@ func (v Value) AsRecordType() RecordTypeInfo {
 	return v.Data.(RecordTypeInfo)
 }
 
+// IsTableType reports whether this value is a table type (list with record schema).
+func (v Value) IsTableType() bool {
+	_, ok := v.Data.(TableTypeInfo)
+	return ok && v.VType.Equal(TList)
+}
+
+// AsTableType returns the TableTypeInfo, panics if not a table type.
+func (v Value) AsTableType() TableTypeInfo {
+	return v.Data.(TableTypeInfo)
+}
+
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
 func (v Value) AsChildType() ChildTypeInfo {
 	return v.Data.(ChildTypeInfo)
@@ -345,6 +370,14 @@ func (v Value) String() string {
 		}
 		return "false"
 	case v.VType.Equal(TList):
+		if tt, ok := v.Data.(TableTypeInfo); ok {
+			parts := make([]string, 0, tt.Record.Fields.Len())
+			for _, k := range tt.Record.Fields.Keys() {
+				val, _ := tt.Record.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "table{" + strings.Join(parts, ",") + "}"
+		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}

@@ -87,15 +87,15 @@ func Unify(a, b Value) (Value, bool) {
 
 // unifyLists handles unification when at least one side is a list.
 func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
-	// Type literal "list" (Data==nil) unifies with any list type.
+	// Type literal "list" (Data==nil) unifies with any list type, but not tables.
 	if aIsList && a.Data == nil {
-		if bIsList {
+		if bIsList && !b.IsTableType() {
 			return b, true
 		}
 		return Value{}, false
 	}
 	if bIsList && b.Data == nil {
-		if aIsList {
+		if aIsList && !a.IsTableType() {
 			return a, true
 		}
 		return Value{}, false
@@ -103,6 +103,25 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	// Both must be list types.
 	if !aIsList || !bIsList {
+		return Value{}, false
+	}
+
+	// Check for table types (record-constrained lists).
+	// Tables only unify with other tables, never with plain lists.
+	aTable := a.IsTableType()
+	bTable := b.IsTableType()
+
+	if aTable && bTable {
+		// Both table types: unify their record schemas.
+		unified, ok := unifyRecordTypes(a.AsTableType().Record, b.AsTableType().Record)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTableType(unified.AsRecordType()), true
+	}
+
+	if aTable || bTable {
+		// One is a table, the other is not — cannot unify.
 		return Value{}, false
 	}
 
@@ -324,6 +343,14 @@ func valuesEqual(a, b Value) bool {
 	case a.VType.Matches(TBoolean):
 		return a.AsBoolean() == b.AsBoolean()
 	case a.VType.Equal(TList):
+		aTT, aTbl := a.Data.(TableTypeInfo)
+		bTT, bTbl := b.Data.(TableTypeInfo)
+		if aTbl && bTbl {
+			return mapsEqual(aTT.Record.Fields, bTT.Record.Fields)
+		}
+		if aTbl != bTbl {
+			return false
+		}
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {

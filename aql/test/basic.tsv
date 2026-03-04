@@ -82,6 +82,27 @@ type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:fals
 # Make - record type (named fields, reordered)
 type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
+# Table type - creation
+table record [x:number y:string]	table{x:number,y:string}
+
+# Table type - with type def
+type foo record [x:integer y:string] type bar table foo bar	table{x:number/integer,y:string}
+
+# Make - table type (positional)
+type foo record [x:integer y:string] type bar table foo make bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Make - table type (named fields)
+type foo record [x:integer y:string] type bar table foo make bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Table unification - compatible schemas
+type foo record [x:any] type bar record [x:number] (table foo) unify (table bar)	table{x:number} true
+
+# Table unification - incompatible schemas
+type foo record [x:number] type bar record [y:number] (table foo) unify (table bar)	'~unify-fail' false
+
+# Table does not unify with list
+list unify table record [x:number]	'~unify-fail' false
+
 # Do - evaluate list contents
 do [1 add 2]	3
 
