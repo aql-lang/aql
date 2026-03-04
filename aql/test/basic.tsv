@@ -16,9 +16,9 @@
 'world'	'world'
 ""	''
 
-# Unknown words become strings
-foo	'foo'
-abc	'abc'
+# Unknown words become atoms (bare, unquoted)
+foo	foo
+abc	abc
 
 # Multiple values on stack
 1 2 3	1 2 3
@@ -32,6 +32,7 @@ a upper	'A'
 # String functions - suffix
 lower "ABC"	'abc'
 lower B	'b'
+
 
 # Arithmetic - prefix
 1 2 add	3

@@ -56,6 +56,23 @@ type ChildTypeInfo struct {
 	Child Value
 }
 
+// FnParam describes one parameter in a function signature.
+type FnParam struct {
+	Name string // empty for unnamed positional parameters
+	Type Type
+}
+
+// FnSig describes one overload of a function definition.
+type FnSig struct {
+	Params []FnParam
+	Body   []Value
+}
+
+// FnDefInfo holds the parsed function specification for a def-defined function.
+type FnDefInfo struct {
+	Sigs []FnSig
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -124,6 +141,11 @@ func NewTypedMap(child Value) Value {
 	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
 }
 
+// NewAtom creates an atom value from a bare unquoted word.
+func NewAtom(name string) Value {
+	return Value{VType: TAtom, Data: name}
+}
+
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
@@ -161,6 +183,11 @@ func NewOpenParen() Value {
 	return Value{VType: TOpenParen, Data: nil}
 }
 
+// NewFnDef creates a function definition value for storage on DefStacks.
+func NewFnDef(info FnDefInfo) Value {
+	return Value{VType: TFnDef, Data: info}
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -179,6 +206,16 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsAtom reports whether this value is an atom.
+func (v Value) IsAtom() bool {
+	return v.VType.Equal(TAtom)
+}
+
+// AsAtom returns the string payload, panics if not an atom.
+func (v Value) AsAtom() string {
+	return v.Data.(string)
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
@@ -249,6 +286,8 @@ func (v Value) String() string {
 		return v.VType.String()
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
+	case v.VType.Equal(TAtom):
+		return v.Data.(string)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):

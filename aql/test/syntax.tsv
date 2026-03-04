@@ -35,10 +35,10 @@ none	none
 list	list
 map	map
 
-# === Unknown words become strings ===
-foo	'foo'
-abc	'abc'
-xyz	'xyz'
+# === Unknown words become atoms ===
+foo	foo
+abc	abc
+xyz	xyz
 
 # === Multiple values on stack ===
 1 2 3	1 2 3
@@ -79,6 +79,18 @@ lower "XYZ"	'xyz'
 10 div 3	3
 10 mod 3	1
 0 add 0	0
+
+# === String concatenation with add ===
+"hello" add " world"	'hello world'
+"a" add "b"	'ab'
+"count: " add 42	'count: 42'
+42 add " items"	'42 items'
+"flag: " add true	'flag: true'
+"val: " add foo	'val: foo'
+
+# Numbers still do integer addition
+1 add 2	3
+10 add -3	7
 
 # === Operator precedence ===
 2 add 3 mul 4	14
@@ -528,3 +540,165 @@ add		signature_error
 
 # Modulo by zero
 10 mod 0		modulo_by_zero
+
+# === undef - remove word definitions ===
+
+# Basic undef removes a definition
+def foo 1 foo undef foo foo	1 foo
+
+# Nested defs: undef reveals the shadowed definition
+def foo 1 def foo 2 foo undef foo foo	2 1
+
+# Multiple undefs peel off all layers
+def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo	3 2 1 foo
+
+# undef with string name
+def "bar" 42 bar undef "bar" bar	42 bar
+
+# Shadowed def with parenthesized expressions
+(def foo 1) (add foo 2) (def foo 3) (add foo 4) (undef foo) (add foo 5) (undef foo)	3 7 6
+
+# === var - scoped variable definitions ===
+
+# Basic var: take x from stack
+5 var [[x] x mul x]	25
+
+# var with inline value
+var [[[x 2]] x mul x]	4
+
+# var with multiple variables from stack
+3 5 var [[x y] x add y]	8
+
+# var with mixed inline and stack variables
+10 var [[[x 2] y] x add y]	12
+
+# var cleans up: word reverts to string after var
+5 var [[x] x mul x] x	25 x
+
+# var with arithmetic body
+7 var [[n] n mul n add n]	56
+
+# var with single inline value in body
+var [[[a 3] [b 4]] a mul a add b mul b]	25
+
+# var preserves existing definitions
+def foo 99 5 var [[x] x add foo] foo	104 99
+
+# Nested var does not leak
+3 var [[x] x add 1] x	4 x
+
+# === def with function signatures (fn word) ===
+
+# Named parameter function
+def square fn [[x:number] [number] [x mul x]] 5 square	25
+
+# Multiple named parameters
+def add2 fn [[x:number,y:number] [number] [x add y]] 3 5 add2	8
+
+# Unnamed parameters (positional, no pair syntax)
+def double fn [[number] [number] [dup add]] 7 double	14
+
+# Named parameters don't leak after call
+def sq fn [[x:number] [number] [x mul x]] 4 sq x	16 x
+
+# undef removes function def
+def sq fn [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 sq
+
+# Function def with infix call
+def sq fn [[x:number] [number] [x mul x]] sq 6	36
+
+# Multiple calls to function def
+def inc fn [[x:number] [number] [x add 1]] 1 inc inc inc	4
+
+# Function def shadows regular def
+(def foo 42) (def foo fn [[number] [number] [dup mul]]) (3 foo) (undef foo) foo	9 42
+
+# === Boolean operators ===
+
+# or
+true or true	true
+true or false	true
+false or true	true
+false or false	false
+
+# and
+true and true	true
+true and false	false
+false and true	false
+false and false	false
+
+# not
+true not	false
+false not	true
+not true	false
+not false	true
+
+# xor
+true xor true	false
+true xor false	true
+false xor true	true
+false xor false	false
+
+# nand
+true nand true	false
+true nand false	true
+false nand true	true
+false nand false	true
+
+# implies
+true implies true	true
+true implies false	false
+false implies true	true
+false implies false	true
+
+# Boolean precedence: and binds tighter than or
+true or false and false	true
+false and true or true	true
+
+# not with binary operators
+true and not false	true
+not true or false	false
+
+# === convert - type conversions ===
+
+# Integer to string
+convert 99 string	'99'
+convert 0 string	'0'
+convert -5 string	'-5'
+
+# Integer to string with variant
+convert 10 string "hex"	'a'
+convert 255 string "hex"	'ff'
+convert 255 string "HEX"	'FF'
+convert 10 string "bin"	'1010'
+convert 8 string "oct"	'10'
+
+# String to number
+convert "42" number	42
+convert "-5" number	-5
+
+# String to number with variant
+convert "ff" number "hex"	255
+convert "1010" number "bin"	10
+convert "10" number "oct"	8
+
+# Boolean to string
+convert true string	'true'
+convert false string	'false'
+
+# Number to boolean
+convert 1 boolean	true
+convert 0 boolean	false
+
+# String to boolean
+convert "true" boolean	true
+convert "false" boolean	false
+convert "" boolean	false
+convert "anything" boolean	true
+
+# Atom to string
+convert foo string	'foo'
+
+# Any to atom
+convert 42 atom	42
+convert "hello" atom	hello

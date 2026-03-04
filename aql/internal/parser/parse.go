@@ -13,9 +13,12 @@ import (
 var typeNames = map[string]engine.Type{
 	"any":     engine.TAny,
 	"none":    engine.TNone,
+	"scalar":  engine.TScalar,
 	"number":  engine.TNumber,
+	"integer": engine.TInteger,
 	"string":  engine.TString,
 	"boolean": engine.TBoolean,
+	"atom":    engine.TAtom,
 	"list":    engine.TList,
 	"map":     engine.TMap,
 }
@@ -179,6 +182,14 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		}
 		return convertMapData(val.Val)
 
+	case map[string]any:
+		// Raw map from list.pair syntax (e.g., [x:number] produces
+		// map[string]any{"x": Text("number")} inside the list).
+		if hasMapChild(val) {
+			return convertTypedMap(val)
+		}
+		return convertMapData(val)
+
 	case jsonic.ListRef:
 		if val.Child != nil {
 			return convertTypedList(val)
@@ -241,6 +252,12 @@ func convertDataValue(v any) (engine.Value, error) {
 			return convertTypedMap(val.Val)
 		}
 		return convertMapData(val.Val)
+
+	case map[string]any:
+		if hasMapChild(val) {
+			return convertTypedMap(val)
+		}
+		return convertMapData(val)
 
 	case jsonic.ListRef:
 		if val.Child != nil {

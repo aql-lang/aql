@@ -7,12 +7,19 @@ import "fmt"
 var typeNames = map[string]Type{
 	"any":     TAny,
 	"none":    TNone,
+	"scalar":  TScalar,
 	"number":  TNumber,
+	"integer": TInteger,
 	"string":  TString,
 	"boolean": TBoolean,
+	"atom":    TAtom,
 	"list":    TList,
 	"map":     TMap,
 }
+
+// stackHeadroom is the extra capacity allocated beyond current need,
+// so that most insert/splice operations avoid heap allocation.
+const stackHeadroom = 8
 
 // Engine is the AQL stack machine.
 type Engine struct {
@@ -26,10 +33,55 @@ func New(registry *Registry) *Engine {
 	return &Engine{registry: registry}
 }
 
+// stackInsert inserts val at index i, shifting elements right.
+// Only allocates when capacity is exhausted.
+func (e *Engine) stackInsert(i int, val Value) {
+	e.stack = append(e.stack, Value{})
+	copy(e.stack[i+1:], e.stack[i:len(e.stack)-1])
+	e.stack[i] = val
+}
+
+// stackRemove removes the element at index i, shifting elements left.
+// Zeroes the freed slot to release interface references.
+func (e *Engine) stackRemove(i int) {
+	copy(e.stack[i:], e.stack[i+1:])
+	e.stack[len(e.stack)-1] = Value{}
+	e.stack = e.stack[:len(e.stack)-1]
+}
+
+// stackSplice removes count elements starting at index i and inserts
+// replacements in their place. Only allocates when net growth exceeds capacity.
+func (e *Engine) stackSplice(i, count int, replacements ...Value) {
+	delta := len(replacements) - count
+	oldLen := len(e.stack)
+	newLen := oldLen + delta
+
+	if delta > 0 {
+		// Grow: ensure capacity, then shift tail right.
+		for cap(e.stack) < newLen {
+			e.stack = append(e.stack, Value{})
+		}
+		e.stack = e.stack[:newLen]
+		copy(e.stack[i+len(replacements):], e.stack[i+count:oldLen])
+	} else if delta < 0 {
+		// Shrink: shift tail left, zero freed slots.
+		copy(e.stack[i+len(replacements):], e.stack[i+count:])
+		for j := newLen; j < oldLen; j++ {
+			e.stack[j] = Value{}
+		}
+		e.stack = e.stack[:newLen]
+	}
+	copy(e.stack[i:], replacements)
+}
+
 // Run executes the input values through the stack machine and returns the
 // resulting stack.
 func (e *Engine) Run(input []Value) ([]Value, error) {
-	e.stack = make([]Value, len(input))
+	if cap(e.stack) >= len(input) {
+		e.stack = e.stack[:len(input)]
+	} else {
+		e.stack = make([]Value, len(input), len(input)+stackHeadroom)
+	}
 	copy(e.stack, input)
 	e.pointer = 0
 
@@ -92,7 +144,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 		funcIdx := fwd.FuncIndex
 
 		// Remove the forward marker.
-		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		e.stackRemove(fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -143,6 +195,14 @@ func (e *Engine) stepWord(val Value) error {
 		return e.stepCloseParen()
 	}
 
+	// If there is a pending forward whose next expected argument is TWord,
+	// collect this word as-is rather than executing it. This lets words
+	// like def, undef, and var receive word names even for already-defined
+	// words (e.g. "undef foo" when foo is defined).
+	if e.hasPendingForwardExpectingWord() {
+		return e.stepLiteral()
+	}
+
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
@@ -158,10 +218,7 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
-		if e.hasPendingForwardExpectingWord() {
-			return e.stepLiteral()
-		}
-		e.stack[e.pointer] = NewString(w.Name)
+		e.stack[e.pointer] = NewAtom(w.Name)
 		return nil
 	}
 
@@ -185,24 +242,32 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	if fn.SuffixPrecedence {
-		// Try prefix first (if all args are on stack already).
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
+
+		// Use prefix match only if it has args (typed signature).
+		// Defer 0-arg matches (generic def handler) so suffix-mode
+		// typed signatures get a chance to collect arguments first.
+		if match != nil && len(match.Sig.Args) > 0 {
+			return e.execMatch(match)
+		}
+
+		// Try suffix: create forward to collect remaining args.
+		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+		if bestSig != nil {
+			suffixNeeded := len(bestSig.Args) - prefixCount
+			if suffixNeeded <= 0 {
+				suffixNeeded = len(bestSig.Args)
+			}
+			return e.insertForward(w, bestSig, suffixNeeded)
+		}
+
+		// Fall back to 0-arg match (generic def handler).
 		if match != nil {
 			return e.execMatch(match)
 		}
 
-		// No full prefix match — create forward to collect remaining suffix args.
-		// Count how many prefix args are already available on the resolved stack.
-		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
-		if bestSig == nil {
-			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
-		}
-		suffixNeeded := len(bestSig.Args) - prefixCount
-		if suffixNeeded <= 0 {
-			suffixNeeded = len(bestSig.Args)
-		}
-		return e.insertForward(w, bestSig, suffixNeeded)
+		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
 
 	// Prefix-only function (dup, swap, drop).
@@ -276,12 +341,41 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 
 		score := signatureScore(sig)
 
+		// Bonus for prefix args already on the stack: each matching
+		// prefix arg adds 25 to the score. This helps signatures that
+		// partially match the existing stack win over those that don't.
+		score += prefixCount * 25
+
 		// Bonus: if the peeked suffix value matches the first expected
 		// suffix arg type, boost this sig's score to prefer it.
 		// In the suffix-first model, suffix always fills from Args[0].
 		if peekVal != nil && prefixCount < len(sig.Args) {
 			firstSuffixType := sig.Args[0]
-			if peekVal.VType.Matches(firstSuffixType) {
+			matched := peekVal.VType.Matches(firstSuffixType)
+			// Predict resolved types for words that haven't executed yet.
+			if !matched && peekVal.IsWord() {
+				pw := peekVal.AsWord()
+				switch {
+				case pw.Name == "true" || pw.Name == "false":
+					matched = TBoolean.Matches(firstSuffixType)
+				case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
+					// Skip structural words.
+				default:
+					if _, isType := typeNames[pw.Name]; isType {
+						// Type names stay as type literals, not useful
+						// for suffix prediction here.
+					} else if e.registry.Lookup(pw.Name) == nil {
+						// Unknown word → will resolve to atom.
+						matched = TAtom.Matches(firstSuffixType)
+					}
+					// Also check TWord for sigs expecting word literals
+					// (e.g. set, def).
+					if !matched {
+						matched = peekVal.VType.Matches(firstSuffixType)
+					}
+				}
+			}
+			if matched {
 				score += 50
 			}
 		}
@@ -310,35 +404,27 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	if len(indices) == n && n > 0 {
 		firstArgIdx := indices[0]
 
-		// Build new stack: keep everything before first arg, skip arg indices
-		// and the word, keep internal forwards, insert results.
+		// Compact: slide non-skip elements over skip elements in
+		// [firstArgIdx..pointer] to preserve internal forwards.
 		skipSet := make(map[int]bool, n+1)
 		for _, idx := range indices {
 			skipSet[idx] = true
 		}
 		skipSet[e.pointer] = true // skip the word itself
 
-		newStack := make([]Value, 0, len(e.stack)-n-1+len(results))
-		newStack = append(newStack, e.stack[:firstArgIdx]...)
-
-		// Copy non-arg, non-word items between first arg and after word.
+		dst := firstArgIdx
 		for i := firstArgIdx; i <= e.pointer; i++ {
 			if !skipSet[i] {
-				newStack = append(newStack, e.stack[i])
+				e.stack[dst] = e.stack[i]
+				dst++
 			}
 		}
-
-		newStack = append(newStack, results...)
-		newStack = append(newStack, e.stack[e.pointer+1:]...)
-		e.stack = newStack
+		// Splice out the compacted garbage, insert results.
+		e.stackSplice(dst, e.pointer+1-dst, results...)
 		e.pointer = firstArgIdx
 	} else if n == 0 {
 		// No args, just replace the word with results.
-		newStack := make([]Value, 0, len(e.stack)-1+len(results))
-		newStack = append(newStack, e.stack[:e.pointer]...)
-		newStack = append(newStack, results...)
-		newStack = append(newStack, e.stack[e.pointer+1:]...)
-		e.stack = newStack
+		e.stackSplice(e.pointer, 1, results...)
 		// Pointer stays at same position to re-examine results.
 	} else {
 		// Fallback: simple contiguous splice.
@@ -346,11 +432,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if argStart < 0 {
 			argStart = 0
 		}
-		newStack := make([]Value, 0, len(e.stack)-n-1+len(results))
-		newStack = append(newStack, e.stack[:argStart]...)
-		newStack = append(newStack, results...)
-		newStack = append(newStack, e.stack[e.pointer+1:]...)
-		e.stack = newStack
+		e.stackSplice(argStart, e.pointer+1-argStart, results...)
 		e.pointer = argStart
 	}
 
@@ -387,11 +469,7 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int) err
 		Sig:          sig,
 	})
 
-	newStack := make([]Value, 0, len(e.stack)+1)
-	newStack = append(newStack, e.stack[:e.pointer+1]...)
-	newStack = append(newStack, fwd)
-	newStack = append(newStack, e.stack[e.pointer+1:]...)
-	e.stack = newStack
+	e.stackInsert(e.pointer+1, fwd)
 
 	e.pointer += 2
 	return nil
@@ -444,7 +522,7 @@ func (e *Engine) stepLiteral() error {
 
 	// Remove the value from its current position.
 	val := e.stack[valIdx]
-	e.stack = append(e.stack[:valIdx], e.stack[valIdx+1:]...)
+	e.stackRemove(valIdx)
 
 	// After removal, adjust indices if valIdx was before them.
 	if valIdx < funcIdx {
@@ -460,11 +538,7 @@ func (e *Engine) stepLiteral() error {
 	// The word retries as prefix with args in their natural order.
 	insertIdx := funcIdx
 
-	newStack := make([]Value, 0, len(e.stack)+1)
-	newStack = append(newStack, e.stack[:insertIdx]...)
-	newStack = append(newStack, val)
-	newStack = append(newStack, e.stack[insertIdx:]...)
-	e.stack = newStack
+	e.stackInsert(insertIdx, val)
 
 	funcIdx++
 	fwdIdx++
@@ -474,7 +548,7 @@ func (e *Engine) stepLiteral() error {
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All suffix args collected. Remove forward, force prefix, retry.
-		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		e.stackRemove(fwdIdx)
 		// fwdIdx is after funcIdx, so funcIdx is unaffected.
 
 		if e.stack[funcIdx].IsWord() {
@@ -496,7 +570,7 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
-	e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+	e.stackRemove(fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
@@ -527,7 +601,7 @@ func (e *Engine) stepEnd() error {
 	}
 
 	if fwdIdx < 0 {
-		e.stack = append(e.stack[:endIdx], e.stack[endIdx+1:]...)
+		e.stackRemove(endIdx)
 		return nil
 	}
 
@@ -537,19 +611,19 @@ func (e *Engine) stepEnd() error {
 	// Remove forward and end from the stack.
 	// Remove higher index first to preserve lower indices.
 	if endIdx > fwdIdx {
-		e.stack = append(e.stack[:endIdx], e.stack[endIdx+1:]...)
-		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		e.stackRemove(endIdx)
+		e.stackRemove(fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx-- // forward removal
 		}
 		// end was already removed (endIdx > fwdIdx), endIdx > funcIdx always
 	} else {
-		e.stack = append(e.stack[:fwdIdx], e.stack[fwdIdx+1:]...)
+		e.stackRemove(fwdIdx)
 		newEndIdx := endIdx
 		if fwdIdx < endIdx {
 			newEndIdx--
 		}
-		e.stack = append(e.stack[:newEndIdx], e.stack[newEndIdx+1:]...)
+		e.stackRemove(newEndIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -604,7 +678,7 @@ func (e *Engine) stepCloseParen() error {
 				funcIdx := fwd.FuncIndex
 
 				// Remove the forward.
-				e.stack = append(e.stack[:i], e.stack[i+1:]...)
+				e.stackRemove(i)
 				closeIdx--
 				if i < funcIdx {
 					funcIdx--
@@ -661,18 +735,10 @@ func (e *Engine) stepCloseParen() error {
 		}
 	}
 
-	// Collect resolved values.
-	results := make([]Value, 0, closeIdx-openIdx-1)
-	for i := openIdx + 1; i < closeIdx; i++ {
-		results = append(results, e.stack[i])
-	}
-
-	// Splice.
-	newStack := make([]Value, 0, len(e.stack)-(closeIdx-openIdx+1)+len(results))
-	newStack = append(newStack, e.stack[:openIdx]...)
-	newStack = append(newStack, results...)
-	newStack = append(newStack, e.stack[closeIdx+1:]...)
-	e.stack = newStack
+	// Remove the close paren (higher index first) and open paren.
+	// The values between them are already in place.
+	e.stackRemove(closeIdx)
+	e.stackRemove(openIdx)
 
 	e.pointer = openIdx
 	return nil

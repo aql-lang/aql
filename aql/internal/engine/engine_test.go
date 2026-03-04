@@ -427,8 +427,6 @@ func TestArithmeticErrors(t *testing.T) {
 		// modulo by zero
 		{"mod by zero prefix", []Value{NewInteger(10), NewInteger(0), NewWord("mod")}},
 		{"mod by zero infix", []Value{NewInteger(10), NewWord("mod"), NewInteger(0)}},
-		// type mismatch: string with add
-		{"string add", []Value{NewString("a"), NewInteger(1), NewWord("add")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1489,11 +1487,14 @@ func TestEdgeArithmeticOneArg(t *testing.T) {
 }
 
 func TestEdgeArithmeticStringOperands(t *testing.T) {
-	// "hello" add "world" → error (strings can't be added)
+	// "hello" add "world" → "helloworld" (string concatenation)
 	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
-	if err == nil {
-		t.Fatal("expected error for string add, got nil")
+	result, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "helloworld" {
+		t.Fatalf("got %v, want 'helloworld'", result)
 	}
 }
 
@@ -2242,13 +2243,16 @@ func TestEdgeSuffixUpperThenLower(t *testing.T) {
 // --- Edge: signature matching specifics ---
 
 func TestEdgeAddWithStringAndInt(t *testing.T) {
-	// "hello" 1 add → error (string doesn't match int for add's first arg)
+	// "hello" 1 add → "hello1" (string concatenation via scalar+scalar)
 	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(1), NewWord("add"),
 	})
-	if err == nil {
-		t.Fatal("expected error for string+int add, got nil")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "hello1" {
+		t.Fatalf("got %v, want 'hello1'", result)
 	}
 }
 
@@ -3275,5 +3279,168 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	}
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+// --- Stack helper method tests ---
+
+func TestStackInsert(t *testing.T) {
+	tests := []struct {
+		name  string
+		start []int
+		idx   int
+		val   int
+		want  []int
+	}{
+		{"insert at start", []int{2, 3}, 0, 1, []int{1, 2, 3}},
+		{"insert at middle", []int{1, 3}, 1, 2, []int{1, 2, 3}},
+		{"insert at end", []int{1, 2}, 2, 3, []int{1, 2, 3}},
+		{"insert into empty", []int{}, 0, 1, []int{1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &Engine{}
+			e.stack = make([]Value, len(tt.start))
+			for i, v := range tt.start {
+				e.stack[i] = NewInteger(int64(v))
+			}
+			e.stackInsert(tt.idx, NewInteger(int64(tt.val)))
+			if len(e.stack) != len(tt.want) {
+				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
+			}
+			for i, w := range tt.want {
+				if e.stack[i].AsInteger() != int64(w) {
+					t.Errorf("stack[%d] = %d, want %d", i, e.stack[i].AsInteger(), w)
+				}
+			}
+		})
+	}
+}
+
+func TestStackRemove(t *testing.T) {
+	tests := []struct {
+		name  string
+		start []int
+		idx   int
+		want  []int
+	}{
+		{"remove first", []int{1, 2, 3}, 0, []int{2, 3}},
+		{"remove middle", []int{1, 2, 3}, 1, []int{1, 3}},
+		{"remove last", []int{1, 2, 3}, 2, []int{1, 2}},
+		{"remove only", []int{1}, 0, []int{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &Engine{}
+			e.stack = make([]Value, len(tt.start))
+			for i, v := range tt.start {
+				e.stack[i] = NewInteger(int64(v))
+			}
+			e.stackRemove(tt.idx)
+			if len(e.stack) != len(tt.want) {
+				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
+			}
+			for i, w := range tt.want {
+				if e.stack[i].AsInteger() != int64(w) {
+					t.Errorf("stack[%d] = %d, want %d", i, e.stack[i].AsInteger(), w)
+				}
+			}
+		})
+	}
+}
+
+func TestStackSplice(t *testing.T) {
+	tests := []struct {
+		name         string
+		start        []int
+		idx, count   int
+		replacements []int
+		want         []int
+	}{
+		{"replace 1 with 1", []int{1, 2, 3}, 1, 1, []int{9}, []int{1, 9, 3}},
+		{"shrink", []int{1, 2, 3, 4}, 1, 2, []int{9}, []int{1, 9, 4}},
+		{"grow", []int{1, 4}, 1, 1, []int{2, 3}, []int{1, 2, 3}},
+		{"remove all", []int{1, 2, 3}, 0, 3, []int{}, []int{}},
+		{"insert at start", []int{2, 3}, 0, 0, []int{1}, []int{1, 2, 3}},
+		{"insert at end", []int{1, 2}, 2, 0, []int{3}, []int{1, 2, 3}},
+		{"replace many with many", []int{1, 2, 3, 4, 5}, 1, 3, []int{8, 9}, []int{1, 8, 9, 5}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &Engine{}
+			e.stack = make([]Value, len(tt.start))
+			for i, v := range tt.start {
+				e.stack[i] = NewInteger(int64(v))
+			}
+			reps := make([]Value, len(tt.replacements))
+			for i, v := range tt.replacements {
+				reps[i] = NewInteger(int64(v))
+			}
+			e.stackSplice(tt.idx, tt.count, reps...)
+			if len(e.stack) != len(tt.want) {
+				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
+			}
+			for i, w := range tt.want {
+				if e.stack[i].AsInteger() != int64(w) {
+					t.Errorf("stack[%d] = %d, want %d", i, e.stack[i].AsInteger(), w)
+				}
+			}
+		})
+	}
+}
+
+func TestStackInsertWithHeadroom(t *testing.T) {
+	e := &Engine{}
+	e.stack = make([]Value, 3, 10)
+	for i := range e.stack {
+		e.stack[i] = NewInteger(int64(i + 1))
+	}
+	e.stackInsert(1, NewInteger(99))
+	if len(e.stack) != 4 {
+		t.Fatalf("len = %d, want 4", len(e.stack))
+	}
+	if cap(e.stack) != 10 {
+		t.Fatalf("cap = %d, want 10 (should not have reallocated)", cap(e.stack))
+	}
+	want := []int64{1, 99, 2, 3}
+	for i, w := range want {
+		if e.stack[i].AsInteger() != w {
+			t.Errorf("stack[%d] = %d, want %d", i, e.stack[i].AsInteger(), w)
+		}
+	}
+}
+
+// --- Benchmarks ---
+
+func BenchmarkSimpleExpression(b *testing.B) {
+	reg := DefaultRegistry()
+	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		eng := New(reg)
+		_, _ = eng.Run(input)
+	}
+}
+
+func BenchmarkComplexExpression(b *testing.B) {
+	reg := DefaultRegistry()
+	input := []Value{
+		NewInteger(1), NewInteger(2), NewWord("add"),
+		NewInteger(3), NewWord("mul"),
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		eng := New(reg)
+		_, _ = eng.Run(input)
+	}
+}
+
+func BenchmarkRepeatedRun(b *testing.B) {
+	reg := DefaultRegistry()
+	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
+	eng := New(reg)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = eng.Run(input)
 	}
 }
