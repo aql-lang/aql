@@ -1204,25 +1204,58 @@ func resolveWordValue(v Value) Value {
 }
 
 // resolveFieldType resolves a record field's type constraint value.
-// If the value is a string that matches a user-defined type name in DefStacks,
-// it is replaced with the defined type value. This allows record definitions
-// to reference user-defined types (e.g., disjunctions) by name:
+//
+// Three resolution strategies:
+//  1. String matching a user-defined type name in DefStacks → replaced
+//     with the defined type value (e.g., disjunctions by name).
+//  2. Concrete list → evaluated as code in a sub-engine so that
+//     expressions like [string or none] produce a disjunction.
+//  3. Everything else passes through unchanged.
+//
+// Examples:
 //
 //	type OptStr (string or none)
-//	type foo record [x:number y:OptStr]    => record{x:number,y:string|none}
+//	record [x:number y:OptStr]              => record{x:number,y:string|none}
+//	record [x:number y:[string or none]]    => record{x:number,y:string|none}
 func resolveFieldType(r *Registry, v Value) Value {
-	if v.Data == nil || !v.VType.Matches(TString) {
+	// Strategy 1: string matching a defined type name.
+	if v.Data != nil && v.VType.Matches(TString) {
+		name := v.AsString()
+		stack := r.DefStacks[name]
+		if len(stack) > 0 {
+			top := stack[len(stack)-1]
+			if isTypeValue(top) {
+				return top
+			}
+		}
 		return v
 	}
-	name := v.AsString()
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+
+	// Strategy 2: evaluate concrete list as code.
+	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+		elems := v.AsList()
+		// Promote strings that name registered functions to words,
+		// since list elements inside pairs are parsed in data context.
+		input := make([]Value, len(elems))
+		for i, e := range elems {
+			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
+				name := e.AsString()
+				if r.Lookup(name) != nil {
+					input[i] = NewWord(name)
+					continue
+				}
+			}
+			input[i] = e
+		}
+		sub := New(r)
+		results, err := sub.Run(input)
+		if err == nil && len(results) == 1 {
+			return results[0]
+		}
+		// If evaluation fails or produces multiple values, keep original.
 		return v
 	}
-	top := stack[len(stack)-1]
-	if isTypeValue(top) {
-		return top
-	}
+
 	return v
 }
 
