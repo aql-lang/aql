@@ -35,10 +35,10 @@ none	none
 list	list
 map	map
 
-# === Unknown words become strings ===
-foo	'foo'
-abc	'abc'
-xyz	'xyz'
+# === Unknown words become atoms ===
+foo	foo
+abc	abc
+xyz	xyz
 
 # === Multiple values on stack ===
 1 2 3	1 2 3
@@ -532,16 +532,16 @@ add		signature_error
 # === undef - remove word definitions ===
 
 # Basic undef removes a definition
-def foo 1 foo undef foo foo	1 'foo'
+def foo 1 foo undef foo foo	1 foo
 
 # Nested defs: undef reveals the shadowed definition
 def foo 1 def foo 2 foo undef foo foo	2 1
 
 # Multiple undefs peel off all layers
-def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo	3 2 1 'foo'
+def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo	3 2 1 foo
 
 # undef with string name
-def "bar" 42 bar undef "bar" bar	42 'bar'
+def "bar" 42 bar undef "bar" bar	42 bar
 
 # Shadowed def with parenthesized expressions
 (def foo 1) (add foo 2) (def foo 3) (add foo 4) (undef foo) (add foo 5) (undef foo)	3 7 6
@@ -561,7 +561,7 @@ var [[[x 2]] x mul x]	4
 10 var [[[x 2] y] x add y]	12
 
 # var cleans up: word reverts to string after var
-5 var [[x] x mul x] x	25 'x'
+5 var [[x] x mul x] x	25 x
 
 # var with arithmetic body
 7 var [[n] n mul n add n]	56
@@ -573,7 +573,7 @@ var [[[a 3] [b 4]] a mul a add b mul b]	25
 def foo 99 5 var [[x] x add foo] foo	104 99
 
 # Nested var does not leak
-3 var [[x] x add 1] x	4 'x'
+3 var [[x] x add 1] x	4 x
 
 # === def with function signatures (fn word) ===
 
@@ -587,10 +587,10 @@ def add2 fn [[x:number,y:number] [number] [x add y]] 3 5 add2	8
 def double fn [[number] [number] [dup add]] 7 double	14
 
 # Named parameters don't leak after call
-def sq fn [[x:number] [number] [x mul x]] 4 sq x	16 'x'
+def sq fn [[x:number] [number] [x mul x]] 4 sq x	16 x
 
 # undef removes function def
-def sq fn [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 'sq'
+def sq fn [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 sq
 
 # Function def with infix call
 def sq fn [[x:number] [number] [x mul x]] sq 6	36
@@ -646,3 +646,47 @@ false and true or true	true
 # not with binary operators
 true and not false	true
 not true or false	false
+
+# === convert - type conversions ===
+
+# Integer to string
+convert 99 string	'99'
+convert 0 string	'0'
+convert -5 string	'-5'
+
+# Integer to string with variant
+convert 10 string "hex"	'a'
+convert 255 string "hex"	'ff'
+convert 255 string "HEX"	'FF'
+convert 10 string "bin"	'1010'
+convert 8 string "oct"	'10'
+
+# String to number
+convert "42" number	42
+convert "-5" number	-5
+
+# String to number with variant
+convert "ff" number "hex"	255
+convert "1010" number "bin"	10
+convert "10" number "oct"	8
+
+# Boolean to string
+convert true string	'true'
+convert false string	'false'
+
+# Number to boolean
+convert 1 boolean	true
+convert 0 boolean	false
+
+# String to boolean
+convert "true" boolean	true
+convert "false" boolean	false
+convert "" boolean	false
+convert "anything" boolean	true
+
+# Atom to string
+convert foo string	'foo'
+
+# Any to atom
+convert 42 atom	42
+convert "hello" atom	hello

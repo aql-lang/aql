@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -71,23 +72,25 @@ func DefaultRegistry() *Registry {
 }
 
 func registerBuiltins(r *Registry) {
-	// upper: [string] -> [string]
-	r.Register("upper", Signature{
-		Args: []Type{TString},
-		Handler: func(args []Value) ([]Value, error) {
-			s := args[0].AsString()
-			return []Value{NewString(strings.ToUpper(s))}, nil
-		},
-	})
+	// upper: [string|atom] -> [string]
+	upperHandler := func(args []Value) ([]Value, error) {
+		s := args[0].Data.(string)
+		return []Value{NewString(strings.ToUpper(s))}, nil
+	}
+	r.Register("upper",
+		Signature{Args: []Type{TString}, Handler: upperHandler},
+		Signature{Args: []Type{TAtom}, Handler: upperHandler},
+	)
 
-	// lower: [string] -> [string]
-	r.Register("lower", Signature{
-		Args: []Type{TString},
-		Handler: func(args []Value) ([]Value, error) {
-			s := args[0].AsString()
-			return []Value{NewString(strings.ToLower(s))}, nil
-		},
-	})
+	// lower: [string|atom] -> [string]
+	lowerHandler := func(args []Value) ([]Value, error) {
+		s := args[0].Data.(string)
+		return []Value{NewString(strings.ToLower(s))}, nil
+	}
+	r.Register("lower",
+		Signature{Args: []Type{TString}, Handler: lowerHandler},
+		Signature{Args: []Type{TAtom}, Handler: lowerHandler},
+	)
 
 	// dup: [any] -> [any, any] (prefix-only)
 	dupHandler := func(args []Value) ([]Value, error) {
@@ -157,6 +160,7 @@ func registerBuiltins(r *Registry) {
 	registerUndef(r)
 	registerVar(r)
 	registerFn(r)
+	registerConvert(r)
 }
 
 // storeKey converts a Value to a string key for the store.
@@ -166,6 +170,9 @@ func storeKey(v Value) string {
 	}
 	if v.VType.Matches(TString) {
 		return v.AsString()
+	}
+	if v.IsAtom() {
+		return v.AsAtom()
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
@@ -655,4 +662,154 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 		}
 		r.Register(name, Signature{Args: argTypes, Handler: handler})
 	}
+}
+
+// registerConvert registers the "convert" word for type conversions.
+//
+// convert takes a source value, a target type literal, and an optional
+// variant string. It converts the source value to the target scalar type.
+//
+//	convert 99 string       => "99"
+//	convert 10 string "hex" => "a"
+//	convert "42" number     => 42
+//	convert true string     => "true"
+func registerConvert(r *Registry) {
+	// scalarText extracts a string representation from any scalar value.
+	scalarText := func(v Value) string {
+		switch {
+		case v.VType.Matches(TString):
+			return v.AsString()
+		case v.IsAtom():
+			return v.AsAtom()
+		case v.VType.Matches(TInteger):
+			return strconv.FormatInt(v.AsInteger(), 10)
+		case v.VType.Matches(TBoolean):
+			if v.AsBoolean() {
+				return "true"
+			}
+			return "false"
+		default:
+			return v.String()
+		}
+	}
+
+	// convertTo performs the actual conversion.
+	convertTo := func(src Value, targetType Type, variant string) (Value, error) {
+		switch {
+		case targetType.Matches(TString):
+			// Convert to string.
+			if variant == "" {
+				return NewString(scalarText(src)), nil
+			}
+			// Variant-based string conversion (only for numbers).
+			if !src.VType.Matches(TNumber) {
+				return Value{}, fmt.Errorf("convert: variant %q only supported for number to string", variant)
+			}
+			n := src.AsInteger()
+			switch variant {
+			case "hex":
+				return NewString(strconv.FormatInt(n, 16)), nil
+			case "HEX":
+				return NewString(strings.ToUpper(strconv.FormatInt(n, 16))), nil
+			case "bin":
+				return NewString(strconv.FormatInt(n, 2)), nil
+			case "oct":
+				return NewString(strconv.FormatInt(n, 8)), nil
+			default:
+				return Value{}, fmt.Errorf("convert: unknown string variant %q", variant)
+			}
+
+		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
+			// Convert to number.
+			text := scalarText(src)
+			if variant == "" {
+				n, err := strconv.ParseInt(text, 10, 64)
+				if err != nil {
+					return Value{}, fmt.Errorf("convert: cannot convert %q to number", text)
+				}
+				return NewInteger(n), nil
+			}
+			var base int
+			switch variant {
+			case "hex":
+				base = 16
+			case "bin":
+				base = 2
+			case "oct":
+				base = 8
+			default:
+				return Value{}, fmt.Errorf("convert: unknown number variant %q", variant)
+			}
+			n, err := strconv.ParseInt(text, base, 64)
+			if err != nil {
+				return Value{}, fmt.Errorf("convert: cannot convert %q to number (base %d)", text, base)
+			}
+			return NewInteger(n), nil
+
+		case targetType.Matches(TBoolean):
+			// Convert to boolean.
+			switch {
+			case src.VType.Matches(TBoolean):
+				return src, nil
+			case src.VType.Matches(TNumber):
+				return NewBoolean(src.AsInteger() != 0), nil
+			default:
+				text := scalarText(src)
+				switch text {
+				case "true":
+					return NewBoolean(true), nil
+				case "false":
+					return NewBoolean(false), nil
+				default:
+					return NewBoolean(text != ""), nil
+				}
+			}
+
+		case targetType.Equal(TAtom):
+			// Convert to atom.
+			return NewAtom(scalarText(src)), nil
+
+		default:
+			return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)
+		}
+	}
+
+	// 2-arg: convert value type
+	convert2Handler := func(args []Value) ([]Value, error) {
+		src := args[0]
+		if args[1].Data != nil {
+			return nil, fmt.Errorf("convert: second argument must be a type literal")
+		}
+		result, err := convertTo(src, args[1].VType, "")
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	// 3-arg: convert value type variant
+	convert3Handler := func(args []Value) ([]Value, error) {
+		src := args[0]
+		if args[1].Data != nil {
+			return nil, fmt.Errorf("convert: second argument must be a type literal")
+		}
+		variant := args[2].Data.(string)
+		result, err := convertTo(src, args[1].VType, variant)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	r.Register("convert",
+		// 3-arg variant registered first (higher score from more args)
+		Signature{
+			Args:    []Type{TAny, TAny, TString},
+			Handler: convert3Handler,
+		},
+		Signature{
+			Args:    []Type{TAny, TAny},
+			Handler: convert2Handler,
+		},
+	)
 }

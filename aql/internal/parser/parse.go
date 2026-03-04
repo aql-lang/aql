@@ -13,9 +13,12 @@ import (
 var typeNames = map[string]engine.Type{
 	"any":     engine.TAny,
 	"none":    engine.TNone,
+	"scalar":  engine.TScalar,
 	"number":  engine.TNumber,
+	"integer": engine.TInteger,
 	"string":  engine.TString,
 	"boolean": engine.TBoolean,
+	"atom":    engine.TAtom,
 	"list":    engine.TList,
 	"map":     engine.TMap,
 }

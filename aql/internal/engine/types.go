@@ -10,22 +10,24 @@ type Type struct {
 
 // Well-known types.
 var (
-	TAny         = NewType("any")
-	TNone        = NewType("none")
-	TString      = NewType("string")
+	TAny          = NewType("any")
+	TNone         = NewType("none")
+	TScalar       = NewType("scalar")
+	TString       = NewType("string")
 	TStringProper = NewType("string/proper")
-	TStringEmpty = NewType("string/empty")
-	TNumber      = NewType("number")
-	TInteger     = NewType("number/integer")
-	TBoolean     = NewType("boolean")
-	TBooleanTrue = NewType("boolean/true")
+	TStringEmpty  = NewType("string/empty")
+	TNumber       = NewType("number")
+	TInteger      = NewType("number/integer")
+	TBoolean      = NewType("boolean")
+	TBooleanTrue  = NewType("boolean/true")
 	TBooleanFalse = NewType("boolean/false")
-	TList        = NewType("list")
-	TMap         = NewType("map")
-	TWord        = NewType("word")
-	TForward     = NewType("forward")
-	TOpenParen   = NewType("paren/open")
-	TFnDef       = NewType("fndef")
+	TAtom         = NewType("atom")
+	TList         = NewType("list")
+	TMap          = NewType("map")
+	TWord         = NewType("word")
+	TForward      = NewType("forward")
+	TOpenParen    = NewType("paren/open")
+	TFnDef        = NewType("fndef")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".
@@ -44,6 +46,14 @@ func (t Type) Matches(pattern Type) bool {
 			return false
 		}
 		return true
+	}
+	if len(pattern.Parts) == 1 && pattern.Parts[0] == "scalar" {
+		// "scalar" is the supertype of string, number, boolean, and atom.
+		switch t.Parts[0] {
+		case "string", "number", "boolean", "atom", "scalar":
+			return true
+		}
+		return false
 	}
 	if len(t.Parts) < len(pattern.Parts) {
 		return false

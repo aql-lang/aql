@@ -19,14 +19,20 @@ arguments and push results.
 0       => 0
 ```
 
-**Strings** are enclosed in double or single quotes. Unrecognised bare
-words are coerced to strings.
+**Strings** are enclosed in double or single quotes.
 
 ```
 "hello world"   => 'hello world'
 'single'        => 'single'
 ""              => ''
-foo             => 'foo'
+```
+
+**Atoms** are bare unquoted words that do not match any defined function,
+type name, or boolean. They represent symbolic names.
+
+```
+foo             => foo
+abc             => abc
 ```
 
 **Booleans** are the bare words `true` and `false`.
@@ -39,7 +45,7 @@ false   => false
 **Type literals** name a type without carrying a value.
 
 ```
-number    string    boolean    any    none    list    map
+number    string    boolean    atom    scalar    any    none    list    map
 ```
 
 ### Compound Data
@@ -200,9 +206,9 @@ unify 1 number end 42       => 1 true 42
 
 #### `upper`
 
-Convert a string to uppercase.
+Convert a string or atom to uppercase.
 
-*Signature:* `[string] -> [string]`
+*Signatures:* `[string] -> [string]`, `[atom] -> [string]`
 *Precedence:* suffix
 
 ```
@@ -213,9 +219,9 @@ a upper             => 'A'
 
 #### `lower`
 
-Convert a string to lowercase.
+Convert a string or atom to lowercase.
 
-*Signature:* `[string] -> [string]`
+*Signatures:* `[string] -> [string]`, `[atom] -> [string]`
 *Precedence:* suffix
 
 ```
@@ -346,6 +352,61 @@ true and the second is false. Precedence 1.
 ```
 true implies false      => false
 false implies true      => true
+```
+
+### Conversion Words
+
+#### `convert`
+
+Convert a value to a target scalar type. An optional third argument
+specifies a variant (e.g., numeric base).
+
+*Signatures:*
+- `[any, any] -> [scalar]` — 2-arg form: value and target type
+- `[any, any, string] -> [scalar]` — 3-arg form: value, target type, variant
+
+*Precedence:* suffix
+
+**To string:**
+
+```
+convert 99 string              => '99'
+convert true string            => 'true'
+convert foo string             => 'foo'
+```
+
+**To string with variant:**
+
+```
+convert 10 string "hex"        => 'a'
+convert 255 string "HEX"       => 'FF'
+convert 10 string "bin"        => '1010'
+convert 8 string "oct"         => '10'
+```
+
+**To number:**
+
+```
+convert "42" number            => 42
+convert "ff" number "hex"      => 255
+convert "1010" number "bin"    => 10
+convert "10" number "oct"      => 8
+```
+
+**To boolean:**
+
+```
+convert 1 boolean              => true
+convert 0 boolean              => false
+convert "true" boolean         => true
+convert "" boolean             => false
+```
+
+**To atom:**
+
+```
+convert 42 atom                => 42
+convert "hello" atom           => hello
 ```
 
 ### Stack Words
@@ -573,7 +634,7 @@ so they do not leak:
 
 ```
 def sq fn [[x:number] [number] [x mul x]]
-4 sq x                      => 16 'x'
+4 sq x                      => 16 x
 ```
 
 Function definitions support all argument styles (prefix, suffix,
@@ -591,8 +652,8 @@ Multiple overloaded signatures can be specified as consecutive triples:
 def op fn [[number] [number] [dup mul] [string] [string] [dup]]
 ```
 
-Supported type names in signatures: `any`, `none`, `number`,
-`integer`, `string`, `boolean`, `list`, `map`.
+Supported type names in signatures: `any`, `none`, `scalar`, `number`,
+`integer`, `string`, `boolean`, `atom`, `list`, `map`.
 
 #### `undef`
 
@@ -606,7 +667,7 @@ stacked, the previous one is revealed.
 *Precedence:* suffix
 
 ```
-def foo 1 foo undef foo foo             => 1 'foo'
+def foo 1 foo undef foo foo             => 1 foo
 
 def foo 1 def foo 2 foo undef foo foo   => 2 1
 ```
@@ -671,10 +732,10 @@ first `x` gets 5, then `y` gets 3.
 **Variables do not leak:**
 
 ```
-5 var [[x] x mul x] x                 => 25 'x'
+5 var [[x] x mul x] x                 => 25 x
 ```
 
-After `var` completes, `x` reverts to an unknown word (string `'x'`).
+After `var` completes, `x` reverts to an unknown word (atom `x`).
 
 **Preserves existing definitions:**
 
@@ -716,22 +777,31 @@ Types form a slash-separated hierarchy. A child type matches a parent
 pattern; a parent does not match a child pattern.
 
 ```
-string
-  string/proper         non-empty strings
-  string/empty          the empty string ""
-
-number
-  number/integer        integer values
-
-boolean
-  boolean/true          the value true
-  boolean/false         the value false
+scalar                  virtual supertype of all scalar types
+  string
+    string/proper       non-empty strings
+    string/empty        the empty string ""
+  number
+    number/integer      integer values
+  boolean
+    boolean/true        the value true
+    boolean/false       the value false
+  atom                  bare unquoted words (no function signature)
 
 list                    lists
 map                     maps
 any                     matches all data types
 none                    matches only itself
 ```
+
+The `scalar` type matches `string`, `number`, `boolean`, and `atom`
+(and all their subtypes). It is useful in function signatures that
+accept any scalar value.
+
+The `atom` type represents bare words that do not resolve to a
+registered function, type name, or boolean. Previously such words were
+coerced to strings; now they retain their identity as atoms. Atoms
+display without quotes.
 
 The `any` type matches all data types but not internal types (`word`,
 `forward`, `paren`).

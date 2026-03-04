@@ -7,9 +7,12 @@ import "fmt"
 var typeNames = map[string]Type{
 	"any":     TAny,
 	"none":    TNone,
+	"scalar":  TScalar,
 	"number":  TNumber,
+	"integer": TInteger,
 	"string":  TString,
 	"boolean": TBoolean,
+	"atom":    TAtom,
 	"list":    TList,
 	"map":     TMap,
 }
@@ -166,7 +169,7 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
-		e.stack[e.pointer] = NewString(w.Name)
+		e.stack[e.pointer] = NewAtom(w.Name)
 		return nil
 	}
 
@@ -294,7 +297,22 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 		// In the suffix-first model, suffix always fills from Args[0].
 		if peekVal != nil && prefixCount < len(sig.Args) {
 			firstSuffixType := sig.Args[0]
-			if peekVal.VType.Matches(firstSuffixType) {
+			matched := peekVal.VType.Matches(firstSuffixType)
+			// Also predict: unknown words (no function, not true/false,
+			// not a type name) will resolve to atoms during execution.
+			// Check both the original type (TWord) and predicted type
+			// (TAtom) so that sigs expecting either get a bonus.
+			if !matched && peekVal.IsWord() {
+				pw := peekVal.AsWord()
+				if e.registry.Lookup(pw.Name) == nil &&
+					pw.Name != "true" && pw.Name != "false" &&
+					pw.Name != "(" && pw.Name != ")" && pw.Name != "end" {
+					if _, isType := typeNames[pw.Name]; !isType {
+						matched = TAtom.Matches(firstSuffixType)
+					}
+				}
+			}
+			if matched {
 				score += 50
 			}
 		}
