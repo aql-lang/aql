@@ -702,3 +702,55 @@ convert foo string	'foo'
 # Any to atom
 convert 42 atom	42
 convert "hello" atom	hello
+
+# === make - type instance creation ===
+
+# make scalar: integer to string
+make string 9	'9'
+make string 42	'42'
+make string 0	'0'
+make string -5	'-5'
+
+# make scalar: string to number
+make number "99"	99
+make number "-5"	-5
+
+# make scalar: to boolean
+make boolean 1	true
+make boolean 0	false
+make boolean "true"	true
+make boolean "false"	false
+
+# make scalar: to atom
+make atom 42	42
+make atom "hello"	hello
+
+# make scalar: already correct type (passthrough)
+make string "hello"	'hello'
+make number 42	42
+make boolean true	true
+
+# make scalar: boolean to string
+make string true	'true'
+make string false	'false'
+
+# make record: positional fields
+def Point record [x:number y:number] make Point [1 2]	{x:1,y:2}
+
+# make record: named fields in declaration order
+def Point record [x:number y:number] make Point [x:1 y:2]	{x:1,y:2}
+
+# make record: named fields in different order
+def Point record [x:number y:number] make Point [y:3 x:4]	{x:4,y:3}
+
+# make record: type conversion applied to fields
+def bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+
+# make record: named fields reordered with type conversion
+def bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+
+# make record: field value conversion (string to number)
+def Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
+
+# make with infix form
+def P record [x:number y:number] P make [1 2]	{x:1,y:2}

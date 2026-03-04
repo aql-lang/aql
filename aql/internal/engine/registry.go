@@ -174,6 +174,7 @@ func registerBuiltins(r *Registry) {
 	registerFn(r)
 	registerConvert(r)
 	registerRecord(r)
+	registerMake(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -868,4 +869,201 @@ func registerRecord(r *Registry) {
 		Args:    []Type{TList},
 		Handler: recordHandler,
 	})
+}
+
+// registerMake registers the "make" word for creating typed instances.
+//
+// Scalar forms:
+//
+//	make string 42       => '42'     (convert integer to string)
+//	make number "99"     => 99       (convert string to number)
+//	make boolean 1       => true     (convert number to boolean)
+//
+// Record form (first arg is a record type value, e.g. from a def):
+//
+//	def bar record [x:number y:boolean z:string]
+//	make bar [1 false "s"]         => {x:1,y:false,z:'s'} (positional)
+//	make bar [y:true x:2 z:'Z']   => {x:2,y:true,z:'Z'}  (named)
+func registerMake(r *Registry) {
+	makeHandler := func(args []Value) ([]Value, error) {
+		targetVal := args[0]
+		srcVal := args[1]
+
+		// Record type instance creation.
+		if targetVal.IsRecordType() {
+			// Wrap in a call to makeRecordHandler with the record name context.
+			// We need to find the name for error messages, but the record type
+			// itself carries all the info we need.
+			recType := targetVal.AsRecordType()
+
+			if !srcVal.VType.Equal(TList) {
+				return nil, fmt.Errorf("make: record values must be a list, got %s", srcVal.String())
+			}
+			elems := srcVal.AsList()
+			fieldKeys := recType.Fields.Keys()
+			result := NewOrderedMap()
+
+			// Check if named or positional.
+			isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
+			if isNamed {
+				if _, ok := elems[0].Data.(*OrderedMap); !ok {
+					isNamed = false
+				}
+			}
+
+			if isNamed {
+				provided := NewOrderedMap()
+				for _, elem := range elems {
+					if !elem.VType.Equal(TMap) {
+						return nil, fmt.Errorf("make: mixed named and positional fields")
+					}
+					m, ok := elem.Data.(*OrderedMap)
+					if !ok {
+						return nil, fmt.Errorf("make: expected concrete map pair, got %s", elem.String())
+					}
+					for _, key := range m.Keys() {
+						val, _ := m.Get(key)
+						provided.Set(key, val)
+					}
+				}
+				for _, key := range fieldKeys {
+					val, ok := provided.Get(key)
+					if !ok {
+						return nil, fmt.Errorf("make: missing field %q", key)
+					}
+					constraint, _ := recType.Fields.Get(key)
+					converted, err := makeFieldValue(val, constraint)
+					if err != nil {
+						return nil, fmt.Errorf("make: field %q: %w", key, err)
+					}
+					result.Set(key, converted)
+				}
+				for _, key := range provided.Keys() {
+					if _, ok := recType.Fields.Get(key); !ok {
+						return nil, fmt.Errorf("make: unknown field %q", key)
+					}
+				}
+			} else {
+				if len(elems) != len(fieldKeys) {
+					return nil, fmt.Errorf("make: expected %d values, got %d",
+						len(fieldKeys), len(elems))
+				}
+				for i, key := range fieldKeys {
+					constraint, _ := recType.Fields.Get(key)
+					converted, err := makeFieldValue(elems[i], constraint)
+					if err != nil {
+						return nil, fmt.Errorf("make: field %q: %w", key, err)
+					}
+					result.Set(key, converted)
+				}
+			}
+
+			return []Value{NewMap(result)}, nil
+		}
+
+		// Scalar type conversion.
+		if targetVal.Data != nil {
+			return nil, fmt.Errorf("make: first argument must be a type literal or record type, got %s", targetVal.String())
+		}
+
+		targetType := targetVal.VType
+		if srcVal.VType.Matches(targetType) {
+			return []Value{srcVal}, nil
+		}
+
+		result, err := makeConvert(srcVal, targetType)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	r.Register("make",
+		Signature{
+			Args:    []Type{TAny, TAny},
+			Handler: makeHandler,
+		},
+	)
+}
+
+// makeConvert converts a source value to a target scalar type for the make word.
+func makeConvert(src Value, targetType Type) (Value, error) {
+	switch {
+	case targetType.Matches(TString):
+		return NewString(valToString(src)), nil
+
+	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
+		text := valToString(src)
+		n, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			return Value{}, fmt.Errorf("make: cannot convert %q to number", text)
+		}
+		return NewInteger(n), nil
+
+	case targetType.Matches(TBoolean):
+		switch {
+		case src.VType.Matches(TBoolean):
+			return src, nil
+		case src.VType.Matches(TNumber):
+			return NewBoolean(src.AsInteger() != 0), nil
+		default:
+			text := valToString(src)
+			switch text {
+			case "true":
+				return NewBoolean(true), nil
+			case "false":
+				return NewBoolean(false), nil
+			default:
+				return NewBoolean(text != ""), nil
+			}
+		}
+
+	case targetType.Equal(TAtom):
+		return NewAtom(valToString(src)), nil
+
+	default:
+		return Value{}, fmt.Errorf("make: unsupported target type %s", targetType)
+	}
+}
+
+// makeFieldValue converts a value to match a record field's type constraint.
+// If the constraint is a type literal, the value is converted to that type.
+// If the value already matches, it is returned as-is.
+func makeFieldValue(val Value, constraint Value) (Value, error) {
+	// Resolve words to their semantic value first (e.g. word(false) → boolean false).
+	val = resolveWordValue(val)
+
+	// If the constraint is a type literal (Data==nil), convert the value.
+	if constraint.Data == nil {
+		constraintType := constraint.VType
+		if val.VType.Matches(constraintType) {
+			return val, nil
+		}
+		return makeConvert(val, constraintType)
+	}
+
+	// If the constraint has a concrete value, just check via unification.
+	unified, ok := Unify(constraint, val)
+	if !ok {
+		return Value{}, fmt.Errorf("value %s does not match constraint %s", val.String(), constraint.String())
+	}
+	return unified, nil
+}
+
+// resolveWordValue converts a word value to its semantic value.
+// Words named "true"/"false" become booleans, type names become type literals,
+// and other words become atoms (bare strings).
+func resolveWordValue(v Value) Value {
+	if !v.IsWord() {
+		return v
+	}
+	name := v.AsWord().Name
+	switch name {
+	case "true":
+		return NewBoolean(true)
+	case "false":
+		return NewBoolean(false)
+	default:
+		return NewAtom(name)
+	}
 }
