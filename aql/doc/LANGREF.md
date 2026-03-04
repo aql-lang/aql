@@ -803,27 +803,22 @@ def Point record [x:number y:number]
 Point                                      => record{x:number,y:number}
 ```
 
-Record types participate in unification:
+Records only unify with other records, never with maps or lists.
+Field order is significant — two records with the same fields in
+different order do not unify.
 
 ```
-def Point record [x:number y:number]
-{x:1, y:2} Point unify                    => {x:1,y:2} true
-{x:"a", y:2} Point unify                  => '~unify-fail' false
-{x:1} Point unify                         => '~unify-fail' false
+record [x:any] unify record [x:number]       => record{x:number} true
+record [x:number] unify record [y:number]     => '~unify-fail' false
+record [x:number y:string] unify
+  record [y:string x:number]                  => '~unify-fail' false  # order differs
 ```
 
-Two record types unify when they have the same keys and compatible
-field types:
+Records do not unify with maps:
 
 ```
-record [x:any] unify record [x:number]    => record{x:number} true
-record [x:number] unify record [y:number] => '~unify-fail' false
-```
-
-The `map` type literal unifies with any record type:
-
-```
-map unify record [x:number]               => record{x:number} true
+{x:1} unify record [x:number]                => '~unify-fail' false
+map unify record [x:number]                   => '~unify-fail' false
 ```
 
 Nested record types are supported:
