@@ -1,0 +1,322 @@
+package engine
+
+import (
+	"fmt"
+	"strings"
+
+	jsonic "github.com/jsonicjs/jsonic/go"
+)
+
+// normalizeLineEndings replaces all \r\n and \r with \n.
+func normalizeLineEndings(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
+
+// denormalizeLineEndings converts \n to the specified ending.
+func denormalizeLineEndings(s string, nl string) string {
+	switch nl {
+	case "crlf":
+		return strings.ReplaceAll(s, "\n", "\r\n")
+	default:
+		return s
+	}
+}
+
+// parseFileOpts extracts options from an AQL map value.
+func parseFileOpts(opts Value) (enc, format, mode, nl string) {
+	enc = "utf8"
+	format = "text"
+	mode = "write"
+	nl = "lf"
+
+	if !opts.VType.Equal(TMap) || opts.Data == nil {
+		return
+	}
+	m := opts.AsMap()
+
+	if v, ok := m.Get("enc"); ok && v.VType.Matches(TString) {
+		enc = v.AsString()
+	}
+	if v, ok := m.Get("fmt"); ok && v.VType.Matches(TString) {
+		format = v.AsString()
+	}
+	if v, ok := m.Get("mode"); ok && v.VType.Matches(TString) {
+		mode = v.AsString()
+	}
+	if v, ok := m.Get("nl"); ok && v.VType.Matches(TString) {
+		nl = v.AsString()
+	}
+
+	return
+}
+
+// jsonicToValue converts a jsonic parse result to an AQL Value.
+// This uses data context: all text becomes strings, not words.
+func jsonicToValue(v any) (Value, error) {
+	switch val := v.(type) {
+	case nil:
+		return NewTypeLiteral(TNone), nil
+	case bool:
+		return NewBoolean(val), nil
+	case float64:
+		return NewInteger(int64(val)), nil
+	case string:
+		return NewString(val), nil
+	case []any:
+		elems := make([]Value, len(val))
+		for i, item := range val {
+			e, err := jsonicToValue(item)
+			if err != nil {
+				return Value{}, err
+			}
+			elems[i] = e
+		}
+		return NewList(elems), nil
+	case map[string]any:
+		om := NewOrderedMap()
+		for _, key := range sortedMapKeys(val) {
+			child, err := jsonicToValue(val[key])
+			if err != nil {
+				return Value{}, err
+			}
+			om.Set(key, child)
+		}
+		return NewMap(om), nil
+	case jsonic.Text:
+		return NewString(val.Str), nil
+	case jsonic.ListRef:
+		return jsonicToValue(val.Val)
+	case jsonic.MapRef:
+		return jsonicToValue(val.Val)
+	default:
+		return Value{}, fmt.Errorf("unsupported jsonic type: %T", v)
+	}
+}
+
+// sortedMapKeys returns map keys in sorted order for deterministic output.
+func sortedMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}
+
+// valueToJsonic converts an AQL Value to a jsonic-compatible string.
+func valueToJsonic(v Value) string {
+	switch {
+	case v.VType.Matches(TString):
+		return fmt.Sprintf("%q", v.AsString())
+	case v.VType.Matches(TInteger):
+		return fmt.Sprintf("%d", v.AsInteger())
+	case v.VType.Matches(TBoolean):
+		if v.AsBoolean() {
+			return "true"
+		}
+		return "false"
+	case v.VType.Equal(TNone):
+		return "null"
+	case v.VType.Equal(TAtom):
+		return fmt.Sprintf("%q", v.AsAtom())
+	case v.VType.Equal(TList):
+		if _, ok := v.Data.([]Value); ok {
+			elems := v.AsList()
+			parts := make([]string, len(elems))
+			for i, e := range elems {
+				parts[i] = valueToJsonic(e)
+			}
+			return "[" + strings.Join(parts, ",") + "]"
+		}
+		return "[]"
+	case v.VType.Equal(TMap):
+		if om, ok := v.Data.(*OrderedMap); ok {
+			parts := make([]string, 0, om.Len())
+			for _, k := range om.Keys() {
+				val, _ := om.Get(k)
+				parts = append(parts, fmt.Sprintf("%q:%s", k, valueToJsonic(val)))
+			}
+			return "{" + strings.Join(parts, ",") + "}"
+		}
+		return "{}"
+	default:
+		return fmt.Sprintf("%q", v.String())
+	}
+}
+
+// registerFileIO registers the read and write words.
+func registerFileIO(r *Registry) {
+	// read: [string] -> [string|list|map]
+	readHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		return doRead(r, path, "utf8", "text", "lf")
+	}
+
+	// read: [string, map] -> [string|list|map]
+	readOptsHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		enc, format, _, nl := parseFileOpts(args[1])
+		return doRead(r, path, enc, format, nl)
+	}
+
+	r.Register("read",
+		Signature{
+			Args:    []Type{TString, TMap},
+			Handler: readOptsHandler,
+		},
+		Signature{
+			Args:    []Type{TString},
+			Handler: readHandler,
+		},
+	)
+
+	// write: [string, string] -> [string]
+	writeHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		content := args[1].AsString()
+		return doWrite(r, path, content, "utf8", "text", "write", "lf")
+	}
+
+	// write: [string, string, map] -> [string]
+	writeOptsHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		content := args[1].AsString()
+		enc, format, mode, nl := parseFileOpts(args[2])
+		return doWrite(r, path, content, enc, format, mode, nl)
+	}
+
+	// write: [string, any, map] -> [string] (for non-string data with fmt)
+	writeAnyOptsHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		_, format, mode, nl := parseFileOpts(args[2])
+		if format == "text" {
+			format = "jsonic"
+		}
+		content := valueToJsonic(args[1])
+		return doWrite(r, path, content, "utf8", format, mode, nl)
+	}
+
+	r.Register("write",
+		Signature{
+			Args:    []Type{TString, TString, TMap},
+			Handler: writeOptsHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TAny, TMap},
+			Handler: writeAnyOptsHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TString},
+			Handler: writeHandler,
+		},
+	)
+}
+
+func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
+	data, err := r.FileOps.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
+	content := string(data)
+
+	// Normalize line endings: default is "lf" (convert all to \n).
+	switch nl {
+	case "lf":
+		content = normalizeLineEndings(content)
+	case "crlf":
+		content = normalizeLineEndings(content)
+		content = denormalizeLineEndings(content, "crlf")
+	case "raw":
+		// No normalization.
+	default:
+		content = normalizeLineEndings(content)
+	}
+
+	switch format {
+	case "text":
+		return []Value{NewString(content)}, nil
+
+	case "json":
+		return parseJSONContent(content)
+
+	case "jsonic":
+		return parseJsonicContent(content)
+
+	case "lines":
+		lines := strings.Split(content, "\n")
+		elems := make([]Value, len(lines))
+		for i, line := range lines {
+			elems[i] = NewString(line)
+		}
+		return []Value{NewList(elems)}, nil
+
+	default:
+		return nil, fmt.Errorf("read: unknown format: %s", format)
+	}
+}
+
+func parseJSONContent(content string) ([]Value, error) {
+	result, err := jsonic.Parse(content)
+	if err != nil {
+		return nil, fmt.Errorf("read: invalid json: %w", err)
+	}
+	v, err := jsonicToValue(result)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	return []Value{v}, nil
+}
+
+func parseJsonicContent(content string) ([]Value, error) {
+	j := jsonic.Make()
+	result, err := j.Parse(content)
+	if err != nil {
+		return nil, fmt.Errorf("read: invalid jsonic: %w", err)
+	}
+	if result == nil {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	v, err := jsonicToValue(result)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	return []Value{v}, nil
+}
+
+func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value, error) {
+	// Apply line ending conversion for output.
+	switch nl {
+	case "lf":
+		content = normalizeLineEndings(content)
+	case "crlf":
+		content = normalizeLineEndings(content)
+		content = denormalizeLineEndings(content, "crlf")
+	case "raw":
+		// No conversion.
+	default:
+		content = normalizeLineEndings(content)
+	}
+
+	data := []byte(content)
+
+	if mode == "append" {
+		existing, err := r.FileOps.ReadFile(path)
+		if err == nil {
+			data = append(existing, data...)
+		}
+		// If file doesn't exist, just write the new data.
+	}
+
+	if err := r.FileOps.WriteFile(path, data, 0644); err != nil {
+		return nil, fmt.Errorf("write: %w", err)
+	}
+
+	return []Value{NewString(path)}, nil
+}

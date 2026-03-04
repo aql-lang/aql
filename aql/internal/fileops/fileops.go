@@ -1,0 +1,93 @@
+// Package fileops provides an internal abstraction over file system operations.
+// All dangerous file I/O goes through this interface so it can be replaced
+// for testing or sandboxing without touching the Go os package directly.
+package fileops
+
+import (
+	"os"
+	"path/filepath"
+)
+
+// FileOps defines the file operations that AQL's read/write words use.
+// The default implementation delegates to the os package.
+// Replace with a custom implementation for testing or sandboxing.
+type FileOps interface {
+	ReadFile(path string) ([]byte, error)
+	WriteFile(path string, data []byte, perm os.FileMode) error
+	ResolvePath(path string) (string, error)
+}
+
+// OSFileOps is the default implementation using the real file system.
+type OSFileOps struct{}
+
+func (o *OSFileOps) ReadFile(path string) ([]byte, error) {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(resolved)
+}
+
+func (o *OSFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(resolved)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(resolved, data, perm)
+}
+
+// ResolvePath resolves a relative path against the process working directory.
+func (o *OSFileOps) ResolvePath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(wd, path), nil
+}
+
+// NewDefault returns the default OS-backed file operations.
+func NewDefault() FileOps {
+	return &OSFileOps{}
+}
+
+// MemFileOps is an in-memory implementation for testing.
+type MemFileOps struct {
+	Files map[string][]byte
+}
+
+func NewMem() *MemFileOps {
+	return &MemFileOps{Files: make(map[string][]byte)}
+}
+
+func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
+	resolved, err := m.ResolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+	data, ok := m.Files[resolved]
+	if !ok {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	return data, nil
+}
+
+func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
+	resolved, err := m.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	m.Files[resolved] = make([]byte, len(data))
+	copy(m.Files[resolved], data)
+	return nil
+}
+
+func (m *MemFileOps) ResolvePath(path string) (string, error) {
+	return filepath.Clean(path), nil
+}

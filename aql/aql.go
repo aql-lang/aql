@@ -2,8 +2,17 @@ package aql
 
 import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
+
+// FileOps is the interface for file system operations used by read/write words.
+type FileOps = fileops.FileOps
+
+// NewMemFileOps creates an in-memory file system for testing.
+func NewMemFileOps() *fileops.MemFileOps {
+	return fileops.NewMem()
+}
 
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
@@ -15,6 +24,11 @@ type AQL struct {
 // New creates a new AQL instance with built-in functions.
 func New() *AQL {
 	return &AQL{registry: engine.DefaultRegistry()}
+}
+
+// SetFileOps replaces the file operations implementation used by read/write.
+func (a *AQL) SetFileOps(ops FileOps) {
+	a.registry.SetFileOps(ops)
 }
 
 // Run parses and executes an AQL source string.
