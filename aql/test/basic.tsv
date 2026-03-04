@@ -127,6 +127,24 @@ type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 "h
 # Make record with optional field - none value
 type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 none]	{x:42,y:none}
 
+# Make record from map - all fields provided
+type foo record [x:number y:string] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field provided
+type foo record [x:number y:[string or none]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field omitted (defaults to none)
+type foo record [x:number y:[string or none]] make foo {x:1}	{x:1,y:none}
+
+# Make record from named list - optional field omitted (defaults to none)
+type foo record [x:number y:[string or none]] make foo [x:1]	{x:1,y:none}
+
+# Make record from map - missing required field is an error
+type foo record [x:number y:string] make foo {x:1}	ERROR:make: missing field "y"
+
+# Make record from map - unknown field is an error
+type foo record [x:number y:string] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+
 # Table with optional field - mixed string and none values
 type OptStr (string or none) type foo record [x:number y:OptStr] type bar table foo make bar [[1 "a"] [2 none]]	[{x:1,y:'a'},{x:2,y:none}]
 

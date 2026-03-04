@@ -49,6 +49,22 @@ func TestBasic(t *testing.T) {
 			// Run through the engine with a fresh registry.
 			eng := engine.New(engine.DefaultRegistry())
 			result, err := eng.Run(values)
+
+			// Expected error: "ERROR:substring"
+			if strings.HasPrefix(expected, "ERROR:") {
+				errSubstr := expected[len("ERROR:"):]
+				if err == nil {
+					t.Errorf("\n  expr: %s\n  expected error containing %q but got result: %s",
+						expr, errSubstr, formatStack(result))
+					return
+				}
+				if !strings.Contains(err.Error(), errSubstr) {
+					t.Errorf("\n  expr: %s\n  error: %v\n  expected error containing %q",
+						expr, err, errSubstr)
+				}
+				return
+			}
+
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
 			}

@@ -949,12 +949,54 @@ func registerMake(r *Registry) {
 			// itself carries all the info we need.
 			recType := targetVal.AsRecordType()
 
-			if !srcVal.VType.Equal(TList) {
-				return nil, fmt.Errorf("make: record values must be a list, got %s", srcVal.String())
-			}
-			elems := srcVal.AsList()
 			fieldKeys := recType.Fields.Keys()
 			result := NewOrderedMap()
+
+			// Helper: fill result from a provided map, defaulting
+			// missing fields to none when the constraint allows it.
+			fillFromMap := func(provided *OrderedMap) error {
+				for _, key := range provided.Keys() {
+					if _, ok := recType.Fields.Get(key); !ok {
+						return fmt.Errorf("make: unknown field %q", key)
+					}
+				}
+				for _, key := range fieldKeys {
+					constraint, _ := recType.Fields.Get(key)
+					val, ok := provided.Get(key)
+					if !ok {
+						// Missing field — allow if none unifies with constraint.
+						noneVal := NewTypeLiteral(TNone)
+						if _, unifOK := Unify(constraint, noneVal); unifOK {
+							result.Set(key, noneVal)
+							continue
+						}
+						return fmt.Errorf("make: missing field %q", key)
+					}
+					converted, err := makeFieldValue(val, constraint)
+					if err != nil {
+						return fmt.Errorf("make: field %q: %w", key, err)
+					}
+					result.Set(key, converted)
+				}
+				return nil
+			}
+
+			// Map form: make RecType {x:1 y:"hello"}
+			if srcVal.VType.Equal(TMap) {
+				provided, ok := srcVal.Data.(*OrderedMap)
+				if !ok {
+					return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
+				}
+				if err := fillFromMap(provided); err != nil {
+					return nil, err
+				}
+				return []Value{NewMap(result)}, nil
+			}
+
+			if !srcVal.VType.Equal(TList) {
+				return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
+			}
+			elems := srcVal.AsList()
 
 			// Check if named or positional.
 			isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
@@ -979,22 +1021,8 @@ func registerMake(r *Registry) {
 						provided.Set(key, val)
 					}
 				}
-				for _, key := range fieldKeys {
-					val, ok := provided.Get(key)
-					if !ok {
-						return nil, fmt.Errorf("make: missing field %q", key)
-					}
-					constraint, _ := recType.Fields.Get(key)
-					converted, err := makeFieldValue(val, constraint)
-					if err != nil {
-						return nil, fmt.Errorf("make: field %q: %w", key, err)
-					}
-					result.Set(key, converted)
-				}
-				for _, key := range provided.Keys() {
-					if _, ok := recType.Fields.Get(key); !ok {
-						return nil, fmt.Errorf("make: unknown field %q", key)
-					}
+				if err := fillFromMap(provided); err != nil {
+					return nil, err
 				}
 			} else {
 				if len(elems) != len(fieldKeys) {

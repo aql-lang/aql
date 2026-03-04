@@ -993,6 +993,22 @@ make Person ["Alice" "ace"]     => {name:'Alice',nick:'ace'}
 make Person ["Bob" none]        => {name:'Bob',nick:none}
 ```
 
+**Map form.** `make` also accepts a map, matching field names by key.
+Missing fields are filled with `none` when the field type allows it:
+
+```
+type Person record [name:string nick:[string or none]]
+make Person {name:"Alice" nick:"ace"}  => {name:'Alice',nick:'ace'}
+make Person {name:"Bob"}               => {name:'Bob',nick:none}
+```
+
+Unknown keys and missing required fields are errors:
+
+```
+make Person {nick:"ace"}               => error: missing field "name"
+make Person {name:"A" extra:1}         => error: unknown field "extra"
+```
+
 **User-defined types as field constraints.** Alternatively, define
 a disjunction separately and reference it by name:
 
