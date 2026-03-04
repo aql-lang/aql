@@ -3410,6 +3410,216 @@ func TestStackInsertWithHeadroom(t *testing.T) {
 	}
 }
 
+// --- Record type tests ---
+
+func TestRecordTypeCreation(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	// record {x:number, y:number} => record{x:number,y:number}
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	fields.Set("y", NewTypeLiteral(TNumber))
+	input := []Value{NewWord("record"), NewMap(fields)}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1", len(result))
+	}
+	if !result[0].IsRecordType() {
+		t.Fatalf("result is not a record type: %s", result[0].String())
+	}
+	if result[0].String() != "record{x:number,y:number}" {
+		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	}
+}
+
+func TestRecordTypeWithDef(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	// def Point record {x:number, y:number}
+	// Point => record{x:number,y:number}
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	fields.Set("y", NewTypeLiteral(TNumber))
+	input := []Value{
+		NewWord("def"), NewWord("Point"),
+		NewWord("record"), NewMap(fields),
+		NewWord("end"),
+		NewWord("Point"),
+	}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1", len(result))
+	}
+	if !result[0].IsRecordType() {
+		t.Fatalf("result is not a record type: %s", result[0].String())
+	}
+	if result[0].String() != "record{x:number,y:number}" {
+		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	}
+}
+
+func TestRecordTypeUnifyWithMap(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	tests := []struct {
+		name    string
+		input   []Value
+		want    string
+		wantLen int
+	}{
+		{
+			name: "record unifies with matching map",
+			input: func() []Value {
+				fields := NewOrderedMap()
+				fields.Set("x", NewTypeLiteral(TNumber))
+				fields.Set("y", NewTypeLiteral(TNumber))
+				m := NewOrderedMap()
+				m.Set("x", NewInteger(1))
+				m.Set("y", NewInteger(2))
+				return []Value{NewMap(m), NewRecordType(fields), NewWord("unify")}
+			}(),
+			want:    "{x:1,y:2} true",
+			wantLen: 2,
+		},
+		{
+			name: "record fails with wrong value type",
+			input: func() []Value {
+				fields := NewOrderedMap()
+				fields.Set("x", NewTypeLiteral(TNumber))
+				fields.Set("y", NewTypeLiteral(TNumber))
+				m := NewOrderedMap()
+				m.Set("x", NewString("hello"))
+				m.Set("y", NewInteger(2))
+				return []Value{NewMap(m), NewRecordType(fields), NewWord("unify")}
+			}(),
+			want:    "'~unify-fail' false",
+			wantLen: 2,
+		},
+		{
+			name: "record fails with missing field",
+			input: func() []Value {
+				fields := NewOrderedMap()
+				fields.Set("x", NewTypeLiteral(TNumber))
+				fields.Set("y", NewTypeLiteral(TNumber))
+				m := NewOrderedMap()
+				m.Set("x", NewInteger(1))
+				return []Value{NewMap(m), NewRecordType(fields), NewWord("unify")}
+			}(),
+			want:    "'~unify-fail' false",
+			wantLen: 2,
+		},
+		{
+			name: "record fails with extra field",
+			input: func() []Value {
+				fields := NewOrderedMap()
+				fields.Set("x", NewTypeLiteral(TNumber))
+				m := NewOrderedMap()
+				m.Set("x", NewInteger(1))
+				m.Set("y", NewInteger(2))
+				return []Value{NewMap(m), NewRecordType(fields), NewWord("unify")}
+			}(),
+			want:    "'~unify-fail' false",
+			wantLen: 2,
+		},
+		{
+			name: "two record types unify when compatible",
+			input: func() []Value {
+				f1 := NewOrderedMap()
+				f1.Set("x", NewTypeLiteral(TAny))
+				f2 := NewOrderedMap()
+				f2.Set("x", NewTypeLiteral(TNumber))
+				return []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")}
+			}(),
+			want:    "record{x:number} true",
+			wantLen: 2,
+		},
+		{
+			name: "two record types fail with different keys",
+			input: func() []Value {
+				f1 := NewOrderedMap()
+				f1.Set("x", NewTypeLiteral(TNumber))
+				f2 := NewOrderedMap()
+				f2.Set("y", NewTypeLiteral(TNumber))
+				return []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")}
+			}(),
+			want:    "'~unify-fail' false",
+			wantLen: 2,
+		},
+		{
+			name: "record with nested type",
+			input: func() []Value {
+				inner := NewOrderedMap()
+				inner.Set("z", NewTypeLiteral(TString))
+				fields := NewOrderedMap()
+				fields.Set("x", NewTypeLiteral(TNumber))
+				fields.Set("y", NewRecordType(inner))
+				m := NewOrderedMap()
+				m.Set("x", NewInteger(1))
+				innerMap := NewOrderedMap()
+				innerMap.Set("z", NewString("hello"))
+				m.Set("y", NewMap(innerMap))
+				return []Value{NewMap(m), NewRecordType(fields), NewWord("unify")}
+			}(),
+			want:    "{x:1,y:{z:'hello'}} true",
+			wantLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Run(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(result) != tt.wantLen {
+				t.Fatalf("got %d values, want %d", len(result), tt.wantLen)
+			}
+			var parts []string
+			for _, v := range result {
+				parts = append(parts, v.String())
+			}
+			got := ""
+			for i, p := range parts {
+				if i > 0 {
+					got += " "
+				}
+				got += p
+			}
+			if got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecordTypeMapLiteralUnify(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	// map type literal unifies with record type
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	input := []Value{NewTypeLiteral(TMap), NewRecordType(fields), NewWord("unify")}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d values, want 2", len(result))
+	}
+	if !result[0].IsRecordType() {
+		t.Errorf("expected record type, got %s", result[0].String())
+	}
+	if !result[1].AsBoolean() {
+		t.Errorf("expected true, got false")
+	}
+}
+
 // --- Benchmarks ---
 
 func BenchmarkSimpleExpression(b *testing.B) {

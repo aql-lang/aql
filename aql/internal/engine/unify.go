@@ -180,6 +180,31 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 		return Value{}, false
 	}
 
+	// Check for record types (field schema constraints).
+	aRecord := a.IsRecordType()
+	bRecord := b.IsRecordType()
+
+	if aRecord && bRecord {
+		// Both record types: unify field schemas.
+		return unifyRecordTypes(a.AsRecordType(), b.AsRecordType())
+	}
+
+	if aRecord {
+		if _, ok := b.Data.(*OrderedMap); ok {
+			// a is record type, b is concrete map.
+			return unifyRecordWithConcrete(a.AsRecordType(), b.AsMap())
+		}
+		return Value{}, false
+	}
+
+	if bRecord {
+		if _, ok := a.Data.(*OrderedMap); ok {
+			// b is record type, a is concrete map.
+			return unifyRecordWithConcrete(b.AsRecordType(), a.AsMap())
+		}
+		return Value{}, false
+	}
+
 	// Check for typed maps (child type constraints).
 	aTyped := a.IsTypedMap()
 	bTyped := b.IsTypedMap()
@@ -250,6 +275,60 @@ func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
 	return NewMap(result), true
 }
 
+// unifyRecordTypes unifies two record types by unifying their field schemas.
+// Both must have exactly the same set of keys; each field type pair is unified.
+func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
+	aFields := a.Fields
+	bFields := b.Fields
+
+	if aFields.Len() != bFields.Len() {
+		return Value{}, false
+	}
+
+	result := NewOrderedMap()
+	for _, key := range aFields.Keys() {
+		aVal, _ := aFields.Get(key)
+		bVal, ok := bFields.Get(key)
+		if !ok {
+			return Value{}, false
+		}
+		unified, uOk := Unify(aVal, bVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+
+	return NewRecordType(result), true
+}
+
+// unifyRecordWithConcrete unifies a record type schema against a concrete map.
+// The map must have exactly the same keys as the record, and each value must
+// unify with the corresponding field type constraint.
+func unifyRecordWithConcrete(record RecordTypeInfo, m *OrderedMap) (Value, bool) {
+	fields := record.Fields
+
+	if fields.Len() != m.Len() {
+		return Value{}, false
+	}
+
+	result := NewOrderedMap()
+	for _, key := range fields.Keys() {
+		fieldType, _ := fields.Get(key)
+		mapVal, ok := m.Get(key)
+		if !ok {
+			return Value{}, false
+		}
+		unified, uOk := Unify(fieldType, mapVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+
+	return NewMap(result), true
+}
+
 // valuesEqual compares the data payloads of two values with the same type.
 func valuesEqual(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
@@ -278,6 +357,14 @@ func valuesEqual(a, b Value) bool {
 		}
 		return listsEqual(a.AsList(), b.AsList())
 	case a.VType.Equal(TMap):
+		aRT, aRec := a.Data.(RecordTypeInfo)
+		bRT, bRec := b.Data.(RecordTypeInfo)
+		if aRec && bRec {
+			return mapsEqual(aRT.Fields, bRT.Fields)
+		}
+		if aRec != bRec {
+			return false
+		}
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {

@@ -173,6 +173,7 @@ func registerBuiltins(r *Registry) {
 	registerVar(r)
 	registerFn(r)
 	registerConvert(r)
+	registerRecord(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -824,4 +825,36 @@ func registerConvert(r *Registry) {
 			Handler: convert2Handler,
 		},
 	)
+}
+
+// registerRecord registers the "record" word for creating record type values.
+//
+// record takes a map argument where values are type constraints (type literals,
+// concrete values, or nested structures). It returns a record type value that
+// can be used with def to define named record types.
+//
+//	record {x:number, y:number}            => record{x:number,y:number}
+//	def Point record {x:number, y:number}  => defines Point as a record type
+//	{x:1, y:2} Point unify                 => {x:1,y:2} true
+func registerRecord(r *Registry) {
+	recordHandler := func(args []Value) ([]Value, error) {
+		m := args[0]
+		if !m.VType.Equal(TMap) {
+			return nil, fmt.Errorf("record: argument must be a map")
+		}
+		// Accept both concrete maps and typed maps as schemas.
+		if _, ok := m.Data.(*OrderedMap); !ok {
+			return nil, fmt.Errorf("record: argument must be a concrete map with field types")
+		}
+		fields := m.AsMap()
+		if fields.Len() == 0 {
+			return nil, fmt.Errorf("record: map must have at least one field")
+		}
+		return []Value{NewRecordType(fields)}, nil
+	}
+
+	r.Register("record", Signature{
+		Args:    []Type{TMap},
+		Handler: recordHandler,
+	})
 }

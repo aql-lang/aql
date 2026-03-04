@@ -56,6 +56,14 @@ type ChildTypeInfo struct {
 	Child Value
 }
 
+// RecordTypeInfo holds the field schema for a record type.
+// Each field maps a name to a type-constraint Value (e.g. a type literal).
+// A record type unifies with a concrete map if it has exactly the right keys
+// and each value unifies with the corresponding field type.
+type RecordTypeInfo struct {
+	Fields *OrderedMap // field name → type-constraint Value
+}
+
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
 	Name string // empty for unnamed positional parameters
@@ -139,6 +147,14 @@ func NewMap(entries *OrderedMap) Value {
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
 	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
+}
+
+// NewRecordType creates a record type value from a field schema.
+// The fields map contains field names as keys and type-constraint Values as values.
+// For example, record{x:number, y:number} constrains maps to have exactly
+// keys x and y with number-typed values.
+func NewRecordType(fields *OrderedMap) Value {
+	return Value{VType: TMap, Data: RecordTypeInfo{Fields: fields}}
 }
 
 // NewAtom creates an atom value from a bare unquoted word.
@@ -230,6 +246,17 @@ func (v Value) IsTypedMap() bool {
 	return ok && v.VType.Equal(TMap)
 }
 
+// IsRecordType reports whether this value is a record type (map with field schema).
+func (v Value) IsRecordType() bool {
+	_, ok := v.Data.(RecordTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsRecordType returns the RecordTypeInfo, panics if not a record type.
+func (v Value) AsRecordType() RecordTypeInfo {
+	return v.Data.(RecordTypeInfo)
+}
+
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
 func (v Value) AsChildType() ChildTypeInfo {
 	return v.Data.(ChildTypeInfo)
@@ -308,6 +335,14 @@ func (v Value) String() string {
 	case v.VType.Equal(TMap):
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "{:" + ct.Child.String() + "}"
+		}
+		if rt, ok := v.Data.(RecordTypeInfo); ok {
+			parts := make([]string, 0, rt.Fields.Len())
+			for _, k := range rt.Fields.Keys() {
+				val, _ := rt.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "record{" + strings.Join(parts, ",") + "}"
 		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())

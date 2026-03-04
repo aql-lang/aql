@@ -779,6 +779,58 @@ def square fn [[x:number] [number] [x mul x]]
 See [Function Signatures with `fn`](#function-signatures-with-fn)
 above for full details.
 
+### Record Type Words
+
+#### `record`
+
+Create a record type from a map of field names to type constraints.
+A record type is a schema that validates maps: it requires exactly the
+specified keys, each with a value matching the field's type constraint.
+
+*Signature:* `[map] -> [record-type]`
+*Precedence:* suffix
+
+```
+record {x:number, y:number}               => record{x:number,y:number}
+```
+
+Use with `def` to create named record types:
+
+```
+def Point record {x:number, y:number}
+Point                                      => record{x:number,y:number}
+```
+
+Record types participate in unification:
+
+```
+def Point record {x:number, y:number}
+{x:1, y:2} Point unify                    => {x:1,y:2} true
+{x:"a", y:2} Point unify                  => '~unify-fail' false
+{x:1} Point unify                         => '~unify-fail' false
+```
+
+Two record types unify when they have the same keys and compatible
+field types:
+
+```
+record {x:any} unify record {x:number}    => record{x:number} true
+record {x:number} unify record {y:number} => '~unify-fail' false
+```
+
+The `map` type literal unifies with any record type:
+
+```
+map unify record {x:number}               => record{x:number} true
+```
+
+Nested record types are supported:
+
+```
+def Inner record {z:string}
+def Outer record {x:number, y:Inner}
+```
+
 
 ## Type System
 
