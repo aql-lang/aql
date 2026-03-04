@@ -776,6 +776,32 @@ type Nums [:number] Nums unify ["a"]	'~unify-fail' false
 # type with typed map
 type NumMap {:number} NumMap unify {a:1,b:2}	{a:1,b:2} true
 
+# === do - evaluate list and map contents ===
+
+# do list: evaluate as token stream
+do [1 add 2]	3
+
+# do list: string operation
+do [upper "hello"]	'HELLO'
+
+# do list: multiple results
+do [1 2 3]	1 2 3
+
+# do list: nested expression
+do [2 mul 3 add 1]	7
+
+# do map: evaluate list values
+do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# do map: non-list values unchanged
+do {x:1,y:"hello"}	{x:1,y:'hello'}
+
+# do map: mixed list and non-list values
+do {a:[1 add 2],b:10}	{a:3,b:10}
+
+# do map: nested maps with list values
+do {m:{x:[5 mul 2]}}	{m:{x:10}}
+
 # === disjunct - union types via or ===
 
 # Disjunct creation: type literals

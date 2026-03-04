@@ -82,6 +82,12 @@ type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:fals
 # Make - record type (named fields, reordered)
 type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
+# Do - evaluate list contents
+do [1 add 2]	3
+
+# Do - evaluate map list values
+do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
 # Disjunct - union types via or
 string or none	string|none
 (string or none) unify "a"	'a' true

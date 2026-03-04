@@ -3610,6 +3610,47 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	}
 }
 
+// --- do word tests ---
+
+func TestDoList(t *testing.T) {
+	e := New(DefaultRegistry())
+	// do [1 add 2] → 3
+	input := []Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
+	}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].String() != "3" {
+		t.Errorf("do list: got %v, want [3]", result)
+	}
+}
+
+func TestDoMap(t *testing.T) {
+	e := New(DefaultRegistry())
+	// do {x:[3 add 4]} → {x:7}
+	innerList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
+	om := NewOrderedMap()
+	om.Set("x", innerList)
+	input := []Value{
+		NewWord("do"),
+		NewMap(om),
+	}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("do map: got %d results, want 1: %v", len(result), result)
+	}
+	t.Logf("do map result: %s (type=%v)", result[0].String(), result[0].VType)
+	if result[0].String() != "{x:7}" {
+		t.Errorf("do map: got %s, want {x:7}", result[0].String())
+	}
+}
+
 // --- Benchmarks ---
 
 func BenchmarkSimpleExpression(b *testing.B) {
