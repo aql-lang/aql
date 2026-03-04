@@ -162,3 +162,22 @@ string or none	string|none
 (string or none) unify "a"	'a' true
 (none or boolean) unify none	none true
 ({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+
+# typeof - returns base type as atom
+typeof 42	number
+typeof "hello"	string
+typeof ""	string
+typeof true	boolean
+typeof false	boolean
+typeof [1 2 3]	list
+typeof {x:1}	map
+typeof none	none
+
+# base - returns zero/default value for a type
+base integer	0
+base number	0
+base string	''
+base boolean	false
+base list	[]
+base map	{}
+base none	none

@@ -1132,6 +1132,38 @@ do {m:{x:[5 mul 2]}}                       => {m:{x:10}}
 ```
 
 
+#### `typeof`
+
+Return the base type of a value as an atom.
+
+*Signature:* `[any] -> [atom]`
+
+```
+typeof 42              => number
+typeof "hello"         => string
+typeof true            => boolean
+typeof [1 2 3]         => list
+typeof {x:1}           => map
+typeof none            => none
+```
+
+#### `base`
+
+Return the zero/default value of a type, similar to Go's zero values.
+
+*Signature:* `[type-literal] -> [value]`
+
+```
+base integer           => 0
+base number            => 0
+base string            => ''
+base boolean           => false
+base list              => []
+base map               => {}
+base none              => none
+```
+
+
 ## Type System
 
 Types form a slash-separated hierarchy. A child type matches a parent

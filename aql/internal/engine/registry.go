@@ -203,6 +203,8 @@ func registerBuiltins(r *Registry) {
 	registerMake(r)
 	registerTypeDef(r)
 	registerDo(r)
+	registerTypeof(r)
+	registerBase(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -1440,4 +1442,72 @@ func isTypeValue(v Value) bool {
 		return true
 	}
 	return false
+}
+
+// registerTypeof registers the "typeof" word that returns the base type
+// of its argument as an atom.
+//
+//	typeof 42          => integer
+//	typeof "hello"     => string
+//	typeof true        => boolean
+//	typeof [1 2 3]     => list
+//	typeof {x:1}       => map
+//	typeof none        => none
+func registerTypeof(r *Registry) {
+	typeofHandler := func(args []Value) ([]Value, error) {
+		v := args[0]
+		name := v.VType.Parts[0]
+		return []Value{NewAtom(name)}, nil
+	}
+
+	r.Register("typeof",
+		Signature{Args: []Type{TAny}, Handler: typeofHandler},
+	)
+}
+
+// registerBase registers the "base" word that returns the zero/default value
+// for a given type, similar to Go's zero values.
+//
+//	base integer    => 0
+//	base string     => ''
+//	base boolean    => false
+//	base list       => []
+//	base map        => {}
+//	base none       => none
+func registerBase(r *Registry) {
+	baseHandler := func(args []Value) ([]Value, error) {
+		v := args[0]
+
+		// The argument should be a type literal (Data==nil) or a type word.
+		t := v.VType
+		if v.Data != nil {
+			// If it's a concrete value, use its type as the target.
+			t = v.VType
+		}
+
+		switch {
+		case t.Matches(TInteger):
+			return []Value{NewInteger(0)}, nil
+		case t.Matches(TNumber):
+			return []Value{NewInteger(0)}, nil
+		case t.Matches(TString):
+			return []Value{NewString("")}, nil
+		case t.Matches(TBoolean):
+			return []Value{NewBoolean(false)}, nil
+		case t.Matches(TList):
+			return []Value{NewList([]Value{})}, nil
+		case t.Matches(TMap):
+			return []Value{NewMap(NewOrderedMap())}, nil
+		case t.Matches(TNone):
+			return []Value{NewTypeLiteral(TNone)}, nil
+		case t.Matches(TAtom):
+			return []Value{NewAtom("")}, nil
+		default:
+			return nil, fmt.Errorf("base: unsupported type %s", t.String())
+		}
+	}
+
+	r.Register("base",
+		Signature{Args: []Type{TAny}, Handler: baseHandler},
+	)
 }
