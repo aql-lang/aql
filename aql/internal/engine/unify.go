@@ -21,6 +21,15 @@ func Unify(a, b Value) (Value, bool) {
 	aType := a.VType
 	bType := b.VType
 
+	// Disjunct unification first: try each alternative, succeed on first match.
+	// Must come before none/any checks so that disjuncts containing none work.
+	if a.IsDisjunct() {
+		return unifyDisjunct(a.AsDisjunct(), b)
+	}
+	if b.IsDisjunct() {
+		return unifyDisjunct(b.AsDisjunct(), a)
+	}
+
 	// "none" only unifies with "none".
 	aNone := aType.Equal(TNone)
 	bNone := bType.Equal(TNone)
@@ -372,6 +381,58 @@ func mapsEqual(a, b *OrderedMap) bool {
 			return false
 		}
 		if !aVal.VType.Equal(bVal.VType) || !valuesEqual(aVal, bVal) {
+			return false
+		}
+	}
+	return true
+}
+
+// unifyDisjunct tries to unify a value against each alternative in a disjunct.
+// Returns the first successful unification. For map alternatives, uses open
+// (subset) matching where the candidate only needs to contain the alternative's
+// key-value pairs.
+func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
+	// "any" unifies with the whole disjunct, preserving it.
+	if val.VType.Equal(TAny) {
+		return NewDisjunct(disj.Alternatives), true
+	}
+
+	for _, alt := range disj.Alternatives {
+		// For concrete map alternatives against concrete map values,
+		// use open (subset) matching.
+		if alt.VType.Equal(TMap) && val.VType.Equal(TMap) &&
+			!alt.IsRecordType() && !val.IsRecordType() &&
+			!alt.IsTypedMap() && !val.IsTypedMap() {
+			if alt.Data != nil && val.Data != nil {
+				if openUnifyMap(alt, val) {
+					return val, true
+				}
+				continue
+			}
+		}
+
+		// Standard unification for all other cases.
+		unified, ok := Unify(alt, val)
+		if ok {
+			return unified, true
+		}
+	}
+	return Value{}, false
+}
+
+// openUnifyMap checks whether candidate contains at least the key-value pairs
+// of pattern. Extra keys in candidate are allowed (open/subset matching).
+func openUnifyMap(pattern, candidate Value) bool {
+	pMap := pattern.AsMap()
+	cMap := candidate.AsMap()
+
+	for _, key := range pMap.Keys() {
+		pVal, _ := pMap.Get(key)
+		cVal, ok := cMap.Get(key)
+		if !ok {
+			return false
+		}
+		if _, uOk := Unify(pVal, cVal); !uOk {
 			return false
 		}
 	}

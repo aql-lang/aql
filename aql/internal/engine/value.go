@@ -81,6 +81,12 @@ type FnDefInfo struct {
 	Sigs []FnSig
 }
 
+// DisjunctInfo holds the alternatives for a disjunction (union) type.
+// A disjunct unifies if any of its alternatives unifies with the target.
+type DisjunctInfo struct {
+	Alternatives []Value
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -204,6 +210,11 @@ func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewDisjunct creates a disjunction type value from a list of alternatives.
+func NewDisjunct(alternatives []Value) Value {
+	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -222,6 +233,17 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsDisjunct reports whether this value is a disjunction type.
+func (v Value) IsDisjunct() bool {
+	_, ok := v.Data.(DisjunctInfo)
+	return ok && v.VType.Equal(TDisjunct)
+}
+
+// AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
+func (v Value) AsDisjunct() DisjunctInfo {
+	return v.Data.(DisjunctInfo)
 }
 
 // IsAtom reports whether this value is an atom.
@@ -332,6 +354,13 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsDisjunct():
+		di := v.AsDisjunct()
+		parts := make([]string, len(di.Alternatives))
+		for i, alt := range di.Alternatives {
+			parts[i] = alt.String()
+		}
+		return strings.Join(parts, "|")
 	case v.VType.Equal(TMap):
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "{:" + ct.Child.String() + "}"

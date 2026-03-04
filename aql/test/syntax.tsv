@@ -754,3 +754,51 @@ def Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
 
 # make with infix form
 def P record [x:number y:number] P make [1 2]	{x:1,y:2}
+
+# === disjunct - union types via or ===
+
+# Disjunct creation: type literals
+string or number	string|number
+string or none	string|none
+none or boolean	none|boolean
+
+# Disjunct chaining (flattened)
+string or number or boolean	string|number|boolean
+
+# Disjunct unify with scalar types
+(string or none) unify "a"	'a' true
+(string or none) unify none	none true
+(none or boolean) unify none	none true
+(none or boolean) unify true	true true
+(number or string) unify 42	42 true
+(number or string) unify "hi"	'hi' true
+
+# Disjunct unify: no match
+(string or boolean) unify 42	'~unify-fail' false
+(number or boolean) unify "hi"	'~unify-fail' false
+
+# Disjunct unify with type narrowing
+(string or number) unify number	number true
+(string or number) unify string	string true
+(number or none) unify 5	5 true
+(number or none) unify none	none true
+
+# Disjunct with any
+(string or number) unify any	string|number true
+
+# Disjunct with concrete maps (open matching)
+({x:1} or {y:2}) unify {x:1}	{x:1} true
+({x:1} or {y:2}) unify {y:2}	{y:2} true
+({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+({x:1} or {y:2} or {z:3}) unify {y:2,q:9,x:8}	{q:9,x:8,y:2} true
+({x:1} or {y:2} or {z:3}) unify {q:9,z:3,x:1}	{q:9,x:1,z:3} true
+
+# Disjunct map: no match
+({x:1} or {y:2}) unify {z:3}	'~unify-fail' false
+({x:1} or {y:2}) unify {x:2}	'~unify-fail' false
+
+# Boolean or still works normally
+true or false	true
+false or true	true
+true or true	true
+false or false	false
