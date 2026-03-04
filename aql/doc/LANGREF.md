@@ -232,17 +232,26 @@ lower B             => 'b'
 
 ### Arithmetic Words
 
-All arithmetic words take two integers and produce one integer.
+Arithmetic words take two integers and produce one integer.
 
 *Signature:* `[integer, integer] -> [integer]`
 
 #### `add`
 
-Addition. Precedence 1.
+Addition for integers; string concatenation when at least one argument
+is a string. Non-string scalars are converted to their string
+representation before concatenation. Precedence 1.
+
+*Signatures:*
+- `[integer, integer] -> [integer]` — numeric addition
+- `[scalar, scalar] -> [string]` — string concatenation
 
 ```
 1 2 add             => 3
 1 add 2             => 3
+"hello" add " world"    => 'hello world'
+"count: " add 42        => 'count: 42'
+42 add " items"         => '42 items'
 ```
 
 #### `sub`

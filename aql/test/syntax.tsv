@@ -80,6 +80,18 @@ lower "XYZ"	'xyz'
 10 mod 3	1
 0 add 0	0
 
+# === String concatenation with add ===
+"hello" add " world"	'hello world'
+"a" add "b"	'ab'
+"count: " add 42	'count: 42'
+42 add " items"	'42 items'
+"flag: " add true	'flag: true'
+"val: " add foo	'val: foo'
+
+# Numbers still do integer addition
+1 add 2	3
+10 add -3	7
+
 # === Operator precedence ===
 2 add 3 mul 4	14
 2 mul 3 add 4	10

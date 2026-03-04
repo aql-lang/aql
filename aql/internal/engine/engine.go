@@ -292,23 +292,37 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 
 		score := signatureScore(sig)
 
+		// Bonus for prefix args already on the stack: each matching
+		// prefix arg adds 25 to the score. This helps signatures that
+		// partially match the existing stack win over those that don't.
+		score += prefixCount * 25
+
 		// Bonus: if the peeked suffix value matches the first expected
 		// suffix arg type, boost this sig's score to prefer it.
 		// In the suffix-first model, suffix always fills from Args[0].
 		if peekVal != nil && prefixCount < len(sig.Args) {
 			firstSuffixType := sig.Args[0]
 			matched := peekVal.VType.Matches(firstSuffixType)
-			// Also predict: unknown words (no function, not true/false,
-			// not a type name) will resolve to atoms during execution.
-			// Check both the original type (TWord) and predicted type
-			// (TAtom) so that sigs expecting either get a bonus.
+			// Predict resolved types for words that haven't executed yet.
 			if !matched && peekVal.IsWord() {
 				pw := peekVal.AsWord()
-				if e.registry.Lookup(pw.Name) == nil &&
-					pw.Name != "true" && pw.Name != "false" &&
-					pw.Name != "(" && pw.Name != ")" && pw.Name != "end" {
-					if _, isType := typeNames[pw.Name]; !isType {
+				switch {
+				case pw.Name == "true" || pw.Name == "false":
+					matched = TBoolean.Matches(firstSuffixType)
+				case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
+					// Skip structural words.
+				default:
+					if _, isType := typeNames[pw.Name]; isType {
+						// Type names stay as type literals, not useful
+						// for suffix prediction here.
+					} else if e.registry.Lookup(pw.Name) == nil {
+						// Unknown word → will resolve to atom.
 						matched = TAtom.Matches(firstSuffixType)
+					}
+					// Also check TWord for sigs expecting word literals
+					// (e.g. set, def).
+					if !matched {
+						matched = peekVal.VType.Matches(firstSuffixType)
 					}
 				}
 			}

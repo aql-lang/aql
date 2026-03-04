@@ -122,6 +122,18 @@ func registerBuiltins(r *Registry) {
 	// Arithmetic: each has Args:[int, int] with suffix precedence.
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
 	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })
+
+	// String concatenation for add: [TScalar, TScalar] converts both
+	// args to strings and concatenates. The [TInteger, TInteger] sig
+	// from registerBinaryIntOp has higher specificity (204 vs 202) so
+	// it wins for two integers when combined with prefix/peek bonuses.
+	r.Register("add", Signature{
+		Args:       []Type{TScalar, TScalar},
+		Precedence: 1,
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewString(valToString(args[0]) + valToString(args[1]))}, nil
+		},
+	})
 	registerBinaryIntOp(r, "sub", 1, func(a, b int64) (int64, error) { return a - b, nil })
 	registerBinaryIntOp(r, "mul", 2, func(a, b int64) (int64, error) { return a * b, nil })
 	registerBinaryIntOp(r, "div", 2, func(a, b int64) (int64, error) {
@@ -161,6 +173,25 @@ func registerBuiltins(r *Registry) {
 	registerVar(r)
 	registerFn(r)
 	registerConvert(r)
+}
+
+// valToString converts any scalar Value to its string representation.
+func valToString(v Value) string {
+	switch {
+	case v.VType.Matches(TString):
+		return v.AsString()
+	case v.IsAtom():
+		return v.AsAtom()
+	case v.VType.Matches(TInteger):
+		return strconv.FormatInt(v.AsInteger(), 10)
+	case v.VType.Matches(TBoolean):
+		if v.AsBoolean() {
+			return "true"
+		}
+		return "false"
+	default:
+		return v.String()
+	}
 }
 
 // storeKey converts a Value to a string key for the store.
@@ -674,32 +705,13 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 //	convert "42" number     => 42
 //	convert true string     => "true"
 func registerConvert(r *Registry) {
-	// scalarText extracts a string representation from any scalar value.
-	scalarText := func(v Value) string {
-		switch {
-		case v.VType.Matches(TString):
-			return v.AsString()
-		case v.IsAtom():
-			return v.AsAtom()
-		case v.VType.Matches(TInteger):
-			return strconv.FormatInt(v.AsInteger(), 10)
-		case v.VType.Matches(TBoolean):
-			if v.AsBoolean() {
-				return "true"
-			}
-			return "false"
-		default:
-			return v.String()
-		}
-	}
-
 	// convertTo performs the actual conversion.
 	convertTo := func(src Value, targetType Type, variant string) (Value, error) {
 		switch {
 		case targetType.Matches(TString):
 			// Convert to string.
 			if variant == "" {
-				return NewString(scalarText(src)), nil
+				return NewString(valToString(src)), nil
 			}
 			// Variant-based string conversion (only for numbers).
 			if !src.VType.Matches(TNumber) {
@@ -721,7 +733,7 @@ func registerConvert(r *Registry) {
 
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
-			text := scalarText(src)
+			text := valToString(src)
 			if variant == "" {
 				n, err := strconv.ParseInt(text, 10, 64)
 				if err != nil {
@@ -754,7 +766,7 @@ func registerConvert(r *Registry) {
 			case src.VType.Matches(TNumber):
 				return NewBoolean(src.AsInteger() != 0), nil
 			default:
-				text := scalarText(src)
+				text := valToString(src)
 				switch text {
 				case "true":
 					return NewBoolean(true), nil
@@ -767,7 +779,7 @@ func registerConvert(r *Registry) {
 
 		case targetType.Equal(TAtom):
 			// Convert to atom.
-			return NewAtom(scalarText(src)), nil
+			return NewAtom(valToString(src)), nil
 
 		default:
 			return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)

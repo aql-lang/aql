@@ -427,8 +427,6 @@ func TestArithmeticErrors(t *testing.T) {
 		// modulo by zero
 		{"mod by zero prefix", []Value{NewInteger(10), NewInteger(0), NewWord("mod")}},
 		{"mod by zero infix", []Value{NewInteger(10), NewWord("mod"), NewInteger(0)}},
-		// type mismatch: string with add
-		{"string add", []Value{NewString("a"), NewInteger(1), NewWord("add")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1489,11 +1487,14 @@ func TestEdgeArithmeticOneArg(t *testing.T) {
 }
 
 func TestEdgeArithmeticStringOperands(t *testing.T) {
-	// "hello" add "world" → error (strings can't be added)
+	// "hello" add "world" → "helloworld" (string concatenation)
 	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
-	if err == nil {
-		t.Fatal("expected error for string add, got nil")
+	result, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "helloworld" {
+		t.Fatalf("got %v, want 'helloworld'", result)
 	}
 }
 
@@ -2242,13 +2243,16 @@ func TestEdgeSuffixUpperThenLower(t *testing.T) {
 // --- Edge: signature matching specifics ---
 
 func TestEdgeAddWithStringAndInt(t *testing.T) {
-	// "hello" 1 add → error (string doesn't match int for add's first arg)
+	// "hello" 1 add → "hello1" (string concatenation via scalar+scalar)
 	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(1), NewWord("add"),
 	})
-	if err == nil {
-		t.Fatal("expected error for string+int add, got nil")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsString() != "hello1" {
+		t.Fatalf("got %v, want 'hello1'", result)
 	}
 }
 
