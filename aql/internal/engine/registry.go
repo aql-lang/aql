@@ -153,6 +153,31 @@ func registerBuiltins(r *Registry) {
 	// Precedence: or/xor/implies=1, and/nand=2 (higher binds tighter).
 	// not is unary with suffix precedence and no precedence level.
 	registerBinaryBoolOp(r, "or", 1, func(a, b bool) bool { return a || b })
+
+	// or for non-boolean values: creates a disjunct (union type).
+	// The boolean signature (specificity 202) ties with this (202), but the
+	// boolean signature is registered first, so it wins for boolean args.
+	r.Register("or", Signature{
+		Args:       []Type{TAny, TAny},
+		Precedence: 1,
+		Handler: func(args []Value) ([]Value, error) {
+			var alts []Value
+			// Flatten left side if already a disjunct.
+			if args[0].IsDisjunct() {
+				alts = append(alts, args[0].AsDisjunct().Alternatives...)
+			} else {
+				alts = append(alts, args[0])
+			}
+			// Flatten right side if already a disjunct.
+			if args[1].IsDisjunct() {
+				alts = append(alts, args[1].AsDisjunct().Alternatives...)
+			} else {
+				alts = append(alts, args[1])
+			}
+			return []Value{NewDisjunct(alts)}, nil
+		},
+	})
+
 	registerBinaryBoolOp(r, "and", 2, func(a, b bool) bool { return a && b })
 	registerBinaryBoolOp(r, "xor", 1, func(a, b bool) bool { return a != b })
 	registerBinaryBoolOp(r, "nand", 2, func(a, b bool) bool { return !(a && b) })
@@ -173,6 +198,13 @@ func registerBuiltins(r *Registry) {
 	registerVar(r)
 	registerFn(r)
 	registerConvert(r)
+	registerRecord(r)
+	registerTable(r)
+	registerMake(r)
+	registerTypeDef(r)
+	registerDo(r)
+	registerTypeof(r)
+	registerBase(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -352,7 +384,7 @@ func installDef(r *Registry, name string, body Value) {
 				if _, ok := top.Data.(FnDefInfo); ok {
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
-				if top.VType.Equal(TList) {
+				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
 					copy(result, elems)
@@ -823,5 +855,735 @@ func registerConvert(r *Registry) {
 			Args:    []Type{TAny, TAny},
 			Handler: convert2Handler,
 		},
+	)
+}
+
+// registerRecord registers the "record" word for creating record type values.
+//
+// record takes a list argument containing field pairs. Each element is a
+// single-key map (from pair syntax) defining a field name and its type
+// constraint.
+//
+//	record [x:number y:string]                   => record{x:number,y:string}
+//	record [{x:{z:boolean}} "y":1]               => record{x:{z:boolean},y:1}
+//	def Point record [x:number y:number]         => defines Point as a record type
+//	{x:1, y:2} Point unify                       => {x:1,y:2} true
+func registerRecord(r *Registry) {
+	recordHandler := func(args []Value) ([]Value, error) {
+		list := args[0]
+		if !list.VType.Equal(TList) {
+			return nil, fmt.Errorf("record: argument must be a list")
+		}
+		elems := list.AsList()
+		if len(elems) == 0 {
+			return nil, fmt.Errorf("record: list must have at least one field")
+		}
+		fields := NewOrderedMap()
+		for _, elem := range elems {
+			if !elem.VType.Equal(TMap) {
+				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
+			}
+			m, ok := elem.Data.(*OrderedMap)
+			if !ok {
+				return nil, fmt.Errorf("record: each element must be a concrete pair, got %s", elem.String())
+			}
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				val = resolveFieldType(r, val)
+				fields.Set(key, val)
+			}
+		}
+		return []Value{NewRecordType(fields)}, nil
+	}
+
+	r.Register("record", Signature{
+		Args:    []Type{TList},
+		Handler: recordHandler,
+	})
+}
+
+// registerTable registers the "table" word for creating table type values.
+//
+// table takes a single argument which must be a record type value. It produces
+// a table type that represents a list of record instances conforming to that
+// record schema.
+//
+//	type foo record [x:integer y:string]
+//	type bar table foo                        => defines bar as table{x:number/integer,y:string}
+//	table record [x:number]                   => table{x:number}
+func registerTable(r *Registry) {
+	tableHandler := func(args []Value) ([]Value, error) {
+		target := args[0]
+		if !target.IsRecordType() {
+			return nil, fmt.Errorf("table: argument must be a record type, got %s", target.String())
+		}
+		return []Value{NewTableType(target.AsRecordType())}, nil
+	}
+
+	r.Register("table", Signature{
+		Args:    []Type{TAny},
+		Handler: tableHandler,
+	})
+}
+
+// registerMake registers the "make" word for creating typed instances.
+//
+// Scalar forms:
+//
+//	make string 42       => '42'     (convert integer to string)
+//	make number "99"     => 99       (convert string to number)
+//	make boolean 1       => true     (convert number to boolean)
+//
+// Record form (first arg is a record type value, e.g. from a def):
+//
+//	def bar record [x:number y:boolean z:string]
+//	make bar [1 false "s"]         => {x:1,y:false,z:'s'} (positional)
+//	make bar [y:true x:2 z:'Z']   => {x:2,y:true,z:'Z'}  (named)
+func registerMake(r *Registry) {
+	// makeRecord creates a record instance from a source value and options.
+	makeRecord := func(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
+		fieldKeys := recType.Fields.Keys()
+		result := NewOrderedMap()
+
+		// Helper: fill result from a provided map, defaulting
+		// missing fields based on useBase flag.
+		fillFromMap := func(provided *OrderedMap) error {
+			for _, key := range provided.Keys() {
+				if _, ok := recType.Fields.Get(key); !ok {
+					return fmt.Errorf("make: unknown field %q", key)
+				}
+			}
+			for _, key := range fieldKeys {
+				constraint, _ := recType.Fields.Get(key)
+				val, ok := provided.Get(key)
+				if !ok {
+					if useBase {
+						// base:true — fill with base value for the field type.
+						bv, err := baseValueForConstraint(constraint)
+						if err != nil {
+							return fmt.Errorf("make: field %q: %w", key, err)
+						}
+						result.Set(key, bv)
+						continue
+					}
+					// Default: allow if none unifies with constraint.
+					noneVal := NewTypeLiteral(TNone)
+					if _, unifOK := Unify(constraint, noneVal); unifOK {
+						result.Set(key, noneVal)
+						continue
+					}
+					return fmt.Errorf("make: missing field %q", key)
+				}
+				converted, err := makeFieldValue(val, constraint)
+				if err != nil {
+					return fmt.Errorf("make: field %q: %w", key, err)
+				}
+				result.Set(key, converted)
+			}
+			return nil
+		}
+
+		// Map form: make RecType {x:1 y:"hello"}
+		if srcVal.VType.Equal(TMap) {
+			provided, ok := srcVal.Data.(*OrderedMap)
+			if !ok {
+				return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
+			}
+			if err := fillFromMap(provided); err != nil {
+				return nil, err
+			}
+			return []Value{NewMap(result)}, nil
+		}
+
+		if !srcVal.VType.Equal(TList) {
+			return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
+		}
+		elems := srcVal.AsList()
+
+		// Check if named or positional.
+		isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
+		if isNamed {
+			if _, ok := elems[0].Data.(*OrderedMap); !ok {
+				isNamed = false
+			}
+		}
+
+		if isNamed {
+			provided := NewOrderedMap()
+			for _, elem := range elems {
+				if !elem.VType.Equal(TMap) {
+					return nil, fmt.Errorf("make: mixed named and positional fields")
+				}
+				m, ok := elem.Data.(*OrderedMap)
+				if !ok {
+					return nil, fmt.Errorf("make: expected concrete map pair, got %s", elem.String())
+				}
+				for _, key := range m.Keys() {
+					val, _ := m.Get(key)
+					provided.Set(key, val)
+				}
+			}
+			if err := fillFromMap(provided); err != nil {
+				return nil, err
+			}
+		} else {
+			if len(elems) != len(fieldKeys) {
+				return nil, fmt.Errorf("make: expected %d values, got %d",
+					len(fieldKeys), len(elems))
+			}
+			for i, key := range fieldKeys {
+				constraint, _ := recType.Fields.Get(key)
+				converted, err := makeFieldValue(elems[i], constraint)
+				if err != nil {
+					return nil, fmt.Errorf("make: field %q: %w", key, err)
+				}
+				result.Set(key, converted)
+			}
+		}
+
+		return []Value{NewMap(result)}, nil
+	}
+
+	// parseOptions extracts make options from an options map.
+	parseOptions := func(opts Value) (useBase bool, err error) {
+		if !opts.VType.Equal(TMap) {
+			return false, fmt.Errorf("make: options must be a map, got %s", opts.String())
+		}
+		m, ok := opts.Data.(*OrderedMap)
+		if !ok {
+			return false, fmt.Errorf("make: expected concrete options map")
+		}
+		if v, ok := m.Get("base"); ok {
+			v = resolveWordValue(v)
+			if v.VType.Matches(TBoolean) && v.Data.(bool) {
+				useBase = true
+			}
+		}
+		return useBase, nil
+	}
+
+	makeHandler := func(args []Value) ([]Value, error) {
+		targetVal := args[0]
+		srcVal := args[1]
+
+		// Record type instance creation.
+		if targetVal.IsRecordType() {
+			recType := targetVal.AsRecordType()
+			return makeRecord(recType, srcVal, false)
+		}
+
+		// Table type instance creation.
+		if targetVal.IsTableType() {
+			tableType := targetVal.AsTableType()
+			recType := tableType.Record
+
+			if !srcVal.VType.Equal(TList) {
+				return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
+			}
+			rows := srcVal.AsList()
+			fieldKeys := recType.Fields.Keys()
+			resultRows := make([]Value, 0, len(rows))
+
+			for rowIdx, rowVal := range rows {
+				if !rowVal.VType.Equal(TList) {
+					return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
+				}
+				rowElems := rowVal.AsList()
+
+				// Check if named or positional.
+				isNamed := len(rowElems) > 0 && rowElems[0].VType.Equal(TMap)
+				if isNamed {
+					if _, ok := rowElems[0].Data.(*OrderedMap); !ok {
+						isNamed = false
+					}
+				}
+
+				result := NewOrderedMap()
+				if isNamed {
+					provided := NewOrderedMap()
+					for _, elem := range rowElems {
+						if !elem.VType.Equal(TMap) {
+							return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
+						}
+						m, ok := elem.Data.(*OrderedMap)
+						if !ok {
+							return nil, fmt.Errorf("make: table row %d: expected concrete map pair, got %s", rowIdx, elem.String())
+						}
+						for _, key := range m.Keys() {
+							val, _ := m.Get(key)
+							provided.Set(key, val)
+						}
+					}
+					for _, key := range fieldKeys {
+						val, ok := provided.Get(key)
+						if !ok {
+							return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
+						}
+						constraint, _ := recType.Fields.Get(key)
+						converted, err := makeFieldValue(val, constraint)
+						if err != nil {
+							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+						}
+						result.Set(key, converted)
+					}
+					for _, key := range provided.Keys() {
+						if _, ok := recType.Fields.Get(key); !ok {
+							return nil, fmt.Errorf("make: table row %d: unknown field %q", rowIdx, key)
+						}
+					}
+				} else {
+					if len(rowElems) != len(fieldKeys) {
+						return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
+							rowIdx, len(fieldKeys), len(rowElems))
+					}
+					for i, key := range fieldKeys {
+						constraint, _ := recType.Fields.Get(key)
+						converted, err := makeFieldValue(rowElems[i], constraint)
+						if err != nil {
+							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+						}
+						result.Set(key, converted)
+					}
+				}
+
+				resultRows = append(resultRows, NewMap(result))
+			}
+
+			return []Value{NewList(resultRows)}, nil
+		}
+
+		// Scalar type conversion.
+		if targetVal.Data != nil {
+			return nil, fmt.Errorf("make: first argument must be a type literal or record type, got %s", targetVal.String())
+		}
+
+		targetType := targetVal.VType
+		if srcVal.VType.Matches(targetType) {
+			return []Value{srcVal}, nil
+		}
+
+		result, err := makeConvert(srcVal, targetType)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	// 3-arg handler: make RecType source {options}
+	makeWithOpts := func(args []Value) ([]Value, error) {
+		targetVal := args[0]
+		srcVal := args[1]
+		optsVal := args[2]
+
+		useBase, err := parseOptions(optsVal)
+		if err != nil {
+			return nil, err
+		}
+
+		if targetVal.IsRecordType() {
+			recType := targetVal.AsRecordType()
+			return makeRecord(recType, srcVal, useBase)
+		}
+
+		// For non-record types, options are ignored — delegate to 2-arg.
+		return makeHandler(args[:2])
+	}
+
+	r.Register("make",
+		Signature{
+			Args:    []Type{TAny, TAny, TMap},
+			Handler: makeWithOpts,
+		},
+		Signature{
+			Args:    []Type{TAny, TAny},
+			Handler: makeHandler,
+		},
+	)
+}
+
+// makeConvert converts a source value to a target scalar type for the make word.
+func makeConvert(src Value, targetType Type) (Value, error) {
+	switch {
+	case targetType.Matches(TString):
+		return NewString(valToString(src)), nil
+
+	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
+		text := valToString(src)
+		n, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			return Value{}, fmt.Errorf("make: cannot convert %q to number", text)
+		}
+		return NewInteger(n), nil
+
+	case targetType.Matches(TBoolean):
+		switch {
+		case src.VType.Matches(TBoolean):
+			return src, nil
+		case src.VType.Matches(TNumber):
+			return NewBoolean(src.AsInteger() != 0), nil
+		default:
+			text := valToString(src)
+			switch text {
+			case "true":
+				return NewBoolean(true), nil
+			case "false":
+				return NewBoolean(false), nil
+			default:
+				return NewBoolean(text != ""), nil
+			}
+		}
+
+	case targetType.Equal(TAtom):
+		return NewAtom(valToString(src)), nil
+
+	default:
+		return Value{}, fmt.Errorf("make: unsupported target type %s", targetType)
+	}
+}
+
+// makeFieldValue converts a value to match a record field's type constraint.
+// If the constraint is a type literal, the value is converted to that type.
+// If the value already matches, it is returned as-is.
+func makeFieldValue(val Value, constraint Value) (Value, error) {
+	// Resolve words to their semantic value first (e.g. word(false) → boolean false).
+	val = resolveWordValue(val)
+
+	// If the constraint is a type literal (Data==nil), convert the value.
+	if constraint.Data == nil {
+		constraintType := constraint.VType
+		if val.VType.Matches(constraintType) {
+			return val, nil
+		}
+		return makeConvert(val, constraintType)
+	}
+
+	// If the constraint has a concrete value, just check via unification.
+	unified, ok := Unify(constraint, val)
+	if !ok {
+		return Value{}, fmt.Errorf("value %s does not match constraint %s", val.String(), constraint.String())
+	}
+	return unified, nil
+}
+
+// resolveWordValue converts a word value to its semantic value.
+// Words named "true"/"false" become booleans, "none" becomes a type literal,
+// and other words become atoms (bare strings).
+func resolveWordValue(v Value) Value {
+	if !v.IsWord() {
+		return v
+	}
+	name := v.AsWord().Name
+	switch name {
+	case "true":
+		return NewBoolean(true)
+	case "false":
+		return NewBoolean(false)
+	case "none":
+		return NewTypeLiteral(TNone)
+	default:
+		return NewAtom(name)
+	}
+}
+
+// resolveFieldType resolves a record field's type constraint value.
+//
+// Three resolution strategies:
+//  1. String matching a user-defined type name in DefStacks → replaced
+//     with the defined type value (e.g., disjunctions by name).
+//  2. Concrete list → evaluated as code in a sub-engine so that
+//     expressions like [string or none] produce a disjunction.
+//  3. Everything else passes through unchanged.
+//
+// Examples:
+//
+//	type OptStr (string or none)
+//	record [x:number y:OptStr]              => record{x:number,y:string|none}
+//	record [x:number y:[string or none]]    => record{x:number,y:string|none}
+func resolveFieldType(r *Registry, v Value) Value {
+	// Strategy 1: string matching a defined type name.
+	if v.Data != nil && v.VType.Matches(TString) {
+		name := v.AsString()
+		stack := r.DefStacks[name]
+		if len(stack) > 0 {
+			top := stack[len(stack)-1]
+			if isTypeValue(top) {
+				return top
+			}
+		}
+		return v
+	}
+
+	// Strategy 2: evaluate concrete list as code.
+	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+		elems := v.AsList()
+		// Promote strings that name registered functions to words,
+		// since list elements inside pairs are parsed in data context.
+		input := make([]Value, len(elems))
+		for i, e := range elems {
+			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
+				name := e.AsString()
+				if r.Lookup(name) != nil {
+					input[i] = NewWord(name)
+					continue
+				}
+			}
+			input[i] = e
+		}
+		sub := New(r)
+		results, err := sub.Run(input)
+		if err == nil && len(results) == 1 {
+			return results[0]
+		}
+		// If evaluation fails or produces multiple values, keep original.
+		return v
+	}
+
+	return v
+}
+
+// registerTypeDef registers the "type" word for defining custom types.
+//
+// type defines a named type. The body must be a type-like value:
+// a record type, disjunct, type literal, typed list, or typed map.
+//
+//	type Point record [x:number y:number]
+//	type OptNum (number or none)
+//	type NumList [:number]
+//	type Num number
+func registerTypeDef(r *Registry) {
+	typeHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		body := args[1]
+
+		// Validate that the body is a type-like value.
+		if !isTypeValue(body) {
+			return nil, fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
+		}
+
+		installDef(r, name, body)
+		return nil, nil
+	}
+
+	r.Register("type",
+		Signature{
+			Args:    []Type{TWord, TAny},
+			Handler: typeHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TAny},
+			Handler: typeHandler,
+		},
+	)
+}
+
+// registerDo registers the "do" word for evaluating list and map contents.
+//
+// For lists, do evaluates the elements as a token stream in a sub-engine:
+//
+//	do [1 add 2]  →  3
+//
+// For maps, do evaluates any list values (depth-first), leaving non-list
+// values unchanged:
+//
+//	do {x: [3 add 4], y: [upper a]}  →  {x:7, y:"A"}
+func registerDo(r *Registry) {
+	// promoteToWord converts a string value to a word if the string
+	// names a registered function. This is needed because list elements
+	// inside maps are parsed in data context (bare text → string),
+	// but do needs to evaluate them as code (bare text → word).
+	promoteToWord := func(v Value) Value {
+		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
+			name := v.AsString()
+			if r.Lookup(name) != nil {
+				return NewWord(name)
+			}
+		}
+		return v
+	}
+
+	evalList := func(elems []Value) ([]Value, error) {
+		sub := New(r)
+		input := make([]Value, len(elems))
+		copy(input, elems)
+		return sub.Run(input)
+	}
+
+	// evalDataList evaluates a list from data context (inside a map).
+	// Strings that name registered functions are promoted to words.
+	evalDataList := func(elems []Value) ([]Value, error) {
+		sub := New(r)
+		input := make([]Value, len(elems))
+		for i, e := range elems {
+			input[i] = promoteToWord(e)
+		}
+		return sub.Run(input)
+	}
+
+	var evalMapValue func(v Value) (Value, error)
+	evalMapValue = func(v Value) (Value, error) {
+		if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+			results, err := evalDataList(v.AsList())
+			if err != nil {
+				return Value{}, err
+			}
+			if len(results) == 1 {
+				return results[0], nil
+			}
+			return NewList(results), nil
+		}
+		if v.VType.Equal(TMap) && !v.IsTypedMap() && !v.IsRecordType() {
+			m := v.AsMap()
+			out := NewOrderedMap()
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				evaluated, err := evalMapValue(val)
+				if err != nil {
+					return Value{}, err
+				}
+				out.Set(key, evaluated)
+			}
+			return NewMap(out), nil
+		}
+		return v, nil
+	}
+
+	r.Register("do",
+		Signature{
+			Args: []Type{TList},
+			Handler: func(args []Value) ([]Value, error) {
+				return evalList(args[0].AsList())
+			},
+		},
+		Signature{
+			Args: []Type{TMap},
+			Handler: func(args []Value) ([]Value, error) {
+				result, err := evalMapValue(args[0])
+				if err != nil {
+					return nil, err
+				}
+				return []Value{result}, nil
+			},
+		},
+	)
+}
+
+// isTypeValue reports whether a value is a valid type definition body.
+func isTypeValue(v Value) bool {
+	// Type literal (Data==nil): number, string, boolean, any, etc.
+	if v.Data == nil {
+		return true
+	}
+	// Record type
+	if v.IsRecordType() {
+		return true
+	}
+	// Table type
+	if v.IsTableType() {
+		return true
+	}
+	// Disjunct
+	if v.IsDisjunct() {
+		return true
+	}
+	// Typed list [:type]
+	if v.IsTypedList() {
+		return true
+	}
+	// Typed map {:type}
+	if v.IsTypedMap() {
+		return true
+	}
+	return false
+}
+
+// registerTypeof registers the "typeof" word that returns the base type
+// of its argument as an atom.
+//
+//	typeof 42          => integer
+//	typeof "hello"     => string
+//	typeof true        => boolean
+//	typeof [1 2 3]     => list
+//	typeof {x:1}       => map
+//	typeof none        => none
+func registerTypeof(r *Registry) {
+	typeofHandler := func(args []Value) ([]Value, error) {
+		v := args[0]
+		name := v.VType.Parts[0]
+		return []Value{NewAtom(name)}, nil
+	}
+
+	r.Register("typeof",
+		Signature{Args: []Type{TAny}, Handler: typeofHandler},
+	)
+}
+
+// registerBase registers the "base" word that returns the zero/default value
+// for a given type, similar to Go's zero values.
+//
+//	base integer    => 0
+//	base string     => ''
+//	base boolean    => false
+//	base list       => []
+//	base map        => {}
+//	base none       => none
+// baseValue returns the zero/default value for a given type, similar to Go's
+// zero values. Used by both the "base" word and "make" with base:true option.
+func baseValue(t Type) (Value, error) {
+	switch {
+	case t.Matches(TInteger):
+		return NewInteger(0), nil
+	case t.Matches(TNumber):
+		return NewInteger(0), nil
+	case t.Matches(TString):
+		return NewString(""), nil
+	case t.Matches(TBoolean):
+		return NewBoolean(false), nil
+	case t.Matches(TList):
+		return NewList([]Value{}), nil
+	case t.Matches(TMap):
+		return NewMap(NewOrderedMap()), nil
+	case t.Matches(TNone):
+		return NewTypeLiteral(TNone), nil
+	case t.Matches(TAtom):
+		return NewAtom(""), nil
+	default:
+		return Value{}, fmt.Errorf("base: unsupported type %s", t.String())
+	}
+}
+
+// baseValueForConstraint returns the base value for a field constraint.
+// For type literals, returns the zero value directly.
+// For disjunctions (e.g. string|none), returns the base of the first
+// non-none alternative.
+func baseValueForConstraint(constraint Value) (Value, error) {
+	if constraint.IsDisjunct() {
+		di := constraint.AsDisjunct()
+		for _, alt := range di.Alternatives {
+			if alt.Data == nil && !alt.VType.Equal(TNone) {
+				return baseValue(alt.VType)
+			}
+		}
+		// All alternatives are none.
+		return NewTypeLiteral(TNone), nil
+	}
+	if constraint.Data == nil {
+		return baseValue(constraint.VType)
+	}
+	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())
+}
+
+func registerBase(r *Registry) {
+	baseHandler := func(args []Value) ([]Value, error) {
+		v := args[0]
+		t := v.VType
+		result, err := baseValue(t)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	r.Register("base",
+		Signature{Args: []Type{TAny}, Handler: baseHandler},
 	)
 }

@@ -68,3 +68,134 @@ lower/s "E"	'e'
 
 # Set/Get
 set foo 99 end get foo	99
+
+# Make - scalar types
+make string 9	'9'
+make string 42	'42'
+make number "99"	99
+make boolean 1	true
+make boolean 0	false
+
+# Make - record type (positional)
+type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+
+# Make - record type (named fields, reordered)
+type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+
+# Table type - creation
+table record [x:number y:string]	table{x:number,y:string}
+
+# Table type - with type def
+type foo record [x:integer y:string] type bar table foo bar	table{x:number/integer,y:string}
+
+# Make - table type (positional)
+type foo record [x:integer y:string] type bar table foo make bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Make - table type (named fields)
+type foo record [x:integer y:string] type bar table foo make bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Table unification - compatible schemas
+type foo record [x:any] type bar record [x:number] (table foo) unify (table bar)	table{x:number} true
+
+# Table unification - incompatible schemas
+type foo record [x:number] type bar record [y:number] (table foo) unify (table bar)	'~unify-fail' false
+
+# Table does not unify with list
+list unify table record [x:number]	'~unify-fail' false
+
+# Record with inline disjunct field (list evaluated as code)
+record [x:number y:[string or none]]	record{x:number,y:string|none}
+
+# Record with inline disjunct - unification narrows
+record [x:number y:[string or none]] unify record [x:number y:string]	record{x:number,y:string} true
+
+# Make record with inline disjunct - none value
+type foo record [x:number y:[string or none]] make foo [42 none]	{x:42,y:none}
+
+# Make record with inline disjunct - string value
+type foo record [x:number y:[string or none]] make foo [42 "hello"]	{x:42,y:'hello'}
+
+# Record with user-defined type field (disjunct for optional)
+type OptStr (string or none) type foo record [x:number y:OptStr] foo	record{x:number,y:string|none}
+
+# Record with user-defined type - unification narrows disjunct
+type OptStr (string or none) type foo record [x:number y:OptStr] foo unify record [x:number y:string]	record{x:number,y:string} true
+
+# Make record with optional field - string value
+type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
+
+# Make record with optional field - none value
+type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 none]	{x:42,y:none}
+
+# Make record from map - all fields provided
+type foo record [x:number y:string] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field provided
+type foo record [x:number y:[string or none]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field omitted (defaults to none)
+type foo record [x:number y:[string or none]] make foo {x:1}	{x:1,y:none}
+
+# Make record from named list - optional field omitted (defaults to none)
+type foo record [x:number y:[string or none]] make foo [x:1]	{x:1,y:none}
+
+# Make record from map - missing required field is an error
+type foo record [x:number y:string] make foo {x:1}	ERROR:make: missing field "y"
+
+# Make record from map - unknown field is an error
+type foo record [x:number y:string] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+
+# Table with optional field - mixed string and none values
+type OptStr (string or none) type foo record [x:number y:OptStr] type bar table foo make bar [[1 "a"] [2 none]]	[{x:1,y:'a'},{x:2,y:none}]
+
+# Record with nested user-defined record type
+type Inner record [z:string] type Outer record [a:number b:Inner] Outer	record{a:number,b:record{z:string}}
+
+# Do - evaluate list contents
+do [1 add 2]	3
+
+# Do - evaluate map list values
+do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# Disjunct - union types via or
+string or none	string|none
+(string or none) unify "a"	'a' true
+(none or boolean) unify none	none true
+({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+
+# typeof - returns base type as atom
+typeof 42	number
+typeof "hello"	string
+typeof ""	string
+typeof true	boolean
+typeof false	boolean
+typeof [1 2 3]	list
+typeof {x:1}	map
+typeof none	none
+
+# base - returns zero/default value for a type
+base integer	0
+base number	0
+base string	''
+base boolean	false
+base list	[]
+base map	{}
+base none	none
+
+# make record with base:true - missing fields get zero values
+type P record [x:number y:string] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - all fields provided
+type P record [x:number y:string] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
+
+# make record with base:true - optional field gets base not none
+type P record [x:number y:[string or none]] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - boolean field
+type P record [x:number y:boolean] make P {x:1} {base:true}	{x:1,y:false}
+
+# make record with base:true - multiple missing fields
+type P record [x:number y:string z:boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
+
+# make record with base:true - named list form
+type P record [x:number y:string] make P [x:1] {base:true}	{x:1,y:''}

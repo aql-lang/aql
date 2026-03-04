@@ -56,6 +56,21 @@ type ChildTypeInfo struct {
 	Child Value
 }
 
+// RecordTypeInfo holds the field schema for a record type.
+// Each field maps a name to a type-constraint Value (e.g. a type literal).
+// A record type unifies with a concrete map if it has exactly the right keys
+// and each value unifies with the corresponding field type.
+type RecordTypeInfo struct {
+	Fields *OrderedMap // field name → type-constraint Value
+}
+
+// TableTypeInfo holds the record schema for a table type.
+// A table represents a list of record instances that all conform to the
+// same record type.
+type TableTypeInfo struct {
+	Record RecordTypeInfo // the record type that each row must match
+}
+
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
 	Name string // empty for unnamed positional parameters
@@ -71,6 +86,12 @@ type FnSig struct {
 // FnDefInfo holds the parsed function specification for a def-defined function.
 type FnDefInfo struct {
 	Sigs []FnSig
+}
+
+// DisjunctInfo holds the alternatives for a disjunction (union) type.
+// A disjunct unifies if any of its alternatives unifies with the target.
+type DisjunctInfo struct {
+	Alternatives []Value
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -141,6 +162,21 @@ func NewTypedMap(child Value) Value {
 	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
 }
 
+// NewRecordType creates a record type value from a field schema.
+// The fields map contains field names as keys and type-constraint Values as values.
+// For example, record{x:number, y:number} constrains maps to have exactly
+// keys x and y with number-typed values.
+func NewRecordType(fields *OrderedMap) Value {
+	return Value{VType: TMap, Data: RecordTypeInfo{Fields: fields}}
+}
+
+// NewTableType creates a table type value from a record type.
+// A table type constrains a list so that each element is a map conforming
+// to the given record schema.
+func NewTableType(record RecordTypeInfo) Value {
+	return Value{VType: TList, Data: TableTypeInfo{Record: record}}
+}
+
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
 	return Value{VType: TAtom, Data: name}
@@ -188,6 +224,11 @@ func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewDisjunct creates a disjunction type value from a list of alternatives.
+func NewDisjunct(alternatives []Value) Value {
+	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -206,6 +247,17 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsDisjunct reports whether this value is a disjunction type.
+func (v Value) IsDisjunct() bool {
+	_, ok := v.Data.(DisjunctInfo)
+	return ok && v.VType.Equal(TDisjunct)
+}
+
+// AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
+func (v Value) AsDisjunct() DisjunctInfo {
+	return v.Data.(DisjunctInfo)
 }
 
 // IsAtom reports whether this value is an atom.
@@ -228,6 +280,28 @@ func (v Value) IsTypedList() bool {
 func (v Value) IsTypedMap() bool {
 	_, ok := v.Data.(ChildTypeInfo)
 	return ok && v.VType.Equal(TMap)
+}
+
+// IsRecordType reports whether this value is a record type (map with field schema).
+func (v Value) IsRecordType() bool {
+	_, ok := v.Data.(RecordTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsRecordType returns the RecordTypeInfo, panics if not a record type.
+func (v Value) AsRecordType() RecordTypeInfo {
+	return v.Data.(RecordTypeInfo)
+}
+
+// IsTableType reports whether this value is a table type (list with record schema).
+func (v Value) IsTableType() bool {
+	_, ok := v.Data.(TableTypeInfo)
+	return ok && v.VType.Equal(TList)
+}
+
+// AsTableType returns the TableTypeInfo, panics if not a table type.
+func (v Value) AsTableType() TableTypeInfo {
+	return v.Data.(TableTypeInfo)
 }
 
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
@@ -296,6 +370,14 @@ func (v Value) String() string {
 		}
 		return "false"
 	case v.VType.Equal(TList):
+		if tt, ok := v.Data.(TableTypeInfo); ok {
+			parts := make([]string, 0, tt.Record.Fields.Len())
+			for _, k := range tt.Record.Fields.Keys() {
+				val, _ := tt.Record.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "table{" + strings.Join(parts, ",") + "}"
+		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}
@@ -305,9 +387,24 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsDisjunct():
+		di := v.AsDisjunct()
+		parts := make([]string, len(di.Alternatives))
+		for i, alt := range di.Alternatives {
+			parts[i] = alt.String()
+		}
+		return strings.Join(parts, "|")
 	case v.VType.Equal(TMap):
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "{:" + ct.Child.String() + "}"
+		}
+		if rt, ok := v.Data.(RecordTypeInfo); ok {
+			parts := make([]string, 0, rt.Fields.Len())
+			for _, k := range rt.Fields.Keys() {
+				val, _ := rt.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "record{" + strings.Join(parts, ",") + "}"
 		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())

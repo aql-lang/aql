@@ -21,6 +21,15 @@ func Unify(a, b Value) (Value, bool) {
 	aType := a.VType
 	bType := b.VType
 
+	// Disjunct unification first: try each alternative, succeed on first match.
+	// Must come before none/any checks so that disjuncts containing none work.
+	if a.IsDisjunct() {
+		return unifyDisjunct(a.AsDisjunct(), b)
+	}
+	if b.IsDisjunct() {
+		return unifyDisjunct(b.AsDisjunct(), a)
+	}
+
 	// "none" only unifies with "none".
 	aNone := aType.Equal(TNone)
 	bNone := bType.Equal(TNone)
@@ -78,15 +87,15 @@ func Unify(a, b Value) (Value, bool) {
 
 // unifyLists handles unification when at least one side is a list.
 func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
-	// Type literal "list" (Data==nil) unifies with any list type.
+	// Type literal "list" (Data==nil) unifies with any list type, but not tables.
 	if aIsList && a.Data == nil {
-		if bIsList {
+		if bIsList && !b.IsTableType() {
 			return b, true
 		}
 		return Value{}, false
 	}
 	if bIsList && b.Data == nil {
-		if aIsList {
+		if aIsList && !a.IsTableType() {
 			return a, true
 		}
 		return Value{}, false
@@ -94,6 +103,25 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	// Both must be list types.
 	if !aIsList || !bIsList {
+		return Value{}, false
+	}
+
+	// Check for table types (record-constrained lists).
+	// Tables only unify with other tables, never with plain lists.
+	aTable := a.IsTableType()
+	bTable := b.IsTableType()
+
+	if aTable && bTable {
+		// Both table types: unify their record schemas.
+		unified, ok := unifyRecordTypes(a.AsTableType().Record, b.AsTableType().Record)
+		if !ok {
+			return Value{}, false
+		}
+		return NewTableType(unified.AsRecordType()), true
+	}
+
+	if aTable || bTable {
+		// One is a table, the other is not — cannot unify.
 		return Value{}, false
 	}
 
@@ -161,15 +189,15 @@ func unifyTypedWithConcrete(childType Value, elems []Value) (Value, bool) {
 // unifyMaps handles unification when at least one side is a map.
 // Maps are closed: both must have exactly the same set of keys.
 func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
-	// Type literal "map" (Data==nil) unifies with any map type.
+	// Type literal "map" (Data==nil) unifies with any map type, but not records.
 	if aIsMap && a.Data == nil {
-		if bIsMap {
+		if bIsMap && !b.IsRecordType() {
 			return b, true
 		}
 		return Value{}, false
 	}
 	if bIsMap && b.Data == nil {
-		if aIsMap {
+		if aIsMap && !a.IsRecordType() {
 			return a, true
 		}
 		return Value{}, false
@@ -177,6 +205,21 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	// Both must be map types.
 	if !aIsMap || !bIsMap {
+		return Value{}, false
+	}
+
+	// Check for record types (field schema constraints).
+	// Records only unify with other records, never with maps or lists.
+	aRecord := a.IsRecordType()
+	bRecord := b.IsRecordType()
+
+	if aRecord && bRecord {
+		// Both record types: unify field schemas with order enforcement.
+		return unifyRecordTypes(a.AsRecordType(), b.AsRecordType())
+	}
+
+	if aRecord || bRecord {
+		// One is a record, the other is not — cannot unify.
 		return Value{}, false
 	}
 
@@ -250,6 +293,38 @@ func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
 	return NewMap(result), true
 }
 
+// unifyRecordTypes unifies two record types by unifying their field schemas.
+// Both must have exactly the same keys in exactly the same order; each field
+// type pair is unified. Field order is significant.
+func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
+	aFields := a.Fields
+	bFields := b.Fields
+
+	if aFields.Len() != bFields.Len() {
+		return Value{}, false
+	}
+
+	aKeys := aFields.Keys()
+	bKeys := bFields.Keys()
+
+	result := NewOrderedMap()
+	for i, key := range aKeys {
+		// Field order must match.
+		if bKeys[i] != key {
+			return Value{}, false
+		}
+		aVal, _ := aFields.Get(key)
+		bVal, _ := bFields.Get(key)
+		unified, uOk := Unify(aVal, bVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+
+	return NewRecordType(result), true
+}
+
 // valuesEqual compares the data payloads of two values with the same type.
 func valuesEqual(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
@@ -268,6 +343,14 @@ func valuesEqual(a, b Value) bool {
 	case a.VType.Matches(TBoolean):
 		return a.AsBoolean() == b.AsBoolean()
 	case a.VType.Equal(TList):
+		aTT, aTbl := a.Data.(TableTypeInfo)
+		bTT, bTbl := b.Data.(TableTypeInfo)
+		if aTbl && bTbl {
+			return mapsEqual(aTT.Record.Fields, bTT.Record.Fields)
+		}
+		if aTbl != bTbl {
+			return false
+		}
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
@@ -278,6 +361,14 @@ func valuesEqual(a, b Value) bool {
 		}
 		return listsEqual(a.AsList(), b.AsList())
 	case a.VType.Equal(TMap):
+		aRT, aRec := a.Data.(RecordTypeInfo)
+		bRT, bRec := b.Data.(RecordTypeInfo)
+		if aRec && bRec {
+			return mapsEqual(aRT.Fields, bRT.Fields)
+		}
+		if aRec != bRec {
+			return false
+		}
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
@@ -317,6 +408,58 @@ func mapsEqual(a, b *OrderedMap) bool {
 			return false
 		}
 		if !aVal.VType.Equal(bVal.VType) || !valuesEqual(aVal, bVal) {
+			return false
+		}
+	}
+	return true
+}
+
+// unifyDisjunct tries to unify a value against each alternative in a disjunct.
+// Returns the first successful unification. For map alternatives, uses open
+// (subset) matching where the candidate only needs to contain the alternative's
+// key-value pairs.
+func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
+	// "any" unifies with the whole disjunct, preserving it.
+	if val.VType.Equal(TAny) {
+		return NewDisjunct(disj.Alternatives), true
+	}
+
+	for _, alt := range disj.Alternatives {
+		// For concrete map alternatives against concrete map values,
+		// use open (subset) matching.
+		if alt.VType.Equal(TMap) && val.VType.Equal(TMap) &&
+			!alt.IsRecordType() && !val.IsRecordType() &&
+			!alt.IsTypedMap() && !val.IsTypedMap() {
+			if alt.Data != nil && val.Data != nil {
+				if openUnifyMap(alt, val) {
+					return val, true
+				}
+				continue
+			}
+		}
+
+		// Standard unification for all other cases.
+		unified, ok := Unify(alt, val)
+		if ok {
+			return unified, true
+		}
+	}
+	return Value{}, false
+}
+
+// openUnifyMap checks whether candidate contains at least the key-value pairs
+// of pattern. Extra keys in candidate are allowed (open/subset matching).
+func openUnifyMap(pattern, candidate Value) bool {
+	pMap := pattern.AsMap()
+	cMap := candidate.AsMap()
+
+	for _, key := range pMap.Keys() {
+		pVal, _ := pMap.Get(key)
+		cVal, ok := cMap.Get(key)
+		if !ok {
+			return false
+		}
+		if _, uOk := Unify(pVal, cVal); !uOk {
 			return false
 		}
 	}

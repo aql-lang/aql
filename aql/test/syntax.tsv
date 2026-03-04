@@ -702,3 +702,150 @@ convert foo string	'foo'
 # Any to atom
 convert 42 atom	42
 convert "hello" atom	hello
+
+# === make - type instance creation ===
+
+# make scalar: integer to string
+make string 9	'9'
+make string 42	'42'
+make string 0	'0'
+make string -5	'-5'
+
+# make scalar: string to number
+make number "99"	99
+make number "-5"	-5
+
+# make scalar: to boolean
+make boolean 1	true
+make boolean 0	false
+make boolean "true"	true
+make boolean "false"	false
+
+# make scalar: to atom
+make atom 42	42
+make atom "hello"	hello
+
+# make scalar: already correct type (passthrough)
+make string "hello"	'hello'
+make number 42	42
+make boolean true	true
+
+# make scalar: boolean to string
+make string true	'true'
+make string false	'false'
+
+# make record: positional fields
+type Point record [x:number y:number] make Point [1 2]	{x:1,y:2}
+
+# make record: named fields in declaration order
+type Point record [x:number y:number] make Point [x:1 y:2]	{x:1,y:2}
+
+# make record: named fields in different order
+type Point record [x:number y:number] make Point [y:3 x:4]	{x:4,y:3}
+
+# make record: type conversion applied to fields
+type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+
+# make record: named fields reordered with type conversion
+type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+
+# make record: field value conversion (string to number)
+type Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
+
+# make with infix form
+type P record [x:number y:number] P make [1 2]	{x:1,y:2}
+
+# === type - custom type definitions ===
+
+# type with record
+type Vec record [x:number y:number] make Vec [3 4]	{x:3,y:4}
+
+# type with disjunct
+type OptNum (number or none) OptNum unify 5	5 true
+type OptNum (number or none) OptNum unify none	none true
+type OptNum (number or none) OptNum unify "hi"	'~unify-fail' false
+
+# type with type alias
+type Num number Num unify 42	42 true
+type Num number Num unify "hi"	'~unify-fail' false
+
+# type with typed list
+type Nums [:number] Nums unify [1,2,3]	[1,2,3] true
+type Nums [:number] Nums unify ["a"]	'~unify-fail' false
+
+# type with typed map
+type NumMap {:number} NumMap unify {a:1,b:2}	{a:1,b:2} true
+
+# === do - evaluate list and map contents ===
+
+# do list: evaluate as token stream
+do [1 add 2]	3
+
+# do list: string operation
+do [upper "hello"]	'HELLO'
+
+# do list: multiple results
+do [1 2 3]	1 2 3
+
+# do list: nested expression
+do [2 mul 3 add 1]	7
+
+# do map: evaluate list values
+do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# do map: non-list values unchanged
+do {x:1,y:"hello"}	{x:1,y:'hello'}
+
+# do map: mixed list and non-list values
+do {a:[1 add 2],b:10}	{a:3,b:10}
+
+# do map: nested maps with list values
+do {m:{x:[5 mul 2]}}	{m:{x:10}}
+
+# === disjunct - union types via or ===
+
+# Disjunct creation: type literals
+string or number	string|number
+string or none	string|none
+none or boolean	none|boolean
+
+# Disjunct chaining (flattened)
+string or number or boolean	string|number|boolean
+
+# Disjunct unify with scalar types
+(string or none) unify "a"	'a' true
+(string or none) unify none	none true
+(none or boolean) unify none	none true
+(none or boolean) unify true	true true
+(number or string) unify 42	42 true
+(number or string) unify "hi"	'hi' true
+
+# Disjunct unify: no match
+(string or boolean) unify 42	'~unify-fail' false
+(number or boolean) unify "hi"	'~unify-fail' false
+
+# Disjunct unify with type narrowing
+(string or number) unify number	number true
+(string or number) unify string	string true
+(number or none) unify 5	5 true
+(number or none) unify none	none true
+
+# Disjunct with any
+(string or number) unify any	string|number true
+
+# Disjunct with concrete maps (open matching)
+({x:1} or {y:2}) unify {x:1}	{x:1} true
+({x:1} or {y:2}) unify {y:2}	{y:2} true
+({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+({x:1} or {y:2} or {z:3}) unify {y:2,q:9,x:8}	{q:9,x:8,y:2} true
+({x:1} or {y:2} or {z:3}) unify {q:9,z:3,x:1}	{q:9,x:1,z:3} true
+
+# Disjunct map: no match
+({x:1} or {y:2}) unify {z:3}	'~unify-fail' false
+({x:1} or {y:2}) unify {x:2}	'~unify-fail' false
+
+# Boolean or still works normally
+true or false	true
+false or true	true
+true or true	true
+false or false	false

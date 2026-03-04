@@ -28,6 +28,7 @@ var (
 	TForward      = NewType("forward")
 	TOpenParen    = NewType("paren/open")
 	TFnDef        = NewType("fndef")
+	TDisjunct     = NewType("disjunct")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".
