@@ -1009,6 +1009,26 @@ make Person {nick:"ace"}               => error: missing field "name"
 make Person {name:"A" extra:1}         => error: unknown field "extra"
 ```
 
+**Options map.** `make` accepts a trailing options map. With
+`base:true`, missing fields are filled with their type's base value
+(zero value) instead of `none`:
+
+```
+type Item record [name:string qty:number active:boolean]
+make Item {name:"Widget"} {base:true}  => {name:'Widget',qty:0,active:false}
+make Item {name:"Bolt" qty:5} {base:true}
+                                       => {name:'Bolt',qty:5,active:false}
+```
+
+For disjunction fields, the base of the first non-none alternative
+is used:
+
+```
+type Rec record [x:number y:[string or none]]
+make Rec {x:1} {base:true}            => {x:1,y:''}
+make Rec {x:1}                        => {x:1,y:none}
+```
+
 **User-defined types as field constraints.** Alternatively, define
 a disjunction separately and reference it by name:
 

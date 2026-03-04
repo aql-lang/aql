@@ -181,3 +181,21 @@ base boolean	false
 base list	[]
 base map	{}
 base none	none
+
+# make record with base:true - missing fields get zero values
+type P record [x:number y:string] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - all fields provided
+type P record [x:number y:string] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
+
+# make record with base:true - optional field gets base not none
+type P record [x:number y:[string or none]] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - boolean field
+type P record [x:number y:boolean] make P {x:1} {base:true}	{x:1,y:false}
+
+# make record with base:true - multiple missing fields
+type P record [x:number y:string z:boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
+
+# make record with base:true - named list form
+type P record [x:number y:string] make P [x:1] {base:true}	{x:1,y:''}

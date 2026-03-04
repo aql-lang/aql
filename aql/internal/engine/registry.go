@@ -940,108 +940,136 @@ func registerTable(r *Registry) {
 //	make bar [1 false "s"]         => {x:1,y:false,z:'s'} (positional)
 //	make bar [y:true x:2 z:'Z']   => {x:2,y:true,z:'Z'}  (named)
 func registerMake(r *Registry) {
+	// makeRecord creates a record instance from a source value and options.
+	makeRecord := func(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
+		fieldKeys := recType.Fields.Keys()
+		result := NewOrderedMap()
+
+		// Helper: fill result from a provided map, defaulting
+		// missing fields based on useBase flag.
+		fillFromMap := func(provided *OrderedMap) error {
+			for _, key := range provided.Keys() {
+				if _, ok := recType.Fields.Get(key); !ok {
+					return fmt.Errorf("make: unknown field %q", key)
+				}
+			}
+			for _, key := range fieldKeys {
+				constraint, _ := recType.Fields.Get(key)
+				val, ok := provided.Get(key)
+				if !ok {
+					if useBase {
+						// base:true — fill with base value for the field type.
+						bv, err := baseValueForConstraint(constraint)
+						if err != nil {
+							return fmt.Errorf("make: field %q: %w", key, err)
+						}
+						result.Set(key, bv)
+						continue
+					}
+					// Default: allow if none unifies with constraint.
+					noneVal := NewTypeLiteral(TNone)
+					if _, unifOK := Unify(constraint, noneVal); unifOK {
+						result.Set(key, noneVal)
+						continue
+					}
+					return fmt.Errorf("make: missing field %q", key)
+				}
+				converted, err := makeFieldValue(val, constraint)
+				if err != nil {
+					return fmt.Errorf("make: field %q: %w", key, err)
+				}
+				result.Set(key, converted)
+			}
+			return nil
+		}
+
+		// Map form: make RecType {x:1 y:"hello"}
+		if srcVal.VType.Equal(TMap) {
+			provided, ok := srcVal.Data.(*OrderedMap)
+			if !ok {
+				return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
+			}
+			if err := fillFromMap(provided); err != nil {
+				return nil, err
+			}
+			return []Value{NewMap(result)}, nil
+		}
+
+		if !srcVal.VType.Equal(TList) {
+			return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
+		}
+		elems := srcVal.AsList()
+
+		// Check if named or positional.
+		isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
+		if isNamed {
+			if _, ok := elems[0].Data.(*OrderedMap); !ok {
+				isNamed = false
+			}
+		}
+
+		if isNamed {
+			provided := NewOrderedMap()
+			for _, elem := range elems {
+				if !elem.VType.Equal(TMap) {
+					return nil, fmt.Errorf("make: mixed named and positional fields")
+				}
+				m, ok := elem.Data.(*OrderedMap)
+				if !ok {
+					return nil, fmt.Errorf("make: expected concrete map pair, got %s", elem.String())
+				}
+				for _, key := range m.Keys() {
+					val, _ := m.Get(key)
+					provided.Set(key, val)
+				}
+			}
+			if err := fillFromMap(provided); err != nil {
+				return nil, err
+			}
+		} else {
+			if len(elems) != len(fieldKeys) {
+				return nil, fmt.Errorf("make: expected %d values, got %d",
+					len(fieldKeys), len(elems))
+			}
+			for i, key := range fieldKeys {
+				constraint, _ := recType.Fields.Get(key)
+				converted, err := makeFieldValue(elems[i], constraint)
+				if err != nil {
+					return nil, fmt.Errorf("make: field %q: %w", key, err)
+				}
+				result.Set(key, converted)
+			}
+		}
+
+		return []Value{NewMap(result)}, nil
+	}
+
+	// parseOptions extracts make options from an options map.
+	parseOptions := func(opts Value) (useBase bool, err error) {
+		if !opts.VType.Equal(TMap) {
+			return false, fmt.Errorf("make: options must be a map, got %s", opts.String())
+		}
+		m, ok := opts.Data.(*OrderedMap)
+		if !ok {
+			return false, fmt.Errorf("make: expected concrete options map")
+		}
+		if v, ok := m.Get("base"); ok {
+			v = resolveWordValue(v)
+			if v.VType.Matches(TBoolean) && v.Data.(bool) {
+				useBase = true
+			}
+		}
+		return useBase, nil
+	}
+
 	makeHandler := func(args []Value) ([]Value, error) {
 		targetVal := args[0]
 		srcVal := args[1]
 
 		// Record type instance creation.
 		if targetVal.IsRecordType() {
-			// Wrap in a call to makeRecordHandler with the record name context.
-			// We need to find the name for error messages, but the record type
-			// itself carries all the info we need.
 			recType := targetVal.AsRecordType()
-
-			fieldKeys := recType.Fields.Keys()
-			result := NewOrderedMap()
-
-			// Helper: fill result from a provided map, defaulting
-			// missing fields to none when the constraint allows it.
-			fillFromMap := func(provided *OrderedMap) error {
-				for _, key := range provided.Keys() {
-					if _, ok := recType.Fields.Get(key); !ok {
-						return fmt.Errorf("make: unknown field %q", key)
-					}
-				}
-				for _, key := range fieldKeys {
-					constraint, _ := recType.Fields.Get(key)
-					val, ok := provided.Get(key)
-					if !ok {
-						// Missing field — allow if none unifies with constraint.
-						noneVal := NewTypeLiteral(TNone)
-						if _, unifOK := Unify(constraint, noneVal); unifOK {
-							result.Set(key, noneVal)
-							continue
-						}
-						return fmt.Errorf("make: missing field %q", key)
-					}
-					converted, err := makeFieldValue(val, constraint)
-					if err != nil {
-						return fmt.Errorf("make: field %q: %w", key, err)
-					}
-					result.Set(key, converted)
-				}
-				return nil
-			}
-
-			// Map form: make RecType {x:1 y:"hello"}
-			if srcVal.VType.Equal(TMap) {
-				provided, ok := srcVal.Data.(*OrderedMap)
-				if !ok {
-					return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
-				}
-				if err := fillFromMap(provided); err != nil {
-					return nil, err
-				}
-				return []Value{NewMap(result)}, nil
-			}
-
-			if !srcVal.VType.Equal(TList) {
-				return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
-			}
-			elems := srcVal.AsList()
-
-			// Check if named or positional.
-			isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
-			if isNamed {
-				if _, ok := elems[0].Data.(*OrderedMap); !ok {
-					isNamed = false
-				}
-			}
-
-			if isNamed {
-				provided := NewOrderedMap()
-				for _, elem := range elems {
-					if !elem.VType.Equal(TMap) {
-						return nil, fmt.Errorf("make: mixed named and positional fields")
-					}
-					m, ok := elem.Data.(*OrderedMap)
-					if !ok {
-						return nil, fmt.Errorf("make: expected concrete map pair, got %s", elem.String())
-					}
-					for _, key := range m.Keys() {
-						val, _ := m.Get(key)
-						provided.Set(key, val)
-					}
-				}
-				if err := fillFromMap(provided); err != nil {
-					return nil, err
-				}
-			} else {
-				if len(elems) != len(fieldKeys) {
-					return nil, fmt.Errorf("make: expected %d values, got %d",
-						len(fieldKeys), len(elems))
-				}
-				for i, key := range fieldKeys {
-					constraint, _ := recType.Fields.Get(key)
-					converted, err := makeFieldValue(elems[i], constraint)
-					if err != nil {
-						return nil, fmt.Errorf("make: field %q: %w", key, err)
-					}
-					result.Set(key, converted)
-				}
-			}
-
-			return []Value{NewMap(result)}, nil
+			return makeRecord(recType, srcVal, false)
 		}
 
 		// Table type instance creation.
@@ -1141,7 +1169,31 @@ func registerMake(r *Registry) {
 		return []Value{result}, nil
 	}
 
+	// 3-arg handler: make RecType source {options}
+	makeWithOpts := func(args []Value) ([]Value, error) {
+		targetVal := args[0]
+		srcVal := args[1]
+		optsVal := args[2]
+
+		useBase, err := parseOptions(optsVal)
+		if err != nil {
+			return nil, err
+		}
+
+		if targetVal.IsRecordType() {
+			recType := targetVal.AsRecordType()
+			return makeRecord(recType, srcVal, useBase)
+		}
+
+		// For non-record types, options are ignored — delegate to 2-arg.
+		return makeHandler(args[:2])
+	}
+
 	r.Register("make",
+		Signature{
+			Args:    []Type{TAny, TAny, TMap},
+			Handler: makeWithOpts,
+		},
 		Signature{
 			Args:    []Type{TAny, TAny},
 			Handler: makeHandler,
@@ -1474,37 +1526,61 @@ func registerTypeof(r *Registry) {
 //	base list       => []
 //	base map        => {}
 //	base none       => none
+// baseValue returns the zero/default value for a given type, similar to Go's
+// zero values. Used by both the "base" word and "make" with base:true option.
+func baseValue(t Type) (Value, error) {
+	switch {
+	case t.Matches(TInteger):
+		return NewInteger(0), nil
+	case t.Matches(TNumber):
+		return NewInteger(0), nil
+	case t.Matches(TString):
+		return NewString(""), nil
+	case t.Matches(TBoolean):
+		return NewBoolean(false), nil
+	case t.Matches(TList):
+		return NewList([]Value{}), nil
+	case t.Matches(TMap):
+		return NewMap(NewOrderedMap()), nil
+	case t.Matches(TNone):
+		return NewTypeLiteral(TNone), nil
+	case t.Matches(TAtom):
+		return NewAtom(""), nil
+	default:
+		return Value{}, fmt.Errorf("base: unsupported type %s", t.String())
+	}
+}
+
+// baseValueForConstraint returns the base value for a field constraint.
+// For type literals, returns the zero value directly.
+// For disjunctions (e.g. string|none), returns the base of the first
+// non-none alternative.
+func baseValueForConstraint(constraint Value) (Value, error) {
+	if constraint.IsDisjunct() {
+		di := constraint.AsDisjunct()
+		for _, alt := range di.Alternatives {
+			if alt.Data == nil && !alt.VType.Equal(TNone) {
+				return baseValue(alt.VType)
+			}
+		}
+		// All alternatives are none.
+		return NewTypeLiteral(TNone), nil
+	}
+	if constraint.Data == nil {
+		return baseValue(constraint.VType)
+	}
+	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())
+}
+
 func registerBase(r *Registry) {
 	baseHandler := func(args []Value) ([]Value, error) {
 		v := args[0]
-
-		// The argument should be a type literal (Data==nil) or a type word.
 		t := v.VType
-		if v.Data != nil {
-			// If it's a concrete value, use its type as the target.
-			t = v.VType
+		result, err := baseValue(t)
+		if err != nil {
+			return nil, err
 		}
-
-		switch {
-		case t.Matches(TInteger):
-			return []Value{NewInteger(0)}, nil
-		case t.Matches(TNumber):
-			return []Value{NewInteger(0)}, nil
-		case t.Matches(TString):
-			return []Value{NewString("")}, nil
-		case t.Matches(TBoolean):
-			return []Value{NewBoolean(false)}, nil
-		case t.Matches(TList):
-			return []Value{NewList([]Value{})}, nil
-		case t.Matches(TMap):
-			return []Value{NewMap(NewOrderedMap())}, nil
-		case t.Matches(TNone):
-			return []Value{NewTypeLiteral(TNone)}, nil
-		case t.Matches(TAtom):
-			return []Value{NewAtom("")}, nil
-		default:
-			return nil, fmt.Errorf("base: unsupported type %s", t.String())
-		}
+		return []Value{result}, nil
 	}
 
 	r.Register("base",
