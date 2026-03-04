@@ -3415,11 +3415,13 @@ func TestStackInsertWithHeadroom(t *testing.T) {
 func TestRecordTypeCreation(t *testing.T) {
 	e := New(DefaultRegistry())
 
-	// record {x:number, y:number} => record{x:number,y:number}
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TNumber))
-	fields.Set("y", NewTypeLiteral(TNumber))
-	input := []Value{NewWord("record"), NewMap(fields)}
+	// record [x:number y:number] => record{x:number,y:number}
+	// In the list, each pair x:number becomes a single-key map {x:number}.
+	pairX := NewOrderedMap()
+	pairX.Set("x", NewTypeLiteral(TNumber))
+	pairY := NewOrderedMap()
+	pairY.Set("y", NewTypeLiteral(TNumber))
+	input := []Value{NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3438,14 +3440,15 @@ func TestRecordTypeCreation(t *testing.T) {
 func TestRecordTypeWithDef(t *testing.T) {
 	e := New(DefaultRegistry())
 
-	// def Point record {x:number, y:number}
+	// def Point record [x:number y:number]
 	// Point => record{x:number,y:number}
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TNumber))
-	fields.Set("y", NewTypeLiteral(TNumber))
+	pairX := NewOrderedMap()
+	pairX.Set("x", NewTypeLiteral(TNumber))
+	pairY := NewOrderedMap()
+	pairY.Set("y", NewTypeLiteral(TNumber))
 	input := []Value{
 		NewWord("def"), NewWord("Point"),
-		NewWord("record"), NewMap(fields),
+		NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
 		NewWord("end"),
 		NewWord("Point"),
 	}
@@ -3595,6 +3598,39 @@ func TestRecordTypeUnifyWithMap(t *testing.T) {
 				t.Errorf("got %s, want %s", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRecordTypeListWithMapElement(t *testing.T) {
+	e := New(DefaultRegistry())
+
+	// record [{x:{z:boolean}} "y":1]
+	// List element 0: map {x:{z:boolean}} — a map with nested map value
+	// List element 1: pair "y":1 — a single-key map {y:1}
+	innerMap := NewOrderedMap()
+	innerMap.Set("z", NewTypeLiteral(TBoolean))
+	elem0 := NewOrderedMap()
+	elem0.Set("x", NewMap(innerMap))
+	elem1 := NewOrderedMap()
+	elem1.Set("y", NewInteger(1))
+	input := []Value{NewWord("record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
+	result, err := e.Run(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1", len(result))
+	}
+	if !result[0].IsRecordType() {
+		t.Fatalf("result is not a record type: %s", result[0].String())
+	}
+	rt := result[0].AsRecordType()
+	if rt.Fields.Len() != 2 {
+		t.Errorf("got %d fields, want 2", rt.Fields.Len())
+	}
+	keys := rt.Fields.Keys()
+	if keys[0] != "x" || keys[1] != "y" {
+		t.Errorf("got keys %v, want [x y]", keys)
 	}
 }
 
