@@ -1044,6 +1044,168 @@ func TestWhereGlobCaseSensitive(t *testing.T) {
 	}
 }
 
+// --- typed columns ---
+
+func TestTypedIntegerColumn(t *testing.T) {
+	// Create a table where "age" is TInteger, not TString.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("age", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name string, age int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("age", engine.NewInteger(age))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("Alice", 30),
+			mkRow("Bob", 25),
+			mkRow("Charlie", 35),
+		},
+		SQLite: false,
+	}
+	reg.Store["people"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Numeric comparison should work correctly with INTEGER column.
+	// With TEXT, "9" > "25" is true (string ordering). With INTEGER, 9 < 25.
+	queryVals, err := parser.Parse(`select * from people where [age gt 25] order [age]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 30 and 35), got %d", len(rows))
+	}
+
+	// Results should come back as integers, not strings.
+	ageVal, ok := rows[0].AsMap().Get("age")
+	if !ok {
+		t.Fatal("expected age field")
+	}
+	if !ageVal.VType.Matches(engine.TInteger) {
+		t.Errorf("expected age to be integer type, got %s", ageVal.VType)
+	}
+	if ageVal.AsInteger() != 30 {
+		t.Errorf("expected age 30, got %d", ageVal.AsInteger())
+	}
+
+	// Ordered by age: 30, 35.
+	age2, _ := rows[1].AsMap().Get("age")
+	if age2.AsInteger() != 35 {
+		t.Errorf("expected second row age 35, got %d", age2.AsInteger())
+	}
+}
+
+func TestTypedBooleanColumn(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("active", engine.NewTypeLiteral(engine.TBoolean))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name string, active bool) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("active", engine.NewBoolean(active))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("Alice", true),
+			mkRow("Bob", false),
+			mkRow("Charlie", true),
+		},
+		SQLite: false,
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from users where [active eq 1]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 active users, got %d", len(rows))
+	}
+
+	// Results should come back as booleans.
+	activeVal, ok := rows[0].AsMap().Get("active")
+	if !ok {
+		t.Fatal("expected active field")
+	}
+	if !activeVal.VType.Matches(engine.TBoolean) {
+		t.Errorf("expected active to be boolean type, got %s", activeVal.VType)
+	}
+	if !activeVal.AsBoolean() {
+		t.Error("expected active to be true")
+	}
+}
+
+func TestTypedIntegerOrdering(t *testing.T) {
+	// This test verifies that INTEGER columns sort numerically, not lexically.
+	// With TEXT: "9" > "25" > "100" (wrong). With INTEGER: 9 < 25 < 100 (correct).
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(val int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(val))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(100), mkRow(9), mkRow(25)},
+		SQLite: false,
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from nums order [val]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	// Should be: 9, 25, 100 (numeric order, not "100", "25", "9").
+	v0, _ := rows[0].AsMap().Get("val")
+	v1, _ := rows[1].AsMap().Get("val")
+	v2, _ := rows[2].AsMap().Get("val")
+	if v0.AsInteger() != 9 || v1.AsInteger() != 25 || v2.AsInteger() != 100 {
+		t.Errorf("expected [9, 25, 100], got [%d, %d, %d]", v0.AsInteger(), v1.AsInteger(), v2.AsInteger())
+	}
+}
+
 // --- SQLite flag on loaded table ---
 
 func TestFileLoadSetsSQLiteFlag(t *testing.T) {

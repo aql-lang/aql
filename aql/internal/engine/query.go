@@ -89,7 +89,8 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 	}
 
 	query := qb.buildSQL(tableName, "*")
-	result, err := qb.Registry.SQLite.Query(query)
+	schema := &qb.Source.Record
+	result, err := qb.Registry.SQLite.Query(query, schema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -121,8 +122,27 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		colSQL = strings.Join(parts, ", ")
 	}
 
+	// Build schema hint for the result columns. For aliased columns,
+	// map the alias name to the source column's type.
+	resultSchema := &qb.Source.Record
+	if cols != nil {
+		resultFields := NewOrderedMap()
+		for _, c := range cols {
+			outputName := c.Name
+			if c.Alias != "" {
+				outputName = c.Alias
+			}
+			if fieldVal, ok := qb.Source.Record.Fields.Get(c.Name); ok {
+				resultFields.Set(outputName, fieldVal)
+			} else {
+				resultFields.Set(outputName, NewTypeLiteral(TString))
+			}
+		}
+		resultSchema = &RecordTypeInfo{Fields: resultFields}
+	}
+
 	query := qb.buildSQL(tableName, colSQL)
-	result, err := qb.Registry.SQLite.Query(query)
+	result, err := qb.Registry.SQLite.Query(query, resultSchema)
 	if err != nil {
 		return TableData{}, err
 	}

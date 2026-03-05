@@ -3,11 +3,26 @@ package engine
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
 )
+
+// aqlTypeToSQLType maps an AQL field type to a SQLite column type.
+func aqlTypeToSQLType(t Type) string {
+	switch {
+	case t.Matches(TInteger):
+		return "INTEGER"
+	case t.Matches(TNumber):
+		return "REAL"
+	case t.Matches(TBoolean):
+		return "INTEGER"
+	default:
+		return "TEXT"
+	}
+}
 
 // SQLiteStore manages an in-memory SQLite database for table storage.
 type SQLiteStore struct {
@@ -51,17 +66,20 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 	// Drop existing table if it exists.
 	_, _ = s.db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdent(name)))
 
-	// Create table with all TEXT columns.
+	// Create table with typed columns based on the record schema.
 	colDefs := make([]string, len(columns))
+	colTypes := make([]Type, len(columns))
 	for i, col := range columns {
-		colDefs[i] = quoteIdent(col) + " TEXT"
+		fieldVal, _ := td.Record.Fields.Get(col)
+		colTypes[i] = fieldVal.VType
+		colDefs[i] = quoteIdent(col) + " " + aqlTypeToSQLType(fieldVal.VType)
 	}
 	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", quoteIdent(name), strings.Join(colDefs, ", "))
 	if _, err := s.db.Exec(createSQL); err != nil {
 		return fmt.Errorf("sqlite create: %w", err)
 	}
 
-	// Insert rows.
+	// Insert rows with native typed values.
 	if len(td.Rows) > 0 {
 		placeholders := make([]string, len(columns))
 		for i := range placeholders {
@@ -92,19 +110,9 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 			for i, col := range columns {
 				v, exists := m.Get(col)
 				if !exists {
-					vals[i] = ""
-				} else if v.VType.Matches(TString) {
-					vals[i] = v.AsString()
-				} else if v.VType.Matches(TInteger) {
-					vals[i] = fmt.Sprintf("%d", v.AsInteger())
-				} else if v.VType.Matches(TBoolean) {
-					if v.AsBoolean() {
-						vals[i] = "true"
-					} else {
-						vals[i] = "false"
-					}
+					vals[i] = nil
 				} else {
-					vals[i] = v.String()
+					vals[i] = aqlValueToSQLParam(v, colTypes[i])
 				}
 			}
 			if _, err := stmt.Exec(vals...); err != nil {
@@ -132,7 +140,10 @@ func (s *SQLiteStore) StoreTempTable(td TableData) (string, error) {
 }
 
 // Query executes a SELECT query and returns results as TableData.
-func (s *SQLiteStore) Query(querySQL string) (TableData, error) {
+// The optional schema provides type hints for reading values back with
+// proper AQL types. If nil, the result schema is inferred from SQLite
+// column types reported by the driver.
+func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -147,19 +158,29 @@ func (s *SQLiteStore) Query(querySQL string) (TableData, error) {
 		return TableData{}, fmt.Errorf("sqlite columns: %w", err)
 	}
 
-	// Build record schema.
+	// Resolve the type for each result column.
+	colTypes := make([]Type, len(cols))
+	for i, col := range cols {
+		colTypes[i] = TString // default
+		if schema != nil {
+			if fieldVal, ok := schema.Fields.Get(col); ok {
+				colTypes[i] = fieldVal.VType
+			}
+		}
+	}
+
+	// Build record schema for the result.
 	fields := NewOrderedMap()
-	for _, col := range cols {
-		fields.Set(col, NewTypeLiteral(TString))
+	for i, col := range cols {
+		fields.Set(col, NewTypeLiteral(colTypes[i]))
 	}
 	record := RecordTypeInfo{Fields: fields}
 
-	// Read rows.
+	// Scan using interface{} to get native SQLite types.
 	var resultRows []Value
 	scanDest := make([]interface{}, len(cols))
-	scanPtrs := make([]sql.NullString, len(cols))
 	for i := range scanDest {
-		scanDest[i] = &scanPtrs[i]
+		scanDest[i] = new(interface{})
 	}
 
 	for rows.Next() {
@@ -168,11 +189,8 @@ func (s *SQLiteStore) Query(querySQL string) (TableData, error) {
 		}
 		om := NewOrderedMap()
 		for i, col := range cols {
-			if scanPtrs[i].Valid {
-				om.Set(col, NewString(scanPtrs[i].String))
-			} else {
-				om.Set(col, NewString(""))
-			}
+			raw := *(scanDest[i].(*interface{}))
+			om.Set(col, sqlResultToAQLValue(raw, colTypes[i]))
 		}
 		resultRows = append(resultRows, NewMap(om))
 	}
@@ -181,6 +199,127 @@ func (s *SQLiteStore) Query(querySQL string) (TableData, error) {
 	}
 
 	return TableData{Record: record, Rows: resultRows}, nil
+}
+
+// aqlValueToSQLParam converts an AQL Value to a Go value suitable for
+// a SQL parameter placeholder, respecting the target column type.
+func aqlValueToSQLParam(v Value, colType Type) interface{} {
+	if v.VType.Equal(TNone) {
+		return nil
+	}
+
+	switch {
+	case colType.Matches(TInteger):
+		// Column wants INTEGER. Coerce the value.
+		if v.VType.Matches(TInteger) {
+			return v.AsInteger()
+		}
+		// String that looks numeric → parse it.
+		if v.VType.Matches(TString) {
+			if n, err := strconv.ParseInt(v.AsString(), 10, 64); err == nil {
+				return n
+			}
+		}
+		if v.VType.Matches(TBoolean) {
+			if v.AsBoolean() {
+				return int64(1)
+			}
+			return int64(0)
+		}
+		// Fallback: store as text.
+		return valToString(v)
+
+	case colType.Matches(TNumber):
+		// Column wants REAL.
+		if v.VType.Matches(TInteger) {
+			return float64(v.AsInteger())
+		}
+		if v.VType.Matches(TString) {
+			if f, err := strconv.ParseFloat(v.AsString(), 64); err == nil {
+				return f
+			}
+		}
+		return valToString(v)
+
+	case colType.Matches(TBoolean):
+		// Column stored as INTEGER (0/1).
+		if v.VType.Matches(TBoolean) {
+			if v.AsBoolean() {
+				return int64(1)
+			}
+			return int64(0)
+		}
+		if v.VType.Matches(TString) {
+			if v.AsString() == "true" {
+				return int64(1)
+			}
+			return int64(0)
+		}
+		return valToString(v)
+
+	default:
+		// TEXT column.
+		if v.VType.Matches(TString) {
+			return v.AsString()
+		}
+		return valToString(v)
+	}
+}
+
+// sqlResultToAQLValue converts a raw SQLite result value to the appropriate
+// AQL Value based on the expected column type.
+func sqlResultToAQLValue(raw interface{}, colType Type) Value {
+	if raw == nil {
+		return Value{VType: TNone}
+	}
+
+	switch {
+	case colType.Matches(TInteger):
+		return NewInteger(toInt64(raw))
+	case colType.Matches(TNumber):
+		// For now, number/integer is the only numeric subtype.
+		return NewInteger(toInt64(raw))
+	case colType.Matches(TBoolean):
+		return NewBoolean(toInt64(raw) != 0)
+	default:
+		return NewString(toString(raw))
+	}
+}
+
+// toInt64 coerces a database/sql scanned value to int64.
+func toInt64(v interface{}) int64 {
+	switch x := v.(type) {
+	case int64:
+		return x
+	case float64:
+		return int64(x)
+	case string:
+		n, _ := strconv.ParseInt(x, 10, 64)
+		return n
+	case []byte:
+		n, _ := strconv.ParseInt(string(x), 10, 64)
+		return n
+	default:
+		return 0
+	}
+}
+
+// toString coerces a database/sql scanned value to string.
+func toString(v interface{}) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // HasTable reports whether a table with the given name exists in the store.
