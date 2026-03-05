@@ -490,6 +490,23 @@ func TestWhereLike(t *testing.T) {
 	assertField(t, rows[0].AsMap(), "name", "Alice")
 }
 
+func TestWhereNeq(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name neq "Alice"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
 // --- order ---
 
 func TestOrderByColumn(t *testing.T) {

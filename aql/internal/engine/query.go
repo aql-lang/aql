@@ -331,6 +331,7 @@ func doTableQuery(r *Registry, td TableData, sqlSuffix string) ([]Value, error) 
 // comparisonOps maps AQL comparison word names to SQL operators.
 var comparisonOps = map[string]string{
 	"eq":   "=",
+	"neq":  "!=",
 	"lt":   "<",
 	"gt":   ">",
 	"lte":  "<=",
@@ -368,7 +369,7 @@ func buildWhereClause(condList Value) (string, error) {
 		opName := valueToColName(elems[i+1])
 		sqlOp, ok := comparisonOps[opName]
 		if !ok {
-			return "", fmt.Errorf("unknown comparison operator %q (use eq, lt, gt, lte, gte, like)", opName)
+			return "", fmt.Errorf("unknown comparison operator %q (use eq, neq, lt, gt, lte, gte, like)", opName)
 		}
 
 		val := elems[i+2]

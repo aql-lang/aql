@@ -598,6 +598,21 @@ none eq none            => true
 true eq false           => false
 ```
 
+#### `neq`
+
+Not equal. The negation of `eq`. Returns `true` when the two values
+are not exactly equal, `false` when they are.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+1 neq 2                 => true
+1 neq 1                 => false
+"abc" neq "xyz"         => true
+"abc" neq "abc"         => false
+```
+
 #### `deq`
 
 Deep equality. Traverses lists and maps depth-first, comparing all
@@ -1612,8 +1627,8 @@ from people                                   # retrieve the table
 Filter table rows using a condition list. Conditions use the
 format `[column op value]` with optional `and`/`or` connectors.
 
-Supported operators: `eq` (=), `lt` (<), `gt` (>), `lte` (<=),
-`gte` (>=), `like` (LIKE).
+Supported operators: `eq` (=), `neq` (!=), `lt` (<), `gt` (>),
+`lte` (<=), `gte` (>=), `like` (LIKE).
 
 *Signature:* `[condition-list, table] -> [table]`
 

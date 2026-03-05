@@ -66,6 +66,18 @@ func TestEngineEq(t *testing.T) {
 	}
 }
 
+func TestEngineNeq(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(3)})
+	if len(result) != 1 || !result[0].AsBoolean() {
+		t.Errorf("5 neq 3 = %v, want true", result)
+	}
+	result = runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(5)})
+	if len(result) != 1 || result[0].AsBoolean() {
+		t.Errorf("5 neq 5 = %v, want false", result)
+	}
+}
+
 func TestEngineDeq(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewString("a"), NewWord("deq"), NewString("a")})
