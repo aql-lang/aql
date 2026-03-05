@@ -763,18 +763,21 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 // registerConvert registers the "convert" word for type conversions.
 //
 // convert takes a source value, a target type literal, and an optional
-// variant string and/or settings map. It converts the source value to
-// the target scalar type.
+// third argument: either a string base shorthand (e.g. "hex") or a
+// settings map. The string shorthand is a convenience for the "base"
+// key in the settings map.
 //
-// When converting to string, the settings map may contain a "size" key
-// specifying the maximum length of the result (default 222). The string
-// is truncated to that length if it exceeds it.
+// Settings map keys:
+//   - "base": base for number conversion ("hex", "HEX", "bin", "oct")
+//   - "size": maximum length for string output (default 222)
 //
-//	convert 99 string                => "99"
-//	convert 10 string "hex"          => "a"
-//	convert "42" number              => 42
-//	convert true string              => "true"
-//	convert "hello" string {size:3}  => "hel"
+//	convert 99 string                          => "99"
+//	convert 10 string "hex"                    => "a"
+//	convert 10 string {base:hex}               => "a"
+//	convert "42" number                        => 42
+//	convert true string                        => "true"
+//	convert "hello" string {size:3}            => "hel"
+//	convert 255 string {base:hex,size:1}       => "f"
 func registerConvert(r *Registry) {
 	const defaultSize = 222
 
@@ -885,28 +888,28 @@ func registerConvert(r *Registry) {
 		return []Value{result}, nil
 	}
 
-	// 3-arg: convert value type <variant-or-settings>
-	// The third argument is either a string variant (e.g. "hex") or a
-	// settings map (e.g. {size:3}) which may also contain a "variant" key.
+	// 3-arg: convert value type <base-or-settings>
+	// The third argument is either a string base shorthand (e.g. "hex")
+	// or a settings map (e.g. {base:hex, size:3}).
 	convert3Handler := func(args []Value) ([]Value, error) {
 		src := args[0]
 		if args[1].Data != nil {
 			return nil, fmt.Errorf("convert: second argument must be a type literal")
 		}
-		variant := ""
+		base := ""
 		size := defaultSize
 		if args[2].VType.Equal(TMap) {
 			m := args[2].AsMap()
-			if v, ok := m.Get("variant"); ok && v.VType.Matches(TString) {
-				variant = v.AsString()
+			if v, ok := m.Get("base"); ok {
+				base = valToString(v)
 			}
 			if v, ok := m.Get("size"); ok && v.VType.Matches(TInteger) {
 				size = int(v.AsInteger())
 			}
 		} else {
-			variant = valToString(args[2])
+			base = valToString(args[2])
 		}
-		result, err := convertTo(src, args[1].VType, variant, size)
+		result, err := convertTo(src, args[1].VType, base, size)
 		if err != nil {
 			return nil, err
 		}

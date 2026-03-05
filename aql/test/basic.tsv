@@ -422,9 +422,13 @@ convert "hello" string {size:3}	'hel'
 convert "abcdef" string {size:0}	''
 convert "ab" string {size:10}	'ab'
 
-# Convert to string - size with variant (both in settings map)
-convert 255 string {variant:"hex",size:1}	'f'
-convert 255 string {variant:"HEX",size:1}	'F'
+# Convert to string - base in settings map (equivalent to string shorthand)
+convert 10 string {base:hex}	'a'
+convert 255 string {base:HEX}	'FF'
+
+# Convert to string - base and size combined in settings map
+convert 255 string {base:hex,size:1}	'f'
+convert 255 string {base:HEX,size:1}	'F'
 
 # Convert to string - default size (222) truncates long strings
 convert "abcdefghij" string {size:5}	'abcde'
