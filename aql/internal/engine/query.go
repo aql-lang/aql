@@ -1266,6 +1266,8 @@ func valueToSQL(v Value) (string, error) {
 		return "'" + strings.ReplaceAll(v.AsAtom(), "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
+	case v.VType.Equal(TWord):
+		return "'" + strings.ReplaceAll(v.AsWord().Name, "'", "''") + "'", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
 	}
