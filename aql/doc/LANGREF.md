@@ -849,6 +849,46 @@ def inc [1 add]
 1 inc inc inc               => 4
 ```
 
+**Partial application via `def ... end`.** When a word inside a `def`
+body does not receive all of its arguments, the word and its collected
+arguments are packaged together. The resulting definition acts as a
+partially applied function — supply the remaining arguments on use.
+
+```
+def add5 add 5 end
+10 add5                     => 15
+
+def mul3 mul 3 end
+4 mul3                      => 12
+
+def sub1 sub 1 end
+10 sub1                     => 9
+```
+
+This works for all words, not just arithmetic:
+
+```
+def greet add "hello " end
+greet "world"               => 'hello world'
+
+def lt10 lt 10 end
+5 lt10                      => true
+
+def and_true and true end
+false and_true              => false
+```
+
+Curried words compose naturally:
+
+```
+def add5 add 5 end
+def mul2 mul 2 end
+3 add5 mul2                 => 16
+
+def add5_twice [add5 add5]
+10 add5_twice               => 20
+```
+
 Definitions stack: a second `def` for the same name shadows the
 previous one.
 
