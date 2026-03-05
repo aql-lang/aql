@@ -362,6 +362,13 @@ none "x" dot	none
 # Dot - list out of bounds returns none
 [10,20] 5 dot	none
 
+# Dot - integer key on map (converted to string)
+{0:"zero",1:"one"} 0 dot	'zero'
+{0:"zero",1:"one"} 1 dot	'one'
+
+# Dot - integer key missing from map returns none
+{a:1} 0 dot	none
+
 # Dot - string key
 {a:1} "a" dot	1
 

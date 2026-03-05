@@ -1623,11 +1623,14 @@ func registerBase(r *Registry) {
 // registerDot registers the "dot" word and its "." alias for extracting
 // key values from maps and lists. Supports null-safe access: if the parent
 // is none, the result is none (like optional chaining in JavaScript).
+// An integer argument indexes into a list, or is converted to a string
+// for map key lookup.
 //
 // Usage (prefix):
 //
 //	{a:1} a dot       => 1
 //	[10,20,30] 1 dot  => 20
+//	{0:"z"} 0 dot     => z
 //
 // Usage (suffix):
 //
@@ -1666,6 +1669,16 @@ func registerDot(r *Registry) {
 		return []Value{list[idx]}, nil
 	}
 
+	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
+		key := strconv.FormatInt(args[0].AsInteger(), 10)
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
 	dotNoneHandler := func(args []Value) ([]Value, error) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
@@ -1674,6 +1687,7 @@ func registerDot(r *Registry) {
 		{Args: []Type{TAtom, TMap}, Handler: dotMapAtomHandler},
 		{Args: []Type{TString, TMap}, Handler: dotMapStringHandler},
 		{Args: []Type{TInteger, TList}, Handler: dotListHandler},
+		{Args: []Type{TInteger, TMap}, Handler: dotMapIntegerHandler},
 		{Args: []Type{TAny, TNone}, Handler: dotNoneHandler},
 	}
 
