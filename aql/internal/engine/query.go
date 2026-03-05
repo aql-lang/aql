@@ -102,62 +102,58 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// order: [columns(suffix), table(prefix)] -> [table]
-	// Sorts table rows using ORDER BY. Column list may include asc/desc atoms.
-	// Usage: from people order [name desc]
-	//        from people order name
+	// order: [any(suffix), table(prefix)] -> [table]
+	// Sorts table rows using ORDER BY. Accepts a column atom or a list
+	// of columns with optional asc/desc direction.
+	// Usage: from people order name
+	//        from people order [name desc]
 	//        from people order by name
-	orderListHandler := func(args []Value) ([]Value, error) {
-		table := args[0]   // prefix: table from stack
-		colList := args[1] // suffix: column list
-
+	//        from people order by [name desc]
+	orderHandler := func(args []Value) ([]Value, error) {
+		// With [TAny, TList], flexibleMatch may order args either way
+		// depending on types. Disambiguate by checking which arg is the table.
+		spec, table := args[0], args[1]
 		td, ok := table.Data.(TableData)
 		if !ok {
-			return nil, fmt.Errorf("order: argument is not a table")
+			// Try swapped order.
+			spec, table = args[1], args[0]
+			td, ok = table.Data.(TableData)
+			if !ok {
+				return nil, fmt.Errorf("order: argument is not a table")
+			}
 		}
 
-		clause, err := buildOrderClause(colList)
-		if err != nil {
-			return nil, fmt.Errorf("order: %w", err)
+		var clause string
+		var err error
+		if spec.VType.Equal(TAtom) {
+			clause = quoteIdent(spec.AsAtom())
+		} else if spec.VType.Equal(TList) {
+			clause, err = buildOrderClause(spec)
+			if err != nil {
+				return nil, fmt.Errorf("order: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("order: expected column name or list, got %s", spec.VType)
 		}
 
-		return doTableQuery(r, td, " ORDER BY "+clause)
-	}
-
-	orderAtomHandler := func(args []Value) ([]Value, error) {
-		col := args[0]   // suffix: column name (TAtom)
-		table := args[1] // prefix: table from stack (TList)
-
-		td, ok := table.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("order: argument is not a table")
-		}
-
-		clause := quoteIdent(col.AsAtom())
 		return doTableQuery(r, td, " ORDER BY "+clause)
 	}
 
 	r.Register("order",
 		Signature{
-			Args:       []Type{TList, TList},
+			Args:       []Type{TAny, TList},
 			Precedence: 1,
-			Handler:    orderListHandler,
-		},
-		Signature{
-			Args:       []Type{TAtom, TList},
-			Precedence: 1,
-			Handler:    orderAtomHandler,
+			Handler:    orderHandler,
 		},
 	)
 
-	// by: [atom] -> [list], [list] -> [list]
-	// Syntactic sugar so "order by name" reads naturally.
-	// Atoms are wrapped in a list so "order" always receives a list.
+	// by: [atom] -> [atom], [list] -> [list]
+	// Identity pass-through. Syntactic sugar so "order by name" reads naturally.
 	r.Register("by",
 		Signature{
 			Args: []Type{TAtom},
 			Handler: func(args []Value) ([]Value, error) {
-				return []Value{NewList(args)}, nil
+				return args, nil
 			},
 		},
 		Signature{
