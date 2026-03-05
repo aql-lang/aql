@@ -128,43 +128,30 @@ func (f *TSVFormat) Encode(v Value) (string, error) {
 // a record (map) keyed by those headers. The result is wrapped in a
 // table type whose record schema has all-string fields.
 func decodeDelimited(content string, sep string) ([]Value, error) {
-	t := true
-	j := csvpkg.MakeJsonic(csvpkg.CsvOptions{
-		Header: &t,
+	noObj := false
+	noHdr := false
+	records, err := csvpkg.Parse(content, csvpkg.CsvOptions{
+		Object: &noObj,
+		Header: &noHdr,
 		Field:  &csvpkg.FieldOptions{Separation: sep},
 	})
-
-	parsed, err := j.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("csv: %w", err)
 	}
 
-	records, ok := parsed.([]any)
-	if !ok || len(records) == 0 {
+	if len(records) == 0 {
 		return []Value{NewList([]Value{})}, nil
 	}
 
-	// Extract column names from first line of content for deterministic order.
-	var columns []string
-	if first, ok := records[0].(map[string]any); ok {
-		// Parse headers from the raw content's first line.
-		headerLine := content
-		if idx := strings.IndexAny(content, "\r\n"); idx >= 0 {
-			headerLine = content[:idx]
-		}
-		columns = strings.Split(headerLine, sep)
-		// Trim whitespace from header names.
-		for i := range columns {
-			columns[i] = strings.TrimSpace(columns[i])
-		}
-		// Filter to only keys that actually appear in the parsed result.
-		filtered := make([]string, 0, len(columns))
-		for _, col := range columns {
-			if _, exists := first[col]; exists {
-				filtered = append(filtered, col)
-			}
-		}
-		columns = filtered
+	// First row is the header.
+	headerRow, ok := records[0].([]any)
+	if !ok || len(headerRow) == 0 {
+		return []Value{NewList([]Value{})}, nil
+	}
+
+	columns := make([]string, len(headerRow))
+	for i, h := range headerRow {
+		columns[i] = strings.TrimSpace(fmt.Sprintf("%v", h))
 	}
 
 	// Build the record type schema (all fields are string type).
@@ -174,29 +161,28 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	}
 	recType := RecordTypeInfo{Fields: fields}
 
-	// Convert each parsed record into an AQL map value.
-	rows := make([]Value, 0, len(records))
-	for _, rec := range records {
-		m, ok := rec.(map[string]any)
+	// Convert each data row into an AQL map value.
+	rows := make([]Value, 0, len(records)-1)
+	for _, rec := range records[1:] {
+		arr, ok := rec.([]any)
 		if !ok {
 			continue
 		}
 		om := NewOrderedMap()
-		for _, col := range columns {
-			val, exists := m[col]
-			if !exists {
+		for i, col := range columns {
+			if i < len(arr) {
+				switch v := arr[i].(type) {
+				case string:
+					om.Set(col, NewString(v))
+				case float64:
+					om.Set(col, NewInteger(int64(v)))
+				case bool:
+					om.Set(col, NewBoolean(v))
+				default:
+					om.Set(col, NewString(fmt.Sprintf("%v", v)))
+				}
+			} else {
 				om.Set(col, NewString(""))
-				continue
-			}
-			switch v := val.(type) {
-			case string:
-				om.Set(col, NewString(v))
-			case float64:
-				om.Set(col, NewInteger(int64(v)))
-			case bool:
-				om.Set(col, NewBoolean(v))
-			default:
-				om.Set(col, NewString(fmt.Sprintf("%v", v)))
 			}
 		}
 		rows = append(rows, NewMap(om))
