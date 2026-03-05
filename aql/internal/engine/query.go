@@ -596,48 +596,49 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// groupby: [columns(suffix), table/query(prefix)] -> [query-builder]
-	// Usage: from sales groupby [region]
-	//        from sales groupby [region product]
-	groupbyListHandler := func(args []Value) ([]Value, error) {
+	// group: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// Usage: from sales group by [region]
+	//        from sales group by [region product]
+	//        from sales group [region]
+	groupListHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
 		clause, err := buildGroupByClause(colList)
 		if err != nil {
-			return nil, fmt.Errorf("groupby: %w", err)
+			return nil, fmt.Errorf("group: %w", err)
 		}
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
-			return nil, fmt.Errorf("groupby: %w", err)
+			return nil, fmt.Errorf("group: %w", err)
 		}
 		qb.GroupBy = clause
 		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
-	groupbyAtomHandler := func(args []Value) ([]Value, error) {
+	groupAtomHandler := func(args []Value) ([]Value, error) {
 		col := args[0]
 		table := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
-			return nil, fmt.Errorf("groupby: %w", err)
+			return nil, fmt.Errorf("group: %w", err)
 		}
 		qb.GroupBy = quoteIdent(col.AsAtom())
 		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
-	r.Register("groupby",
+	r.Register("group",
 		Signature{
 			Args:       []Type{TList, TList},
 			Precedence: 2,
-			Handler:    groupbyListHandler,
+			Handler:    groupListHandler,
 		},
 		Signature{
 			Args:       []Type{TAtom, TList},
 			Precedence: 2,
-			Handler:    groupbyAtomHandler,
+			Handler:    groupAtomHandler,
 		},
 	)
 

@@ -1270,7 +1270,7 @@ func TestGroupByWithCount(t *testing.T) {
 	}
 	reg.Store["staff"] = engine.Value{VType: engine.TList, Data: td}
 
-	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff groupby [dept] order [dept]`)
+	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] order [dept]`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1328,7 +1328,7 @@ func TestHaving(t *testing.T) {
 	reg.Store["staff"] = engine.Value{VType: engine.TList, Data: td}
 
 	// Only groups with count > 1
-	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff groupby [dept] having [cnt gt 1]`)
+	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] having [cnt gt 1]`)
 	if err != nil {
 		t.Fatal(err)
 	}
