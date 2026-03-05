@@ -1331,6 +1331,38 @@ base none              => none
 ```
 
 
+### Output Words
+
+#### `print`
+
+Print a value to the output writer, followed by a newline. Strings
+are printed as-is (no quotes); maps and lists use JSON-like formatting;
+tables are printed as aligned text with column headers. The value is
+consumed (removed from the stack).
+
+*Signature:* `[any] -> []`
+*Precedence:* suffix
+
+```
+print "hello"               # outputs: hello\n
+print 42                    # outputs: 42\n
+print {x:1,y:2}            # outputs: {"x": 1, "y": 2}\n
+```
+
+#### `printstr`
+
+Same as `print` but does **not** emit a trailing newline. Useful for
+building output incrementally or for prompts.
+
+*Signature:* `[any] -> []`
+*Precedence:* suffix
+
+```
+printstr "hello "           # outputs: hello  (no newline)
+printstr 42                 # outputs: 42     (no newline)
+```
+
+
 ### Conditional Words
 
 #### `if`
