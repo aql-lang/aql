@@ -1360,6 +1360,68 @@ func TestWhereNotIn(t *testing.T) {
 	}
 }
 
+// --- IN with subquery ---
+
+func TestWhereInSubquery(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities)] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestWhereNotInSubquery(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city not in (select [city] from cities)]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+func TestWhereInSubqueryWithFilter(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities where [country eq "UK"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice: London/UK), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereInSubqueryEmpty(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities where [country eq "None"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
 // --- GROUP BY / HAVING ---
 
 func TestGroupByWithCount(t *testing.T) {

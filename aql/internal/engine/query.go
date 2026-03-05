@@ -454,6 +454,12 @@ func registerQuery(r *Registry) {
 		table := args[0]
 		condList := args[1]
 
+		// Resolve any parenthesized sub-expressions (e.g. subqueries in IN).
+		condList, err := resolveWhereSubExprs(r, condList)
+		if err != nil {
+			return nil, fmt.Errorf("where: %w", err)
+		}
+
 		clause, err := buildWhereClause(condList)
 		if err != nil {
 			return nil, fmt.Errorf("where: %w", err)
@@ -647,6 +653,11 @@ func registerQuery(r *Registry) {
 	havingHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
+
+		condList, err := resolveWhereSubExprs(r, condList)
+		if err != nil {
+			return nil, fmt.Errorf("having: %w", err)
+		}
 
 		clause, err := buildWhereClause(condList)
 		if err != nil {
@@ -1071,8 +1082,90 @@ var logicalOps = map[string]string{
 //	[column is null]                           — IS NULL
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
+// resolveWhereSubExprs scans a WHERE condition list for parenthesized
+// sub-expressions (sequences of tokens between "(" and ")") and evaluates
+// them via the engine. The results replace the paren tokens in the list.
+// This enables subquery support in IN clauses:
+//
+//	[city in (select [city] from cities)]
+//
+// The "(select [city] from cities)" tokens are evaluated, producing a
+// TableData value that buildInList can extract values from.
+func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
+	elems := condList.AsList()
+	if len(elems) == 0 {
+		return condList, nil
+	}
+
+	// Quick scan: any open-paren words?
+	hasParen := false
+	for _, e := range elems {
+		if e.IsWord() && e.AsWord().Name == "(" {
+			hasParen = true
+			break
+		}
+	}
+	if !hasParen {
+		// Recurse into nested lists.
+		result := make([]Value, len(elems))
+		for i, e := range elems {
+			if e.VType.Equal(TList) {
+				if _, isTD := e.Data.(TableData); !isTD {
+					if _, isQB := e.Data.(QueryBuilder); !isQB {
+						resolved, err := resolveWhereSubExprs(r, e)
+						if err != nil {
+							return Value{}, err
+						}
+						result[i] = resolved
+						continue
+					}
+				}
+			}
+			result[i] = e
+		}
+		return NewList(result), nil
+	}
+
+	// Find matching paren pairs and evaluate them.
+	var result []Value
+	i := 0
+	for i < len(elems) {
+		if elems[i].IsWord() && elems[i].AsWord().Name == "(" {
+			// Find the matching close paren.
+			depth := 1
+			j := i + 1
+			for j < len(elems) && depth > 0 {
+				if elems[j].IsWord() && elems[j].AsWord().Name == "(" {
+					depth++
+				} else if elems[j].IsWord() && elems[j].AsWord().Name == ")" {
+					depth--
+				}
+				j++
+			}
+			if depth != 0 {
+				return Value{}, fmt.Errorf("unmatched parenthesis in condition")
+			}
+			// Evaluate the sub-expression (tokens between parens).
+			subExpr := elems[i+1 : j-1]
+			eng := New(r)
+			evalResult, err := eng.Run(subExpr)
+			if err != nil {
+				return Value{}, fmt.Errorf("subquery evaluation: %w", err)
+			}
+			result = append(result, evalResult...)
+			i = j
+		} else {
+			result = append(result, elems[i])
+			i++
+		}
+	}
+
+	return NewList(result), nil
+}
+
 //	[column not between value1 value2]         — NOT BETWEEN ... AND ...
 //	[column in [v1 v2 v3]]                     — IN (v1, v2, v3)
+//	[column in (select [col] from table)]      — IN (subquery result)
 //	[column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
 //	[... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
@@ -1306,6 +1399,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 }
 
 // buildInList converts a list value to a comma-separated SQL value list.
+// If the value is a table result (from a subquery), extracts the first column values.
 func buildInList(v Value) (string, error) {
 	if !v.VType.Equal(TList) {
 		// Single value
@@ -1315,6 +1409,19 @@ func buildInList(v Value) (string, error) {
 		}
 		return sql, nil
 	}
+
+	// Check for subquery result: TableData or QueryBuilder.
+	if td, ok := v.Data.(TableData); ok {
+		return buildInListFromTable(td)
+	}
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		td, err := qb.Materialize()
+		if err != nil {
+			return "", fmt.Errorf("in subquery: %w", err)
+		}
+		return buildInListFromTable(td)
+	}
+
 	elems := v.AsList()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty IN list")
@@ -1326,6 +1433,39 @@ func buildInList(v Value) (string, error) {
 			return "", err
 		}
 		parts[i] = sql
+	}
+	return strings.Join(parts, ", "), nil
+}
+
+// buildInListFromTable extracts the first column values from a TableData
+// and returns them as a comma-separated SQL value list for use in IN clauses.
+func buildInListFromTable(td TableData) (string, error) {
+	cols := td.Record.Fields.Keys()
+	if len(cols) == 0 {
+		return "", fmt.Errorf("in subquery: result has no columns")
+	}
+	firstCol := cols[0]
+
+	if len(td.Rows) == 0 {
+		// Empty subquery result — use a value that matches nothing.
+		return "NULL", nil
+	}
+
+	parts := make([]string, 0, len(td.Rows))
+	for _, row := range td.Rows {
+		m := row.AsMap()
+		val, ok := m.Get(firstCol)
+		if !ok {
+			continue
+		}
+		sql, err := valueToSQL(val)
+		if err != nil {
+			return "", fmt.Errorf("in subquery value: %w", err)
+		}
+		parts = append(parts, sql)
+	}
+	if len(parts) == 0 {
+		return "NULL", nil
 	}
 	return strings.Join(parts, ", "), nil
 }
