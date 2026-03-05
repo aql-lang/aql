@@ -5,6 +5,126 @@ import (
 	"strings"
 )
 
+// QueryBuilder accumulates SQL clauses for deferred query execution.
+// Instead of running a separate SQL query for each pipeline word
+// (where, order, limit), the QueryBuilder collects all clauses and
+// executes a single combined query when materialized.
+type QueryBuilder struct {
+	Source   TableData  // the source table data
+	Registry *Registry // needed for SQLite access during materialization
+	Where    string    // WHERE condition (without keyword)
+	OrderBy  string    // ORDER BY clause (without keyword)
+	Limit    int       // -1 = no limit
+	Offset   int       // -1 = no offset
+}
+
+// NewQueryBuilder creates a QueryBuilder from a table data source.
+func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
+	return QueryBuilder{
+		Source:   td,
+		Registry: r,
+		Limit:   -1,
+		Offset:  -1,
+	}
+}
+
+// clone returns a shallow copy of the QueryBuilder for safe mutation.
+func (qb QueryBuilder) clone() QueryBuilder {
+	return qb
+}
+
+// buildSQL constructs the full SQL query string.
+func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
+	var buf strings.Builder
+	buf.WriteString("SELECT ")
+	buf.WriteString(colSQL)
+	buf.WriteString(" FROM ")
+	buf.WriteString(quoteIdent(tableName))
+	if qb.Where != "" {
+		buf.WriteString(" WHERE ")
+		buf.WriteString(qb.Where)
+	}
+	if qb.OrderBy != "" {
+		buf.WriteString(" ORDER BY ")
+		buf.WriteString(qb.OrderBy)
+	}
+	if qb.Limit >= 0 {
+		fmt.Fprintf(&buf, " LIMIT %d", qb.Limit)
+	}
+	if qb.Offset >= 0 {
+		fmt.Fprintf(&buf, " OFFSET %d", qb.Offset)
+	}
+	return buf.String()
+}
+
+// ensureSource loads the source table into SQLite if needed.
+// Returns the table name to use and whether a temp table was created.
+func (qb *QueryBuilder) ensureSource() (string, bool, error) {
+	if qb.Source.SQLite {
+		return qb.Source.TableName, false, nil
+	}
+	r := qb.Registry
+	if r.SQLite == nil {
+		return "", false, fmt.Errorf("SQLite store not initialized")
+	}
+	tmpName, err := r.SQLite.StoreTempTable(qb.Source)
+	if err != nil {
+		return "", false, err
+	}
+	return tmpName, true, nil
+}
+
+// Materialize executes the accumulated query and returns the result as TableData.
+func (qb *QueryBuilder) Materialize() (TableData, error) {
+	tableName, ownsTmp, err := qb.ensureSource()
+	if err != nil {
+		return TableData{}, err
+	}
+	if ownsTmp {
+		defer qb.Registry.SQLite.DropTable(tableName)
+	}
+
+	query := qb.buildSQL(tableName, "*")
+	result, err := qb.Registry.SQLite.Query(query)
+	if err != nil {
+		return TableData{}, err
+	}
+	return result, nil
+}
+
+// MaterializeWithColumns executes with specific column selection.
+func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, error) {
+	tableName, ownsTmp, err := qb.ensureSource()
+	if err != nil {
+		return TableData{}, err
+	}
+	if ownsTmp {
+		defer qb.Registry.SQLite.DropTable(tableName)
+	}
+
+	var colSQL string
+	if cols == nil {
+		colSQL = "*"
+	} else {
+		parts := make([]string, len(cols))
+		for i, c := range cols {
+			if c.Alias != "" {
+				parts[i] = quoteIdent(c.Name) + " AS " + quoteIdent(c.Alias)
+			} else {
+				parts[i] = quoteIdent(c.Name)
+			}
+		}
+		colSQL = strings.Join(parts, ", ")
+	}
+
+	query := qb.buildSQL(tableName, colSQL)
+	result, err := qb.Registry.SQLite.Query(query)
+	if err != nil {
+		return TableData{}, err
+	}
+	return result, nil
+}
+
 // registerQuery registers the select, from, star, where, order, by, and limit words.
 func registerQuery(r *Registry) {
 	// star: [] -> [atom("*")]
@@ -15,8 +135,9 @@ func registerQuery(r *Registry) {
 		},
 	})
 
-	// from: [atom] -> [table]
-	// Looks up a table by name from the registry store.
+	// from: [atom] -> [query-builder]
+	// Looks up a table by name from the registry store and wraps it
+	// in a QueryBuilder for deferred clause accumulation.
 	fromHandler := func(args []Value) ([]Value, error) {
 		name := args[0].AsAtom()
 		val, ok := r.Store[name]
@@ -26,7 +147,14 @@ func registerQuery(r *Registry) {
 		if !val.IsTableType() {
 			return nil, fmt.Errorf("from: %q is not a table", name)
 		}
-		return []Value{val}, nil
+
+		td, ok := val.Data.(TableData)
+		if !ok {
+			return nil, fmt.Errorf("from: %q has no table data", name)
+		}
+
+		qb := NewQueryBuilder(r, td)
+		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
 	r.Register("from",
@@ -38,9 +166,10 @@ func registerQuery(r *Registry) {
 
 	// select: [atom, list] -> [table]  (select * from ...)
 	// select: [list, list] -> [table]  (select [a, b] from ...)
+	// Materializes QueryBuilder or TableData into final result.
 	selectStarHandler := func(args []Value) ([]Value, error) {
 		colSpec := args[0] // atom "*"
-		table := args[1]   // table value
+		table := args[1]   // table/query-builder value
 
 		if colSpec.AsAtom() != "*" {
 			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
@@ -51,7 +180,7 @@ func registerQuery(r *Registry) {
 
 	selectColsHandler := func(args []Value) ([]Value, error) {
 		colList := args[0] // list of columns/aliases
-		table := args[1]   // table value
+		table := args[1]   // table/query-builder value
 
 		cols, err := parseColumnSpec(colList)
 		if err != nil {
@@ -72,26 +201,26 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// where: [condition(suffix), table(prefix)] -> [table]
+	// where: [condition(suffix), table/query(prefix)] -> [query-builder]
 	// Filters table rows using a SQL WHERE clause derived from the condition list.
 	// Condition list elements: column-name op value [and|or column-name op value ...]
 	// Supported ops: eq, lt, gt, lte, gte, like
 	// Usage: from people where [age gt "25"]
 	whereHandler := func(args []Value) ([]Value, error) {
-		table := args[0]    // prefix: table from stack
+		table := args[0]    // prefix: table/query from stack
 		condList := args[1] // suffix: condition list
-
-		td, ok := table.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("where: argument is not a table")
-		}
 
 		clause, err := buildWhereClause(condList)
 		if err != nil {
 			return nil, fmt.Errorf("where: %w", err)
 		}
 
-		return doTableQuery(r, td, " WHERE "+clause)
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("where: %w", err)
+		}
+		qb.Where = clause
+		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
 	r.Register("where",
@@ -102,7 +231,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// order: [columns(suffix), table(prefix)] -> [table]
+	// order: [columns(suffix), table/query(prefix)] -> [query-builder]
 	// Sorts table rows using ORDER BY. Accepts a column atom or a list
 	// of columns with optional asc/desc direction.
 	// Usage: from people order name
@@ -110,34 +239,32 @@ func registerQuery(r *Registry) {
 	//        from people order by name
 	//        from people order by [name desc]
 	orderListHandler := func(args []Value) ([]Value, error) {
-		table := args[0]   // prefix: table from stack
+		table := args[0]   // prefix: table/query from stack
 		colList := args[1] // suffix: column list
-
-		td, ok := table.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("order: argument is not a table")
-		}
 
 		clause, err := buildOrderClause(colList)
 		if err != nil {
 			return nil, fmt.Errorf("order: %w", err)
 		}
 
-		return doTableQuery(r, td, " ORDER BY "+clause)
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("order: %w", err)
+		}
+		qb.OrderBy = clause
+		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
 	orderAtomHandler := func(args []Value) ([]Value, error) {
-		// flexibleMatch reorders [TList, TAtom] -> [TAtom, TList]
 		col := args[0]   // column name (TAtom)
 		table := args[1] // table (TList)
 
-		td, ok := table.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("order: argument is not a table")
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("order: %w", err)
 		}
-
-		clause := quoteIdent(col.AsAtom())
-		return doTableQuery(r, td, " ORDER BY "+clause)
+		qb.OrderBy = quoteIdent(col.AsAtom())
+		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
 	r.Register("order",
@@ -171,19 +298,19 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// limit: [integer(suffix), table(prefix)] -> [table]
+	// limit: [integer(suffix), table/query(prefix)] -> [query-builder]
 	// Restricts the number of rows returned.
 	// Usage: from people limit 2
 	limitHandler := func(args []Value) ([]Value, error) {
 		n := args[0].AsInteger() // suffix: count (TInteger)
-		table := args[1]         // prefix: table from stack (TList)
+		table := args[1]         // prefix: table/query from stack (TList)
 
-		td, ok := table.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("limit: argument is not a table")
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("limit: %w", err)
 		}
-
-		return doTableQuery(r, td, fmt.Sprintf(" LIMIT %d", n))
+		qb.Limit = int(n)
+		return []Value{Value{VType: TList, Data: qb}}, nil
 	}
 
 	r.Register("limit",
@@ -247,82 +374,33 @@ func valueToColName(v Value) string {
 	return ""
 }
 
-// doSelect performs a SELECT query on a table value.
+// toQueryBuilder converts a Value (QueryBuilder or TableData) into a QueryBuilder.
+func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		return qb.clone(), nil
+	}
+	if td, ok := v.Data.(TableData); ok {
+		return NewQueryBuilder(r, td), nil
+	}
+	return QueryBuilder{}, fmt.Errorf("argument is not a table or query")
+}
+
+// doSelect performs a SELECT query, materializing a QueryBuilder or TableData.
 // If cols is nil, selects all columns (*).
 func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
-	td, ok := table.Data.(TableData)
-	if !ok {
-		return nil, fmt.Errorf("select: argument is not a table")
-	}
-
-	// Ensure the table is in SQLite.
-	tableName := td.TableName
-	if !td.SQLite {
-		// Create a temporary SQLite table for non-SQLite-backed tables.
-		if r.SQLite == nil {
-			return nil, fmt.Errorf("select: SQLite store not initialized")
-		}
-		tmpName, err := r.SQLite.StoreTempTable(td)
-		if err != nil {
-			return nil, fmt.Errorf("select: %w", err)
-		}
-		tableName = tmpName
-		defer r.SQLite.DropTable(tmpName)
-	}
-
-	// Build the SQL query.
-	query, err := buildSelectSQL(cols, tableName)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := r.SQLite.Query(query)
+	qb, err := toQueryBuilder(r, table)
 	if err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
-	return []Value{Value{VType: TList, Data: result}}, nil
-}
-
-// buildSelectSQL constructs a SQL SELECT statement.
-func buildSelectSQL(cols []columnSpec, tableName string) (string, error) {
-	var colSQL string
+	var result TableData
 	if cols == nil {
-		colSQL = "*"
+		result, err = qb.Materialize()
 	} else {
-		parts := make([]string, len(cols))
-		for i, c := range cols {
-			if c.Alias != "" {
-				parts[i] = quoteIdent(c.Name) + " AS " + quoteIdent(c.Alias)
-			} else {
-				parts[i] = quoteIdent(c.Name)
-			}
-		}
-		colSQL = strings.Join(parts, ", ")
+		result, err = qb.MaterializeWithColumns(cols)
 	}
-	return fmt.Sprintf("SELECT %s FROM %s", colSQL, quoteIdent(tableName)), nil
-}
-
-// doTableQuery executes a SELECT * FROM table with an additional SQL suffix
-// (WHERE, ORDER BY, LIMIT, etc.) and returns the result as a table value.
-func doTableQuery(r *Registry, td TableData, sqlSuffix string) ([]Value, error) {
-	tableName := td.TableName
-	if !td.SQLite {
-		if r.SQLite == nil {
-			return nil, fmt.Errorf("SQLite store not initialized")
-		}
-		tmpName, err := r.SQLite.StoreTempTable(td)
-		if err != nil {
-			return nil, err
-		}
-		tableName = tmpName
-		defer r.SQLite.DropTable(tmpName)
-	}
-
-	query := fmt.Sprintf("SELECT * FROM %s%s", quoteIdent(tableName), sqlSuffix)
-	result, err := r.SQLite.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("select: %w", err)
 	}
 
 	return []Value{Value{VType: TList, Data: result}}, nil

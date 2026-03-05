@@ -302,6 +302,9 @@ func (v Value) IsTableType() bool {
 		if _, ok := v.Data.(TableData); ok {
 			return true
 		}
+		if _, ok := v.Data.(QueryBuilder); ok {
+			return true
+		}
 	}
 	return false
 }
@@ -310,6 +313,9 @@ func (v Value) IsTableType() bool {
 func (v Value) AsTableType() TableTypeInfo {
 	if td, ok := v.Data.(TableData); ok {
 		return TableTypeInfo{Record: td.Record}
+	}
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		return TableTypeInfo{Record: qb.Source.Record}
 	}
 	return v.Data.(TableTypeInfo)
 }
@@ -345,9 +351,17 @@ func (v Value) AsBoolean() bool {
 }
 
 // AsList returns the []Value payload, panics if not a list type.
-// Also works for TableData, returning the rows.
+// Also works for TableData and QueryBuilder, returning the rows.
+// For QueryBuilder, this triggers materialization.
 func (v Value) AsList() []Value {
 	if td, ok := v.Data.(TableData); ok {
+		return td.Rows
+	}
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		td, err := qb.Materialize()
+		if err != nil {
+			return nil
+		}
 		return td.Rows
 	}
 	return v.Data.([]Value)
@@ -403,6 +417,14 @@ func (v Value) String() string {
 				rowParts[i] = row.String()
 			}
 			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
+		}
+		if qb, ok := v.Data.(QueryBuilder); ok {
+			td, err := qb.Materialize()
+			if err != nil {
+				return "query(error:" + err.Error() + ")"
+			}
+			v2 := Value{VType: TList, Data: td}
+			return v2.String()
 		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
