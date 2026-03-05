@@ -1291,6 +1291,92 @@ base none              => none
 ```
 
 
+### Conditional Words
+
+#### `if`
+
+Conditional evaluation, analogous to the ternary operator. Evaluates
+the condition, then evaluates only the matching branch. Unevaluated
+branches produce no side effects.
+
+*Signatures:*
+- `[any, any, any] -> [any]` — 3-arg: condition, then-branch, else-branch
+- `[any, any] -> [any]` — 2-arg: condition, then-branch (returns nothing if false)
+
+*Precedence:* suffix
+
+**Condition evaluation:** If the condition is a list, it is evaluated
+as code (like `do`). The result is then tested for truthiness.
+
+**Truthiness rules** (same as `convert boolean`):
+- `false`, `0`, `""`, `none`, empty list, empty map → **falsy**
+- `true`, non-zero numbers, non-empty strings → **truthy**
+
+**Branch evaluation:** If a branch is a list, it is evaluated as code.
+Scalar branch values are returned as-is. Only the matching branch is
+evaluated — the other is never executed.
+
+**3-arg form** (if-then-else):
+
+```
+if true 1 2                     => 1
+if false 1 2                    => 2
+if true "yes" "no"              => 'yes'
+if false "yes" "no"             => 'no'
+```
+
+**2-arg form** (if-then, no else):
+
+```
+if true 42                      => 42
+if false 42                     =>        # empty stack
+```
+
+**List conditions** — evaluated as code:
+
+```
+if [1 lt 2] [3 add 4] [5 add 6]    => 7
+if [2 lt 1] [3 add 4] [5 add 6]    => 11
+```
+
+**List branches** — evaluated as code:
+
+```
+if true [1 add 2] [3 add 4]    => 3
+if false [1 add 2] [3 add 4]   => 7
+```
+
+**Lazy evaluation** — only the matching branch is evaluated:
+
+```
+if true 1 [10 div 0]           => 1       # no division error
+if false [10 div 0] 2          => 2       # no division error
+```
+
+**Falsy values:**
+
+```
+if 0 1 2                       => 2
+if "" 1 2                      => 2
+if none 1 2                    => 2
+```
+
+**Truthy values:**
+
+```
+if 1 10 20                     => 10
+if "yes" 10 20                 => 10
+if 42 10 20                    => 10
+```
+
+**Nested:**
+
+```
+if true (if false 1 2) 3       => 2
+if false 1 (if true 2 3)       => 2
+```
+
+
 ### File I/O Words
 
 File operations use an internal `FileOps` interface rather than calling
