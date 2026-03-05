@@ -2592,6 +2592,89 @@ func TestOrderByMultipleKeysMixed(t *testing.T) {
 	assertField(t, rows[1].AsMap(), "city", "London")
 }
 
+// --- COLLATE ---
+
+func TestOrderCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data order [name collate nocase asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Case-insensitive: alice < Bob < CHARLIE
+	assertField(t, rows[0].AsMap(), "name", "alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "CHARLIE")
+}
+
+func TestOrderCollateBinary(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data order [name collate binary asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Binary: uppercase < lowercase (B < C < a)
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "CHARLIE")
+	assertField(t, rows[2].AsMap(), "name", "alice")
+}
+
+func TestWhereEqCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name eq "ALICE" collate nocase]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "alice")
+}
+
+func TestWhereEqCollateNocaseNoMatch(t *testing.T) {
+	// Without collate nocase, "ALICE" should not match "alice"
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name eq "ALICE"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (case-sensitive), got %d", len(rows))
+	}
+}
+
+func TestWhereLikeCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name like "b%" collate nocase]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
 // --- GROUP BY with single atom (group name) ---
 
 func TestGroupByAtom(t *testing.T) {

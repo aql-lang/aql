@@ -1380,7 +1380,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		}
 
 	default:
-		// Standard comparison: op value
+		// Standard comparison: op value [collate nocase|binary|rtrim]
 		sqlOp, ok := comparisonOps[opName]
 		if !ok {
 			return "", i, fmt.Errorf("unknown comparison operator %q", opName)
@@ -1395,7 +1395,28 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 			return "", i, err
 		}
 		i++
-		return fmt.Sprintf("%s %s %s", quoteIdent(col), sqlOp, sqlVal), i, nil
+
+		// Optional COLLATE modifier.
+		collateSuffix := ""
+		if i < len(elems) {
+			next := valueToColName(elems[i])
+			if strings.ToLower(next) == "collate" {
+				i++
+				if i >= len(elems) {
+					return "", i, fmt.Errorf("collate must be followed by nocase, binary, or rtrim")
+				}
+				cname := strings.ToLower(valueToColName(elems[i]))
+				switch cname {
+				case "nocase", "binary", "rtrim":
+					collateSuffix = " COLLATE " + strings.ToUpper(cname)
+					i++
+				default:
+					return "", i, fmt.Errorf("collate must be followed by nocase, binary, or rtrim, got %q", cname)
+				}
+			}
+		}
+
+		return fmt.Sprintf("%s %s %s%s", quoteIdent(col), sqlOp, sqlVal, collateSuffix), i, nil
 	}
 }
 
@@ -1597,9 +1618,17 @@ func buildOrderClause(colList Value) (string, error) {
 			return "FIRST", true
 		case "last":
 			return "LAST", true
+		case "collate":
+			return "COLLATE", true
 		default:
 			return "", false
 		}
+	}
+
+	collations := map[string]string{
+		"nocase": "NOCASE",
+		"binary": "BINARY",
+		"rtrim":  "RTRIM",
 	}
 
 	var parts []string
@@ -1633,6 +1662,17 @@ func buildOrderClause(colList Value) (string, error) {
 					return "", fmt.Errorf("nulls must be followed by first or last, got %q", next)
 				}
 				parts[len(parts)-1] += " " + sql + " " + strings.ToUpper(next)
+			} else if lower == "collate" {
+				i++
+				if i >= len(elems) {
+					return "", fmt.Errorf("collate must be followed by nocase, binary, or rtrim")
+				}
+				next := strings.ToLower(valueToColName(elems[i]))
+				colSQL, ok := collations[next]
+				if !ok {
+					return "", fmt.Errorf("collate must be followed by nocase, binary, or rtrim, got %q", next)
+				}
+				parts[len(parts)-1] += " " + sql + " " + colSQL
 			} else {
 				parts[len(parts)-1] += " " + sql
 			}
