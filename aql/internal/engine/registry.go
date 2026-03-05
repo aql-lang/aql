@@ -202,6 +202,8 @@ func registerBuiltins(r *Registry) {
 		},
 	})
 
+	registerComparison(r)
+
 	registerStorage(r)
 	registerUnify(r)
 	registerDef(r)
