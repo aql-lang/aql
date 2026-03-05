@@ -412,3 +412,19 @@ none a dotr	ERROR:dotr: parent is none
 # Dotr - !. alias
 {a:1} a !.	1
 {a:1} b !.	ERROR:dotr: key "b" not found in map
+
+# Convert to string - default truncation at 222
+convert 99 string	'99'
+convert true string	'true'
+
+# Convert to string - size setting truncates
+convert "hello" string {size:3}	'hel'
+convert "abcdef" string {size:0}	''
+convert "ab" string {size:10}	'ab'
+
+# Convert to string - size with variant (both in settings map)
+convert 255 string {variant:"hex",size:1}	'f'
+convert 255 string {variant:"HEX",size:1}	'F'
+
+# Convert to string - default size (222) truncates long strings
+convert "abcdefghij" string {size:5}	'abcde'

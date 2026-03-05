@@ -763,38 +763,59 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 // registerConvert registers the "convert" word for type conversions.
 //
 // convert takes a source value, a target type literal, and an optional
-// variant string. It converts the source value to the target scalar type.
+// variant string and/or settings map. It converts the source value to
+// the target scalar type.
 //
-//	convert 99 string       => "99"
-//	convert 10 string "hex" => "a"
-//	convert "42" number     => 42
-//	convert true string     => "true"
+// When converting to string, the settings map may contain a "size" key
+// specifying the maximum length of the result (default 222). The string
+// is truncated to that length if it exceeds it.
+//
+//	convert 99 string                => "99"
+//	convert 10 string "hex"          => "a"
+//	convert "42" number              => 42
+//	convert true string              => "true"
+//	convert "hello" string {size:3}  => "hel"
 func registerConvert(r *Registry) {
+	const defaultSize = 222
+
+	// truncate limits a string to maxLen characters.
+	truncate := func(s string, maxLen int) string {
+		if maxLen < 0 {
+			maxLen = 0
+		}
+		if len(s) > maxLen {
+			return s[:maxLen]
+		}
+		return s
+	}
+
 	// convertTo performs the actual conversion.
-	convertTo := func(src Value, targetType Type, variant string) (Value, error) {
+	convertTo := func(src Value, targetType Type, variant string, size int) (Value, error) {
 		switch {
 		case targetType.Matches(TString):
 			// Convert to string.
 			if variant == "" {
-				return NewString(valToString(src)), nil
+				return NewString(truncate(valToString(src), size)), nil
 			}
 			// Variant-based string conversion (only for numbers).
 			if !src.VType.Matches(TNumber) {
 				return Value{}, fmt.Errorf("convert: variant %q only supported for number to string", variant)
 			}
 			n := src.AsInteger()
+			var s string
 			switch variant {
 			case "hex":
-				return NewString(strconv.FormatInt(n, 16)), nil
+				s = strconv.FormatInt(n, 16)
 			case "HEX":
-				return NewString(strings.ToUpper(strconv.FormatInt(n, 16))), nil
+				s = strings.ToUpper(strconv.FormatInt(n, 16))
 			case "bin":
-				return NewString(strconv.FormatInt(n, 2)), nil
+				s = strconv.FormatInt(n, 2)
 			case "oct":
-				return NewString(strconv.FormatInt(n, 8)), nil
+				s = strconv.FormatInt(n, 8)
 			default:
 				return Value{}, fmt.Errorf("convert: unknown string variant %q", variant)
 			}
+			return NewString(truncate(s, size)), nil
 
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
@@ -857,21 +878,35 @@ func registerConvert(r *Registry) {
 		if args[1].Data != nil {
 			return nil, fmt.Errorf("convert: second argument must be a type literal")
 		}
-		result, err := convertTo(src, args[1].VType, "")
+		result, err := convertTo(src, args[1].VType, "", defaultSize)
 		if err != nil {
 			return nil, err
 		}
 		return []Value{result}, nil
 	}
 
-	// 3-arg: convert value type variant
+	// 3-arg: convert value type <variant-or-settings>
+	// The third argument is either a string variant (e.g. "hex") or a
+	// settings map (e.g. {size:3}) which may also contain a "variant" key.
 	convert3Handler := func(args []Value) ([]Value, error) {
 		src := args[0]
 		if args[1].Data != nil {
 			return nil, fmt.Errorf("convert: second argument must be a type literal")
 		}
-		variant := args[2].Data.(string)
-		result, err := convertTo(src, args[1].VType, variant)
+		variant := ""
+		size := defaultSize
+		if args[2].VType.Equal(TMap) {
+			m := args[2].AsMap()
+			if v, ok := m.Get("variant"); ok && v.VType.Matches(TString) {
+				variant = v.AsString()
+			}
+			if v, ok := m.Get("size"); ok && v.VType.Matches(TInteger) {
+				size = int(v.AsInteger())
+			}
+		} else {
+			variant = valToString(args[2])
+		}
+		result, err := convertTo(src, args[1].VType, variant, size)
 		if err != nil {
 			return nil, err
 		}
@@ -881,7 +916,7 @@ func registerConvert(r *Registry) {
 	r.Register("convert",
 		// 3-arg variant registered first (higher score from more args)
 		Signature{
-			Args:    []Type{TAny, TAny, TString},
+			Args:    []Type{TAny, TAny, TAny},
 			Handler: convert3Handler,
 		},
 		Signature{
