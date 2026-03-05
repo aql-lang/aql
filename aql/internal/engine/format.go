@@ -211,8 +211,10 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 
 // TableData holds a concrete table: its record schema plus the row data.
 type TableData struct {
-	Record RecordTypeInfo
-	Rows   []Value
+	Record    RecordTypeInfo
+	Rows      []Value
+	SQLite    bool   // true if data is backed by an in-memory SQLite table
+	TableName string // name of the table in the SQLite store
 }
 
 // encodeDelimited converts a table value to CSV/TSV text.

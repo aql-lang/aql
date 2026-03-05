@@ -282,6 +282,31 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
+
+	// Store table data in SQLite for formats that produce tables.
+	if r.SQLite != nil && len(result) == 1 {
+		if td, ok := result[0].Data.(TableData); ok {
+			// Derive table name from file path (basename without extension).
+			baseName := path
+			if idx := strings.LastIndex(baseName, "/"); idx >= 0 {
+				baseName = baseName[idx+1:]
+			}
+			if idx := strings.LastIndex(baseName, "\\"); idx >= 0 {
+				baseName = baseName[idx+1:]
+			}
+			if idx := strings.LastIndex(baseName, "."); idx >= 0 {
+				baseName = baseName[:idx]
+			}
+
+			if err := r.SQLite.StoreTable(baseName, td); err != nil {
+				return nil, fmt.Errorf("read: sqlite store: %w", err)
+			}
+			td.SQLite = true
+			td.TableName = baseName
+			result[0] = Value{VType: TList, Data: td}
+		}
+	}
+
 	return result, nil
 }
 
