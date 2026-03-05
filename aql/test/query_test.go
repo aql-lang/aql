@@ -736,6 +736,316 @@ func TestWhereOnInternalTable(t *testing.T) {
 
 // --- SQLite flag on loaded table ---
 
+// --- offset ---
+
+func TestOffset(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name] limit 2 offset 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// Ordered by name: Alice, Bob, Charlie; offset 1 skips Alice
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestLimitOffset(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name] limit 1 offset 2`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// Ordered: Alice(0), Bob(1), Charlie(2); offset 2, limit 1 → Charlie
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+// --- distinct ---
+
+func TestDistinct(t *testing.T) {
+	// Create a table with duplicate city values.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [city] from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows without distinct, got %d", len(rows))
+	}
+
+	// With distinct — all cities happen to be unique, so same count.
+	result, err = runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [city] (from people distinct)`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows = result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows with distinct (all unique), got %d", len(rows))
+	}
+}
+
+func TestDistinctDuplicates(t *testing.T) {
+	// Build a table with duplicate values.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("color", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(color string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("color", engine.NewString(color))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("red"), mkRow("blue"), mkRow("red"), mkRow("blue"), mkRow("red")},
+		SQLite: false,
+	}
+	reg.Store["colors"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [color] (from colors distinct)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 distinct colors, got %d", len(rows))
+	}
+}
+
+// --- nulls first / nulls last ---
+
+func TestOrderNullsFirst(t *testing.T) {
+	// Build a table with some NULL values.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("score", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name, score string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		if score != "" {
+			om.Set("score", engine.NewString(score))
+		} else {
+			om.Set("score", engine.NewString(""))
+		}
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", "90"), mkRow("Bob", ""), mkRow("Charlie", "80")},
+		SQLite: false,
+	}
+	reg.Store["scores"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Order by score with nulls first — empty strings sort first.
+	queryVals, err := parser.Parse(`select * from scores order [score asc nulls first]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Empty string sorts first with NULLS FIRST.
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+// --- order by position ---
+
+func TestOrderByPosition(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [1]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Column 1 is "name" — alphabetical: Alice, Bob, Charlie
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByPositionDesc(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [1 desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+// --- is null / is not null ---
+
+func TestWhereIsNull(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("email", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name, email string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("email", engine.NewString(email))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", "alice@test.com"), mkRow("Bob", ""), mkRow("Charlie", "charlie@test.com")},
+		SQLite: false,
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	// is not null — in SQLite all TEXT columns are non-null (empty string != null)
+	// but the query should still execute without error.
+	queryVals, err := parser.Parse(`select * from users where [email is not null]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows (all non-null TEXT), got %d", len(rows))
+	}
+}
+
+// --- between ---
+
+func TestWhereBetween(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age between "25" "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 25 and 30), got %d", len(rows))
+	}
+}
+
+func TestWhereNotBetween(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age not between "25" "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (age 35), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+func TestWhereBetweenAndOther(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age between "25" "35" and city eq "London"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+// --- glob ---
+
+func TestWhereGlob(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name glob "A*"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereGlobCaseSensitive(t *testing.T) {
+	// GLOB is case-sensitive unlike LIKE.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name glob "a*"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (GLOB is case-sensitive), got %d", len(rows))
+	}
+}
+
+// --- SQLite flag on loaded table ---
+
 func TestFileLoadSetsSQLiteFlag(t *testing.T) {
 	result, err := runWithOSFiles(t, `"file/people.csv" read`)
 	if err != nil {

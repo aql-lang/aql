@@ -16,6 +16,7 @@ type QueryBuilder struct {
 	OrderBy  string    // ORDER BY clause (without keyword)
 	Limit    int       // -1 = no limit
 	Offset   int       // -1 = no offset
+	Distinct bool      // true for SELECT DISTINCT
 }
 
 // NewQueryBuilder creates a QueryBuilder from a table data source.
@@ -37,6 +38,9 @@ func (qb QueryBuilder) clone() QueryBuilder {
 func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 	var buf strings.Builder
 	buf.WriteString("SELECT ")
+	if qb.Distinct {
+		buf.WriteString("DISTINCT ")
+	}
 	buf.WriteString(colSQL)
 	buf.WriteString(" FROM ")
 	buf.WriteString(quoteIdent(tableName))
@@ -320,6 +324,52 @@ func registerQuery(r *Registry) {
 			Handler:    limitHandler,
 		},
 	)
+
+	// offset: [integer(suffix), table/query(prefix)] -> [query-builder]
+	// Skips the first n rows. Used with limit for pagination.
+	// Usage: from people limit 10 offset 20
+	offsetHandler := func(args []Value) ([]Value, error) {
+		n := args[0].AsInteger() // suffix: offset count (TInteger)
+		table := args[1]         // prefix: table/query from stack (TList)
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("offset: %w", err)
+		}
+		qb.Offset = int(n)
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("offset",
+		Signature{
+			Args:       []Type{TInteger, TList},
+			Precedence: 1,
+			Handler:    offsetHandler,
+		},
+	)
+
+	// distinct: [table/query(prefix)] -> [query-builder]
+	// Marks the query to use SELECT DISTINCT.
+	// Usage: select distinct * from people
+	//        select distinct [name] from people
+	distinctHandler := func(args []Value) ([]Value, error) {
+		table := args[0] // prefix: table/query from stack (TList)
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("distinct: %w", err)
+		}
+		qb.Distinct = true
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("distinct",
+		Signature{
+			Args:       []Type{TList},
+			Precedence: 1,
+			Handler:    distinctHandler,
+		},
+	)
 }
 
 // columnSpec describes a column selection, with optional alias.
@@ -415,6 +465,7 @@ var comparisonOps = map[string]string{
 	"lte":  "<=",
 	"gte":  ">=",
 	"like": "LIKE",
+	"glob": "GLOB",
 }
 
 // logicalOps maps AQL logical word names to SQL connectors.
@@ -424,7 +475,14 @@ var logicalOps = map[string]string{
 }
 
 // buildWhereClause translates a condition list into a SQL WHERE clause.
-// Format: [column op value] or [column op value and/or column op value ...]
+// Supported forms:
+//
+//	[column op value]                          — standard comparison
+//	[column is null]                           — IS NULL
+//	[column is not null]                       — IS NOT NULL
+//	[column between value1 value2]             — BETWEEN ... AND ...
+//	[column not between value1 value2]         — NOT BETWEEN ... AND ...
+//	[... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
 	elems := condList.AsList()
 	if len(elems) == 0 {
@@ -434,30 +492,110 @@ func buildWhereClause(condList Value) (string, error) {
 	var parts []string
 	i := 0
 	for i < len(elems) {
-		// Expect: column op value
-		if i+2 >= len(elems) {
-			return "", fmt.Errorf("incomplete condition: expected column op value")
+		if i >= len(elems) {
+			break
 		}
 
 		col := valueToColName(elems[i])
 		if col == "" {
 			return "", fmt.Errorf("expected column name, got %s", elems[i].VType)
 		}
+		i++
 
-		opName := valueToColName(elems[i+1])
-		sqlOp, ok := comparisonOps[opName]
-		if !ok {
-			return "", fmt.Errorf("unknown comparison operator %q (use eq, neq, lt, gt, lte, gte, like)", opName)
+		if i >= len(elems) {
+			return "", fmt.Errorf("incomplete condition after column %q", col)
 		}
 
-		val := elems[i+2]
-		sqlVal, err := valueToSQL(val)
-		if err != nil {
-			return "", err
-		}
+		opName := valueToColName(elems[i])
 
-		parts = append(parts, fmt.Sprintf("%s %s %s", quoteIdent(col), sqlOp, sqlVal))
-		i += 3
+		switch opName {
+		case "is":
+			// is null / is not null
+			i++
+			if i >= len(elems) {
+				return "", fmt.Errorf("incomplete condition: expected null or not after is")
+			}
+			next := valueToColName(elems[i])
+			if next == "null" {
+				parts = append(parts, fmt.Sprintf("%s IS NULL", quoteIdent(col)))
+				i++
+			} else if next == "not" {
+				i++
+				if i >= len(elems) {
+					return "", fmt.Errorf("incomplete condition: expected null after is not")
+				}
+				nn := valueToColName(elems[i])
+				if nn != "null" {
+					return "", fmt.Errorf("expected null after is not, got %q", nn)
+				}
+				parts = append(parts, fmt.Sprintf("%s IS NOT NULL", quoteIdent(col)))
+				i++
+			} else {
+				return "", fmt.Errorf("expected null or not after is, got %q", next)
+			}
+
+		case "between":
+			// between value1 value2
+			i++
+			if i+1 >= len(elems) {
+				return "", fmt.Errorf("between requires two values")
+			}
+			lo, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", err
+			}
+			i++
+			hi, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, fmt.Sprintf("%s BETWEEN %s AND %s", quoteIdent(col), lo, hi))
+			i++
+
+		case "not":
+			// not between value1 value2
+			i++
+			if i >= len(elems) {
+				return "", fmt.Errorf("incomplete condition: expected between after not")
+			}
+			next := valueToColName(elems[i])
+			if next != "between" {
+				return "", fmt.Errorf("expected between after not, got %q", next)
+			}
+			i++
+			if i+1 >= len(elems) {
+				return "", fmt.Errorf("not between requires two values")
+			}
+			lo, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", err
+			}
+			i++
+			hi, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi))
+			i++
+
+		default:
+			// Standard comparison: op value
+			sqlOp, ok := comparisonOps[opName]
+			if !ok {
+				return "", fmt.Errorf("unknown comparison operator %q", opName)
+			}
+			i++
+			if i >= len(elems) {
+				return "", fmt.Errorf("incomplete condition: expected value after %q", opName)
+			}
+			val := elems[i]
+			sqlVal, err := valueToSQL(val)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, fmt.Sprintf("%s %s %s", quoteIdent(col), sqlOp, sqlVal))
+			i++
+		}
 
 		// Check for logical connector.
 		if i < len(elems) {
@@ -497,30 +635,76 @@ func valueToSQL(v Value) (string, error) {
 }
 
 // buildOrderClause translates a column list into a SQL ORDER BY clause.
-// Supports: [col1, col2] or [col1 asc, col2 desc] or [col1, desc, col2].
-// Direction atoms "asc" and "desc" are applied to the preceding column.
+// Supports:
+//   - [col1, col2]                   — multiple columns
+//   - [col1 asc, col2 desc]          — with direction
+//   - [col1 asc nulls first]         — with nulls placement
+//   - [1, 2 desc]                    — positional (1-based)
 func buildOrderClause(colList Value) (string, error) {
 	elems := colList.AsList()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty order column list")
 	}
 
+	// orderModifiers are atoms that modify the preceding column entry.
+	isModifier := func(name string) (string, bool) {
+		switch name {
+		case "asc":
+			return "ASC", true
+		case "desc":
+			return "DESC", true
+		case "nulls":
+			// "nulls" is a prefix for "first" or "last"; handled below.
+			return "NULLS", true
+		case "first":
+			return "FIRST", true
+		case "last":
+			return "LAST", true
+		default:
+			return "", false
+		}
+	}
+
 	var parts []string
-	for _, e := range elems {
+	i := 0
+	for i < len(elems) {
+		e := elems[i]
+
+		// Integer: positional column reference (ORDER BY 1, 2).
+		if e.VType.Matches(TInteger) {
+			parts = append(parts, fmt.Sprintf("%d", e.AsInteger()))
+			i++
+			continue
+		}
+
 		name := valueToColName(e)
 		if name == "" {
-			return "", fmt.Errorf("expected column name or asc/desc, got %s", e.VType)
+			return "", fmt.Errorf("expected column name, position, or modifier, got %s", e.VType)
 		}
 		lower := strings.ToLower(name)
-		if lower == "asc" || lower == "desc" {
-			// Attach direction to previous column.
+
+		if sql, ok := isModifier(lower); ok {
 			if len(parts) == 0 {
-				return "", fmt.Errorf("asc/desc without preceding column name")
+				return "", fmt.Errorf("%s without preceding column name", lower)
 			}
-			parts[len(parts)-1] += " " + strings.ToUpper(lower)
+			// "nulls" must be followed by "first" or "last".
+			if lower == "nulls" {
+				i++
+				if i >= len(elems) {
+					return "", fmt.Errorf("nulls must be followed by first or last")
+				}
+				next := strings.ToLower(valueToColName(elems[i]))
+				if next != "first" && next != "last" {
+					return "", fmt.Errorf("nulls must be followed by first or last, got %q", next)
+				}
+				parts[len(parts)-1] += " " + sql + " " + strings.ToUpper(next)
+			} else {
+				parts[len(parts)-1] += " " + sql
+			}
 		} else {
 			parts = append(parts, quoteIdent(name))
 		}
+		i++
 	}
 
 	return strings.Join(parts, ", "), nil
