@@ -5,6 +5,21 @@ import (
 	"strings"
 )
 
+// JoinClause represents a single JOIN in a query.
+type JoinClause struct {
+	Type      string // "JOIN", "LEFT JOIN", "CROSS JOIN"
+	Table     string // table name in the store
+	Alias     string // optional alias
+	On        string // ON condition (raw SQL)
+	UsingCols string // USING(col1, col2) clause
+}
+
+// SetOp represents a set operation combining two queries.
+type SetOp struct {
+	Op    string       // "UNION", "UNION ALL", "INTERSECT", "EXCEPT"
+	Right QueryBuilder // the right-hand query
+}
+
 // QueryBuilder accumulates SQL clauses for deferred query execution.
 // Instead of running a separate SQL query for each pipeline word
 // (where, order, limit), the QueryBuilder collects all clauses and
@@ -17,6 +32,11 @@ type QueryBuilder struct {
 	Limit    int       // -1 = no limit
 	Offset   int       // -1 = no offset
 	Distinct bool      // true for SELECT DISTINCT
+	GroupBy  string    // GROUP BY clause (without keyword)
+	Having   string    // HAVING clause (without keyword)
+	Joins    []JoinClause
+	Alias    string // table alias for the FROM source
+	SetOps   []SetOp
 }
 
 // NewQueryBuilder creates a QueryBuilder from a table data source.
@@ -31,6 +51,16 @@ func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 
 // clone returns a shallow copy of the QueryBuilder for safe mutation.
 func (qb QueryBuilder) clone() QueryBuilder {
+	if qb.Joins != nil {
+		cp := make([]JoinClause, len(qb.Joins))
+		copy(cp, qb.Joins)
+		qb.Joins = cp
+	}
+	if qb.SetOps != nil {
+		cp := make([]SetOp, len(qb.SetOps))
+		copy(cp, qb.SetOps)
+		qb.SetOps = cp
+	}
 	return qb
 }
 
@@ -44,10 +74,57 @@ func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 	buf.WriteString(colSQL)
 	buf.WriteString(" FROM ")
 	buf.WriteString(quoteIdent(tableName))
+	if qb.Alias != "" {
+		buf.WriteString(" AS ")
+		buf.WriteString(quoteIdent(qb.Alias))
+	}
+	for _, j := range qb.Joins {
+		buf.WriteString(" ")
+		buf.WriteString(j.Type)
+		buf.WriteString(" ")
+		buf.WriteString(quoteIdent(j.Table))
+		if j.Alias != "" {
+			buf.WriteString(" AS ")
+			buf.WriteString(quoteIdent(j.Alias))
+		}
+		if j.On != "" {
+			buf.WriteString(" ON ")
+			buf.WriteString(j.On)
+		}
+		if j.UsingCols != "" {
+			buf.WriteString(" USING(")
+			buf.WriteString(j.UsingCols)
+			buf.WriteString(")")
+		}
+	}
 	if qb.Where != "" {
 		buf.WriteString(" WHERE ")
 		buf.WriteString(qb.Where)
 	}
+	if qb.GroupBy != "" {
+		buf.WriteString(" GROUP BY ")
+		buf.WriteString(qb.GroupBy)
+	}
+	if qb.Having != "" {
+		buf.WriteString(" HAVING ")
+		buf.WriteString(qb.Having)
+	}
+
+	// Set operations (UNION, INTERSECT, EXCEPT) are appended after the
+	// first SELECT but before ORDER BY / LIMIT which apply to the combined result.
+	for _, so := range qb.SetOps {
+		buf.WriteString(" ")
+		buf.WriteString(so.Op)
+		buf.WriteString(" ")
+		// Build the right-hand SELECT. It uses its own source table.
+		rightTable := so.Right.Source.TableName
+		if !so.Right.Source.SQLite {
+			rightTable = "" // will be resolved during materialize
+		}
+		rightSQL := so.Right.buildSQL(rightTable, "*")
+		buf.WriteString(rightSQL)
+	}
+
 	if qb.OrderBy != "" {
 		buf.WriteString(" ORDER BY ")
 		buf.WriteString(qb.OrderBy)
@@ -78,6 +155,67 @@ func (qb *QueryBuilder) ensureSource() (string, bool, error) {
 	return tmpName, true, nil
 }
 
+// ensureJoinSources ensures all joined tables are in SQLite.
+// Returns a list of temp table names that should be cleaned up.
+func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
+	var tmpNames []string
+	for i := range qb.Joins {
+		j := &qb.Joins[i]
+		if qb.Registry.SQLite.HasTable(j.Table) {
+			continue
+		}
+		// Look up the table in the store and load it.
+		val, ok := qb.Registry.Store[j.Table]
+		if !ok {
+			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
+		}
+		td, ok := val.Data.(TableData)
+		if !ok {
+			return tmpNames, fmt.Errorf("join: %q has no table data", j.Table)
+		}
+		if td.SQLite {
+			j.Table = td.TableName
+		} else {
+			tmpName, err := qb.Registry.SQLite.StoreTempTable(td)
+			if err != nil {
+				return tmpNames, err
+			}
+			j.Table = tmpName
+			tmpNames = append(tmpNames, tmpName)
+		}
+	}
+	return tmpNames, nil
+}
+
+// mergedSchema returns a combined schema from the source and all joined tables.
+func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
+	fields := NewOrderedMap()
+	// Add source fields.
+	for _, k := range qb.Source.Record.Fields.Keys() {
+		v, _ := qb.Source.Record.Fields.Get(k)
+		fields.Set(k, v)
+	}
+	// Add joined table fields.
+	for _, j := range qb.Joins {
+		val, ok := qb.Registry.Store[j.Table]
+		if !ok {
+			// Try the original name if it was remapped to a temp table.
+			continue
+		}
+		td, ok := val.Data.(TableData)
+		if !ok {
+			continue
+		}
+		for _, k := range td.Record.Fields.Keys() {
+			if _, exists := fields.Get(k); !exists {
+				v, _ := td.Record.Fields.Get(k)
+				fields.Set(k, v)
+			}
+		}
+	}
+	return RecordTypeInfo{Fields: fields}
+}
+
 // Materialize executes the accumulated query and returns the result as TableData.
 func (qb *QueryBuilder) Materialize() (TableData, error) {
 	tableName, ownsTmp, err := qb.ensureSource()
@@ -88,9 +226,26 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		defer qb.Registry.SQLite.DropTable(tableName)
 	}
 
+	joinTmps, err := qb.ensureJoinSources()
+	if err != nil {
+		return TableData{}, err
+	}
+	for _, t := range joinTmps {
+		defer qb.Registry.SQLite.DropTable(t)
+	}
+
+	// Ensure set-op right-hand sources are in SQLite.
+	setOpTmps, err := qb.ensureSetOpSources()
+	if err != nil {
+		return TableData{}, err
+	}
+	for _, t := range setOpTmps {
+		defer qb.Registry.SQLite.DropTable(t)
+	}
+
+	schema := qb.mergedSchema()
 	query := qb.buildSQL(tableName, "*")
-	schema := &qb.Source.Record
-	result, err := qb.Registry.SQLite.Query(query, schema)
+	result, err := qb.Registry.SQLite.Query(query, &schema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -107,13 +262,36 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		defer qb.Registry.SQLite.DropTable(tableName)
 	}
 
+	joinTmps, err := qb.ensureJoinSources()
+	if err != nil {
+		return TableData{}, err
+	}
+	for _, t := range joinTmps {
+		defer qb.Registry.SQLite.DropTable(t)
+	}
+
+	setOpTmps, err := qb.ensureSetOpSources()
+	if err != nil {
+		return TableData{}, err
+	}
+	for _, t := range setOpTmps {
+		defer qb.Registry.SQLite.DropTable(t)
+	}
+
 	var colSQL string
 	if cols == nil {
 		colSQL = "*"
 	} else {
 		parts := make([]string, len(cols))
 		for i, c := range cols {
-			if c.Alias != "" {
+			if c.Raw != "" {
+				// Raw SQL expression (aggregate, cast, etc.)
+				if c.Alias != "" {
+					parts[i] = c.Raw + " AS " + quoteIdent(c.Alias)
+				} else {
+					parts[i] = c.Raw
+				}
+			} else if c.Alias != "" {
 				parts[i] = quoteIdent(c.Name) + " AS " + quoteIdent(c.Alias)
 			} else {
 				parts[i] = quoteIdent(c.Name)
@@ -122,9 +300,9 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		colSQL = strings.Join(parts, ", ")
 	}
 
-	// Build schema hint for the result columns. For aliased columns,
-	// map the alias name to the source column's type.
-	resultSchema := &qb.Source.Record
+	// Build schema hint for the result columns.
+	merged := qb.mergedSchema()
+	resultSchema := &merged
 	if cols != nil {
 		resultFields := NewOrderedMap()
 		for _, c := range cols {
@@ -132,7 +310,12 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 			if c.Alias != "" {
 				outputName = c.Alias
 			}
-			if fieldVal, ok := qb.Source.Record.Fields.Get(c.Name); ok {
+			if c.Raw != "" && c.Alias != "" {
+				outputName = c.Alias
+			}
+			if len(c.ResultType.Parts) > 0 {
+				resultFields.Set(outputName, NewTypeLiteral(c.ResultType))
+			} else if fieldVal, ok := merged.Fields.Get(c.Name); ok {
 				resultFields.Set(outputName, fieldVal)
 			} else {
 				resultFields.Set(outputName, NewTypeLiteral(TString))
@@ -149,10 +332,30 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 	return result, nil
 }
 
-// registerQuery registers the select, from, star, where, order, by, and limit words.
+// ensureSetOpSources ensures all set-op right-hand sources are in SQLite.
+func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
+	var tmpNames []string
+	for i := range qb.SetOps {
+		so := &qb.SetOps[i]
+		if so.Right.Source.SQLite {
+			continue
+		}
+		tmpName, err := qb.Registry.SQLite.StoreTempTable(so.Right.Source)
+		if err != nil {
+			return tmpNames, err
+		}
+		so.Right.Source.SQLite = true
+		so.Right.Source.TableName = tmpName
+		tmpNames = append(tmpNames, tmpName)
+	}
+	return tmpNames, nil
+}
+
+// registerQuery registers the select, from, star, where, order, by, limit,
+// offset, distinct, groupby, having, join, on, using, union, intersect,
+// except, cast, and aggregate words.
 func registerQuery(r *Registry) {
 	// star: [] -> [atom("*")]
-	// Alias for the * wildcard, usable in definitions where * cannot be typed.
 	r.RegisterPrefixOnly("star", Signature{
 		Handler: func(_ []Value) ([]Value, error) {
 			return []Value{NewAtom("*")}, nil
@@ -160,8 +363,6 @@ func registerQuery(r *Registry) {
 	})
 
 	// from: [atom] -> [query-builder]
-	// Looks up a table by name from the registry store and wraps it
-	// in a QueryBuilder for deferred clause accumulation.
 	fromHandler := func(args []Value) ([]Value, error) {
 		name := args[0].AsAtom()
 		val, ok := r.Store[name]
@@ -188,12 +389,33 @@ func registerQuery(r *Registry) {
 		},
 	)
 
+	// as: [atom(suffix), table/query(prefix)] -> [query-builder with alias]
+	// Usage: from people as p
+	asHandler := func(args []Value) ([]Value, error) {
+		alias := args[0].AsAtom()
+		table := args[1]
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("as: %w", err)
+		}
+		qb.Alias = alias
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("as",
+		Signature{
+			Args:       []Type{TAtom, TList},
+			Precedence: 2,
+			Handler:    asHandler,
+		},
+	)
+
 	// select: [atom, list] -> [table]  (select * from ...)
 	// select: [list, list] -> [table]  (select [a, b] from ...)
-	// Materializes QueryBuilder or TableData into final result.
 	selectStarHandler := func(args []Value) ([]Value, error) {
-		colSpec := args[0] // atom "*"
-		table := args[1]   // table/query-builder value
+		colSpec := args[0]
+		table := args[1]
 
 		if colSpec.AsAtom() != "*" {
 			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
@@ -203,8 +425,8 @@ func registerQuery(r *Registry) {
 	}
 
 	selectColsHandler := func(args []Value) ([]Value, error) {
-		colList := args[0] // list of columns/aliases
-		table := args[1]   // table/query-builder value
+		colList := args[0]
+		table := args[1]
 
 		cols, err := parseColumnSpec(colList)
 		if err != nil {
@@ -216,23 +438,21 @@ func registerQuery(r *Registry) {
 
 	r.Register("select",
 		Signature{
-			Args:    []Type{TAtom, TList},
-			Handler: selectStarHandler,
+			Args:       []Type{TAtom, TList},
+			Precedence: 1,
+			Handler:    selectStarHandler,
 		},
 		Signature{
-			Args:    []Type{TList, TList},
-			Handler: selectColsHandler,
+			Args:       []Type{TList, TList},
+			Precedence: 1,
+			Handler:    selectColsHandler,
 		},
 	)
 
 	// where: [condition(suffix), table/query(prefix)] -> [query-builder]
-	// Filters table rows using a SQL WHERE clause derived from the condition list.
-	// Condition list elements: column-name op value [and|or column-name op value ...]
-	// Supported ops: eq, lt, gt, lte, gte, like
-	// Usage: from people where [age gt "25"]
 	whereHandler := func(args []Value) ([]Value, error) {
-		table := args[0]    // prefix: table/query from stack
-		condList := args[1] // suffix: condition list
+		table := args[0]
+		condList := args[1]
 
 		clause, err := buildWhereClause(condList)
 		if err != nil {
@@ -250,21 +470,15 @@ func registerQuery(r *Registry) {
 	r.Register("where",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    whereHandler,
 		},
 	)
 
 	// order: [columns(suffix), table/query(prefix)] -> [query-builder]
-	// Sorts table rows using ORDER BY. Accepts a column atom or a list
-	// of columns with optional asc/desc direction.
-	// Usage: from people order name
-	//        from people order [name desc]
-	//        from people order by name
-	//        from people order by [name desc]
 	orderListHandler := func(args []Value) ([]Value, error) {
-		table := args[0]   // prefix: table/query from stack
-		colList := args[1] // suffix: column list
+		table := args[0]
+		colList := args[1]
 
 		clause, err := buildOrderClause(colList)
 		if err != nil {
@@ -280,8 +494,8 @@ func registerQuery(r *Registry) {
 	}
 
 	orderAtomHandler := func(args []Value) ([]Value, error) {
-		col := args[0]   // column name (TAtom)
-		table := args[1] // table (TList)
+		col := args[0]
+		table := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -294,19 +508,17 @@ func registerQuery(r *Registry) {
 	r.Register("order",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    orderListHandler,
 		},
 		Signature{
 			Args:       []Type{TAtom, TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    orderAtomHandler,
 		},
 	)
 
 	// by: [atom] -> [list], [list] -> [list]
-	// Syntactic sugar so "order by name" reads naturally.
-	// Wraps atoms into a list so "order" always receives TList from "by".
 	r.Register("by",
 		Signature{
 			Args: []Type{TAtom},
@@ -323,11 +535,9 @@ func registerQuery(r *Registry) {
 	)
 
 	// limit: [integer(suffix), table/query(prefix)] -> [query-builder]
-	// Restricts the number of rows returned.
-	// Usage: from people limit 2
 	limitHandler := func(args []Value) ([]Value, error) {
-		n := args[0].AsInteger() // suffix: count (TInteger)
-		table := args[1]         // prefix: table/query from stack (TList)
+		n := args[0].AsInteger()
+		table := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -340,17 +550,15 @@ func registerQuery(r *Registry) {
 	r.Register("limit",
 		Signature{
 			Args:       []Type{TInteger, TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    limitHandler,
 		},
 	)
 
 	// offset: [integer(suffix), table/query(prefix)] -> [query-builder]
-	// Skips the first n rows. Used with limit for pagination.
-	// Usage: from people limit 10 offset 20
 	offsetHandler := func(args []Value) ([]Value, error) {
-		n := args[0].AsInteger() // suffix: offset count (TInteger)
-		table := args[1]         // prefix: table/query from stack (TList)
+		n := args[0].AsInteger()
+		table := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -363,17 +571,14 @@ func registerQuery(r *Registry) {
 	r.Register("offset",
 		Signature{
 			Args:       []Type{TInteger, TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    offsetHandler,
 		},
 	)
 
 	// distinct: [table/query(prefix)] -> [query-builder]
-	// Marks the query to use SELECT DISTINCT.
-	// Usage: select distinct * from people
-	//        select distinct [name] from people
 	distinctHandler := func(args []Value) ([]Value, error) {
-		table := args[0] // prefix: table/query from stack (TList)
+		table := args[0]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -386,20 +591,251 @@ func registerQuery(r *Registry) {
 	r.Register("distinct",
 		Signature{
 			Args:       []Type{TList},
-			Precedence: 1,
+			Precedence: 2,
 			Handler:    distinctHandler,
+		},
+	)
+
+	// groupby: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// Usage: from sales groupby [region]
+	//        from sales groupby [region product]
+	groupbyListHandler := func(args []Value) ([]Value, error) {
+		table := args[0]
+		colList := args[1]
+
+		clause, err := buildGroupByClause(colList)
+		if err != nil {
+			return nil, fmt.Errorf("groupby: %w", err)
+		}
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("groupby: %w", err)
+		}
+		qb.GroupBy = clause
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	groupbyAtomHandler := func(args []Value) ([]Value, error) {
+		col := args[0]
+		table := args[1]
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("groupby: %w", err)
+		}
+		qb.GroupBy = quoteIdent(col.AsAtom())
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("groupby",
+		Signature{
+			Args:       []Type{TList, TList},
+			Precedence: 2,
+			Handler:    groupbyListHandler,
+		},
+		Signature{
+			Args:       []Type{TAtom, TList},
+			Precedence: 2,
+			Handler:    groupbyAtomHandler,
+		},
+	)
+
+	// having: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// Usage: from sales groupby [region] having [count gt 5]
+	havingHandler := func(args []Value) ([]Value, error) {
+		table := args[0]
+		condList := args[1]
+
+		clause, err := buildWhereClause(condList)
+		if err != nil {
+			return nil, fmt.Errorf("having: %w", err)
+		}
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("having: %w", err)
+		}
+		qb.Having = clause
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("having",
+		Signature{
+			Args:       []Type{TList, TList},
+			Precedence: 2,
+			Handler:    havingHandler,
+		},
+	)
+
+	// join: [atom(suffix), table/query(prefix)] -> [query-builder]
+	// Usage: from orders join products on [...]
+	registerJoinWord(r, "join", "JOIN")
+	registerJoinWord(r, "innerjoin", "JOIN")
+	registerJoinWord(r, "leftjoin", "LEFT JOIN")
+	registerJoinWord(r, "crossjoin", "CROSS JOIN")
+
+	// on: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// Sets the ON condition for the most recent join.
+	// Usage: from orders join products on [orders.product_id eq products.id]
+	onHandler := func(args []Value) ([]Value, error) {
+		table := args[0]
+		condList := args[1]
+
+		clause, err := buildJoinCondition(condList)
+		if err != nil {
+			return nil, fmt.Errorf("on: %w", err)
+		}
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("on: %w", err)
+		}
+		if len(qb.Joins) == 0 {
+			return nil, fmt.Errorf("on: no preceding join")
+		}
+		qb.Joins[len(qb.Joins)-1].On = clause
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("on",
+		Signature{
+			Args:       []Type{TList, TList},
+			Precedence: 2,
+			Handler:    onHandler,
+		},
+	)
+
+	// using: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// Usage: from orders join products using [id]
+	usingHandler := func(args []Value) ([]Value, error) {
+		table := args[0]
+		colList := args[1]
+
+		elems := colList.AsList()
+		cols := make([]string, 0, len(elems))
+		for _, e := range elems {
+			name := valueToColName(e)
+			if name == "" {
+				return nil, fmt.Errorf("using: expected column name, got %s", e.VType)
+			}
+			cols = append(cols, quoteIdent(name))
+		}
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("using: %w", err)
+		}
+		if len(qb.Joins) == 0 {
+			return nil, fmt.Errorf("using: no preceding join")
+		}
+		qb.Joins[len(qb.Joins)-1].UsingCols = strings.Join(cols, ", ")
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register("using",
+		Signature{
+			Args:       []Type{TList, TList},
+			Precedence: 2,
+			Handler:    usingHandler,
+		},
+	)
+
+	// Set operations: union, unionall, intersect, except
+	registerSetOpWord(r, "union", "UNION")
+	registerSetOpWord(r, "unionall", "UNION ALL")
+	registerSetOpWord(r, "intersect", "INTERSECT")
+	registerSetOpWord(r, "except", "EXCEPT")
+
+	// Aggregate functions (count, sum, avg, min, max) and CAST are handled
+	// directly in parseColumnSpec when they appear as the first element of a
+	// sub-list in the column spec, e.g.:
+	//   select [[count name cnt]] from people
+	//   select [[cast age integer]] from people
+}
+
+// registerJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
+func registerJoinWord(r *Registry, name string, joinType string) {
+	handler := func(args []Value) ([]Value, error) {
+		tableName := args[0].AsAtom()
+		table := args[1]
+
+		qb, err := toQueryBuilder(r, table)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		qb.Joins = append(qb.Joins, JoinClause{
+			Type:  joinType,
+			Table: tableName,
+		})
+		return []Value{Value{VType: TList, Data: qb}}, nil
+	}
+
+	r.Register(name,
+		Signature{
+			Args:       []Type{TAtom, TList},
+			Precedence: 2,
+			Handler:    handler,
 		},
 	)
 }
 
-// columnSpec describes a column selection, with optional alias.
+// registerSetOpWord registers a set operation word (union, unionall, intersect, except).
+func registerSetOpWord(r *Registry, name string, op string) {
+	handler := func(args []Value) ([]Value, error) {
+		left := args[0]
+		right := args[1]
+
+		leftQB, err := toQueryBuilder(r, left)
+		if err != nil {
+			return nil, fmt.Errorf("%s: left operand: %w", name, err)
+		}
+		rightQB, err := toQueryBuilder(r, right)
+		if err != nil {
+			return nil, fmt.Errorf("%s: right operand: %w", name, err)
+		}
+
+		leftQB.SetOps = append(leftQB.SetOps, SetOp{
+			Op:    op,
+			Right: rightQB,
+		})
+		return []Value{Value{VType: TList, Data: leftQB}}, nil
+	}
+
+	r.Register(name,
+		Signature{
+			Args:       []Type{TList, TList},
+			Precedence: 2,
+			Handler:    handler,
+		},
+	)
+}
+
+// aggregateFuncs is the set of recognized aggregate function names.
+var aggregateFuncs = map[string]bool{
+	"count": true,
+	"sum":   true,
+	"avg":   true,
+	"min":   true,
+	"max":   true,
+}
+
+// columnSpec describes a column selection, with optional alias and raw SQL.
 type columnSpec struct {
-	Name  string
-	Alias string // empty means no alias
+	Name       string // column name (empty if Raw is set)
+	Alias      string // empty means no alias
+	Raw        string // raw SQL expression (for aggregates, cast, etc.)
+	ResultType Type   // expected result type (zero value means inherit from source)
 }
 
 // parseColumnSpec parses the column list from a select word.
-// Supports: [a, b] and [[a x] b] for aliasing.
+// Supports:
+//   - [a, b]                     — plain columns
+//   - [[a x] b]                  — column aliasing
+//   - [[count name cnt]]         — aggregate with alias: COUNT("name") AS "cnt"
+//   - [[count * total]]          — COUNT(*) AS "total"
+//   - [[cast age integer]]       — CAST("age" AS INTEGER)
+//   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
 func parseColumnSpec(colList Value) ([]columnSpec, error) {
 	elems := colList.AsList()
 	cols := make([]columnSpec, 0, len(elems))
@@ -410,10 +846,39 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 		case e.VType.Matches(TString):
 			cols = append(cols, columnSpec{Name: e.AsString()})
 		case e.IsWord():
-			cols = append(cols, columnSpec{Name: e.AsWord().Name})
+			// A word that appears in the column list without evaluation
+			// is treated as a column name OR as an aggregate function name.
+			wname := e.AsWord().Name
+			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
-			// [name alias] pair
 			pair := e.AsList()
+			if len(pair) < 2 {
+				return nil, fmt.Errorf("select: column spec list must have at least 2 elements")
+			}
+
+			firstName := nameFromValue(pair[0])
+
+			// Check for cast: [cast col type] or [cast col type alias]
+			if firstName == "cast" {
+				spec, err := parseCastSpec(pair)
+				if err != nil {
+					return nil, err
+				}
+				cols = append(cols, spec)
+				continue
+			}
+
+			// Check for aggregate: [count col alias] or [sum col alias] etc.
+			if aggregateFuncs[firstName] {
+				spec, err := parseAggregateSpec(firstName, pair[1:])
+				if err != nil {
+					return nil, err
+				}
+				cols = append(cols, spec)
+				continue
+			}
+
+			// Standard [name alias] pair
 			if len(pair) != 2 {
 				return nil, fmt.Errorf("select: column alias must be [name alias], got %d elements", len(pair))
 			}
@@ -428,6 +893,110 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 		}
 	}
 	return cols, nil
+}
+
+// nameFromValue extracts a name from an atom, string, or word value.
+// Unlike valueToColName, this also recognizes unevaluated word values.
+func nameFromValue(v Value) string {
+	if v.VType.Equal(TAtom) {
+		return v.AsAtom()
+	}
+	if v.VType.Matches(TString) {
+		return v.AsString()
+	}
+	if v.IsWord() {
+		return v.AsWord().Name
+	}
+	return ""
+}
+
+// parseAggregateSpec parses the arguments after the aggregate function name.
+// remaining is the elements after the function name, e.g., for [count name cnt]
+// remaining = [name, cnt].
+func parseAggregateSpec(fnName string, remaining []Value) (columnSpec, error) {
+	if len(remaining) == 0 || len(remaining) > 2 {
+		return columnSpec{}, fmt.Errorf("%s: expected [%s col] or [%s col alias]", fnName, fnName, fnName)
+	}
+
+	fn := strings.ToUpper(fnName)
+	col := nameFromValue(remaining[0])
+	if col == "" {
+		return columnSpec{}, fmt.Errorf("%s: expected column name", fnName)
+	}
+
+	var raw string
+	if col == "*" {
+		raw = fn + "(*)"
+	} else {
+		raw = fn + "(" + quoteIdent(col) + ")"
+	}
+
+	alias := strings.ToLower(fn) + "_" + col
+	if len(remaining) == 2 {
+		alias = nameFromValue(remaining[1])
+	}
+
+	return columnSpec{
+		Raw:        raw,
+		Alias:      alias,
+		ResultType: TInteger,
+	}, nil
+}
+
+// parseCastSpec parses [cast col type] or [cast col type alias] into a columnSpec.
+func parseCastSpec(elems []Value) (columnSpec, error) {
+	if len(elems) < 3 || len(elems) > 4 {
+		return columnSpec{}, fmt.Errorf("cast: expected [cast column type] or [cast column type alias]")
+	}
+	col := valueToColName(elems[1])
+	typeName := valueToColName(elems[2])
+	if col == "" || typeName == "" {
+		return columnSpec{}, fmt.Errorf("cast: column and type must be atoms or strings")
+	}
+
+	sqlType := aqlTypenameToSQLType(typeName)
+	raw := "CAST(" + quoteIdent(col) + " AS " + sqlType + ")"
+
+	alias := col
+	if len(elems) == 4 {
+		alias = valueToColName(elems[3])
+	}
+
+	return columnSpec{
+		Raw:        raw,
+		Alias:      alias,
+		ResultType: sqlTypeToAQLType(sqlType),
+	}, nil
+}
+
+// aqlTypenameToSQLType maps an AQL type name string to a SQL type.
+func aqlTypenameToSQLType(name string) string {
+	switch strings.ToLower(name) {
+	case "integer", "int":
+		return "INTEGER"
+	case "real", "float", "number":
+		return "REAL"
+	case "text", "string":
+		return "TEXT"
+	case "boolean", "bool":
+		return "INTEGER" // SQLite stores booleans as integers
+	default:
+		return strings.ToUpper(name)
+	}
+}
+
+// sqlTypeToAQLType maps a SQL type string back to an AQL Type.
+func sqlTypeToAQLType(sqlType string) Type {
+	switch sqlType {
+	case "INTEGER":
+		return TInteger
+	case "REAL":
+		return TNumber
+	case "TEXT":
+		return TString
+	default:
+		return TString
+	}
 }
 
 // valueToColName extracts the string content from an atom, string, or word value.
@@ -502,6 +1071,8 @@ var logicalOps = map[string]string{
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
 //	[column not between value1 value2]         — NOT BETWEEN ... AND ...
+//	[column in [v1 v2 v3]]                     — IN (v1, v2, v3)
+//	[column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
 //	[... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
 	elems := condList.AsList()
@@ -512,10 +1083,6 @@ func buildWhereClause(condList Value) (string, error) {
 	var parts []string
 	i := 0
 	for i < len(elems) {
-		if i >= len(elems) {
-			break
-		}
-
 		col := valueToColName(elems[i])
 		if col == "" {
 			return "", fmt.Errorf("expected column name, got %s", elems[i].VType)
@@ -572,31 +1139,57 @@ func buildWhereClause(condList Value) (string, error) {
 			parts = append(parts, fmt.Sprintf("%s BETWEEN %s AND %s", quoteIdent(col), lo, hi))
 			i++
 
-		case "not":
-			// not between value1 value2
+		case "in":
+			// in [v1 v2 v3]
 			i++
 			if i >= len(elems) {
-				return "", fmt.Errorf("incomplete condition: expected between after not")
+				return "", fmt.Errorf("in requires a value list")
+			}
+			inSQL, err := buildInList(elems[i])
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, fmt.Sprintf("%s IN (%s)", quoteIdent(col), inSQL))
+			i++
+
+		case "not":
+			// not between / not in
+			i++
+			if i >= len(elems) {
+				return "", fmt.Errorf("incomplete condition: expected between or in after not")
 			}
 			next := valueToColName(elems[i])
-			if next != "between" {
-				return "", fmt.Errorf("expected between after not, got %q", next)
+			switch next {
+			case "between":
+				i++
+				if i+1 >= len(elems) {
+					return "", fmt.Errorf("not between requires two values")
+				}
+				lo, err := valueToSQL(elems[i])
+				if err != nil {
+					return "", err
+				}
+				i++
+				hi, err := valueToSQL(elems[i])
+				if err != nil {
+					return "", err
+				}
+				parts = append(parts, fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi))
+				i++
+			case "in":
+				i++
+				if i >= len(elems) {
+					return "", fmt.Errorf("not in requires a value list")
+				}
+				inSQL, err := buildInList(elems[i])
+				if err != nil {
+					return "", err
+				}
+				parts = append(parts, fmt.Sprintf("%s NOT IN (%s)", quoteIdent(col), inSQL))
+				i++
+			default:
+				return "", fmt.Errorf("expected between or in after not, got %q", next)
 			}
-			i++
-			if i+1 >= len(elems) {
-				return "", fmt.Errorf("not between requires two values")
-			}
-			lo, err := valueToSQL(elems[i])
-			if err != nil {
-				return "", err
-			}
-			i++
-			hi, err := valueToSQL(elems[i])
-			if err != nil {
-				return "", err
-			}
-			parts = append(parts, fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi))
-			i++
 
 		default:
 			// Standard comparison: op value
@@ -631,11 +1224,35 @@ func buildWhereClause(condList Value) (string, error) {
 	return strings.Join(parts, " "), nil
 }
 
+// buildInList converts a list value to a comma-separated SQL value list.
+func buildInList(v Value) (string, error) {
+	if !v.VType.Equal(TList) {
+		// Single value
+		sql, err := valueToSQL(v)
+		if err != nil {
+			return "", err
+		}
+		return sql, nil
+	}
+	elems := v.AsList()
+	if len(elems) == 0 {
+		return "", fmt.Errorf("empty IN list")
+	}
+	parts := make([]string, len(elems))
+	for i, e := range elems {
+		sql, err := valueToSQL(e)
+		if err != nil {
+			return "", err
+		}
+		parts[i] = sql
+	}
+	return strings.Join(parts, ", "), nil
+}
+
 // valueToSQL converts a Value to a SQL literal string.
 func valueToSQL(v Value) (string, error) {
 	switch {
 	case v.VType.Matches(TString):
-		// Escape single quotes for SQL.
 		return "'" + strings.ReplaceAll(v.AsString(), "'", "''") + "'", nil
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.AsInteger()), nil
@@ -645,13 +1262,91 @@ func valueToSQL(v Value) (string, error) {
 		}
 		return "'false'", nil
 	case v.VType.Equal(TAtom):
-		// Atoms used as values are treated as strings.
 		return "'" + strings.ReplaceAll(v.AsAtom(), "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
 	}
+}
+
+// buildGroupByClause translates a column list into a SQL GROUP BY clause.
+func buildGroupByClause(colList Value) (string, error) {
+	elems := colList.AsList()
+	if len(elems) == 0 {
+		return "", fmt.Errorf("empty group by column list")
+	}
+	parts := make([]string, 0, len(elems))
+	for _, e := range elems {
+		name := valueToColName(e)
+		if name == "" {
+			return "", fmt.Errorf("groupby: expected column name, got %s", e.VType)
+		}
+		parts = append(parts, quoteIdent(name))
+	}
+	return strings.Join(parts, ", "), nil
+}
+
+// buildJoinCondition translates a condition list into a SQL ON clause.
+// Supports dot-separated qualified names: [a.id eq b.id]
+func buildJoinCondition(condList Value) (string, error) {
+	elems := condList.AsList()
+	if len(elems) == 0 {
+		return "1=1", nil
+	}
+
+	var parts []string
+	i := 0
+	for i < len(elems) {
+		lhs := valueToColName(elems[i])
+		if lhs == "" {
+			return "", fmt.Errorf("expected column name, got %s", elems[i].VType)
+		}
+		i++
+
+		if i >= len(elems) {
+			return "", fmt.Errorf("incomplete join condition after %q", lhs)
+		}
+
+		opName := valueToColName(elems[i])
+		sqlOp, ok := comparisonOps[opName]
+		if !ok {
+			return "", fmt.Errorf("unknown comparison operator %q in join condition", opName)
+		}
+		i++
+
+		if i >= len(elems) {
+			return "", fmt.Errorf("incomplete join condition: expected value after %q", opName)
+		}
+
+		rhs := valueToColName(elems[i])
+		if rhs == "" {
+			return "", fmt.Errorf("expected column name on right side of join condition, got %s", elems[i].VType)
+		}
+		i++
+
+		parts = append(parts, fmt.Sprintf("%s %s %s", quoteJoinCol(lhs), sqlOp, quoteJoinCol(rhs)))
+
+		// Check for logical connector.
+		if i < len(elems) {
+			connName := valueToColName(elems[i])
+			sqlConn, ok := logicalOps[connName]
+			if ok {
+				parts = append(parts, sqlConn)
+				i++
+			}
+		}
+	}
+
+	return strings.Join(parts, " "), nil
+}
+
+// quoteJoinCol quotes a column reference that may be dot-qualified (table.col).
+func quoteJoinCol(name string) string {
+	if idx := strings.IndexByte(name, '.'); idx >= 0 {
+		return quoteIdent(name[:idx]) + "." + quoteIdent(name[idx+1:])
+	}
+	return quoteIdent(name)
 }
 
 // buildOrderClause translates a column list into a SQL ORDER BY clause.
@@ -666,7 +1361,6 @@ func buildOrderClause(colList Value) (string, error) {
 		return "", fmt.Errorf("empty order column list")
 	}
 
-	// orderModifiers are atoms that modify the preceding column entry.
 	isModifier := func(name string) (string, bool) {
 		switch name {
 		case "asc":
@@ -674,7 +1368,6 @@ func buildOrderClause(colList Value) (string, error) {
 		case "desc":
 			return "DESC", true
 		case "nulls":
-			// "nulls" is a prefix for "first" or "last"; handled below.
 			return "NULLS", true
 		case "first":
 			return "FIRST", true
@@ -690,7 +1383,6 @@ func buildOrderClause(colList Value) (string, error) {
 	for i < len(elems) {
 		e := elems[i]
 
-		// Integer: positional column reference (ORDER BY 1, 2).
 		if e.VType.Matches(TInteger) {
 			parts = append(parts, fmt.Sprintf("%d", e.AsInteger()))
 			i++
@@ -707,7 +1399,6 @@ func buildOrderClause(colList Value) (string, error) {
 			if len(parts) == 0 {
 				return "", fmt.Errorf("%s without preceding column name", lower)
 			}
-			// "nulls" must be followed by "first" or "last".
 			if lower == "nulls" {
 				i++
 				if i >= len(elems) {
