@@ -566,7 +566,7 @@ func TestParseTypedListMap(t *testing.T) {
 		t.Fatalf("expected key 'x' in child map")
 	}
 	if !xVal.VType.Equal(engine.TNumber) {
-		t.Errorf("expected x to be number type, got %s", xVal.VType)
+		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal.VType)
 	}
 }
 
@@ -684,6 +684,166 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 		t.Fatalf("expected key 'x' in child map")
 	}
 	if !xVal.VType.Equal(engine.TNumber) {
-		t.Errorf("expected x to be number type, got %s", xVal.VType)
+		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal.VType)
+	}
+}
+
+// --- Word list (explicit bracket) tests ---
+
+func TestParseExplicitList(t *testing.T) {
+	// [1 add 2] → single list value containing words
+	got, err := Parse("[1 add 2]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].VType.Equal(engine.TList) {
+		t.Fatalf("expected list, got %s", got[0].VType)
+	}
+	elems := got[0].AsList()
+	if len(elems) != 3 {
+		t.Errorf("expected 3 elements, got %d", len(elems))
+	}
+}
+
+func TestParseListWithStrings(t *testing.T) {
+	// ["hello" "world"] → list of strings
+	got, err := Parse(`["hello" "world"]`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	elems := got[0].AsList()
+	if len(elems) != 2 {
+		t.Errorf("expected 2 elements, got %d", len(elems))
+	}
+}
+
+// --- Data list (list inside map) tests ---
+
+func TestParseMapWithList(t *testing.T) {
+	// {x:[1,2,3]} → map with list value in data context
+	got, err := Parse(`{x:[1,2,3]}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].VType.Equal(engine.TMap) {
+		t.Fatalf("expected map, got %s", got[0].VType)
+	}
+	m := got[0].AsMap()
+	xVal, ok := m.Get("x")
+	if !ok {
+		t.Fatal("expected key 'x'")
+	}
+	if !xVal.VType.Equal(engine.TList) {
+		t.Errorf("expected list, got %s", xVal.VType)
+	}
+	elems := xVal.AsList()
+	if len(elems) != 3 {
+		t.Errorf("expected 3 elements, got %d", len(elems))
+	}
+}
+
+func TestParseMapWithBooleans(t *testing.T) {
+	// {a:true,b:false} → map with boolean values (data context)
+	got, err := Parse(`{a:true,b:false}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	aVal, _ := m.Get("a")
+	if !aVal.VType.Matches(engine.TBoolean) || !aVal.AsBoolean() {
+		t.Errorf("expected true, got %s", aVal)
+	}
+	bVal, _ := m.Get("b")
+	if !bVal.VType.Matches(engine.TBoolean) || bVal.AsBoolean() {
+		t.Errorf("expected false, got %s", bVal)
+	}
+}
+
+func TestParseMapWithNull(t *testing.T) {
+	// {x:null} → in jsonic data context, bare "null" is Text
+	got, err := Parse(`{x:null}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	_, ok := m.Get("x")
+	if !ok {
+		t.Fatal("expected key 'x'")
+	}
+}
+
+func TestParseMapWithTypeName(t *testing.T) {
+	// {x:number} → map with type literal in data context
+	got, err := Parse(`{x:number}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	if !xVal.VType.Equal(engine.TNumber) {
+		t.Errorf("expected number type literal, got %s", xVal.VType)
+	}
+}
+
+func TestParseMapWithNestedMap(t *testing.T) {
+	// {a:{b:1}} → nested map in data context
+	got, err := Parse(`{a:{b:1}}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	aVal, _ := m.Get("a")
+	if !aVal.VType.Equal(engine.TMap) {
+		t.Errorf("expected nested map, got %s", aVal.VType)
+	}
+}
+
+// --- preprocessParens tests ---
+
+func TestParseParensInString(t *testing.T) {
+	// "(hello)" → the parens are inside a string, not structural
+	assertParse(t, `"(hello)"`, []engine.Value{engine.NewString("(hello)")})
+}
+
+func TestParseNoParens(t *testing.T) {
+	// No parens — preprocessParens should be a no-op
+	assertParse(t, "1 2 3", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewInteger(2),
+		engine.NewInteger(3),
+	})
+}
+
+// --- Escape in string within parens ---
+
+func TestParseEscapeInParenString(t *testing.T) {
+	// Parentheses inside escaped strings in preprocessParens
+	got, err := Parse(`"a\"b" 1`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) < 1 {
+		t.Fatalf("expected at least 1 value, got %d", len(got))
 	}
 }

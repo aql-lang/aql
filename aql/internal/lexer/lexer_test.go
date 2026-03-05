@@ -6,6 +6,44 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
+func TestTokenize(t *testing.T) {
+	l := New("hello")
+	tokens := l.Tokenize()
+	// Since NextToken is a stub returning EOF, we should get exactly 1 EOF token
+	if len(tokens) != 1 {
+		t.Fatalf("expected 1 token, got %d", len(tokens))
+	}
+	if tokens[0].Type != token.EOF {
+		t.Errorf("expected EOF token, got %s", tokens[0].Type)
+	}
+}
+
+func TestTokenizeEmpty(t *testing.T) {
+	l := New("")
+	tokens := l.Tokenize()
+	if len(tokens) != 1 {
+		t.Fatalf("expected 1 token, got %d", len(tokens))
+	}
+	if tokens[0].Type != token.EOF {
+		t.Errorf("expected EOF token, got %s", tokens[0].Type)
+	}
+}
+
+func TestLexerReadChar(t *testing.T) {
+	l := New("ab")
+	if l.ch != 'a' {
+		t.Errorf("expected 'a', got %c", l.ch)
+	}
+	l.readChar()
+	if l.ch != 'b' {
+		t.Errorf("expected 'b', got %c", l.ch)
+	}
+	l.readChar()
+	if l.ch != 0 {
+		t.Errorf("expected 0 (EOF), got %c", l.ch)
+	}
+}
+
 func TestNextToken(t *testing.T) {
 	tests := []struct {
 		name     string
