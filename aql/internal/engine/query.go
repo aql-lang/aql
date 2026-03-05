@@ -428,6 +428,12 @@ func registerQuery(r *Registry) {
 		colList := args[0]
 		table := args[1]
 
+		// Resolve any parenthesized sub-expressions (e.g. scalar subqueries).
+		colList, err := resolveSelectSubExprs(r, colList)
+		if err != nil {
+			return nil, fmt.Errorf("select: %w", err)
+		}
+
 		cols, err := parseColumnSpec(colList)
 		if err != nil {
 			return nil, err
@@ -890,6 +896,24 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 				continue
 			}
 
+			// Check for scalar subquery: [<TableData/QueryBuilder> alias]
+			if isTableOrQuery(pair[0]) {
+				scalar, err := resolveScalarValue(pair[0])
+				if err != nil {
+					return nil, fmt.Errorf("select scalar subquery: %w", err)
+				}
+				sqlVal, err := valueToSQL(scalar)
+				if err != nil {
+					return nil, fmt.Errorf("select scalar subquery: %w", err)
+				}
+				alias := ""
+				if len(pair) >= 2 {
+					alias = nameFromValue(pair[1])
+				}
+				cols = append(cols, columnSpec{Raw: sqlVal, Alias: alias})
+				continue
+			}
+
 			// Standard [name alias] pair
 			if len(pair) != 2 {
 				return nil, fmt.Errorf("select: column alias must be [name alias], got %d elements", len(pair))
@@ -1083,6 +1107,84 @@ var logicalOps = map[string]string{
 //	[column is null]                           — IS NULL
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
+// resolveSelectSubExprs evaluates parenthesized sub-expressions in a
+// SELECT column list, replacing them with their results. This enables
+// scalar subqueries in the column list:
+//
+//	select [name [[(select [[max salary]] from emp) top_sal]]] from emp
+//
+// The inner list elements are scanned for paren tokens. When found, the
+// sub-expression is evaluated and the result replaces the paren tokens.
+func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
+	elems := colList.AsList()
+	if len(elems) == 0 {
+		return colList, nil
+	}
+
+	result := make([]Value, len(elems))
+	for i, e := range elems {
+		if e.VType.Equal(TList) {
+			if _, isTD := e.Data.(TableData); !isTD {
+				if _, isQB := e.Data.(QueryBuilder); !isQB {
+					resolved, err := resolveSelectSubExprs(r, e)
+					if err != nil {
+						return Value{}, err
+					}
+					result[i] = resolved
+					continue
+				}
+			}
+		}
+		result[i] = e
+	}
+
+	// Check for paren tokens at this level.
+	hasParen := false
+	for _, e := range result {
+		if e.IsWord() && e.AsWord().Name == "(" {
+			hasParen = true
+			break
+		}
+	}
+	if !hasParen {
+		return NewList(result), nil
+	}
+
+	// Find matching paren pairs and evaluate them.
+	var out []Value
+	idx := 0
+	for idx < len(result) {
+		if result[idx].IsWord() && result[idx].AsWord().Name == "(" {
+			depth := 1
+			j := idx + 1
+			for j < len(result) && depth > 0 {
+				if result[j].IsWord() && result[j].AsWord().Name == "(" {
+					depth++
+				} else if result[j].IsWord() && result[j].AsWord().Name == ")" {
+					depth--
+				}
+				j++
+			}
+			if depth != 0 {
+				return Value{}, fmt.Errorf("unmatched parenthesis in select column list")
+			}
+			subExpr := result[idx+1 : j-1]
+			eng := New(r)
+			evalResult, err := eng.Run(subExpr)
+			if err != nil {
+				return Value{}, fmt.Errorf("select subquery evaluation: %w", err)
+			}
+			out = append(out, evalResult...)
+			idx = j
+		} else {
+			out = append(out, result[idx])
+			idx++
+		}
+	}
+
+	return NewList(out), nil
+}
+
 // resolveWhereSubExprs scans a WHERE condition list for parenthesized
 // sub-expressions (sequences of tokens between "(" and ")") and evaluates
 // them via the engine. The results replace the paren tokens in the list.
@@ -1390,6 +1492,11 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 			return "", i, fmt.Errorf("incomplete condition: expected value after %q", opName)
 		}
 		val := elems[i]
+		// Handle scalar subquery result (TableData or QueryBuilder).
+		val, err := resolveScalarValue(val)
+		if err != nil {
+			return "", i, fmt.Errorf("where scalar subquery: %w", err)
+		}
 		sqlVal, err := valueToSQL(val)
 		if err != nil {
 			return "", i, err
@@ -1490,6 +1597,53 @@ func buildInListFromTable(td TableData) (string, error) {
 		return "NULL", nil
 	}
 	return strings.Join(parts, ", "), nil
+}
+
+// isTableOrQuery returns true if the Value wraps a TableData or QueryBuilder.
+func isTableOrQuery(v Value) bool {
+	if _, ok := v.Data.(TableData); ok {
+		return true
+	}
+	if _, ok := v.Data.(QueryBuilder); ok {
+		return true
+	}
+	return false
+}
+
+// scalarFromTable extracts a single scalar value from a TableData that has
+// exactly one row. Used for scalar subquery results.
+func scalarFromTable(td TableData) (Value, error) {
+	cols := td.Record.Fields.Keys()
+	if len(cols) == 0 {
+		return Value{}, fmt.Errorf("scalar subquery returned no columns")
+	}
+	if len(td.Rows) == 0 {
+		return NewTypeLiteral(TNone), nil
+	}
+	if len(td.Rows) > 1 {
+		return Value{}, fmt.Errorf("scalar subquery returned %d rows, expected 1", len(td.Rows))
+	}
+	val, ok := td.Rows[0].AsMap().Get(cols[0])
+	if !ok {
+		return NewTypeLiteral(TNone), nil
+	}
+	return val, nil
+}
+
+// resolveScalarValue extracts a scalar value from a Value that may be a
+// TableData or QueryBuilder (result of a scalar subquery).
+func resolveScalarValue(v Value) (Value, error) {
+	if td, ok := v.Data.(TableData); ok {
+		return scalarFromTable(td)
+	}
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		td, err := qb.Materialize()
+		if err != nil {
+			return Value{}, fmt.Errorf("scalar subquery: %w", err)
+		}
+		return scalarFromTable(td)
+	}
+	return v, nil
 }
 
 // valueToSQL converts a Value to a SQL literal string.

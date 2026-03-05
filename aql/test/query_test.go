@@ -3082,3 +3082,86 @@ func TestFileLoadSetsSQLiteFlag(t *testing.T) {
 		t.Errorf("expected table name 'people', got %q", td.TableName)
 	}
 }
+
+// --- scalar subquery tests ---
+
+func TestScalarSubqueryInWhereGt(t *testing.T) {
+	// avg age = (30+25+35+28)/4 = 29.5, so age > 29.5 → Alice(30), Charlie(35)
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [age gt (select [[avg age]] from emp)] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestScalarSubqueryInWhereEq(t *testing.T) {
+	// Subquery returns Alice's dept = "Engineering".
+	// Engineering employees: Alice, Charlie.
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [dept eq (select [dept] from emp where [name eq "Alice"])] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestScalarSubqueryInSelect(t *testing.T) {
+	// Each row gets a top_salary column with the max salary (90000).
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select [name [(select [[max salary]] from emp) top_salary]] from emp order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[0].AsMap(), "top_salary", "90000")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "top_salary", "90000")
+}
+
+func TestScalarSubqueryMultipleRowsError(t *testing.T) {
+	// Subquery returns 4 rows — should error.
+	_, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [age gt (select [age] from emp)]`,
+	)
+	if err == nil {
+		t.Fatal("expected error for multi-row scalar subquery")
+	}
+}
+
+func TestScalarSubqueryEmptyReturnsNull(t *testing.T) {
+	// Subquery returns no rows (nobody named "Nobody").
+	// Comparing with NULL should return no matches.
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [name eq (select [name] from emp where [name eq "Nobody"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (NULL comparison), got %d", len(rows))
+	}
+}
