@@ -358,6 +358,365 @@ func TestCurriedSelectCols(t *testing.T) {
 	}
 }
 
+// --- where ---
+
+func TestWhereBasic(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name eq "Alice"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[0].AsMap(), "age", "30")
+}
+
+func TestWhereNumericComparison(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age gt "25"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 30 and 35), got %d", len(rows))
+	}
+}
+
+func TestWhereLt(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age lt "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (age 25), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+func TestWhereAnd(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age gte "30" and city eq "London"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereOr(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [city eq "London" or city eq "Tokyo"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestWhereWithColumns(t *testing.T) {
+	// Use parens so where filters before select projects columns.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [name] (from people where [city eq "Paris"])`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	if rows[0].AsMap().Len() != 1 {
+		t.Errorf("expected 1 column, got %d", rows[0].AsMap().Len())
+	}
+}
+
+func TestWhereNoMatch(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name eq "Nobody"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestWhereLike(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name like "A%"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+// --- order ---
+
+func TestOrderByColumn(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Alphabetical: Alice, Bob, Charlie
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByDesc(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Reverse alphabetical: Charlie, Bob, Alice
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+func TestOrderByAtom(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order name`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderBySyntax(t *testing.T) {
+	// "order by name" should work the same as "order name"
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order by name`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByListSyntax(t *testing.T) {
+	// "order by [name desc]" should work
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order by [name desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+// --- limit ---
+
+func TestLimit(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people limit 2`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestLimitOne(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+func TestLimitZero(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people limit 0`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+// --- chaining where + order + limit ---
+
+func TestWhereOrderLimit(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age gte "25"] order [name] limit 2`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// age >= 25 gives all 3, ordered by name: Alice, Bob, Charlie, limited to 2
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+}
+
+func TestWhereAndOrder(t *testing.T) {
+	// Use parens so where and order are applied before select projects columns.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [name] (from people where [age gte "30"] order [name desc])`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// age >= 30: Alice(30), Charlie(35), ordered desc: Charlie, Alice
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[1].AsMap(), "name", "Alice")
+}
+
+func TestOrderAndLimit(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [age] limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob") // youngest
+}
+
+// --- non-SQLite table ---
+
+func TestWhereOnInternalTable(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("color", engine.NewTypeLiteral(engine.TString))
+	fields.Set("count", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	row1 := engine.NewOrderedMap()
+	row1.Set("color", engine.NewString("red"))
+	row1.Set("count", engine.NewString("5"))
+	row2 := engine.NewOrderedMap()
+	row2.Set("color", engine.NewString("blue"))
+	row2.Set("count", engine.NewString("3"))
+
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{engine.NewMap(row1), engine.NewMap(row2)},
+		SQLite: false,
+	}
+	reg.Store["colors"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from colors where [color eq "red"]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "color", "red")
+}
+
 // --- SQLite flag on loaded table ---
 
 func TestFileLoadSetsSQLiteFlag(t *testing.T) {

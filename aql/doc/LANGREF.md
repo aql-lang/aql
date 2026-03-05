@@ -1569,6 +1569,127 @@ write to standard error.
 write stderr "error message"       # write to stderr
 ```
 
+### Query Words
+
+Query words filter, sort, and limit table data using SQL-like syntax.
+Tables are backed by SQLite when loaded via `read` with a tabular
+format (CSV, TSV). Non-SQLite tables are transparently loaded into a
+temporary SQLite table for query execution.
+
+#### `select`
+
+Select columns from a table. Use `*` (or `star`) for all columns,
+or a list of column names. Column aliases use nested lists.
+
+*Signatures:*
+- `[atom("*"), table] -> [table]` — select all columns
+- `[list, table] -> [table]` — select named columns
+
+*Precedence:* suffix
+
+```
+select * from people                          # all columns
+select [name, age] from people                # named columns
+select [[name n], age] from people            # alias: name AS n
+select star from people                       # star word = *
+```
+
+#### `from`
+
+Look up a named table from the registry store.
+
+*Signature:* `[atom] -> [table]`
+
+*Precedence:* suffix
+
+```
+set people ("file/people.csv" read)
+from people                                   # retrieve the table
+```
+
+#### `where`
+
+Filter table rows using a condition list. Conditions use the
+format `[column op value]` with optional `and`/`or` connectors.
+
+Supported operators: `eq` (=), `lt` (<), `gt` (>), `lte` (<=),
+`gte` (>=), `like` (LIKE).
+
+*Signature:* `[condition-list, table] -> [table]`
+
+*Precedence:* 1
+
+```
+from people where [age gt "25"]
+from people where [city eq "Paris"]
+from people where [age gt "20" and city eq "Paris"]
+from people where [name like "A%"]
+```
+
+#### `order`
+
+Sort table rows. Accepts a column name (atom) or a list of columns
+with optional `asc`/`desc` direction.
+
+*Signatures:*
+- `[atom, table] -> [table]` — order by single column
+- `[list, table] -> [table]` — order by column list
+
+*Precedence:* 1
+
+```
+from people order name
+from people order [name]
+from people order [name desc]
+from people order [city asc, name desc]
+```
+
+#### `by`
+
+Syntactic sugar for `order by` style expressions. Identity
+pass-through that wraps atoms into a list so `order` receives
+a consistent type.
+
+*Signatures:*
+- `[atom] -> [list]`
+- `[list] -> [list]`
+
+```
+from people order by name
+from people order by [name desc]
+```
+
+#### `limit`
+
+Restrict the number of rows returned.
+
+*Signature:* `[integer, table] -> [table]`
+
+*Precedence:* 1
+
+```
+from people limit 2
+from people limit 1
+```
+
+#### Chaining
+
+Query words can be chained. Each operation produces a table that
+the next operation consumes.
+
+```
+from people where [age gt "20"] order name
+from people where [age gt "20"] limit 2
+from people order name limit 2
+from people where [age gt "20"] order [name] limit 1
+```
+
+Use parentheses for column projection with filtering:
+
+```
+select [name] (from people where [city eq "Paris"])
+```
+
 
 ## Type System
 
