@@ -1059,14 +1059,15 @@ func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
 
 // comparisonOps maps AQL comparison word names to SQL operators.
 var comparisonOps = map[string]string{
-	"eq":   "=",
-	"neq":  "!=",
-	"lt":   "<",
-	"gt":   ">",
-	"lte":  "<=",
-	"gte":  ">=",
-	"like": "LIKE",
-	"glob": "GLOB",
+	"eq":     "=",
+	"neq":    "!=",
+	"lt":     "<",
+	"gt":     ">",
+	"lte":    "<=",
+	"gte":    ">=",
+	"like":   "LIKE",
+	"glob":   "GLOB",
+	"regexp": "REGEXP",
 }
 
 // logicalOps maps AQL logical word names to SQL connectors.

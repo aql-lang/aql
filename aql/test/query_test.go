@@ -1422,6 +1422,67 @@ func TestWhereInSubqueryEmpty(t *testing.T) {
 	}
 }
 
+// --- REGEXP ---
+
+func TestWhereRegexp(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name regexp "^[AB]"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Bob), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+}
+
+func TestWhereRegexpNoMatch(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name regexp "^Z"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestWhereNotRegexp(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [name regexp "^[AB]"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+func TestWhereRegexpDigits(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age regexp "^3"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice:30, Charlie:35), got %d", len(rows))
+	}
+}
+
 // --- GROUP BY / HAVING ---
 
 func TestGroupByWithCount(t *testing.T) {
@@ -2473,6 +2534,62 @@ func TestInnerJoinKeyword(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
+}
+
+// --- ORDER BY with multiple keys ---
+
+func TestOrderByMultipleKeys(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [city asc name asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// London < Paris < Tokyo
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByMultipleKeysDesc(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [city desc name asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Tokyo > Paris > London (desc)
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+func TestOrderByMultipleKeysMixed(t *testing.T) {
+	// Create test data with duplicate city values to test secondary sort
+	result, err := runQuery(t,
+		`set cities ("file/cities.csv" read)`,
+		`select * from cities order [country asc city desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// Japan < UK (asc), then city desc within each group
+	assertField(t, rows[0].AsMap(), "city", "Tokyo")
+	assertField(t, rows[1].AsMap(), "city", "London")
 }
 
 // --- GROUP BY with single atom (group name) ---

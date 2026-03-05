@@ -2,13 +2,43 @@ package engine
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
+
+func init() {
+	sqlite.MustRegisterFunction("regexp", &sqlite.FunctionImpl{
+		NArgs:         2,
+		Deterministic: true,
+		Scalar: func(ctx *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+			if args[0] == nil || args[1] == nil {
+				return nil, nil
+			}
+			pattern, ok := args[0].(string)
+			if !ok {
+				return nil, fmt.Errorf("regexp: pattern must be a string")
+			}
+			value, ok := args[1].(string)
+			if !ok {
+				return nil, fmt.Errorf("regexp: value must be a string")
+			}
+			matched, err := regexp.MatchString(pattern, value)
+			if err != nil {
+				return nil, fmt.Errorf("regexp: %w", err)
+			}
+			if matched {
+				return int64(1), nil
+			}
+			return int64(0), nil
+		},
+	})
+}
 
 // aqlTypeToSQLType maps an AQL field type to a SQLite column type.
 func aqlTypeToSQLType(t Type) string {
