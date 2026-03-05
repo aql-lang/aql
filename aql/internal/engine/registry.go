@@ -2,6 +2,8 @@ package engine
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -22,6 +24,7 @@ type Registry struct {
 	DefStacks map[string][]Value // stacked bodies for def-defined words
 	FileOps   fileops.FileOps    // file operations for read/write words
 	Formats   map[string]Format  // format registry for read/write (keyed by name)
+	Output    io.Writer          // output writer for print word
 }
 
 // NewRegistry creates an empty registry.
@@ -32,6 +35,7 @@ func NewRegistry() *Registry {
 		DefStacks: make(map[string][]Value),
 		FileOps:   fileops.NewDefault(),
 		Formats:   DefaultFormats(),
+		Output:    os.Stdout,
 	}
 }
 
@@ -220,6 +224,7 @@ func registerBuiltins(r *Registry) {
 	registerBase(r)
 	registerFileIO(r)
 	registerIf(r)
+	registerPrint(r)
 }
 
 // valToString converts any scalar Value to its string representation.
