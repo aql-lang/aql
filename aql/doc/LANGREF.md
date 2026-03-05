@@ -1533,6 +1533,42 @@ style (`write "path" "content"`) for clarity. The infix form
 `"content" write "path"` is ambiguous because the engine cannot
 distinguish path from content when both are strings.
 
+#### `stdin`
+
+Push the special stdin path onto the stack. Use with `read` to read
+from standard input.
+
+*Signature:* `[] -> [string]`
+
+```
+read stdin                          # read all of stdin as text
+read stdin {fmt:"json"}            # parse stdin as JSON
+read stdin {fmt:"lines"}           # split stdin into lines
+```
+
+#### `stdout`
+
+Push the special stdout path onto the stack. Use with `write` to
+write to standard output.
+
+*Signature:* `[] -> [string]`
+
+```
+write stdout "hello"               # write to stdout
+write stdout (upper "hello")       # write computed value to stdout
+```
+
+#### `stderr`
+
+Push the special stderr path onto the stack. Use with `write` to
+write to standard error.
+
+*Signature:* `[] -> [string]`
+
+```
+write stderr "error message"       # write to stderr
+```
+
 
 ## Type System
 

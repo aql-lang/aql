@@ -2,10 +2,18 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
 	jsonic "github.com/jsonicjs/jsonic/go"
+)
+
+// Special path constants for stdio streams.
+const (
+	pathStdin  = "<stdin>"
+	pathStdout = "<stdout>"
+	pathStderr = "<stderr>"
 )
 
 // formatFromExt returns the format name based on the file extension.
@@ -263,12 +271,42 @@ func registerFileIO(r *Registry) {
 			Handler: writeHandler,
 		},
 	)
+
+	// stdin, stdout, stderr push special path strings for use with read/write.
+	r.Register("stdin",
+		Signature{
+			Args:    []Type{},
+			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStdin)}, nil },
+		},
+	)
+	r.Register("stdout",
+		Signature{
+			Args:    []Type{},
+			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStdout)}, nil },
+		},
+	)
+	r.Register("stderr",
+		Signature{
+			Args:    []Type{},
+			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStderr)}, nil },
+		},
+	)
 }
 
 func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
-	data, err := r.FileOps.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+	var data []byte
+	var err error
+
+	if path == pathStdin {
+		data, err = io.ReadAll(r.Input)
+		if err != nil {
+			return nil, fmt.Errorf("read: stdin: %w", err)
+		}
+	} else {
+		data, err = r.FileOps.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read: %w", err)
+		}
 	}
 
 	content := applyNL(string(data), nl)
@@ -312,6 +350,20 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 
 func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value, error) {
 	content = applyNL(content, nl)
+
+	// Handle stdout/stderr special paths.
+	if path == pathStdout || path == pathStderr {
+		var w io.Writer
+		if path == pathStdout {
+			w = r.Output
+		} else {
+			w = r.ErrOutput
+		}
+		if _, err := fmt.Fprint(w, content); err != nil {
+			return nil, fmt.Errorf("write: %w", err)
+		}
+		return []Value{NewString(path)}, nil
+	}
 
 	data := []byte(content)
 
