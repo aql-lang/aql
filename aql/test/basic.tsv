@@ -335,3 +335,51 @@ def add5 add 5 end (3 add5) mul 2	16
 
 # Composing curried words
 def add5 add 5 end def add5_twice [add5 add5] 10 add5_twice	20
+
+# Dot - key extraction from maps (prefix form)
+{a:1} a dot	1
+{a:1,b:2} b dot	2
+
+# Dot - key extraction from maps (suffix form)
+{a:1} dot a	1
+{a:1,b:2} dot b	2
+
+# Dot - nested map access (prefix form)
+{a:{b:1}} a dot b dot	1
+
+# Dot - missing key returns none
+{a:1} b dot	none
+
+# Dot - null safety (none parent returns none)
+none a dot	none
+none "x" dot	none
+
+# Dot - list index access
+[10,20,30] 0 dot	10
+[10,20,30] 1 dot	20
+[10,20,30] 2 dot	30
+
+# Dot - list out of bounds returns none
+[10,20] 5 dot	none
+
+# Dot - string key
+{a:1} "a" dot	1
+
+# Dot notation - simple
+set foo a:b:1 foo.a.b	1
+
+# Dot notation - single level
+set bar {x:42} bar.x	42
+
+# Dot notation - with set storing map
+set m {a:{b:{c:99}}} m.a.b.c	99
+
+# Dot notation - missing key returns none
+set obj {a:1} obj.b	none
+
+# Dot notation - null propagation through chain
+set obj {a:1} obj.b.c	none
+
+# Dot notation - leading dot (stack access)
+{a:1} .a	1
+{a:{b:2}} .a.b	2
