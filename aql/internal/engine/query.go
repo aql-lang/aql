@@ -1084,132 +1084,80 @@ func buildWhereClause(condList Value) (string, error) {
 	var parts []string
 	i := 0
 	for i < len(elems) {
-		col := valueToColName(elems[i])
-		if col == "" {
-			return "", fmt.Errorf("expected column name, got %s", elems[i].VType)
-		}
-		i++
-
-		if i >= len(elems) {
-			return "", fmt.Errorf("incomplete condition after column %q", col)
-		}
-
-		opName := valueToColName(elems[i])
-
-		switch opName {
-		case "is":
-			// is null / is not null
+		// --- NOT prefix ---
+		// [not col op val ...]  → NOT (col op val)
+		// [not [sub-condition]] → NOT (sub-condition)
+		firstCol := valueToColName(elems[i])
+		if firstCol == "not" {
 			i++
 			if i >= len(elems) {
-				return "", fmt.Errorf("incomplete condition: expected null or not after is")
+				return "", fmt.Errorf("incomplete condition: expected condition after not")
 			}
-			next := valueToColName(elems[i])
-			if next == "null" {
-				parts = append(parts, fmt.Sprintf("%s IS NULL", quoteIdent(col)))
-				i++
-			} else if next == "not" {
-				i++
-				if i >= len(elems) {
-					return "", fmt.Errorf("incomplete condition: expected null after is not")
-				}
-				nn := valueToColName(elems[i])
-				if nn != "null" {
-					return "", fmt.Errorf("expected null after is not, got %q", nn)
-				}
-				parts = append(parts, fmt.Sprintf("%s IS NOT NULL", quoteIdent(col)))
-				i++
-			} else {
-				return "", fmt.Errorf("expected null or not after is, got %q", next)
-			}
-
-		case "between":
-			// between value1 value2
-			i++
-			if i+1 >= len(elems) {
-				return "", fmt.Errorf("between requires two values")
-			}
-			lo, err := valueToSQL(elems[i])
-			if err != nil {
-				return "", err
-			}
-			i++
-			hi, err := valueToSQL(elems[i])
-			if err != nil {
-				return "", err
-			}
-			parts = append(parts, fmt.Sprintf("%s BETWEEN %s AND %s", quoteIdent(col), lo, hi))
-			i++
-
-		case "in":
-			// in [v1 v2 v3]
-			i++
-			if i >= len(elems) {
-				return "", fmt.Errorf("in requires a value list")
-			}
-			inSQL, err := buildInList(elems[i])
-			if err != nil {
-				return "", err
-			}
-			parts = append(parts, fmt.Sprintf("%s IN (%s)", quoteIdent(col), inSQL))
-			i++
-
-		case "not":
-			// not between / not in
-			i++
-			if i >= len(elems) {
-				return "", fmt.Errorf("incomplete condition: expected between or in after not")
-			}
-			next := valueToColName(elems[i])
-			switch next {
-			case "between":
-				i++
-				if i+1 >= len(elems) {
-					return "", fmt.Errorf("not between requires two values")
-				}
-				lo, err := valueToSQL(elems[i])
+			// If followed by a sub-list, negate the whole group.
+			if elems[i].VType.Equal(TList) {
+				inner, err := buildWhereClause(elems[i])
 				if err != nil {
 					return "", err
 				}
+				parts = append(parts, "NOT ("+inner+")")
 				i++
-				hi, err := valueToSQL(elems[i])
-				if err != nil {
-					return "", err
+				// Check for logical connector after the NOT group.
+				if i < len(elems) {
+					connName := valueToColName(elems[i])
+					if sqlConn, ok := logicalOps[connName]; ok {
+						parts = append(parts, sqlConn)
+						i++
+					}
 				}
-				parts = append(parts, fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi))
-				i++
-			case "in":
-				i++
-				if i >= len(elems) {
-					return "", fmt.Errorf("not in requires a value list")
-				}
-				inSQL, err := buildInList(elems[i])
-				if err != nil {
-					return "", err
-				}
-				parts = append(parts, fmt.Sprintf("%s NOT IN (%s)", quoteIdent(col), inSQL))
-				i++
-			default:
-				return "", fmt.Errorf("expected between or in after not, got %q", next)
+				continue
 			}
-
-		default:
-			// Standard comparison: op value
-			sqlOp, ok := comparisonOps[opName]
-			if !ok {
-				return "", fmt.Errorf("unknown comparison operator %q", opName)
-			}
-			i++
-			if i >= len(elems) {
-				return "", fmt.Errorf("incomplete condition: expected value after %q", opName)
-			}
-			val := elems[i]
-			sqlVal, err := valueToSQL(val)
+			// Otherwise, NOT applies to the next single condition.
+			// Collect tokens for the single condition: col op val
+			// (or col not in [...], col is null, etc.)
+			singleCond, consumed, err := parseSingleCondition(elems, i)
 			if err != nil {
 				return "", err
 			}
-			parts = append(parts, fmt.Sprintf("%s %s %s", quoteIdent(col), sqlOp, sqlVal))
-			i++
+			parts = append(parts, "NOT ("+singleCond+")")
+			i = consumed
+			// Check for logical connector.
+			if i < len(elems) {
+				connName := valueToColName(elems[i])
+				if sqlConn, ok := logicalOps[connName]; ok {
+					parts = append(parts, sqlConn)
+					i++
+				}
+			}
+			continue
 		}
+
+		// --- Sub-list (parenthesized group) ---
+		// [[col op val or col op val] and ...]  → (...) AND ...
+		if elems[i].VType.Equal(TList) {
+			inner, err := buildWhereClause(elems[i])
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, "("+inner+")")
+			i++
+			// Check for logical connector after the group.
+			if i < len(elems) {
+				connName := valueToColName(elems[i])
+				if sqlConn, ok := logicalOps[connName]; ok {
+					parts = append(parts, sqlConn)
+					i++
+				}
+			}
+			continue
+		}
+
+		// --- Standard condition ---
+		singleCond, consumed, err := parseSingleCondition(elems, i)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, singleCond)
+		i = consumed
 
 		// Check for logical connector.
 		if i < len(elems) {
@@ -1223,6 +1171,138 @@ func buildWhereClause(condList Value) (string, error) {
 	}
 
 	return strings.Join(parts, " "), nil
+}
+
+// parseSingleCondition parses one condition starting at elems[start].
+// Returns the SQL string and the new index after the condition.
+func parseSingleCondition(elems []Value, start int) (string, int, error) {
+	i := start
+	col := valueToColName(elems[i])
+	if col == "" {
+		return "", i, fmt.Errorf("expected column name, got %s", elems[i].VType)
+	}
+	i++
+
+	if i >= len(elems) {
+		return "", i, fmt.Errorf("incomplete condition after column %q", col)
+	}
+
+	opName := valueToColName(elems[i])
+
+	switch opName {
+	case "is":
+		// is null / is not null
+		i++
+		if i >= len(elems) {
+			return "", i, fmt.Errorf("incomplete condition: expected null or not after is")
+		}
+		next := valueToColName(elems[i])
+		if next == "null" {
+			i++
+			return fmt.Sprintf("%s IS NULL", quoteIdent(col)), i, nil
+		} else if next == "not" {
+			i++
+			if i >= len(elems) {
+				return "", i, fmt.Errorf("incomplete condition: expected null after is not")
+			}
+			nn := valueToColName(elems[i])
+			if nn != "null" {
+				return "", i, fmt.Errorf("expected null after is not, got %q", nn)
+			}
+			i++
+			return fmt.Sprintf("%s IS NOT NULL", quoteIdent(col)), i, nil
+		} else {
+			return "", i, fmt.Errorf("expected null or not after is, got %q", next)
+		}
+
+	case "between":
+		// between value1 value2
+		i++
+		if i+1 >= len(elems) {
+			return "", i, fmt.Errorf("between requires two values")
+		}
+		lo, err := valueToSQL(elems[i])
+		if err != nil {
+			return "", i, err
+		}
+		i++
+		hi, err := valueToSQL(elems[i])
+		if err != nil {
+			return "", i, err
+		}
+		i++
+		return fmt.Sprintf("%s BETWEEN %s AND %s", quoteIdent(col), lo, hi), i, nil
+
+	case "in":
+		// in [v1 v2 v3]
+		i++
+		if i >= len(elems) {
+			return "", i, fmt.Errorf("in requires a value list")
+		}
+		inSQL, err := buildInList(elems[i])
+		if err != nil {
+			return "", i, err
+		}
+		i++
+		return fmt.Sprintf("%s IN (%s)", quoteIdent(col), inSQL), i, nil
+
+	case "not":
+		// not between / not in
+		i++
+		if i >= len(elems) {
+			return "", i, fmt.Errorf("incomplete condition: expected between or in after not")
+		}
+		next := valueToColName(elems[i])
+		switch next {
+		case "between":
+			i++
+			if i+1 >= len(elems) {
+				return "", i, fmt.Errorf("not between requires two values")
+			}
+			lo, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", i, err
+			}
+			i++
+			hi, err := valueToSQL(elems[i])
+			if err != nil {
+				return "", i, err
+			}
+			i++
+			return fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi), i, nil
+		case "in":
+			i++
+			if i >= len(elems) {
+				return "", i, fmt.Errorf("not in requires a value list")
+			}
+			inSQL, err := buildInList(elems[i])
+			if err != nil {
+				return "", i, err
+			}
+			i++
+			return fmt.Sprintf("%s NOT IN (%s)", quoteIdent(col), inSQL), i, nil
+		default:
+			return "", i, fmt.Errorf("expected between or in after not, got %q", next)
+		}
+
+	default:
+		// Standard comparison: op value
+		sqlOp, ok := comparisonOps[opName]
+		if !ok {
+			return "", i, fmt.Errorf("unknown comparison operator %q", opName)
+		}
+		i++
+		if i >= len(elems) {
+			return "", i, fmt.Errorf("incomplete condition: expected value after %q", opName)
+		}
+		val := elems[i]
+		sqlVal, err := valueToSQL(val)
+		if err != nil {
+			return "", i, err
+		}
+		i++
+		return fmt.Sprintf("%s %s %s", quoteIdent(col), sqlOp, sqlVal), i, nil
+	}
 }
 
 // buildInList converts a list value to a comma-separated SQL value list.

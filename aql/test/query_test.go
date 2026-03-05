@@ -994,6 +994,125 @@ func TestWhereNotBetween(t *testing.T) {
 	assertField(t, rows[0].AsMap(), "name", "Charlie")
 }
 
+// --- NOT prefix ---
+
+func TestWhereNotSimple(t *testing.T) {
+	// [not name eq "Alice"] → NOT ("name" = 'Alice')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not name eq "Alice"] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Bob, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestWhereNotWithSubList(t *testing.T) {
+	// [not [city eq "London" or city eq "Tokyo"]] → NOT ("city" = 'London' OR "city" = 'Tokyo')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [city eq "London" or city eq "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Paris), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+func TestWhereNotAndOther(t *testing.T) {
+	// [not name eq "Alice" and city eq "Tokyo"] → NOT ("name" = 'Alice') AND "city" = 'Tokyo'
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not name eq "Alice" and city eq "Tokyo"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+// --- Nested groups (parenthesized conditions) ---
+
+func TestWhereNestedGroup(t *testing.T) {
+	// [[city eq "London" or city eq "Paris"] and age gte "30"]
+	// → ("city" = 'London' OR "city" = 'Paris') AND "age" >= '30'
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [[city eq "London" or city eq "Paris"] and age gte "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice: London, 30), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereNestedGroupRight(t *testing.T) {
+	// [age gte "30" and [city eq "London" or city eq "Tokyo"]]
+	// → "age" >= '30' AND ("city" = 'London' OR "city" = 'Tokyo')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age gte "30" and [city eq "London" or city eq "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+}
+
+func TestWhereNotWithNestedGroup(t *testing.T) {
+	// [not [city eq "London" or city eq "Paris"]] → NOT (...) — only Tokyo remains
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [city eq "London" or city eq "Paris"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie: Tokyo), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+func TestWhereDoubleNested(t *testing.T) {
+	// [[city eq "London"] or [city eq "Tokyo"]] — two groups connected by OR
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [[city eq "London"] or [city eq "Tokyo"]] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
 func TestWhereBetweenAndOther(t *testing.T) {
 	result, err := runQuery(t,
 		`set people ("file/people.csv" read)`,
