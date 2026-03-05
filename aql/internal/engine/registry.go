@@ -219,6 +219,7 @@ func registerBuiltins(r *Registry) {
 	registerTypeof(r)
 	registerBase(r)
 	registerFileIO(r)
+	registerIf(r)
 }
 
 // valToString converts any scalar Value to its string representation.
