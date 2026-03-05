@@ -9,6 +9,9 @@ import (
 // FileOps is the interface for file system operations used by read/write words.
 type FileOps = fileops.FileOps
 
+// Format handles encoding and decoding file content for a specific format.
+type Format = engine.Format
+
 // NewMemFileOps creates an in-memory file system for testing.
 func NewMemFileOps() *fileops.MemFileOps {
 	return fileops.NewMem()
@@ -29,6 +32,12 @@ func New() *AQL {
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
 	a.registry.SetFileOps(ops)
+}
+
+// RegisterFormat adds or replaces a format in the format registry.
+// Formats are used by read/write words via the {fmt:"name"} option.
+func (a *AQL) RegisterFormat(name string, f Format) {
+	a.registry.Formats[name] = f
 }
 
 // Run parses and executes an AQL source string.

@@ -21,6 +21,7 @@ type Registry struct {
 	Store     map[string]Value   // key-value store for set/get
 	DefStacks map[string][]Value // stacked bodies for def-defined words
 	FileOps   fileops.FileOps    // file operations for read/write words
+	Formats   map[string]Format  // format registry for read/write (keyed by name)
 }
 
 // NewRegistry creates an empty registry.
@@ -30,6 +31,7 @@ func NewRegistry() *Registry {
 		Store:     make(map[string]Value),
 		DefStacks: make(map[string][]Value),
 		FileOps:   fileops.NewDefault(),
+		Formats:   DefaultFormats(),
 	}
 }
 

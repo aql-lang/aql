@@ -23,6 +23,31 @@ type FileOps interface {
 Set via `aql.SetFileOps(ops)` or `registry.SetFileOps(ops)`.
 Default implementation uses the real file system with process cwd for relative paths.
 
+### Format Registry
+
+File format handling (json, jsonic, lines, etc.) is dispatched through a
+`Format` interface on the Registry:
+
+```go
+type Format interface {
+    Decode(content string) ([]Value, error)
+    Encode(v Value) (string, error)
+}
+```
+
+Built-in formats are registered at startup via `DefaultFormats()`.
+The host application can add custom formats:
+
+```go
+a := aql.New()
+a.RegisterFormat("yaml", &MyYAMLFormat{})
+// Now: read "config.yaml" {fmt:"yaml"}
+```
+
+The `read` and `write` words look up the format by name from `Registry.Formats`
+and call `Decode`/`Encode` respectively. Line ending normalization is applied
+before format decoding and after encoding, so formats operate on normalized content.
+
 
 ## Words
 

@@ -24,6 +24,20 @@ func denormalizeLineEndings(s string, nl string) string {
 	}
 }
 
+// applyNL applies line ending normalization based on the nl option.
+func applyNL(content string, nl string) string {
+	switch nl {
+	case "lf":
+		return normalizeLineEndings(content)
+	case "crlf":
+		return denormalizeLineEndings(normalizeLineEndings(content), "crlf")
+	case "raw":
+		return content
+	default:
+		return normalizeLineEndings(content)
+	}
+}
+
 // parseFileOpts extracts options from an AQL map value.
 func parseFileOpts(opts Value) (enc, format, mode, nl string) {
 	enc = "utf8"
@@ -224,85 +238,22 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 		return nil, fmt.Errorf("read: %w", err)
 	}
 
-	content := string(data)
+	content := applyNL(string(data), nl)
 
-	// Normalize line endings: default is "lf" (convert all to \n).
-	switch nl {
-	case "lf":
-		content = normalizeLineEndings(content)
-	case "crlf":
-		content = normalizeLineEndings(content)
-		content = denormalizeLineEndings(content, "crlf")
-	case "raw":
-		// No normalization.
-	default:
-		content = normalizeLineEndings(content)
-	}
-
-	switch format {
-	case "text":
-		return []Value{NewString(content)}, nil
-
-	case "json":
-		return parseJSONContent(content)
-
-	case "jsonic":
-		return parseJsonicContent(content)
-
-	case "lines":
-		lines := strings.Split(content, "\n")
-		elems := make([]Value, len(lines))
-		for i, line := range lines {
-			elems[i] = NewString(line)
-		}
-		return []Value{NewList(elems)}, nil
-
-	default:
+	f, ok := r.Formats[format]
+	if !ok {
 		return nil, fmt.Errorf("read: unknown format: %s", format)
 	}
-}
 
-func parseJSONContent(content string) ([]Value, error) {
-	result, err := jsonic.Parse(content)
-	if err != nil {
-		return nil, fmt.Errorf("read: invalid json: %w", err)
-	}
-	v, err := jsonicToValue(result)
+	result, err := f.Decode(content)
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
-	return []Value{v}, nil
-}
-
-func parseJsonicContent(content string) ([]Value, error) {
-	j := jsonic.Make()
-	result, err := j.Parse(content)
-	if err != nil {
-		return nil, fmt.Errorf("read: invalid jsonic: %w", err)
-	}
-	if result == nil {
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-	v, err := jsonicToValue(result)
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
-	}
-	return []Value{v}, nil
+	return result, nil
 }
 
 func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value, error) {
-	// Apply line ending conversion for output.
-	switch nl {
-	case "lf":
-		content = normalizeLineEndings(content)
-	case "crlf":
-		content = normalizeLineEndings(content)
-		content = denormalizeLineEndings(content, "crlf")
-	case "raw":
-		// No conversion.
-	default:
-		content = normalizeLineEndings(content)
-	}
+	content = applyNL(content, nl)
 
 	data := []byte(content)
 
@@ -311,7 +262,6 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 		if err == nil {
 			data = append(existing, data...)
 		}
-		// If file doesn't exist, just write the new data.
 	}
 
 	if err := r.FileOps.WriteFile(path, data, 0644); err != nil {
