@@ -5,8 +5,16 @@ import (
 	"strings"
 )
 
-// registerQuery registers the select and from words.
+// registerQuery registers the select, from, and star words.
 func registerQuery(r *Registry) {
+	// star: [] -> [atom("*")]
+	// Alias for the * wildcard, usable in definitions where * cannot be typed.
+	r.RegisterPrefixOnly("star", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			return []Value{NewAtom("*")}, nil
+		},
+	})
+
 	// from: [atom] -> [table]
 	// Looks up a table by name from the registry store.
 	fromHandler := func(args []Value) ([]Value, error) {
@@ -55,12 +63,12 @@ func registerQuery(r *Registry) {
 
 	r.Register("select",
 		Signature{
-			Args:    []Type{TList, TList},
-			Handler: selectColsHandler,
-		},
-		Signature{
 			Args:    []Type{TAtom, TList},
 			Handler: selectStarHandler,
+		},
+		Signature{
+			Args:    []Type{TList, TList},
+			Handler: selectColsHandler,
 		},
 	)
 }

@@ -142,6 +142,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 
 		fwd := e.stack[fwdIdx].AsForward()
 		funcIdx := fwd.FuncIndex
+		collectedCount := fwd.CollectedArgs
 
 		// Remove the forward marker.
 		e.stackRemove(fwdIdx)
@@ -149,14 +150,10 @@ func (e *Engine) resolveOrphanedForwards() error {
 			funcIdx--
 		}
 
-		// Force prefix on the function word.
-		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-			w := e.stack[funcIdx].AsWord()
-			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
-		}
+		// Try prefix match or create curry list.
+		e.curryOrPrefix(funcIdx, collectedCount)
 
-		// Retry from the function word.
-		e.pointer = funcIdx
+		// Retry from the current pointer position.
 		for step := 0; step < 100; step++ {
 			if e.pointer >= len(e.stack) {
 				break
@@ -569,18 +566,14 @@ func (e *Engine) stepLiteral() error {
 func (e *Engine) implicitEnd(fwdIdx int) error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
+	collectedCount := fwd.CollectedArgs
 
 	e.stackRemove(fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
 
-	if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-		w := e.stack[funcIdx].AsWord()
-		e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
-	}
-
-	e.pointer = funcIdx
+	e.curryOrPrefix(funcIdx, collectedCount)
 	return nil
 }
 
@@ -632,14 +625,7 @@ func (e *Engine) stepEnd() error {
 		}
 	}
 
-	_ = fwd // consumed above
-
-	if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-		w := e.stack[funcIdx].AsWord()
-		e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
-	}
-
-	e.pointer = funcIdx
+	e.curryOrPrefix(funcIdx, fwd.CollectedArgs)
 	return nil
 }
 
@@ -676,6 +662,7 @@ func (e *Engine) stepCloseParen() error {
 				hasFwd = true
 				fwd := e.stack[i].AsForward()
 				funcIdx := fwd.FuncIndex
+				collectedCount := fwd.CollectedArgs
 
 				// Remove the forward.
 				e.stackRemove(i)
@@ -684,14 +671,16 @@ func (e *Engine) stepCloseParen() error {
 					funcIdx--
 				}
 
-				// Force prefix on the function word.
-				if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-					w := e.stack[funcIdx].AsWord()
-					e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+				// Try prefix match or create curry list.
+				e.curryOrPrefix(funcIdx, collectedCount)
+
+				// Recalculate closeIdx after potential stack changes.
+				closeIdx = e.findCloseParenAfter(openIdx)
+				if closeIdx < 0 {
+					return fmt.Errorf("syntax error: unmatched closing parenthesis")
 				}
 
-				// Re-evaluate from funcIdx up to closeIdx.
-				e.pointer = funcIdx
+				// Re-evaluate from current pointer up to closeIdx.
 				for e.pointer < closeIdx {
 					val := e.stack[e.pointer]
 					switch {
@@ -802,6 +791,92 @@ func (e *Engine) peekPrecedence(idx int) int {
 		}
 	}
 	return maxPrec
+}
+
+// curryOrPrefix handles a terminated forward. If the word at funcIdx can
+// match a prefix signature with the available resolved values, it forces
+// prefix mode for normal execution. Otherwise, it packages the word and
+// its collectedCount suffix args into a list value (partial application).
+// When the list is later expanded (e.g., via def body substitution), the
+// word and args are spliced back onto the stack for completion.
+func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
+	if funcIdx >= len(e.stack) || !e.stack[funcIdx].IsWord() {
+		e.pointer = funcIdx
+		return
+	}
+
+	w := e.stack[funcIdx].AsWord()
+	fn := e.registry.Lookup(w.Name)
+
+	// Check if prefix match exists with current resolved values.
+	if fn != nil {
+		// Build resolved slice up to funcIdx.
+		start := 0
+		for i := funcIdx - 1; i >= 0; i-- {
+			if e.stack[i].IsOpenParen() {
+				start = i + 1
+				break
+			}
+		}
+		var resolved []Value
+		for i := start; i < funcIdx; i++ {
+			v := e.stack[i]
+			if !v.IsForward() && !v.IsOpenParen() {
+				resolved = append(resolved, v)
+			}
+		}
+
+		testW := WordInfo{Name: w.Name, ArgCount: -1, ForcePrefix: true}
+		match := MatchSignature(fn.Signatures, resolved, testW)
+		if match != nil {
+			// Prefix match works - proceed normally.
+			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+			e.pointer = funcIdx
+			return
+		}
+	}
+
+	// Check if there's a pending outer forward that would collect the result.
+	// Only create a curry list when an outer context is waiting for a value;
+	// otherwise, fall through to normal prefix retry (which may error).
+	hasOuterForward := false
+	checkStart := funcIdx - collectedCount
+	if checkStart < 0 {
+		checkStart = 0
+	}
+	for i := checkStart - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break
+		}
+		if e.stack[i].IsForward() {
+			hasOuterForward = true
+			break
+		}
+	}
+
+	if hasOuterForward {
+		// Create a curry list: [word, arg1, arg2, ...].
+		// When this list is expanded by def body substitution, it re-emits
+		// the word and collected args for completion with additional args.
+		startIdx := funcIdx - collectedCount
+		if startIdx < 0 {
+			startIdx = 0
+		}
+
+		elems := make([]Value, 0, 1+collectedCount)
+		elems = append(elems, NewWord(w.Name))
+		for i := startIdx; i < funcIdx; i++ {
+			elems = append(elems, e.stack[i])
+		}
+
+		e.stackSplice(startIdx, collectedCount+1, NewList(elems))
+		e.pointer = startIdx
+		return
+	}
+
+	// No outer forward - force prefix (may result in error on next step).
+	e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	e.pointer = funcIdx
 }
 
 // hasPendingForwardExpectingWord checks if there is a pending forward

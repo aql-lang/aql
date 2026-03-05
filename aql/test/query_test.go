@@ -208,6 +208,156 @@ func TestSelectAgainstInternalTable(t *testing.T) {
 	}
 }
 
+// --- star word ---
+
+func TestStarWord(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select star from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	r0 := rows[0].AsMap()
+	assertField(t, r0, "name", "Alice")
+	assertField(t, r0, "age", "30")
+	assertField(t, r0, "city", "London")
+}
+
+// --- currying (partial application via def) ---
+
+func TestCurriedFrom(t *testing.T) {
+	// def from01 from people end; select * from01
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	steps := []string{
+		`set people ("file/people.csv" read)`,
+		`def from01 from people end`,
+		`select * from01`,
+	}
+
+	var result []engine.Value
+	for _, step := range steps {
+		vals, err := parser.Parse(step)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err = eng.Run(vals)
+		if err != nil {
+			t.Fatalf("step %q: %v", step, err)
+		}
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	assertField(t, r0, "name", "Alice")
+}
+
+func TestCurriedSelect(t *testing.T) {
+	// def select01 select star end; select01 from people
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	steps := []string{
+		`set people ("file/people.csv" read)`,
+		`def select01 select star end`,
+		`select01 from people`,
+	}
+
+	var result []engine.Value
+	for _, step := range steps {
+		vals, err := parser.Parse(step)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err = eng.Run(vals)
+		if err != nil {
+			t.Fatalf("step %q: %v", step, err)
+		}
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+}
+
+func TestCurriedBoth(t *testing.T) {
+	// def select01 select star end; def from01 from people end; select01 from01
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	steps := []string{
+		`set people ("file/people.csv" read)`,
+		`def select01 select star end`,
+		`def from01 from people end`,
+		`select01 from01`,
+	}
+
+	var result []engine.Value
+	for _, step := range steps {
+		vals, err := parser.Parse(step)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err = eng.Run(vals)
+		if err != nil {
+			t.Fatalf("step %q: %v", step, err)
+		}
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	assertField(t, r0, "name", "Alice")
+}
+
+func TestCurriedSelectCols(t *testing.T) {
+	// def sel_name select [name] end; sel_name from people
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	steps := []string{
+		`set people ("file/people.csv" read)`,
+		`def sel_name select [name] end`,
+		`sel_name from people`,
+	}
+
+	var result []engine.Value
+	for _, step := range steps {
+		vals, err := parser.Parse(step)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err = eng.Run(vals)
+		if err != nil {
+			t.Fatalf("step %q: %v", step, err)
+		}
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	assertField(t, r0, "name", "Alice")
+	if r0.Len() != 1 {
+		t.Errorf("expected 1 column, got %d", r0.Len())
+	}
+}
+
 // --- SQLite flag on loaded table ---
 
 func TestFileLoadSetsSQLiteFlag(t *testing.T) {
