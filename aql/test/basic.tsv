@@ -390,3 +390,25 @@ set obj {a:1} obj.b.c	none
 # Dot notation - leading dot (stack access)
 {a:1} .a	1
 {a:{b:2}} .a.b	2
+
+# Dotr - strict key extraction (errors on missing)
+{a:1} a dotr	1
+{a:1,b:2} b dotr	2
+[10,20,30] 1 dotr	20
+{0:"zero"} 0 dotr	'zero'
+
+# Dotr - missing key is an error
+{a:1} b dotr	ERROR:dotr: key "b" not found in map
+
+# Dotr - none parent is an error
+none a dotr	ERROR:dotr: parent is none
+
+# Dotr - list out of bounds is an error
+[10,20] 5 dotr	ERROR:dotr: index 5 out of bounds (length 2)
+
+# Dotr - integer key missing from map is an error
+{a:1} 0 dotr	ERROR:dotr: key "0" not found in map
+
+# Dotr - !. alias
+{a:1} a !.	1
+{a:1} b !.	ERROR:dotr: key "b" not found in map

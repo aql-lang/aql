@@ -439,6 +439,11 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 		return []engine.Value{engine.NewWord("dot")}, nil
 	}
 
+	// Standalone "!." → just the dotr word.
+	if text == "!." {
+		return []engine.Value{engine.NewWord("dotr")}, nil
+	}
+
 	parts := strings.Split(text, ".")
 	var result []engine.Value
 
