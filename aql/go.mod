@@ -8,6 +8,7 @@ require (
 )
 
 require (
-	github.com/voxgig/struct/go v0.1.0 // indirect
+	github.com/jsonicjs/csv/go v0.1.0 // indirect
+	github.com/voxgig/struct v0.0.10 // indirect
 	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5 // indirect
 )

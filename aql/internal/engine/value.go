@@ -295,12 +295,22 @@ func (v Value) AsRecordType() RecordTypeInfo {
 
 // IsTableType reports whether this value is a table type (list with record schema).
 func (v Value) IsTableType() bool {
-	_, ok := v.Data.(TableTypeInfo)
-	return ok && v.VType.Equal(TList)
+	if v.VType.Equal(TList) {
+		if _, ok := v.Data.(TableTypeInfo); ok {
+			return true
+		}
+		if _, ok := v.Data.(TableData); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // AsTableType returns the TableTypeInfo, panics if not a table type.
 func (v Value) AsTableType() TableTypeInfo {
+	if td, ok := v.Data.(TableData); ok {
+		return TableTypeInfo{Record: td.Record}
+	}
 	return v.Data.(TableTypeInfo)
 }
 
@@ -335,7 +345,11 @@ func (v Value) AsBoolean() bool {
 }
 
 // AsList returns the []Value payload, panics if not a list type.
+// Also works for TableData, returning the rows.
 func (v Value) AsList() []Value {
+	if td, ok := v.Data.(TableData); ok {
+		return td.Rows
+	}
 	return v.Data.([]Value)
 }
 
@@ -377,6 +391,18 @@ func (v Value) String() string {
 				parts = append(parts, k+":"+val.String())
 			}
 			return "table{" + strings.Join(parts, ",") + "}"
+		}
+		if td, ok := v.Data.(TableData); ok {
+			parts := make([]string, 0, td.Record.Fields.Len())
+			for _, k := range td.Record.Fields.Keys() {
+				val, _ := td.Record.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			rowParts := make([]string, len(td.Rows))
+			for i, row := range td.Rows {
+				rowParts[i] = row.String()
+			}
+			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
 		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"

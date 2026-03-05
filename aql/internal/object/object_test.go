@@ -2,6 +2,29 @@ package object
 
 import "testing"
 
+func TestObjectType(t *testing.T) {
+	tests := []struct {
+		name     string
+		obj      Object
+		expected ObjectType
+	}{
+		{"integer", &Integer{Value: 42}, INTEGER_OBJ},
+		{"boolean", &Boolean{Value: true}, BOOLEAN_OBJ},
+		{"null", &Null{}, NULL_OBJ},
+		{"error", &Error{Message: "oops"}, ERROR_OBJ},
+		{"string", &String{Value: "hello"}, STRING_OBJ},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.obj.Type()
+			if got != tt.expected {
+				t.Errorf("Type() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestObjectInspect(t *testing.T) {
 	tests := []struct {
 		name     string

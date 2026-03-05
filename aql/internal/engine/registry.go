@@ -2,8 +2,12 @@ package engine
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
 // Function groups all signatures for a named function.
@@ -18,6 +22,9 @@ type Registry struct {
 	funcs     map[string]*Function
 	Store     map[string]Value   // key-value store for set/get
 	DefStacks map[string][]Value // stacked bodies for def-defined words
+	FileOps   fileops.FileOps    // file operations for read/write words
+	Formats   map[string]Format  // format registry for read/write (keyed by name)
+	Output    io.Writer          // output writer for print word
 }
 
 // NewRegistry creates an empty registry.
@@ -26,7 +33,15 @@ func NewRegistry() *Registry {
 		funcs:     make(map[string]*Function),
 		Store:     make(map[string]Value),
 		DefStacks: make(map[string][]Value),
+		FileOps:   fileops.NewDefault(),
+		Formats:   DefaultFormats(),
+		Output:    os.Stdout,
 	}
+}
+
+// SetFileOps replaces the file operations implementation.
+func (r *Registry) SetFileOps(ops fileops.FileOps) {
+	r.FileOps = ops
 }
 
 // Register adds one or more signatures to a named function with suffix precedence.
@@ -191,6 +206,8 @@ func registerBuiltins(r *Registry) {
 		},
 	})
 
+	registerComparison(r)
+
 	registerStorage(r)
 	registerUnify(r)
 	registerDef(r)
@@ -205,6 +222,9 @@ func registerBuiltins(r *Registry) {
 	registerDo(r)
 	registerTypeof(r)
 	registerBase(r)
+	registerFileIO(r)
+	registerIf(r)
+	registerPrint(r)
 }
 
 // valToString converts any scalar Value to its string representation.

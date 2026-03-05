@@ -325,10 +325,10 @@ lower/1s "H"    => 'h'
 Arithmetic words carry a precedence level. Higher precedence binds
 tighter when words compete for suffix arguments.
 
-| Precedence | Words              |
-|------------|--------------------|
-| 2 (high)   | `mul`, `div`, `mod`|
-| 1 (low)    | `add`, `sub`       |
+| Precedence | Words                                          |
+|------------|------------------------------------------------|
+| 2 (high)   | `mul`, `div`, `mod`, `and`, `nand`             |
+| 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `lt`, `gt`, `lte`, `gte`, `eq`, `deq` |
 
 ```
 2 add 3 mul 4               => 14      # (2+3)*4, not 2+(3*4)
@@ -509,6 +509,113 @@ true and the second is false. Precedence 1.
 ```
 true implies false      => false
 false implies true      => true
+```
+
+### Comparison Words
+
+Comparison words take two arguments with suffix precedence at
+precedence level 1. They use natural type comparisons: integers
+compare numerically, strings compare lexicographically, booleans
+compare as `false < true`, atoms compare lexicographically on
+their name.
+
+Cross-type comparisons are an error for ordering words (`lt`, `gt`,
+`lte`, `gte`). Equality words (`eq`, `deq`) return `false` for
+mismatched types without error.
+
+Non-scalar types (lists, maps) are not orderable — ordering
+comparisons produce an error. Use `eq` or `deq` for equality checks
+on non-scalars.
+
+#### `lt`
+
+Less than.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+1 lt 2                  => true
+2 lt 1                  => false
+1 lt 1                  => false
+"abc" lt "def"          => true
+false lt true           => true
+```
+
+#### `gt`
+
+Greater than.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+2 gt 1                  => true
+1 gt 2                  => false
+"def" gt "abc"          => true
+```
+
+#### `lte`
+
+Less than or equal.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+1 lte 2                 => true
+1 lte 1                 => true
+2 lte 1                 => false
+```
+
+#### `gte`
+
+Greater than or equal.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+2 gte 1                 => true
+1 gte 1                 => true
+1 gte 2                 => false
+```
+
+#### `eq`
+
+Exact equality. For scalars (integer, string, boolean, atom, none),
+compares by value. For non-scalars (list, map), compares by identity
+(same in-memory object).
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+1 eq 1                  => true
+1 eq 2                  => false
+"abc" eq "abc"          => true
+none eq none            => true
+true eq false           => false
+```
+
+#### `deq`
+
+Deep equality. Traverses lists and maps depth-first, comparing all
+leaf values. Two lists are deeply equal if they have the same length
+and each element is deeply equal. Two maps are deeply equal if they
+have the same keys and each value is deeply equal.
+
+*Signature:* `[any, any] -> [boolean]`
+*Precedence:* 1
+
+```
+1 deq 1                 => true
+[1,2,3] deq [1,2,3]    => true
+[1,2] deq [1,2,3]      => false
+{x:1,y:2} deq {x:1,y:2}   => true
+{x:1,y:2} deq {x:1,y:3}   => false
+{x:1} deq {x:1,y:2}        => false
+none deq none           => true
 ```
 
 ### Conversion Words
@@ -1184,6 +1291,177 @@ base none              => none
 ```
 
 
+### Conditional Words
+
+#### `if`
+
+Conditional evaluation, analogous to the ternary operator. Evaluates
+the condition, then evaluates only the matching branch. Unevaluated
+branches produce no side effects.
+
+*Signatures:*
+- `[any, any, any] -> [any]` — 3-arg: condition, then-branch, else-branch
+- `[any, any] -> [any]` — 2-arg: condition, then-branch (returns nothing if false)
+
+*Precedence:* suffix
+
+**Condition evaluation:** If the condition is a list, it is evaluated
+as code (like `do`). The result is then tested for truthiness.
+
+**Truthiness rules** (same as `convert boolean`):
+- `false`, `0`, `""`, `none`, empty list, empty map → **falsy**
+- `true`, non-zero numbers, non-empty strings → **truthy**
+
+**Branch evaluation:** If a branch is a list, it is evaluated as code.
+Scalar branch values are returned as-is. Only the matching branch is
+evaluated — the other is never executed.
+
+**3-arg form** (if-then-else):
+
+```
+if true 1 2                     => 1
+if false 1 2                    => 2
+if true "yes" "no"              => 'yes'
+if false "yes" "no"             => 'no'
+```
+
+**2-arg form** (if-then, no else):
+
+```
+if true 42                      => 42
+if false 42                     =>        # empty stack
+```
+
+**List conditions** — evaluated as code:
+
+```
+if [1 lt 2] [3 add 4] [5 add 6]    => 7
+if [2 lt 1] [3 add 4] [5 add 6]    => 11
+```
+
+**List branches** — evaluated as code:
+
+```
+if true [1 add 2] [3 add 4]    => 3
+if false [1 add 2] [3 add 4]   => 7
+```
+
+**Lazy evaluation** — only the matching branch is evaluated:
+
+```
+if true 1 [10 div 0]           => 1       # no division error
+if false [10 div 0] 2          => 2       # no division error
+```
+
+**Falsy values:**
+
+```
+if 0 1 2                       => 2
+if "" 1 2                      => 2
+if none 1 2                    => 2
+```
+
+**Truthy values:**
+
+```
+if 1 10 20                     => 10
+if "yes" 10 20                 => 10
+if 42 10 20                    => 10
+```
+
+**Nested:**
+
+```
+if true (if false 1 2) 3       => 2
+if false 1 (if true 2 3)       => 2
+```
+
+
+### File I/O Words
+
+File operations use an internal `FileOps` interface rather than calling
+the Go `os` package directly. The default implementation uses the real
+file system with the process working directory for relative paths. A
+`MemFileOps` implementation is available for testing.
+
+File format handling is dispatched through a pluggable `Format`
+interface. Built-in formats are `text`, `json`, `jsonic`, and `lines`.
+Host applications can register custom formats via `RegisterFormat`.
+
+#### `read`
+
+Read a file and push its contents onto the stack. By default returns
+a string with line endings normalized to `\n`.
+
+*Signatures:*
+- `[string] -> [string]` — read file at path
+- `[string, map] -> [string|list|map]` — read with options
+
+*Precedence:* suffix
+
+```
+read "data.txt"                         # read as text
+"data.txt" read                         # prefix style
+read "config.json" {fmt:"json"}         # parse JSON to map/list
+read "config.jsonic" {fmt:"jsonic"}     # parse with jsonic (relaxed JSON)
+read "data.txt" {fmt:"lines"}           # split into list of strings
+read "raw.bin" {nl:"raw"}              # no line ending normalization
+```
+
+**Options map:**
+
+| Key    | Default   | Values                                     |
+|--------|-----------|--------------------------------------------|
+| `enc`  | `"utf8"`  | `"utf8"`, `"binary"`, `"latin1"`           |
+| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`  |
+| `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
+
+**Format details:**
+
+- `text` — raw string, no parsing
+- `json` — parse JSON to AQL map/list
+- `jsonic` — parse with jsonic (unquoted keys, trailing commas, etc.)
+- `lines` — split on `\n` into a list of strings
+
+**Line ending normalization:**
+
+- `"lf"` (default) — normalize all `\r\n` and `\r` to `\n`
+- `"crlf"` — normalize all to `\r\n`
+- `"raw"` — no normalization, content preserved as-is
+
+#### `write`
+
+Write content to a file. Returns the path written.
+
+*Signatures:*
+- `[string, string] -> [string]` — path, content -> path
+- `[string, string, map] -> [string]` — path, content, options -> path
+- `[string, any, map] -> [string]` — path, data, options (auto-serializes)
+
+*Precedence:* suffix
+
+```
+write "out.txt" "hello world"
+write "out.txt" (upper "hello")
+write "log.txt" "entry\n" {mode:"append"}
+write "out.txt" "a\nb\n" {nl:"crlf"}
+```
+
+**Options map:**
+
+| Key    | Default   | Values                                     |
+|--------|-----------|--------------------------------------------|
+| `enc`  | `"utf8"`  | `"utf8"`, `"binary"`, `"latin1"`           |
+| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`  |
+| `mode` | `"write"` | `"write"` (truncate), `"append"`           |
+| `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
+
+**Note:** With two string arguments of the same type, prefer suffix
+style (`write "path" "content"`) for clarity. The infix form
+`"content" write "path"` is ambiguous because the engine cannot
+distinguish path from content when both are strings.
+
+
 ## Type System
 
 Types form a slash-separated hierarchy. A child type matches a parent
@@ -1225,9 +1503,12 @@ longest argument list with narrowest types.
 
 ## Error Codes
 
-| Code              | Meaning                                |
-|-------------------|----------------------------------------|
-| `syntax_error`    | Unmatched parenthesis or malformed input |
-| `signature_error` | No matching signature for the given arguments |
-| `division_by_zero`| Division by zero in `div`              |
-| `modulo_by_zero`  | Modulo by zero in `mod`                |
+| Code              | Meaning                                          |
+|-------------------|--------------------------------------------------|
+| `syntax_error`    | Unmatched parenthesis or malformed input          |
+| `signature_error` | No matching signature for the given arguments     |
+| `division_by_zero`| Division by zero in `div`                         |
+| `modulo_by_zero`  | Modulo by zero in `mod`                           |
+| `cannot_compare`  | Ordering comparison on incompatible or non-orderable types |
+| `read`            | File read error (not found, invalid format, etc.) |
+| `write`           | File write error                                  |
