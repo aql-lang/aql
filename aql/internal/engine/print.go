@@ -5,9 +5,10 @@ import (
 	"strings"
 )
 
-// registerPrint registers the "print" word.
+// registerPrint registers the "print" and "printstr" words.
 // print consumes one value from the stack and writes its formatted
-// representation to the registry's Output writer:
+// representation to the registry's Output writer followed by a newline.
+// printstr does the same but without a trailing newline.
 //   - strings: printed as-is
 //   - maps/lists: printed as JSON-like text
 //   - tables: printed as a formatted table with column headers
@@ -23,6 +24,20 @@ func registerPrint(r *Registry) {
 		Signature{
 			Args:    []Type{TAny},
 			Handler: handler,
+		},
+	)
+
+	handlerStr := func(args []Value) ([]Value, error) {
+		v := args[0]
+		out := formatForPrint(v)
+		fmt.Fprint(r.Output, out)
+		return nil, nil
+	}
+
+	r.Register("printstr",
+		Signature{
+			Args:    []Type{TAny},
+			Handler: handlerStr,
 		},
 	)
 }

@@ -299,3 +299,39 @@ if false 1 (if true 2 3)	2
 # if - suffix style
 if true "yes" "no"	'yes'
 if false "yes" "no"	'no'
+
+# Partial application (currying) via def ... end
+# def creates a word whose body is the partial application of another word.
+
+# Arithmetic currying
+def add5 add 5 end 10 add5	15
+def sub1 sub 1 end 10 sub1	9
+def mul3 mul 3 end 4 mul3	12
+def div2 div 2 end 10 div2	5
+def mod3 mod 3 end 10 mod3	1
+
+# List-style def (quotation)
+def double [dup add] 5 double	10
+def square [dup mul] 7 square	49
+def inc [1 add] 1 inc inc inc	4
+
+# Curried boolean operators
+def and_true and true end false and_true	false
+def or_true or true end false or_true	true
+
+# Curried comparison operators
+def lt10 lt 10 end 5 lt10	true
+def gte0 gte 0 end 1 gte0	true
+
+# Curried string concatenation
+def greet add "hello " end greet "world"	'hello world'
+
+# Chaining curried words
+def add5 add 5 end def mul2 mul 2 end 3 add5 mul2	16
+def mul2 mul 2 end def add5 add 5 end 3 mul2 add5	11
+
+# Curried words in parentheses
+def add5 add 5 end (3 add5) mul 2	16
+
+# Composing curried words
+def add5 add 5 end def add5_twice [add5 add5] 10 add5_twice	20

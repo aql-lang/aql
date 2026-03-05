@@ -173,6 +173,56 @@ func TestPrintEmptyTable(t *testing.T) {
 	}
 }
 
+func TestPrintstrString(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+
+	runAQL(t, r, []Value{NewWord("printstr"), NewString("hello")})
+
+	got := buf.String()
+	if got != "hello" {
+		t.Errorf("printstr string: got %q, want %q", got, "hello")
+	}
+}
+
+func TestPrintstrNoNewline(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+
+	runAQL(t, r, []Value{NewWord("printstr"), NewString("abc")})
+
+	got := buf.String()
+	if strings.Contains(got, "\n") {
+		t.Errorf("printstr should not emit newline, got %q", got)
+	}
+}
+
+func TestPrintstrInteger(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+
+	runAQL(t, r, []Value{NewWord("printstr"), NewInteger(42)})
+
+	got := buf.String()
+	if got != "42" {
+		t.Errorf("printstr integer: got %q, want %q", got, "42")
+	}
+}
+
+func TestPrintstrConsumesValue(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+
+	result := runAQL(t, r, []Value{NewWord("printstr"), NewString("gone")})
+	if len(result) != 0 {
+		t.Errorf("printstr should consume value, stack has %d items", len(result))
+	}
+}
+
 func TestFormatValueJSON(t *testing.T) {
 	tests := []struct {
 		name string

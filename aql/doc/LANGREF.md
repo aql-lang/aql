@@ -849,6 +849,46 @@ def inc [1 add]
 1 inc inc inc               => 4
 ```
 
+**Partial application via `def ... end`.** When a word inside a `def`
+body does not receive all of its arguments, the word and its collected
+arguments are packaged together. The resulting definition acts as a
+partially applied function — supply the remaining arguments on use.
+
+```
+def add5 add 5 end
+10 add5                     => 15
+
+def mul3 mul 3 end
+4 mul3                      => 12
+
+def sub1 sub 1 end
+10 sub1                     => 9
+```
+
+This works for all words, not just arithmetic:
+
+```
+def greet add "hello " end
+greet "world"               => 'hello world'
+
+def lt10 lt 10 end
+5 lt10                      => true
+
+def and_true and true end
+false and_true              => false
+```
+
+Curried words compose naturally:
+
+```
+def add5 add 5 end
+def mul2 mul 2 end
+3 add5 mul2                 => 16
+
+def add5_twice [add5 add5]
+10 add5_twice               => 20
+```
+
 Definitions stack: a second `def` for the same name shadows the
 previous one.
 
@@ -1291,6 +1331,38 @@ base none              => none
 ```
 
 
+### Output Words
+
+#### `print`
+
+Print a value to the output writer, followed by a newline. Strings
+are printed as-is (no quotes); maps and lists use JSON-like formatting;
+tables are printed as aligned text with column headers. The value is
+consumed (removed from the stack).
+
+*Signature:* `[any] -> []`
+*Precedence:* suffix
+
+```
+print "hello"               # outputs: hello\n
+print 42                    # outputs: 42\n
+print {x:1,y:2}            # outputs: {"x": 1, "y": 2}\n
+```
+
+#### `printstr`
+
+Same as `print` but does **not** emit a trailing newline. Useful for
+building output incrementally or for prompts.
+
+*Signature:* `[any] -> []`
+*Precedence:* suffix
+
+```
+printstr "hello "           # outputs: hello  (no newline)
+printstr 42                 # outputs: 42     (no newline)
+```
+
+
 ### Conditional Words
 
 #### `if`
@@ -1460,6 +1532,163 @@ write "out.txt" "a\nb\n" {nl:"crlf"}
 style (`write "path" "content"`) for clarity. The infix form
 `"content" write "path"` is ambiguous because the engine cannot
 distinguish path from content when both are strings.
+
+#### `stdin`
+
+Push the special stdin path onto the stack. Use with `read` to read
+from standard input.
+
+*Signature:* `[] -> [string]`
+
+```
+read stdin                          # read all of stdin as text
+read stdin {fmt:"json"}            # parse stdin as JSON
+read stdin {fmt:"lines"}           # split stdin into lines
+```
+
+#### `stdout`
+
+Push the special stdout path onto the stack. Use with `write` to
+write to standard output.
+
+*Signature:* `[] -> [string]`
+
+```
+write stdout "hello"               # write to stdout
+write stdout (upper "hello")       # write computed value to stdout
+```
+
+#### `stderr`
+
+Push the special stderr path onto the stack. Use with `write` to
+write to standard error.
+
+*Signature:* `[] -> [string]`
+
+```
+write stderr "error message"       # write to stderr
+```
+
+### Query Words
+
+Query words filter, sort, and limit table data using SQL-like syntax.
+Tables are backed by SQLite when loaded via `read` with a tabular
+format (CSV, TSV). Non-SQLite tables are transparently loaded into a
+temporary SQLite table for query execution.
+
+#### `select`
+
+Select columns from a table. Use `*` (or `star`) for all columns,
+or a list of column names. Column aliases use nested lists.
+
+*Signatures:*
+- `[atom("*"), table] -> [table]` — select all columns
+- `[list, table] -> [table]` — select named columns
+
+*Precedence:* suffix
+
+```
+select * from people                          # all columns
+select [name, age] from people                # named columns
+select [[name n], age] from people            # alias: name AS n
+select star from people                       # star word = *
+```
+
+#### `from`
+
+Look up a named table from the registry store.
+
+*Signature:* `[atom] -> [table]`
+
+*Precedence:* suffix
+
+```
+set people ("file/people.csv" read)
+from people                                   # retrieve the table
+```
+
+#### `where`
+
+Filter table rows using a condition list. Conditions use the
+format `[column op value]` with optional `and`/`or` connectors.
+
+Supported operators: `eq` (=), `lt` (<), `gt` (>), `lte` (<=),
+`gte` (>=), `like` (LIKE).
+
+*Signature:* `[condition-list, table] -> [table]`
+
+*Precedence:* 1
+
+```
+from people where [age gt "25"]
+from people where [city eq "Paris"]
+from people where [age gt "20" and city eq "Paris"]
+from people where [name like "A%"]
+```
+
+#### `order`
+
+Sort table rows. Accepts a column name (atom) or a list of columns
+with optional `asc`/`desc` direction.
+
+*Signatures:*
+- `[atom, table] -> [table]` — order by single column
+- `[list, table] -> [table]` — order by column list
+
+*Precedence:* 1
+
+```
+from people order name
+from people order [name]
+from people order [name desc]
+from people order [city asc, name desc]
+```
+
+#### `by`
+
+Syntactic sugar for `order by` style expressions. Wraps atom
+arguments into a single-element list so `order` always receives a
+list. List arguments pass through unchanged.
+
+*Signatures:*
+- `[atom] -> [list]`
+- `[list] -> [list]`
+
+```
+from people order by name
+from people order by [name desc]
+```
+
+#### `limit`
+
+Restrict the number of rows returned.
+
+*Signature:* `[integer, table] -> [table]`
+
+*Precedence:* 1
+
+```
+from people limit 2
+from people limit 1
+```
+
+#### Chaining
+
+Query words can be chained. Each operation produces a table that
+the next operation consumes.
+
+```
+from people where [age gt "20"] order name
+from people where [age gt "20"] limit 2
+from people order name limit 2
+from people where [age gt "20"] order [name] limit 1
+```
+
+Use parentheses for column projection with filtering:
+
+```
+select [name] (from people where [city eq "Paris"])
+```
 
 
 ## Type System

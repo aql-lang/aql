@@ -24,11 +24,18 @@ type Registry struct {
 	DefStacks map[string][]Value // stacked bodies for def-defined words
 	FileOps   fileops.FileOps    // file operations for read/write words
 	Formats   map[string]Format  // format registry for read/write (keyed by name)
-	Output    io.Writer          // output writer for print word
+	Output    io.Writer          // output writer for print/printstr and stdout
+	ErrOutput io.Writer          // error output writer for stderr
+	Input     io.Reader          // input reader for stdin
+	SQLite    *SQLiteStore       // in-memory SQLite store for table data
 }
 
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry {
+	sqlStore, err := NewSQLiteStore()
+	if err != nil {
+		panic("failed to initialize SQLite store: " + err.Error())
+	}
 	return &Registry{
 		funcs:     make(map[string]*Function),
 		Store:     make(map[string]Value),
@@ -36,6 +43,9 @@ func NewRegistry() *Registry {
 		FileOps:   fileops.NewDefault(),
 		Formats:   DefaultFormats(),
 		Output:    os.Stdout,
+		ErrOutput: os.Stderr,
+		Input:     os.Stdin,
+		SQLite:    sqlStore,
 	}
 }
 
@@ -223,6 +233,7 @@ func registerBuiltins(r *Registry) {
 	registerTypeof(r)
 	registerBase(r)
 	registerFileIO(r)
+	registerQuery(r)
 	registerIf(r)
 	registerPrint(r)
 }

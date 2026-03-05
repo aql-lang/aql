@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -300,5 +301,144 @@ func TestWriteCRLF(t *testing.T) {
 	content := string(mem.Files["out.txt"])
 	if content != "a\r\nb\r\n" {
 		t.Errorf("file content: got %q, want %q", content, "a\r\nb\r\n")
+	}
+}
+
+// --- stdio word tests ---
+
+// runWithStdio creates a registry with custom stdin/stdout/stderr and runs AQL.
+func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stack string, err error) {
+	t.Helper()
+	reg := engine.DefaultRegistry()
+	reg.SetFileOps(fileops.NewMem())
+
+	var outBuf, errBuf bytes.Buffer
+	reg.Output = &outBuf
+	reg.ErrOutput = &errBuf
+	reg.Input = strings.NewReader(stdin)
+
+	values, parseErr := parser.Parse(expr)
+	if parseErr != nil {
+		return "", "", "", parseErr
+	}
+
+	eng := engine.New(reg)
+	result, runErr := eng.Run(values)
+	if runErr != nil {
+		return outBuf.String(), errBuf.String(), "", runErr
+	}
+
+	return outBuf.String(), errBuf.String(), formatStack(result), nil
+}
+
+func TestStdinWord(t *testing.T) {
+	// stdin should push a special path string.
+	reg := engine.DefaultRegistry()
+	reg.SetFileOps(fileops.NewMem())
+	var buf bytes.Buffer
+	reg.Output = &buf
+
+	values, err := parser.Parse(`stdin`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := engine.New(reg)
+	result, err := eng.Run(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := formatStack(result)
+	if got != "'<stdin>'" {
+		t.Errorf("stdin word: got %s, want '<stdin>'", got)
+	}
+}
+
+func TestStdoutWord(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	values, err := parser.Parse(`stdout`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := engine.New(reg)
+	result, err := eng.Run(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := formatStack(result)
+	if got != "'<stdout>'" {
+		t.Errorf("stdout word: got %s, want '<stdout>'", got)
+	}
+}
+
+func TestStderrWord(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	values, err := parser.Parse(`stderr`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := engine.New(reg)
+	result, err := eng.Run(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := formatStack(result)
+	if got != "'<stderr>'" {
+		t.Errorf("stderr word: got %s, want '<stderr>'", got)
+	}
+}
+
+func TestReadStdin(t *testing.T) {
+	_, _, stack, err := runWithStdio(t, "hello from stdin", `read stdin`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stack != "'hello from stdin'" {
+		t.Errorf("read stdin: got %s, want 'hello from stdin'", stack)
+	}
+}
+
+func TestWriteStdout(t *testing.T) {
+	stdout, _, stack, err := runWithStdio(t, "", `write stdout "hello out"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stdout != "hello out" {
+		t.Errorf("stdout content: got %q, want %q", stdout, "hello out")
+	}
+	if stack != "'<stdout>'" {
+		t.Errorf("return value: got %s, want '<stdout>'", stack)
+	}
+}
+
+func TestWriteStderr(t *testing.T) {
+	_, stderr, stack, err := runWithStdio(t, "", `write stderr "error msg"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stderr != "error msg" {
+		t.Errorf("stderr content: got %q, want %q", stderr, "error msg")
+	}
+	if stack != "'<stderr>'" {
+		t.Errorf("return value: got %s, want '<stderr>'", stack)
+	}
+}
+
+func TestReadStdinWithFormat(t *testing.T) {
+	_, _, stack, err := runWithStdio(t, `{"x":1}`, `read stdin {fmt:"json"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stack != "{x:1}" {
+		t.Errorf("read stdin json: got %s, want {x:1}", stack)
+	}
+}
+
+func TestReadStdinLines(t *testing.T) {
+	_, _, stack, err := runWithStdio(t, "aaa\nbbb\nccc", `read stdin {fmt:"lines"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stack != "['aaa','bbb','ccc']" {
+		t.Errorf("read stdin lines: got %s, want ['aaa','bbb','ccc']", stack)
 	}
 }
