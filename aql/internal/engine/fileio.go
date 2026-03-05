@@ -2,10 +2,31 @@ package engine
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
+
+// formatFromExt returns the format name based on the file extension.
+// Returns empty string if the extension is not recognized.
+func formatFromExt(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".csv":
+		return "csv"
+	case ".tsv":
+		return "tsv"
+	case ".json":
+		return "json"
+	case ".jsonic":
+		return "jsonic"
+	case ".txt":
+		return "text"
+	default:
+		return ""
+	}
+}
 
 // normalizeLineEndings replaces all \r\n and \r with \n.
 func normalizeLineEndings(s string) string {
@@ -39,7 +60,8 @@ func applyNL(content string, nl string) string {
 }
 
 // parseFileOpts extracts options from an AQL map value.
-func parseFileOpts(opts Value) (enc, format, mode, nl string) {
+// fmtExplicit is true if the user explicitly set the fmt option.
+func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) {
 	enc = "utf8"
 	format = "text"
 	mode = "write"
@@ -55,6 +77,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string) {
 	}
 	if v, ok := m.Get("fmt"); ok && v.VType.Matches(TString) {
 		format = v.AsString()
+		fmtExplicit = true
 	}
 	if v, ok := m.Get("mode"); ok && v.VType.Matches(TString) {
 		mode = v.AsString()
@@ -169,13 +192,23 @@ func registerFileIO(r *Registry) {
 	// read: [string] -> [string|list|map]
 	readHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
-		return doRead(r, path, "utf8", "text", "lf")
+		format := formatFromExt(path)
+		if format == "" {
+			format = "text"
+		}
+		return doRead(r, path, "utf8", format, "lf")
 	}
 
 	// read: [string, map] -> [string|list|map]
 	readOptsHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
-		enc, format, _, nl := parseFileOpts(args[1])
+		enc, format, _, nl, fmtExplicit := parseFileOpts(args[1])
+		// If fmt was not explicitly set, use file extension.
+		if !fmtExplicit {
+			if extFmt := formatFromExt(path); extFmt != "" {
+				format = extFmt
+			}
+		}
 		return doRead(r, path, enc, format, nl)
 	}
 
@@ -201,14 +234,14 @@ func registerFileIO(r *Registry) {
 	writeOptsHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
 		content := args[1].AsString()
-		enc, format, mode, nl := parseFileOpts(args[2])
+		enc, format, mode, nl, _ := parseFileOpts(args[2])
 		return doWrite(r, path, content, enc, format, mode, nl)
 	}
 
 	// write: [string, any, map] -> [string] (for non-string data with fmt)
 	writeAnyOptsHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
-		_, format, mode, nl := parseFileOpts(args[2])
+		_, format, mode, nl, _ := parseFileOpts(args[2])
 		if format == "text" {
 			format = "jsonic"
 		}

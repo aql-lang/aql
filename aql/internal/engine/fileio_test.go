@@ -68,7 +68,7 @@ func TestApplyNL(t *testing.T) {
 
 func TestParseFileOpts(t *testing.T) {
 	// Default opts from non-map value
-	enc, format, mode, nl := parseFileOpts(NewInteger(0))
+	enc, format, mode, nl, _ := parseFileOpts(NewInteger(0))
 	if enc != "utf8" || format != "text" || mode != "write" || nl != "lf" {
 		t.Errorf("defaults wrong: enc=%s fmt=%s mode=%s nl=%s", enc, format, mode, nl)
 	}
@@ -79,7 +79,7 @@ func TestParseFileOpts(t *testing.T) {
 	m.Set("fmt", NewString("json"))
 	m.Set("mode", NewString("append"))
 	m.Set("nl", NewString("crlf"))
-	enc, format, mode, nl = parseFileOpts(NewMap(m))
+	enc, format, mode, nl, _ = parseFileOpts(NewMap(m))
 	if enc != "binary" {
 		t.Errorf("enc = %s, want binary", enc)
 	}
@@ -97,7 +97,7 @@ func TestParseFileOpts(t *testing.T) {
 func TestParseFileOptsPartial(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("fmt", NewString("lines"))
-	enc, format, mode, nl := parseFileOpts(NewMap(m))
+	enc, format, mode, nl, _ := parseFileOpts(NewMap(m))
 	if enc != "utf8" || format != "lines" || mode != "write" || nl != "lf" {
 		t.Errorf("partial opts wrong: enc=%s fmt=%s mode=%s nl=%s", enc, format, mode, nl)
 	}

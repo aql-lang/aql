@@ -826,3 +826,129 @@ func TestValToString(t *testing.T) {
 		})
 	}
 }
+
+func TestEngineReadCSVByExtension(t *testing.T) {
+	r := DefaultRegistry()
+	mem := fileops.NewMem()
+	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
+	r.SetFileOps(mem)
+
+	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.csv")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.IsTableType() {
+		t.Fatalf("expected table type, got %s", v.VType)
+	}
+	rows := v.AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	nameVal, ok := r0.Get("name")
+	if !ok {
+		t.Fatal("expected 'name' key")
+	}
+	if nameVal.AsString() != "Alice" {
+		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	}
+}
+
+func TestEngineReadTSVByExtension(t *testing.T) {
+	r := DefaultRegistry()
+	mem := fileops.NewMem()
+	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
+	r.SetFileOps(mem)
+
+	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.tsv")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.IsTableType() {
+		t.Fatalf("expected table type, got %s", v.VType)
+	}
+	rows := v.AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestEngineReadCSVExplicitFormat(t *testing.T) {
+	r := DefaultRegistry()
+	mem := fileops.NewMem()
+	mem.Files["data.txt"] = []byte("a,b\n1,2")
+	r.SetFileOps(mem)
+
+	opts := NewOrderedMap()
+	opts.Set("fmt", NewString("csv"))
+	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.txt"), NewMap(opts)})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.IsTableType() {
+		t.Fatalf("expected table type, got %s", v.VType)
+	}
+}
+
+func TestEngineReadOverrideExtension(t *testing.T) {
+	r := DefaultRegistry()
+	mem := fileops.NewMem()
+	mem.Files["data.csv"] = []byte("hello,world")
+	r.SetFileOps(mem)
+
+	opts := NewOrderedMap()
+	opts.Set("fmt", NewString("text"))
+	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.csv"), NewMap(opts)})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	// With text format, we get a plain string, not a table
+	if result[0].IsTableType() {
+		t.Error("expected non-table type with text format override")
+	}
+	if result[0].AsString() != "hello,world" {
+		t.Errorf("got %q, want %q", result[0].AsString(), "hello,world")
+	}
+}
+
+func TestEngineReadJSONByExtension(t *testing.T) {
+	r := DefaultRegistry()
+	mem := fileops.NewMem()
+	mem.Files["data.json"] = []byte(`{"key":"value"}`)
+	r.SetFileOps(mem)
+
+	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.json")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if !result[0].VType.Equal(TMap) {
+		t.Errorf("expected map type, got %s", result[0].VType)
+	}
+}
+
+func TestFormatFromExt(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"file.csv", "csv"},
+		{"file.tsv", "tsv"},
+		{"file.json", "json"},
+		{"file.jsonic", "jsonic"},
+		{"file.txt", "text"},
+		{"file.unknown", ""},
+		{"file", ""},
+		{"path/to/data.CSV", "csv"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := formatFromExt(tt.path)
+			if got != tt.want {
+				t.Errorf("formatFromExt(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}

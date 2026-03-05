@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestTextFormatDecode(t *testing.T) {
 	f := &TextFormat{}
@@ -162,9 +165,217 @@ func TestLinesFormatEncodeNonList(t *testing.T) {
 
 func TestDefaultFormats(t *testing.T) {
 	fmts := DefaultFormats()
-	for _, name := range []string{"text", "json", "jsonic", "lines"} {
+	for _, name := range []string{"text", "json", "jsonic", "lines", "csv", "tsv"} {
 		if _, ok := fmts[name]; !ok {
 			t.Errorf("missing format: %s", name)
 		}
+	}
+}
+
+// --- CSV format tests ---
+
+func TestCSVFormatDecode(t *testing.T) {
+	f := &CSVFormat{}
+	result, err := f.Decode("name,age\nAlice,30\nBob,25")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+
+	v := result[0]
+	if !v.IsTableType() {
+		t.Fatalf("expected table type, got %s", v)
+	}
+
+	rows := v.AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	// Check first row
+	r0 := rows[0].AsMap()
+	nameVal, ok := r0.Get("name")
+	if !ok {
+		t.Fatal("expected 'name' key")
+	}
+	if nameVal.AsString() != "Alice" {
+		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	}
+	ageVal, ok := r0.Get("age")
+	if !ok {
+		t.Fatal("expected 'age' key")
+	}
+	if ageVal.AsString() != "30" {
+		t.Errorf("age = %q, want %q", ageVal.AsString(), "30")
+	}
+
+	// Check second row
+	r1 := rows[1].AsMap()
+	nameVal, _ = r1.Get("name")
+	if nameVal.AsString() != "Bob" {
+		t.Errorf("name = %q, want %q", nameVal.AsString(), "Bob")
+	}
+}
+
+func TestCSVFormatDecodeEmpty(t *testing.T) {
+	f := &CSVFormat{}
+	result, err := f.Decode("name,age\n")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestCSVFormatDecodeQuoted(t *testing.T) {
+	f := &CSVFormat{}
+	result, err := f.Decode("a,b\n\"hello, world\",2\n")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	m := rows[0].AsMap()
+	aVal, _ := m.Get("a")
+	if aVal.AsString() != "hello, world" {
+		t.Errorf("a = %q, want %q", aVal.AsString(), "hello, world")
+	}
+}
+
+func TestCSVFormatDecodeTableSchema(t *testing.T) {
+	f := &CSVFormat{}
+	result, err := f.Decode("x,y\n1,2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := result[0]
+	tt := v.AsTableType()
+	fields := tt.Record.Fields
+	if fields.Len() != 2 {
+		t.Errorf("expected 2 fields, got %d", fields.Len())
+	}
+	xType, ok := fields.Get("x")
+	if !ok {
+		t.Fatal("expected field 'x'")
+	}
+	if !xType.VType.Equal(TString) {
+		t.Errorf("expected string type for x, got %s", xType.VType)
+	}
+}
+
+func TestCSVFormatEncode(t *testing.T) {
+	f := &CSVFormat{}
+	// Create a table data value
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	r0 := NewOrderedMap()
+	r0.Set("age", NewString("30"))
+	r0.Set("name", NewString("Alice"))
+	r1 := NewOrderedMap()
+	r1.Set("age", NewString("25"))
+	r1.Set("name", NewString("Bob"))
+
+	table := Value{VType: TList, Data: TableData{
+		Record: rec,
+		Rows:   []Value{NewMap(r0), NewMap(r1)},
+	}}
+
+	s, err := f.Encode(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "name") || !strings.Contains(s, "age") {
+		t.Errorf("encoded CSV missing headers: %q", s)
+	}
+	if !strings.Contains(s, "Alice") || !strings.Contains(s, "Bob") {
+		t.Errorf("encoded CSV missing data: %q", s)
+	}
+}
+
+func TestCSVFormatEncodeQuoted(t *testing.T) {
+	f := &CSVFormat{}
+	fields := NewOrderedMap()
+	fields.Set("a", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	r0 := NewOrderedMap()
+	r0.Set("a", NewString("hello, world"))
+	table := Value{VType: TList, Data: TableData{
+		Record: rec,
+		Rows:   []Value{NewMap(r0)},
+	}}
+	s, err := f.Encode(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, `"hello, world"`) {
+		t.Errorf("expected quoted field in: %q", s)
+	}
+}
+
+// --- TSV format tests ---
+
+func TestTSVFormatDecode(t *testing.T) {
+	f := &TSVFormat{}
+	result, err := f.Decode("name\tage\nAlice\t30\nBob\t25")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+
+	v := result[0]
+	if !v.IsTableType() {
+		t.Fatalf("expected table type, got %s", v)
+	}
+
+	rows := v.AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	r0 := rows[0].AsMap()
+	nameVal, _ := r0.Get("name")
+	if nameVal.AsString() != "Alice" {
+		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	}
+}
+
+func TestTSVFormatEncode(t *testing.T) {
+	f := &TSVFormat{}
+	fields := NewOrderedMap()
+	fields.Set("a", NewTypeLiteral(TString))
+	fields.Set("b", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	r0 := NewOrderedMap()
+	r0.Set("a", NewString("x"))
+	r0.Set("b", NewString("y"))
+	table := Value{VType: TList, Data: TableData{
+		Record: rec,
+		Rows:   []Value{NewMap(r0)},
+	}}
+	s, err := f.Encode(table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "a\tb") {
+		t.Errorf("expected tab-separated headers in: %q", s)
+	}
+	if !strings.Contains(s, "x\ty") {
+		t.Errorf("expected tab-separated data in: %q", s)
 	}
 }
