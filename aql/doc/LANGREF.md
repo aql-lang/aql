@@ -1646,11 +1646,12 @@ from people order [city asc, name desc]
 
 #### `by`
 
-Syntactic sugar for `order by` style expressions. Identity
-pass-through so `order by name` reads naturally.
+Syntactic sugar for `order by` style expressions. Wraps atom
+arguments into a single-element list so `order` always receives a
+list. List arguments pass through unchanged.
 
 *Signatures:*
-- `[atom] -> [atom]`
+- `[atom] -> [list]`
 - `[list] -> [list]`
 
 ```

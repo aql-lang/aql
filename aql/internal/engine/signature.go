@@ -72,8 +72,9 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // flexibleMatch checks whether values can be reordered to match the given types.
-// - Try positional (identity) first.
-// - For 2 args with distinct types, try swap.
+// Tries positional (identity) first, then permutations for N <= 6.
+// Among valid permutations, prefers the one closest to the original order
+// (fewest displacements), with positional always winning if it matches.
 // Returns the values reordered to match types, or false.
 func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
 	n := len(types)
@@ -81,20 +82,80 @@ func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
 		return nil, false
 	}
 
-	// Try positional first.
+	// Try positional first — always preferred.
 	if positionalMatch(values, types) {
 		return values, true
 	}
 
-	// For 2 args, try swap.
-	if n == 2 {
-		swapped := []Value{values[1], values[0]}
-		if positionalMatch(swapped, types) {
-			return swapped, true
-		}
+	// Try permutations for small N.
+	if n >= 2 && n <= 6 {
+		return permMatch(values[:n], types)
 	}
 
 	return nil, false
+}
+
+// permMatch finds a permutation of values that matches types.
+// Among valid permutations, returns the one with fewest displacements
+// from the original order (most values staying in place).
+func permMatch(values []Value, types []Type) ([]Value, bool) {
+	n := len(values)
+	perm := make([]int, n)
+	for i := range perm {
+		perm[i] = i
+	}
+
+	var bestPerm []int
+	bestDisplaced := n + 1
+
+	// Generate all permutations via Heap's algorithm.
+	var generate func(k int)
+	generate = func(k int) {
+		if k == 1 {
+			// Check this permutation.
+			match := true
+			for i, t := range types {
+				if !values[perm[i]].VType.Matches(t) {
+					match = false
+					break
+				}
+			}
+			if match {
+				displaced := 0
+				for i := range perm {
+					if perm[i] != i {
+						displaced++
+					}
+				}
+				if displaced < bestDisplaced {
+					bestDisplaced = displaced
+					bestPerm = make([]int, n)
+					copy(bestPerm, perm)
+				}
+			}
+			return
+		}
+		for i := 0; i < k; i++ {
+			generate(k - 1)
+			if k%2 == 0 {
+				perm[i], perm[k-1] = perm[k-1], perm[i]
+			} else {
+				perm[0], perm[k-1] = perm[k-1], perm[0]
+			}
+		}
+	}
+
+	generate(n)
+
+	if bestPerm == nil {
+		return nil, false
+	}
+
+	result := make([]Value, n)
+	for i, idx := range bestPerm {
+		result[i] = values[idx]
+	}
+	return result, true
 }
 
 // positionalMatch checks whether values match types in order.

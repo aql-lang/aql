@@ -102,58 +102,65 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// order: [any(suffix), table(prefix)] -> [table]
+	// order: [columns(suffix), table(prefix)] -> [table]
 	// Sorts table rows using ORDER BY. Accepts a column atom or a list
 	// of columns with optional asc/desc direction.
 	// Usage: from people order name
 	//        from people order [name desc]
 	//        from people order by name
 	//        from people order by [name desc]
-	orderHandler := func(args []Value) ([]Value, error) {
-		// With [TAny, TList], flexibleMatch may order args either way
-		// depending on types. Disambiguate by checking which arg is the table.
-		spec, table := args[0], args[1]
+	orderListHandler := func(args []Value) ([]Value, error) {
+		table := args[0]   // prefix: table from stack
+		colList := args[1] // suffix: column list
+
 		td, ok := table.Data.(TableData)
 		if !ok {
-			// Try swapped order.
-			spec, table = args[1], args[0]
-			td, ok = table.Data.(TableData)
-			if !ok {
-				return nil, fmt.Errorf("order: argument is not a table")
-			}
+			return nil, fmt.Errorf("order: argument is not a table")
 		}
 
-		var clause string
-		var err error
-		if spec.VType.Equal(TAtom) {
-			clause = quoteIdent(spec.AsAtom())
-		} else if spec.VType.Equal(TList) {
-			clause, err = buildOrderClause(spec)
-			if err != nil {
-				return nil, fmt.Errorf("order: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("order: expected column name or list, got %s", spec.VType)
+		clause, err := buildOrderClause(colList)
+		if err != nil {
+			return nil, fmt.Errorf("order: %w", err)
 		}
 
 		return doTableQuery(r, td, " ORDER BY "+clause)
 	}
 
+	orderAtomHandler := func(args []Value) ([]Value, error) {
+		// flexibleMatch reorders [TList, TAtom] -> [TAtom, TList]
+		col := args[0]   // column name (TAtom)
+		table := args[1] // table (TList)
+
+		td, ok := table.Data.(TableData)
+		if !ok {
+			return nil, fmt.Errorf("order: argument is not a table")
+		}
+
+		clause := quoteIdent(col.AsAtom())
+		return doTableQuery(r, td, " ORDER BY "+clause)
+	}
+
 	r.Register("order",
 		Signature{
-			Args:       []Type{TAny, TList},
+			Args:       []Type{TList, TList},
 			Precedence: 1,
-			Handler:    orderHandler,
+			Handler:    orderListHandler,
+		},
+		Signature{
+			Args:       []Type{TAtom, TList},
+			Precedence: 1,
+			Handler:    orderAtomHandler,
 		},
 	)
 
-	// by: [atom] -> [atom], [list] -> [list]
-	// Identity pass-through. Syntactic sugar so "order by name" reads naturally.
+	// by: [atom] -> [list], [list] -> [list]
+	// Syntactic sugar so "order by name" reads naturally.
+	// Wraps atoms into a list so "order" always receives TList from "by".
 	r.Register("by",
 		Signature{
 			Args: []Type{TAtom},
 			Handler: func(args []Value) ([]Value, error) {
-				return args, nil
+				return []Value{NewList(args)}, nil
 			},
 		},
 		Signature{
