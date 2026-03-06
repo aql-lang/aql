@@ -379,6 +379,7 @@ func registerBuiltins(r *Registry) {
 	registerPrint(r)
 	registerDot(r)
 	registerDotr(r)
+	registerTrace(r)
 }
 
 // valToString converts any scalar Value to its string representation.

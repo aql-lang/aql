@@ -21,11 +21,16 @@ var typeNames = map[string]Type{
 // so that most insert/splice operations avoid heap allocation.
 const stackHeadroom = 8
 
+// TraceCallback is called before each step of execution when tracing is enabled.
+// It receives the step number, pointer position, full stack, and stack length.
+type TraceCallback func(step int, pointer int, stack []Value)
+
 // Engine is the AQL stack machine.
 type Engine struct {
 	stack    []Value
 	pointer  int
 	registry *Registry
+	trace    TraceCallback
 }
 
 // New creates an Engine with the given function registry.
@@ -92,6 +97,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		}
 
 		val := e.stack[e.pointer]
+
+		if e.trace != nil {
+			snapshot := make([]Value, len(e.stack))
+			copy(snapshot, e.stack)
+			e.trace(step, e.pointer, snapshot)
+		}
 
 		switch {
 		case val.IsWord():
