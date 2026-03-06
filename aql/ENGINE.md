@@ -16,19 +16,33 @@ Most specific being longest with narrowest types.
 
 The usual forth style primitives are provided by the system: dup, swap, etc.
 
-Suffix arguments are supported as follows. Some function signatures
-may specify that they are forward matches. If such a signature has
-precedence, sufficent future tokens must be resolved to check for a
-match.  In this case a new primitive, forward, is placed on the stack,
-which stores internal accounting to manipulate the stack so that the
-primary function will ultimately find its expected arguments in order
-at the top of the stack. To make this work, ALL functions have an
-implicit signature that checks for a forward value (very low
-precedence) and performs appropriate stack manipulation.
+Some words can use future tokens as if they were on the stack
+already. This is called suffix precedence.
 
-Function call syntax allows for explicit selection of signature by
-specifying the number of arguments needed, and whether they are prefix
-or suffix arguments.
+All words should use suffix precedence unless explicitly defined to
+have prefix only args. The traditional forth words such as dup, swap,
+drop, etc always have prefix only args. Everything else has suffix
+precedence. For suffix precedence, the engine signature matching
+should attempt to find the longest and most specific match against
+future tokens. Partial matches are then completed by looking prefix
+values, that is, the stack. Precedence levels can be used to give some
+words higher precedence than others.
+
+NOTE: once a signature match has been found, the engine should move
+the matched future tokens to stack, in reverse order. Thus the
+internal code of the function always operates as if all arg were
+prefix args.
+
+Here are some examples ([|] indicates the state of the stack: [current|future]):
+* def catter fn [[integer string] [string] [add]]
+   * [1 "a"|] -> catter -> ["a1"|] 
+   * [2|] -> catter "b" -> ["b2"|]  # as if stack was [2 "b"|]
+   * [|] -> catter "c" 3 -> ["c3"|] # as if stack was [3 "c"|]
+
+Review the signature matching and word argument arrangement and adjust
+if necessary. also review the forward mechanism to see if it is
+actually needed
+
 
 
 
