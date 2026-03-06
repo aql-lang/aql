@@ -679,6 +679,18 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			// Type literal (already resolved by parser)
 			params = append(params, FnParam{Type: elem.VType})
 
+		case elem.VType.Matches(TInteger):
+			// Integer literal as type constraint (e.g., 0 matches number/integer/0)
+			params = append(params, FnParam{Type: elem.VType})
+
+		case elem.VType.Matches(TBoolean):
+			// Boolean literal as type constraint
+			params = append(params, FnParam{Type: elem.VType})
+
+		case elem.VType.Matches(TString):
+			// String literal as type constraint
+			params = append(params, FnParam{Type: elem.VType})
+
 		default:
 			return nil, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
 		}
@@ -698,6 +710,10 @@ func resolveSigType(v Value) Type {
 	}
 	if v.VType.Matches(TString) {
 		return resolveTypeName(v.AsString())
+	}
+	// Literal values (integers, booleans) carry their literal type.
+	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
+		return v.VType
 	}
 	return TAny
 }

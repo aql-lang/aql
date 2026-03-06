@@ -743,6 +743,91 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 	}
 }
 
+func TestIntegerLiteralType(t *testing.T) {
+	// NewInteger encodes literal value in type path: number/integer/5
+	v := NewInteger(5)
+	if !v.VType.Matches(TInteger) {
+		t.Errorf("NewInteger(5).VType = %s, want matches number/integer", v.VType)
+	}
+	if !v.VType.Matches(TNumber) {
+		t.Errorf("NewInteger(5).VType = %s, want matches number", v.VType)
+	}
+	// Different integers have different types
+	v0 := NewInteger(0)
+	v1 := NewInteger(1)
+	if v0.VType.Equal(v1.VType) {
+		t.Errorf("NewInteger(0) and NewInteger(1) should have different types")
+	}
+	// But both match integer
+	if !v0.VType.Matches(TInteger) || !v1.VType.Matches(TInteger) {
+		t.Error("both should match integer")
+	}
+}
+
+func TestEngineFnLiteralType(t *testing.T) {
+	r := DefaultRegistry()
+	// def adder fn [[0] [integer] [add 2]] end
+	// adder only matches the value 0, adds 2 to it
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(2)}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(0), NewWord("adder"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("0 adder = %v, want 2", result)
+	}
+}
+
+func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
+	r := DefaultRegistry()
+	// def adder fn [[0] [integer] [add 2]] end
+	// adder should NOT match 5 (only matches 0)
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(2)}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("adder"),
+	})
+	if err == nil {
+		t.Error("expected error: adder should not match 5")
+	}
+}
+
+func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
+	r := DefaultRegistry()
+	// def handler fn [[0] [integer] [add 10] [1] [integer] [add 20]] end
+	// handler 0 → 10, handler 1 → 21
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(10)}),
+		NewList([]Value{NewInteger(1)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(20)}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(0), NewWord("handler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("0 handler = %v, want 10", result)
+	}
+
+	result = runAQL(t, r, []Value{
+		NewInteger(1), NewWord("handler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 21 {
+		t.Errorf("1 handler = %v, want 21", result)
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point

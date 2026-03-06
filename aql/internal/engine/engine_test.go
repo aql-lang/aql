@@ -50,8 +50,8 @@ func TestNewString(t *testing.T) {
 
 func TestNewInteger(t *testing.T) {
 	v := NewInteger(42)
-	if !v.VType.Equal(TInteger) {
-		t.Errorf("type = %s, want number/integer", v.VType)
+	if !v.VType.Matches(TInteger) {
+		t.Errorf("type = %s, want matches number/integer", v.VType)
 	}
 	if v.AsInteger() != 42 {
 		t.Errorf("data = %d, want 42", v.AsInteger())

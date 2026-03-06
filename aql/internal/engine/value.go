@@ -127,9 +127,12 @@ func NewString(s string) Value {
 	return Value{VType: TStringProper, Data: s}
 }
 
-// NewInteger creates a number/integer value.
+// NewInteger creates a number/integer value with a literal type.
+// The literal value is encoded in the type path (e.g., number/integer/5),
+// making it a subtype of number/integer. This enables pattern matching
+// on specific values in function signatures.
 func NewInteger(n int64) Value {
-	return Value{VType: TInteger, Data: n}
+	return Value{VType: NewType(fmt.Sprintf("number/integer/%d", n)), Data: n}
 }
 
 // NewBoolean creates a boolean/true or boolean/false value.
