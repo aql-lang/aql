@@ -144,6 +144,70 @@ func registerBuiltins(r *Registry) {
 		Handler: dropHandler,
 	})
 
+	// over: [a, b] -> [a, b, a] (prefix-only)
+	r.RegisterPrefixOnly("over", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[0]}, nil
+		},
+	})
+
+	// rot: [a, b, c] -> [b, c, a] (prefix-only)
+	r.RegisterPrefixOnly("rot", Signature{
+		Args: []Type{TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1], args[2], args[0]}, nil
+		},
+	})
+
+	// nip: [a, b] -> [b] (prefix-only)
+	r.RegisterPrefixOnly("nip", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1]}, nil
+		},
+	})
+
+	// tuck: [a, b] -> [b, a, b] (prefix-only)
+	r.RegisterPrefixOnly("tuck", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1], args[0], args[1]}, nil
+		},
+	})
+
+	// 2dup: [a, b] -> [a, b, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2dup", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[0], args[1]}, nil
+		},
+	})
+
+	// 2swap: [a, b, c, d] -> [c, d, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2swap", Signature{
+		Args: []Type{TAny, TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[2], args[3], args[0], args[1]}, nil
+		},
+	})
+
+	// 2drop: [a, b] -> [] (prefix-only)
+	r.RegisterPrefixOnly("2drop", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return nil, nil
+		},
+	})
+
+	// 2over: [a, b, c, d] -> [a, b, c, d, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2over", Signature{
+		Args: []Type{TAny, TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[2], args[3], args[0], args[1]}, nil
+		},
+	})
+
 	// Arithmetic: each has Args:[int, int] with suffix precedence.
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
 	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })
@@ -172,6 +236,42 @@ func registerBuiltins(r *Registry) {
 			return 0, fmt.Errorf("modulo by zero")
 		}
 		return a % b, nil
+	})
+
+	// abs: [int] -> [int] (suffix precedence)
+	r.Register("abs", Signature{
+		Args: []Type{TInteger},
+		Handler: func(args []Value) ([]Value, error) {
+			v := args[0].AsInteger()
+			if v < 0 {
+				v = -v
+			}
+			return []Value{NewInteger(v)}, nil
+		},
+	})
+
+	// negate: [int] -> [int] (suffix precedence)
+	r.Register("negate", Signature{
+		Args: []Type{TInteger},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(-args[0].AsInteger())}, nil
+		},
+	})
+
+	// min: [int, int] -> [int] (suffix precedence)
+	registerBinaryIntOp(r, "min", 1, func(a, b int64) (int64, error) {
+		if a < b {
+			return a, nil
+		}
+		return b, nil
+	})
+
+	// max: [int, int] -> [int] (suffix precedence)
+	registerBinaryIntOp(r, "max", 1, func(a, b int64) (int64, error) {
+		if a > b {
+			return a, nil
+		}
+		return b, nil
 	})
 
 	// Boolean: binary ops have Args:[boolean, boolean] with suffix precedence.

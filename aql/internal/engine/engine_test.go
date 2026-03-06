@@ -262,6 +262,147 @@ func TestDropSuffix(t *testing.T) {
 	}
 }
 
+func TestOver(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("over")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 1 {
+		t.Errorf("got %v, want [1, 2, 1]", result)
+	}
+}
+
+func TestRot(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("rot")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 2 || result[1].AsInteger() != 3 || result[2].AsInteger() != 1 {
+		t.Errorf("got %v, want [2, 3, 1]", result)
+	}
+}
+
+func TestNip(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("nip")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("got %v, want [2]", result)
+	}
+}
+
+func TestTuck(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("tuck")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 2 || result[1].AsInteger() != 1 || result[2].AsInteger() != 2 {
+		t.Errorf("got %v, want [2, 1, 2]", result)
+	}
+}
+
+func Test2Dup(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2dup")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 1 || result[3].AsInteger() != 2 {
+		t.Errorf("got %v, want [1, 2, 1, 2]", result)
+	}
+}
+
+func Test2Swap(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2swap")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 3 || result[1].AsInteger() != 4 || result[2].AsInteger() != 1 || result[3].AsInteger() != 2 {
+		t.Errorf("got %v, want [3, 4, 1, 2]", result)
+	}
+}
+
+func Test2Drop(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2drop")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %v, want []", result)
+	}
+}
+
+func Test2Over(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2over")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 6 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 3 || result[3].AsInteger() != 4 || result[4].AsInteger() != 1 || result[5].AsInteger() != 2 {
+		t.Errorf("got %v, want [1, 2, 3, 4, 1, 2]", result)
+	}
+}
+
+func TestAbs(t *testing.T) {
+	e := New(DefaultRegistry())
+	// -5 abs → 5
+	result, err := e.Run([]Value{NewInteger(-5), NewWord("abs")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 5 {
+		t.Errorf("got %v, want [5]", result)
+	}
+	// 3 abs → 3
+	result, err = e.Run([]Value{NewInteger(3), NewWord("abs")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestNegate(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(5), NewWord("negate")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != -5 {
+		t.Errorf("got %v, want [-5]", result)
+	}
+}
+
+func TestMin(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("min")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestMax(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("max")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 7 {
+		t.Errorf("got %v, want [7]", result)
+	}
+}
+
 // --- Engine tests: modifier forcing ---
 
 func TestForceSuffix(t *testing.T) {
