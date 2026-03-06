@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
@@ -22,20 +25,35 @@ var typeNames = map[string]Type{
 const stackHeadroom = 8
 
 // TraceCallback is called before each step of execution when tracing is enabled.
-// It receives the step number, pointer position, full stack, and stack length.
-type TraceCallback func(step int, pointer int, stack []Value)
+// It receives the step number, pointer position, full stack, and an annotation
+// describing what happened on the previous step.
+type TraceCallback func(step int, pointer int, stack []Value, note string)
 
 // Engine is the AQL stack machine.
 type Engine struct {
-	stack    []Value
-	pointer  int
-	registry *Registry
-	trace    TraceCallback
+	stack     []Value
+	pointer   int
+	registry  *Registry
+	trace     TraceCallback
+	traceNote string // annotation set during execution for the next trace call
 }
 
 // New creates an Engine with the given function registry.
 func New(registry *Registry) *Engine {
 	return &Engine{registry: registry}
+}
+
+// traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
+func traceSigStr(name string, sig *Signature) string {
+	args := make([]string, len(sig.Args))
+	for i, t := range sig.Args {
+		args[i] = t.String()
+	}
+	s := name + "(" + strings.Join(args, ", ") + ")"
+	if sig.Precedence > 0 {
+		s += fmt.Sprintf(" prec=%d", sig.Precedence)
+	}
+	return s
 }
 
 // stackInsert inserts val at index i, shifting elements right.
@@ -101,7 +119,9 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		if e.trace != nil {
 			snapshot := make([]Value, len(e.stack))
 			copy(snapshot, e.stack)
-			e.trace(step, e.pointer, snapshot)
+			note := e.traceNote
+			e.traceNote = ""
+			e.trace(step, e.pointer, snapshot, note)
 		}
 
 		switch {
@@ -236,6 +256,7 @@ func (e *Engine) stepWord(val Value) error {
 		if match == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
+		e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 		return e.execMatch(match)
 	}
 
@@ -246,6 +267,7 @@ func (e *Engine) stepWord(val Value) error {
 		if bestSig == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
+		e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
 		return e.insertForward(w, bestSig, len(bestSig.Args))
 	}
 
@@ -257,6 +279,7 @@ func (e *Engine) stepWord(val Value) error {
 		// Defer 0-arg matches (generic def handler) so suffix-mode
 		// typed signatures get a chance to collect arguments first.
 		if match != nil && len(match.Sig.Args) > 0 {
+			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
@@ -267,11 +290,13 @@ func (e *Engine) stepWord(val Value) error {
 			if suffixNeeded <= 0 {
 				suffixNeeded = len(bestSig.Args)
 			}
+			e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
 			return e.insertForward(w, bestSig, suffixNeeded)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
 		if match != nil {
+			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
@@ -284,6 +309,7 @@ func (e *Engine) stepWord(val Value) error {
 	if match == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
+	e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 	return e.execMatch(match)
 }
 
@@ -600,6 +626,12 @@ func (e *Engine) stepLiteral() error {
 	// defer collection and let that operator execute first.
 	if fwd.Precedence > 0 {
 		if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
+			nextName := ""
+			if valIdx+1 < len(e.stack) && e.stack[valIdx+1].IsWord() {
+				nextName = e.stack[valIdx+1].AsWord().Name
+			}
+			e.traceNote = fmt.Sprintf("defer %s prec=%d < %s prec=%d",
+				fwd.FuncName, fwd.Precedence, nextName, nextPrec)
 			e.pointer++
 			return nil
 		}
@@ -630,6 +662,9 @@ func (e *Engine) stepLiteral() error {
 
 	fwd.CollectedArgs++
 	fwd.FuncIndex = funcIdx
+
+	e.traceNote = fmt.Sprintf("collect %s %d/%d",
+		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All suffix args collected. Remove forward, force prefix, retry.

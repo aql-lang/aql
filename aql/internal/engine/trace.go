@@ -113,24 +113,19 @@ func registerTrace(r *Registry) {
 func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 	const termWidth = 120
 	const stepWidth = 4 // "NNN "
-	const sep = " │ "
-	const sepLen = 3
-
-	// Compute available width for left (stack) and right (remaining).
-	// Layout: "NNN  [ stack | ptr ] │ remaining tokens"
-	contentWidth := termWidth - stepWidth
 
 	type traceStep struct {
 		step    int
 		pointer int
 		stack   []Value
+		note    string
 	}
 
 	var steps []traceStep
 
 	sub := New(r)
-	sub.trace = func(step int, pointer int, stack []Value) {
-		steps = append(steps, traceStep{step, pointer, stack})
+	sub.trace = func(step int, pointer int, stack []Value, note string) {
+		steps = append(steps, traceStep{step, pointer, stack, note})
 	}
 
 	result, err := sub.Run(tokens)
@@ -178,20 +173,52 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 		// Step number: right-aligned, 3 digits.
 		stepStr := fmt.Sprintf("%s%3d%s", cGray, s.step, cReset)
 
+		// Format the annotation (right-aligned).
+		noteStr := ""
+		noteVisLen := 0
+		if s.note != "" {
+			noteStr = cGray + s.note + cReset
+			noteVisLen = traceVisibleLen(noteStr)
+		}
+
 		// Determine if we need wrapping.
-		totalLen := stepWidth + leftVisLen
-		if totalLen <= contentWidth {
-			// Single line — pad to alignment.
-			fmt.Fprintf(w, "%s %s\n", stepStr, leftDisplay)
+		usedLen := stepWidth + leftVisLen
+		if usedLen <= termWidth {
+			if noteVisLen > 0 && usedLen+2+noteVisLen <= termWidth {
+				// Everything fits — right-align the note.
+				gap := termWidth - usedLen - noteVisLen
+				if gap < 2 {
+					gap = 2
+				}
+				fmt.Fprintf(w, "%s %s%s%s\n", stepStr, leftDisplay,
+					strings.Repeat(" ", gap), noteStr)
+			} else {
+				// Stack fits, note on next line (right-aligned).
+				fmt.Fprintf(w, "%s %s\n", stepStr, leftDisplay)
+				if noteVisLen > 0 {
+					gap := termWidth - noteVisLen
+					if gap < stepWidth+1 {
+						gap = stepWidth + 1
+					}
+					fmt.Fprintf(w, "%s%s\n", strings.Repeat(" ", gap), noteStr)
+				}
+			}
 		} else {
 			// Multi-line: wrap the stack display.
-			lines := traceWrap(leftParts, s.pointer, contentWidth-4)
+			lines := traceWrap(leftParts, s.pointer, termWidth-stepWidth-4)
 			for i, line := range lines {
 				if i == 0 {
 					fmt.Fprintf(w, "%s %s\n", stepStr, line)
 				} else {
 					fmt.Fprintf(w, "%s %s\n", cGray+"   "+cReset, line)
 				}
+			}
+			if noteVisLen > 0 {
+				gap := termWidth - noteVisLen
+				if gap < stepWidth+1 {
+					gap = stepWidth + 1
+				}
+				fmt.Fprintf(w, "%s%s\n", strings.Repeat(" ", gap), noteStr)
 			}
 		}
 	}
