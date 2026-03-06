@@ -689,6 +689,60 @@ func TestEngineFnNamed(t *testing.T) {
 	}
 }
 
+func TestEngineFnCatterPrefixOnly(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [1 "a"|] -> catter -> all args from prefix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(1), NewString("a"), NewWord("catter"),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("1 'a' catter = %v, want string result", result)
+	}
+}
+
+func TestEngineFnCatterPartialSuffix(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(2), NewWord("catter"), NewString("b"),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("2 catter 'b' = %v, want string result", result)
+	}
+}
+
+func TestEngineFnCatterFullSuffix(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [|] -> catter "c" 3 -> both args from suffix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("catter"), NewString("c"), NewInteger(3),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("catter 'c' 3 = %v, want string result", result)
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point

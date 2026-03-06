@@ -313,25 +313,30 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 		}
 
 		// Count how many args from the top of the resolved stack match
-		// the END of sig.Args (prefix portion). In the suffix-first model,
-		// suffix fills Args[0..S-1] and prefix fills Args[S..N-1].
-		// So prefix args match against the last slots.
+		// sig.Args in any position (flexible prefix matching).
+		// Only consider the top N contiguous resolved values.
 		prefixCount := 0
-		for tryN := len(sig.Args); tryN >= 1; tryN-- {
-			if tryN > len(resolved) {
-				continue
-			}
-			match := true
-			for j := 0; j < tryN; j++ {
-				rIdx := len(resolved) - tryN + j
-				sigIdx := len(sig.Args) - tryN + j
-				if !resolved[rIdx].VType.Matches(sig.Args[sigIdx]) {
-					match = false
-					break
+		usedArgs := make([]bool, len(sig.Args))
+		maxTry := len(sig.Args)
+		if maxTry > len(resolved) {
+			maxTry = len(resolved)
+		}
+		for tryN := maxTry; tryN >= 1; tryN-- {
+			top := resolved[len(resolved)-tryN:]
+			tempUsed := make([]bool, len(sig.Args))
+			matched := 0
+			for _, v := range top {
+				for si := 0; si < len(sig.Args); si++ {
+					if !tempUsed[si] && v.VType.Matches(sig.Args[si]) {
+						tempUsed[si] = true
+						matched++
+						break
+					}
 				}
 			}
-			if match {
+			if matched == tryN {
 				prefixCount = tryN
+				copy(usedArgs, tempUsed)
 				break
 			}
 		}
@@ -343,32 +348,40 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 		// partially match the existing stack win over those that don't.
 		score += prefixCount * 25
 
-		// Bonus: if the peeked suffix value matches the first expected
-		// suffix arg type, boost this sig's score to prefer it.
-		// In the suffix-first model, suffix always fills from Args[0].
+		// Bonus: if the peeked suffix value matches the first unmatched
+		// sig arg type, boost this sig's score. Only check the first
+		// unmatched arg to avoid false positives on heterogeneous sigs.
 		if peekVal != nil && prefixCount < len(sig.Args) {
-			firstSuffixType := sig.Args[0]
-			matched := peekVal.VType.Matches(firstSuffixType)
-			// Predict resolved types for words that haven't executed yet.
-			if !matched && peekVal.IsWord() {
-				pw := peekVal.AsWord()
-				switch {
-				case pw.Name == "true" || pw.Name == "false":
-					matched = TBoolean.Matches(firstSuffixType)
-				case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
-					// Skip structural words.
-				default:
-					if _, isType := typeNames[pw.Name]; isType {
-						// Type names stay as type literals, not useful
-						// for suffix prediction here.
-					} else if e.registry.Lookup(pw.Name) == nil {
-						// Unknown word → will resolve to atom.
-						matched = TAtom.Matches(firstSuffixType)
-					}
-					// Also check TWord for sigs expecting word literals
-					// (e.g. set, def).
-					if !matched {
-						matched = peekVal.VType.Matches(firstSuffixType)
+			firstUnmatched := -1
+			for si := 0; si < len(sig.Args); si++ {
+				if !usedArgs[si] {
+					firstUnmatched = si
+					break
+				}
+			}
+			matched := false
+			if firstUnmatched >= 0 {
+				firstSuffixType := sig.Args[firstUnmatched]
+				matched = peekVal.VType.Matches(firstSuffixType)
+				// Predict resolved types for words that haven't executed yet.
+				if !matched && peekVal.IsWord() {
+					pw := peekVal.AsWord()
+					switch {
+					case pw.Name == "true" || pw.Name == "false":
+						matched = TBoolean.Matches(firstSuffixType)
+					case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
+						// Skip structural words.
+					default:
+						if _, isType := typeNames[pw.Name]; isType {
+							// Type names stay as type literals.
+						} else if e.registry.Lookup(pw.Name) == nil {
+							// Unknown word → will resolve to atom.
+							matched = TAtom.Matches(firstSuffixType)
+						}
+						// Also check TWord for sigs expecting word literals.
+						if !matched {
+							matched = peekVal.VType.Matches(firstSuffixType)
+						}
 					}
 				}
 			}
@@ -496,13 +509,19 @@ func (e *Engine) stepLiteral() error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
-	// Check if the value matches the next expected suffix type.
-	// In the suffix-first model, suffix fills Args[0..S-1] in order.
-	nextArgIdx := fwd.CollectedArgs
-	if nextArgIdx < len(fwd.Sig.Args) {
-		expectedType := fwd.Sig.Args[nextArgIdx]
+	// Check if the value matches ANY remaining (uncollected) arg type.
+	// Suffix collection is flexible: the value can satisfy any arg slot,
+	// with final ordering handled by flexibleMatch during prefix retry.
+	if fwd.CollectedArgs < len(fwd.Sig.Args) {
 		val := e.stack[valIdx]
-		if !val.VType.Matches(expectedType) {
+		matchesAny := false
+		for i := 0; i < len(fwd.Sig.Args); i++ {
+			if val.VType.Matches(fwd.Sig.Args[i]) {
+				matchesAny = true
+				break
+			}
+		}
+		if !matchesAny {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
 		}
