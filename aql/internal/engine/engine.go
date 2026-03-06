@@ -406,7 +406,24 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Find the indices of the n resolved values before the pointer.
 	indices := e.resolvedIndicesBefore(n)
 
-	results, err := match.Sig.Handler(match.Args)
+	var results []Value
+	var err error
+	if match.Sig.FullStackHandler != nil {
+		// Collect the full resolved stack before the pointer,
+		// excluding the matched args and forwards.
+		fullStack := e.resolvedStackBefore(indices)
+		results, err = match.Sig.FullStackHandler(match.Args, fullStack)
+		if err != nil {
+			return err
+		}
+		// FullStackHandler returns the complete replacement for
+		// everything from start through the pointer (inclusive).
+		e.stackSplice(0, e.pointer+1, results...)
+		e.pointer = 0
+		return nil
+	}
+
+	results, err = match.Sig.Handler(match.Args)
 	if err != nil {
 		return err
 	}
@@ -466,6 +483,23 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 		indices[i], indices[j] = indices[j], indices[i]
 	}
 	return indices
+}
+
+// resolvedStackBefore returns all resolved values before the pointer,
+// excluding forwards, open-parens, and the matched arg indices.
+func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
+	exclude := make(map[int]bool, len(excludeIndices))
+	for _, idx := range excludeIndices {
+		exclude[idx] = true
+	}
+	var stack []Value
+	for i := 0; i < e.pointer; i++ {
+		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() {
+			continue
+		}
+		stack = append(stack, e.stack[i])
+	}
+	return stack
 }
 
 // insertForward handles a suffix-precedence word by placing a forward

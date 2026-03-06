@@ -208,6 +208,47 @@ func registerBuiltins(r *Registry) {
 		},
 	})
 
+	// depth: [] -> [n] pushes the number of items on the stack (prefix-only)
+	r.RegisterPrefixOnly("depth", Signature{
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			return append(stack, NewInteger(int64(len(stack)))), nil
+		},
+	})
+
+	// pick: [n] -> [v] copies the nth item from the stack (0-indexed from top) (prefix-only)
+	// 1 2 3 0 pick → 1 2 3 3   (pick 0 = dup)
+	// 1 2 3 2 pick → 1 2 3 1   (pick 2 = copy bottom)
+	r.RegisterPrefixOnly("pick", Signature{
+		Args: []Type{TInteger},
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			n := int(args[0].AsInteger())
+			if n < 0 || n >= len(stack) {
+				return nil, fmt.Errorf("pick: index %d out of range (stack depth %d)", n, len(stack))
+			}
+			return append(stack, stack[len(stack)-1-n]), nil
+		},
+	})
+
+	// roll: [n] -> [] rotates the nth item to the top (0-indexed from top) (prefix-only)
+	// 1 2 3 2 roll → 2 3 1   (roll 2 = rot)
+	// 1 2 3 1 roll → 1 3 2   (roll 1 = swap)
+	r.RegisterPrefixOnly("roll", Signature{
+		Args: []Type{TInteger},
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			n := int(args[0].AsInteger())
+			if n < 0 || n >= len(stack) {
+				return nil, fmt.Errorf("roll: index %d out of range (stack depth %d)", n, len(stack))
+			}
+			// Rotate: remove stack[len-1-n], append it on top.
+			idx := len(stack) - 1 - n
+			result := make([]Value, 0, len(stack))
+			result = append(result, stack[:idx]...)
+			result = append(result, stack[idx+1:]...)
+			result = append(result, stack[idx])
+			return result, nil
+		},
+	})
+
 	// Arithmetic: each has Args:[int, int] with suffix precedence.
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
 	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })

@@ -10,6 +10,13 @@ type Signature struct {
 	Args       []Type
 	Precedence int // higher binds tighter; 0 = default (no precedence)
 	Handler    func(args []Value) ([]Value, error)
+
+	// FullStackHandler, when non-nil, is called instead of Handler.
+	// It receives the matched args AND the full resolved stack before
+	// the word (excluding forwards and the matched args themselves).
+	// Use this for words like depth, pick, roll that need to inspect
+	// or manipulate the entire stack.
+	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
 }
 
 // TotalArgs returns the number of arguments.
