@@ -929,6 +929,14 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 		handler := func(args []Value) ([]Value, error) {
 			var result []Value
 			var names []string
+			// Wrap the entire expansion (unnamed args + body + undef
+			// cleanup) in parens so it evaluates as a single
+			// sub-expression. Without this, an outer forward can grab
+			// intermediate values from the body before the body
+			// finishes executing (e.g. recursive factorial: the outer
+			// mul's forward grabs x=1 from the inner body instead of
+			// waiting for the full result).
+			result = append(result, NewOpenParen())
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -944,6 +952,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
 			}
+			result = append(result, NewWord(")"))
 			return result, nil
 		}
 		registerFn(name, Signature{Args: argTypes, Handler: handler})
