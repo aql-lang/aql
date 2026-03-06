@@ -161,6 +161,46 @@ func TestEngineIfListBranch(t *testing.T) {
 	}
 }
 
+func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
+	// Register a side-effect word that increments a counter
+	callCount := 0
+	r := DefaultRegistry()
+	r.Register("side-effect",
+		Signature{
+			Args: []Type{TAny},
+			Handler: func(args []Value) ([]Value, error) {
+				callCount++
+				return args, nil
+			},
+		},
+	)
+
+	// if true [side-effect 1] [side-effect 2] → only then-branch runs
+	thenList := NewList([]Value{NewWord("side-effect"), NewInteger(1)})
+	elseList := NewList([]Value{NewWord("side-effect"), NewInteger(2)})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(true), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected [1], got %v", result)
+	}
+
+	// Reset and test false branch
+	callCount = 0
+	result = runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(false), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("expected [2], got %v", result)
+	}
+}
+
 func TestEngineIfFalsy(t *testing.T) {
 	r := DefaultRegistry()
 	// if 0 1 2 → 0 is falsy → return 2
