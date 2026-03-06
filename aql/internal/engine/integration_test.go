@@ -828,6 +828,45 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 	}
 }
 
+func TestEngineFnDefPrefixOnly(t *testing.T) {
+	r := DefaultRegistry()
+	// def doubler/p fn [[x:integer] [integer] [x x add]] end
+	// doubler/p registers as prefix-only: takes args from the stack only,
+	// never collects suffix args via forward.
+	fnBody := NewList([]Value{
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
+	})
+	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("doubler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("5 doubler = %v, want 10", result)
+	}
+}
+
+func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
+	r := DefaultRegistry()
+	// def doubler/p fn [[x:integer] [integer] [x x add]] end
+	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
+	// It should fail because there's nothing on the stack for prefix match.
+	fnBody := NewList([]Value{
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("doubler"), NewInteger(5),
+	})
+	if err == nil {
+		t.Error("expected error: doubler/p should not collect suffix args")
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point

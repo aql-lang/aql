@@ -358,6 +358,15 @@ func defName(v Value) string {
 	return v.AsString()
 }
 
+// defPrefixOnly returns true if the name word carries the /p modifier,
+// indicating the defined word should be prefix-only (not suffix precedence).
+func defPrefixOnly(v Value) bool {
+	if v.IsWord() {
+		return v.AsWord().ForcePrefix
+	}
+	return false
+}
+
 // registerDef registers the "def" word for defining new words.
 //
 // def creates literal substitutions: the body replaces the word during
@@ -375,8 +384,9 @@ func defName(v Value) string {
 func registerDef(r *Registry) {
 	defHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
+		prefixOnly := defPrefixOnly(args[0])
 		body := args[1]
-		installDef(r, name, body)
+		installDef(r, name, body, prefixOnly)
 		return nil, nil
 	}
 
@@ -401,11 +411,16 @@ func registerDef(r *Registry) {
 // When body is a FnDefInfo value (produced by the fn word), installDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
-func installDef(r *Registry, name string, body Value) {
+func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
+	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+	registerFn := r.Register
+	if isPrefixOnly {
+		registerFn = r.RegisterPrefixOnly
+	}
 	if len(r.DefStacks[name]) == 0 {
 		// First definition: register one generic fallback handler
 		// that reads the top of the definition stack.
-		r.Register(name, Signature{
+		registerFn(name, Signature{
 			Handler: func(_ []Value) ([]Value, error) {
 				stack := r.DefStacks[name]
 				if len(stack) == 0 {
@@ -431,7 +446,7 @@ func installDef(r *Registry, name string, body Value) {
 	// FnDefInfo body (from fn word): install typed signatures.
 	if body.VType.Equal(TFnDef) {
 		fnDef := body.Data.(FnDefInfo)
-		installFnDef(r, name, fnDef)
+		installFnDef(r, name, fnDef, isPrefixOnly)
 		r.DefStacks[name] = append(r.DefStacks[name], body)
 		return
 	}
@@ -745,7 +760,12 @@ func resolveTypeName(name string) Type {
 // installFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via installDef, returns body tokens, and appends undef cleanup.
-func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
+func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool) {
+	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+	registerFn := r.Register
+	if isPrefixOnly {
+		registerFn = r.RegisterPrefixOnly
+	}
 	for _, sig := range fnDef.Sigs {
 		argTypes := make([]Type, len(sig.Params))
 		for i, p := range sig.Params {
@@ -772,7 +792,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 			}
 			return result, nil
 		}
-		r.Register(name, Signature{Args: argTypes, Handler: handler})
+		registerFn(name, Signature{Args: argTypes, Handler: handler})
 	}
 }
 
