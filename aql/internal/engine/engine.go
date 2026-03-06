@@ -556,6 +556,30 @@ func (e *Engine) stepLiteral() error {
 			}
 		}
 		if !matchesAny {
+			// The forward's chosen sig doesn't accept this value, but
+			// another overload of the same function might. Check all
+			// signatures and switch if we find a compatible one.
+			if fn := e.registry.Lookup(fwd.FuncName); fn != nil {
+				for si := range fn.Signatures {
+					altSig := &fn.Signatures[si]
+					if len(altSig.Args) != len(fwd.Sig.Args) {
+						continue
+					}
+					for ai := range altSig.Args {
+						if val.VType.Matches(altSig.Args[ai]) {
+							fwd.Sig = altSig
+							e.stack[fwdIdx] = NewForward(fwd)
+							matchesAny = true
+							break
+						}
+					}
+					if matchesAny {
+						break
+					}
+				}
+			}
+		}
+		if !matchesAny {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
 		}

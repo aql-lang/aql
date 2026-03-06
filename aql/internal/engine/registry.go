@@ -925,22 +925,36 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 		}
 		s := sig // capture for closure
 		handler := func(args []Value) ([]Value, error) {
-			var result []Value
 			var names []string
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
 					names = append(names, p.Name)
-				} else {
-					// Unnamed parameter: push value back for the body to use
-					result = append(result, args[i])
+				}
+			}
+
+			// Build input: unnamed args followed by body tokens.
+			var input []Value
+			for i, p := range s.Params {
+				if p.Name == "" {
+					input = append(input, args[i])
 				}
 			}
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
-			result = append(result, body...)
+			input = append(input, body...)
+
+			// Execute body in a sub-engine to isolate from outer forwards.
+			sub := New(r)
+			result, err := sub.Run(input)
+
+			// Clean up named params regardless of error.
 			for i := len(names) - 1; i >= 0; i-- {
-				result = append(result, NewWord("undef"), NewWord(names[i]))
+				uninstallDef(r, names[i])
+			}
+
+			if err != nil {
+				return nil, err
 			}
 			return result, nil
 		}
