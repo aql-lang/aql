@@ -3,9 +3,11 @@ package evaluator
 import (
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/aql/internal/ast"
 	"github.com/metsitaba/voxgig-exp/aql/internal/lexer"
 	"github.com/metsitaba/voxgig-exp/aql/internal/object"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+	"github.com/metsitaba/voxgig-exp/aql/internal/token"
 )
 
 func testEval(input string) object.Object {
@@ -26,6 +28,16 @@ func TestEval(t *testing.T) {
 			input:        "",
 			expectedType: object.NULL_OBJ,
 		},
+		{
+			name:         "identifier expression returns null",
+			input:        "foo",
+			expectedType: object.NULL_OBJ,
+		},
+		{
+			name:         "multiple statements returns last",
+			input:        "foo bar",
+			expectedType: object.NULL_OBJ,
+		},
 	}
 
 	for _, tt := range tests {
@@ -35,5 +47,15 @@ func TestEval(t *testing.T) {
 				t.Errorf("got type %q, want %q", result.Type(), tt.expectedType)
 			}
 		})
+	}
+}
+
+func TestEvalNonProgramNode(t *testing.T) {
+	// Passing a non-Program node should return NULL.
+	result := Eval(&ast.ExpressionStatement{
+		Token: token.Token{Type: token.IDENT, Literal: "x"},
+	})
+	if result != NULL {
+		t.Errorf("expected NULL, got %v", result)
 	}
 }
