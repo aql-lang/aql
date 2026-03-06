@@ -867,6 +867,79 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 	}
 }
 
+func TestEngineFnAbbreviatedSignature(t *testing.T) {
+	r := DefaultRegistry()
+
+	// def foo fn [
+	//   [string] [string] [add "Q"]    -- full form
+	//   integer  string   [add "P"]    -- abbreviated input sig & output sig
+	//   99       string   [drop "NN"]  -- abbreviated input sig & output sig
+	// ]
+
+	fnBody := NewList([]Value{
+		// sig 1: [string] [string] [add "Q"]
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add"), NewString("Q")}),
+
+		// sig 2: integer string [add "P"]  (abbreviated input & output)
+		NewWord("integer"),
+		NewWord("string"),
+		NewList([]Value{NewWord("add"), NewString("P")}),
+
+		// sig 3: 99 string [drop "NN"]  (abbreviated input & output)
+		NewInteger(99),
+		NewWord("string"),
+		NewList([]Value{NewWord("drop"), NewString("NN")}),
+	})
+
+	// foo "x" → "xQ" (string matches sig 1: "x" add "Q")
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewString("x"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "xQ" {
+		t.Errorf("foo \"x\" = %v, want \"xQ\"", result)
+	}
+
+	// foo 1 → "1P" (integer matches sig 2: 1 add "P")
+	result = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(1), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "1P" {
+		t.Errorf("foo 1 = %v, want \"1P\"", result)
+	}
+
+	// foo 99 → "NN" (literal 99 matches sig 3: drop "NN")
+	result = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(99), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "NN" {
+		t.Errorf("foo 99 = %v, want \"NN\"", result)
+	}
+
+}
+
+func TestEngineFnAbbreviatedSimple(t *testing.T) {
+	r := DefaultRegistry()
+	// def double fn [number number [dup add]] end 7 double
+	// All three elements abbreviated (single-valued)
+	fnBody := NewList([]Value{
+		NewWord("number"),
+		NewWord("number"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(7), NewWord("double"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 14 {
+		t.Errorf("double 7 = %v, want 14", result)
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point

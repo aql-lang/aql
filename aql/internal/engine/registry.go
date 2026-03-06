@@ -775,6 +775,8 @@ func registerFn(r *Registry) {
 
 // parseFnDef parses a function specification list into FnDefInfo.
 // The list contains signature triples: [input-sig, output-sig, body] ...
+// Each element of a triple may be abbreviated: a non-list value is treated
+// as a single-element list (e.g., `string` is equivalent to `[string]`).
 func parseFnDef(list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
@@ -782,18 +784,27 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		// list[i+1] is the output signature — informational only
 		body := list[i+2]
 
+		// Abbreviation: non-list input sig is treated as [inputSig].
+		if !inputSig.VType.Equal(TList) {
+			inputSig = NewList([]Value{inputSig})
+		}
+
 		params, err := parseFnParams(inputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
 
-		if !body.VType.Equal(TList) {
-			return FnDefInfo{}, fmt.Errorf("function spec: body must be a list")
+		// Abbreviation: non-list body is treated as [body].
+		var bodyElems []Value
+		if body.VType.Equal(TList) {
+			bodyElems = body.AsList()
+		} else {
+			bodyElems = []Value{body}
 		}
 
 		sigs = append(sigs, FnSig{
 			Params: params,
-			Body:   body.AsList(),
+			Body:   bodyElems,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
