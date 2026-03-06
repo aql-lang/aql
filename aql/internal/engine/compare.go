@@ -224,6 +224,15 @@ func registerComparison(r *Registry) {
 		},
 	})
 
+	// neq: [any, any] -> [boolean] — not equal (negation of eq)
+	r.Register("neq", Signature{
+		Args:       []Type{TAny, TAny},
+		Precedence: 1,
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewBoolean(!exactEqual(args[0], args[1]))}, nil
+		},
+	})
+
 	// deq: [any, any] -> [boolean] — deep equality (traverse non-scalars)
 	r.Register("deq", Signature{
 		Args:       []Type{TAny, TAny},

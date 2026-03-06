@@ -335,3 +335,100 @@ def add5 add 5 end (3 add5) mul 2	16
 
 # Composing curried words
 def add5 add 5 end def add5_twice [add5 add5] 10 add5_twice	20
+
+# Dot - key extraction from maps (prefix form)
+{a:1} a dot	1
+{a:1,b:2} b dot	2
+
+# Dot - key extraction from maps (suffix form)
+{a:1} dot a	1
+{a:1,b:2} dot b	2
+
+# Dot - nested map access (prefix form)
+{a:{b:1}} a dot b dot	1
+
+# Dot - missing key returns none
+{a:1} b dot	none
+
+# Dot - null safety (none parent returns none)
+none a dot	none
+none "x" dot	none
+
+# Dot - list index access
+[10,20,30] 0 dot	10
+[10,20,30] 1 dot	20
+[10,20,30] 2 dot	30
+
+# Dot - list out of bounds returns none
+[10,20] 5 dot	none
+
+# Dot - integer key on map (converted to string)
+{0:"zero",1:"one"} 0 dot	'zero'
+{0:"zero",1:"one"} 1 dot	'one'
+
+# Dot - integer key missing from map returns none
+{a:1} 0 dot	none
+
+# Dot - string key
+{a:1} "a" dot	1
+
+# Dot notation - simple
+set foo a:b:1 foo.a.b	1
+
+# Dot notation - single level
+set bar {x:42} bar.x	42
+
+# Dot notation - with set storing map
+set m {a:{b:{c:99}}} m.a.b.c	99
+
+# Dot notation - missing key returns none
+set obj {a:1} obj.b	none
+
+# Dot notation - null propagation through chain
+set obj {a:1} obj.b.c	none
+
+# Dot notation - leading dot (stack access)
+{a:1} .a	1
+{a:{b:2}} .a.b	2
+
+# Dotr - strict key extraction (errors on missing)
+{a:1} a dotr	1
+{a:1,b:2} b dotr	2
+[10,20,30] 1 dotr	20
+{0:"zero"} 0 dotr	'zero'
+
+# Dotr - missing key is an error
+{a:1} b dotr	ERROR:dotr: key "b" not found in map
+
+# Dotr - none parent is an error
+none a dotr	ERROR:dotr: parent is none
+
+# Dotr - list out of bounds is an error
+[10,20] 5 dotr	ERROR:dotr: index 5 out of bounds (length 2)
+
+# Dotr - integer key missing from map is an error
+{a:1} 0 dotr	ERROR:dotr: key "0" not found in map
+
+# Dotr - !. alias
+{a:1} a !.	1
+{a:1} b !.	ERROR:dotr: key "b" not found in map
+
+# Convert to string - default truncation at 222
+convert 99 string	'99'
+convert true string	'true'
+
+# Convert to string - size setting truncates
+convert "hello" string {size:3}	'hel'
+convert "abcdef" string {size:0}	''
+convert "ab" string {size:10}	'ab'
+
+# Convert to string - base in settings map (equivalent to string shorthand)
+convert 10 string {base:hex}	'a'
+convert 255 string {base:HEX}	'FF'
+
+# Convert to string - base and size combined in settings map
+convert 255 string {base:hex,size:1}	'f'
+convert 255 string {base:HEX,size:1}	'F'
+
+# Convert to string - default size (222) truncates long strings
+convert "abcdefghij" string {size:5}	'abcde'

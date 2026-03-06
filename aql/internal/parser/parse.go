@@ -154,6 +154,15 @@ func preprocessParens(src string) string {
 func convertTopLevel(items []any) ([]engine.Value, error) {
 	values := make([]engine.Value, 0, len(items))
 	for _, item := range items {
+		// Check for dot notation in unquoted text tokens.
+		if text, ok := item.(jsonic.Text); ok && text.Quote == "" && strings.Contains(text.Str, ".") {
+			expanded, err := expandDottedWord(text.Str)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, expanded...)
+			continue
+		}
 		v, err := convertTopLevelValue(item)
 		if err != nil {
 			return nil, err
@@ -211,13 +220,22 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 // Square brackets at the top level are a quotation operator for program
 // fragments: unquoted text → words, maps use data context.
 func convertWordList(items []any) (engine.Value, error) {
-	elems := make([]engine.Value, len(items))
-	for i, item := range items {
+	elems := make([]engine.Value, 0, len(items))
+	for _, item := range items {
+		// Check for dot notation in unquoted text tokens.
+		if text, ok := item.(jsonic.Text); ok && text.Quote == "" && strings.Contains(text.Str, ".") {
+			expanded, err := expandDottedWord(text.Str)
+			if err != nil {
+				return engine.Value{}, err
+			}
+			elems = append(elems, expanded...)
+			continue
+		}
 		v, err := convertTopLevelValue(item)
 		if err != nil {
 			return engine.Value{}, err
 		}
-		elems[i] = v
+		elems = append(elems, v)
 	}
 	return engine.NewList(elems), nil
 }
@@ -407,4 +425,51 @@ func parseWord(text string) (engine.Value, error) {
 		return engine.NewWordModified(name, argCount, forcePrefix, forceSuffix), nil
 	}
 	return engine.NewWord(name), nil
+}
+
+// expandDottedWord expands dot notation like "foo.a.b" into a sequence of
+// engine values: [get, foo, a, dot, b, dot]. The first segment is retrieved
+// from the store via "get", and each subsequent segment extracts a key using
+// the "dot" word. A standalone "." becomes the "dot" word.
+// Leading dot (e.g. ".a.b") omits the get and emits [a, dot, b, dot],
+// operating on whatever value is already on the stack.
+func expandDottedWord(text string) ([]engine.Value, error) {
+	// Standalone "." → just the dot word.
+	if text == "." {
+		return []engine.Value{engine.NewWord("dot")}, nil
+	}
+
+	// Standalone "!." → just the dotr word.
+	if text == "!." {
+		return []engine.Value{engine.NewWord("dotr")}, nil
+	}
+
+	parts := strings.Split(text, ".")
+	var result []engine.Value
+
+	// First part (before first dot): retrieve from store via get.
+	if parts[0] != "" {
+		result = append(result, engine.NewWord("get"))
+		w, err := parseWord(parts[0])
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, w)
+	}
+
+	// Subsequent parts (after each dot): emit key then dot (prefix).
+	for _, part := range parts[1:] {
+		if part == "" {
+			continue
+		}
+		// Integer keys for list access.
+		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
+			result = append(result, engine.NewInteger(n))
+		} else {
+			result = append(result, engine.NewWord(part))
+		}
+		result = append(result, engine.NewWordModified("dot", -1, true, false))
+	}
+
+	return result, nil
 }

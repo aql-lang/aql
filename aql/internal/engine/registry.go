@@ -236,6 +236,8 @@ func registerBuiltins(r *Registry) {
 	registerQuery(r)
 	registerIf(r)
 	registerPrint(r)
+	registerDot(r)
+	registerDotr(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -761,38 +763,62 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 // registerConvert registers the "convert" word for type conversions.
 //
 // convert takes a source value, a target type literal, and an optional
-// variant string. It converts the source value to the target scalar type.
+// third argument: either a string base shorthand (e.g. "hex") or a
+// settings map. The string shorthand is a convenience for the "base"
+// key in the settings map.
 //
-//	convert 99 string       => "99"
-//	convert 10 string "hex" => "a"
-//	convert "42" number     => 42
-//	convert true string     => "true"
+// Settings map keys:
+//   - "base": base for number conversion ("hex", "HEX", "bin", "oct")
+//   - "size": maximum length for string output (default 222)
+//
+//	convert 99 string                          => "99"
+//	convert 10 string "hex"                    => "a"
+//	convert 10 string {base:hex}               => "a"
+//	convert "42" number                        => 42
+//	convert true string                        => "true"
+//	convert "hello" string {size:3}            => "hel"
+//	convert 255 string {base:hex,size:1}       => "f"
 func registerConvert(r *Registry) {
+	const defaultSize = 222
+
+	// truncate limits a string to maxLen characters.
+	truncate := func(s string, maxLen int) string {
+		if maxLen < 0 {
+			maxLen = 0
+		}
+		if len(s) > maxLen {
+			return s[:maxLen]
+		}
+		return s
+	}
+
 	// convertTo performs the actual conversion.
-	convertTo := func(src Value, targetType Type, variant string) (Value, error) {
+	convertTo := func(src Value, targetType Type, variant string, size int) (Value, error) {
 		switch {
 		case targetType.Matches(TString):
 			// Convert to string.
 			if variant == "" {
-				return NewString(valToString(src)), nil
+				return NewString(truncate(valToString(src), size)), nil
 			}
 			// Variant-based string conversion (only for numbers).
 			if !src.VType.Matches(TNumber) {
 				return Value{}, fmt.Errorf("convert: variant %q only supported for number to string", variant)
 			}
 			n := src.AsInteger()
+			var s string
 			switch variant {
 			case "hex":
-				return NewString(strconv.FormatInt(n, 16)), nil
+				s = strconv.FormatInt(n, 16)
 			case "HEX":
-				return NewString(strings.ToUpper(strconv.FormatInt(n, 16))), nil
+				s = strings.ToUpper(strconv.FormatInt(n, 16))
 			case "bin":
-				return NewString(strconv.FormatInt(n, 2)), nil
+				s = strconv.FormatInt(n, 2)
 			case "oct":
-				return NewString(strconv.FormatInt(n, 8)), nil
+				s = strconv.FormatInt(n, 8)
 			default:
 				return Value{}, fmt.Errorf("convert: unknown string variant %q", variant)
 			}
+			return NewString(truncate(s, size)), nil
 
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
@@ -855,21 +881,35 @@ func registerConvert(r *Registry) {
 		if args[1].Data != nil {
 			return nil, fmt.Errorf("convert: second argument must be a type literal")
 		}
-		result, err := convertTo(src, args[1].VType, "")
+		result, err := convertTo(src, args[1].VType, "", defaultSize)
 		if err != nil {
 			return nil, err
 		}
 		return []Value{result}, nil
 	}
 
-	// 3-arg: convert value type variant
+	// 3-arg: convert value type <base-or-settings>
+	// The third argument is either a string base shorthand (e.g. "hex")
+	// or a settings map (e.g. {base:hex, size:3}).
 	convert3Handler := func(args []Value) ([]Value, error) {
 		src := args[0]
 		if args[1].Data != nil {
 			return nil, fmt.Errorf("convert: second argument must be a type literal")
 		}
-		variant := args[2].Data.(string)
-		result, err := convertTo(src, args[1].VType, variant)
+		base := ""
+		size := defaultSize
+		if args[2].VType.Equal(TMap) {
+			m := args[2].AsMap()
+			if v, ok := m.Get("base"); ok {
+				base = valToString(v)
+			}
+			if v, ok := m.Get("size"); ok && v.VType.Matches(TInteger) {
+				size = int(v.AsInteger())
+			}
+		} else {
+			base = valToString(args[2])
+		}
+		result, err := convertTo(src, args[1].VType, base, size)
 		if err != nil {
 			return nil, err
 		}
@@ -879,7 +919,7 @@ func registerConvert(r *Registry) {
 	r.Register("convert",
 		// 3-arg variant registered first (higher score from more args)
 		Signature{
-			Args:    []Type{TAny, TAny, TString},
+			Args:    []Type{TAny, TAny, TAny},
 			Handler: convert3Handler,
 		},
 		Signature{
@@ -1617,4 +1657,145 @@ func registerBase(r *Registry) {
 	r.Register("base",
 		Signature{Args: []Type{TAny}, Handler: baseHandler},
 	)
+}
+
+// registerDot registers the "dot" word and its "." alias for extracting
+// key values from maps and lists. Supports null-safe access: if the parent
+// is none, the result is none (like optional chaining in JavaScript).
+// An integer argument indexes into a list, or is converted to a string
+// for map key lookup.
+//
+// Usage (prefix):
+//
+//	{a:1} a dot       => 1
+//	[10,20,30] 1 dot  => 20
+//	{0:"z"} 0 dot     => z
+//
+// Usage (suffix):
+//
+//	{a:1} dot a       => 1
+//
+// Usage (dot notation, handled by parser):
+//
+//	set foo a:b:1 foo.a.b  => 1
+func registerDot(r *Registry) {
+	dotMapAtomHandler := func(args []Value) ([]Value, error) {
+		key := args[0].AsAtom()
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	dotMapStringHandler := func(args []Value) ([]Value, error) {
+		key := args[0].AsString()
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	dotListHandler := func(args []Value) ([]Value, error) {
+		idx := int(args[0].AsInteger())
+		list := args[1].AsList()
+		if idx < 0 || idx >= len(list) {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{list[idx]}, nil
+	}
+
+	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
+		key := strconv.FormatInt(args[0].AsInteger(), 10)
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	dotNoneHandler := func(args []Value) ([]Value, error) {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+
+	sigs := []Signature{
+		{Args: []Type{TAtom, TMap}, Handler: dotMapAtomHandler},
+		{Args: []Type{TString, TMap}, Handler: dotMapStringHandler},
+		{Args: []Type{TInteger, TList}, Handler: dotListHandler},
+		{Args: []Type{TInteger, TMap}, Handler: dotMapIntegerHandler},
+		{Args: []Type{TAny, TNone}, Handler: dotNoneHandler},
+	}
+
+	r.Register("dot", sigs...)
+	r.Register(".", sigs...)
+}
+
+// registerDotr registers "dotr" and its "!." alias — a strict variant of
+// dot that returns an error when the parent is none or the key/index is
+// missing, instead of silently returning none.
+//
+// Usage:
+//
+//	{a:1} a dotr      => 1
+//	{a:1} b dotr      => ERROR (key not found)
+//	none a dotr       => ERROR (parent is none)
+//	[10,20] 5 dotr    => ERROR (index out of bounds)
+func registerDotr(r *Registry) {
+	dotrMapAtomHandler := func(args []Value) ([]Value, error) {
+		key := args[0].AsAtom()
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return nil, fmt.Errorf("dotr: key %q not found in map", key)
+		}
+		return []Value{val}, nil
+	}
+
+	dotrMapStringHandler := func(args []Value) ([]Value, error) {
+		key := args[0].AsString()
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return nil, fmt.Errorf("dotr: key %q not found in map", key)
+		}
+		return []Value{val}, nil
+	}
+
+	dotrListHandler := func(args []Value) ([]Value, error) {
+		idx := int(args[0].AsInteger())
+		list := args[1].AsList()
+		if idx < 0 || idx >= len(list) {
+			return nil, fmt.Errorf("dotr: index %d out of bounds (length %d)", idx, len(list))
+		}
+		return []Value{list[idx]}, nil
+	}
+
+	dotrMapIntegerHandler := func(args []Value) ([]Value, error) {
+		key := strconv.FormatInt(args[0].AsInteger(), 10)
+		m := args[1].AsMap()
+		val, ok := m.Get(key)
+		if !ok {
+			return nil, fmt.Errorf("dotr: key %q not found in map", key)
+		}
+		return []Value{val}, nil
+	}
+
+	dotrNoneHandler := func(args []Value) ([]Value, error) {
+		return nil, fmt.Errorf("dotr: parent is none")
+	}
+
+	sigs := []Signature{
+		{Args: []Type{TAtom, TMap}, Handler: dotrMapAtomHandler},
+		{Args: []Type{TString, TMap}, Handler: dotrMapStringHandler},
+		{Args: []Type{TInteger, TList}, Handler: dotrListHandler},
+		{Args: []Type{TInteger, TMap}, Handler: dotrMapIntegerHandler},
+		{Args: []Type{TAny, TNone}, Handler: dotrNoneHandler},
+	}
+
+	r.Register("dotr", sigs...)
+	r.Register("!.", sigs...)
 }

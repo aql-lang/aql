@@ -49,6 +49,13 @@ func formatForPrint(v Value) string {
 		if td, ok := v.Data.(TableData); ok {
 			return formatTable(td)
 		}
+		if qb, ok := v.Data.(QueryBuilder); ok {
+			td, err := qb.Materialize()
+			if err != nil {
+				return "query(error:" + err.Error() + ")"
+			}
+			return formatTable(td)
+		}
 	}
 
 	// String: printed as-is (no quotes).

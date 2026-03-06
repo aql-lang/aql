@@ -490,6 +490,23 @@ func TestWhereLike(t *testing.T) {
 	assertField(t, rows[0].AsMap(), "name", "Alice")
 }
 
+func TestWhereNeq(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name neq "Alice"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
 // --- order ---
 
 func TestOrderByColumn(t *testing.T) {
@@ -719,6 +736,2334 @@ func TestWhereOnInternalTable(t *testing.T) {
 
 // --- SQLite flag on loaded table ---
 
+// --- offset ---
+
+func TestOffset(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name] limit 2 offset 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// Ordered by name: Alice, Bob, Charlie; offset 1 skips Alice
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestLimitOffset(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [name] limit 1 offset 2`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// Ordered: Alice(0), Bob(1), Charlie(2); offset 2, limit 1 → Charlie
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+// --- distinct ---
+
+func TestDistinct(t *testing.T) {
+	// Create a table with duplicate city values.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [city] from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows without distinct, got %d", len(rows))
+	}
+
+	// With distinct — all cities happen to be unique, so same count.
+	result, err = runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [city] (from people distinct)`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows = result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows with distinct (all unique), got %d", len(rows))
+	}
+}
+
+func TestDistinctDuplicates(t *testing.T) {
+	// Build a table with duplicate values.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("color", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(color string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("color", engine.NewString(color))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("red"), mkRow("blue"), mkRow("red"), mkRow("blue"), mkRow("red")},
+		SQLite: false,
+	}
+	reg.Store["colors"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [color] (from colors distinct)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 distinct colors, got %d", len(rows))
+	}
+}
+
+// --- nulls first / nulls last ---
+
+func TestOrderNullsFirst(t *testing.T) {
+	// Build a table with some NULL values.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("score", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name, score string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		if score != "" {
+			om.Set("score", engine.NewString(score))
+		} else {
+			om.Set("score", engine.NewString(""))
+		}
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", "90"), mkRow("Bob", ""), mkRow("Charlie", "80")},
+		SQLite: false,
+	}
+	reg.Store["scores"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Order by score with nulls first — empty strings sort first.
+	queryVals, err := parser.Parse(`select * from scores order [score asc nulls first]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Empty string sorts first with NULLS FIRST.
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+// --- order by position ---
+
+func TestOrderByPosition(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [1]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Column 1 is "name" — alphabetical: Alice, Bob, Charlie
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByPositionDesc(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [1 desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+// --- is null / is not null ---
+
+func TestWhereIsNull(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("email", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name, email string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("email", engine.NewString(email))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", "alice@test.com"), mkRow("Bob", ""), mkRow("Charlie", "charlie@test.com")},
+		SQLite: false,
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	// is not null — in SQLite all TEXT columns are non-null (empty string != null)
+	// but the query should still execute without error.
+	queryVals, err := parser.Parse(`select * from users where [email is not null]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows (all non-null TEXT), got %d", len(rows))
+	}
+}
+
+// --- between ---
+
+func TestWhereBetween(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age between "25" "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 25 and 30), got %d", len(rows))
+	}
+}
+
+func TestWhereNotBetween(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age not between "25" "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (age 35), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+// --- NOT prefix ---
+
+func TestWhereNotSimple(t *testing.T) {
+	// [not name eq "Alice"] → NOT ("name" = 'Alice')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not name eq "Alice"] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Bob, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestWhereNotWithSubList(t *testing.T) {
+	// [not [city eq "London" or city eq "Tokyo"]] → NOT ("city" = 'London' OR "city" = 'Tokyo')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [city eq "London" or city eq "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Paris), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+func TestWhereNotAndOther(t *testing.T) {
+	// [not name eq "Alice" and city eq "Tokyo"] → NOT ("name" = 'Alice') AND "city" = 'Tokyo'
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not name eq "Alice" and city eq "Tokyo"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+// --- Nested groups (parenthesized conditions) ---
+
+func TestWhereNestedGroup(t *testing.T) {
+	// [[city eq "London" or city eq "Paris"] and age gte "30"]
+	// → ("city" = 'London' OR "city" = 'Paris') AND "age" >= '30'
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [[city eq "London" or city eq "Paris"] and age gte "30"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice: London, 30), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereNestedGroupRight(t *testing.T) {
+	// [age gte "30" and [city eq "London" or city eq "Tokyo"]]
+	// → "age" >= '30' AND ("city" = 'London' OR "city" = 'Tokyo')
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age gte "30" and [city eq "London" or city eq "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+}
+
+func TestWhereNotWithNestedGroup(t *testing.T) {
+	// [not [city eq "London" or city eq "Paris"]] → NOT (...) — only Tokyo remains
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [city eq "London" or city eq "Paris"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie: Tokyo), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+func TestWhereDoubleNested(t *testing.T) {
+	// [[city eq "London"] or [city eq "Tokyo"]] — two groups connected by OR
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [[city eq "London"] or [city eq "Tokyo"]] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestWhereBetweenAndOther(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age between "25" "35" and city eq "London"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+// --- glob ---
+
+func TestWhereGlob(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name glob "A*"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereGlobCaseSensitive(t *testing.T) {
+	// GLOB is case-sensitive unlike LIKE.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name glob "a*"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (GLOB is case-sensitive), got %d", len(rows))
+	}
+}
+
+// --- typed columns ---
+
+func TestTypedIntegerColumn(t *testing.T) {
+	// Create a table where "age" is TInteger, not TString.
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("age", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name string, age int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("age", engine.NewInteger(age))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("Alice", 30),
+			mkRow("Bob", 25),
+			mkRow("Charlie", 35),
+		},
+		SQLite: false,
+	}
+	reg.Store["people"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Numeric comparison should work correctly with INTEGER column.
+	// With TEXT, "9" > "25" is true (string ordering). With INTEGER, 9 < 25.
+	queryVals, err := parser.Parse(`select * from people where [age gt 25] order [age]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 30 and 35), got %d", len(rows))
+	}
+
+	// Results should come back as integers, not strings.
+	ageVal, ok := rows[0].AsMap().Get("age")
+	if !ok {
+		t.Fatal("expected age field")
+	}
+	if !ageVal.VType.Matches(engine.TInteger) {
+		t.Errorf("expected age to be integer type, got %s", ageVal.VType)
+	}
+	if ageVal.AsInteger() != 30 {
+		t.Errorf("expected age 30, got %d", ageVal.AsInteger())
+	}
+
+	// Ordered by age: 30, 35.
+	age2, _ := rows[1].AsMap().Get("age")
+	if age2.AsInteger() != 35 {
+		t.Errorf("expected second row age 35, got %d", age2.AsInteger())
+	}
+}
+
+func TestTypedBooleanColumn(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("active", engine.NewTypeLiteral(engine.TBoolean))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name string, active bool) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("active", engine.NewBoolean(active))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("Alice", true),
+			mkRow("Bob", false),
+			mkRow("Charlie", true),
+		},
+		SQLite: false,
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from users where [active eq 1]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 active users, got %d", len(rows))
+	}
+
+	// Results should come back as booleans.
+	activeVal, ok := rows[0].AsMap().Get("active")
+	if !ok {
+		t.Fatal("expected active field")
+	}
+	if !activeVal.VType.Matches(engine.TBoolean) {
+		t.Errorf("expected active to be boolean type, got %s", activeVal.VType)
+	}
+	if !activeVal.AsBoolean() {
+		t.Error("expected active to be true")
+	}
+}
+
+func TestTypedIntegerOrdering(t *testing.T) {
+	// This test verifies that INTEGER columns sort numerically, not lexically.
+	// With TEXT: "9" > "25" > "100" (wrong). With INTEGER: 9 < 25 < 100 (correct).
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(val int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(val))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(100), mkRow(9), mkRow(25)},
+		SQLite: false,
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from nums order [val]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	// Should be: 9, 25, 100 (numeric order, not "100", "25", "9").
+	v0, _ := rows[0].AsMap().Get("val")
+	v1, _ := rows[1].AsMap().Get("val")
+	v2, _ := rows[2].AsMap().Get("val")
+	if v0.AsInteger() != 9 || v1.AsInteger() != 25 || v2.AsInteger() != 100 {
+		t.Errorf("expected [9, 25, 100], got [%d, %d, %d]", v0.AsInteger(), v1.AsInteger(), v2.AsInteger())
+	}
+}
+
+// --- IN / NOT IN ---
+
+func TestWhereIn(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [city in ["London" "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestWhereNotIn(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [city not in ["London" "Tokyo"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	name, _ := r0.Get("name")
+	if name.AsString() != "Bob" {
+		t.Errorf("expected Bob, got %s", name.AsString())
+	}
+}
+
+// --- IN with subquery ---
+
+func TestWhereInSubquery(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities)] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestWhereNotInSubquery(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city not in (select [city] from cities)]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+func TestWhereInSubqueryWithFilter(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities where [country eq "UK"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice: London/UK), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
+func TestWhereInSubqueryEmpty(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`select * from people where [city in (select [city] from cities where [country eq "None"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+// --- REGEXP ---
+
+func TestWhereRegexp(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name regexp "^[AB]"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice, Bob), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+}
+
+func TestWhereRegexpNoMatch(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [name regexp "^Z"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestWhereNotRegexp(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [not [name regexp "^[AB]"]]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+}
+
+func TestWhereRegexpDigits(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [age regexp "^3"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (Alice:30, Charlie:35), got %d", len(rows))
+	}
+}
+
+// --- GROUP BY / HAVING ---
+
+func TestGroupByWithCount(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(dept, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("dept", engine.NewString(dept))
+		om.Set("name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("eng", "Alice"),
+			mkRow("eng", "Bob"),
+			mkRow("sales", "Charlie"),
+			mkRow("eng", "Dave"),
+			mkRow("sales", "Eve"),
+		},
+	}
+	reg.Store["staff"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] order [dept]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(rows))
+	}
+
+	r0 := rows[0].AsMap()
+	dept0, _ := r0.Get("dept")
+	cnt0, _ := r0.Get("cnt")
+	if dept0.AsString() != "eng" {
+		t.Errorf("expected dept eng, got %s", dept0.AsString())
+	}
+	if cnt0.AsInteger() != 3 {
+		t.Errorf("expected count 3, got %d", cnt0.AsInteger())
+	}
+
+	r1 := rows[1].AsMap()
+	cnt1, _ := r1.Get("cnt")
+	if cnt1.AsInteger() != 2 {
+		t.Errorf("expected count 2, got %d", cnt1.AsInteger())
+	}
+}
+
+func TestHaving(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(dept, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("dept", engine.NewString(dept))
+		om.Set("name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("eng", "Alice"),
+			mkRow("eng", "Bob"),
+			mkRow("sales", "Charlie"),
+			mkRow("eng", "Dave"),
+		},
+	}
+	reg.Store["staff"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Only groups with count > 1
+	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] having [cnt gt 1]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 group (eng has 3), got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	dept, _ := r0.Get("dept")
+	if dept.AsString() != "eng" {
+		t.Errorf("expected eng, got %s", dept.AsString())
+	}
+}
+
+// --- Table aliases ---
+
+func TestFromAlias(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people as p`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+}
+
+// --- JOINs ---
+
+func TestInnerJoin(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	// orders table
+	oFields := engine.NewOrderedMap()
+	oFields.Set("order_id", engine.NewTypeLiteral(engine.TString))
+	oFields.Set("product", engine.NewTypeLiteral(engine.TString))
+	oFields.Set("qty", engine.NewTypeLiteral(engine.TString))
+	oRec := engine.RecordTypeInfo{Fields: oFields}
+	mkOrder := func(id, product, qty string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("order_id", engine.NewString(id))
+		om.Set("product", engine.NewString(product))
+		om.Set("qty", engine.NewString(qty))
+		return engine.NewMap(om)
+	}
+	oTD := engine.TableData{
+		Record: oRec,
+		Rows: []engine.Value{
+			mkOrder("1", "widget", "10"),
+			mkOrder("2", "gadget", "5"),
+			mkOrder("3", "widget", "3"),
+		},
+	}
+	reg.Store["orders"] = engine.Value{VType: engine.TList, Data: oTD}
+
+	// products table
+	pFields := engine.NewOrderedMap()
+	pFields.Set("product", engine.NewTypeLiteral(engine.TString))
+	pFields.Set("price", engine.NewTypeLiteral(engine.TString))
+	pRec := engine.RecordTypeInfo{Fields: pFields}
+	mkProduct := func(name, price string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("product", engine.NewString(name))
+		om.Set("price", engine.NewString(price))
+		return engine.NewMap(om)
+	}
+	pTD := engine.TableData{
+		Record: pRec,
+		Rows: []engine.Value{
+			mkProduct("widget", "9.99"),
+			mkProduct("gadget", "19.99"),
+		},
+	}
+	reg.Store["products"] = engine.Value{VType: engine.TList, Data: pTD}
+
+	queryVals, err := parser.Parse(`select * from orders join products using [product] order [order_id]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 joined rows, got %d", len(rows))
+	}
+
+	// First row should have both order and product fields.
+	r0 := rows[0].AsMap()
+	oid, _ := r0.Get("order_id")
+	price, _ := r0.Get("price")
+	if oid.AsString() != "1" {
+		t.Errorf("expected order_id 1, got %s", oid.AsString())
+	}
+	if price.AsString() != "9.99" {
+		t.Errorf("expected price 9.99, got %s", price.AsString())
+	}
+}
+
+func TestLeftJoin(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	// people
+	pFields := engine.NewOrderedMap()
+	pFields.Set("name", engine.NewTypeLiteral(engine.TString))
+	pFields.Set("dept_id", engine.NewTypeLiteral(engine.TString))
+	pRec := engine.RecordTypeInfo{Fields: pFields}
+	mkPerson := func(name, deptID string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("dept_id", engine.NewString(deptID))
+		return engine.NewMap(om)
+	}
+	pTD := engine.TableData{
+		Record: pRec,
+		Rows: []engine.Value{
+			mkPerson("Alice", "1"),
+			mkPerson("Bob", "2"),
+			mkPerson("Charlie", "99"), // no matching dept
+		},
+	}
+	reg.Store["people"] = engine.Value{VType: engine.TList, Data: pTD}
+
+	// depts
+	dFields := engine.NewOrderedMap()
+	dFields.Set("dept_id", engine.NewTypeLiteral(engine.TString))
+	dFields.Set("dept_name", engine.NewTypeLiteral(engine.TString))
+	dRec := engine.RecordTypeInfo{Fields: dFields}
+	mkDept := func(id, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("dept_id", engine.NewString(id))
+		om.Set("dept_name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	dTD := engine.TableData{
+		Record: dRec,
+		Rows: []engine.Value{
+			mkDept("1", "Engineering"),
+			mkDept("2", "Sales"),
+		},
+	}
+	reg.Store["depts"] = engine.Value{VType: engine.TList, Data: dTD}
+
+	queryVals, err := parser.Parse(`select * from people leftjoin depts using [dept_id] order [name]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows (left join preserves all left rows), got %d", len(rows))
+	}
+
+	// Charlie should have NULL dept_name.
+	r2 := rows[2].AsMap()
+	name2, _ := r2.Get("name")
+	if name2.AsString() != "Charlie" {
+		t.Errorf("expected Charlie, got %s", name2.AsString())
+	}
+}
+
+// --- Set operations ---
+
+func TestUnion(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(names ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set("name", engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(names))
+		for i, n := range names {
+			om := engine.NewOrderedMap()
+			om.Set("name", engine.NewString(n))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: mkTable("Bob", "Charlie")}
+
+	// UNION removes duplicates.
+	queryVals, err := parser.Parse(`select * (from t1 union from t2) order [name]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 unique rows, got %d", len(rows))
+	}
+}
+
+func TestUnionAll(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(names ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set("name", engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(names))
+		for i, n := range names {
+			om := engine.NewOrderedMap()
+			om.Set("name", engine.NewString(n))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: mkTable("Bob", "Charlie")}
+
+	// UNION ALL keeps duplicates.
+	queryVals, err := parser.Parse(`select * (from t1 unionall from t2) order [name]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 rows (with duplicate Bob), got %d", len(rows))
+	}
+}
+
+func TestIntersect(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(names ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set("name", engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(names))
+		for i, n := range names {
+			om := engine.NewOrderedMap()
+			om.Set("name", engine.NewString(n))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: mkTable("Bob", "Charlie")}
+
+	queryVals, err := parser.Parse(`select * (from t1 intersect from t2)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
+	}
+	name, _ := rows[0].AsMap().Get("name")
+	if name.AsString() != "Bob" {
+		t.Errorf("expected Bob, got %s", name.AsString())
+	}
+}
+
+func TestExcept(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(names ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set("name", engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(names))
+		for i, n := range names {
+			om := engine.NewOrderedMap()
+			om.Set("name", engine.NewString(n))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: mkTable("Bob", "Charlie")}
+
+	queryVals, err := parser.Parse(`select * (from t1 except from t2)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice), got %d", len(rows))
+	}
+	name, _ := rows[0].AsMap().Get("name")
+	if name.AsString() != "Alice" {
+		t.Errorf("expected Alice, got %s", name.AsString())
+	}
+}
+
+// --- CAST ---
+
+func TestCast(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[cast age integer age_int]] from people order [age_int]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+
+	// CAST should produce integer ordering: 25, 30, 35 (not "25", "30", "35").
+	v0, _ := rows[0].AsMap().Get("age_int")
+	v1, _ := rows[1].AsMap().Get("age_int")
+	v2, _ := rows[2].AsMap().Get("age_int")
+	if v0.AsInteger() != 25 || v1.AsInteger() != 30 || v2.AsInteger() != 35 {
+		t.Errorf("expected [25, 30, 35], got [%d, %d, %d]", v0.AsInteger(), v1.AsInteger(), v2.AsInteger())
+	}
+}
+
+// --- Aggregate words standalone ---
+
+func TestCountStar(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[count * total]] from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	cnt, _ := rows[0].AsMap().Get("total")
+	if cnt.AsInteger() != 3 {
+		t.Errorf("expected count 3, got %d", cnt.AsInteger())
+	}
+}
+
+func TestSumAggregate(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(10), mkRow(20), mkRow(30)},
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [[sum val total]] from nums`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	total, _ := rows[0].AsMap().Get("total")
+	if total.AsInteger() != 60 {
+		t.Errorf("expected sum 60, got %d", total.AsInteger())
+	}
+}
+
+// --- SQLite flag on loaded table ---
+
+// --- JOIN with ON condition (covers buildJoinCondition, quoteJoinCol) ---
+
+func TestJoinWithOnCondition(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	// employees table
+	eFields := engine.NewOrderedMap()
+	eFields.Set("emp_name", engine.NewTypeLiteral(engine.TString))
+	eFields.Set("dept_id", engine.NewTypeLiteral(engine.TString))
+	eRec := engine.RecordTypeInfo{Fields: eFields}
+	mkEmp := func(name, deptID string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("emp_name", engine.NewString(name))
+		om.Set("dept_id", engine.NewString(deptID))
+		return engine.NewMap(om)
+	}
+	eTD := engine.TableData{
+		Record: eRec,
+		Rows:   []engine.Value{mkEmp("Alice", "1"), mkEmp("Bob", "2")},
+	}
+	reg.Store["employees"] = engine.Value{VType: engine.TList, Data: eTD}
+
+	// departments table
+	dFields := engine.NewOrderedMap()
+	dFields.Set("id", engine.NewTypeLiteral(engine.TString))
+	dFields.Set("dept_name", engine.NewTypeLiteral(engine.TString))
+	dRec := engine.RecordTypeInfo{Fields: dFields}
+	mkDept := func(id, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("id", engine.NewString(id))
+		om.Set("dept_name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	dTD := engine.TableData{
+		Record: dRec,
+		Rows:   []engine.Value{mkDept("1", "Engineering"), mkDept("2", "Sales")},
+	}
+	reg.Store["departments"] = engine.Value{VType: engine.TList, Data: dTD}
+
+	// JOIN with ON using non-qualified column names (since columns are unique across tables)
+	queryVals, err := parser.Parse(`select * from employees join departments on [dept_id eq id] order [emp_name]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 joined rows, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	empName, _ := r0.Get("emp_name")
+	deptName, _ := r0.Get("dept_name")
+	if empName.AsString() != "Alice" {
+		t.Errorf("expected Alice, got %s", empName.AsString())
+	}
+	if deptName.AsString() != "Engineering" {
+		t.Errorf("expected Engineering, got %s", deptName.AsString())
+	}
+}
+
+func TestJoinWithOnMultipleConditions(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	// t1 table
+	f1 := engine.NewOrderedMap()
+	f1.Set("a", engine.NewTypeLiteral(engine.TString))
+	f1.Set("b", engine.NewTypeLiteral(engine.TString))
+	r1 := engine.RecordTypeInfo{Fields: f1}
+	mk1 := func(a, b string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("a", engine.NewString(a))
+		om.Set("b", engine.NewString(b))
+		return engine.NewMap(om)
+	}
+	td1 := engine.TableData{Record: r1, Rows: []engine.Value{mk1("1", "x"), mk1("2", "y")}}
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: td1}
+
+	// t2 table
+	f2 := engine.NewOrderedMap()
+	f2.Set("c", engine.NewTypeLiteral(engine.TString))
+	f2.Set("d", engine.NewTypeLiteral(engine.TString))
+	r2 := engine.RecordTypeInfo{Fields: f2}
+	mk2 := func(c, d string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("c", engine.NewString(c))
+		om.Set("d", engine.NewString(d))
+		return engine.NewMap(om)
+	}
+	td2 := engine.TableData{Record: r2, Rows: []engine.Value{mk2("1", "x"), mk2("2", "z")}}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: td2}
+
+	// JOIN with AND in ON condition (non-qualified since temp table names differ)
+	queryVals, err := parser.Parse(`select * from t1 join t2 on [a eq c and b eq d]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (only a=1,b=x matches), got %d", len(rows))
+	}
+}
+
+func TestJoinWithOnDotQualified(t *testing.T) {
+	// Test dot-qualified column names in ON clause with SQLite-backed tables.
+	// This exercises quoteJoinCol with dot notation.
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read) set departments ("file/departments.csv" read)`,
+		`select * from people join departments on ["people.age" eq "departments.dept_id"] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// age is text "30", "25", "35" and dept_id is "1","2","3" — no matches expected
+	// but the query should execute without error, exercising the dot-qualified path
+	rows := result[0].AsList()
+	_ = rows // result doesn't matter, we just need the dot-qualified parsing to work
+}
+
+// --- CROSS JOIN ---
+
+func TestCrossJoin(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(field string, vals ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set(field, engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(vals))
+		for i, v := range vals {
+			om := engine.NewOrderedMap()
+			om.Set(field, engine.NewString(v))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	reg.Store["colors"] = engine.Value{VType: engine.TList, Data: mkTable("color", "red", "blue")}
+	reg.Store["sizes"] = engine.Value{VType: engine.TList, Data: mkTable("size", "S", "M", "L")}
+
+	queryVals, err := parser.Parse(`select * from colors crossjoin sizes`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 6 {
+		t.Fatalf("expected 6 rows (2x3 cross join), got %d", len(rows))
+	}
+}
+
+// --- CAST additional type mappings ---
+
+func TestCastToReal(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[cast age real]] from people order [age]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+}
+
+func TestCastToText(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(42)},
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [[cast val text t]] from nums`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	v, _ := rows[0].AsMap().Get("t")
+	if v.AsString() != "42" {
+		t.Errorf("expected '42', got %q", v.AsString())
+	}
+}
+
+func TestCastWithoutAlias(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[cast age integer]] from people limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// Without alias, output name defaults to the column name.
+	v, ok := rows[0].AsMap().Get("age")
+	if !ok {
+		t.Fatal("expected 'age' field in result")
+	}
+	if v.AsInteger() != 30 {
+		t.Errorf("expected 30, got %d", v.AsInteger())
+	}
+}
+
+// --- Aggregate edge cases ---
+
+func TestAvgAggregate(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(10), mkRow(20), mkRow(30)},
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [[avg val average]] from nums`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	avg, _ := rows[0].AsMap().Get("average")
+	// AVG of 10,20,30 = 20
+	if avg.AsInteger() != 20 {
+		t.Errorf("expected avg 20, got %d", avg.AsInteger())
+	}
+}
+
+func TestMinMaxAggregate(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(10), mkRow(20), mkRow(30)},
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [[min val lo] [max val hi]] from nums`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	lo, _ := rows[0].AsMap().Get("lo")
+	hi, _ := rows[0].AsMap().Get("hi")
+	if lo.AsInteger() != 10 {
+		t.Errorf("expected min 10, got %d", lo.AsInteger())
+	}
+	if hi.AsInteger() != 30 {
+		t.Errorf("expected max 30, got %d", hi.AsInteger())
+	}
+}
+
+func TestAggregateWithoutAlias(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[count name]] from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// Default alias is "count_name"
+	cnt, ok := rows[0].AsMap().Get("count_name")
+	if !ok {
+		t.Fatal("expected 'count_name' field (default alias)")
+	}
+	if cnt.AsInteger() != 3 {
+		t.Errorf("expected 3, got %d", cnt.AsInteger())
+	}
+}
+
+// --- WHERE IS NULL ---
+
+func TestWhereIsNullActual(t *testing.T) {
+	// Test IS NULL with actual NULL values (not just empty strings).
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("score", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	row1 := engine.NewOrderedMap()
+	row1.Set("name", engine.NewString("Alice"))
+	row1.Set("score", engine.NewInteger(90))
+	row2 := engine.NewOrderedMap()
+	row2.Set("name", engine.NewString("Bob"))
+	row2.Set("score", engine.Value{VType: engine.TNone})
+	row3 := engine.NewOrderedMap()
+	row3.Set("name", engine.NewString("Charlie"))
+	row3.Set("score", engine.NewInteger(80))
+
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{engine.NewMap(row1), engine.NewMap(row2), engine.NewMap(row3)},
+	}
+	reg.Store["students"] = engine.Value{VType: engine.TList, Data: td}
+
+	// IS NULL
+	queryVals, err := parser.Parse(`select * from students where [score is null]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row with NULL score, got %d", len(rows))
+	}
+	name, _ := rows[0].AsMap().Get("name")
+	if name.AsString() != "Bob" {
+		t.Errorf("expected Bob, got %s", name.AsString())
+	}
+}
+
+// --- Multi-column GROUP BY ---
+
+func TestMultiColumnGroupBy(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
+	fields.Set("role", engine.NewTypeLiteral(engine.TString))
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	mkRow := func(dept, role, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("dept", engine.NewString(dept))
+		om.Set("role", engine.NewString(role))
+		om.Set("name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows: []engine.Value{
+			mkRow("eng", "dev", "Alice"),
+			mkRow("eng", "dev", "Bob"),
+			mkRow("eng", "mgr", "Charlie"),
+			mkRow("sales", "dev", "Dave"),
+		},
+	}
+	reg.Store["staff"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [dept role [count name cnt]] from staff group by [dept role] order [dept role]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 groups, got %d", len(rows))
+	}
+	// eng/dev = 2, eng/mgr = 1, sales/dev = 1
+	cnt0, _ := rows[0].AsMap().Get("cnt")
+	if cnt0.AsInteger() != 2 {
+		t.Errorf("expected count 2 for eng/dev, got %d", cnt0.AsInteger())
+	}
+}
+
+// --- ORDER BY NULLS LAST ---
+
+func TestOrderNullsLast(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("score", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	row1 := engine.NewOrderedMap()
+	row1.Set("name", engine.NewString("Alice"))
+	row1.Set("score", engine.NewInteger(90))
+	row2 := engine.NewOrderedMap()
+	row2.Set("name", engine.NewString("Bob"))
+	row2.Set("score", engine.Value{VType: engine.TNone})
+	row3 := engine.NewOrderedMap()
+	row3.Set("name", engine.NewString("Charlie"))
+	row3.Set("score", engine.NewInteger(80))
+
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{engine.NewMap(row1), engine.NewMap(row2), engine.NewMap(row3)},
+	}
+	reg.Store["students"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from students order [score asc nulls last]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// With NULLS LAST, Bob (null score) should be last.
+	lastRow := rows[2].AsMap()
+	name, _ := lastRow.Get("name")
+	if name.AsString() != "Bob" {
+		t.Errorf("expected Bob last (null score), got %s", name.AsString())
+	}
+}
+
+// --- innerjoin keyword ---
+
+func TestInnerJoinKeyword(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	mkTable := func(field string, vals ...string) engine.TableData {
+		fields := engine.NewOrderedMap()
+		fields.Set(field, engine.NewTypeLiteral(engine.TString))
+		recType := engine.RecordTypeInfo{Fields: fields}
+		rows := make([]engine.Value, len(vals))
+		for i, v := range vals {
+			om := engine.NewOrderedMap()
+			om.Set(field, engine.NewString(v))
+			rows[i] = engine.NewMap(om)
+		}
+		return engine.TableData{Record: recType, Rows: rows}
+	}
+
+	// Two tables with shared column for USING
+	f1 := engine.NewOrderedMap()
+	f1.Set("id", engine.NewTypeLiteral(engine.TString))
+	f1.Set("name", engine.NewTypeLiteral(engine.TString))
+	r1 := engine.RecordTypeInfo{Fields: f1}
+	mk1 := func(id, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("id", engine.NewString(id))
+		om.Set("name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	_ = mkTable // suppress unused
+
+	td1 := engine.TableData{Record: r1, Rows: []engine.Value{mk1("1", "Alice"), mk1("2", "Bob")}}
+	reg.Store["t1"] = engine.Value{VType: engine.TList, Data: td1}
+
+	f2 := engine.NewOrderedMap()
+	f2.Set("id", engine.NewTypeLiteral(engine.TString))
+	f2.Set("score", engine.NewTypeLiteral(engine.TString))
+	r2 := engine.RecordTypeInfo{Fields: f2}
+	mk2 := func(id, score string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("id", engine.NewString(id))
+		om.Set("score", engine.NewString(score))
+		return engine.NewMap(om)
+	}
+	td2 := engine.TableData{Record: r2, Rows: []engine.Value{mk2("1", "90"), mk2("2", "85")}}
+	reg.Store["t2"] = engine.Value{VType: engine.TList, Data: td2}
+
+	queryVals, err := parser.Parse(`select * from t1 innerjoin t2 using [id] order [id]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+// --- ORDER BY with multiple keys ---
+
+func TestOrderByMultipleKeys(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [city asc name asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// London < Paris < Tokyo
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Charlie")
+}
+
+func TestOrderByMultipleKeysDesc(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people order [city desc name asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Tokyo > Paris > London (desc)
+	assertField(t, rows[0].AsMap(), "name", "Charlie")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "Alice")
+}
+
+func TestOrderByMultipleKeysMixed(t *testing.T) {
+	// Create test data with duplicate city values to test secondary sort
+	result, err := runQuery(t,
+		`set cities ("file/cities.csv" read)`,
+		`select * from cities order [country asc city desc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// Japan < UK (asc), then city desc within each group
+	assertField(t, rows[0].AsMap(), "city", "Tokyo")
+	assertField(t, rows[1].AsMap(), "city", "London")
+}
+
+// --- COLLATE ---
+
+func TestOrderCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data order [name collate nocase asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Case-insensitive: alice < Bob < CHARLIE
+	assertField(t, rows[0].AsMap(), "name", "alice")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[2].AsMap(), "name", "CHARLIE")
+}
+
+func TestOrderCollateBinary(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data order [name collate binary asc]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// Binary: uppercase < lowercase (B < C < a)
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "name", "CHARLIE")
+	assertField(t, rows[2].AsMap(), "name", "alice")
+}
+
+func TestWhereEqCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name eq "ALICE" collate nocase]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "alice")
+}
+
+func TestWhereEqCollateNocaseNoMatch(t *testing.T) {
+	// Without collate nocase, "ALICE" should not match "alice"
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name eq "ALICE"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (case-sensitive), got %d", len(rows))
+	}
+}
+
+func TestWhereLikeCollateNocase(t *testing.T) {
+	result, err := runQuery(t,
+		`set data ("file/mixed_case.csv" read)`,
+		`select * from data where [name like "b%" collate nocase]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Bob")
+}
+
+// --- GROUP BY with single atom (group name) ---
+
+func TestGroupByAtom(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("city", engine.NewTypeLiteral(engine.TString))
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(city, name string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("city", engine.NewString(city))
+		om.Set("name", engine.NewString(name))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("London", "A"), mkRow("London", "B"), mkRow("Paris", "C")},
+	}
+	reg.Store["data"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [city [count name cnt]] from data group city order [city]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(rows))
+	}
+}
+
+// --- WHERE with integer comparison (covers valueToSQL integer branch) ---
+
+func TestWhereIntegerComparison(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("age", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(name string, age int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("age", engine.NewInteger(age))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", 30), mkRow("Bob", 25), mkRow("Charlie", 35)},
+	}
+	reg.Store["people"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Use integer literal in WHERE (not string)
+	queryVals, err := parser.Parse(`select * from people where [age gt 28]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (age 30, 35), got %d", len(rows))
+	}
+}
+
+// --- WHERE with boolean/none values (covers valueToSQL branches) ---
+
+func TestWhereBooleanValue(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("active", engine.NewTypeLiteral(engine.TBoolean))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(name string, active bool) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("active", engine.NewBoolean(active))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", true), mkRow("Bob", false)},
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Using string "true" comparison with a boolean column (exercises boolean coercion in aqlValueToSQLParam)
+	queryVals, err := parser.Parse(`select * from users where [active eq "true"]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = result // exercises the path
+}
+
+// --- Mixed type table (covers more aqlValueToSQLParam and sqlResultToAQLValue branches) ---
+
+func TestMixedTypeStorage(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("score", engine.NewTypeLiteral(engine.TNumber))
+	fields.Set("active", engine.NewTypeLiteral(engine.TBoolean))
+	fields.Set("count", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+
+	// Row with string values that need coercion to numeric types
+	row1 := engine.NewOrderedMap()
+	row1.Set("name", engine.NewString("Alice"))
+	row1.Set("score", engine.NewString("95.5")) // string → REAL coercion
+	row1.Set("active", engine.NewString("true")) // string → boolean coercion
+	row1.Set("count", engine.NewString("42"))    // string → INTEGER coercion
+
+	// Row with proper typed values
+	row2 := engine.NewOrderedMap()
+	row2.Set("name", engine.NewString("Bob"))
+	row2.Set("score", engine.NewInteger(88))      // integer → REAL coercion
+	row2.Set("active", engine.NewBoolean(false))   // boolean → INTEGER (0/1)
+	row2.Set("count", engine.NewBoolean(true))     // boolean → INTEGER coercion
+
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{engine.NewMap(row1), engine.NewMap(row2)},
+	}
+	reg.Store["data"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from data order [name]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	// Check Alice's values came back correctly
+	r0 := rows[0].AsMap()
+	name, _ := r0.Get("name")
+	if name.AsString() != "Alice" {
+		t.Errorf("expected Alice, got %s", name.AsString())
+	}
+	count, _ := r0.Get("count")
+	if count.AsInteger() != 42 {
+		t.Errorf("expected count 42, got %d", count.AsInteger())
+	}
+	active, _ := r0.Get("active")
+	if !active.AsBoolean() {
+		t.Error("expected active true")
+	}
+}
+
+// --- CAST with different type names (covers aqlTypenameToSQLType branches) ---
+
+func TestCastWithTypeAliases(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[cast age int i1] [cast name string s1]] from people limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	i1, _ := rows[0].AsMap().Get("i1")
+	if i1.AsInteger() != 30 {
+		t.Errorf("expected 30, got %d", i1.AsInteger())
+	}
+	s1, _ := rows[0].AsMap().Get("s1")
+	if s1.AsString() != "Alice" {
+		t.Errorf("expected Alice, got %s", s1.AsString())
+	}
+}
+
+func TestCastFloat(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[cast age float f1] [cast age number n1]] from people limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+// --- select with string column name ---
+
+func TestSelectStringColumns(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select ["name" "city"] from people limit 1`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	r0 := rows[0].AsMap()
+	if r0.Len() != 2 {
+		t.Errorf("expected 2 columns, got %d", r0.Len())
+	}
+}
+
+// --- WHERE with BETWEEN using integer values ---
+
+func TestWhereBetweenIntegers(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow(10), mkRow(20), mkRow(30), mkRow(40)},
+	}
+	reg.Store["nums"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select * from nums where [val between 15 35]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (20, 30), got %d", len(rows))
+	}
+}
+
+// --- WHERE with atom value (covers valueToSQL atom branch) ---
+
+// --- WHERE with single IN value (covers buildInList single-value branch) ---
+
+func TestWhereInSingleValue(t *testing.T) {
+	// IN with a single non-list value (covers buildInList single-value branch)
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [city in "London"]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+// --- CAST with bool type alias (covers aqlTypenameToSQLType "bool" branch) ---
+
+func TestCastBool(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("active", engine.NewTypeLiteral(engine.TString))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	row := engine.NewOrderedMap()
+	row.Set("active", engine.NewString("1"))
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{engine.NewMap(row)},
+	}
+	reg.Store["data"] = engine.Value{VType: engine.TList, Data: td}
+
+	queryVals, err := parser.Parse(`select [[cast active bool b]] from data`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+// --- WHERE with boolean literal (covers valueToSQL boolean branch) ---
+
+func TestWhereWithBoolLiteral(t *testing.T) {
+	reg := engine.DefaultRegistry()
+	eng := engine.New(reg)
+
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("active", engine.NewTypeLiteral(engine.TBoolean))
+	recType := engine.RecordTypeInfo{Fields: fields}
+	mkRow := func(name string, active bool) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("name", engine.NewString(name))
+		om.Set("active", engine.NewBoolean(active))
+		return engine.NewMap(om)
+	}
+	td := engine.TableData{
+		Record: recType,
+		Rows:   []engine.Value{mkRow("Alice", true), mkRow("Bob", false)},
+	}
+	reg.Store["users"] = engine.Value{VType: engine.TList, Data: td}
+
+	// Use boolean false literal in WHERE condition
+	queryVals, err := parser.Parse(`select * from users where [active eq false]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.Run(queryVals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	// "false" becomes 'false' as SQL string, and active is stored as INTEGER 0
+	// This tests the boolean branch of valueToSQL
+	_ = rows
+}
+
+// --- Aggregate with string column name in nested list ---
+
+func TestAggregateWithStringColName(t *testing.T) {
+	// Uses string literal inside aggregate spec: [count "name" cnt]
+	// This covers nameFromValue string branch
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select [[count "name" cnt]] from people`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	cnt, _ := rows[0].AsMap().Get("cnt")
+	if cnt.AsInteger() != 3 {
+		t.Errorf("expected 3, got %d", cnt.AsInteger())
+	}
+}
+
+func TestWhereWithAtomValue(t *testing.T) {
+	result, err := runQuery(t,
+		`set people ("file/people.csv" read)`,
+		`select * from people where [city eq London]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+}
+
 func TestFileLoadSetsSQLiteFlag(t *testing.T) {
 	result, err := runWithOSFiles(t, `"file/people.csv" read`)
 	if err != nil {
@@ -735,5 +3080,88 @@ func TestFileLoadSetsSQLiteFlag(t *testing.T) {
 	}
 	if td.TableName != "people" {
 		t.Errorf("expected table name 'people', got %q", td.TableName)
+	}
+}
+
+// --- scalar subquery tests ---
+
+func TestScalarSubqueryInWhereGt(t *testing.T) {
+	// avg age = (30+25+35+28)/4 = 29.5, so age > 29.5 → Alice(30), Charlie(35)
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [age gt (select [[avg age]] from emp)] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestScalarSubqueryInWhereEq(t *testing.T) {
+	// Subquery returns Alice's dept = "Engineering".
+	// Engineering employees: Alice, Charlie.
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [dept eq (select [dept] from emp where [name eq "Alice"])] order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[1].AsMap(), "name", "Charlie")
+}
+
+func TestScalarSubqueryInSelect(t *testing.T) {
+	// Each row gets a top_salary column with the max salary (90000).
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select [name [(select [[max salary]] from emp) top_salary]] from emp order [name]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 rows, got %d", len(rows))
+	}
+	assertField(t, rows[0].AsMap(), "name", "Alice")
+	assertField(t, rows[0].AsMap(), "top_salary", "90000")
+	assertField(t, rows[1].AsMap(), "name", "Bob")
+	assertField(t, rows[1].AsMap(), "top_salary", "90000")
+}
+
+func TestScalarSubqueryMultipleRowsError(t *testing.T) {
+	// Subquery returns 4 rows — should error.
+	_, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [age gt (select [age] from emp)]`,
+	)
+	if err == nil {
+		t.Fatal("expected error for multi-row scalar subquery")
+	}
+}
+
+func TestScalarSubqueryEmptyReturnsNull(t *testing.T) {
+	// Subquery returns no rows (nobody named "Nobody").
+	// Comparing with NULL should return no matches.
+	result, err := runQuery(t,
+		`set emp ("file/employees.csv" read)`,
+		`select * from emp where [name eq (select [name] from emp where [name eq "Nobody"])]`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (NULL comparison), got %d", len(rows))
 	}
 }

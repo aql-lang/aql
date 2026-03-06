@@ -212,6 +212,13 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	case TableData:
 		columns = data.Record.Fields.Keys()
 		rows = data.Rows
+	case QueryBuilder:
+		td, err := data.Materialize()
+		if err != nil {
+			return "", fmt.Errorf("encode: %w", err)
+		}
+		columns = td.Record.Fields.Keys()
+		rows = td.Rows
 	case []Value:
 		rows = data
 		if len(rows) > 0 {
