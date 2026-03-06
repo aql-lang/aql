@@ -144,6 +144,111 @@ func registerBuiltins(r *Registry) {
 		Handler: dropHandler,
 	})
 
+	// over: [a, b] -> [a, b, a] (prefix-only)
+	r.RegisterPrefixOnly("over", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[0]}, nil
+		},
+	})
+
+	// rot: [a, b, c] -> [b, c, a] (prefix-only)
+	r.RegisterPrefixOnly("rot", Signature{
+		Args: []Type{TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1], args[2], args[0]}, nil
+		},
+	})
+
+	// nip: [a, b] -> [b] (prefix-only)
+	r.RegisterPrefixOnly("nip", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1]}, nil
+		},
+	})
+
+	// tuck: [a, b] -> [b, a, b] (prefix-only)
+	r.RegisterPrefixOnly("tuck", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[1], args[0], args[1]}, nil
+		},
+	})
+
+	// 2dup: [a, b] -> [a, b, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2dup", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[0], args[1]}, nil
+		},
+	})
+
+	// 2swap: [a, b, c, d] -> [c, d, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2swap", Signature{
+		Args: []Type{TAny, TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[2], args[3], args[0], args[1]}, nil
+		},
+	})
+
+	// 2drop: [a, b] -> [] (prefix-only)
+	r.RegisterPrefixOnly("2drop", Signature{
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return nil, nil
+		},
+	})
+
+	// 2over: [a, b, c, d] -> [a, b, c, d, a, b] (prefix-only)
+	r.RegisterPrefixOnly("2over", Signature{
+		Args: []Type{TAny, TAny, TAny, TAny},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{args[0], args[1], args[2], args[3], args[0], args[1]}, nil
+		},
+	})
+
+	// depth: [] -> [n] pushes the number of items on the stack (prefix-only)
+	r.RegisterPrefixOnly("depth", Signature{
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			return append(stack, NewInteger(int64(len(stack)))), nil
+		},
+	})
+
+	// pick: [n] -> [v] copies the nth item from the stack (0-indexed from top) (prefix-only)
+	// 1 2 3 0 pick → 1 2 3 3   (pick 0 = dup)
+	// 1 2 3 2 pick → 1 2 3 1   (pick 2 = copy bottom)
+	r.RegisterPrefixOnly("pick", Signature{
+		Args: []Type{TInteger},
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			n := int(args[0].AsInteger())
+			if n < 0 || n >= len(stack) {
+				return nil, fmt.Errorf("pick: index %d out of range (stack depth %d)", n, len(stack))
+			}
+			return append(stack, stack[len(stack)-1-n]), nil
+		},
+	})
+
+	// roll: [n] -> [] rotates the nth item to the top (0-indexed from top) (prefix-only)
+	// 1 2 3 2 roll → 2 3 1   (roll 2 = rot)
+	// 1 2 3 1 roll → 1 3 2   (roll 1 = swap)
+	r.RegisterPrefixOnly("roll", Signature{
+		Args: []Type{TInteger},
+		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
+			n := int(args[0].AsInteger())
+			if n < 0 || n >= len(stack) {
+				return nil, fmt.Errorf("roll: index %d out of range (stack depth %d)", n, len(stack))
+			}
+			// Rotate: remove stack[len-1-n], append it on top.
+			idx := len(stack) - 1 - n
+			result := make([]Value, 0, len(stack))
+			result = append(result, stack[:idx]...)
+			result = append(result, stack[idx+1:]...)
+			result = append(result, stack[idx])
+			return result, nil
+		},
+	})
+
 	// Arithmetic: each has Args:[int, int] with suffix precedence.
 	// Precedence: add/sub=1, mul/div/mod=2 (higher binds tighter).
 	registerBinaryIntOp(r, "add", 1, func(a, b int64) (int64, error) { return a + b, nil })
@@ -172,6 +277,42 @@ func registerBuiltins(r *Registry) {
 			return 0, fmt.Errorf("modulo by zero")
 		}
 		return a % b, nil
+	})
+
+	// abs: [int] -> [int] (suffix precedence)
+	r.Register("abs", Signature{
+		Args: []Type{TInteger},
+		Handler: func(args []Value) ([]Value, error) {
+			v := args[0].AsInteger()
+			if v < 0 {
+				v = -v
+			}
+			return []Value{NewInteger(v)}, nil
+		},
+	})
+
+	// negate: [int] -> [int] (suffix precedence)
+	r.Register("negate", Signature{
+		Args: []Type{TInteger},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(-args[0].AsInteger())}, nil
+		},
+	})
+
+	// min: [int, int] -> [int] (suffix precedence)
+	registerBinaryIntOp(r, "min", 1, func(a, b int64) (int64, error) {
+		if a < b {
+			return a, nil
+		}
+		return b, nil
+	})
+
+	// max: [int, int] -> [int] (suffix precedence)
+	registerBinaryIntOp(r, "max", 1, func(a, b int64) (int64, error) {
+		if a > b {
+			return a, nil
+		}
+		return b, nil
 	})
 
 	// Boolean: binary ops have Args:[boolean, boolean] with suffix precedence.
@@ -238,6 +379,7 @@ func registerBuiltins(r *Registry) {
 	registerPrint(r)
 	registerDot(r)
 	registerDotr(r)
+	registerTrace(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -358,6 +500,15 @@ func defName(v Value) string {
 	return v.AsString()
 }
 
+// defPrefixOnly returns true if the name word carries the /p modifier,
+// indicating the defined word should be prefix-only (not suffix precedence).
+func defPrefixOnly(v Value) bool {
+	if v.IsWord() {
+		return v.AsWord().ForcePrefix
+	}
+	return false
+}
+
 // registerDef registers the "def" word for defining new words.
 //
 // def creates literal substitutions: the body replaces the word during
@@ -375,8 +526,9 @@ func defName(v Value) string {
 func registerDef(r *Registry) {
 	defHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
+		prefixOnly := defPrefixOnly(args[0])
 		body := args[1]
-		installDef(r, name, body)
+		installDef(r, name, body, prefixOnly)
 		return nil, nil
 	}
 
@@ -401,11 +553,16 @@ func registerDef(r *Registry) {
 // When body is a FnDefInfo value (produced by the fn word), installDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
-func installDef(r *Registry, name string, body Value) {
+func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
+	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+	registerFn := r.Register
+	if isPrefixOnly {
+		registerFn = r.RegisterPrefixOnly
+	}
 	if len(r.DefStacks[name]) == 0 {
 		// First definition: register one generic fallback handler
 		// that reads the top of the definition stack.
-		r.Register(name, Signature{
+		registerFn(name, Signature{
 			Handler: func(_ []Value) ([]Value, error) {
 				stack := r.DefStacks[name]
 				if len(stack) == 0 {
@@ -431,7 +588,7 @@ func installDef(r *Registry, name string, body Value) {
 	// FnDefInfo body (from fn word): install typed signatures.
 	if body.VType.Equal(TFnDef) {
 		fnDef := body.Data.(FnDefInfo)
-		installFnDef(r, name, fnDef)
+		installFnDef(r, name, fnDef, isPrefixOnly)
 		r.DefStacks[name] = append(r.DefStacks[name], body)
 		return
 	}
@@ -619,6 +776,8 @@ func registerFn(r *Registry) {
 
 // parseFnDef parses a function specification list into FnDefInfo.
 // The list contains signature triples: [input-sig, output-sig, body] ...
+// Each element of a triple may be abbreviated: a non-list value is treated
+// as a single-element list (e.g., `string` is equivalent to `[string]`).
 func parseFnDef(list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
@@ -626,18 +785,27 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		// list[i+1] is the output signature — informational only
 		body := list[i+2]
 
+		// Abbreviation: non-list input sig is treated as [inputSig].
+		if !inputSig.VType.Equal(TList) {
+			inputSig = NewList([]Value{inputSig})
+		}
+
 		params, err := parseFnParams(inputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
 
-		if !body.VType.Equal(TList) {
-			return FnDefInfo{}, fmt.Errorf("function spec: body must be a list")
+		// Abbreviation: non-list body is treated as [body].
+		var bodyElems []Value
+		if body.VType.Equal(TList) {
+			bodyElems = body.AsList()
+		} else {
+			bodyElems = []Value{body}
 		}
 
 		sigs = append(sigs, FnSig{
 			Params: params,
-			Body:   body.AsList(),
+			Body:   bodyElems,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
@@ -679,6 +847,18 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			// Type literal (already resolved by parser)
 			params = append(params, FnParam{Type: elem.VType})
 
+		case elem.VType.Matches(TInteger):
+			// Integer literal as type constraint (e.g., 0 matches number/integer/0)
+			params = append(params, FnParam{Type: elem.VType})
+
+		case elem.VType.Matches(TBoolean):
+			// Boolean literal as type constraint
+			params = append(params, FnParam{Type: elem.VType})
+
+		case elem.VType.Matches(TString):
+			// String literal as type constraint
+			params = append(params, FnParam{Type: elem.VType})
+
 		default:
 			return nil, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
 		}
@@ -698,6 +878,10 @@ func resolveSigType(v Value) Type {
 	}
 	if v.VType.Matches(TString) {
 		return resolveTypeName(v.AsString())
+	}
+	// Literal values (integers, booleans) carry their literal type.
+	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
+		return v.VType
 	}
 	return TAny
 }
@@ -729,7 +913,12 @@ func resolveTypeName(name string) Type {
 // installFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via installDef, returns body tokens, and appends undef cleanup.
-func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
+func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool) {
+	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+	registerFn := r.Register
+	if isPrefixOnly {
+		registerFn = r.RegisterPrefixOnly
+	}
 	for _, sig := range fnDef.Sigs {
 		argTypes := make([]Type, len(sig.Params))
 		for i, p := range sig.Params {
@@ -756,7 +945,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo) {
 			}
 			return result, nil
 		}
-		r.Register(name, Signature{Args: argTypes, Handler: handler})
+		registerFn(name, Signature{Args: argTypes, Handler: handler})
 	}
 }
 

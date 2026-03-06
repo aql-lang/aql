@@ -1,6 +1,6 @@
 # AQL File Access API Design
 
-## Status: Implemented (v1)
+## Status: Implemented (v2 — CSV/TSV added)
 
 
 ## Architecture
@@ -94,7 +94,7 @@ Signatures:
 | Key    | Default   | Values                                     |
 |--------|-----------|--------------------------------------------|
 | `enc`  | `"utf8"`  | `"utf8"`, `"binary"`, `"latin1"`           |
-| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`  |
+| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`, `"csv"`, `"tsv"` |
 | `mode` | `"write"` | `"write"` (truncate), `"append"`           |
 | `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
 
@@ -104,6 +104,8 @@ Signatures:
 - `json` — on read: parse JSON to AQL map/list; on write: serialize to JSON
 - `jsonic` — on read: parse with jsonic (relaxed JSON: unquoted keys, etc.)
 - `lines` — on read: split into list of strings; on write: join list with newline
+- `csv` — on read: parse CSV into a table value with schema; on write: serialize table to CSV
+- `tsv` — on read: parse TSV into a table value with schema; on write: serialize table to TSV
 
 
 ## Line Endings
@@ -177,14 +179,13 @@ write "path" (read "source.txt")     # clear: content from expression
 - `write` returns the path
 
 
-## Not in Scope (v1)
+## Not in Scope
 
 - Sandbox/path traversal protection (use custom FileOps)
 - Directory operations (`ls`, `mkdir`, `rm`)
 - Streaming or chunked reads
 - File metadata (`stat`, `exists`)
 - Network I/O (`fetch`, `http`)
-- CSV format
 - Glob patterns
 - File watching
 - Write atomicity (temp+rename)

@@ -1,5 +1,5 @@
 
-
+# AQL Samples
 
 
 ## Format
@@ -49,7 +49,7 @@ type increment word [
 child elements:
 
 `[:string]` - list of strings
-`[:{x:number}]` - of of `{x:number}` maps
+`[:{x:number}]` - list of `{x:number}` maps
 
 `{:integer}` - map of integers
 `{:[:string]}` - map of string lists
@@ -181,7 +181,7 @@ markers being ##
 
 ## Word definitions
 
-Quoted source is directly placed onto future token strea,
+Quoted source is directly placed onto future token stream.
 
 The built in def has suffix precedence with signature: 
 ```
@@ -203,7 +203,7 @@ decrement 3 # result <2|>, works because sub allows suffix args
 ```
 
 New words defined with `def` can only handle prefix args internally.
-Suffix args are an engine convenience. See ENGINES.md for an explanation.
+Suffix args are an engine convenience. See ENGINE.md for an explanation.
 
 
 `def x` means use top of stack as value
@@ -220,7 +220,7 @@ returns <3 7 6>
 
 `def square [ [number] [number] [dup mul]]`
 
-Words are effectively functions. Thus square takes one argument, suffix precendence. 
+Words are effectively functions. Thus square takes one argument, suffix precedence. 
 The argument can be:
 
 - list with 3n entries

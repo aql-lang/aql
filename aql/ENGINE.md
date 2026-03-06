@@ -18,7 +18,7 @@ The usual forth style primitives are provided by the system: dup, swap, etc.
 
 Suffix arguments are supported as follows. Some function signatures
 may specify that they are forward matches. If such a signature has
-precedence, sufficent future tokens must be resolved to check for a
+precedence, sufficient future tokens must be resolved to check for a
 match.  In this case a new primitive, forward, is placed on the stack,
 which stores internal accounting to manipulate the stack so that the
 primary function will ultimately find its expected arguments in order
@@ -185,7 +185,7 @@ Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
 * [|] -> `1.5 2 area` -> [3|]
 
 
-Implementation: words themselves shoudl never deal with suffix precedence. Instead the 
+Implementation: words themselves should never deal with suffix precedence. Instead the 
 interpreter should move any matched values from the future stack onto the main stack, and the
 word can then proceed normally, as if the values had been prefix values all along.
 
@@ -198,7 +198,7 @@ The default argument precedence can be specified using a /p or /s suffix in the 
 
 ## Traditional Forth-style Builtins
 
-Words such as dup, swap, drop, etc, taken directly form forth, are considered defined with /p, an d only operate on the stack be default. 
+Words such as dup, swap, drop, etc, taken directly from forth, are considered defined with /p, and only operate on the stack by default. 
 
 * [1|] -> `dup` -> [1 1|]
 * [2 3|] -> `swap` -> [3 2|]
