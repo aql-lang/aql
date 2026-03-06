@@ -331,7 +331,7 @@ tighter when words compete for suffix arguments.
 | 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `lt`, `gt`, `lte`, `gte`, `eq`, `deq` |
 
 ```
-2 add 3 mul 4               => 14      # (2+3)*4, not 2+(3*4)
+2 add 3 mul 4               => 14      # 2+(3*4), mul binds tighter
 2 mul 3 add 4               => 10      # (2*3)+4
 1 add 2 mul 3 add 4         => 11
 ```
@@ -1472,7 +1472,7 @@ file system with the process working directory for relative paths. A
 `MemFileOps` implementation is available for testing.
 
 File format handling is dispatched through a pluggable `Format`
-interface. Built-in formats are `text`, `json`, `jsonic`, and `lines`.
+interface. Built-in formats are `text`, `json`, `jsonic`, `lines`, `csv`, and `tsv`.
 Host applications can register custom formats via `RegisterFormat`.
 
 #### `read`
@@ -1500,7 +1500,7 @@ read "raw.bin" {nl:"raw"}              # no line ending normalization
 | Key    | Default   | Values                                     |
 |--------|-----------|--------------------------------------------|
 | `enc`  | `"utf8"`  | `"utf8"`, `"binary"`, `"latin1"`           |
-| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`  |
+| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`, `"csv"`, `"tsv"` |
 | `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
 
 **Format details:**
@@ -1509,6 +1509,8 @@ read "raw.bin" {nl:"raw"}              # no line ending normalization
 - `json` — parse JSON to AQL map/list
 - `jsonic` — parse with jsonic (unquoted keys, trailing commas, etc.)
 - `lines` — split on `\n` into a list of strings
+- `csv` — parse CSV into a table value with typed schema
+- `tsv` — parse TSV (tab-separated) into a table value with typed schema
 
 **Line ending normalization:**
 
@@ -1539,7 +1541,7 @@ write "out.txt" "a\nb\n" {nl:"crlf"}
 | Key    | Default   | Values                                     |
 |--------|-----------|--------------------------------------------|
 | `enc`  | `"utf8"`  | `"utf8"`, `"binary"`, `"latin1"`           |
-| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`  |
+| `fmt`  | `"text"`  | `"text"`, `"json"`, `"jsonic"`, `"lines"`, `"csv"`, `"tsv"` |
 | `mode` | `"write"` | `"write"` (truncate), `"append"`           |
 | `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
 
