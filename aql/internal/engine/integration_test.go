@@ -982,6 +982,71 @@ func TestEngineFnFactorial(t *testing.T) {
 	}
 }
 
+func TestEngineFnFactorialNoVars(t *testing.T) {
+	r := DefaultRegistry()
+	// Try several variable-free body forms for the recursive case.
+	// Base case is always: 0 integer [drop 1]
+	bodies := []struct {
+		name string
+		body []Value
+	}{
+		// Approach A: dup sub 1 fact swap mul
+		// n dup → n n; n sub 1 → n-1; fact → fact(n-1); swap mul → n*fact(n-1)
+		{"dup sub 1 fact swap mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("swap"), NewWord("mul"),
+		}},
+		// Approach B: dup sub 1 fact mul (rely on mul grabbing n as prefix)
+		{"dup sub 1 fact mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("mul"),
+		}},
+		// Approach C: dup mul fact (dup sub 1)  — same structure as named version
+		// but dup in inner parens has no prefix, so this likely fails
+		{"dup mul fact (dup sub 1)", []Value{
+			NewWord("dup"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("dup"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}},
+	}
+
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+
+	for _, b := range bodies {
+		fnBody := NewList([]Value{
+			NewInteger(0),
+			NewWord("integer"),
+			NewList([]Value{NewWord("drop"), NewInteger(1)}),
+			NewWord("integer"),
+			NewList([]Value{NewWord("integer")}),
+			NewList(b.body),
+		})
+		allPass := true
+		for _, tc := range tests {
+			result := runAQL(t, r, []Value{
+				NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+				NewInteger(tc.input), NewWord("fact"),
+			})
+			if len(result) != 1 || result[0].AsInteger() != tc.expected {
+				t.Logf("FAIL body=%q: fact %d = %v, want %d", b.name, tc.input, result, tc.expected)
+				allPass = false
+			}
+		}
+		if allPass {
+			t.Logf("PASS body=%q", b.name)
+		}
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point
