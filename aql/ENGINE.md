@@ -16,6 +16,7 @@ Most specific being longest with narrowest types.
 
 The usual forth style primitives are provided by the system: dup, swap, etc.
 
+
 Some words can use future tokens as if they were on the stack
 already. This is called suffix precedence.
 
@@ -42,10 +43,6 @@ Here are some examples ([|] indicates the state of the stack: [current|future]):
 Review the signature matching and word argument arrangement and adjust
 if necessary. also review the forward mechanism to see if it is
 actually needed
-
-
-
-
 
 
 
@@ -199,7 +196,7 @@ Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
 * [|] -> `1.5 2 area` -> [3|]
 
 
-Implementation: words themselves shoudl never deal with suffix precedence. Instead the 
+Implementation: words themselves should never deal with suffix precedence. Instead the 
 interpreter should move any matched values from the future stack onto the main stack, and the
 word can then proceed normally, as if the values had been prefix values all along.
 
@@ -212,7 +209,7 @@ The default argument precedence can be specified using a /p or /s suffix in the 
 
 ## Traditional Forth-style Builtins
 
-Words such as dup, swap, drop, etc, taken directly form forth, are considered defined with /p, an d only operate on the stack be default. 
+Words such as dup, swap, drop, etc, taken directly from forth, are considered defined with /p, and only operate on the stack by default. 
 
 * [1|] -> `dup` -> [1 1|]
 * [2 3|] -> `swap` -> [3 2|]

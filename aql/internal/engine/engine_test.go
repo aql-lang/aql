@@ -50,8 +50,8 @@ func TestNewString(t *testing.T) {
 
 func TestNewInteger(t *testing.T) {
 	v := NewInteger(42)
-	if !v.VType.Equal(TInteger) {
-		t.Errorf("type = %s, want number/integer", v.VType)
+	if !v.VType.Matches(TInteger) {
+		t.Errorf("type = %s, want matches number/integer", v.VType)
 	}
 	if v.AsInteger() != 42 {
 		t.Errorf("data = %d, want 42", v.AsInteger())
@@ -259,6 +259,237 @@ func TestDropSuffix(t *testing.T) {
 	}
 	if len(result) != 0 {
 		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	}
+}
+
+func TestOver(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("over")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 1 {
+		t.Errorf("got %v, want [1, 2, 1]", result)
+	}
+}
+
+func TestRot(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("rot")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 2 || result[1].AsInteger() != 3 || result[2].AsInteger() != 1 {
+		t.Errorf("got %v, want [2, 3, 1]", result)
+	}
+}
+
+func TestNip(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("nip")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("got %v, want [2]", result)
+	}
+}
+
+func TestTuck(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("tuck")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 2 || result[1].AsInteger() != 1 || result[2].AsInteger() != 2 {
+		t.Errorf("got %v, want [2, 1, 2]", result)
+	}
+}
+
+func Test2Dup(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2dup")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 1 || result[3].AsInteger() != 2 {
+		t.Errorf("got %v, want [1, 2, 1, 2]", result)
+	}
+}
+
+func Test2Swap(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2swap")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 3 || result[1].AsInteger() != 4 || result[2].AsInteger() != 1 || result[3].AsInteger() != 2 {
+		t.Errorf("got %v, want [3, 4, 1, 2]", result)
+	}
+}
+
+func Test2Drop(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2drop")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %v, want []", result)
+	}
+}
+
+func Test2Over(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2over")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 6 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 3 || result[3].AsInteger() != 4 || result[4].AsInteger() != 1 || result[5].AsInteger() != 2 {
+		t.Errorf("got %v, want [1, 2, 3, 4, 1, 2]", result)
+	}
+}
+
+func TestDepthEmpty(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewWord("depth")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 0 {
+		t.Errorf("got %v, want [0]", result)
+	}
+}
+
+func TestDepth(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("depth")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[3].AsInteger() != 3 {
+		t.Errorf("got %v, want [1, 2, 3, 3]", result)
+	}
+}
+
+func TestPick0(t *testing.T) {
+	// pick 0 = dup: 1 2 3 0 pick → 1 2 3 3
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("pick")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 3 || result[3].AsInteger() != 3 {
+		t.Errorf("got %v, want [1, 2, 3, 3]", result)
+	}
+}
+
+func TestPick2(t *testing.T) {
+	// 1 2 3 2 pick → 1 2 3 1
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("pick")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 4 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 3 || result[3].AsInteger() != 1 {
+		t.Errorf("got %v, want [1, 2, 3, 1]", result)
+	}
+}
+
+func TestPickOutOfRange(t *testing.T) {
+	e := New(DefaultRegistry())
+	_, err := e.Run([]Value{NewInteger(1), NewInteger(5), NewWord("pick")})
+	if err == nil {
+		t.Fatal("expected error for out-of-range pick")
+	}
+}
+
+func TestRoll2(t *testing.T) {
+	// 1 2 3 2 roll → 2 3 1 (same as rot)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("roll")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 2 || result[1].AsInteger() != 3 || result[2].AsInteger() != 1 {
+		t.Errorf("got %v, want [2, 3, 1]", result)
+	}
+}
+
+func TestRoll1(t *testing.T) {
+	// 1 2 3 1 roll → 1 3 2 (same as swap)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(1), NewWord("roll")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 1 || result[1].AsInteger() != 3 || result[2].AsInteger() != 2 {
+		t.Errorf("got %v, want [1, 3, 2]", result)
+	}
+}
+
+func TestRoll0(t *testing.T) {
+	// 1 2 3 0 roll → 1 2 3 (no-op)
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("roll")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 3 || result[0].AsInteger() != 1 || result[1].AsInteger() != 2 || result[2].AsInteger() != 3 {
+		t.Errorf("got %v, want [1, 2, 3]", result)
+	}
+}
+
+func TestAbs(t *testing.T) {
+	e := New(DefaultRegistry())
+	// -5 abs → 5
+	result, err := e.Run([]Value{NewInteger(-5), NewWord("abs")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 5 {
+		t.Errorf("got %v, want [5]", result)
+	}
+	// 3 abs → 3
+	result, err = e.Run([]Value{NewInteger(3), NewWord("abs")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestNegate(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(5), NewWord("negate")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != -5 {
+		t.Errorf("got %v, want [-5]", result)
+	}
+}
+
+func TestMin(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("min")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestMax(t *testing.T) {
+	e := New(DefaultRegistry())
+	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("max")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 7 {
+		t.Errorf("got %v, want [7]", result)
 	}
 }
 

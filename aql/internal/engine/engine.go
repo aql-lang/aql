@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
@@ -21,16 +24,36 @@ var typeNames = map[string]Type{
 // so that most insert/splice operations avoid heap allocation.
 const stackHeadroom = 8
 
+// TraceCallback is called before each step of execution when tracing is enabled.
+// It receives the step number, pointer position, full stack, and an annotation
+// describing what happened on the previous step.
+type TraceCallback func(step int, pointer int, stack []Value, note string)
+
 // Engine is the AQL stack machine.
 type Engine struct {
-	stack    []Value
-	pointer  int
-	registry *Registry
+	stack     []Value
+	pointer   int
+	registry  *Registry
+	trace     TraceCallback
+	traceNote string // annotation set during execution for the next trace call
 }
 
 // New creates an Engine with the given function registry.
 func New(registry *Registry) *Engine {
 	return &Engine{registry: registry}
+}
+
+// traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
+func traceSigStr(name string, sig *Signature) string {
+	args := make([]string, len(sig.Args))
+	for i, t := range sig.Args {
+		args[i] = t.String()
+	}
+	s := name + "(" + strings.Join(args, ", ") + ")"
+	if sig.Precedence > 0 {
+		s += fmt.Sprintf(" prec=%d", sig.Precedence)
+	}
+	return s
 }
 
 // stackInsert inserts val at index i, shifting elements right.
@@ -92,6 +115,14 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		}
 
 		val := e.stack[e.pointer]
+
+		if e.trace != nil {
+			snapshot := make([]Value, len(e.stack))
+			copy(snapshot, e.stack)
+			note := e.traceNote
+			e.traceNote = ""
+			e.trace(step, e.pointer, snapshot, note)
+		}
 
 		switch {
 		case val.IsWord():
@@ -225,6 +256,7 @@ func (e *Engine) stepWord(val Value) error {
 		if match == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
+		e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 		return e.execMatch(match)
 	}
 
@@ -235,6 +267,7 @@ func (e *Engine) stepWord(val Value) error {
 		if bestSig == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
+		e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
 		return e.insertForward(w, bestSig, len(bestSig.Args))
 	}
 
@@ -246,6 +279,7 @@ func (e *Engine) stepWord(val Value) error {
 		// Defer 0-arg matches (generic def handler) so suffix-mode
 		// typed signatures get a chance to collect arguments first.
 		if match != nil && len(match.Sig.Args) > 0 {
+			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
@@ -256,11 +290,13 @@ func (e *Engine) stepWord(val Value) error {
 			if suffixNeeded <= 0 {
 				suffixNeeded = len(bestSig.Args)
 			}
+			e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
 			return e.insertForward(w, bestSig, suffixNeeded)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
 		if match != nil {
+			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
@@ -273,6 +309,7 @@ func (e *Engine) stepWord(val Value) error {
 	if match == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
+	e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 	return e.execMatch(match)
 }
 
@@ -313,25 +350,30 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 		}
 
 		// Count how many args from the top of the resolved stack match
-		// the END of sig.Args (prefix portion). In the suffix-first model,
-		// suffix fills Args[0..S-1] and prefix fills Args[S..N-1].
-		// So prefix args match against the last slots.
+		// sig.Args in any position (flexible prefix matching).
+		// Only consider the top N contiguous resolved values.
 		prefixCount := 0
-		for tryN := len(sig.Args); tryN >= 1; tryN-- {
-			if tryN > len(resolved) {
-				continue
-			}
-			match := true
-			for j := 0; j < tryN; j++ {
-				rIdx := len(resolved) - tryN + j
-				sigIdx := len(sig.Args) - tryN + j
-				if !resolved[rIdx].VType.Matches(sig.Args[sigIdx]) {
-					match = false
-					break
+		usedArgs := make([]bool, len(sig.Args))
+		maxTry := len(sig.Args)
+		if maxTry > len(resolved) {
+			maxTry = len(resolved)
+		}
+		for tryN := maxTry; tryN >= 1; tryN-- {
+			top := resolved[len(resolved)-tryN:]
+			tempUsed := make([]bool, len(sig.Args))
+			matched := 0
+			for _, v := range top {
+				for si := 0; si < len(sig.Args); si++ {
+					if !tempUsed[si] && v.VType.Matches(sig.Args[si]) {
+						tempUsed[si] = true
+						matched++
+						break
+					}
 				}
 			}
-			if match {
+			if matched == tryN {
 				prefixCount = tryN
+				copy(usedArgs, tempUsed)
 				break
 			}
 		}
@@ -343,32 +385,40 @@ func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (
 		// partially match the existing stack win over those that don't.
 		score += prefixCount * 25
 
-		// Bonus: if the peeked suffix value matches the first expected
-		// suffix arg type, boost this sig's score to prefer it.
-		// In the suffix-first model, suffix always fills from Args[0].
+		// Bonus: if the peeked suffix value matches the first unmatched
+		// sig arg type, boost this sig's score. Only check the first
+		// unmatched arg to avoid false positives on heterogeneous sigs.
 		if peekVal != nil && prefixCount < len(sig.Args) {
-			firstSuffixType := sig.Args[0]
-			matched := peekVal.VType.Matches(firstSuffixType)
-			// Predict resolved types for words that haven't executed yet.
-			if !matched && peekVal.IsWord() {
-				pw := peekVal.AsWord()
-				switch {
-				case pw.Name == "true" || pw.Name == "false":
-					matched = TBoolean.Matches(firstSuffixType)
-				case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
-					// Skip structural words.
-				default:
-					if _, isType := typeNames[pw.Name]; isType {
-						// Type names stay as type literals, not useful
-						// for suffix prediction here.
-					} else if e.registry.Lookup(pw.Name) == nil {
-						// Unknown word → will resolve to atom.
-						matched = TAtom.Matches(firstSuffixType)
-					}
-					// Also check TWord for sigs expecting word literals
-					// (e.g. set, def).
-					if !matched {
-						matched = peekVal.VType.Matches(firstSuffixType)
+			firstUnmatched := -1
+			for si := 0; si < len(sig.Args); si++ {
+				if !usedArgs[si] {
+					firstUnmatched = si
+					break
+				}
+			}
+			matched := false
+			if firstUnmatched >= 0 {
+				firstSuffixType := sig.Args[firstUnmatched]
+				matched = peekVal.VType.Matches(firstSuffixType)
+				// Predict resolved types for words that haven't executed yet.
+				if !matched && peekVal.IsWord() {
+					pw := peekVal.AsWord()
+					switch {
+					case pw.Name == "true" || pw.Name == "false":
+						matched = TBoolean.Matches(firstSuffixType)
+					case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
+						// Skip structural words.
+					default:
+						if _, isType := typeNames[pw.Name]; isType {
+							// Type names stay as type literals.
+						} else if e.registry.Lookup(pw.Name) == nil {
+							// Unknown word → will resolve to atom.
+							matched = TAtom.Matches(firstSuffixType)
+						}
+						// Also check TWord for sigs expecting word literals.
+						if !matched {
+							matched = peekVal.VType.Matches(firstSuffixType)
+						}
 					}
 				}
 			}
@@ -393,7 +443,24 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Find the indices of the n resolved values before the pointer.
 	indices := e.resolvedIndicesBefore(n)
 
-	results, err := match.Sig.Handler(match.Args)
+	var results []Value
+	var err error
+	if match.Sig.FullStackHandler != nil {
+		// Collect the full resolved stack before the pointer,
+		// excluding the matched args and forwards.
+		fullStack := e.resolvedStackBefore(indices)
+		results, err = match.Sig.FullStackHandler(match.Args, fullStack)
+		if err != nil {
+			return err
+		}
+		// FullStackHandler returns the complete replacement for
+		// everything from start through the pointer (inclusive).
+		e.stackSplice(0, e.pointer+1, results...)
+		e.pointer = 0
+		return nil
+	}
+
+	results, err = match.Sig.Handler(match.Args)
 	if err != nil {
 		return err
 	}
@@ -455,6 +522,23 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 	return indices
 }
 
+// resolvedStackBefore returns all resolved values before the pointer,
+// excluding forwards, open-parens, and the matched arg indices.
+func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
+	exclude := make(map[int]bool, len(excludeIndices))
+	for _, idx := range excludeIndices {
+		exclude[idx] = true
+	}
+	var stack []Value
+	for i := 0; i < e.pointer; i++ {
+		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() {
+			continue
+		}
+		stack = append(stack, e.stack[i])
+	}
+	return stack
+}
+
 // insertForward handles a suffix-precedence word by placing a forward
 // primitive after the word on the stack.
 func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int) error {
@@ -496,13 +580,43 @@ func (e *Engine) stepLiteral() error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
-	// Check if the value matches the next expected suffix type.
-	// In the suffix-first model, suffix fills Args[0..S-1] in order.
-	nextArgIdx := fwd.CollectedArgs
-	if nextArgIdx < len(fwd.Sig.Args) {
-		expectedType := fwd.Sig.Args[nextArgIdx]
+	// Check if the value matches ANY remaining (uncollected) arg type.
+	// Suffix collection is flexible: the value can satisfy any arg slot,
+	// with final ordering handled by flexibleMatch during prefix retry.
+	if fwd.CollectedArgs < len(fwd.Sig.Args) {
 		val := e.stack[valIdx]
-		if !val.VType.Matches(expectedType) {
+		matchesAny := false
+		for i := 0; i < len(fwd.Sig.Args); i++ {
+			if val.VType.Matches(fwd.Sig.Args[i]) {
+				matchesAny = true
+				break
+			}
+		}
+		if !matchesAny {
+			// The forward's chosen sig doesn't accept this value, but
+			// another overload of the same function might. Check all
+			// signatures and switch if we find a compatible one.
+			if fn := e.registry.Lookup(fwd.FuncName); fn != nil {
+				for si := range fn.Signatures {
+					altSig := &fn.Signatures[si]
+					if len(altSig.Args) != len(fwd.Sig.Args) {
+						continue
+					}
+					for ai := range altSig.Args {
+						if val.VType.Matches(altSig.Args[ai]) {
+							fwd.Sig = altSig
+							e.stack[fwdIdx] = NewForward(fwd)
+							matchesAny = true
+							break
+						}
+					}
+					if matchesAny {
+						break
+					}
+				}
+			}
+		}
+		if !matchesAny {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
 		}
@@ -512,6 +626,12 @@ func (e *Engine) stepLiteral() error {
 	// defer collection and let that operator execute first.
 	if fwd.Precedence > 0 {
 		if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
+			nextName := ""
+			if valIdx+1 < len(e.stack) && e.stack[valIdx+1].IsWord() {
+				nextName = e.stack[valIdx+1].AsWord().Name
+			}
+			e.traceNote = fmt.Sprintf("defer %s prec=%d < %s prec=%d",
+				fwd.FuncName, fwd.Precedence, nextName, nextPrec)
 			e.pointer++
 			return nil
 		}
@@ -542,6 +662,9 @@ func (e *Engine) stepLiteral() error {
 
 	fwd.CollectedArgs++
 	fwd.FuncIndex = funcIdx
+
+	e.traceNote = fmt.Sprintf("collect %s %d/%d",
+		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All suffix args collected. Remove forward, force prefix, retry.

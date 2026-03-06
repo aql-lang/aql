@@ -1,5 +1,12 @@
 # AQL Core Execution Loop — Implementation Plan
 
+> **Note:** This plan has been completed. The engine, registry, type
+> system, and built-in primitives described below are all implemented.
+> A parser (using jsonic, not the stub lexer) was also added, along with
+> file I/O, query words, conditionals, and many additional builtins
+> beyond the initial scope listed here. See LANGREF.md for the current
+> language reference.
+
 ## Analysis
 
 AQL is a **concatenative stack machine**. The core engine takes the next item,

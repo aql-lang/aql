@@ -689,6 +689,299 @@ func TestEngineFnNamed(t *testing.T) {
 	}
 }
 
+func TestEngineFnCatterPrefixOnly(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [1 "a"|] -> catter -> all args from prefix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(1), NewString("a"), NewWord("catter"),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("1 'a' catter = %v, want string result", result)
+	}
+}
+
+func TestEngineFnCatterPartialSuffix(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(2), NewWord("catter"), NewString("b"),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("2 catter 'b' = %v, want string result", result)
+	}
+}
+
+func TestEngineFnCatterFullSuffix(t *testing.T) {
+	r := DefaultRegistry()
+	// def catter fn [[integer string] [string] [add]] end
+	// Case: [|] -> catter "c" 3 -> both args from suffix
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("integer"), NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("catter"), NewString("c"), NewInteger(3),
+	})
+	if len(result) != 1 || !result[0].VType.Matches(TString) {
+		t.Errorf("catter 'c' 3 = %v, want string result", result)
+	}
+}
+
+func TestIntegerLiteralType(t *testing.T) {
+	// NewInteger encodes literal value in type path: number/integer/5
+	v := NewInteger(5)
+	if !v.VType.Matches(TInteger) {
+		t.Errorf("NewInteger(5).VType = %s, want matches number/integer", v.VType)
+	}
+	if !v.VType.Matches(TNumber) {
+		t.Errorf("NewInteger(5).VType = %s, want matches number", v.VType)
+	}
+	// Different integers have different types
+	v0 := NewInteger(0)
+	v1 := NewInteger(1)
+	if v0.VType.Equal(v1.VType) {
+		t.Errorf("NewInteger(0) and NewInteger(1) should have different types")
+	}
+	// But both match integer
+	if !v0.VType.Matches(TInteger) || !v1.VType.Matches(TInteger) {
+		t.Error("both should match integer")
+	}
+}
+
+func TestEngineFnLiteralType(t *testing.T) {
+	r := DefaultRegistry()
+	// def adder fn [[0] [integer] [add 2]] end
+	// adder only matches the value 0, adds 2 to it
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(2)}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(0), NewWord("adder"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("0 adder = %v, want 2", result)
+	}
+}
+
+func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
+	r := DefaultRegistry()
+	// def adder fn [[0] [integer] [add 2]] end
+	// adder should NOT match 5 (only matches 0)
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(2)}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("adder"),
+	})
+	if err == nil {
+		t.Error("expected error: adder should not match 5")
+	}
+}
+
+func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
+	r := DefaultRegistry()
+	// def handler fn [[0] [integer] [add 10] [1] [integer] [add 20]] end
+	// handler 0 → 10, handler 1 → 21
+	fnBody := NewList([]Value{
+		NewList([]Value{NewInteger(0)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(10)}),
+		NewList([]Value{NewInteger(1)}),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("add"), NewInteger(20)}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(0), NewWord("handler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("0 handler = %v, want 10", result)
+	}
+
+	result = runAQL(t, r, []Value{
+		NewInteger(1), NewWord("handler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 21 {
+		t.Errorf("1 handler = %v, want 21", result)
+	}
+}
+
+func TestEngineFnDefPrefixOnly(t *testing.T) {
+	r := DefaultRegistry()
+	// def doubler/p fn [[x:integer] [integer] [x x add]] end
+	// doubler/p registers as prefix-only: takes args from the stack only,
+	// never collects suffix args via forward.
+	fnBody := NewList([]Value{
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
+	})
+	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("doubler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("5 doubler = %v, want 10", result)
+	}
+}
+
+func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
+	r := DefaultRegistry()
+	// def doubler/p fn [[x:integer] [integer] [x x add]] end
+	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
+	// It should fail because there's nothing on the stack for prefix match.
+	fnBody := NewList([]Value{
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("doubler"), NewInteger(5),
+	})
+	if err == nil {
+		t.Error("expected error: doubler/p should not collect suffix args")
+	}
+}
+
+func TestEngineFnAbbreviatedSignature(t *testing.T) {
+	r := DefaultRegistry()
+
+	// def foo fn [
+	//   [string] [string] [add "Q"]    -- full form
+	//   integer  string   [add "P"]    -- abbreviated input sig & output sig
+	//   99       string   [drop "NN"]  -- abbreviated input sig & output sig
+	// ]
+
+	fnBody := NewList([]Value{
+		// sig 1: [string] [string] [add "Q"]
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("add"), NewString("Q")}),
+
+		// sig 2: integer string [add "P"]  (abbreviated input & output)
+		NewWord("integer"),
+		NewWord("string"),
+		NewList([]Value{NewWord("add"), NewString("P")}),
+
+		// sig 3: 99 string [drop "NN"]  (abbreviated input & output)
+		NewInteger(99),
+		NewWord("string"),
+		NewList([]Value{NewWord("drop"), NewString("NN")}),
+	})
+
+	// foo "x" → "xQ" (string matches sig 1: "x" add "Q")
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewString("x"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "xQ" {
+		t.Errorf("foo \"x\" = %v, want \"xQ\"", result)
+	}
+
+	// foo 1 → "1P" (integer matches sig 2: 1 add "P")
+	result = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(1), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "1P" {
+		t.Errorf("foo 1 = %v, want \"1P\"", result)
+	}
+
+	// foo 99 → "NN" (literal 99 matches sig 3: drop "NN")
+	result = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(99), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "NN" {
+		t.Errorf("foo 99 = %v, want \"NN\"", result)
+	}
+
+}
+
+func TestEngineFnAbbreviatedSimple(t *testing.T) {
+	r := DefaultRegistry()
+	// def double fn [number number [dup add]] end 7 double
+	// All three elements abbreviated (single-valued)
+	fnBody := NewList([]Value{
+		NewWord("number"),
+		NewWord("number"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(7), NewWord("double"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 14 {
+		t.Errorf("double 7 = %v, want 14", result)
+	}
+}
+
+func TestEngineFnFactorial(t *testing.T) {
+	r := DefaultRegistry()
+	// def fact fn [0 integer [drop 1] [x:integer] [integer] [x mul fact (x sub 1)]]
+	fnBody := NewList([]Value{
+		// sig 1 (base case): 0 integer [drop 1]
+		NewInteger(0),
+		NewWord("integer"),
+		NewList([]Value{NewWord("drop"), NewInteger(1)}),
+		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("integer"))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{
+			NewWord("x"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}),
+	})
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+	for _, tc := range tests {
+		result := runAQL(t, r, []Value{
+			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewInteger(tc.input), NewWord("fact"),
+		})
+		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
+		}
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point
