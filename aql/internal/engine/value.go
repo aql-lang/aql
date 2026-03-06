@@ -445,7 +445,7 @@ func (v Value) String() string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
-	case v.VType.Equal(TMap):
+	case v.VType.Matches(TMap):
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "{:" + ct.Child.String() + "}"
 		}

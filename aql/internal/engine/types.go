@@ -28,7 +28,8 @@ var (
 	TForward      = NewType("forward")
 	TOpenParen    = NewType("paren/open")
 	TFnDef        = NewType("fndef")
-	TDisjunct     = NewType("disjunct")
+	TDisjunct        = NewType("disjunct")
+	TWordInspection  = NewType("map/word_inspection")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".

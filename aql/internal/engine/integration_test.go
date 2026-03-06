@@ -1234,6 +1234,114 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	}
 }
 
+// --- Inspect word tests ---
+
+func TestEngineInspectBuiltin(t *testing.T) {
+	r := DefaultRegistry()
+	// inspect add => word_inspection map
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.VType.Equal(TWordInspection) {
+		t.Fatalf("expected type %s, got %s", TWordInspection, v.VType)
+	}
+	m := v.AsMap()
+
+	// Check name field.
+	name, ok := m.Get("name")
+	if !ok || name.AsString() != "add" {
+		t.Errorf("name = %v, want 'add'", name)
+	}
+
+	// Check kind field.
+	kind, ok := m.Get("kind")
+	if !ok || kind.AsAtom() != "builtin" {
+		t.Errorf("kind = %v, want builtin", kind)
+	}
+
+	// Check signatures field is a non-empty list.
+	sigs, ok := m.Get("signatures")
+	if !ok {
+		t.Fatal("missing signatures field")
+	}
+	sigList := sigs.AsList()
+	if len(sigList) == 0 {
+		t.Error("expected at least one signature for add")
+	}
+
+	// Check first signature has args and precedence.
+	sig0 := sigList[0].AsMap()
+	args, _ := sig0.Get("args")
+	argList := args.AsList()
+	if len(argList) != 2 {
+		t.Errorf("expected 2 args for add, got %d", len(argList))
+	}
+
+	prec, _ := sig0.Get("precedence")
+	if prec.AsInteger() == 0 {
+		t.Error("expected non-zero precedence for add")
+	}
+}
+
+func TestEngineInspectUserDefined(t *testing.T) {
+	r := DefaultRegistry()
+	// def double [2 mul] ; inspect double
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
+		NewWord("inspect"), NewWord("double"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "defined" {
+		t.Errorf("kind = %v, want defined", kind)
+	}
+
+	name, _ := m.Get("name")
+	if name.AsString() != "double" {
+		t.Errorf("name = %v, want 'double'", name)
+	}
+}
+
+func TestEngineInspectUnknown(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("nonexistent")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "unknown" {
+		t.Errorf("kind = %v, want unknown", kind)
+	}
+
+	sigs, _ := m.Get("signatures")
+	if len(sigs.AsList()) != 0 {
+		t.Errorf("expected empty signatures for unknown word")
+	}
+}
+
+func TestEngineInspectDotAccess(t *testing.T) {
+	r := DefaultRegistry()
+	// inspect upper .name => 'upper'
+	result := runAQL(t, r, []Value{
+		NewWord("inspect"), NewWord("upper"),
+		NewWord("."), NewWord("name"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if result[0].AsString() != "upper" {
+		t.Errorf("inspect upper .name = %v, want 'upper'", result[0])
+	}
+}
+
 func TestFormatFromExt(t *testing.T) {
 	tests := []struct {
 		path string
