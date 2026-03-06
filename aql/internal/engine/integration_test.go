@@ -1027,7 +1027,7 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 			NewWord("integer"),
 			NewList([]Value{NewWord("drop"), NewInteger(1)}),
 			NewWord("integer"),
-			NewList([]Value{NewWord("integer")}),
+			NewWord("integer"),
 			NewList(b.body),
 		})
 		allPass := true
