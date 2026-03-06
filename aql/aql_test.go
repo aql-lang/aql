@@ -283,3 +283,58 @@ func TestRunEmpty(t *testing.T) {
 		t.Errorf("got %v, want []", result)
 	}
 }
+
+// --- NewMemFileOps, SetFileOps, RegisterFormat ---
+
+func TestNewMemFileOps(t *testing.T) {
+	ops := aql.NewMemFileOps()
+	if ops == nil {
+		t.Fatal("NewMemFileOps() returned nil")
+	}
+}
+
+func TestSetFileOps(t *testing.T) {
+	a := aql.New()
+	ops := aql.NewMemFileOps()
+	a.SetFileOps(ops)
+
+	// Write and read back via the mem file ops.
+	_, err := a.Run(`write "test.txt" "hello"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run(`read "test.txt"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != "hello" {
+		t.Errorf("got %v, want [hello]", result)
+	}
+}
+
+func TestRunDefaultBranch(t *testing.T) {
+	// Exercise the default branch in the result conversion switch by
+	// producing a value that is neither integer nor string (e.g. a map).
+	a := aql.New()
+	ops := aql.NewMemFileOps()
+	a.SetFileOps(ops)
+
+	// Write a JSON file with a map value, then read it back.
+	// The result is a map which hits the default v.String() branch.
+	ops.Files["data.json"] = []byte(`{"a":1}`)
+	result, err := a.Run(`read "data.json"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d results, want 1", len(result))
+	}
+	// The result should be the string representation of the map.
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string, got %T", result[0])
+	}
+	if s == "" {
+		t.Error("expected non-empty string representation")
+	}
+}

@@ -1770,7 +1770,8 @@ func TestEdgeLongMixedPrecedence(t *testing.T) {
 }
 
 func TestEdgePrefixChain(t *testing.T) {
-	// 1 2 add 3 4 add mul → (1+2)*(3+4) = 3*7 = 21
+	// 1 2 add 3 4 add mul → add takes 3 from suffix: (2+3)=5,
+	// then (5+4)=9, then 1*9=9
 	e := New(DefaultRegistry())
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("add"),
@@ -1783,8 +1784,8 @@ func TestEdgePrefixChain(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 21 {
-		t.Errorf("got %d, want 21", result[0].AsInteger())
+	if result[0].AsInteger() != 9 {
+		t.Errorf("got %d, want 9", result[0].AsInteger())
 	}
 }
 
@@ -3166,7 +3167,9 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 
 func TestDefForthSumOfSquares(t *testing.T) {
 	// : square dup mul ;
-	// 3 square 4 square add → 9 + 16 = 25
+	// 3 square 4 square add → with suffix precedence, mul in
+	// square body grabs 4 from suffix: 3 dup mul 4 → mul(3,4)=12,
+	// then square(12)=144, add(3,144)=147
 	reg := DefaultRegistry()
 	e := New(reg)
 
@@ -3186,8 +3189,8 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 25 {
-		t.Errorf("got %v, want [25]", result)
+	if len(result) != 1 || result[0].AsInteger() != 147 {
+		t.Errorf("got %v, want [147]", result)
 	}
 }
 

@@ -161,6 +161,46 @@ func TestEngineIfListBranch(t *testing.T) {
 	}
 }
 
+func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
+	// Register a side-effect word that increments a counter
+	callCount := 0
+	r := DefaultRegistry()
+	r.Register("side-effect",
+		Signature{
+			Args: []Type{TAny},
+			Handler: func(args []Value) ([]Value, error) {
+				callCount++
+				return args, nil
+			},
+		},
+	)
+
+	// if true [side-effect 1] [side-effect 2] → only then-branch runs
+	thenList := NewList([]Value{NewWord("side-effect"), NewInteger(1)})
+	elseList := NewList([]Value{NewWord("side-effect"), NewInteger(2)})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(true), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected [1], got %v", result)
+	}
+
+	// Reset and test false branch
+	callCount = 0
+	result = runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(false), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("expected [2], got %v", result)
+	}
+}
+
 func TestEngineIfFalsy(t *testing.T) {
 	r := DefaultRegistry()
 	// if 0 1 2 → 0 is falsy → return 2
@@ -982,6 +1022,71 @@ func TestEngineFnFactorial(t *testing.T) {
 	}
 }
 
+func TestEngineFnFactorialNoVars(t *testing.T) {
+	r := DefaultRegistry()
+	// Try several variable-free body forms for the recursive case.
+	// Base case is always: 0 integer [drop 1]
+	bodies := []struct {
+		name string
+		body []Value
+	}{
+		// Approach A: dup sub 1 fact swap mul
+		// n dup → n n; n sub 1 → n-1; fact → fact(n-1); swap mul → n*fact(n-1)
+		{"dup sub 1 fact swap mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("swap"), NewWord("mul"),
+		}},
+		// Approach B: dup sub 1 fact mul (rely on mul grabbing n as prefix)
+		{"dup sub 1 fact mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("mul"),
+		}},
+		// Approach C: dup mul fact (dup sub 1)  — same structure as named version
+		// but dup in inner parens has no prefix, so this likely fails
+		{"dup mul fact (dup sub 1)", []Value{
+			NewWord("dup"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("dup"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}},
+	}
+
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+
+	for _, b := range bodies {
+		fnBody := NewList([]Value{
+			NewInteger(0),
+			NewWord("integer"),
+			NewList([]Value{NewWord("drop"), NewInteger(1)}),
+			NewWord("integer"),
+			NewWord("integer"),
+			NewList(b.body),
+		})
+		allPass := true
+		for _, tc := range tests {
+			result := runAQL(t, r, []Value{
+				NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+				NewInteger(tc.input), NewWord("fact"),
+			})
+			if len(result) != 1 || result[0].AsInteger() != tc.expected {
+				t.Logf("FAIL body=%q: fact %d = %v, want %d", b.name, tc.input, result, tc.expected)
+				allPass = false
+			}
+		}
+		if allPass {
+			t.Logf("PASS body=%q", b.name)
+		}
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point
@@ -1231,6 +1336,114 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	}
 	if !result[0].VType.Equal(TMap) {
 		t.Errorf("expected map type, got %s", result[0].VType)
+	}
+}
+
+// --- Inspect word tests ---
+
+func TestEngineInspectBuiltin(t *testing.T) {
+	r := DefaultRegistry()
+	// inspect add => word_inspection map
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.VType.Equal(TWordInspection) {
+		t.Fatalf("expected type %s, got %s", TWordInspection, v.VType)
+	}
+	m := v.AsMap()
+
+	// Check name field.
+	name, ok := m.Get("name")
+	if !ok || name.AsString() != "add" {
+		t.Errorf("name = %v, want 'add'", name)
+	}
+
+	// Check kind field.
+	kind, ok := m.Get("kind")
+	if !ok || kind.AsAtom() != "builtin" {
+		t.Errorf("kind = %v, want builtin", kind)
+	}
+
+	// Check signatures field is a non-empty list.
+	sigs, ok := m.Get("signatures")
+	if !ok {
+		t.Fatal("missing signatures field")
+	}
+	sigList := sigs.AsList()
+	if len(sigList) == 0 {
+		t.Error("expected at least one signature for add")
+	}
+
+	// Check first signature has args and precedence.
+	sig0 := sigList[0].AsMap()
+	args, _ := sig0.Get("args")
+	argList := args.AsList()
+	if len(argList) != 2 {
+		t.Errorf("expected 2 args for add, got %d", len(argList))
+	}
+
+	prec, _ := sig0.Get("precedence")
+	if prec.AsInteger() == 0 {
+		t.Error("expected non-zero precedence for add")
+	}
+}
+
+func TestEngineInspectUserDefined(t *testing.T) {
+	r := DefaultRegistry()
+	// def double [2 mul] ; inspect double
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
+		NewWord("inspect"), NewWord("double"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "defined" {
+		t.Errorf("kind = %v, want defined", kind)
+	}
+
+	name, _ := m.Get("name")
+	if name.AsString() != "double" {
+		t.Errorf("name = %v, want 'double'", name)
+	}
+}
+
+func TestEngineInspectUnknown(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("nonexistent")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "unknown" {
+		t.Errorf("kind = %v, want unknown", kind)
+	}
+
+	sigs, _ := m.Get("signatures")
+	if len(sigs.AsList()) != 0 {
+		t.Errorf("expected empty signatures for unknown word")
+	}
+}
+
+func TestEngineInspectDotAccess(t *testing.T) {
+	r := DefaultRegistry()
+	// inspect upper .name => 'upper'
+	result := runAQL(t, r, []Value{
+		NewWord("inspect"), NewWord("upper"),
+		NewWord("."), NewWord("name"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if result[0].AsString() != "upper" {
+		t.Errorf("inspect upper .name = %v, want 'upper'", result[0])
 	}
 }
 

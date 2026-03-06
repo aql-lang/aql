@@ -275,15 +275,35 @@ func (e *Engine) stepWord(val Value) error {
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
 
-		// Use prefix match only if it has args (typed signature).
-		// Defer 0-arg matches (generic def handler) so suffix-mode
-		// typed signatures get a chance to collect arguments first.
+		// When prefix has a full match (typed signature), check if
+		// suffix tokens should take priority. Suffix precedence means
+		// we prefer to consume tokens after the word when available.
 		if match != nil && len(match.Sig.Args) > 0 {
+			if e.hasSuffixValues(fn) {
+				// Suffix tokens exist. Verify that collecting from
+				// suffix would still produce a valid signature match
+				// before switching away from the working prefix match.
+				suffixVal := e.peekSuffixValue()
+				extended := append(resolved, suffixVal)
+				if MatchSignature(fn.Signatures, extended, w) != nil {
+					bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+					if bestSig != nil {
+						suffixNeeded := len(bestSig.Args) - prefixCount
+						if suffixNeeded <= 0 {
+							suffixNeeded = 1
+						}
+						e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
+						return e.insertForward(w, bestSig, suffixNeeded)
+					}
+				}
+			}
+			// No viable suffix — use prefix match.
 			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
-		// Try suffix: create forward to collect remaining args.
+		// No full prefix match — try suffix (create forward to collect
+		// remaining args), preserving original behavior.
 		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
 		if bestSig != nil {
 			suffixNeeded := len(bestSig.Args) - prefixCount
@@ -890,6 +910,61 @@ func (e *Engine) effectiveResolved() []Value {
 		}
 	}
 	return resolved
+}
+
+// hasSuffixValues checks whether there are collectible value tokens after the
+// current pointer. Literals and unknown words are collectible. Known function
+// words are not directly collectible (they execute via stepWord), so they
+// don't count — unless the function has signatures expecting TWord arguments
+// (e.g., def needs to collect word names).
+func (e *Engine) hasSuffixValues(fn *Function) bool {
+	if e.pointer+1 >= len(e.stack) {
+		return false
+	}
+	next := e.stack[e.pointer+1]
+	if next.IsForward() || next.IsOpenParen() {
+		return false
+	}
+	if next.IsWord() {
+		nw := next.AsWord()
+		if nw.Name == ")" || nw.Name == "end" {
+			return false
+		}
+		if e.registry.Lookup(nw.Name) != nil {
+			// Known function — only collectible if fn expects TWord args.
+			for si := range fn.Signatures {
+				for _, argType := range fn.Signatures[si].Args {
+					if argType.Equal(TWord) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// peekSuffixValue returns a value representing what the next stack element
+// would resolve to, for use in speculative signature matching. Unknown words
+// become atoms; true/false become booleans; literals are returned as-is.
+func (e *Engine) peekSuffixValue() Value {
+	if e.pointer+1 >= len(e.stack) {
+		return Value{}
+	}
+	next := e.stack[e.pointer+1]
+	if next.IsWord() {
+		nw := next.AsWord()
+		switch nw.Name {
+		case "true":
+			return NewBoolean(true)
+		case "false":
+			return NewBoolean(false)
+		default:
+			return NewAtom(nw.Name)
+		}
+	}
+	return next
 }
 
 // peekPrecedence returns the highest precedence of the word at stack[idx].

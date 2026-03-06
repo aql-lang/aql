@@ -47,7 +47,7 @@ func TestIsTruthyMap(t *testing.T) {
 
 func TestEvalArgScalar(t *testing.T) {
 	r := DefaultRegistry()
-	result, err := evalArg(r, NewInteger(42))
+	result, err := evalCond(r, NewInteger(42))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestEvalArgList(t *testing.T) {
 	r := DefaultRegistry()
 	// [1 add 2] should evaluate to [3]
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result, err := evalArg(r, list)
+	result, err := evalCond(r, list)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
