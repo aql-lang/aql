@@ -40,9 +40,10 @@ func isTruthy(v Value) bool {
 	}
 }
 
-// evalArg evaluates an if-word argument. If the value is a list, it is
-// evaluated as code (like do). Otherwise the scalar value is returned as-is.
-func evalArg(r *Registry, v Value) ([]Value, error) {
+// evalCond evaluates an if-word condition. If the value is a list, it is
+// evaluated as code in a sub-engine (the result is needed before choosing
+// a branch). Otherwise the scalar value is returned as-is.
+func evalCond(r *Registry, v Value) ([]Value, error) {
 	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList()
 		sub := New(r)
@@ -53,10 +54,25 @@ func evalArg(r *Registry, v Value) ([]Value, error) {
 	return []Value{v}, nil
 }
 
+// spliceArg returns tokens for a branch value. If the value is a list,
+// its elements are returned wrapped in parens so the main engine evaluates
+// them as a sub-expression (no sub-engine needed). Scalars are returned as-is.
+func spliceArg(v Value) []Value {
+	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+		elems := v.AsList()
+		result := make([]Value, 0, len(elems)+2)
+		result = append(result, NewOpenParen())
+		result = append(result, elems...)
+		result = append(result, NewWord(")"))
+		return result
+	}
+	return []Value{v}
+}
+
 func registerIf(r *Registry) {
 	// if: [any, any, any] -> [any] — 3-arg (condition, then, else)
 	if3Handler := func(args []Value) ([]Value, error) {
-		condResults, err := evalArg(r, args[0])
+		condResults, err := evalCond(r, args[0])
 		if err != nil {
 			return nil, fmt.Errorf("if: %w", err)
 		}
@@ -66,22 +82,14 @@ func registerIf(r *Registry) {
 		cond := isTruthy(condResults[len(condResults)-1])
 
 		if cond {
-			result, err := evalArg(r, args[1])
-			if err != nil {
-				return nil, fmt.Errorf("if: %w", err)
-			}
-			return result, nil
+			return spliceArg(args[1]), nil
 		}
-		result, err := evalArg(r, args[2])
-		if err != nil {
-			return nil, fmt.Errorf("if: %w", err)
-		}
-		return result, nil
+		return spliceArg(args[2]), nil
 	}
 
 	// if: [any, any] -> [any] — 2-arg (condition, then)
 	if2Handler := func(args []Value) ([]Value, error) {
-		condResults, err := evalArg(r, args[0])
+		condResults, err := evalCond(r, args[0])
 		if err != nil {
 			return nil, fmt.Errorf("if: %w", err)
 		}
@@ -91,11 +99,7 @@ func registerIf(r *Registry) {
 		cond := isTruthy(condResults[len(condResults)-1])
 
 		if cond {
-			result, err := evalArg(r, args[1])
-			if err != nil {
-				return nil, fmt.Errorf("if: %w", err)
-			}
-			return result, nil
+			return spliceArg(args[1]), nil
 		}
 		return nil, nil
 	}
