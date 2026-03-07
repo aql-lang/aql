@@ -31,6 +31,7 @@ type Registry struct {
 	Modules   map[string]ModuleDesc    // child modules keyed by generated ID
 	moduleSeq int                      // counter for generating module IDs
 	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
+	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
 }
 
 // NewRegistry creates an empty registry.
@@ -67,6 +68,31 @@ func (r *Registry) SetFileOps(ops fileops.FileOps) {
 // SetParseFunc sets the parser callback used by file-based import.
 func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 	r.ParseFunc = fn
+}
+
+// PushContext pushes a new context layer that is a shallow copy of parent.
+// Values are copied by reference (like Go's context.WithValue pattern).
+func (r *Registry) PushContext(parent map[string]Value) {
+	child := make(map[string]Value, len(parent))
+	for k, v := range parent {
+		child[k] = v
+	}
+	r.ctxStack = append(r.ctxStack, child)
+}
+
+// PopContext removes the top context layer, restoring the parent.
+func (r *Registry) PopContext() {
+	if len(r.ctxStack) > 0 {
+		r.ctxStack = r.ctxStack[:len(r.ctxStack)-1]
+	}
+}
+
+// Context returns the current (top) context map, or nil if no context is active.
+func (r *Registry) Context() map[string]Value {
+	if len(r.ctxStack) == 0 {
+		return nil
+	}
+	return r.ctxStack[len(r.ctxStack)-1]
 }
 
 // Register adds one or more signatures to a named function with suffix precedence.
@@ -398,6 +424,7 @@ func registerBuiltins(r *Registry) {
 	registerInspect(r)
 	registerFor(r)
 	registerModule(r)
+	registerContext(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -478,6 +505,70 @@ func registerStorage(r *Registry) {
 		Args:    []Type{TAny},
 		Handler: getHandler,
 	})
+}
+
+// registerContext registers the "context" word for scoped key-value storage.
+// Usage:
+//
+//	context set "key" value   — store value under key in current context
+//	context set foo value     — store with word key
+//	context get "key"         — retrieve value (returns none if key not found)
+//	context get foo           — retrieve with word key
+func registerContext(r *Registry) {
+	ctxSetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return nil, fmt.Errorf("context: no active context")
+		}
+		key := storeKey(args[0])
+		ctx[key] = args[1]
+		return nil, nil
+	}
+
+	ctxGetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		key := storeKey(args[0])
+		val, ok := ctx[key]
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	// Register "context-set" and "context-get" as the implementation words.
+	r.Register("context-set",
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetHandler},
+	)
+
+	r.Register("context-get",
+		Signature{Args: []Type{TString}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TWord}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TAny}, Handler: ctxGetHandler},
+	)
+
+	// Register "context" as a dispatcher that converts the sub-command
+	// into the appropriate hyphenated word call.
+	r.Register("context",
+		Signature{
+			Args: []Type{TWord},
+			Handler: func(args []Value) ([]Value, error) {
+				cmd := args[0].AsWord().Name
+				switch cmd {
+				case "set":
+					return []Value{NewWord("context-set")}, nil
+				case "get":
+					return []Value{NewWord("context-get")}, nil
+				default:
+					return nil, fmt.Errorf("context: unknown sub-command: %s (expected set or get)", cmd)
+				}
+			},
+		},
+	)
 }
 
 // registerBinaryIntOp registers a binary integer operation with a single
@@ -2209,6 +2300,16 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Input = parent.Input
 	modReg.FileOps = parent.FileOps
 	modReg.ParseFunc = parent.ParseFunc
+
+	// Inherit parent context so module can read parent values.
+	// The module's Run will push its own copy-on-write layer on top.
+	if parentCtx := parent.Context(); parentCtx != nil {
+		copied := make(map[string]Value, len(parentCtx))
+		for k, v := range parentCtx {
+			copied[k] = v
+		}
+		modReg.ctxStack = append(modReg.ctxStack, copied)
+	}
 
 	exports := make(map[string]*OrderedMap)
 
