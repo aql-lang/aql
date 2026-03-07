@@ -28,8 +28,10 @@ var (
 	TForward      = NewType("forward")
 	TOpenParen    = NewType("paren/open")
 	TFnDef        = NewType("fndef")
+	TReturnCheck     = NewType("returncheck")
 	TDisjunct        = NewType("disjunct")
 	TWordInspection  = NewType("map/word_inspection")
+	TModule          = NewType("module")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".
@@ -44,7 +46,7 @@ func NewType(path string) Type {
 func (t Type) Matches(pattern Type) bool {
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "any" {
 		// "any" matches all data types but not internal types (word, forward).
-		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" {
+		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" || t.Parts[0] == "returncheck" {
 			return false
 		}
 		return true

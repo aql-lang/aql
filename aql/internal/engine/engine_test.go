@@ -3885,6 +3885,213 @@ func TestDoMap(t *testing.T) {
 	}
 }
 
+// --- Module tests ---
+
+func TestModuleBasic(t *testing.T) {
+	// module [def inc [add 1] export Foo {inc:inc}]
+	// Should return a module descriptor.
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
+		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+	})
+	result := runAQL(t, r, []Value{NewWord("module"), body})
+	if len(result) != 1 {
+		t.Fatalf("module: got %d results, want 1", len(result))
+	}
+	if !result[0].IsModule() {
+		t.Fatalf("module: result is not a module, got %s", result[0].VType)
+	}
+	desc := result[0].AsModule()
+	fooExport, ok := desc.Exports["Foo"]
+	if !ok {
+		t.Fatal("module: export 'Foo' not found")
+	}
+	if fooExport.Len() != 1 {
+		t.Fatalf("module: Foo export has wrong length: %d", fooExport.Len())
+	}
+	val, ok := fooExport.Get("inc")
+	if !ok {
+		t.Fatal("module: export Foo.inc not found")
+	}
+	// The exported "inc" should be the list [add 1]
+	if !val.VType.Equal(TList) {
+		t.Errorf("module: export inc type = %s, want list", val.VType)
+	}
+}
+
+func TestModuleImportBasic(t *testing.T) {
+	// import module [def inc [add 1] export Foo {inc:inc}]
+	// Then Foo should be a def that resolves to a map {inc:[add 1]}
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
+		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+	})
+	// Run: import module [...]
+	result := runAQL(t, r, []Value{
+		NewWord("import"), NewWord("module"), body,
+	})
+	// import returns nothing
+	if len(result) != 0 {
+		t.Fatalf("import module: got %d results, want 0: %v", len(result), result)
+	}
+
+	// Now "Foo" should be defined and accessible.
+	// Foo should resolve to map {inc:[add 1]}
+	result2 := runAQL(t, r, []Value{NewWord("Foo")})
+	if len(result2) != 1 {
+		t.Fatalf("Foo: got %d results, want 1", len(result2))
+	}
+	if !result2[0].VType.Equal(TMap) {
+		t.Errorf("Foo: type = %s, want map", result2[0].VType)
+	}
+}
+
+func TestModuleImportDotAccess(t *testing.T) {
+	// import module [def inc [add 1] export Foo {inc:inc}]
+	// Foo.inc 2 → should evaluate to 3
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
+		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+	})
+	// Step 1: import the module
+	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
+
+	// Step 2: Foo.inc 2 → "inc" key in Foo map → [add 1] → applied to 2 → 3
+	// Foo resolves to map {inc:[add 1]}
+	// dot with "inc" gives [add 1]
+	// do [add 1] with 2 on stack should give 3
+	// Actually let's test just Foo . inc to get the value
+	result := runAQL(t, r, []Value{NewWord("Foo"), NewWord("inc"), NewWord(".")})
+	if len(result) != 1 {
+		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
+	}
+	// Should be the list [add 1]
+	if !result[0].VType.Equal(TList) {
+		t.Errorf("Foo.inc: type = %s, want list", result[0].VType)
+	}
+}
+
+func TestModuleIsolation(t *testing.T) {
+	// Module's internal defs should not leak to the parent.
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("def"), NewWord("secret"), NewInteger(42),
+		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
+	})
+	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
+
+	// "secret" should NOT be defined in the parent registry.
+	if r.Lookup("secret") != nil {
+		t.Error("module: internal def 'secret' leaked to parent")
+	}
+}
+
+func TestModuleDefSubject(t *testing.T) {
+	// Modules can be subjects of def.
+	// def MyMod module [export M {x:1}]
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("MyMod"), NewWord("module"), body,
+	})
+
+	// MyMod should resolve to a module descriptor.
+	result := runAQL(t, r, []Value{NewWord("MyMod")})
+	if len(result) != 1 || !result[0].IsModule() {
+		t.Fatalf("def MyMod: expected module descriptor, got %v", result)
+	}
+
+	// import MyMod should work.
+	runAQL(t, r, []Value{NewWord("import"), NewWord("MyMod")})
+	result2 := runAQL(t, r, []Value{NewWord("M")})
+	if len(result2) != 1 || !result2[0].VType.Equal(TMap) {
+		t.Errorf("import MyMod: M = %v, want map", result2)
+	}
+}
+
+func TestModuleImportRename(t *testing.T) {
+	// import [Foo Bar] module [export Foo {x:1}]
+	// Bar should be defined, Foo should not.
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
+	})
+	modResult := runAQL(t, r, []Value{NewWord("module"), body})
+	if len(modResult) != 1 || !modResult[0].IsModule() {
+		t.Fatal("expected module descriptor")
+	}
+
+	// import [Foo Bar] <module-desc>
+	renameList := NewList([]Value{NewAtom("Foo"), NewAtom("Bar")})
+	runAQL(t, r, []Value{NewWord("import"), renameList, modResult[0]})
+
+	// Bar should be defined.
+	result := runAQL(t, r, []Value{NewWord("Bar")})
+	if len(result) != 1 {
+		t.Fatalf("Bar: got %d results, want 1", len(result))
+	}
+}
+
+func TestModuleImportMultiRename(t *testing.T) {
+	// import [[Foo Baz]] module [export Foo {x:1}]
+	r := DefaultRegistry()
+	body := NewList([]Value{
+		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
+	})
+	modResult := runAQL(t, r, []Value{NewWord("module"), body})
+
+	// import [[Foo Baz]] <module-desc>
+	pair := NewList([]Value{NewAtom("Foo"), NewAtom("Baz")})
+	renameList := NewList([]Value{pair})
+	runAQL(t, r, []Value{NewWord("import"), renameList, modResult[0]})
+
+	result := runAQL(t, r, []Value{NewWord("Baz")})
+	if len(result) != 1 {
+		t.Fatalf("Baz: got %d results, want 1", len(result))
+	}
+}
+
+func TestModuleFreshRegistry(t *testing.T) {
+	// Defs in parent should not be visible inside module.
+	r := DefaultRegistry()
+	// Define "foo" in parent.
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewInteger(99),
+	})
+
+	// Module body tries to use "foo" — it should NOT find the parent def.
+	// "foo" should resolve to an atom inside the module.
+	body := NewList([]Value{
+		NewWord("export"), NewWord("M"), makeMap("val", NewWord("foo")),
+	})
+	result := runAQL(t, r, []Value{NewWord("module"), body})
+	if len(result) != 1 || !result[0].IsModule() {
+		t.Fatal("expected module")
+	}
+	desc := result[0].AsModule()
+	mExport, ok := desc.Exports["M"]
+	if !ok {
+		t.Fatal("module: export 'M' not found")
+	}
+	val, _ := mExport.Get("val")
+	// "foo" inside module should be an atom (not resolved), not 99.
+	if val.VType.Matches(TInteger) {
+		t.Error("module: parent def 'foo' leaked into module")
+	}
+}
+
+// makeMap is a helper to create a map Value with a single key-value pair.
+func makeMap(key string, val Value) Value {
+	om := NewOrderedMap()
+	om.Set(key, val)
+	return NewMap(om)
+}
+
 // --- Benchmarks ---
 
 func BenchmarkSimpleExpression(b *testing.B) {
