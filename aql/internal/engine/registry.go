@@ -31,6 +31,7 @@ type Registry struct {
 	Modules   map[string]ModuleDesc    // child modules keyed by generated ID
 	moduleSeq int                      // counter for generating module IDs
 	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
+	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
 }
 
 // NewRegistry creates an empty registry.
@@ -67,6 +68,31 @@ func (r *Registry) SetFileOps(ops fileops.FileOps) {
 // SetParseFunc sets the parser callback used by file-based import.
 func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 	r.ParseFunc = fn
+}
+
+// PushContext pushes a new context layer that is a shallow copy of parent.
+// Values are copied by reference (like Go's context.WithValue pattern).
+func (r *Registry) PushContext(parent map[string]Value) {
+	child := make(map[string]Value, len(parent))
+	for k, v := range parent {
+		child[k] = v
+	}
+	r.ctxStack = append(r.ctxStack, child)
+}
+
+// PopContext removes the top context layer, restoring the parent.
+func (r *Registry) PopContext() {
+	if len(r.ctxStack) > 0 {
+		r.ctxStack = r.ctxStack[:len(r.ctxStack)-1]
+	}
+}
+
+// Context returns the current (top) context map, or nil if no context is active.
+func (r *Registry) Context() map[string]Value {
+	if len(r.ctxStack) == 0 {
+		return nil
+	}
+	return r.ctxStack[len(r.ctxStack)-1]
 }
 
 // Register adds one or more signatures to a named function with suffix precedence.
@@ -398,6 +424,7 @@ func registerBuiltins(r *Registry) {
 	registerInspect(r)
 	registerFor(r)
 	registerModule(r)
+	registerContext(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -478,6 +505,70 @@ func registerStorage(r *Registry) {
 		Args:    []Type{TAny},
 		Handler: getHandler,
 	})
+}
+
+// registerContext registers the "context" word for scoped key-value storage.
+// Usage:
+//
+//	context set "key" value   — store value under key in current context
+//	context set foo value     — store with word key
+//	context get "key"         — retrieve value (returns none if key not found)
+//	context get foo           — retrieve with word key
+func registerContext(r *Registry) {
+	ctxSetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return nil, fmt.Errorf("context: no active context")
+		}
+		key := storeKey(args[0])
+		ctx[key] = args[1]
+		return nil, nil
+	}
+
+	ctxGetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		key := storeKey(args[0])
+		val, ok := ctx[key]
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	// Register "context-set" and "context-get" as the implementation words.
+	r.Register("context-set",
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetHandler},
+	)
+
+	r.Register("context-get",
+		Signature{Args: []Type{TString}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TWord}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TAny}, Handler: ctxGetHandler},
+	)
+
+	// Register "context" as a dispatcher that converts the sub-command
+	// into the appropriate hyphenated word call.
+	r.Register("context",
+		Signature{
+			Args: []Type{TWord},
+			Handler: func(args []Value) ([]Value, error) {
+				cmd := args[0].AsWord().Name
+				switch cmd {
+				case "set":
+					return []Value{NewWord("context-set")}, nil
+				case "get":
+					return []Value{NewWord("context-get")}, nil
+				default:
+					return nil, fmt.Errorf("context: unknown sub-command: %s (expected set or get)", cmd)
+				}
+			},
+		},
+	)
 }
 
 // registerBinaryIntOp registers a binary integer operation with a single
@@ -611,6 +702,13 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 		return
 	}
 
+	// FnUndefInfo body (from fn word in pair mode): remove targeted signatures.
+	if body.VType.Equal(TFnUndef) {
+		undefInfo := body.Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
+		return
+	}
+
 	r.DefStacks[name] = append(r.DefStacks[name], body)
 }
 
@@ -674,6 +772,103 @@ func registerUndef(r *Registry) {
 			Handler: undefHandler,
 		},
 	)
+
+	// Targeted undef: undef foo fn [[number] [number]]
+	undefFnHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		undefInfo := args[1].Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
+		return nil, nil
+	}
+	r.Register("undef",
+		Signature{
+			Args:    []Type{TWord, TFnUndef},
+			Handler: undefFnHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TFnUndef},
+			Handler: undefFnHandler,
+		},
+	)
+}
+
+// fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
+// (same param types and return types, ignoring param names).
+func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
+	if len(sig.Params) != len(spec.Params) {
+		return false
+	}
+	for i := range sig.Params {
+		if !sig.Params[i].Type.Equal(spec.Params[i].Type) {
+			return false
+		}
+	}
+	if len(sig.Returns) != len(spec.Returns) {
+		return false
+	}
+	for i := range sig.Returns {
+		if !sig.Returns[i].Equal(spec.Returns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// uninstallFnSigs removes specific function signatures from a word's DefStack.
+// For each spec in the FnUndefInfo, it finds and removes the most recent
+// DefStack entry containing a matching signature, then rebuilds the
+// Function.Signatures slice from the remaining entries.
+func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return
+	}
+
+	// For each spec, find and remove the most recent matching DefStack entry.
+	for _, spec := range specs.Sigs {
+		for j := len(stack) - 1; j >= 0; j-- {
+			fnDef, ok := stack[j].Data.(FnDefInfo)
+			if !ok {
+				continue
+			}
+			matched := false
+			for _, sig := range fnDef.Sigs {
+				if fnSigMatchesSpec(sig, spec) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				stack = append(stack[:j], stack[j+1:]...)
+				break
+			}
+		}
+	}
+
+	r.DefStacks[name] = stack
+
+	fn := r.funcs[name]
+	if fn == nil {
+		return
+	}
+
+	// If no DefStack entries remain, clean up entirely.
+	if len(stack) == 0 {
+		delete(r.funcs, name)
+		delete(r.DefStacks, name)
+		return
+	}
+
+	// Rebuild: keep the generic fallback (index 0), remove all typed sigs,
+	// then re-register from remaining DefStack entries.
+	if len(fn.Signatures) > 0 {
+		fn.Signatures = fn.Signatures[:1] // keep generic fallback
+	}
+	for _, entry := range stack {
+		if fnDef, ok := entry.Data.(FnDefInfo); ok {
+			installFnDef(r, name, fnDef)
+		}
+	}
 }
 
 // registerVar registers the "var" word for scoped variable definitions.
@@ -769,6 +964,8 @@ func registerVar(r *Registry) {
 
 // registerFn registers the "fn" word, which parses a list of signature
 // triples into a FnDefInfo value. Use with def: def name fn [[params] [out] [body]].
+// When the list length is divisible by 2 but not 3, it is parsed as pairs
+// (input+output, no body) producing a FnUndefInfo for targeted undef.
 func registerFn(r *Registry) {
 	fnHandler := func(args []Value) ([]Value, error) {
 		list := args[0]
@@ -776,14 +973,26 @@ func registerFn(r *Registry) {
 			return nil, fmt.Errorf("fn: argument must be a list")
 		}
 		elems := list.AsList()
-		if len(elems) == 0 || len(elems)%3 != 0 {
-			return nil, fmt.Errorf("fn: list must contain signature triples (length must be a multiple of 3)")
+		if len(elems) == 0 {
+			return nil, fmt.Errorf("fn: list must not be empty")
 		}
-		fnDef, err := parseFnDef(elems)
-		if err != nil {
-			return nil, err
+		// Triples (def mode) take precedence when divisible by 3.
+		if len(elems)%3 == 0 {
+			fnDef, err := parseFnDef(elems)
+			if err != nil {
+				return nil, err
+			}
+			return []Value{NewFnDef(fnDef)}, nil
 		}
-		return []Value{NewFnDef(fnDef)}, nil
+		// Pairs (undef mode) when divisible by 2.
+		if len(elems)%2 == 0 {
+			undefInfo, err := parseFnUndefSpec(elems)
+			if err != nil {
+				return nil, err
+			}
+			return []Value{NewFnUndef(undefInfo)}, nil
+		}
+		return nil, fmt.Errorf("fn: list length must be a multiple of 3 (def) or 2 (undef spec)")
 	}
 
 	r.Register("fn", Signature{
@@ -833,6 +1042,37 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// parseFnUndefSpec parses a list of signature pairs (input+output, no body)
+// into a FnUndefInfo for targeted undef. Used when fn receives a list whose
+// length is divisible by 2 but not 3.
+func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
+	var sigs []FnSigSpec
+	for i := 0; i < len(list); i += 2 {
+		inputSig := list[i]
+		outputSig := list[i+1]
+
+		if !inputSig.VType.Equal(TList) {
+			inputSig = NewList([]Value{inputSig})
+		}
+
+		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		returns, err := parseFnReturns(outputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		sigs = append(sigs, FnSigSpec{
+			Params:  params,
+			Returns: returns,
+		})
+	}
+	return FnUndefInfo{Sigs: sigs}, nil
 }
 
 // parseFnReturns extracts return types from an output signature.
@@ -2209,6 +2449,16 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Input = parent.Input
 	modReg.FileOps = parent.FileOps
 	modReg.ParseFunc = parent.ParseFunc
+
+	// Inherit parent context so module can read parent values.
+	// The module's Run will push its own copy-on-write layer on top.
+	if parentCtx := parent.Context(); parentCtx != nil {
+		copied := make(map[string]Value, len(parentCtx))
+		for k, v := range parentCtx {
+			copied[k] = v
+		}
+		modReg.ctxStack = append(modReg.ctxStack, copied)
+	}
 
 	exports := make(map[string]*OrderedMap)
 

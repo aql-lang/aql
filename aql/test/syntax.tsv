@@ -604,6 +604,12 @@ def sq fn [[x:number] [number] [x mul x]] 4 sq x	16 x
 # undef removes function def
 def sq fn [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 sq
 
+# targeted undef: remove 2-arg sig, 1-arg remains
+def foo fn [[x:number] [number] [x mul x]] def foo fn [[x:number,y:number] [number] [x add y]] undef foo fn [[number,number] [number]] 5 foo	25
+
+# targeted undef: remove 1-arg sig, 2-arg remains
+def foo fn [[x:number] [number] [x mul x]] def foo fn [[x:number,y:number] [number] [x add y]] undef foo fn [[number] [number]] 3 5 foo	8
+
 # Function def with infix call
 def sq fn [[x:number] [number] [x mul x]] sq 6	36
 

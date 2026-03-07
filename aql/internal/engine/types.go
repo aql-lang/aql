@@ -28,6 +28,7 @@ var (
 	TForward      = NewType("forward")
 	TOpenParen    = NewType("paren/open")
 	TFnDef        = NewType("fndef")
+	TFnUndef      = NewType("fnundef")
 	TReturnCheck     = NewType("returncheck")
 	TDisjunct        = NewType("disjunct")
 	TWordInspection  = NewType("map/word_inspection")
