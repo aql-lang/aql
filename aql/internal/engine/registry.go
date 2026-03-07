@@ -28,6 +28,9 @@ type Registry struct {
 	ErrOutput io.Writer          // error output writer for stderr
 	Input     io.Reader          // input reader for stdin
 	SQLite    *SQLiteStore       // in-memory SQLite store for table data
+	Modules   map[string]ModuleDesc    // child modules keyed by generated ID
+	moduleSeq int                      // counter for generating module IDs
+	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
 }
 
 // NewRegistry creates an empty registry.
@@ -46,12 +49,24 @@ func NewRegistry() *Registry {
 		ErrOutput: os.Stderr,
 		Input:     os.Stdin,
 		SQLite:    sqlStore,
+		Modules:   make(map[string]ModuleDesc),
 	}
+}
+
+// NextModuleID generates a unique module identifier.
+func (r *Registry) NextModuleID() string {
+	r.moduleSeq++
+	return fmt.Sprintf("mod_%d", r.moduleSeq)
 }
 
 // SetFileOps replaces the file operations implementation.
 func (r *Registry) SetFileOps(ops fileops.FileOps) {
 	r.FileOps = ops
+}
+
+// SetParseFunc sets the parser callback used by file-based import.
+func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
+	r.ParseFunc = fn
 }
 
 // Register adds one or more signatures to a named function with suffix precedence.
@@ -382,6 +397,7 @@ func registerBuiltins(r *Registry) {
 	registerTrace(r)
 	registerInspect(r)
 	registerFor(r)
+	registerModule(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -784,7 +800,7 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
 		inputSig := list[i]
-		// list[i+1] is the output signature — informational only
+		outputSig := list[i+1]
 		body := list[i+2]
 
 		// Abbreviation: non-list input sig is treated as [inputSig].
@@ -793,6 +809,11 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnDefInfo{}, err
+		}
+
+		returns, err := parseFnReturns(outputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
@@ -806,11 +827,32 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params: params,
-			Body:   bodyElems,
+			Params:  params,
+			Returns: returns,
+			Body:    bodyElems,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// parseFnReturns extracts return types from an output signature.
+// A non-list value is treated as a single-element list.
+// An empty list means no return type checking.
+func parseFnReturns(outputSig Value) ([]Type, error) {
+	if !outputSig.VType.Equal(TList) {
+		// Abbreviation: single value treated as [value].
+		t := resolveSigType(outputSig)
+		return []Type{t}, nil
+	}
+	elems := outputSig.AsList()
+	if len(elems) == 0 {
+		return nil, nil
+	}
+	types := make([]Type, len(elems))
+	for i, e := range elems {
+		types[i] = resolveSigType(e)
+	}
+	return types, nil
 }
 
 // parseFnParams extracts parameters from an input signature list.
@@ -952,6 +994,13 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			result = append(result, body...)
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
+			}
+			// Inject return-check if return types are declared.
+			if len(s.Returns) > 0 {
+				result = append(result, NewReturnCheck(ReturnCheckInfo{
+					FuncName: name,
+					Returns:  s.Returns,
+				}))
 			}
 			result = append(result, NewWord(")"))
 			return result, nil
@@ -2065,4 +2114,270 @@ func registerDotr(r *Registry) {
 
 	r.Register("dotr", sigs...)
 	r.Register("!.", sigs...)
+}
+
+// registerModule registers the "module", "export", and "import" words.
+//
+// module works like do but with a completely fresh, isolated sub-engine
+// (new registry, new bus). Inside a module the "export" word is available
+// to declare exports. The return value is a module descriptor (ModuleDesc)
+// which can be the subject of def.
+//
+// export: [atom_or_string map] registers an export name and map within
+// the module. The export map's values are evaluated in the module context.
+//
+// import: injects exported names from a module descriptor into the current
+// engine as defs.
+//   - [module-desc]                    — use export names as-is
+//   - [[atom atom] module-desc]        — rename single export (from to)
+//   - [[:pairs...] module-desc]        — rename multiple exports
+func registerModule(r *Registry) {
+	// module: [list] -> [module-desc]
+	r.Register("module", Signature{
+		Args: []Type{TList},
+		Handler: func(args []Value) ([]Value, error) {
+			desc, err := runModuleBody(r, args[0].AsList())
+			if err != nil {
+				return nil, fmt.Errorf("module: %w", err)
+			}
+			return []Value{NewModule(desc)}, nil
+		},
+	})
+
+	// import: [module-desc] -> [] — import all exports as defs
+	importAllHandler := func(args []Value) ([]Value, error) {
+		desc := args[0].AsModule()
+		installExports(r, desc, nil)
+		return nil, nil
+	}
+
+	// import: [list module-desc] -> [] — rename imports
+	importRenameHandler := func(args []Value) ([]Value, error) {
+		desc := args[1].AsModule()
+		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	// import: [string] -> [] — import from a file path.
+	// The file is read, parsed, and executed in an isolated module engine.
+	// The file should contain export statements (no module word needed).
+	importFileHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		desc, err := loadFileModule(r, path)
+		if err != nil {
+			return nil, err
+		}
+		installExports(r, desc, nil)
+		return nil, nil
+	}
+
+	// import: [list string] -> [] — import from file with renaming.
+	importFileRenameHandler := func(args []Value) ([]Value, error) {
+		path := args[1].AsString()
+		desc, err := loadFileModule(r, path)
+		if err != nil {
+			return nil, err
+		}
+		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	r.Register("import",
+		Signature{
+			Args:    []Type{TModule},
+			Handler: importAllHandler,
+		},
+		Signature{
+			Args:    []Type{TList, TModule},
+			Handler: importRenameHandler,
+		},
+		Signature{
+			Args:    []Type{TString},
+			Handler: importFileHandler,
+		},
+		Signature{
+			Args:    []Type{TList, TString},
+			Handler: importFileRenameHandler,
+		},
+	)
+}
+
+// runModuleBody creates an isolated module engine, runs the given values,
+// and returns a ModuleDesc with the collected exports.
+func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
+	modReg := DefaultRegistry()
+	modReg.Output = parent.Output
+	modReg.ErrOutput = parent.ErrOutput
+	modReg.Input = parent.Input
+	modReg.FileOps = parent.FileOps
+	modReg.ParseFunc = parent.ParseFunc
+
+	exports := make(map[string]*OrderedMap)
+
+	exportHandler := func(name string, rawMap *OrderedMap) {
+		resolved := NewOrderedMap()
+		for _, key := range rawMap.Keys() {
+			val, _ := rawMap.Get(key)
+			resolved.Set(key, resolveModuleExport(modReg, val))
+		}
+		exports[name] = resolved
+	}
+
+	modReg.Register("export", Signature{
+		Args: []Type{TWord, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(defName(eargs[0]), eargs[1].AsMap())
+			return nil, nil
+		},
+	}, Signature{
+		Args: []Type{TAtom, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
+			return nil, nil
+		},
+	}, Signature{
+		Args: []Type{TString, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(eargs[0].AsString(), eargs[1].AsMap())
+			return nil, nil
+		},
+	})
+
+	// Promote strings to words for code evaluation inside module.
+	promoteToWord := func(v Value) Value {
+		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
+			name := v.AsString()
+			if modReg.Lookup(name) != nil {
+				return NewWord(name)
+			}
+		}
+		return v
+	}
+
+	input := make([]Value, len(elems))
+	for i, e := range elems {
+		input[i] = promoteToWord(e)
+	}
+	sub := New(modReg)
+	_, err := sub.Run(input)
+	if err != nil {
+		return ModuleDesc{}, err
+	}
+
+	modID := parent.NextModuleID()
+	desc := ModuleDesc{
+		ID:      modID,
+		Exports: exports,
+	}
+	parent.Modules[modID] = desc
+	return desc, nil
+}
+
+// loadFileModule reads a file, parses it as AQL, and runs it as a module.
+func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
+	if parent.ParseFunc == nil {
+		return ModuleDesc{}, fmt.Errorf("import: parser not configured for file import")
+	}
+
+	data, err := parent.FileOps.ReadFile(path)
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %w", err)
+	}
+
+	parsed, err := parent.ParseFunc(string(data))
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", path, err)
+	}
+
+	desc, err := runModuleBody(parent, parsed)
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", path, err)
+	}
+	return desc, nil
+}
+
+// installExports installs all exports from a module descriptor as defs.
+// If names is nil, all exports are installed using their original names.
+func installExports(r *Registry, desc ModuleDesc, names []string) {
+	if names == nil {
+		for name, exportMap := range desc.Exports {
+			installDef(r, name, NewMap(exportMap))
+		}
+		return
+	}
+	for _, name := range names {
+		if exportMap, ok := desc.Exports[name]; ok {
+			installDef(r, name, NewMap(exportMap))
+		}
+	}
+}
+
+// installRenamedExports applies a rename list to module exports and installs them.
+func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) error {
+	if len(renameList) == 0 {
+		return fmt.Errorf("import: empty rename list")
+	}
+
+	if renameList[0].VType.Equal(TList) {
+		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
+		for _, pair := range renameList {
+			pairElems := pair.AsList()
+			if len(pairElems) != 2 {
+				return fmt.Errorf("import: rename pair must have exactly 2 elements")
+			}
+			fromName := valToAtomOrString(pairElems[0])
+			toName := valToAtomOrString(pairElems[1])
+			exportMap, ok := desc.Exports[fromName]
+			if !ok {
+				return fmt.Errorf("import: export %q not found in module", fromName)
+			}
+			installDef(r, toName, NewMap(exportMap))
+		}
+	} else {
+		// Single rename pair: [from to]
+		if len(renameList) != 2 {
+			return fmt.Errorf("import: rename list must have exactly 2 elements (from to)")
+		}
+		fromName := valToAtomOrString(renameList[0])
+		toName := valToAtomOrString(renameList[1])
+		exportMap, ok := desc.Exports[fromName]
+		if !ok {
+			return fmt.Errorf("import: export %q not found in module", fromName)
+		}
+		installDef(r, toName, NewMap(exportMap))
+	}
+	return nil
+}
+
+// resolveModuleExport resolves an export map value through the module's
+// def stacks. If the value is a string, atom, or word that names a def'd word,
+// the def body is returned. Otherwise the value is returned as-is.
+func resolveModuleExport(modReg *Registry, v Value) Value {
+	var name string
+	if v.IsWord() {
+		name = v.AsWord().Name
+	} else if v.VType.Matches(TString) {
+		name = v.AsString()
+	} else if v.IsAtom() {
+		name = v.AsAtom()
+	} else {
+		return v
+	}
+	stack := modReg.DefStacks[name]
+	if len(stack) > 0 {
+		return stack[len(stack)-1]
+	}
+	return v
+}
+
+// valToAtomOrString extracts a string from a Value that is an atom, string, or word.
+func valToAtomOrString(v Value) string {
+	if v.IsWord() {
+		return v.AsWord().Name
+	}
+	if v.IsAtom() {
+		return v.AsAtom()
+	}
+	if v.VType.Matches(TString) {
+		return v.AsString()
+	}
+	return v.String()
 }

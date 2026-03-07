@@ -80,13 +80,20 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params []FnParam
-	Body   []Value
+	Params  []FnParam
+	Returns []Type // declared return types (nil = unchecked)
+	Body    []Value
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
 type FnDefInfo struct {
 	Sigs []FnSig
+}
+
+// ReturnCheckInfo carries expected return types for fn-defined function validation.
+type ReturnCheckInfo struct {
+	FuncName string
+	Returns  []Type
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -139,6 +146,13 @@ type ForCont struct {
 	Step     int64   // increment per iteration
 	Body     []Value // original body tokens (replayed each iteration)
 	Results  []Value // accumulated results from completed iterations
+}
+
+// ModuleDesc describes a module: its generated ID and named exports.
+// Each export call adds a named entry mapping export name → export map.
+type ModuleDesc struct {
+	ID      string                    // generated internal identifier
+	Exports map[string]*OrderedMap    // export name → export map (name → value)
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -294,9 +308,19 @@ func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewReturnCheck creates a return-check marker for fn return type validation.
+func NewReturnCheck(info ReturnCheckInfo) Value {
+	return Value{VType: TReturnCheck, Data: info}
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+}
+
+// NewModule creates a module descriptor value.
+func NewModule(desc ModuleDesc) Value {
+	return Value{VType: TModule, Data: desc}
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -339,6 +363,16 @@ func (v Value) AsMove() MoveInfo {
 	return v.Data.(MoveInfo)
 }
 
+// IsReturnCheck reports whether this value is a return-check marker.
+func (v Value) IsReturnCheck() bool {
+	return v.VType.Equal(TReturnCheck)
+}
+
+// AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
+func (v Value) AsReturnCheck() ReturnCheckInfo {
+	return v.Data.(ReturnCheckInfo)
+}
+
 // IsDisjunct reports whether this value is a disjunction type.
 func (v Value) IsDisjunct() bool {
 	_, ok := v.Data.(DisjunctInfo)
@@ -348,6 +382,16 @@ func (v Value) IsDisjunct() bool {
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
 func (v Value) AsDisjunct() DisjunctInfo {
 	return v.Data.(DisjunctInfo)
+}
+
+// IsModule reports whether this value is a module descriptor.
+func (v Value) IsModule() bool {
+	return v.VType.Equal(TModule)
+}
+
+// AsModule returns the ModuleDesc, panics if not a module.
+func (v Value) AsModule() ModuleDesc {
+	return v.Data.(ModuleDesc)
 }
 
 // IsAtom reports whether this value is an atom.
@@ -478,6 +522,12 @@ func (v Value) String() string {
 	case v.IsMove():
 		m := v.AsMove()
 		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
+	case v.IsReturnCheck():
+		rc := v.AsReturnCheck()
+		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsModule():
+		md := v.AsModule()
+		return fmt.Sprintf("module(%s)", md.ID)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()

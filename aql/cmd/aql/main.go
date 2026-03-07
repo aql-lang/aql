@@ -79,7 +79,9 @@ func run(w io.Writer, source string) error {
 		return fmt.Errorf("parse error: %s", err)
 	}
 
-	eng := engine.NewTop(engine.DefaultRegistry())
+	reg := engine.DefaultRegistry()
+	reg.SetParseFunc(parser.Parse)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return fmt.Errorf("error: %s", err)

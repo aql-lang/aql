@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
@@ -1087,6 +1088,54 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 	}
 }
 
+func TestEngineFnFactorialNamedZero(t *testing.T) {
+	r := DefaultRegistry()
+	// def fact fn [[_:0] integer [1] [x:integer] [integer] [x mul fact (x sub 1)]]
+	// Using {_:0} instead of bare 0 in the base case.
+	// Named param "_" consumes the 0 from the stack, so the body is just [1].
+	fnBody := NewList([]Value{
+		// sig 1 (base case): [_:0] integer [1]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("_", NewInteger(0))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewInteger(1)}),
+		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("integer"))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{
+			NewWord("x"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}),
+	})
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+	for _, tc := range tests {
+		result := runAQL(t, r, []Value{
+			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewInteger(tc.input), NewWord("fact"),
+		})
+		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
+		}
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point
@@ -1468,5 +1517,191 @@ func TestFormatFromExt(t *testing.T) {
 				t.Errorf("formatFromExt(%q) = %q, want %q", tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+// --- Return type validation tests ---
+
+func TestEngineFnReturnTypeCorrect(t *testing.T) {
+	r := DefaultRegistry()
+	// def double fn [[number] [number] [dup add]] end
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("double"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("5 double = %v, want 10", result)
+	}
+}
+
+func TestEngineFnReturnTypeWrong(t *testing.T) {
+	r := DefaultRegistry()
+	// def bad fn [[number] [string] [dup add]] end
+	// Returns a number but declares string return type.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("bad"),
+	})
+	if err == nil {
+		t.Fatal("expected return type error, got nil")
+	}
+	if !strings.Contains(err.Error(), "bad") || !strings.Contains(err.Error(), "expected") {
+		t.Errorf("error should mention function name and expected type, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnCountWrong(t *testing.T) {
+	r := DefaultRegistry()
+	// def toomany fn [[number] [number number] [dup]] end
+	// Body produces 2 values but signature declares 2 returns, dup produces 2 from 1.
+	// Actually let's make it expect 1 but body produces 2.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup")}), // produces 2 values, signature expects 1
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("toomany"),
+	})
+	if err == nil {
+		t.Fatal("expected return count error, got nil")
+	}
+	if !strings.Contains(err.Error(), "toomany") {
+		t.Errorf("error should mention function name, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnTypeAny(t *testing.T) {
+	r := DefaultRegistry()
+	// def identity fn [[any] [any] []] end
+	// [any] return type should accept any value.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("any")}),
+		NewList([]Value{NewWord("any")}),
+		NewList([]Value{}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(42), NewWord("identity"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("42 identity = %v, want 42", result)
+	}
+}
+
+func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
+	r := DefaultRegistry()
+	// def dbl fn [[number] [] [dup add]] end
+	// Empty return sig means no checking (backwards compat).
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(7), NewWord("dbl"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 14 {
+		t.Errorf("7 dbl = %v, want 14", result)
+	}
+}
+
+func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
+	r := DefaultRegistry()
+	// def dup2 fn [[number] [number number] [dup]] end
+	// Returns 2 numbers.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number"), NewWord("number")}),
+		NewList([]Value{NewWord("dup")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(3), NewWord("dup2"),
+	})
+	if len(result) != 2 || result[0].AsInteger() != 3 || result[1].AsInteger() != 3 {
+		t.Errorf("3 dup2 = %v, want [3 3]", result)
+	}
+}
+
+func TestEngineFnReturnTypeNamedParams(t *testing.T) {
+	r := DefaultRegistry()
+	// def square fn [[x:number] [number] [x mul x]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(6), NewWord("square"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 36 {
+		t.Errorf("6 square = %v, want 36", result)
+	}
+}
+
+func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
+	r := DefaultRegistry()
+	// def isbig fn [[x:number] [number] [x gt 10]] end
+	// Declares number return but body returns boolean via gt.
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
+	})
+	err := runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("isbig"),
+	})
+	if err == nil {
+		t.Fatal("expected return type error for named param fn, got nil")
+	}
+	if !strings.Contains(err.Error(), "isbig") {
+		t.Errorf("error should mention function name, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
+	r := DefaultRegistry()
+	// def add1 fn [[number] [number] [1 add] [string] [string] ["1" add]] end
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewString("1"), NewWord("add")}),
+	})
+	// Test number overload
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(10), NewWord("add1"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("10 add1 = %v, want 11", result)
+	}
+	// Test string overload
+	result = runAQL(t, r, []Value{
+		NewString("hello"), NewWord("add1"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hello1" {
+		t.Errorf("'hello' add1 = %v, want 'hello1'", result)
 	}
 }

@@ -166,6 +166,9 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 				return nil, err
 			}
 
+		case val.IsReturnCheck():
+			e.pointer++
+
 		default:
 			if val.VType.Equal(Type{}) {
 				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
@@ -1087,6 +1090,8 @@ func (e *Engine) stepCloseParen() error {
 						e.pointer++
 					case val.IsOpenParen():
 						e.pointer++
+					case val.IsReturnCheck():
+						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil {
 							return err
@@ -1111,6 +1116,33 @@ func (e *Engine) stepCloseParen() error {
 			fwd := e.stack[i].AsForward()
 			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
 				fwd.FuncName, fwd.ExpectedArgs)
+		}
+	}
+
+	// Check for return type validation.
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if e.stack[i].IsReturnCheck() {
+			rc := e.stack[i].AsReturnCheck()
+			e.stackRemove(i)
+			closeIdx--
+
+			// Collect resolved values in scope.
+			var results []Value
+			for j := openIdx + 1; j < closeIdx; j++ {
+				results = append(results, e.stack[j])
+			}
+
+			if len(results) != len(rc.Returns) {
+				return fmt.Errorf("%s: expected %d return value(s), got %d",
+					rc.FuncName, len(rc.Returns), len(results))
+			}
+			for k, exp := range rc.Returns {
+				if !results[k].VType.Matches(exp) {
+					return fmt.Errorf("%s: return value %d: expected %s, got %s",
+						rc.FuncName, k+1, exp, results[k].VType)
+				}
+			}
+			break
 		}
 	}
 
