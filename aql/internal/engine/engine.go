@@ -831,7 +831,12 @@ func (e *Engine) stepMove(val Value) error {
 		}
 	}
 	if markIdx < 0 {
-		return fmt.Errorf("move error: mark %q not found on stack (%s)", info.To, info.Reason)
+		// Mark was removed from the stack (e.g. by a for-loop controller
+		// signalling loop completion). Remove this orphaned move quietly.
+		delete(e.marks, info.To)
+		e.stackRemove(e.pointer)
+		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		return nil
 	}
 
 	// Get the saved body from the mark.
