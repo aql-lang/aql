@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 // --- Multi-level type construction and String() ---
@@ -628,5 +629,165 @@ func TestUnifySymmetry(t *testing.T) {
 					pair[1].VType, pair[0].VType, r2.VType)
 			}
 		})
+	}
+}
+
+// ===== Efficiency tests: thousands of sibling types =====
+
+// TestMatchesEfficiencyThousandsOfSiblings confirms that matching a/b/x against
+// a/b is O(len(pattern)) and not affected by how many sibling types a/b/x<N> exist.
+// We create 10,000 distinct types under the same parent and verify that matching
+// each one against the parent pattern takes constant time per check.
+func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
+	const numSiblings = 10_000
+	parent := NewType("a/b")
+
+	// Create 10,000 sibling types: a/b/0, a/b/1, ..., a/b/9999
+	siblings := make([]Type, numSiblings)
+	for i := 0; i < numSiblings; i++ {
+		siblings[i] = NewType(fmt.Sprintf("a/b/%d", i))
+	}
+
+	// Every sibling must match the parent
+	for i, sib := range siblings {
+		if !sib.Matches(parent) {
+			t.Fatalf("sibling a/b/%d should match a/b", i)
+		}
+	}
+
+	// Time the full pass: 10,000 Matches calls should be very fast (<50ms easily)
+	start := time.Now()
+	for _, sib := range siblings {
+		sib.Matches(parent)
+	}
+	elapsed := time.Since(start)
+
+	// 10,000 prefix comparisons should be sub-millisecond; generous 50ms limit
+	if elapsed > 50*time.Millisecond {
+		t.Errorf("10,000 Matches calls took %v — expected <50ms", elapsed)
+	}
+	t.Logf("10,000 Matches calls completed in %v", elapsed)
+}
+
+// TestIsSubtypeOfEfficiencyThousandsOfSiblings confirms IsSubtypeOf is O(len(parent)).
+func TestIsSubtypeOfEfficiencyThousandsOfSiblings(t *testing.T) {
+	const numSiblings = 10_000
+	parent := NewType("a/b")
+
+	siblings := make([]Type, numSiblings)
+	for i := 0; i < numSiblings; i++ {
+		siblings[i] = NewType(fmt.Sprintf("a/b/%d", i))
+	}
+
+	for i, sib := range siblings {
+		if !sib.IsSubtypeOf(parent) {
+			t.Fatalf("sibling a/b/%d should be subtype of a/b", i)
+		}
+	}
+
+	start := time.Now()
+	for _, sib := range siblings {
+		sib.IsSubtypeOf(parent)
+	}
+	elapsed := time.Since(start)
+
+	if elapsed > 50*time.Millisecond {
+		t.Errorf("10,000 IsSubtypeOf calls took %v — expected <50ms", elapsed)
+	}
+	t.Logf("10,000 IsSubtypeOf calls completed in %v", elapsed)
+}
+
+// TestMatchSignatureEfficiencyThousandsOfSiblings confirms that MatchSignature
+// picks the right signature efficiently when a value has one of thousands of
+// sibling types and only a parent-level signature is registered.
+func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
+	const numSiblings = 10_000
+	parent := NewType("a/b")
+
+	sigs := []Signature{
+		{Args: []Type{parent}, Handler: dummyHandler},
+	}
+
+	start := time.Now()
+	for i := 0; i < numSiblings; i++ {
+		val := Value{VType: NewType(fmt.Sprintf("a/b/%d", i)), Data: nil}
+		m := MatchSignature(sigs, []Value{val}, WordInfo{ArgCount: -1})
+		if m == nil {
+			t.Fatalf("a/b/%d should match signature [a/b]", i)
+		}
+	}
+	elapsed := time.Since(start)
+
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("10,000 MatchSignature calls took %v — expected <200ms", elapsed)
+	}
+	t.Logf("10,000 MatchSignature calls completed in %v", elapsed)
+}
+
+// TestUnifyEfficiencyThousandsOfSiblings confirms Unify(a/b/x, a/b) is efficient
+// across thousands of distinct sibling types.
+func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
+	const numSiblings = 10_000
+	parentVal := Value{VType: NewType("a/b"), Data: nil}
+
+	start := time.Now()
+	for i := 0; i < numSiblings; i++ {
+		child := Value{VType: NewType(fmt.Sprintf("a/b/%d", i)), Data: nil}
+		result, ok := Unify(child, parentVal)
+		if !ok {
+			t.Fatalf("Unify(a/b/%d, a/b) should succeed", i)
+		}
+		// Should return the child (narrower type)
+		if result.VType.Parts[2] != fmt.Sprintf("%d", i) {
+			t.Fatalf("Unify(a/b/%d, a/b) returned wrong type: %s", i, result.VType)
+		}
+	}
+	elapsed := time.Since(start)
+
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("10,000 Unify calls took %v — expected <200ms", elapsed)
+	}
+	t.Logf("10,000 Unify calls completed in %v", elapsed)
+}
+
+// TestMatchConstantTimeRegardlessOfSiblingCount verifies that matching time
+// does NOT grow with the number of existing sibling types. Compares timing
+// with 100 siblings vs 10,000 siblings — both should be similar.
+func TestMatchConstantTimeRegardlessOfSiblingCount(t *testing.T) {
+	parent := NewType("prefix/mid")
+
+	// Warm up: create and match 100 siblings
+	small := make([]Type, 100)
+	for i := range small {
+		small[i] = NewType(fmt.Sprintf("prefix/mid/%d", i))
+	}
+
+	const iterations = 100_000
+	start := time.Now()
+	for n := 0; n < iterations; n++ {
+		small[n%100].Matches(parent)
+	}
+	smallElapsed := time.Since(start)
+
+	// Now create 10,000 siblings (types are independent structs, no registry)
+	large := make([]Type, 10_000)
+	for i := range large {
+		large[i] = NewType(fmt.Sprintf("prefix/mid/%d", i))
+	}
+
+	start = time.Now()
+	for n := 0; n < iterations; n++ {
+		large[n%10_000].Matches(parent)
+	}
+	largeElapsed := time.Since(start)
+
+	t.Logf("100 siblings: %v for %d iterations", smallElapsed, iterations)
+	t.Logf("10,000 siblings: %v for %d iterations", largeElapsed, iterations)
+
+	// The large set should not be more than 3x slower (generous margin for noise).
+	// In reality they should be nearly identical since Matches is a simple prefix check.
+	if largeElapsed > 3*smallElapsed+time.Millisecond {
+		t.Errorf("matching with 10,000 siblings (%v) is significantly slower than 100 siblings (%v)",
+			largeElapsed, smallElapsed)
 	}
 }
