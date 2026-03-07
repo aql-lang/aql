@@ -139,6 +139,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		switch {
 		case val.IsWord():
 			if err := e.stepWord(val); err != nil {
+				if isBreak(err) {
+					if e.handleLoopBreak() {
+						continue
+					}
+				}
+				if isContinue(err) {
+					if e.handleLoopContinue() {
+						continue
+					}
+				}
 				return nil, err
 			}
 
@@ -814,6 +824,9 @@ func (e *Engine) stepMark(val Value) {
 // original body. Both the mark and the move are removed from the stack after
 // the jump to prevent infinite loops. If the target mark is not found, an
 // error is returned using the move's reason metadata.
+//
+// When the move carries a ForCont (for-loop continuation), stepMoveCont is
+// called instead of the basic one-shot replay.
 func (e *Engine) stepMove(val Value) error {
 	info := val.AsMove()
 	moveIdx := e.pointer
@@ -839,6 +852,11 @@ func (e *Engine) stepMove(val Value) error {
 		return nil
 	}
 
+	// Delegate to continuation handler for for-loops.
+	if info.Cont != nil {
+		return e.stepMoveCont(markIdx, moveIdx, info)
+	}
+
 	// Get the saved body from the mark.
 	markInfo := e.stack[markIdx].AsMark()
 
@@ -855,6 +873,137 @@ func (e *Engine) stepMove(val Value) error {
 	// Set pointer to where the mark was (now the start of the replayed body).
 	e.pointer = markIdx
 	return nil
+}
+
+// stepMoveCont handles a for-loop continuation move. It collects this
+// iteration's results, advances the iterator, and either splices in a new
+// mark+body+move for the next iteration or finalizes the loop.
+func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
+	cont := info.Cont
+
+	// Collect resolved values between mark and move (this iteration's output).
+	for j := markIdx + 1; j < moveIdx; j++ {
+		cont.Results = append(cont.Results, e.stack[j])
+	}
+
+	// Advance iterator.
+	cont.Current += cont.Step
+
+	// Check if more iterations remain.
+	moreIterations := (cont.Step > 0 && cont.Current < cont.End) ||
+		(cont.Step < 0 && cont.Current > cont.End)
+
+	if moreIterations {
+		// Update iterator: uninstall old value, install new one.
+		// This keeps the DefStacks depth at 1 throughout the loop.
+		uninstallDef(cont.Registry, cont.IterName)
+		installDef(cont.Registry, cont.IterName, NewInteger(cont.Current))
+
+		// Generate new mark ID.
+		id := NextMarkID()
+
+		// Build replacement: mark + body + move.
+		body := cont.Body
+		tokens := make([]Value, 0, len(body)+2)
+		tokens = append(tokens, NewMark(id, body...))
+		bodyCopy := make([]Value, len(body))
+		copy(bodyCopy, body)
+		tokens = append(tokens, bodyCopy...)
+		tokens = append(tokens, NewMoveCont(id, info.Reason, cont))
+
+		// Remove old mark ID, register new one.
+		delete(e.marks, info.To)
+		e.stackSplice(markIdx, moveIdx-markIdx+1, tokens...)
+		if e.marks == nil {
+			e.marks = make(map[string]bool)
+		}
+		e.marks[id] = true
+
+		// Set pointer to the new mark so stepMark processes it.
+		e.pointer = markIdx
+		e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		return nil
+	}
+
+	// Done — uninstall iterator, splice in accumulated results.
+	uninstallDef(cont.Registry, cont.IterName)
+	delete(e.marks, info.To)
+	e.stackSplice(markIdx, moveIdx-markIdx+1, cont.Results...)
+	e.pointer = markIdx
+	e.traceNote = "for done"
+	return nil
+}
+
+// handleLoopBreak handles a break sentinel error by finding the nearest
+// enclosing for-loop (move with continuation) and terminating it.
+// Returns true if break was handled, false if no enclosing loop was found.
+func (e *Engine) handleLoopBreak() bool {
+	// Scan forward from current pointer for a move with continuation.
+	for i := e.pointer; i < len(e.stack); i++ {
+		if e.stack[i].IsMove() {
+			info := e.stack[i].AsMove()
+			if info.Cont != nil {
+				// Found the for-loop's move. Find its mark.
+				markIdx := -1
+				for j := 0; j < i; j++ {
+					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+						markIdx = j
+						break
+					}
+				}
+				if markIdx < 0 {
+					delete(e.marks, info.To)
+					continue
+				}
+
+				// Uninstall iterator, splice in accumulated results.
+				uninstallDef(info.Cont.Registry, info.Cont.IterName)
+				delete(e.marks, info.To)
+				e.stackSplice(markIdx, i-markIdx+1, info.Cont.Results...)
+				e.pointer = markIdx
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// handleLoopContinue handles a continue sentinel error by finding the nearest
+// enclosing for-loop and advancing to the next iteration (discarding the
+// current iteration's partial results).
+// Returns true if continue was handled, false if no enclosing loop was found.
+func (e *Engine) handleLoopContinue() bool {
+	// Scan forward from current pointer for a move with continuation.
+	for i := e.pointer; i < len(e.stack); i++ {
+		if e.stack[i].IsMove() {
+			info := e.stack[i].AsMove()
+			if info.Cont != nil {
+				// Found the for-loop's move. Find its mark.
+				markIdx := -1
+				for j := 0; j < i; j++ {
+					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+						markIdx = j
+						break
+					}
+				}
+				if markIdx < 0 {
+					delete(e.marks, info.To)
+					continue
+				}
+
+				// Remove values between mark and move (discard partial results).
+				if i-markIdx > 1 {
+					e.stackSplice(markIdx+1, i-markIdx-1)
+					// Recalculate move position.
+					i = markIdx + 1
+				}
+				// Set pointer to the move so stepMove fires next.
+				e.pointer = i
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // cleanMarks removes any leftover mark and move entries from the stack.

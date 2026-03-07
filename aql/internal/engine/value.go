@@ -118,9 +118,27 @@ type MarkInfo struct {
 // a move, it jumps back to the corresponding mark. The Reason field
 // describes why the move exists (e.g. "for loop") and is used in error
 // messages when the target mark cannot be found.
+//
+// Cont optionally carries for-loop continuation state. When set, stepMove
+// uses it to drive multi-iteration loops: each firing advances the iterator,
+// conditionally re-inserts mark+body+move for the next iteration, and
+// accumulates results across iterations.
 type MoveInfo struct {
-	To     string // ID of the target mark
-	Reason string // human-readable reason (for error messages)
+	To     string   // ID of the target mark
+	Reason string   // human-readable reason (for error messages)
+	Cont   *ForCont // optional: for-loop iteration state
+}
+
+// ForCont holds the iteration state for a mark/move-driven for loop.
+// It is carried by the MoveInfo and mutated across iterations.
+type ForCont struct {
+	Registry *Registry
+	IterName string  // name of the iterator variable (e.g. "i")
+	Current  int64   // current iteration value
+	End      int64   // exclusive bound
+	Step     int64   // increment per iteration
+	Body     []Value // original body tokens (replayed each iteration)
+	Results  []Value // accumulated results from completed iterations
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -264,6 +282,11 @@ func NewMark(id string, body ...Value) Value {
 // The reason string describes why this move exists (used in error messages).
 func NewMove(to string, reason string) Value {
 	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason}}
+}
+
+// NewMoveCont creates a move value with for-loop continuation state.
+func NewMoveCont(to, reason string, cont *ForCont) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.

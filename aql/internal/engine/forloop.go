@@ -10,15 +10,18 @@ import "fmt"
 //	for [1,10] [print i]        — iterate 1..9
 //	for [0,10,2] [print i]      — iterate 0,2,4,6,8
 //
-// Each iteration runs the body in a sub-engine with only one copy of
-// the body on the stack. This avoids the unlimited stack growth of
-// eager body expansion. The iterator variable is installed via def
-// and scoped to each iteration.
+// Implementation: the for handler returns mark + body + move tokens that
+// get spliced onto the caller's stack. The move carries a ForCont with
+// iteration state. When the engine reaches the move after processing the
+// body, stepMoveCont collects the iteration's results, advances the
+// iterator, and either splices a fresh mark+body+move for the next
+// iteration or finalizes the loop with accumulated results.
 //
-// Break and continue use sentinel errors to control the loop. Inside
-// each sub-engine iteration, mark/move wrap the body so that continue
-// can skip the remainder of the body by triggering a move back to the
-// mark, which then terminates (one-shot).
+// This ensures only one copy of the body is on the stack at a time,
+// eliminating the unlimited stack growth of eager body expansion.
+//
+// Break and continue use sentinel errors caught by the engine's Run loop,
+// which delegates to handleLoopBreak/handleLoopContinue.
 func registerFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
 	forCountHandler := func(args []Value) ([]Value, error) {
@@ -80,10 +83,9 @@ func isContinue(err error) bool {
 	return err == errContinue
 }
 
-// runForLoop executes a for loop from start to end (exclusive) with the
-// given step. Each iteration runs the body in a sub-engine with a single
-// copy of the body on the stack. Mark and move bracket the body inside
-// each sub-engine so that the body can be replayed (one-shot) by continue.
+// runForLoop builds the mark+body+move tokens for a for loop and returns
+// them. The engine splices these onto the stack and processes them; the
+// move's ForCont drives subsequent iterations via stepMoveCont.
 func runForLoop(r *Registry, start, end, step int64, iterName string, body Value) ([]Value, error) {
 	if step == 0 {
 		return nil, fmt.Errorf("for: step cannot be zero")
@@ -97,35 +99,32 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 
 	bodyElems := body.AsList()
 
-	var results []Value
-	for i := start; (step > 0 && i < end) || (step < 0 && i > end); i += step {
-		// Install the iterator variable.
-		installDef(r, iterName, NewInteger(i))
+	// Install the iterator variable for the first iteration.
+	installDef(r, iterName, NewInteger(start))
 
-		// Build the sub-engine input: one copy of the body.
-		input := make([]Value, len(bodyElems))
-		copy(input, bodyElems)
+	// Create the continuation state.
+	bodyCopy := make([]Value, len(bodyElems))
+	copy(bodyCopy, bodyElems)
 
-		sub := New(r)
-		out, err := sub.Run(input)
-
-		// Uninstall the iterator variable.
-		uninstallDef(r, iterName)
-
-		if isBreak(err) {
-			break
-		}
-		if isContinue(err) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("for: %w", err)
-		}
-
-		results = append(results, out...)
+	cont := &ForCont{
+		Registry: r,
+		IterName: iterName,
+		Current:  start,
+		End:      end,
+		Step:     step,
+		Body:     bodyCopy,
 	}
 
-	return results, nil
+	// Build the stack segment: mark + body + move.
+	id := NextMarkID()
+	tokens := make([]Value, 0, len(bodyElems)+2)
+	tokens = append(tokens, NewMark(id, bodyElems...))
+	bodyTokens := make([]Value, len(bodyElems))
+	copy(bodyTokens, bodyElems)
+	tokens = append(tokens, bodyTokens...)
+	tokens = append(tokens, NewMoveCont(id, "for loop", cont))
+
+	return tokens, nil
 }
 
 // parseRange parses a range specification list into start, end, step.
