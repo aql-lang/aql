@@ -134,6 +134,7 @@ type MoveInfo struct {
 	To     string   // ID of the target mark
 	Reason string   // human-readable reason (for error messages)
 	Cont   *ForCont // optional: for-loop iteration state
+	IfCont *IfCont  // optional: if-statement continuation state
 }
 
 // ForCont holds the iteration state for a mark/move-driven for loop.
@@ -146,6 +147,14 @@ type ForCont struct {
 	Step     int64   // increment per iteration
 	Body     []Value // original body tokens (replayed each iteration)
 	Results  []Value // accumulated results from completed iterations
+}
+
+// IfCont holds the continuation state for a mark/move-driven if statement.
+// When the move fires, the condition result (between mark and move) is
+// evaluated for truthiness to select the appropriate branch.
+type IfCont struct {
+	Then []Value // tokens to splice if condition is truthy
+	Else []Value // tokens to splice if condition is falsy (nil for 2-arg if)
 }
 
 // ModuleDesc describes a module: its generated ID and named exports.
@@ -301,6 +310,11 @@ func NewMove(to string, reason string) Value {
 // NewMoveCont creates a move value with for-loop continuation state.
 func NewMoveCont(to, reason string, cont *ForCont) Value {
 	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
+}
+
+// NewMoveIf creates a move value with if-statement continuation state.
+func NewMoveIf(to, reason string, ifCont *IfCont) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, IfCont: ifCont}}
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.

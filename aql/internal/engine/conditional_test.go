@@ -45,26 +45,90 @@ func TestIsTruthyMap(t *testing.T) {
 	}
 }
 
-func TestEvalArgScalar(t *testing.T) {
+// TestIfListConditionMarkMove verifies that list conditions are evaluated
+// via mark/move in the main engine (not a sub-engine).
+func TestIfListConditionMarkMove(t *testing.T) {
 	r := DefaultRegistry()
-	result, err := evalCond(r, NewInteger(42))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != 42 {
-		t.Errorf("expected [42], got %v", result)
+	// if [1 add 2 gt 2] 10 20 — condition evaluates to true (3>2)
+	condList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2), NewWord("gt"), NewInteger(2)})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), condList, NewInteger(10), NewInteger(20),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("if [1 add 2 gt 2] 10 20 = %v, want [10]", result)
 	}
 }
 
-func TestEvalArgList(t *testing.T) {
+func TestIfListConditionFalseMarkMove(t *testing.T) {
 	r := DefaultRegistry()
-	// [1 add 2] should evaluate to [3]
-	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result, err := evalCond(r, list)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// if [1 gt 2] 10 20 — condition is false
+	condList := NewList([]Value{NewInteger(1), NewWord("gt"), NewInteger(2)})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), condList, NewInteger(10), NewInteger(20),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 20 {
+		t.Errorf("if [1 gt 2] 10 20 = %v, want [20]", result)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 3 {
-		t.Errorf("expected [3], got %v", result)
+}
+
+func TestIfScalar2ArgTrue(t *testing.T) {
+	r := DefaultRegistry()
+	// if true 42 — 2-arg, scalar true condition
+	result := runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(true), NewInteger(42),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("if true 42 = %v, want [42]", result)
+	}
+}
+
+func TestIfScalar2ArgFalse(t *testing.T) {
+	r := DefaultRegistry()
+	// if false 42 — 2-arg, scalar false condition returns nothing
+	result := runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(false), NewInteger(42),
+	})
+	if len(result) != 0 {
+		t.Errorf("if false 42 = %v, want []", result)
+	}
+}
+
+// TestIfConditionSharesContext verifies that the condition, evaluated
+// via mark/move in the main engine, shares the parent's context.
+func TestIfConditionSharesContext(t *testing.T) {
+	r := DefaultRegistry()
+	condList := NewList([]Value{NewWord("context"), NewWord("get"), NewString("flag")})
+	result := runAQL(t, r, []Value{
+		NewWord("context"), NewWord("set"), NewString("flag"), NewBoolean(true),
+		NewWord("if"), condList, NewString("yes"), NewString("no"),
+	})
+	if len(result) != 1 || result[0].AsString() != "yes" {
+		t.Errorf("if [context get flag] should see parent context, got %v", result)
+	}
+}
+
+// TestIfConditionCanSetContext verifies that condition evaluation in the
+// main engine can modify the parent's context (unlike the old sub-engine).
+func TestIfConditionCanSetContext(t *testing.T) {
+	r := DefaultRegistry()
+	// Condition sets a context value, then we read it after if
+	condList := NewList([]Value{
+		NewWord("context"), NewWord("set"), NewString("seen"), NewBoolean(true),
+		NewBoolean(true),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), condList, NewInteger(1), NewInteger(2),
+		NewWord("context"), NewWord("get"), NewString("seen"),
+	})
+	// Should return [1, true] — the if returned 1 (truthy condition),
+	// and context get "seen" returns true (set during condition eval)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 1 {
+		t.Errorf("if branch result = %v, want 1", result[0])
+	}
+	if !result[1].AsBoolean() {
+		t.Errorf("context set during condition should persist, got %v", result[1])
 	}
 }

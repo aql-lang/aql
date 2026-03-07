@@ -868,6 +868,11 @@ func (e *Engine) stepMove(val Value) error {
 		return e.stepMoveCont(markIdx, moveIdx, info)
 	}
 
+	// Delegate to if-statement continuation handler.
+	if info.IfCont != nil {
+		return e.stepMoveIf(markIdx, moveIdx, info)
+	}
+
 	// Get the saved body from the mark.
 	markInfo := e.stack[markIdx].AsMark()
 
@@ -942,6 +947,45 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	e.stackSplice(markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
 	e.traceNote = "for done"
+	return nil
+}
+
+// stepMoveIf handles an if-statement continuation move. It collects the
+// condition result (all resolved values between mark and move), evaluates
+// the last value for truthiness, and splices in the chosen branch.
+func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
+	ifCont := info.IfCont
+
+	// Collect condition results between mark and move.
+	var condResult Value
+	for j := markIdx + 1; j < moveIdx; j++ {
+		condResult = e.stack[j]
+	}
+
+	// Remove mark from hash table.
+	delete(e.marks, info.To)
+
+	// Check if condition produced a value.
+	if condResult.VType.Parts == nil {
+		e.stackSplice(markIdx, moveIdx-markIdx+1)
+		e.pointer = markIdx
+		return fmt.Errorf("if: condition produced no value")
+	}
+
+	// Evaluate truthiness and choose branch.
+	cond := isTruthy(condResult)
+
+	var branch []Value
+	if cond {
+		branch = ifCont.Then
+	} else {
+		branch = ifCont.Else
+	}
+
+	// Splice chosen branch (or nothing) in place of mark+condition+move.
+	e.stackSplice(markIdx, moveIdx-markIdx+1, branch...)
+	e.pointer = markIdx
+	e.traceNote = fmt.Sprintf("if %v", cond)
 	return nil
 }
 
