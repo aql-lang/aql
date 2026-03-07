@@ -37,6 +37,7 @@ type Engine struct {
 	trace     TraceCallback
 	traceNote string // annotation set during execution for the next trace call
 	stepLimit int    // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	marks     map[string]bool // active mark IDs (for mark/move control flow)
 }
 
 // New creates an Engine with the given function registry.
@@ -147,7 +148,18 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsOpenParen():
 			e.pointer++
 
+		case val.IsMark():
+			e.stepMark(val)
+
+		case val.IsMove():
+			if err := e.stepMove(val); err != nil {
+				return nil, err
+			}
+
 		default:
+			if val.VType.Equal(Type{}) {
+				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
+			}
 			if err := e.stepLiteral(); err != nil {
 				return nil, err
 			}
@@ -164,6 +176,9 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
 		}
 	}
+
+	// Remove any leftover marks and moves from the stack.
+	e.cleanMarks()
 
 	return e.stack, nil
 }
@@ -542,9 +557,10 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 		if e.stack[i].IsOpenParen() {
 			break
 		}
-		if !e.stack[i].IsForward() {
-			indices = append(indices, i)
+		if e.stack[i].IsForward() || e.stack[i].IsMark() || e.stack[i].IsMove() {
+			continue
 		}
+		indices = append(indices, i)
 	}
 	// Reverse so indices are in stack order (ascending).
 	for i, j := 0, len(indices)-1; i < j; i, j = i+1, j-1 {
@@ -562,7 +578,7 @@ func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
 	}
 	var stack []Value
 	for i := 0; i < e.pointer; i++ {
-		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() {
+		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() || e.stack[i].IsMark() || e.stack[i].IsMove() {
 			continue
 		}
 		stack = append(stack, e.stack[i])
@@ -783,6 +799,72 @@ func (e *Engine) stepEnd() error {
 	return nil
 }
 
+// stepMark records the mark's ID in the marks hash table and advances.
+func (e *Engine) stepMark(val Value) {
+	info := val.AsMark()
+	if e.marks == nil {
+		e.marks = make(map[string]bool)
+	}
+	e.marks[info.ID] = true
+	e.traceNote = "mark " + info.ID
+	e.pointer++
+}
+
+// stepMove jumps the pointer back to the corresponding mark, replaying the
+// original body. Both the mark and the move are removed from the stack after
+// the jump to prevent infinite loops. If the target mark is not found, an
+// error is returned using the move's reason metadata.
+func (e *Engine) stepMove(val Value) error {
+	info := val.AsMove()
+	moveIdx := e.pointer
+
+	if e.marks == nil || !e.marks[info.To] {
+		return fmt.Errorf("move error: mark %q not found (%s)", info.To, info.Reason)
+	}
+
+	// Scan the stack to find the mark's current position.
+	markIdx := -1
+	for i := 0; i < len(e.stack); i++ {
+		if e.stack[i].IsMark() && e.stack[i].AsMark().ID == info.To {
+			markIdx = i
+			break
+		}
+	}
+	if markIdx < 0 {
+		return fmt.Errorf("move error: mark %q not found on stack (%s)", info.To, info.Reason)
+	}
+
+	// Get the saved body from the mark.
+	markInfo := e.stack[markIdx].AsMark()
+
+	// Remove from hash table.
+	delete(e.marks, info.To)
+
+	// Replace everything from mark through move (inclusive) with the body copy.
+	body := make([]Value, len(markInfo.Body))
+	copy(body, markInfo.Body)
+	e.stackSplice(markIdx, moveIdx-markIdx+1, body...)
+
+	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+
+	// Set pointer to where the mark was (now the start of the replayed body).
+	e.pointer = markIdx
+	return nil
+}
+
+// cleanMarks removes any leftover mark and move entries from the stack.
+func (e *Engine) cleanMarks() {
+	i := 0
+	for i < len(e.stack) {
+		if e.stack[i].IsMark() || e.stack[i].IsMove() {
+			e.stackRemove(i)
+		} else {
+			i++
+		}
+	}
+	e.marks = nil
+}
+
 // stepOpenParen replaces the "(" word with an open-paren marker.
 func (e *Engine) stepOpenParen() error {
 	e.stack[e.pointer] = NewOpenParen()
@@ -916,7 +998,7 @@ func (e *Engine) effectiveResolved() []Value {
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
-		if !v.IsForward() && !v.IsOpenParen() {
+		if !v.IsForward() && !v.IsOpenParen() && !v.IsMark() && !v.IsMove() {
 			resolved = append(resolved, v)
 		}
 	}
