@@ -1088,6 +1088,54 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 	}
 }
 
+func TestEngineFnFactorialNamedZero(t *testing.T) {
+	r := DefaultRegistry()
+	// def fact fn [[_:0] integer [1] [x:integer] [integer] [x mul fact (x sub 1)]]
+	// Using {_:0} instead of bare 0 in the base case.
+	// Named param "_" consumes the 0 from the stack, so the body is just [1].
+	fnBody := NewList([]Value{
+		// sig 1 (base case): [_:0] integer [1]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("_", NewInteger(0))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewInteger(1)}),
+		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("integer"))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{
+			NewWord("x"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}),
+	})
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+	for _, tc := range tests {
+		result := runAQL(t, r, []Value{
+			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewInteger(tc.input), NewWord("fact"),
+		})
+		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
+		}
+	}
+}
+
 func TestEngineTypeRecord(t *testing.T) {
 	r := DefaultRegistry()
 	// type Point record [x:number y:number] end Point
