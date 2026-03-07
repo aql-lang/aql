@@ -36,11 +36,19 @@ type Engine struct {
 	registry  *Registry
 	trace     TraceCallback
 	traceNote string // annotation set during execution for the next trace call
+	stepLimit int    // 0 means use default (22222 for top-level, 2222 for sub-engines)
 }
 
 // New creates an Engine with the given function registry.
+// The returned engine uses the sub-engine step limit (2222).
+// Use NewTop for the top-level engine with a higher limit (22222).
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry}
+	return &Engine{registry: registry, stepLimit: 2222}
+}
+
+// NewTop creates a top-level Engine with the maximum step limit (22222).
+func NewTop(registry *Registry) *Engine {
+	return &Engine{registry: registry, stepLimit: 22222}
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -108,7 +116,10 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	copy(e.stack, input)
 	e.pointer = 0
 
-	limit := 22222 // safety bound
+	limit := e.stepLimit
+	if limit <= 0 {
+		limit = 22222
+	}
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break

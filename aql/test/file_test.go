@@ -19,7 +19,7 @@ func runWithOSFiles(t *testing.T, expr string) ([]engine.Value, error) {
 		return nil, err
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	return eng.Run(values)
 }
 
@@ -226,7 +226,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestFileReadTSVPrint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	_, err = eng.Run(values)
 	if err != nil {
 		t.Fatal(err)

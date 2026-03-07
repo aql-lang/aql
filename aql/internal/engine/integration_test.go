@@ -9,7 +9,7 @@ import (
 // helper to run AQL expressions through the engine and return results
 func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 	t.Helper()
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -19,7 +19,7 @@ func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 
 func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 	t.Helper()
-	e := New(r)
+	e := NewTop(r)
 	_, err := e.Run(tokens)
 	return err
 }
@@ -460,7 +460,7 @@ func TestEngineUndef(t *testing.T) {
 
 func TestEngineRecord(t *testing.T) {
 	r := DefaultRegistry()
-	e := New(r)
+	e := NewTop(r)
 	// Parse a pair list manually: jsonic produces maps for x:number syntax
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
@@ -478,7 +478,7 @@ func TestEngineRecord(t *testing.T) {
 
 func TestEngineTable(t *testing.T) {
 	r := DefaultRegistry()
-	e := New(r)
+	e := NewTop(r)
 	// Create a record type first, then table
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
