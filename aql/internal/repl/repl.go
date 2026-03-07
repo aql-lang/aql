@@ -34,6 +34,7 @@ func Start(in io.Reader, out io.Writer) {
 
 	// Shared registry so set/get state persists across REPL lines.
 	registry := engine.DefaultRegistry()
+	registry.SetParseFunc(parser.Parse)
 	registry.Output = out
 
 	for {
