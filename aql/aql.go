@@ -3,6 +3,7 @@ package aql
 import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -80,6 +81,7 @@ type AQL struct {
 func New() *AQL {
 	reg := engine.DefaultRegistry()
 	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
 	return &AQL{registry: reg}
 }
 
