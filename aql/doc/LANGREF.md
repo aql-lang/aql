@@ -695,11 +695,11 @@ none deq none           => true
 #### `convert`
 
 Convert a value to a target scalar type. An optional third argument
-specifies a variant (e.g., numeric base).
+specifies a variant (string shorthand) or a settings map.
 
 *Signatures:*
 - `[any, any] -> [scalar]` — 2-arg form: value and target type
-- `[any, any, string] -> [scalar]` — 3-arg form: value, target type, variant
+- `[any, any, any] -> [scalar]` — 3-arg form: value, target type, variant or settings map
 
 *Precedence:* suffix
 
@@ -743,6 +743,20 @@ convert "" boolean             => false
 ```
 convert 42 atom                => 42
 convert "hello" atom           => hello
+```
+
+**Settings map form.** The third argument can be a map with `base`
+and/or `size` keys:
+
+| Key    | Default | Values                               |
+|--------|---------|--------------------------------------|
+| `base` | (none)  | `"hex"`, `"HEX"`, `"bin"`, `"oct"`  |
+| `size` | 222     | Max output string length             |
+
+```
+convert 10 string {base:hex}              => 'a'
+convert "hello" string {size:3}           => 'hel'
+convert 255 string {base:hex, size:1}     => 'f'
 ```
 
 ### Stack Words
