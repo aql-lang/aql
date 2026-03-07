@@ -772,6 +772,24 @@ func registerUndef(r *Registry) {
 			Handler: undefHandler,
 		},
 	)
+
+	// Targeted undef: undef foo fn [[number] [number]]
+	undefFnHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		undefInfo := args[1].Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
+		return nil, nil
+	}
+	r.Register("undef",
+		Signature{
+			Args:    []Type{TWord, TFnUndef},
+			Handler: undefFnHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TFnUndef},
+			Handler: undefFnHandler,
+		},
+	)
 }
 
 // fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec

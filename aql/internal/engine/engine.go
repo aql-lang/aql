@@ -745,12 +745,149 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		e.pointer = funcIdx
+	} else if e.shouldResolveForwardEarly(fwd, fwdIdx) {
+		// A shorter sig is fully satisfied and the next token can't
+		// produce the longer sig's next expected type. Resolve now
+		// so the function fires before subsequent tokens evaluate.
+		e.traceNote = fmt.Sprintf("early-resolve %s %d/%d",
+			fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+		e.stackRemove(fwdIdx)
+
+		if e.stack[funcIdx].IsWord() {
+			w := e.stack[funcIdx].AsWord()
+			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+		}
+
+		e.pointer = funcIdx
 	} else {
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
 	}
 
 	return nil
+}
+
+// shouldResolveForwardEarly checks whether a forward that hasn't collected
+// all its expected args should resolve now because a shorter signature of the
+// same function is fully satisfied and the next token on the stack cannot
+// plausibly produce the longer sig's next expected type. This prevents the
+// forward from delaying the function's execution when it's clear the shorter
+// sig is the right match (e.g., "undef foo foo" should use the 1-arg [TWord]
+// sig immediately rather than waiting for a TFnUndef that won't come).
+func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
+	fn := e.registry.Lookup(fwd.FuncName)
+	if fn == nil {
+		return false
+	}
+
+	// Check if any shorter sig with exactly CollectedArgs args can
+	// accept the types of the already-collected suffix values.
+	funcIdx := fwd.FuncIndex
+	collectedTypes := make([]Type, fwd.CollectedArgs)
+	for i := 0; i < fwd.CollectedArgs; i++ {
+		collectedTypes[i] = e.stack[funcIdx-fwd.CollectedArgs+i].VType
+	}
+
+	hasShorterMatch := false
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+		if len(sig.Args) != fwd.CollectedArgs {
+			continue
+		}
+		// Flexible match: each collected type must match some sig arg.
+		used := make([]bool, len(sig.Args))
+		allMatch := true
+		for _, ct := range collectedTypes {
+			found := false
+			for j := range sig.Args {
+				if !used[j] && ct.Matches(sig.Args[j]) {
+					used[j] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			hasShorterMatch = true
+			break
+		}
+	}
+	if !hasShorterMatch {
+		return false
+	}
+
+	// A shorter sig is satisfied. Check whether the next token on the
+	// stack could produce the type needed for the longer sig's next slot.
+	nextArgType := fwd.Sig.Args[fwd.CollectedArgs]
+	peekIdx := fwdIdx + 1
+	if peekIdx >= len(e.stack) {
+		return true // no more tokens → resolve with shorter sig
+	}
+
+	return !e.couldProduceType(e.stack[peekIdx], nextArgType)
+}
+
+// couldProduceType predicts whether a stack value, when evaluated, could
+// produce a value matching the expected type. For literal values, this is
+// a direct type check. For words, it predicts based on definitions or
+// assumes built-in functions could produce any type.
+func (e *Engine) couldProduceType(v Value, expected Type) bool {
+	// Direct type match (works for all literals).
+	if v.VType.Matches(expected) {
+		return true
+	}
+
+	if v.IsForward() {
+		return false // structural, can't produce values
+	}
+
+	// An open paren starts a sub-expression that will evaluate to a
+	// value of unknown type, so assume it could produce anything.
+	if v.IsOpenParen() {
+		return true
+	}
+
+	if v.IsWord() {
+		w := v.AsWord()
+		// "(" starts a sub-expression that will produce a value.
+		if w.Name == "(" {
+			return true
+		}
+		// ")" and "end" are terminators, not value-producers.
+		if w.Name == ")" || w.Name == "end" {
+			return false
+		}
+		// Boolean literals.
+		if w.Name == "true" || w.Name == "false" {
+			return TBoolean.Matches(expected)
+		}
+		// Type names stay as type literals.
+		if _, isType := typeNames[w.Name]; isType {
+			return false
+		}
+		// Defined word (via DefStacks): resolves to a known type.
+		if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
+			return ds[len(ds)-1].VType.Matches(expected)
+		}
+		// Registered built-in function: could produce most types.
+		// Specialized internal types (TFnUndef, TFnDef) can only be
+		// produced by specific functions (fn).
+		if e.registry.Lookup(w.Name) != nil {
+			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
+				return w.Name == "fn"
+			}
+			return true
+		}
+		// Unknown word → becomes atom.
+		return TAtom.Matches(expected)
+	}
+
+	// Non-word literal: already checked VType.Matches above.
+	return false
 }
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
