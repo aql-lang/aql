@@ -26,7 +26,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 		return "", err
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return "", err
@@ -52,7 +52,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.Me
 		return mem, "", err
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return mem, "", err
@@ -274,7 +274,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -322,7 +322,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 		return "", "", "", parseErr
 	}
 
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, runErr := eng.Run(values)
 	if runErr != nil {
 		return outBuf.String(), errBuf.String(), "", runErr
@@ -342,7 +342,7 @@ func TestStdinWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -359,7 +359,7 @@ func TestStdoutWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -376,7 +376,7 @@ func TestStderrWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)

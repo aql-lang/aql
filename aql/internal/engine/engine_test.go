@@ -2530,7 +2530,7 @@ func TestEdgeLookupUnknown(t *testing.T) {
 
 func TestEdgeEmptyRegistry(t *testing.T) {
 	r := NewRegistry()
-	e := New(r)
+	e := NewTop(r)
 	// Everything becomes unknown word → string
 	result, err := e.Run([]Value{NewWord("foo"), NewWord("bar")})
 	if err != nil {
@@ -2546,7 +2546,7 @@ func TestEdgeEmptyRegistry(t *testing.T) {
 
 func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
 	r := NewRegistry()
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("end")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2558,7 +2558,7 @@ func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
 
 func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
 	r := NewRegistry()
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(42), NewWord(")"),
 	})
@@ -2702,7 +2702,7 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 		Args:    []Type{TAny},
 		Handler: func(args []Value) ([]Value, error) { return args, nil },
 	})
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run([]Value{NewWord("echo"), NewInteger(42)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2721,7 +2721,7 @@ func TestEdgeSignatureMultipleSuffix(t *testing.T) {
 			return args, nil
 		},
 	})
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run([]Value{
 		NewWord("pair"), NewInteger(1), NewInteger(2),
 	})
@@ -2742,7 +2742,7 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 			return []Value{args[0], args[0], args[0]}, nil
 		},
 	})
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run([]Value{NewInteger(7), NewWord("triple")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

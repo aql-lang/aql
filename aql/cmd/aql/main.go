@@ -81,7 +81,7 @@ func run(w io.Writer, source string) error {
 
 	reg := engine.DefaultRegistry()
 	reg.SetParseFunc(parser.Parse)
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return fmt.Errorf("error: %s", err)

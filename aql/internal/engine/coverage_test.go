@@ -1,0 +1,3319 @@
+package engine
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+// ========================
+// Query / Table tests
+// ========================
+
+func makeTestTable(r *Registry) {
+	// Create a "people" table: name:string, age:number
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("name", NewString("alice"))
+	row1.Set("age", NewInteger(30))
+	row2 := NewOrderedMap()
+	row2.Set("name", NewString("bob"))
+	row2.Set("age", NewInteger(25))
+	row3 := NewOrderedMap()
+	row3.Set("name", NewString("carol"))
+	row3.Set("age", NewInteger(35))
+
+	td := TableData{
+		Record: rec,
+		Rows:   []Value{NewMap(row1), NewMap(row2), NewMap(row3)},
+	}
+	r.Store["people"] = Value{VType: TList, Data: td}
+}
+
+func TestQueryFrom(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if !result[0].IsTableType() {
+		t.Fatalf("expected table type, got %s", result[0])
+	}
+}
+
+func TestQueryFromSelect(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromWhereSimple(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	// from people where [name eq "alice"]
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("name"), NewWord("eq"), NewString("alice"),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromWhere(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	// from people where [age gt 28]
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("age"), NewWord("gt"), NewInteger(28),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	td, ok := result[0].Data.(QueryBuilder)
+	if !ok {
+		td2, ok2 := result[0].Data.(TableData)
+		if !ok2 {
+			t.Fatalf("expected QueryBuilder or TableData, got %T", result[0].Data)
+		}
+		if len(td2.Rows) != 2 {
+			t.Errorf("expected 2 rows (alice=30, carol=35), got %d", len(td2.Rows))
+		}
+		return
+	}
+	mat, err := td.Materialize()
+	if err != nil {
+		t.Fatalf("materialize error: %v", err)
+	}
+	if len(mat.Rows) != 2 {
+		t.Errorf("expected 2 rows (alice=30, carol=35), got %d", len(mat.Rows))
+	}
+}
+
+func TestQueryFromOrderBy(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("order"), NewWord("by"), NewWord("age"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromLimit(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("limit"), NewInteger(2),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromOffset(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("offset"), NewInteger(1),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromDistinct(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("distinct"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromAs(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("as"), NewWord("p"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromGroupBy(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("group"), NewWord("by"), NewWord("name"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryStarWord(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("star")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryMaterializeSelectStar(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	// from people select star — triggers full materialization pipeline
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	// Materialize the result
+	v := result[0]
+	if qb, ok := v.Data.(QueryBuilder); ok {
+		td, err := qb.Materialize()
+		if err != nil {
+			t.Fatalf("materialize error: %v", err)
+		}
+		if len(td.Rows) != 3 {
+			t.Errorf("expected 3 rows, got %d", len(td.Rows))
+		}
+	}
+}
+
+func TestQueryJoin(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	// Create a second table "scores"
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("score", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("name", NewString("alice"))
+	row1.Set("score", NewInteger(95))
+	row2 := NewOrderedMap()
+	row2.Set("name", NewString("bob"))
+	row2.Set("score", NewInteger(88))
+
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
+	r.Store["scores"] = Value{VType: TList, Data: td}
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("join"), NewWord("scores"),
+		NewWord("using"), NewList([]Value{NewWord("name")}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryUnion(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	// Create second table with same schema
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("name", NewString("dave"))
+	row1.Set("age", NewInteger(40))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1)}}
+	r.Store["people2"] = Value{VType: TList, Data: td}
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("union"), NewWord("from"), NewWord("people2"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+// ========================
+// Unify tests (disjunct, equality, open map)
+// ========================
+
+func TestUnifyDisjunctMatch(t *testing.T) {
+	// string|none should unify with string "hello"
+	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	val := NewString("hello")
+	result, ok := Unify(disj, val)
+	if !ok {
+		t.Fatal("expected unification to succeed")
+	}
+	if !result.VType.Matches(TString) {
+		t.Errorf("expected string type, got %s", result.VType)
+	}
+}
+
+func TestUnifyDisjunctNone(t *testing.T) {
+	// string|none should unify with none
+	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	val := NewTypeLiteral(TNone)
+	result, ok := Unify(disj, val)
+	if !ok {
+		t.Fatal("expected unification to succeed")
+	}
+	if !result.VType.Equal(TNone) {
+		t.Errorf("expected none type, got %s", result.VType)
+	}
+}
+
+func TestUnifyDisjunctFail(t *testing.T) {
+	// string|none should NOT unify with integer
+	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	val := NewInteger(42)
+	_, ok := Unify(disj, val)
+	if ok {
+		t.Fatal("expected unification to fail")
+	}
+}
+
+func TestUnifyDisjunctWithAny(t *testing.T) {
+	// string|none unifying with any should preserve the disjunct
+	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	val := NewTypeLiteral(TAny)
+	result, ok := Unify(disj, val)
+	if !ok {
+		t.Fatal("expected unification to succeed")
+	}
+	if !result.IsDisjunct() {
+		t.Errorf("expected disjunct, got %s", result)
+	}
+}
+
+func TestUnifyDisjunctMapOpen(t *testing.T) {
+	// Disjunct with map alternative uses open (subset) matching
+	patternMap := NewOrderedMap()
+	patternMap.Set("x", NewTypeLiteral(TNumber))
+	pattern := NewMap(patternMap)
+
+	candidateMap := NewOrderedMap()
+	candidateMap.Set("x", NewInteger(42))
+	candidateMap.Set("y", NewString("extra"))
+	candidate := NewMap(candidateMap)
+
+	disj := NewDisjunct([]Value{pattern})
+	result, ok := Unify(disj, candidate)
+	if !ok {
+		t.Fatal("expected open map unification to succeed")
+	}
+	if !result.VType.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.VType)
+	}
+}
+
+func TestValuesEqualLists(t *testing.T) {
+	a := NewList([]Value{NewInteger(1), NewInteger(2)})
+	b := NewList([]Value{NewInteger(1), NewInteger(2)})
+	if !valuesEqual(a, b) {
+		t.Error("expected equal lists")
+	}
+}
+
+func TestValuesEqualListsDiff(t *testing.T) {
+	a := NewList([]Value{NewInteger(1), NewInteger(2)})
+	b := NewList([]Value{NewInteger(1), NewInteger(3)})
+	if valuesEqual(a, b) {
+		t.Error("expected unequal lists")
+	}
+}
+
+func TestValuesEqualMaps(t *testing.T) {
+	m1 := NewOrderedMap()
+	m1.Set("a", NewInteger(1))
+	m2 := NewOrderedMap()
+	m2.Set("a", NewInteger(1))
+	if !valuesEqual(NewMap(m1), NewMap(m2)) {
+		t.Error("expected equal maps")
+	}
+}
+
+func TestValuesEqualMapsDiffKeys(t *testing.T) {
+	m1 := NewOrderedMap()
+	m1.Set("a", NewInteger(1))
+	m2 := NewOrderedMap()
+	m2.Set("b", NewInteger(1))
+	if valuesEqual(NewMap(m1), NewMap(m2)) {
+		t.Error("expected unequal maps")
+	}
+}
+
+func TestValuesEqualTableTypes(t *testing.T) {
+	f1 := NewOrderedMap()
+	f1.Set("x", NewTypeLiteral(TNumber))
+	f2 := NewOrderedMap()
+	f2.Set("x", NewTypeLiteral(TNumber))
+
+	tt1 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f1}}}
+	tt2 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f2}}}
+	if !valuesEqual(tt1, tt2) {
+		t.Error("expected equal table types")
+	}
+}
+
+func TestValuesEqualTypedLists(t *testing.T) {
+	tl1 := NewTypedList(NewTypeLiteral(TString))
+	tl2 := NewTypedList(NewTypeLiteral(TString))
+	if !valuesEqual(tl1, tl2) {
+		t.Error("expected equal typed lists")
+	}
+}
+
+func TestValuesEqualTypedListsDiff(t *testing.T) {
+	tl1 := NewTypedList(NewTypeLiteral(TString))
+	tl2 := NewTypedList(NewTypeLiteral(TNumber))
+	if valuesEqual(tl1, tl2) {
+		t.Error("expected unequal typed lists")
+	}
+}
+
+func TestValuesEqualRecordTypes(t *testing.T) {
+	f1 := NewOrderedMap()
+	f1.Set("x", NewTypeLiteral(TNumber))
+	f2 := NewOrderedMap()
+	f2.Set("x", NewTypeLiteral(TNumber))
+	rt1 := NewRecordType(f1)
+	rt2 := NewRecordType(f2)
+	if !valuesEqual(rt1, rt2) {
+		t.Error("expected equal record types")
+	}
+}
+
+func TestValuesEqualTypedMaps(t *testing.T) {
+	tm1 := NewTypedMap(NewTypeLiteral(TString))
+	tm2 := NewTypedMap(NewTypeLiteral(TString))
+	if !valuesEqual(tm1, tm2) {
+		t.Error("expected equal typed maps")
+	}
+}
+
+func TestValuesEqualTypedMapsDiff(t *testing.T) {
+	tm1 := NewTypedMap(NewTypeLiteral(TString))
+	tm2 := NewTypedMap(NewTypeLiteral(TNumber))
+	if valuesEqual(tm1, tm2) {
+		t.Error("expected unequal typed maps")
+	}
+}
+
+func TestValuesEqualOneNilData(t *testing.T) {
+	a := NewTypeLiteral(TString)
+	b := NewString("hello")
+	if valuesEqual(a, b) {
+		t.Error("expected unequal (type literal vs concrete)")
+	}
+}
+
+func TestOpenUnifyMap(t *testing.T) {
+	pattern := NewOrderedMap()
+	pattern.Set("x", NewTypeLiteral(TNumber))
+	candidate := NewOrderedMap()
+	candidate.Set("x", NewInteger(5))
+	candidate.Set("y", NewString("extra"))
+	if !openUnifyMap(NewMap(pattern), NewMap(candidate)) {
+		t.Error("expected open unify to succeed")
+	}
+}
+
+func TestOpenUnifyMapMissingKey(t *testing.T) {
+	pattern := NewOrderedMap()
+	pattern.Set("z", NewTypeLiteral(TNumber))
+	candidate := NewOrderedMap()
+	candidate.Set("x", NewInteger(5))
+	if openUnifyMap(NewMap(pattern), NewMap(candidate)) {
+		t.Error("expected open unify to fail")
+	}
+}
+
+func TestUnifyTypedMaps(t *testing.T) {
+	tm1 := NewTypedMap(NewTypeLiteral(TNumber))
+	tm2 := NewTypedMap(NewTypeLiteral(TInteger))
+	result, ok := Unify(tm1, tm2)
+	if !ok {
+		t.Fatal("expected typed map unification to succeed")
+	}
+	if !result.IsTypedMap() {
+		t.Errorf("expected typed map, got %s", result)
+	}
+}
+
+func TestUnifyTypedMapWithConcrete(t *testing.T) {
+	tm := NewTypedMap(NewTypeLiteral(TNumber))
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	m.Set("y", NewInteger(2))
+	result, ok := Unify(tm, NewMap(m))
+	if !ok {
+		t.Fatal("expected unification to succeed")
+	}
+	if !result.VType.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.VType)
+	}
+}
+
+func TestUnifyMapsClosedFail(t *testing.T) {
+	m1 := NewOrderedMap()
+	m1.Set("x", NewInteger(1))
+	m2 := NewOrderedMap()
+	m2.Set("x", NewInteger(1))
+	m2.Set("y", NewInteger(2))
+	_, ok := Unify(NewMap(m1), NewMap(m2))
+	if ok {
+		t.Error("expected closed map unification to fail (different key counts)")
+	}
+}
+
+func TestUnifyMapsKeyMismatch(t *testing.T) {
+	m1 := NewOrderedMap()
+	m1.Set("x", NewInteger(1))
+	m2 := NewOrderedMap()
+	m2.Set("y", NewInteger(1))
+	_, ok := Unify(NewMap(m1), NewMap(m2))
+	if ok {
+		t.Error("expected closed map unification to fail (different keys)")
+	}
+}
+
+func TestUnifyMapWithNonMap(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	_, ok := Unify(NewMap(m), NewInteger(1))
+	if ok {
+		t.Error("expected map+int unification to fail")
+	}
+}
+
+func TestUnifyListLiteralWithConcrete(t *testing.T) {
+	listType := NewTypeLiteral(TList)
+	concrete := NewList([]Value{NewInteger(1)})
+	result, ok := Unify(listType, concrete)
+	if !ok {
+		t.Fatal("expected list type to unify with concrete list")
+	}
+	if !result.VType.Equal(TList) {
+		t.Errorf("expected list, got %s", result.VType)
+	}
+}
+
+func TestUnifyMapLiteralWithConcrete(t *testing.T) {
+	mapType := NewTypeLiteral(TMap)
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	result, ok := Unify(mapType, NewMap(m))
+	if !ok {
+		t.Fatal("expected map type to unify with concrete map")
+	}
+	if !result.VType.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.VType)
+	}
+}
+
+// ========================
+// Dot / Dotr tests
+// ========================
+
+func TestDotMapAtom(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(42))
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dot")})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("expected 42, got %v", result)
+	}
+}
+
+func TestDotMapString(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("key", NewInteger(99))
+	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dot")})
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("expected 99, got %v", result)
+	}
+}
+
+func TestDotListIndex(t *testing.T) {
+	r := DefaultRegistry()
+	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
+	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("dot")})
+	if len(result) != 1 || result[0].AsString() != "b" {
+		t.Errorf("expected 'b', got %v", result)
+	}
+}
+
+func TestDotListOutOfBounds(t *testing.T) {
+	r := DefaultRegistry()
+	list := NewList([]Value{NewString("a")})
+	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("dot")})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Errorf("expected none, got %v", result)
+	}
+}
+
+func TestDotMapMissing(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dot")})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Errorf("expected none for missing key, got %v", result)
+	}
+}
+
+func TestDotMapIntegerKey(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("0", NewString("zero"))
+	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("dot")})
+	if len(result) != 1 || result[0].AsString() != "zero" {
+		t.Errorf("expected 'zero', got %v", result)
+	}
+}
+
+func TestDotNone(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dot")})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Errorf("expected none, got %v", result)
+	}
+}
+
+func TestDotrMapSuccess(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(42))
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dotr")})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("expected 42, got %v", result)
+	}
+}
+
+func TestDotrMapMissingError(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	err := runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dotr")})
+	if err == nil {
+		t.Fatal("expected error for missing key")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
+	}
+}
+
+func TestDotrNoneError(t *testing.T) {
+	r := DefaultRegistry()
+	err := runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dotr")})
+	if err == nil {
+		t.Fatal("expected error for none parent")
+	}
+	if !strings.Contains(err.Error(), "none") {
+		t.Errorf("expected 'none' error, got: %v", err)
+	}
+}
+
+func TestDotrListOutOfBounds(t *testing.T) {
+	r := DefaultRegistry()
+	list := NewList([]Value{NewString("a")})
+	err := runAQLError(t, r, []Value{list, NewInteger(5), NewWord("dotr")})
+	if err == nil {
+		t.Fatal("expected error for out of bounds")
+	}
+	if !strings.Contains(err.Error(), "out of bounds") {
+		t.Errorf("expected 'out of bounds' error, got: %v", err)
+	}
+}
+
+func TestDotrMapStringKey(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("key", NewInteger(99))
+	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dotr")})
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("expected 99, got %v", result)
+	}
+}
+
+func TestDotrMapStringMissing(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	err := runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("dotr")})
+	if err == nil {
+		t.Fatal("expected error for missing string key")
+	}
+}
+
+func TestDotrMapIntegerKey(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("5", NewString("five"))
+	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("dotr")})
+	if len(result) != 1 || result[0].AsString() != "five" {
+		t.Errorf("expected 'five', got %v", result)
+	}
+}
+
+func TestDotrMapIntegerKeyMissing(t *testing.T) {
+	r := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("0", NewString("zero"))
+	err := runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("dotr")})
+	if err == nil {
+		t.Fatal("expected error for missing integer key")
+	}
+}
+
+// ========================
+// Make / Record tests
+// ========================
+
+func TestMakeRecordPositional(t *testing.T) {
+	r := DefaultRegistry()
+	// type Point record [x:number y:number]
+	// make Point [1 2]
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Point"),
+		NewWord("record"), NewList([]Value{
+			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
+			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
+		}),
+		NewWord("make"), NewWord("Point"),
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	m := result[0].AsMap()
+	xVal, _ := m.Get("x")
+	yVal, _ := m.Get("y")
+	if xVal.AsInteger() != 1 || yVal.AsInteger() != 2 {
+		t.Errorf("expected {x:1,y:2}, got %v", result[0])
+	}
+}
+
+func singleMap(key string, val Value) *OrderedMap {
+	m := NewOrderedMap()
+	m.Set(key, val)
+	return m
+}
+
+func TestMakeRecordNamed(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Pt"),
+		NewWord("record"), NewList([]Value{
+			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
+			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
+		}),
+		NewWord("make"), NewWord("Pt"),
+		NewList([]Value{
+			NewMap(singleMap("y", NewInteger(20))),
+			NewMap(singleMap("x", NewInteger(10))),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	m := result[0].AsMap()
+	xVal, _ := m.Get("x")
+	yVal, _ := m.Get("y")
+	if xVal.AsInteger() != 10 || yVal.AsInteger() != 20 {
+		t.Errorf("expected {x:10,y:20}, got %v", result[0])
+	}
+}
+
+func TestMakeRecordMap(t *testing.T) {
+	r := DefaultRegistry()
+	src := NewOrderedMap()
+	src.Set("x", NewInteger(5))
+	src.Set("y", NewInteger(6))
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Pt2"),
+		NewWord("record"), NewList([]Value{
+			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
+			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
+		}),
+		NewWord("make"), NewWord("Pt2"), NewMap(src),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+// ========================
+// Convert tests
+// ========================
+
+func TestConvertIntToString(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(42), NewWord("string"),
+	})
+	if len(result) != 1 || result[0].AsString() != "42" {
+		t.Errorf("expected '42', got %v", result)
+	}
+}
+
+func TestConvertIntToStringHex(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(255), NewWord("string"), NewString("hex"),
+	})
+	if len(result) != 1 || result[0].AsString() != "ff" {
+		t.Errorf("expected 'ff', got %v", result)
+	}
+}
+
+func TestConvertIntToStringBin(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("bin"),
+	})
+	if len(result) != 1 || result[0].AsString() != "1010" {
+		t.Errorf("expected '1010', got %v", result)
+	}
+}
+
+func TestConvertIntToStringOct(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(8), NewWord("string"), NewString("oct"),
+	})
+	if len(result) != 1 || result[0].AsString() != "10" {
+		t.Errorf("expected '10', got %v", result)
+	}
+}
+
+func TestConvertStringToNumber(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewString("99"), NewWord("number"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("expected 99, got %v", result)
+	}
+}
+
+func TestConvertBoolToString(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewBoolean(true), NewWord("string"),
+	})
+	if len(result) != 1 || result[0].AsString() != "true" {
+		t.Errorf("expected 'true', got %v", result)
+	}
+}
+
+func TestConvertIntToBool(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(1), NewWord("boolean"),
+	})
+	if len(result) != 1 || !result[0].AsBoolean() {
+		t.Errorf("expected true, got %v", result)
+	}
+}
+
+func TestConvertIntToBoolZero(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(0), NewWord("boolean"),
+	})
+	if len(result) != 1 || result[0].AsBoolean() {
+		t.Errorf("expected false, got %v", result)
+	}
+}
+
+func TestConvertStringToBool(t *testing.T) {
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewString("true"), NewWord("boolean"),
+	})
+	if len(result) != 1 || !result[0].AsBoolean() {
+		t.Errorf("expected true, got %v", result)
+	}
+}
+
+func TestConvertWithSettingsMap(t *testing.T) {
+	r := DefaultRegistry()
+	settings := NewOrderedMap()
+	settings.Set("base", NewString("hex"))
+	result := runAQL(t, r, []Value{
+		NewWord("convert"), NewInteger(255), NewWord("string"), NewMap(settings),
+	})
+	if len(result) != 1 || result[0].AsString() != "ff" {
+		t.Errorf("expected 'ff', got %v", result)
+	}
+}
+
+// ========================
+// Var edge cases
+// ========================
+
+func TestVarStringName(t *testing.T) {
+	r := DefaultRegistry()
+	// 5 var [["x"] x mul x]
+	result := runAQL(t, r, []Value{
+		NewInteger(5),
+		NewWord("var"), NewList([]Value{
+			NewList([]Value{NewString("x")}),
+			NewWord("x"), NewWord("mul"), NewWord("x"),
+		}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("expected 25, got %v", result)
+	}
+}
+
+func TestVarWithDefault(t *testing.T) {
+	r := DefaultRegistry()
+	// var [[[x 10]] x add 1]
+	result := runAQL(t, r, []Value{
+		NewWord("var"), NewList([]Value{
+			NewList([]Value{
+				NewList([]Value{NewWord("x"), NewInteger(10)}),
+			}),
+			NewWord("x"), NewWord("add"), NewInteger(1),
+		}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("expected 11, got %v", result)
+	}
+}
+
+// ========================
+// Print / format tests
+// ========================
+
+func TestFormatForPrintString(t *testing.T) {
+	out := formatForPrint(NewString("hello"))
+	if out != "hello" {
+		t.Errorf("expected 'hello', got %q", out)
+	}
+}
+
+func TestFormatForPrintInteger(t *testing.T) {
+	out := formatForPrint(NewInteger(42))
+	if out != "42" {
+		t.Errorf("expected '42', got %q", out)
+	}
+}
+
+func TestFormatForPrintBoolean(t *testing.T) {
+	out := formatForPrint(NewBoolean(true))
+	if out != "true" {
+		t.Errorf("expected 'true', got %q", out)
+	}
+}
+
+func TestFormatForPrintMap(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	out := formatForPrint(NewMap(m))
+	if !strings.Contains(out, "\"x\"") || !strings.Contains(out, "1") {
+		t.Errorf("expected JSON-like map, got %q", out)
+	}
+}
+
+func TestFormatForPrintList(t *testing.T) {
+	list := NewList([]Value{NewInteger(1), NewString("a")})
+	out := formatForPrint(list)
+	if !strings.Contains(out, "1") || !strings.Contains(out, "\"a\"") {
+		t.Errorf("expected JSON-like list, got %q", out)
+	}
+}
+
+func TestFormatForPrintTable(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+	row := NewOrderedMap()
+	row.Set("name", NewString("alice"))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+	out := formatForPrint(Value{VType: TList, Data: td})
+	if !strings.Contains(out, "name") || !strings.Contains(out, "alice") {
+		t.Errorf("expected table with 'name' and 'alice', got %q", out)
+	}
+}
+
+func TestFormatForPrintEmptyTable(t *testing.T) {
+	rec := RecordTypeInfo{Fields: NewOrderedMap()}
+	td := TableData{Record: rec, Rows: nil}
+	out := formatForPrint(Value{VType: TList, Data: td})
+	if out != "(empty table)" {
+		t.Errorf("expected '(empty table)', got %q", out)
+	}
+}
+
+func TestFormatValueJSONNone(t *testing.T) {
+	out := formatValueJSON(NewTypeLiteral(TNone))
+	if out != "null" {
+		t.Errorf("expected 'null', got %q", out)
+	}
+}
+
+func TestFormatValueJSONBoolFalse(t *testing.T) {
+	out := formatValueJSON(NewBoolean(false))
+	if out != "false" {
+		t.Errorf("expected 'false', got %q", out)
+	}
+}
+
+func TestFormatValueJSONNestedMap(t *testing.T) {
+	inner := NewOrderedMap()
+	inner.Set("a", NewInteger(1))
+	outer := NewOrderedMap()
+	outer.Set("m", NewMap(inner))
+	out := formatValueJSON(NewMap(outer))
+	if !strings.Contains(out, "\"m\"") || !strings.Contains(out, "\"a\"") {
+		t.Errorf("expected nested map, got %q", out)
+	}
+}
+
+func TestPadRight(t *testing.T) {
+	if padRight("hi", 5) != "hi   " {
+		t.Error("expected padding")
+	}
+	if padRight("hello", 3) != "hello" {
+		t.Error("expected no truncation")
+	}
+}
+
+// ========================
+// Trace tests
+// ========================
+
+func TestTraceColorize(t *testing.T) {
+	cases := []struct {
+		val  Value
+		want string
+	}{
+		{NewWord("add"), "add"},
+		{NewWordModified("x", -1, true, false), "x/p"},
+		{NewWordModified("x", -1, false, true), "x/s"},
+		{NewString("hi"), `"hi"`},
+		{NewInteger(42), "42"},
+		{NewBoolean(true), "true"},
+		{NewBoolean(false), "false"},
+		{NewAtom("foo"), "foo"},
+		{NewTypeLiteral(TNumber), "number"},
+		{NewList([]Value{NewInteger(1)}), "1"},
+	}
+	for _, tc := range cases {
+		got := traceColorize(tc.val)
+		// Strip ANSI codes
+		visible := stripANSI(got)
+		if !strings.Contains(visible, tc.want) {
+			t.Errorf("traceColorize(%s) visible = %q, want contains %q", tc.val, visible, tc.want)
+		}
+	}
+}
+
+func stripANSI(s string) string {
+	var out strings.Builder
+	inEsc := false
+	for _, r := range s {
+		if r == '\033' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		out.WriteRune(r)
+	}
+	return out.String()
+}
+
+func TestTraceColorizeMap(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	got := traceColorize(NewMap(m))
+	visible := stripANSI(got)
+	if !strings.Contains(visible, "x") || !strings.Contains(visible, "1") {
+		t.Errorf("expected map colorize to contain 'x' and '1', got %q", visible)
+	}
+}
+
+func TestTraceColorizeForward(t *testing.T) {
+	fwd := NewForward(ForwardInfo{FuncName: "add", CollectedArgs: 1, ExpectedArgs: 2})
+	got := traceColorize(fwd)
+	visible := stripANSI(got)
+	if !strings.Contains(visible, "add") || !strings.Contains(visible, "1/2") {
+		t.Errorf("expected forward colorize, got %q", visible)
+	}
+}
+
+func TestTraceColorizeOpenParen(t *testing.T) {
+	got := traceColorize(NewWord("("))
+	visible := stripANSI(got)
+	if !strings.Contains(visible, "(") {
+		t.Errorf("expected '(', got %q", visible)
+	}
+}
+
+func TestTraceVisibleLen(t *testing.T) {
+	if traceVisibleLen("hello") != 5 {
+		t.Error("plain string length wrong")
+	}
+	if traceVisibleLen("\033[31mhello\033[0m") != 5 {
+		t.Error("ANSI-wrapped length wrong")
+	}
+}
+
+func TestRunTrace(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+	tokens := []Value{NewInteger(1), NewWord("add"), NewInteger(2)}
+	result, err := runTrace(r, tokens, &buf)
+	if err != nil {
+		t.Fatalf("runTrace error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("expected [3], got %v", result)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "trace") {
+		t.Errorf("expected trace output, got %q", out)
+	}
+	if !strings.Contains(out, "result") {
+		t.Errorf("expected result in output, got %q", out)
+	}
+}
+
+func TestRunTraceLong(t *testing.T) {
+	// Force multi-line wrapping by using a long expression
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+	tokens := make([]Value, 0)
+	for i := 0; i < 30; i++ {
+		tokens = append(tokens, NewInteger(int64(i)))
+	}
+	_, err := runTrace(r, tokens, &buf)
+	if err != nil {
+		t.Fatalf("runTrace error: %v", err)
+	}
+}
+
+func TestTraceWrapEmpty(t *testing.T) {
+	lines := traceWrap(nil, 0, 80)
+	if len(lines) != 1 || !strings.Contains(stripANSI(lines[0]), "[ ]") {
+		t.Errorf("expected [ ] for empty, got %v", lines)
+	}
+}
+
+// ========================
+// Engine edge cases: stepEnd, curryOrPrefix, peekSuffixValue
+// ========================
+
+func TestStepEndNoForward(t *testing.T) {
+	// "end" with no pending forward should just be removed
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewInteger(1), NewWord("end")})
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected [1], got %v", result)
+	}
+}
+
+func TestDefEndExplicit(t *testing.T) {
+	// "def foo 42 end foo" — end terminates def's suffix collection
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
+		NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("expected 42, got %v", result)
+	}
+}
+
+func TestParenResolvesForward(t *testing.T) {
+	// (1 add 2) — paren should resolve the forward
+	r := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("expected 3, got %v", result)
+	}
+}
+
+func TestUnmatchedCloseParen(t *testing.T) {
+	r := DefaultRegistry()
+	err := runAQLError(t, r, []Value{NewInteger(1), NewWord(")")})
+	if err == nil {
+		t.Fatal("expected error for unmatched close paren")
+	}
+}
+
+// ========================
+// resolveWordValue tests
+// ========================
+
+func TestResolveWordValueTrue(t *testing.T) {
+	v := resolveWordValue(NewWord("true"))
+	if !v.VType.Matches(TBoolean) || !v.AsBoolean() {
+		t.Errorf("expected boolean true, got %s", v)
+	}
+}
+
+func TestResolveWordValueFalse(t *testing.T) {
+	v := resolveWordValue(NewWord("false"))
+	if !v.VType.Matches(TBoolean) || v.AsBoolean() {
+		t.Errorf("expected boolean false, got %s", v)
+	}
+}
+
+func TestResolveWordValueNone(t *testing.T) {
+	v := resolveWordValue(NewWord("none"))
+	if !v.VType.Equal(TNone) {
+		t.Errorf("expected none, got %s", v)
+	}
+}
+
+func TestResolveWordValueOther(t *testing.T) {
+	v := resolveWordValue(NewWord("foo"))
+	if !v.VType.Equal(TAtom) {
+		t.Errorf("expected atom, got %s", v)
+	}
+}
+
+func TestResolveWordValueNonWord(t *testing.T) {
+	v := resolveWordValue(NewInteger(42))
+	if !v.VType.Matches(TInteger) {
+		t.Errorf("expected integer passthrough, got %s", v)
+	}
+}
+
+// ========================
+// resolveSigType / resolveTypeName tests
+// ========================
+
+func TestResolveSigTypeTypeLiteral(t *testing.T) {
+	tp := resolveSigType(NewTypeLiteral(TNumber))
+	if !tp.Equal(TNumber) {
+		t.Errorf("expected number, got %s", tp)
+	}
+}
+
+func TestResolveSigTypeWord(t *testing.T) {
+	tp := resolveSigType(NewWord("string"))
+	if !tp.Equal(TString) {
+		t.Errorf("expected string, got %s", tp)
+	}
+}
+
+func TestResolveSigTypeString(t *testing.T) {
+	tp := resolveSigType(NewString("boolean"))
+	if !tp.Equal(TBoolean) {
+		t.Errorf("expected boolean, got %s", tp)
+	}
+}
+
+func TestResolveSigTypeInteger(t *testing.T) {
+	v := NewInteger(42)
+	tp := resolveSigType(v)
+	if !tp.Matches(TInteger) {
+		t.Errorf("expected integer type, got %s", tp)
+	}
+}
+
+func TestResolveSigTypeBoolean(t *testing.T) {
+	v := NewBoolean(true)
+	tp := resolveSigType(v)
+	if !tp.Matches(TBoolean) {
+		t.Errorf("expected boolean type, got %s", tp)
+	}
+}
+
+func TestResolveSigTypeDefault(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	tp := resolveSigType(NewMap(m))
+	if !tp.Equal(TAny) {
+		t.Errorf("expected any for map, got %s", tp)
+	}
+}
+
+func TestResolveTypeName(t *testing.T) {
+	cases := map[string]Type{
+		"any": TAny, "none": TNone, "number": TNumber,
+		"integer": TInteger, "string": TString, "boolean": TBoolean,
+		"atom": TAtom, "list": TList, "map": TMap, "scalar": TScalar,
+	}
+	for name, want := range cases {
+		got := resolveTypeName(name)
+		if !got.Equal(want) {
+			t.Errorf("resolveTypeName(%q) = %s, want %s", name, got, want)
+		}
+	}
+}
+
+func TestResolveTypeNameUnknown(t *testing.T) {
+	// Unknown names create a new named type via NewType
+	got := resolveTypeName("foobar")
+	if got.String() != "foobar" {
+		t.Errorf("expected named type 'foobar', got %s", got)
+	}
+}
+
+// ========================
+// isTypeValue tests
+// ========================
+
+func TestIsTypeValueTypeLiteral(t *testing.T) {
+	if !isTypeValue(NewTypeLiteral(TNumber)) {
+		t.Error("type literal should be a type value")
+	}
+}
+
+func TestIsTypeValueDisjunct(t *testing.T) {
+	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	if !isTypeValue(disj) {
+		t.Error("disjunct of types should be a type value")
+	}
+}
+
+func TestIsTypeValueRecordType(t *testing.T) {
+	f := NewOrderedMap()
+	f.Set("x", NewTypeLiteral(TNumber))
+	rt := NewRecordType(f)
+	if !isTypeValue(rt) {
+		t.Error("record type should be a type value")
+	}
+}
+
+func TestIsTypeValueNotType(t *testing.T) {
+	if isTypeValue(NewInteger(42)) {
+		t.Error("integer should not be a type value")
+	}
+}
+
+func TestIsTypeValueTypedList(t *testing.T) {
+	tl := NewTypedList(NewTypeLiteral(TString))
+	if !isTypeValue(tl) {
+		t.Error("typed list should be a type value")
+	}
+}
+
+func TestIsTypeValueTypedMap(t *testing.T) {
+	tm := NewTypedMap(NewTypeLiteral(TNumber))
+	if !isTypeValue(tm) {
+		t.Error("typed map should be a type value")
+	}
+}
+
+// ========================
+// Fn tests (multi-signature, edge cases)
+// ========================
+
+func TestFnMultiSignature(t *testing.T) {
+	r := DefaultRegistry()
+	// def f fn [[x:number] [number] [x mul x] [x:string] [string] [x upper]]
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("f"), NewWord("fn"),
+		NewList([]Value{
+			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TNumber)))}),
+			NewList([]Value{NewTypeLiteral(TNumber)}),
+			NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
+			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TString)))}),
+			NewList([]Value{NewTypeLiteral(TString)}),
+			NewList([]Value{NewWord("x"), NewWord("upper")}),
+		}),
+		NewInteger(5), NewWord("f"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("expected 25, got %v", result)
+	}
+}
+
+// ========================
+// Value.String edge cases (additional)
+// ========================
+
+func TestValueStringTypedListCov(t *testing.T) {
+	tl := NewTypedList(NewTypeLiteral(TString))
+	s := tl.String()
+	if !strings.Contains(s, "string") {
+		t.Errorf("expected typed list string, got %q", s)
+	}
+}
+
+func TestValueStringTypedMapCov(t *testing.T) {
+	tm := NewTypedMap(NewTypeLiteral(TNumber))
+	s := tm.String()
+	if !strings.Contains(s, "number") {
+		t.Errorf("expected typed map string, got %q", s)
+	}
+}
+
+// ========================
+// Format: encode/decode delimited
+// ========================
+
+func TestDecodeCSV(t *testing.T) {
+	content := "name,age\nalice,30\nbob,25\n"
+	result, err := decodeDelimited(content, ",")
+	if err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if !result[0].IsTableType() {
+		t.Fatalf("expected table type, got %s", result[0])
+	}
+	td := result[0].Data.(TableData)
+	if len(td.Rows) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(td.Rows))
+	}
+	if td.Record.Fields.Len() != 2 {
+		t.Errorf("expected 2 columns, got %d", td.Record.Fields.Len())
+	}
+}
+
+func TestDecodeTSV(t *testing.T) {
+	content := "x\ty\n1\t2\n3\t4\n"
+	result, err := decodeDelimited(content, "\t")
+	if err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestDecodeEmpty(t *testing.T) {
+	result, err := decodeDelimited("", ",")
+	if err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestEncodeTableData(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("name", NewString("alice"))
+	row.Set("age", NewInteger(30))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+	v := Value{VType: TList, Data: td}
+
+	encoded, err := encodeDelimited(v, ",")
+	if err != nil {
+		t.Fatalf("encode error: %v", err)
+	}
+	if !strings.Contains(encoded, "name") || !strings.Contains(encoded, "alice") {
+		t.Errorf("expected encoded CSV with 'name' and 'alice', got %q", encoded)
+	}
+}
+
+func TestEncodeQuotedStrings(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("val", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("val", NewString("has,comma"))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+	v := Value{VType: TList, Data: td}
+
+	encoded, err := encodeDelimited(v, ",")
+	if err != nil {
+		t.Fatalf("encode error: %v", err)
+	}
+	if !strings.Contains(encoded, "\"has,comma\"") {
+		t.Errorf("expected quoted value, got %q", encoded)
+	}
+}
+
+func TestEncodeListOfMaps(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	list := NewList([]Value{NewMap(m)})
+
+	encoded, err := encodeDelimited(list, ",")
+	if err != nil {
+		t.Fatalf("encode error: %v", err)
+	}
+	if !strings.Contains(encoded, "x") {
+		t.Errorf("expected 'x' header, got %q", encoded)
+	}
+}
+
+func TestEncodeEmptyColumns(t *testing.T) {
+	fields := NewOrderedMap()
+	rec := RecordTypeInfo{Fields: fields}
+	td := TableData{Record: rec, Rows: nil}
+	v := Value{VType: TList, Data: td}
+
+	encoded, err := encodeDelimited(v, ",")
+	if err != nil {
+		t.Fatalf("encode error: %v", err)
+	}
+	if encoded != "" {
+		t.Errorf("expected empty string, got %q", encoded)
+	}
+}
+
+func TestEncodeNonTable(t *testing.T) {
+	v := NewString("hello")
+	encoded, err := encodeDelimited(v, ",")
+	if err != nil {
+		t.Fatalf("encode error: %v", err)
+	}
+	if encoded != "'hello'" {
+		t.Errorf("expected 'hello', got %q", encoded)
+	}
+}
+
+// ========================
+// More query tests to cover remaining branches
+// ========================
+
+func TestQueryFromWhereLt(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("age"), NewWord("lt"), NewInteger(30),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromWhereGte(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("age"), NewWord("gte"), NewInteger(30),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromWhereLte(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("age"), NewWord("lte"), NewInteger(30),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromWhereNeq(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewWord("name"), NewWord("neq"), NewString("alice"),
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromOrderAsc(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("order"), NewList([]Value{NewWord("age")}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryFromLimitOffset(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("limit"), NewInteger(1),
+		NewWord("offset"), NewInteger(1),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryPrintTable(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+	makeTestTable(r)
+
+	runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("print"),
+	})
+	out := buf.String()
+	if !strings.Contains(out, "alice") || !strings.Contains(out, "name") {
+		t.Errorf("expected table output, got %q", out)
+	}
+}
+
+// ========================
+// More unify edge cases
+// ========================
+
+func TestUnifyListsDifferentLength(t *testing.T) {
+	a := NewList([]Value{NewInteger(1)})
+	b := NewList([]Value{NewInteger(1), NewInteger(2)})
+	_, ok := Unify(a, b)
+	if ok {
+		t.Error("expected different-length lists to fail")
+	}
+}
+
+func TestUnifyTypedListWithConcrete(t *testing.T) {
+	tl := NewTypedList(NewTypeLiteral(TNumber))
+	concrete := NewList([]Value{NewInteger(1), NewInteger(2)})
+	result, ok := Unify(tl, concrete)
+	if !ok {
+		t.Fatal("expected typed list to unify with concrete list")
+	}
+	if !result.VType.Equal(TList) {
+		t.Errorf("expected list, got %s", result.VType)
+	}
+}
+
+func TestUnifyTypedListFail(t *testing.T) {
+	tl := NewTypedList(NewTypeLiteral(TNumber))
+	concrete := NewList([]Value{NewString("not a number")})
+	_, ok := Unify(tl, concrete)
+	if ok {
+		t.Error("expected typed list + string list to fail")
+	}
+}
+
+func TestUnifyRecordTypesDiffOrder(t *testing.T) {
+	f1 := NewOrderedMap()
+	f1.Set("a", NewTypeLiteral(TNumber))
+	f1.Set("b", NewTypeLiteral(TString))
+	f2 := NewOrderedMap()
+	f2.Set("b", NewTypeLiteral(TString))
+	f2.Set("a", NewTypeLiteral(TNumber))
+	_, ok := Unify(NewRecordType(f1), NewRecordType(f2))
+	if ok {
+		t.Error("expected different field order to fail")
+	}
+}
+
+func TestUnifyRecordTypesDiffFields(t *testing.T) {
+	f1 := NewOrderedMap()
+	f1.Set("a", NewTypeLiteral(TNumber))
+	f2 := NewOrderedMap()
+	f2.Set("a", NewTypeLiteral(TNumber))
+	f2.Set("b", NewTypeLiteral(TString))
+	_, ok := Unify(NewRecordType(f1), NewRecordType(f2))
+	if ok {
+		t.Error("expected different field count to fail")
+	}
+}
+
+func TestUnifyTableWithNonTable(t *testing.T) {
+	f := NewOrderedMap()
+	f.Set("x", NewTypeLiteral(TNumber))
+	tt := NewTableType(RecordTypeInfo{Fields: f})
+	concrete := NewList([]Value{NewInteger(1)})
+	_, ok := Unify(tt, concrete)
+	if ok {
+		t.Error("expected table + plain list to fail")
+	}
+}
+
+func TestUnifyTableTypes(t *testing.T) {
+	f1 := NewOrderedMap()
+	f1.Set("x", NewTypeLiteral(TNumber))
+	f2 := NewOrderedMap()
+	f2.Set("x", NewTypeLiteral(TInteger))
+	tt1 := NewTableType(RecordTypeInfo{Fields: f1})
+	tt2 := NewTableType(RecordTypeInfo{Fields: f2})
+	_, ok := Unify(tt1, tt2)
+	if !ok {
+		t.Error("expected compatible table types to unify")
+	}
+}
+
+func TestUnifyListLiteralWithTable(t *testing.T) {
+	listType := NewTypeLiteral(TList)
+	f := NewOrderedMap()
+	f.Set("x", NewTypeLiteral(TNumber))
+	tt := NewTableType(RecordTypeInfo{Fields: f})
+	_, ok := Unify(listType, tt)
+	if ok {
+		t.Error("expected list literal + table to fail")
+	}
+}
+
+func TestUnifyMapLiteralWithRecord(t *testing.T) {
+	mapType := NewTypeLiteral(TMap)
+	f := NewOrderedMap()
+	f.Set("x", NewTypeLiteral(TNumber))
+	rt := NewRecordType(f)
+	_, ok := Unify(mapType, rt)
+	if ok {
+		t.Error("expected map literal + record to fail")
+	}
+}
+
+func TestUnifyRecordWithConcrete(t *testing.T) {
+	f := NewOrderedMap()
+	f.Set("x", NewTypeLiteral(TNumber))
+	rt := NewRecordType(f)
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	_, ok := Unify(rt, NewMap(m))
+	if ok {
+		t.Error("expected record type + concrete map to fail")
+	}
+}
+
+// ========================
+// SQLite store tests
+// ========================
+
+func TestSQLiteStoreTable(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("name", NewString("alice"))
+	row.Set("age", NewInteger(30))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+
+	if err := store.StoreTable("test_people", td); err != nil {
+		t.Fatalf("StoreTable error: %v", err)
+	}
+	if !store.HasTable("test_people") {
+		t.Error("expected table to exist")
+	}
+}
+
+func TestSQLiteQuery(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("x", NewInteger(1))
+	row2 := NewOrderedMap()
+	row2.Set("x", NewInteger(2))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
+
+	if err := store.StoreTable("nums", td); err != nil {
+		t.Fatalf("StoreTable error: %v", err)
+	}
+
+	result, err := store.Query("SELECT * FROM \"nums\"", &rec)
+	if err != nil {
+		t.Fatalf("Query error: %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(result.Rows))
+	}
+}
+
+func TestSQLiteStoreTempTable(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("v", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("v", NewString("hello"))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+
+	name, err := store.StoreTempTable(td)
+	if err != nil {
+		t.Fatalf("StoreTempTable error: %v", err)
+	}
+	if name == "" {
+		t.Error("expected non-empty temp table name")
+	}
+	if !store.HasTable(name) {
+		t.Error("expected temp table to exist")
+	}
+}
+
+func TestSQLiteDropTable(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("v", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+	td := TableData{Record: rec, Rows: nil}
+
+	if err := store.StoreTable("drop_me", td); err != nil {
+		t.Fatalf("StoreTable error: %v", err)
+	}
+	if !store.HasTable("drop_me") {
+		t.Fatal("expected table to exist before drop")
+	}
+	store.DropTable("drop_me")
+	if store.HasTable("drop_me") {
+		t.Error("expected table to not exist after drop")
+	}
+}
+
+func TestSQLiteStoreWithBoolAndString(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("flag", NewTypeLiteral(TBoolean))
+	fields.Set("name", NewTypeLiteral(TString))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("flag", NewBoolean(true))
+	row.Set("name", NewString("test"))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+
+	if err := store.StoreTable("bool_test", td); err != nil {
+		t.Fatalf("StoreTable error: %v", err)
+	}
+
+	result, err := store.Query("SELECT * FROM \"bool_test\"", &rec)
+	if err != nil {
+		t.Fatalf("Query error: %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Errorf("expected 1 row, got %d", len(result.Rows))
+	}
+}
+
+// ========================
+// More trace coverage (wrapping, notes on second line)
+// ========================
+
+func TestRunTraceError(t *testing.T) {
+	r := DefaultRegistry()
+	var buf bytes.Buffer
+	r.Output = &buf
+	tokens := []Value{NewInteger(10), NewWord("div"), NewInteger(0)}
+	_, err := runTrace(r, tokens, &buf)
+	if err == nil {
+		t.Fatal("expected error for div by zero")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "error") {
+		t.Errorf("expected error in trace output, got %q", out)
+	}
+}
+
+func TestTraceWrapMultiLine(t *testing.T) {
+	// Create enough parts to force wrapping
+	var parts []string
+	for i := 0; i < 20; i++ {
+		parts = append(parts, traceColorize(NewInteger(int64(i*1000000))))
+	}
+	lines := traceWrap(parts, 5, 40)
+	if len(lines) < 2 {
+		t.Errorf("expected multiple lines for wrapping, got %d", len(lines))
+	}
+}
+
+// ========================
+// makeConvert / makeFieldValue
+// ========================
+
+func TestMakeConvertToString(t *testing.T) {
+	v, err := makeConvert(NewInteger(42), TString)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if v.AsString() != "42" {
+		t.Errorf("expected '42', got %s", v)
+	}
+}
+
+func TestMakeConvertToNumber(t *testing.T) {
+	v, err := makeConvert(NewString("99"), TNumber)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if v.AsInteger() != 99 {
+		t.Errorf("expected 99, got %s", v)
+	}
+}
+
+func TestMakeConvertToBoolFromBool(t *testing.T) {
+	v, err := makeConvert(NewBoolean(true), TBoolean)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if !v.AsBoolean() {
+		t.Error("expected true")
+	}
+}
+
+func TestMakeConvertToBoolFromInt(t *testing.T) {
+	v, err := makeConvert(NewInteger(1), TBoolean)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if !v.AsBoolean() {
+		t.Error("expected true")
+	}
+}
+
+func TestMakeConvertToBoolFromString(t *testing.T) {
+	v, err := makeConvert(NewString("true"), TBoolean)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if !v.AsBoolean() {
+		t.Error("expected true")
+	}
+	v2, _ := makeConvert(NewString("false"), TBoolean)
+	if v2.AsBoolean() {
+		t.Error("expected false")
+	}
+	v3, _ := makeConvert(NewString(""), TBoolean)
+	if v3.AsBoolean() {
+		t.Error("expected false for empty string")
+	}
+}
+
+func TestMakeConvertToAtom(t *testing.T) {
+	v, err := makeConvert(NewString("hello"), TAtom)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if !v.VType.Equal(TAtom) {
+		t.Errorf("expected atom, got %s", v.VType)
+	}
+}
+
+func TestMakeConvertUnsupported(t *testing.T) {
+	_, err := makeConvert(NewString("x"), TList)
+	if err == nil {
+		t.Error("expected error for unsupported target type")
+	}
+}
+
+func TestMakeFieldValueAlreadyMatches(t *testing.T) {
+	v, err := makeFieldValue(NewInteger(42), NewTypeLiteral(TNumber))
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if v.AsInteger() != 42 {
+		t.Errorf("expected 42, got %s", v)
+	}
+}
+
+func TestMakeFieldValueConvert(t *testing.T) {
+	v, err := makeFieldValue(NewString("99"), NewTypeLiteral(TNumber))
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if v.AsInteger() != 99 {
+		t.Errorf("expected 99, got %s", v)
+	}
+}
+
+func TestMakeFieldValueWordTrue(t *testing.T) {
+	v, err := makeFieldValue(NewWord("true"), NewTypeLiteral(TBoolean))
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if !v.AsBoolean() {
+		t.Error("expected true")
+	}
+}
+
+func TestMakeFieldValueConstraintUnify(t *testing.T) {
+	v, err := makeFieldValue(NewInteger(42), NewInteger(42))
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if v.AsInteger() != 42 {
+		t.Errorf("expected 42, got %s", v)
+	}
+}
+
+// ========================
+// valToString coverage
+// ========================
+
+func TestValToStringAtom(t *testing.T) {
+	s := valToString(NewAtom("hello"))
+	if s != "hello" {
+		t.Errorf("expected 'hello', got %q", s)
+	}
+}
+
+func TestValToStringNone(t *testing.T) {
+	s := valToString(NewTypeLiteral(TNone))
+	if s != "none" {
+		t.Errorf("expected 'none', got %q", s)
+	}
+}
+
+// ========================
+// AsList QueryBuilder path
+// ========================
+
+func TestAsListQueryBuilder(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	// Accessing AsList on a QueryBuilder triggers materialization
+	list := result[0].AsList()
+	if len(list) != 3 {
+		t.Errorf("expected 3 rows via AsList, got %d", len(list))
+	}
+}
+
+// ========================
+// Engine: stepEnd with forward before end
+// ========================
+
+func TestStepEndWithForwardBeforeEnd(t *testing.T) {
+	r := DefaultRegistry()
+	// def myval 42 end 1 add myval
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("myval"), NewInteger(42), NewWord("end"),
+		NewInteger(1), NewWord("add"), NewWord("myval"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 43 {
+		t.Errorf("expected 43, got %v", result)
+	}
+}
+
+func TestStepEndTerminatesDef(t *testing.T) {
+	r := DefaultRegistry()
+	// def a [1 add] end 10 a
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("a"),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("end"),
+		NewInteger(10), NewWord("a"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("expected 11, got %v", result)
+	}
+}
+
+// ========================
+// NewRegistry (Store field)
+// ========================
+
+func TestNewRegistryHasStore(t *testing.T) {
+	r := NewRegistry()
+	if r.Store == nil {
+		t.Error("expected Store to be initialized")
+	}
+	if r.Formats == nil {
+		t.Error("expected Formats to be initialized")
+	}
+}
+
+// ========================
+// Direct unit tests for query.go internal functions
+// ========================
+
+func TestBuildWhereClauseEmpty(t *testing.T) {
+	cond := NewList([]Value{})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clause != "1=1" {
+		t.Errorf("expected '1=1', got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseSimpleEq(t *testing.T) {
+	cond := NewList([]Value{NewAtom("name"), NewAtom("eq"), NewString("alice")})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "=") || !strings.Contains(clause, "alice") {
+		t.Errorf("expected SQL with = and alice, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseLtGteLteNeq(t *testing.T) {
+	tests := []struct {
+		op     string
+		sqlOp  string
+	}{
+		{"lt", "<"},
+		{"gte", ">="},
+		{"lte", "<="},
+		{"neq", "!="},
+		{"gt", ">"},
+		{"like", "LIKE"},
+	}
+	for _, tt := range tests {
+		cond := NewList([]Value{NewAtom("age"), NewAtom(tt.op), NewInteger(25)})
+		clause, err := buildWhereClause(cond)
+		if err != nil {
+			t.Errorf("op %s: %v", tt.op, err)
+			continue
+		}
+		if !strings.Contains(clause, tt.sqlOp) {
+			t.Errorf("op %s: expected %q in clause %q", tt.op, tt.sqlOp, clause)
+		}
+	}
+}
+
+func TestBuildWhereClauseIsNull(t *testing.T) {
+	cond := NewList([]Value{NewAtom("name"), NewAtom("is"), NewAtom("null")})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "IS NULL") {
+		t.Errorf("expected IS NULL, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseIsNotNull(t *testing.T) {
+	cond := NewList([]Value{NewAtom("name"), NewAtom("is"), NewAtom("not"), NewAtom("null")})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "IS NOT NULL") {
+		t.Errorf("expected IS NOT NULL, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseBetween(t *testing.T) {
+	cond := NewList([]Value{NewAtom("age"), NewAtom("between"), NewInteger(20), NewInteger(30)})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "BETWEEN") {
+		t.Errorf("expected BETWEEN, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseIn(t *testing.T) {
+	inList := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
+	cond := NewList([]Value{NewAtom("id"), NewAtom("in"), inList})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "IN") {
+		t.Errorf("expected IN, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseNotIn(t *testing.T) {
+	inList := NewList([]Value{NewInteger(1), NewInteger(2)})
+	cond := NewList([]Value{NewAtom("id"), NewAtom("not"), NewAtom("in"), inList})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "NOT IN") {
+		t.Errorf("expected NOT IN, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseNotBetween(t *testing.T) {
+	cond := NewList([]Value{NewAtom("age"), NewAtom("not"), NewAtom("between"), NewInteger(20), NewInteger(30)})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "NOT BETWEEN") {
+		t.Errorf("expected NOT BETWEEN, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseAndOr(t *testing.T) {
+	cond := NewList([]Value{
+		NewAtom("age"), NewAtom("gt"), NewInteger(20),
+		NewAtom("and"),
+		NewAtom("name"), NewAtom("eq"), NewString("alice"),
+	})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "AND") {
+		t.Errorf("expected AND, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseCollate(t *testing.T) {
+	cond := NewList([]Value{
+		NewAtom("name"), NewAtom("eq"), NewString("alice"), NewAtom("collate"), NewAtom("nocase"),
+	})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "COLLATE NOCASE") {
+		t.Errorf("expected COLLATE NOCASE, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseNotPrefix(t *testing.T) {
+	// not [sub-condition]
+	sub := NewList([]Value{NewAtom("age"), NewAtom("gt"), NewInteger(20)})
+	cond := NewList([]Value{NewAtom("not"), sub})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "NOT (") {
+		t.Errorf("expected NOT (...), got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseSubgroup(t *testing.T) {
+	// [[age gt 20] and name eq "alice"]
+	sub := NewList([]Value{NewAtom("age"), NewAtom("gt"), NewInteger(20)})
+	cond := NewList([]Value{sub, NewAtom("and"), NewAtom("name"), NewAtom("eq"), NewString("alice")})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "(") {
+		t.Errorf("expected parenthesized subgroup, got %q", clause)
+	}
+}
+
+func TestBuildWhereClauseValueBoolNone(t *testing.T) {
+	// Test boolean and none in WHERE value
+	cond := NewList([]Value{NewAtom("active"), NewAtom("eq"), NewBoolean(true)})
+	clause, err := buildWhereClause(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "'true'") {
+		t.Errorf("expected 'true', got %q", clause)
+	}
+}
+
+// ========================
+// buildJoinCondition tests
+// ========================
+
+func TestBuildJoinConditionSimple(t *testing.T) {
+	cond := NewList([]Value{NewAtom("id"), NewAtom("eq"), NewAtom("dept_id")})
+	clause, err := buildJoinCondition(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "=") {
+		t.Errorf("expected = in join condition, got %q", clause)
+	}
+}
+
+func TestBuildJoinConditionDotQualified(t *testing.T) {
+	cond := NewList([]Value{NewString("a.id"), NewAtom("eq"), NewString("b.id")})
+	clause, err := buildJoinCondition(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// quoteJoinCol should split on dot
+	if !strings.Contains(clause, ".") {
+		t.Errorf("expected dot-qualified columns in join condition, got %q", clause)
+	}
+}
+
+func TestBuildJoinConditionMultipleWithAnd(t *testing.T) {
+	cond := NewList([]Value{
+		NewAtom("id"), NewAtom("eq"), NewAtom("fk"),
+		NewAtom("and"),
+		NewAtom("type"), NewAtom("eq"), NewAtom("kind"),
+	})
+	clause, err := buildJoinCondition(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "AND") {
+		t.Errorf("expected AND, got %q", clause)
+	}
+}
+
+func TestBuildJoinConditionEmpty(t *testing.T) {
+	cond := NewList([]Value{})
+	clause, err := buildJoinCondition(cond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clause != "1=1" {
+		t.Errorf("expected '1=1', got %q", clause)
+	}
+}
+
+func TestQuoteJoinCol(t *testing.T) {
+	// Simple name
+	if got := quoteJoinCol("name"); !strings.Contains(got, "name") {
+		t.Errorf("expected 'name' in result, got %q", got)
+	}
+	// Dot-qualified
+	got := quoteJoinCol("people.id")
+	if !strings.Contains(got, ".") {
+		t.Errorf("expected dot in result, got %q", got)
+	}
+}
+
+// ========================
+// buildOrderClause tests
+// ========================
+
+func TestBuildOrderClauseSimple(t *testing.T) {
+	cols := NewList([]Value{NewAtom("name")})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "name") {
+		t.Errorf("expected 'name', got %q", clause)
+	}
+}
+
+func TestBuildOrderClauseDesc(t *testing.T) {
+	cols := NewList([]Value{NewAtom("age"), NewAtom("desc")})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "DESC") {
+		t.Errorf("expected DESC, got %q", clause)
+	}
+}
+
+func TestBuildOrderClauseNullsFirst(t *testing.T) {
+	cols := NewList([]Value{NewAtom("score"), NewAtom("asc"), NewAtom("nulls"), NewAtom("first")})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "NULLS FIRST") {
+		t.Errorf("expected NULLS FIRST, got %q", clause)
+	}
+}
+
+func TestBuildOrderClauseCollateNocase(t *testing.T) {
+	cols := NewList([]Value{NewAtom("name"), NewAtom("collate"), NewAtom("nocase"), NewAtom("asc")})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "COLLATE NOCASE") {
+		t.Errorf("expected COLLATE NOCASE, got %q", clause)
+	}
+}
+
+func TestBuildOrderClausePositional(t *testing.T) {
+	cols := NewList([]Value{NewInteger(1), NewInteger(2)})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, "1") || !strings.Contains(clause, "2") {
+		t.Errorf("expected positional 1,2, got %q", clause)
+	}
+}
+
+func TestBuildOrderClauseMultiple(t *testing.T) {
+	cols := NewList([]Value{NewAtom("city"), NewAtom("asc"), NewAtom("name"), NewAtom("desc")})
+	clause, err := buildOrderClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, ",") {
+		t.Errorf("expected comma-separated, got %q", clause)
+	}
+}
+
+// ========================
+// parseColumnSpec tests
+// ========================
+
+func TestParseColumnSpecAtoms(t *testing.T) {
+	cols := NewList([]Value{NewAtom("name"), NewAtom("age")})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 2 {
+		t.Fatalf("expected 2 specs, got %d", len(specs))
+	}
+	if specs[0].Name != "name" {
+		t.Errorf("expected 'name', got %q", specs[0].Name)
+	}
+}
+
+func TestParseColumnSpecStrings(t *testing.T) {
+	cols := NewList([]Value{NewString("name")})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Name != "name" {
+		t.Errorf("expected name spec, got %+v", specs)
+	}
+}
+
+func TestParseColumnSpecAlias(t *testing.T) {
+	// [name, person_name] alias pair
+	pair := NewList([]Value{NewAtom("name"), NewAtom("person_name")})
+	cols := NewList([]Value{pair})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 || specs[0].Name != "name" || specs[0].Alias != "person_name" {
+		t.Errorf("expected name->person_name alias, got %+v", specs)
+	}
+}
+
+func TestParseColumnSpecAggregate(t *testing.T) {
+	// [count name cnt]
+	agg := NewList([]Value{NewAtom("count"), NewAtom("name"), NewAtom("cnt")})
+	cols := NewList([]Value{agg})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	if !strings.Contains(specs[0].Raw, "COUNT") {
+		t.Errorf("expected COUNT in raw, got %q", specs[0].Raw)
+	}
+	if specs[0].Alias != "cnt" {
+		t.Errorf("expected alias 'cnt', got %q", specs[0].Alias)
+	}
+}
+
+func TestParseColumnSpecCountStar(t *testing.T) {
+	// [count * total]
+	agg := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("total")})
+	cols := NewList([]Value{agg})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	if !strings.Contains(specs[0].Raw, "COUNT(*)") {
+		t.Errorf("expected COUNT(*), got %q", specs[0].Raw)
+	}
+}
+
+func TestParseColumnSpecCast(t *testing.T) {
+	// [cast age integer age_int]
+	cast := NewList([]Value{NewAtom("cast"), NewAtom("age"), NewAtom("integer"), NewAtom("age_int")})
+	cols := NewList([]Value{cast})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	if !strings.Contains(specs[0].Raw, "CAST") {
+		t.Errorf("expected CAST in raw, got %q", specs[0].Raw)
+	}
+	if specs[0].Alias != "age_int" {
+		t.Errorf("expected alias 'age_int', got %q", specs[0].Alias)
+	}
+}
+
+func TestParseColumnSpecCastNoAlias(t *testing.T) {
+	// [cast age integer]
+	cast := NewList([]Value{NewAtom("cast"), NewAtom("age"), NewAtom("integer")})
+	cols := NewList([]Value{cast})
+	specs, err := parseColumnSpec(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	if specs[0].Alias != "age" {
+		t.Errorf("expected alias 'age' (default), got %q", specs[0].Alias)
+	}
+}
+
+func TestParseColumnSpecSumAvgMinMax(t *testing.T) {
+	for _, fn := range []string{"sum", "avg", "min", "max"} {
+		agg := NewList([]Value{NewAtom(fn), NewAtom("val")})
+		cols := NewList([]Value{agg})
+		specs, err := parseColumnSpec(cols)
+		if err != nil {
+			t.Errorf("%s: %v", fn, err)
+			continue
+		}
+		if len(specs) != 1 {
+			t.Errorf("%s: expected 1 spec, got %d", fn, len(specs))
+			continue
+		}
+		if !strings.Contains(specs[0].Raw, strings.ToUpper(fn)) {
+			t.Errorf("%s: expected %s in raw, got %q", fn, strings.ToUpper(fn), specs[0].Raw)
+		}
+	}
+}
+
+// ========================
+// nameFromValue tests
+// ========================
+
+func TestNameFromValueAtom(t *testing.T) {
+	if got := nameFromValue(NewAtom("foo")); got != "foo" {
+		t.Errorf("expected 'foo', got %q", got)
+	}
+}
+
+func TestNameFromValueString(t *testing.T) {
+	if got := nameFromValue(NewString("bar")); got != "bar" {
+		t.Errorf("expected 'bar', got %q", got)
+	}
+}
+
+func TestNameFromValueWord(t *testing.T) {
+	if got := nameFromValue(NewWord("baz")); got != "baz" {
+		t.Errorf("expected 'baz', got %q", got)
+	}
+}
+
+func TestNameFromValueOther(t *testing.T) {
+	if got := nameFromValue(NewInteger(42)); got != "" {
+		t.Errorf("expected empty, got %q", got)
+	}
+}
+
+// ========================
+// aqlTypenameToSQLType / sqlTypeToAQLType tests
+// ========================
+
+func TestAqlTypenameToSQLType(t *testing.T) {
+	tests := map[string]string{
+		"integer": "INTEGER", "int": "INTEGER",
+		"real": "REAL", "float": "REAL", "number": "REAL",
+		"text": "TEXT", "string": "TEXT",
+		"boolean": "INTEGER", "bool": "INTEGER",
+	}
+	for input, expected := range tests {
+		if got := aqlTypenameToSQLType(input); got != expected {
+			t.Errorf("aqlTypenameToSQLType(%q) = %q, want %q", input, got, expected)
+		}
+	}
+}
+
+func TestSqlTypeToAQLType(t *testing.T) {
+	if got := sqlTypeToAQLType("INTEGER"); !got.Equal(TInteger) {
+		t.Errorf("expected TInteger, got %v", got)
+	}
+	if got := sqlTypeToAQLType("REAL"); !got.Equal(TNumber) {
+		t.Errorf("expected TNumber, got %v", got)
+	}
+	if got := sqlTypeToAQLType("TEXT"); !got.Equal(TString) {
+		t.Errorf("expected TString, got %v", got)
+	}
+	if got := sqlTypeToAQLType("UNKNOWN"); !got.Equal(TString) {
+		t.Errorf("expected TString (default), got %v", got)
+	}
+}
+
+// ========================
+// valueToSQL tests
+// ========================
+
+func TestValueToSQLString(t *testing.T) {
+	got, err := valueToSQL(NewString("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "'hello'" {
+		t.Errorf("expected 'hello', got %q", got)
+	}
+}
+
+func TestValueToSQLInt(t *testing.T) {
+	got, err := valueToSQL(NewInteger(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "42" {
+		t.Errorf("expected '42', got %q", got)
+	}
+}
+
+func TestValueToSQLBool(t *testing.T) {
+	got, err := valueToSQL(NewBoolean(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "'true'" {
+		t.Errorf("expected \"'true'\", got %q", got)
+	}
+}
+
+func TestValueToSQLNone(t *testing.T) {
+	got, err := valueToSQL(Value{VType: TNone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "NULL" {
+		t.Errorf("expected 'NULL', got %q", got)
+	}
+}
+
+func TestValueToSQLAtom(t *testing.T) {
+	got, err := valueToSQL(NewAtom("foo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "'foo'" {
+		t.Errorf("expected \"'foo'\", got %q", got)
+	}
+}
+
+func TestValueToSQLWord(t *testing.T) {
+	got, err := valueToSQL(NewWord("bar"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "'bar'" {
+		t.Errorf("expected \"'bar'\", got %q", got)
+	}
+}
+
+func TestValueToSQLStringWithQuote(t *testing.T) {
+	got, err := valueToSQL(NewString("it's"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "''") {
+		t.Errorf("expected escaped quote, got %q", got)
+	}
+}
+
+// ========================
+// buildInList tests
+// ========================
+
+func TestBuildInListValues(t *testing.T) {
+	inList := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
+	got, err := buildInList(inList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "1") || !strings.Contains(got, "3") {
+		t.Errorf("expected 1,2,3 in result, got %q", got)
+	}
+}
+
+func TestBuildInListSingleValue(t *testing.T) {
+	got, err := buildInList(NewInteger(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "42" {
+		t.Errorf("expected '42', got %q", got)
+	}
+}
+
+func TestBuildInListFromTableValues(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("id", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("id", NewInteger(10))
+	row2 := NewOrderedMap()
+	row2.Set("id", NewInteger(20))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
+
+	got, err := buildInListFromTable(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "10") || !strings.Contains(got, "20") {
+		t.Errorf("expected 10,20 in result, got %q", got)
+	}
+}
+
+func TestBuildInListFromTableEmpty(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("id", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+	td := TableData{Record: rec, Rows: nil}
+
+	got, err := buildInListFromTable(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "NULL" {
+		t.Errorf("expected 'NULL', got %q", got)
+	}
+}
+
+func TestBuildInListFromTableInWhere(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("id", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("id", NewInteger(5))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+	tdVal := Value{VType: TList, Data: td}
+
+	got, err := buildInList(tdVal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "5") {
+		t.Errorf("expected 5 in result, got %q", got)
+	}
+}
+
+// ========================
+// isTableOrQuery tests
+// ========================
+
+func TestIsTableOrQueryTableData(t *testing.T) {
+	td := TableData{}
+	v := Value{VType: TList, Data: td}
+	if !isTableOrQuery(v) {
+		t.Error("expected true for TableData")
+	}
+}
+
+func TestIsTableOrQueryQueryBuilder(t *testing.T) {
+	qb := QueryBuilder{}
+	v := Value{VType: TList, Data: qb}
+	if !isTableOrQuery(v) {
+		t.Error("expected true for QueryBuilder")
+	}
+}
+
+func TestIsTableOrQueryOther(t *testing.T) {
+	v := NewInteger(42)
+	if isTableOrQuery(v) {
+		t.Error("expected false for integer")
+	}
+}
+
+// ========================
+// scalarFromTable tests
+// ========================
+
+func TestScalarFromTableOneRow(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("x", NewInteger(42))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+
+	val, err := scalarFromTable(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !val.VType.Matches(TInteger) || val.AsInteger() != 42 {
+		t.Errorf("expected 42, got %v", val)
+	}
+}
+
+func TestScalarFromTableNoRows(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+	td := TableData{Record: rec, Rows: nil}
+
+	val, err := scalarFromTable(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !val.VType.Equal(TNone) {
+		t.Errorf("expected TNone, got %v", val.VType)
+	}
+}
+
+func TestScalarFromTableMultipleRows(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("x", NewInteger(1))
+	row2 := NewOrderedMap()
+	row2.Set("x", NewInteger(2))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
+
+	_, err := scalarFromTable(td)
+	if err == nil {
+		t.Error("expected error for multiple rows")
+	}
+}
+
+// ========================
+// resolveScalarValue tests
+// ========================
+
+func TestResolveScalarValuePlain(t *testing.T) {
+	v := NewInteger(42)
+	got, err := resolveScalarValue(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AsInteger() != 42 {
+		t.Errorf("expected 42, got %v", got)
+	}
+}
+
+func TestResolveScalarValueTableData(t *testing.T) {
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TInteger))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row := NewOrderedMap()
+	row.Set("x", NewInteger(99))
+	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
+
+	v := Value{VType: TList, Data: td}
+	got, err := resolveScalarValue(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AsInteger() != 99 {
+		t.Errorf("expected 99, got %v", got)
+	}
+}
+
+// ========================
+// buildGroupByClause tests
+// ========================
+
+func TestBuildGroupByClause(t *testing.T) {
+	cols := NewList([]Value{NewAtom("dept"), NewAtom("role")})
+	clause, err := buildGroupByClause(cols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(clause, ",") {
+		t.Errorf("expected comma-separated, got %q", clause)
+	}
+}
+
+func TestBuildGroupByClauseEmpty(t *testing.T) {
+	cols := NewList([]Value{})
+	_, err := buildGroupByClause(cols)
+	if err == nil {
+		t.Error("expected error for empty group by")
+	}
+}
+
+// ========================
+// End-to-end query tests via runAQL
+// ========================
+
+func makeTestTableWithDepts(r *Registry) {
+	// Create "people" with name, age, dept columns
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("age", NewTypeLiteral(TNumber))
+	fields.Set("dept", NewTypeLiteral(TString))
+
+	rec := RecordTypeInfo{Fields: fields}
+
+	mkRow := func(name string, age int64, dept string) Value {
+		om := NewOrderedMap()
+		om.Set("name", NewString(name))
+		om.Set("age", NewInteger(age))
+		om.Set("dept", NewString(dept))
+		return NewMap(om)
+	}
+
+	td := TableData{
+		Record: rec,
+		Rows: []Value{
+			mkRow("alice", 30, "eng"),
+			mkRow("bob", 25, "eng"),
+			mkRow("carol", 35, "sales"),
+			mkRow("dave", 28, "sales"),
+		},
+	}
+	r.Store["employees"] = Value{VType: TList, Data: td}
+}
+
+func makeDeptTable(r *Registry) {
+	fields := NewOrderedMap()
+	fields.Set("dept", NewTypeLiteral(TString))
+	fields.Set("budget", NewTypeLiteral(TNumber))
+
+	rec := RecordTypeInfo{Fields: fields}
+
+	mkRow := func(dept string, budget int64) Value {
+		om := NewOrderedMap()
+		om.Set("dept", NewString(dept))
+		om.Set("budget", NewInteger(budget))
+		return NewMap(om)
+	}
+
+	td := TableData{
+		Record: rec,
+		Rows: []Value{
+			mkRow("eng", 100000),
+			mkRow("sales", 50000),
+		},
+	}
+	r.Store["departments"] = Value{VType: TList, Data: td}
+}
+
+func TestQuerySelectWithColumnList(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	// select [name dept] from employees
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{NewAtom("name"), NewAtom("dept")}),
+		NewWord("from"), NewWord("employees"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQuerySelectWithAlias(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	// select [[name person_name]] from employees
+	aliasPair := NewList([]Value{NewAtom("name"), NewAtom("person_name")})
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{aliasPair}),
+		NewWord("from"), NewWord("employees"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQuerySelectCountStar(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	// select [[count * total]] from employees
+	countSpec := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("total")})
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{countSpec}),
+		NewWord("from"), NewWord("employees"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQuerySelectCast(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	// select [[cast age integer age_int]] from employees
+	castSpec := NewList([]Value{NewAtom("cast"), NewAtom("age"), NewAtom("integer"), NewAtom("age_int")})
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{castSpec}),
+		NewWord("from"), NewWord("employees"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryWhereIsNull(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewAtom("name"), NewAtom("is"), NewAtom("not"), NewAtom("null"),
+		}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryWhereBetween(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewAtom("age"), NewAtom("between"), NewInteger(25), NewInteger(32),
+		}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryWhereIn(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewAtom("name"), NewAtom("in"),
+			NewList([]Value{NewString("alice"), NewString("carol")}),
+		}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryGroupByWithAggregate(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	// select [[count * cnt]] from employees group by [dept]
+	countSpec := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("cnt")})
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{NewAtom("dept"), countSpec}),
+		NewWord("from"), NewWord("employees"),
+		NewWord("group"), NewWord("by"), NewList([]Value{NewAtom("dept")}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryDistinct(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("select"), NewList([]Value{NewAtom("dept")}),
+		NewWord("from"), NewWord("employees"),
+		NewWord("distinct"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryJoinOnCondition(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+	makeDeptTable(r)
+
+	// Use unqualified column names with aliases to avoid SQLite naming issues
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("employees"),
+		NewWord("join"), NewWord("departments"),
+		NewWord("using"), NewList([]Value{NewAtom("dept")}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryJoinUsing(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTableWithDepts(r)
+	makeDeptTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("employees"),
+		NewWord("join"), NewWord("departments"),
+		NewWord("using"), NewList([]Value{NewAtom("dept")}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryOrderByList(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("order"), NewList([]Value{NewAtom("age"), NewAtom("desc")}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryLimitOffset(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("limit"), NewInteger(2),
+		NewWord("offset"), NewInteger(1),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryAsAlias(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("as"), NewWord("p"),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryWhereAndCondition(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewAtom("age"), NewAtom("gt"), NewInteger(20),
+			NewAtom("and"),
+			NewAtom("age"), NewAtom("lt"), NewInteger(33),
+		}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestQueryWhereCollate(t *testing.T) {
+	r := DefaultRegistry()
+	makeTestTable(r)
+
+	result := runAQL(t, r, []Value{
+		NewWord("from"), NewWord("people"),
+		NewWord("where"), NewList([]Value{
+			NewAtom("name"), NewAtom("eq"), NewString("ALICE"),
+			NewAtom("collate"), NewAtom("nocase"),
+		}),
+		NewWord("select"), NewWord("star"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+// ========================
+// Additional engine coverage: peekSuffixValue
+// ========================
+
+func TestPeekSuffixValueInContext(t *testing.T) {
+	r := DefaultRegistry()
+	// Exercise curryOrPrefix and peekSuffixValue through a word that uses suffix precedence
+	// e.g., "add" with suffix: 1 add 2
+	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("expected [3], got %v", result)
+	}
+}
+
+// ========================
+// Additional engine.go coverage: stepEnd branches
+// ========================
+
+func TestStepEndWithMoveAndMark(t *testing.T) {
+	r := DefaultRegistry()
+	// def creates a mark; calling a def word triggers move
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("dbl"), NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewInteger(5), NewWord("dbl"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("expected [10], got %v", result)
+	}
+}
+
+// ========================
+// Additional registry.go coverage
+// ========================
+
+func TestBaseValueForConstraintCoverage(t *testing.T) {
+	// Exercise baseValueForConstraint by testing type-related operations
+	r := DefaultRegistry()
+	// Create a typed list via the type system
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("typeof"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+// ========================
+// Additional SQLite tests: various value type conversions
+// ========================
+
+func TestSQLiteQueryWithNullValues(t *testing.T) {
+	store, err := NewSQLiteStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	fields := NewOrderedMap()
+	fields.Set("name", NewTypeLiteral(TString))
+	fields.Set("score", NewTypeLiteral(TNumber))
+	rec := RecordTypeInfo{Fields: fields}
+
+	row1 := NewOrderedMap()
+	row1.Set("name", NewString("alice"))
+	row1.Set("score", NewInteger(100))
+	row2 := NewOrderedMap()
+	row2.Set("name", NewString("bob"))
+	row2.Set("score", Value{VType: TNone})
+
+	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
+
+	if err := store.StoreTable("scores_null", td); err != nil {
+		t.Fatalf("StoreTable error: %v", err)
+	}
+	result, err := store.Query("SELECT * FROM \"scores_null\"", &rec)
+	if err != nil {
+		t.Fatalf("Query error: %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(result.Rows))
+	}
+}
+

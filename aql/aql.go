@@ -57,7 +57,7 @@ func (a *AQL) Run(src string) ([]any, error) {
 		return nil, err
 	}
 
-	eng := engine.New(a.registry)
+	eng := engine.NewTop(a.registry)
 	result, err := eng.Run(values)
 	if err != nil {
 		return nil, err

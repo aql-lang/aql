@@ -47,7 +47,7 @@ func TestBasic(t *testing.T) {
 			}
 
 			// Run through the engine with a fresh registry.
-			eng := engine.New(engine.DefaultRegistry())
+			eng := engine.NewTop(engine.DefaultRegistry())
 			result, err := eng.Run(values)
 
 			// Expected error: "ERROR:substring"

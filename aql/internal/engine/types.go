@@ -31,6 +31,8 @@ var (
 	TReturnCheck     = NewType("returncheck")
 	TDisjunct        = NewType("disjunct")
 	TWordInspection  = NewType("map/word_inspection")
+	TMark            = NewType("mark")
+	TMove            = NewType("move")
 	TModule          = NewType("module")
 )
 
@@ -46,7 +48,7 @@ func NewType(path string) Type {
 func (t Type) Matches(pattern Type) bool {
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "any" {
 		// "any" matches all data types but not internal types (word, forward).
-		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" || t.Parts[0] == "returncheck" {
+		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" || t.Parts[0] == "mark" || t.Parts[0] == "move" || t.Parts[0] == "returncheck" {
 			return false
 		}
 		return true

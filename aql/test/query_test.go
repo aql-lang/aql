@@ -11,7 +11,7 @@ import (
 func runQuery(t *testing.T, setup string, query string) ([]engine.Value, error) {
 	t.Helper()
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// Run setup (e.g., load file and set as table name).
 	if setup != "" {
@@ -157,7 +157,7 @@ func TestSelectWithAlias(t *testing.T) {
 func TestSelectAgainstInternalTable(t *testing.T) {
 	// Build a table manually without SQLite backing.
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// Create a table using AQL type system.
 	fields := engine.NewOrderedMap()
@@ -235,7 +235,7 @@ func TestStarWord(t *testing.T) {
 func TestCurriedFrom(t *testing.T) {
 	// def from01 from people end; select * from01
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	steps := []string{
 		`set people ("file/people.csv" read)`,
@@ -266,7 +266,7 @@ func TestCurriedFrom(t *testing.T) {
 func TestCurriedSelect(t *testing.T) {
 	// def select01 select star end; select01 from people
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	steps := []string{
 		`set people ("file/people.csv" read)`,
@@ -295,7 +295,7 @@ func TestCurriedSelect(t *testing.T) {
 func TestCurriedBoth(t *testing.T) {
 	// def select01 select star end; def from01 from people end; select01 from01
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	steps := []string{
 		`set people ("file/people.csv" read)`,
@@ -327,7 +327,7 @@ func TestCurriedBoth(t *testing.T) {
 func TestCurriedSelectCols(t *testing.T) {
 	// def sel_name select [name] end; sel_name from people
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	steps := []string{
 		`set people ("file/people.csv" read)`,
@@ -697,7 +697,7 @@ func TestOrderAndLimit(t *testing.T) {
 
 func TestWhereOnInternalTable(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("color", engine.NewTypeLiteral(engine.TString))
@@ -806,7 +806,7 @@ func TestDistinct(t *testing.T) {
 func TestDistinctDuplicates(t *testing.T) {
 	// Build a table with duplicate values.
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("color", engine.NewTypeLiteral(engine.TString))
@@ -844,7 +844,7 @@ func TestDistinctDuplicates(t *testing.T) {
 func TestOrderNullsFirst(t *testing.T) {
 	// Build a table with some NULL values.
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -924,7 +924,7 @@ func TestOrderByPositionDesc(t *testing.T) {
 
 func TestWhereIsNull(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -1168,7 +1168,7 @@ func TestWhereGlobCaseSensitive(t *testing.T) {
 func TestTypedIntegerColumn(t *testing.T) {
 	// Create a table where "age" is TInteger, not TString.
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -1229,7 +1229,7 @@ func TestTypedIntegerColumn(t *testing.T) {
 
 func TestTypedBooleanColumn(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -1284,7 +1284,7 @@ func TestTypedIntegerOrdering(t *testing.T) {
 	// This test verifies that INTEGER columns sort numerically, not lexically.
 	// With TEXT: "9" > "25" > "100" (wrong). With INTEGER: 9 < 25 < 100 (correct).
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -1487,7 +1487,7 @@ func TestWhereRegexpDigits(t *testing.T) {
 
 func TestGroupByWithCount(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
@@ -1545,7 +1545,7 @@ func TestGroupByWithCount(t *testing.T) {
 
 func TestHaving(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
@@ -1610,7 +1610,7 @@ func TestFromAlias(t *testing.T) {
 
 func TestInnerJoin(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// orders table
 	oFields := engine.NewOrderedMap()
@@ -1683,7 +1683,7 @@ func TestInnerJoin(t *testing.T) {
 
 func TestLeftJoin(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// people
 	pFields := engine.NewOrderedMap()
@@ -1752,7 +1752,7 @@ func TestLeftJoin(t *testing.T) {
 
 func TestUnion(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(names ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -1788,7 +1788,7 @@ func TestUnion(t *testing.T) {
 
 func TestUnionAll(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(names ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -1824,7 +1824,7 @@ func TestUnionAll(t *testing.T) {
 
 func TestIntersect(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(names ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -1863,7 +1863,7 @@ func TestIntersect(t *testing.T) {
 
 func TestExcept(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(names ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -1946,7 +1946,7 @@ func TestCountStar(t *testing.T) {
 
 func TestSumAggregate(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -1988,7 +1988,7 @@ func TestSumAggregate(t *testing.T) {
 
 func TestJoinWithOnCondition(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// employees table
 	eFields := engine.NewOrderedMap()
@@ -2051,7 +2051,7 @@ func TestJoinWithOnCondition(t *testing.T) {
 
 func TestJoinWithOnMultipleConditions(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	// t1 table
 	f1 := engine.NewOrderedMap()
@@ -2117,7 +2117,7 @@ func TestJoinWithOnDotQualified(t *testing.T) {
 
 func TestCrossJoin(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(field string, vals ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -2168,7 +2168,7 @@ func TestCastToReal(t *testing.T) {
 
 func TestCastToText(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -2229,7 +2229,7 @@ func TestCastWithoutAlias(t *testing.T) {
 
 func TestAvgAggregate(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -2267,7 +2267,7 @@ func TestAvgAggregate(t *testing.T) {
 
 func TestMinMaxAggregate(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -2333,7 +2333,7 @@ func TestAggregateWithoutAlias(t *testing.T) {
 func TestWhereIsNullActual(t *testing.T) {
 	// Test IS NULL with actual NULL values (not just empty strings).
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -2379,7 +2379,7 @@ func TestWhereIsNullActual(t *testing.T) {
 
 func TestMultiColumnGroupBy(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("dept", engine.NewTypeLiteral(engine.TString))
@@ -2429,7 +2429,7 @@ func TestMultiColumnGroupBy(t *testing.T) {
 
 func TestOrderNullsLast(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -2477,7 +2477,7 @@ func TestOrderNullsLast(t *testing.T) {
 
 func TestInnerJoinKeyword(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	mkTable := func(field string, vals ...string) engine.TableData {
 		fields := engine.NewOrderedMap()
@@ -2679,7 +2679,7 @@ func TestWhereLikeCollateNocase(t *testing.T) {
 
 func TestGroupByAtom(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("city", engine.NewTypeLiteral(engine.TString))
@@ -2716,7 +2716,7 @@ func TestGroupByAtom(t *testing.T) {
 
 func TestWhereIntegerComparison(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -2754,7 +2754,7 @@ func TestWhereIntegerComparison(t *testing.T) {
 
 func TestWhereBooleanValue(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -2788,7 +2788,7 @@ func TestWhereBooleanValue(t *testing.T) {
 
 func TestMixedTypeStorage(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))
@@ -2909,7 +2909,7 @@ func TestSelectStringColumns(t *testing.T) {
 
 func TestWhereBetweenIntegers(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("val", engine.NewTypeLiteral(engine.TInteger))
@@ -2963,7 +2963,7 @@ func TestWhereInSingleValue(t *testing.T) {
 
 func TestCastBool(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("active", engine.NewTypeLiteral(engine.TString))
@@ -2994,7 +2994,7 @@ func TestCastBool(t *testing.T) {
 
 func TestWhereWithBoolLiteral(t *testing.T) {
 	reg := engine.DefaultRegistry()
-	eng := engine.New(reg)
+	eng := engine.NewTop(reg)
 
 	fields := engine.NewOrderedMap()
 	fields.Set("name", engine.NewTypeLiteral(engine.TString))

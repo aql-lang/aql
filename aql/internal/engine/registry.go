@@ -396,6 +396,7 @@ func registerBuiltins(r *Registry) {
 	registerDotr(r)
 	registerTrace(r)
 	registerInspect(r)
+	registerFor(r)
 	registerModule(r)
 }
 

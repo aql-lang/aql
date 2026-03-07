@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 )
 
 // OrderedMap is a map that preserves insertion order of keys.
@@ -99,6 +100,52 @@ type ReturnCheckInfo struct {
 // A disjunct unifies if any of its alternatives unifies with the target.
 type DisjunctInfo struct {
 	Alternatives []Value
+}
+
+// markCounter is a global counter for generating unique mark IDs.
+var markCounter atomic.Int64
+
+// NextMarkID generates a unique mark ID.
+func NextMarkID() string {
+	n := markCounter.Add(1)
+	return fmt.Sprintf("_m%d", n)
+}
+
+// MarkInfo identifies a mark on the stack. Marks are internal control-flow
+// anchors placed by constructs like for-loops. Each mark has a unique ID
+// so that a corresponding move can jump the pointer back to it.
+// Body stores the original values between the mark and its paired move,
+// enabling replay when the move fires.
+type MarkInfo struct {
+	ID   string  // unique identifier for this mark
+	Body []Value // original content to replay (set by the move on first encounter)
+}
+
+// MoveInfo identifies a move on the stack. When the stack pointer reaches
+// a move, it jumps back to the corresponding mark. The Reason field
+// describes why the move exists (e.g. "for loop") and is used in error
+// messages when the target mark cannot be found.
+//
+// Cont optionally carries for-loop continuation state. When set, stepMove
+// uses it to drive multi-iteration loops: each firing advances the iterator,
+// conditionally re-inserts mark+body+move for the next iteration, and
+// accumulates results across iterations.
+type MoveInfo struct {
+	To     string   // ID of the target mark
+	Reason string   // human-readable reason (for error messages)
+	Cont   *ForCont // optional: for-loop iteration state
+}
+
+// ForCont holds the iteration state for a mark/move-driven for loop.
+// It is carried by the MoveInfo and mutated across iterations.
+type ForCont struct {
+	Registry *Registry
+	IterName string  // name of the iterator variable (e.g. "i")
+	Current  int64   // current iteration value
+	End      int64   // exclusive bound
+	Step     int64   // increment per iteration
+	Body     []Value // original body tokens (replayed each iteration)
+	Results  []Value // accumulated results from completed iterations
 }
 
 // ModuleDesc describes a module: its generated ID and named exports.
@@ -236,6 +283,26 @@ func NewOpenParen() Value {
 	return Value{VType: TOpenParen, Data: nil}
 }
 
+// NewMark creates a mark value with the given unique ID and the body to
+// replay when the corresponding move fires. The body should contain
+// the original values between the mark and its paired move.
+func NewMark(id string, body ...Value) Value {
+	b := make([]Value, len(body))
+	copy(b, body)
+	return Value{VType: TMark, Data: MarkInfo{ID: id, Body: b}}
+}
+
+// NewMove creates a move value targeting the mark with the given ID.
+// The reason string describes why this move exists (used in error messages).
+func NewMove(to string, reason string) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason}}
+}
+
+// NewMoveCont creates a move value with for-loop continuation state.
+func NewMoveCont(to, reason string, cont *ForCont) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
+}
+
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
@@ -274,6 +341,26 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsMark reports whether this value is a mark.
+func (v Value) IsMark() bool {
+	return v.VType.Equal(TMark)
+}
+
+// AsMark returns the MarkInfo, panics if not a mark.
+func (v Value) AsMark() MarkInfo {
+	return v.Data.(MarkInfo)
+}
+
+// IsMove reports whether this value is a move.
+func (v Value) IsMove() bool {
+	return v.VType.Equal(TMove)
+}
+
+// AsMove returns the MoveInfo, panics if not a move.
+func (v Value) AsMove() MoveInfo {
+	return v.Data.(MoveInfo)
 }
 
 // IsReturnCheck reports whether this value is a return-check marker.
@@ -430,6 +517,11 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsMark():
+		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
+	case v.IsMove():
+		m := v.AsMove()
+		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
 	case v.IsReturnCheck():
 		rc := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)

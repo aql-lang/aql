@@ -11,8 +11,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
-func TestSigMatch(t *testing.T) {
-	f, err := os.Open("sigmatch.tsv")
+func TestForLoop(t *testing.T) {
+	f, err := os.Open("forloop.tsv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,6 +26,7 @@ func TestSigMatch(t *testing.T) {
 		lineNum++
 		line := scanner.Text()
 
+		// Skip empty lines and comments.
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -39,14 +40,17 @@ func TestSigMatch(t *testing.T) {
 
 		ran++
 		t.Run(fmt.Sprintf("L%d_%s", lineNum, expr), func(t *testing.T) {
+			// Parse the expression into engine values.
 			values, err := parser.Parse(expr)
 			if err != nil {
 				t.Fatalf("parse error: %v", err)
 			}
 
+			// Run through the engine with a fresh registry.
 			eng := engine.NewTop(engine.DefaultRegistry())
 			result, err := eng.Run(values)
 
+			// Expected error: "ERROR:substring"
 			if strings.HasPrefix(expected, "ERROR:") {
 				errSubstr := expected[len("ERROR:"):]
 				if err == nil {
@@ -77,8 +81,8 @@ func TestSigMatch(t *testing.T) {
 	}
 
 	if ran == 0 {
-		t.Fatal("no test cases found in sigmatch.tsv")
+		t.Fatal("no test cases found in forloop.tsv")
 	}
 
-	t.Logf("ran %d test cases", ran)
+	t.Logf("ran %d for-loop test cases", ran)
 }

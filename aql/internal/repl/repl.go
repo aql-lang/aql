@@ -53,7 +53,7 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		eng := engine.New(registry)
+		eng := engine.NewTop(registry)
 		result, err := eng.Run(values)
 		if err != nil {
 			fmt.Fprintf(out, "  error: %s\n", err)
