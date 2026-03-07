@@ -108,7 +108,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	copy(e.stack, input)
 	e.pointer = 0
 
-	limit := 1000 // safety bound
+	limit := 22222 // safety bound
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break
@@ -159,7 +159,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 // resolveOrphanedForwards handles end-of-input by resolving pending forwards.
 func (e *Engine) resolveOrphanedForwards() error {
-	for attempt := 0; attempt < 100; attempt++ {
+	for attempt := 0; attempt < 222; attempt++ {
 		fwdIdx := -1
 		for i, v := range e.stack {
 			if v.IsForward() {
@@ -798,7 +798,7 @@ func (e *Engine) stepCloseParen() error {
 
 	// Resolve any forwards inside the paren scope via implicit end.
 	// We loop because resolving a forward may cause re-evaluation.
-	for attempt := 0; attempt < 50; attempt++ {
+	for attempt := 0; attempt < 222; attempt++ {
 		hasFwd := false
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if e.stack[i].IsForward() {
