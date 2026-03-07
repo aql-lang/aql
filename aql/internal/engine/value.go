@@ -90,6 +90,18 @@ type FnDefInfo struct {
 	Sigs []FnSig
 }
 
+// FnSigSpec describes a signature specification without a body, used for
+// targeted undef of specific function signatures.
+type FnSigSpec struct {
+	Params  []FnParam
+	Returns []Type
+}
+
+// FnUndefInfo holds signature specs for targeted undef of function signatures.
+type FnUndefInfo struct {
+	Sigs []FnSigSpec
+}
+
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
 	FuncName string
@@ -320,6 +332,11 @@ func NewMoveIf(to, reason string, ifCont *IfCont) Value {
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
+}
+
+// NewFnUndef creates a function undef spec value for targeted signature removal.
+func NewFnUndef(info FnUndefInfo) Value {
+	return Value{VType: TFnUndef, Data: info}
 }
 
 // NewReturnCheck creates a return-check marker for fn return type validation.

@@ -1705,3 +1705,249 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 		t.Errorf("'hello' add1 = %v, want 'hello1'", result)
 	}
 }
+
+func TestPiecemealDef(t *testing.T) {
+	r := DefaultRegistry()
+
+	// Define foo with number sig, then add string sig
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Define both sigs
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+	})
+
+	// Test number sig
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Errorf("3 foo = %v, want 9", result)
+	}
+
+	// Test string sig
+	result = runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hihi" {
+		t.Errorf("\"hi\" foo = %v, want \"hihi\"", result)
+	}
+}
+
+func TestPiecemealUndefPopsRecent(t *testing.T) {
+	r := DefaultRegistry()
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// def number sig, def string sig, undef (pops string sig), test number sig
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("undef"), NewWord("foo"), NewWord("end"),
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after undef = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefTargeted(t *testing.T) {
+	r := DefaultRegistry()
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Targeted removal: def foo fn [[number] [number]] (pairs = remove sig)
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+	})
+
+	// def both sigs, targeted remove number sig, string sig still works
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsString() != "hihi" {
+		t.Errorf("\"hi\" foo after targeted undef = %v, want \"hihi\"", result[0])
+	}
+}
+
+func TestFnUndefTargetedReverse(t *testing.T) {
+	r := DefaultRegistry()
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Remove string sig, keep number sig
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+	})
+
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after targeted undef string = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefNonExistentNoOp(t *testing.T) {
+	r := DefaultRegistry()
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+
+	// Remove a string sig that was never defined — should be a no-op
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+	})
+
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after no-op undef = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefRemovesAll(t *testing.T) {
+	r := DefaultRegistry()
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+
+	// Remove the only sig — word should become undefined
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+	})
+
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("foo"),
+	})
+	// foo should fall through to atom (string)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsString() != "foo" {
+		t.Errorf("foo after removing all sigs = %v, want atom \"foo\"", result[0])
+	}
+}
+
+func TestPiecemealStackUnwind(t *testing.T) {
+	r := DefaultRegistry()
+
+	// def A (number -> dup mul), def B (string -> dup add), undef B, A still works
+	bodyA := NewList([]Value{
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	bodyB := NewList([]Value{
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Define both
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyA, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyB, NewWord("end"),
+	})
+
+	// Both sigs work
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Fatalf("3 foo = %v, want 9", result)
+	}
+	result = runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hihi" {
+		t.Fatalf("\"hi\" foo = %v, want \"hihi\"", result)
+	}
+
+	// Undef pops B (string sig), A (number sig) remains
+	_ = runAQL(t, r, []Value{
+		NewWord("undef"), NewWord("foo"), NewWord("end"),
+	})
+	result = runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Fatalf("3 foo after undef B = %v, want 9", result)
+	}
+}
