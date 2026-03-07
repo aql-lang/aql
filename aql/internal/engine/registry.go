@@ -783,7 +783,7 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
 		inputSig := list[i]
-		// list[i+1] is the output signature — informational only
+		outputSig := list[i+1]
 		body := list[i+2]
 
 		// Abbreviation: non-list input sig is treated as [inputSig].
@@ -792,6 +792,11 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnDefInfo{}, err
+		}
+
+		returns, err := parseFnReturns(outputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
@@ -805,11 +810,32 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params: params,
-			Body:   bodyElems,
+			Params:  params,
+			Returns: returns,
+			Body:    bodyElems,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// parseFnReturns extracts return types from an output signature.
+// A non-list value is treated as a single-element list.
+// An empty list means no return type checking.
+func parseFnReturns(outputSig Value) ([]Type, error) {
+	if !outputSig.VType.Equal(TList) {
+		// Abbreviation: single value treated as [value].
+		t := resolveSigType(outputSig)
+		return []Type{t}, nil
+	}
+	elems := outputSig.AsList()
+	if len(elems) == 0 {
+		return nil, nil
+	}
+	types := make([]Type, len(elems))
+	for i, e := range elems {
+		types[i] = resolveSigType(e)
+	}
+	return types, nil
 }
 
 // parseFnParams extracts parameters from an input signature list.
@@ -951,6 +977,13 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			result = append(result, body...)
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
+			}
+			// Inject return-check if return types are declared.
+			if len(s.Returns) > 0 {
+				result = append(result, NewReturnCheck(ReturnCheckInfo{
+					FuncName: name,
+					Returns:  s.Returns,
+				}))
 			}
 			result = append(result, NewWord(")"))
 			return result, nil

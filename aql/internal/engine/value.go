@@ -79,13 +79,20 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params []FnParam
-	Body   []Value
+	Params  []FnParam
+	Returns []Type // declared return types (nil = unchecked)
+	Body    []Value
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
 type FnDefInfo struct {
 	Sigs []FnSig
+}
+
+// ReturnCheckInfo carries expected return types for fn-defined function validation.
+type ReturnCheckInfo struct {
+	FuncName string
+	Returns  []Type
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -227,6 +234,11 @@ func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewReturnCheck creates a return-check marker for fn return type validation.
+func NewReturnCheck(info ReturnCheckInfo) Value {
+	return Value{VType: TReturnCheck, Data: info}
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
@@ -250,6 +262,16 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsReturnCheck reports whether this value is a return-check marker.
+func (v Value) IsReturnCheck() bool {
+	return v.VType.Equal(TReturnCheck)
+}
+
+// AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
+func (v Value) AsReturnCheck() ReturnCheckInfo {
+	return v.Data.(ReturnCheckInfo)
 }
 
 // IsDisjunct reports whether this value is a disjunction type.
@@ -386,6 +408,9 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsReturnCheck():
+		rc := v.AsReturnCheck()
+		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()
