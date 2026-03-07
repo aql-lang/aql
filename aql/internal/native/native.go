@@ -65,5 +65,9 @@ func makeFullStackHandler(r *engine.Registry, h NativeHandler) func(args []engin
 func All() []NativeFunc {
 	return []NativeFunc{
 		listFunc(),
+		createFunc(),
+		loadFunc(),
+		updateFunc(),
+		removeFunc(),
 	}
 }

@@ -50,6 +50,21 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
+// Delete removes a key-value pair. Returns true if the key existed.
+func (m *OrderedMap) Delete(key string) bool {
+	if _, exists := m.vals[key]; !exists {
+		return false
+	}
+	delete(m.vals, key)
+	for i, k := range m.keys {
+		if k == key {
+			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
 // For example, [:string] constrains all list elements to be strings,
 // and {:string} constrains all map values to be strings.
