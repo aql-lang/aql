@@ -101,6 +101,13 @@ type DisjunctInfo struct {
 	Alternatives []Value
 }
 
+// ModuleDesc describes a module: its generated ID and named exports.
+// Each export call adds a named entry mapping export name → export map.
+type ModuleDesc struct {
+	ID      string                    // generated internal identifier
+	Exports map[string]*OrderedMap    // export name → export map (name → value)
+}
+
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
 	Name        string
@@ -244,6 +251,11 @@ func NewDisjunct(alternatives []Value) Value {
 	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
 }
 
+// NewModule creates a module descriptor value.
+func NewModule(desc ModuleDesc) Value {
+	return Value{VType: TModule, Data: desc}
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -283,6 +295,16 @@ func (v Value) IsDisjunct() bool {
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
 func (v Value) AsDisjunct() DisjunctInfo {
 	return v.Data.(DisjunctInfo)
+}
+
+// IsModule reports whether this value is a module descriptor.
+func (v Value) IsModule() bool {
+	return v.VType.Equal(TModule)
+}
+
+// AsModule returns the ModuleDesc, panics if not a module.
+func (v Value) AsModule() ModuleDesc {
+	return v.Data.(ModuleDesc)
 }
 
 // IsAtom reports whether this value is an atom.
@@ -411,6 +433,9 @@ func (v Value) String() string {
 	case v.IsReturnCheck():
 		rc := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsModule():
+		md := v.AsModule()
+		return fmt.Sprintf("module(%s)", md.ID)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()

@@ -31,6 +31,7 @@ var (
 	TReturnCheck     = NewType("returncheck")
 	TDisjunct        = NewType("disjunct")
 	TWordInspection  = NewType("map/word_inspection")
+	TModule          = NewType("module")
 )
 
 // NewType creates a Type from a slash-separated path, e.g. "string/proper".
