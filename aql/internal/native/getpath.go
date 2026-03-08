@@ -24,7 +24,7 @@ func getpathFunc() NativeFunc {
 }
 
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.
-func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
 	path := args[1].AsString()
 

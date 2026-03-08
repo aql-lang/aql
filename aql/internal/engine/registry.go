@@ -596,6 +596,13 @@ func registerStorage(r *Registry) {
 	)
 
 	getHandler := func(args []Value) ([]Value, error) {
+		// If the argument was already resolved (e.g. a defined word
+		// that the engine evaluated before get collected it), return
+		// it directly — no Store lookup needed.
+		if args[0].VType.Matches(TMap) || args[0].VType.Matches(TList) ||
+			args[0].VType.Matches(TFunction) || args[0].VType.Equal(TFnDef) {
+			return []Value{args[0]}, nil
+		}
 		key := storeKey(args[0])
 		val, ok := r.Store[key]
 		if !ok {
@@ -1370,6 +1377,75 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 		}
 		registerFn(name, Signature{Args: argTypes, Handler: handler})
 	}
+}
+
+// CallAQL invokes an AQL function value (FnDefInfo) with the given arguments
+// in a sub-engine. This allows native Go code to call AQL callbacks.
+//
+//	result, err := r.CallAQL(callbackValue, []Value{someArg})
+func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		return nil, fmt.Errorf("CallAQL: value is not a function")
+	}
+
+	// Find matching signature.
+	for _, sig := range fnDef.Sigs {
+		if len(sig.Params) != len(args) {
+			continue
+		}
+		match := true
+		for i, p := range sig.Params {
+			if !args[i].VType.Matches(p.Type) {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+
+		// Build token sequence (same as installFnDef handler).
+		var tokens []Value
+		var names []string
+
+		// Push args list onto the args stack.
+		argsCopy := make([]Value, len(args))
+		copy(argsCopy, args)
+		argsList := NewList(argsCopy)
+		r.argsStack = append(r.argsStack, argsList)
+
+		for i, p := range sig.Params {
+			if p.Name != "" {
+				installDef(r, p.Name, args[i])
+				names = append(names, p.Name)
+			} else {
+				tokens = append(tokens, args[i])
+			}
+		}
+		body := make([]Value, len(sig.Body))
+		copy(body, sig.Body)
+		tokens = append(tokens, body...)
+
+		// Evaluate in a sub-engine.
+		sub := New(r)
+		result, err := sub.Run(tokens)
+
+		// Cleanup: pop args stack, undef named params.
+		if len(r.argsStack) > 0 {
+			r.argsStack = r.argsStack[:len(r.argsStack)-1]
+		}
+		for i := len(names) - 1; i >= 0; i-- {
+			uninstallDef(r, names[i])
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("CallAQL: %w", err)
+		}
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("CallAQL: no matching signature for arguments")
 }
 
 // registerConvert registers the "convert" word for type conversions.

@@ -255,3 +255,50 @@ func TestWalkNested(t *testing.T) {
 		}
 	}
 }
+
+func TestWalkWithCallback(t *testing.T) {
+	// Walk with an AQL callback that extracts the "value" field from each leaf.
+	// walk is prefix-only, so both data and callback are on the left.
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	list := result[0].AsList()
+	if len(list) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(list))
+	}
+	// Collect the values (order may vary).
+	vals := make(map[int64]bool)
+	for _, v := range list {
+		vals[v.AsInteger()] = true
+	}
+	if !vals[1] || !vals[2] {
+		t.Errorf("expected values 1 and 2, got %v", vals)
+	}
+}
+
+func TestWalkWithCallbackTransform(t *testing.T) {
+	// Walk with a callback that doubles each leaf value.
+	result, err := runNativeSteps(t, nil, []string{
+		`{x:3 y:5} (fn [[m:map] [any] [m.value dup add]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := result[0].AsList()
+	if len(list) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(list))
+	}
+	vals := make(map[int64]bool)
+	for _, v := range list {
+		vals[v.AsInteger()] = true
+	}
+	if !vals[6] || !vals[10] {
+		t.Errorf("expected values 6 and 10, got %v", vals)
+	}
+}

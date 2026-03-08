@@ -24,7 +24,7 @@ func mergeFunc() NativeFunc {
 }
 
 // mergeHandler calls voxgigstruct.Merge on two values, returning the merged result.
-func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	a := valueToAny(args[0])
 	b := valueToAny(args[1])
 

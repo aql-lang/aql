@@ -26,7 +26,7 @@ func listFunc() NativeFunc {
 }
 
 // listAllHandler returns all records from a table as a list.
-func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
@@ -36,7 +36,7 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // listFilterHandler returns records from a table that match the given map.
 // A record matches when every key-value pair in the filter map has an equal
 // value in the corresponding record field.
-func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	filter := args[1].AsMap()
 

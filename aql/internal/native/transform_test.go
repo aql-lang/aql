@@ -19,7 +19,7 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil)
+	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestTransformHandlerInject(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil)
+	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestTransformHandlerNestedPath(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil)
+	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

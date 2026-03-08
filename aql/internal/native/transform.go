@@ -25,7 +25,7 @@ func transformFunc() NativeFunc {
 
 // transformHandler calls voxgig struct Transform, converting between
 // engine.Value and Go any types.
-func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
 	spec := valueToAny(args[1])
 

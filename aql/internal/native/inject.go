@@ -25,7 +25,7 @@ func injectFunc() NativeFunc {
 }
 
 // injectHandler calls voxgigstruct.Inject to resolve path references.
-func injectHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func injectHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	val := valueToAny(args[0])
 	store := valueToAny(args[1])
 

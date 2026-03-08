@@ -5,9 +5,10 @@ import (
 )
 
 // NativeHandler is the signature for built-in native functions.
-// It receives the matched arguments, the current context map, and the
-// resolved stack (excluding matched args).
-type NativeHandler func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error)
+// It receives the matched arguments, the current context map, the
+// resolved stack (excluding matched args), and the registry (for
+// invoking AQL callbacks via r.CallAQL).
+type NativeHandler func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error)
 
 // NativeFunc describes a built-in native function with its name, signatures,
 // and whether it uses suffix precedence.
@@ -50,7 +51,7 @@ func Register(r *engine.Registry) {
 func makeFullStackHandler(r *engine.Registry, h NativeHandler) func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
 	return func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
 		ctx := r.Context()
-		results, err := h(args, ctx, stack)
+		results, err := h(args, ctx, stack, r)
 		if err != nil {
 			return nil, err
 		}

@@ -24,7 +24,7 @@ func updateFunc() NativeFunc {
 
 // updateHandler finds a record by its "id" field and merges the provided
 // fields into it. Returns the updated table. The map must contain an "id" field.
-func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	patch := args[1].AsMap()
 

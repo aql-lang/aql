@@ -25,7 +25,7 @@ func createFunc() NativeFunc {
 // createHandler appends a new record to the table.
 // The map must contain an "id" field. If a record with the same id already
 // exists, an error is returned.
-func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	rec := args[1].AsMap()
 

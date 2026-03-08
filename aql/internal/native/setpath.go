@@ -24,7 +24,7 @@ func setpathFunc() NativeFunc {
 }
 
 // setpathHandler calls voxgigstruct.SetPath to set a nested value.
-func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
 	path := args[1].AsString()
 	newVal := valueToAny(args[2])

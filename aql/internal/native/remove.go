@@ -24,7 +24,7 @@ func removeFunc() NativeFunc {
 
 // removeHandler finds a record by its "id" field and removes it from the table.
 // Returns the updated table. The map must contain an "id" field.
-func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	filter := args[1].AsMap()
 

@@ -24,7 +24,7 @@ func cloneFunc() NativeFunc {
 }
 
 // cloneHandler calls voxgigstruct.Clone to produce a deep copy.
-func cloneHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func cloneHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
 
 	result := voxgigstruct.Clone(data)

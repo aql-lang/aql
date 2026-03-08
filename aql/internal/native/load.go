@@ -24,7 +24,7 @@ func loadFunc() NativeFunc {
 
 // loadHandler finds and returns a single record matching the filter.
 // Returns an error if no matching record is found.
-func loadHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func loadHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	filter := args[1].AsMap()
 
