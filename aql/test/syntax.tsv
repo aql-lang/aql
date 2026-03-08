@@ -872,3 +872,25 @@ dblcall 4 []	8
 
 # callback calls a fn-defined function
 def sq fn [[x:number] [number] [x mul x]] dblcall 3 [sq]	36
+
+# === call (execute a list as code) ===
+
+# call splices list contents as code in a paren scope
+10 [dup mul] call	100
+
+# call with add
+3 [add 7] call	10
+
+# empty list call is a no-op (value passes through)
+5 [] call	5
+
+# === def fn style dblcall (cb auto-expands via def) ===
+
+# define dblcall as a def fn: cb list body auto-splices when referenced
+def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 5 [dup mul]	100
+
+# def fn dblcall with simple callback
+def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 3 [dup add]	12
+
+# def fn dblcall with empty callback
+def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 4 []	8
