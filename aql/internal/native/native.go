@@ -69,5 +69,6 @@ func All() []NativeFunc {
 		loadFunc(),
 		updateFunc(),
 		removeFunc(),
+		transformFunc(),
 	}
 }
