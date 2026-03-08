@@ -1042,7 +1042,10 @@ func registerVar(r *Registry) {
 // --- Function specification helpers ---
 
 // registerFn registers the "fn" word, which parses a list of signature
-// triples into a FnDefInfo value. Use with def: def name fn [[params] [out] [body]].
+// triples into a function value (lambda). Used standalone as a lambda:
+//   (fn [[x:number] [number] [x mul x]])
+// Or with def to bind a name:
+//   def square fn [[x:number] [number] [x mul x]]
 // When the list length is divisible by 2 but not 3, it is parsed as pairs
 // (input+output, no body) producing a FnUndefInfo for targeted undef.
 func registerFn(r *Registry) {
@@ -1061,7 +1064,7 @@ func registerFn(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			return []Value{NewFnDef(fnDef)}, nil
+			return []Value{NewFunction(fnDef)}, nil
 		}
 		// Pairs (undef mode) when divisible by 2.
 		if len(elems)%2 == 0 {
