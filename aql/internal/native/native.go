@@ -70,5 +70,11 @@ func All() []NativeFunc {
 		updateFunc(),
 		removeFunc(),
 		transformFunc(),
+		mergeFunc(),
+		validateFunc(),
+		getpathFunc(),
+		setpathFunc(),
+		injectFunc(),
+		cloneFunc(),
 	}
 }
