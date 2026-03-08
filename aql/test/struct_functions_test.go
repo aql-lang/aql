@@ -256,10 +256,13 @@ func TestWalkNested(t *testing.T) {
 	}
 }
 
-func TestWalkWithBeforeCallback(t *testing.T) {
-	// Walk with a before callback that returns the value unchanged.
-	// The before callback is called on all nodes (pre-order) and its return
-	// value replaces the node. The result is the transformed tree.
+// --- walk with before callback ---
+
+func TestWalkBeforeIdentity(t *testing.T) {
+	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) walk
+	// Before callback returns m.value (identity) — tree is preserved unchanged.
+	// The before callback is called pre-order on every node; returning m.value
+	// leaves each node as-is, so the walk produces the original structure.
 	result, err := runNativeSteps(t, nil, []string{
 		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) walk`,
 	})
@@ -269,11 +272,6 @@ func TestWalkWithBeforeCallback(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	// The before callback returns m.value for each node.
-	// For the root node {a:1 b:2}, m.value is the map itself.
-	// Since the before callback replaces the root with its value (the map),
-	// and then descends, replacing leaves with their values (integers),
-	// the result is the original map structure preserved.
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
@@ -285,30 +283,76 @@ func TestWalkWithBeforeCallback(t *testing.T) {
 	}
 }
 
-func TestWalkWithBeforeCallbackTransform(t *testing.T) {
-	// Walk with a before callback that doubles integer leaf values.
-	// The callback checks if the value is an integer and doubles it.
+func TestWalkBeforeIdentityNested(t *testing.T) {
+	// AQL: {a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) walk
+	// Identity before callback on a nested structure — entire tree preserved.
 	result, err := runNativeSteps(t, nil, []string{
-		`{x:3 y:5} (fn [[m:map] [any] [m.value]]) walk`,
+		`{a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Result should be the tree with values passed through the callback.
 	m := result[0].AsMap()
-	x, _ := m.Get("x")
-	y, _ := m.Get("y")
-	if x.AsInteger() != 3 {
-		t.Errorf("expected x=3, got %v", x)
+	inner, _ := m.Get("a")
+	im := inner.AsMap()
+	x, _ := im.Get("x")
+	y, _ := im.Get("y")
+	b, _ := m.Get("b")
+	if x.AsInteger() != 1 {
+		t.Errorf("expected x=1, got %v", x)
 	}
-	if y.AsInteger() != 5 {
-		t.Errorf("expected y=5, got %v", y)
+	if y.AsInteger() != 2 {
+		t.Errorf("expected y=2, got %v", y)
+	}
+	if b.AsInteger() != 3 {
+		t.Errorf("expected b=3, got %v", b)
 	}
 }
 
-func TestWalkWithBeforeAndAfterCallbacks(t *testing.T) {
-	// Walk with both before and after callbacks.
-	// Before returns value unchanged, after returns value unchanged.
+func TestWalkBeforeReplace(t *testing.T) {
+	// AQL: {a:1 b:2} (fn [[m:map] [any] [99]]) walk
+	// Before callback replaces the root node with 99 (a non-node value).
+	// Since 99 is not a map/list, walk does NOT descend into children.
+	// This demonstrates that the before callback controls traversal:
+	// replacing a node with a scalar stops descent into that subtree.
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:1 b:2} (fn [[m:map] [any] [99]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("expected 99, got %v", result[0])
+	}
+}
+
+func TestWalkBeforeReturnPath(t *testing.T) {
+	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.path]]) walk
+	// Before callback returns the path string for every node.
+	// The root path is "" (empty string), which replaces the root map.
+	// Since a string is not a node, descent stops — result is "".
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:1 b:2} (fn [[m:map] [any] [m.path]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if result[0].AsString() != "" {
+		t.Errorf("expected empty string (root path), got %q", result[0].AsString())
+	}
+}
+
+// --- walk with before AND after callbacks ---
+
+func TestWalkBeforeAfterIdentity(t *testing.T) {
+	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk
+	// Both before and after return m.value (identity) — tree is preserved.
 	result, err := runNativeSteps(t, nil, []string{
 		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk`,
 	})
@@ -326,5 +370,58 @@ func TestWalkWithBeforeAndAfterCallbacks(t *testing.T) {
 	}
 	if b.AsInteger() != 2 {
 		t.Errorf("expected b=2, got %v", b)
+	}
+}
+
+func TestWalkBeforeAfterPostOrder(t *testing.T) {
+	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [99]]) walk
+	// Before callback is identity (allows descent), after callback replaces
+	// every node with 99 (post-order). Processing order:
+	//   1. before(root) → {a:1 b:2} (identity, descent proceeds)
+	//   2. before(a=1) → 1 (identity)
+	//   3. after(a=1) → 99
+	//   4. before(b=2) → 2 (identity)
+	//   5. after(b=2) → 99
+	//   6. after(root={a:99 b:99}) → 99
+	// Final result: 99
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [99]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("expected 99 (after replaces all), got %v", result[0])
+	}
+}
+
+func TestWalkBeforeAfterNested(t *testing.T) {
+	// AQL: {a:{x:1 y:2} b:3}
+	//        (fn [[m:map] [any] [m.value]])
+	//        (fn [[m:map] [any] [m.value]]) walk
+	// Both callbacks are identity — nested tree preserved through full traversal.
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	inner, _ := m.Get("a")
+	im := inner.AsMap()
+	x, _ := im.Get("x")
+	y, _ := im.Get("y")
+	b, _ := m.Get("b")
+	if x.AsInteger() != 1 {
+		t.Errorf("expected x=1, got %v", x)
+	}
+	if y.AsInteger() != 2 {
+		t.Errorf("expected y=2, got %v", y)
+	}
+	if b.AsInteger() != 3 {
+		t.Errorf("expected b=3, got %v", b)
 	}
 }
