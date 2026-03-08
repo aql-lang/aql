@@ -76,5 +76,6 @@ func All() []NativeFunc {
 		setpathFunc(),
 		injectFunc(),
 		cloneFunc(),
+		walkFunc(),
 	}
 }

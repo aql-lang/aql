@@ -198,3 +198,60 @@ func TestValidateReturnsSpec(t *testing.T) {
 		t.Errorf("expected $NUMBER, got %s", age.AsString())
 	}
 }
+
+// --- walk ---
+
+func TestWalkFlat(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:1 b:"hello"} walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	leaves := result[0].AsList()
+	if len(leaves) != 2 {
+		t.Fatalf("expected 2 leaves, got %d", len(leaves))
+	}
+
+	paths := make(map[string]string)
+	for _, leaf := range leaves {
+		m := leaf.AsMap()
+		p, _ := m.Get("path")
+		v, _ := m.Get("value")
+		paths[p.AsString()] = v.String()
+	}
+	if _, ok := paths["a"]; !ok {
+		t.Error("missing path 'a'")
+	}
+	if _, ok := paths["b"]; !ok {
+		t.Error("missing path 'b'")
+	}
+}
+
+func TestWalkNested(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`{a:{x:1 y:2} b:3} walk`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaves := result[0].AsList()
+	if len(leaves) != 3 {
+		t.Fatalf("expected 3 leaves, got %d", len(leaves))
+	}
+
+	paths := make(map[string]bool)
+	for _, leaf := range leaves {
+		m := leaf.AsMap()
+		p, _ := m.Get("path")
+		paths[p.AsString()] = true
+	}
+	for _, want := range []string{"a.x", "a.y", "b"} {
+		if !paths[want] {
+			t.Errorf("missing path %q", want)
+		}
+	}
+}
