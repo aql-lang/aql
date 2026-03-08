@@ -32,6 +32,7 @@ type Registry struct {
 	moduleSeq int                      // counter for generating module IDs
 	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
 	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
+	argsStack []Value            // stack of args lists for nested fn calls
 }
 
 // NewRegistry creates an empty registry.
@@ -427,6 +428,7 @@ func registerBuiltins(r *Registry) {
 	registerContext(r)
 	registerDblcall(r)
 	registerCall(r)
+	registerPopArgs(r)
 }
 
 // registerDblcall registers "dblcall", an example function that takes an
@@ -498,6 +500,24 @@ func registerCall(r *Registry) {
 			bodyCopy := make([]Value, len(bodyElems))
 			copy(bodyCopy, bodyElems)
 			return bodyCopy, nil
+		},
+	})
+}
+
+// registerPopArgs registers the internal "__pop-args" word used to clean up
+// the args stack after a fn-defined function body finishes executing.
+func registerPopArgs(r *Registry) {
+	r.Register("__pop-args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) > 0 {
+				r.argsStack = r.argsStack[:len(r.argsStack)-1]
+			}
+			if len(r.argsStack) > 0 {
+				r.Store["args"] = r.argsStack[len(r.argsStack)-1]
+			} else {
+				delete(r.Store, "args")
+			}
+			return nil, nil
 		},
 	})
 }
@@ -1304,6 +1324,15 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			// mul's forward grabs x=1 from the inner body instead of
 			// waiting for the full result).
 			result = append(result, NewOpenParen())
+
+			// Push args list onto the stack and store in Store for
+			// dotted access (args.0, args.1, etc.).
+			argsCopy := make([]Value, len(args))
+			copy(argsCopy, args)
+			argsList := NewList(argsCopy)
+			r.argsStack = append(r.argsStack, argsList)
+			r.Store["args"] = argsList
+
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -1316,6 +1345,8 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
 			result = append(result, body...)
+			// Pop the args stack to restore the previous args (for nesting).
+			result = append(result, NewWord("__pop-args"))
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
 			}
