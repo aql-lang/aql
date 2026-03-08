@@ -7,8 +7,9 @@ import (
 )
 
 // removeFunc returns the "remove" native function definition.
-// remove has suffix precedence and one signature:
+// remove has suffix precedence and two signatures:
 //   - [table, map] — removes the record whose "id" matches the map's "id" field
+//   - [map, map]   — record type + filter: returns empty table
 func removeFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "remove",
@@ -18,8 +19,18 @@ func removeFunc() NativeFunc {
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: removeHandler,
 			},
+			{
+				Args:    []engine.Type{engine.TMap, engine.TMap},
+				Handler: removeRecordHandler,
+			},
 		},
 	}
+}
+
+// removeRecordHandler handles remove on a record type (not a table).
+// Returns an empty table.
+func removeRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewList([]engine.Value{})}, nil
 }
 
 // removeHandler finds a record by its "id" field and removes it from the table.

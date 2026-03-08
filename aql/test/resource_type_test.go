@@ -292,6 +292,130 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 }
 
 // ==========================================================================
+// CRUD operations on entity record type (return empty tables)
+// ==========================================================================
+
+func TestEntityTypeList(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`list entity`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+func TestEntityTypeListFilter(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`entity list {name:"users"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+func TestEntityTypeCreate(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`entity create {id:"1" name:"users"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+func TestEntityTypeLoad(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`entity load {id:"1"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	// load on record type returns empty map
+	m := result[0].AsMap()
+	if len(m.Keys()) != 0 {
+		t.Errorf("expected empty map, got %d keys", len(m.Keys()))
+	}
+}
+
+func TestEntityTypeUpdate(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`entity update {id:"1" name:"users-v2"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+func TestEntityTypeRemove(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`entity remove {id:"1"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+// Test CRUD on the base resource type too.
+func TestResourceTypeListEmpty(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type resource record [name:string kind:string meta:map]`,
+		`list resource`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+func TestResourceTypeCreateEmpty(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`type resource record [name:string kind:string meta:map]`,
+		`resource create {id:"1" name:"foo"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result[0].AsList()
+	if len(rows) != 0 {
+		t.Errorf("expected empty table, got %d rows", len(rows))
+	}
+}
+
+// ==========================================================================
 // Aliases
 // ==========================================================================
 

@@ -7,8 +7,9 @@ import (
 )
 
 // createFunc returns the "create" native function definition.
-// create has suffix precedence and one signature:
+// create has suffix precedence and two signatures:
 //   - [table, map] — appends the map as a new record to the table; the map must contain an "id" field
+//   - [map, map]   — record type + record: returns empty table
 func createFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "create",
@@ -18,8 +19,18 @@ func createFunc() NativeFunc {
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: createHandler,
 			},
+			{
+				Args:    []engine.Type{engine.TMap, engine.TMap},
+				Handler: createRecordHandler,
+			},
 		},
 	}
+}
+
+// createRecordHandler handles create on a record type (not a table).
+// Returns an empty table.
+func createRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewList([]engine.Value{})}, nil
 }
 
 // createHandler appends a new record to the table.

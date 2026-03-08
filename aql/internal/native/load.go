@@ -7,8 +7,9 @@ import (
 )
 
 // loadFunc returns the "load" native function definition.
-// load has suffix precedence and one signature:
+// load has suffix precedence and two signatures:
 //   - [table, map] — finds a single record by matching the map's key-value pairs (typically {id:"..."})
+//   - [map, map]   — record type + filter: returns empty map
 func loadFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "load",
@@ -18,8 +19,18 @@ func loadFunc() NativeFunc {
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: loadHandler,
 			},
+			{
+				Args:    []engine.Type{engine.TMap, engine.TMap},
+				Handler: loadRecordHandler,
+			},
 		},
 	}
+}
+
+// loadRecordHandler handles load on a record type (not a table).
+// Returns an empty map.
+func loadRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewMap(engine.NewOrderedMap())}, nil
 }
 
 // loadHandler finds and returns a single record matching the filter.

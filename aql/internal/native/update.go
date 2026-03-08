@@ -7,8 +7,9 @@ import (
 )
 
 // updateFunc returns the "update" native function definition.
-// update has suffix precedence and one signature:
+// update has suffix precedence and two signatures:
 //   - [table, map] — finds a record by "id" and merges the map's fields into it
+//   - [map, map]   — record type + patch: returns empty table
 func updateFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "update",
@@ -18,8 +19,18 @@ func updateFunc() NativeFunc {
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: updateHandler,
 			},
+			{
+				Args:    []engine.Type{engine.TMap, engine.TMap},
+				Handler: updateRecordHandler,
+			},
 		},
 	}
+}
+
+// updateRecordHandler handles update on a record type (not a table).
+// Returns an empty table.
+func updateRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewList([]engine.Value{})}, nil
 }
 
 // updateHandler finds a record by its "id" field and merges the provided
