@@ -425,6 +425,7 @@ func registerBuiltins(r *Registry) {
 	registerFor(r)
 	registerModule(r)
 	registerContext(r)
+	registerApply(r)
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -567,6 +568,56 @@ func registerContext(r *Registry) {
 					return nil, fmt.Errorf("context: unknown sub-command: %s (expected set or get)", cmd)
 				}
 			},
+		},
+	)
+}
+
+// registerApply registers the "apply" word for invoking a callback (list body)
+// with a value on the stack.
+//
+// apply takes two arguments: a value and a list (the callback body).
+// It uses mark/move to splice the value and body tokens onto the main
+// engine stack, so the body executes with the value available on the stack.
+// When the move fires, the results between mark and move are collected
+// and replace the entire mark..move segment.
+//
+//	5 apply [dup mul]     => 25
+//	"hello" apply [upper] => "HELLO"
+func registerApply(r *Registry) {
+	applyHandler := func(args []Value) ([]Value, error) {
+		val := args[0]
+		body := args[1]
+
+		if !body.VType.Equal(TList) {
+			return nil, fmt.Errorf("apply: callback must be a list, got %s", body.VType)
+		}
+		if body.IsTypedList() || body.IsTableType() {
+			return nil, fmt.Errorf("apply: callback must be a plain list")
+		}
+
+		bodyElems := body.AsList()
+		if len(bodyElems) == 0 {
+			// Empty body: just return the value unchanged.
+			return []Value{val}, nil
+		}
+
+		// Build: mark + val + body_tokens... + move
+		id := NextMarkID()
+		tokens := make([]Value, 0, len(bodyElems)+3)
+		tokens = append(tokens, NewMark(id, bodyElems...))
+		tokens = append(tokens, val)
+		bodyCopy := make([]Value, len(bodyElems))
+		copy(bodyCopy, bodyElems)
+		tokens = append(tokens, bodyCopy...)
+		tokens = append(tokens, NewMoveApply(id, "apply"))
+
+		return tokens, nil
+	}
+
+	r.Register("apply",
+		Signature{
+			Args:    []Type{TAny, TList},
+			Handler: applyHandler,
 		},
 	)
 }

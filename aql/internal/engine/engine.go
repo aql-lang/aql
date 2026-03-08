@@ -1010,6 +1010,11 @@ func (e *Engine) stepMove(val Value) error {
 		return e.stepMoveIf(markIdx, moveIdx, info)
 	}
 
+	// Delegate to apply callback continuation handler.
+	if info.ApplyCont != nil {
+		return e.stepMoveApply(markIdx, moveIdx, info)
+	}
+
 	// Get the saved body from the mark.
 	markInfo := e.stack[markIdx].AsMark()
 
@@ -1123,6 +1128,26 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	e.stackSplice(markIdx, moveIdx-markIdx+1, branch...)
 	e.pointer = markIdx
 	e.traceNote = fmt.Sprintf("if %v", cond)
+	return nil
+}
+
+// stepMoveApply handles an apply callback continuation move. It collects
+// the resolved values between mark and move and splices them in place,
+// completing the callback invocation.
+func (e *Engine) stepMoveApply(markIdx, moveIdx int, info MoveInfo) error {
+	// Collect resolved values between mark and move.
+	var results []Value
+	for j := markIdx + 1; j < moveIdx; j++ {
+		results = append(results, e.stack[j])
+	}
+
+	// Remove mark from hash table.
+	delete(e.marks, info.To)
+
+	// Splice results in place of mark+body+move.
+	e.stackSplice(markIdx, moveIdx-markIdx+1, results...)
+	e.pointer = markIdx
+	e.traceNote = "apply done"
 	return nil
 }
 

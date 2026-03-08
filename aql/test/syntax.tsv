@@ -855,3 +855,23 @@ true or false	true
 false or true	true
 true or true	true
 false or false	false
+
+# === apply (callback invocation via mark/move) ===
+
+# apply with arithmetic callback
+5 apply [dup mul]	25
+
+# apply with string callback
+"hello" apply [upper]	'HELLO'
+
+# apply with multi-step callback
+3 apply [dup add dup mul]	36
+
+# apply with empty body returns value unchanged
+42 apply []	42
+
+# apply suffix form
+apply 10 [dup mul]	100
+
+# apply with a named fn that the callback calls
+def dbl fn [[x:number] [number] [x add x]] 5 apply [dbl]	10
