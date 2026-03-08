@@ -349,6 +349,13 @@ func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewFunction creates a function reference value. The underlying data is a
+// FnDefInfo, but the type is TFunction so it can be matched by function-typed
+// parameters and passed to other functions without being called.
+func NewFunction(info FnDefInfo) Value {
+	return Value{VType: TFunction, Data: info}
+}
+
 // NewFnUndef creates a function undef spec value for targeted signature removal.
 func NewFnUndef(info FnUndefInfo) Value {
 	return Value{VType: TFnUndef, Data: info}

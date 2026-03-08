@@ -758,6 +758,9 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				if _, ok := top.Data.(FnDefInfo); ok {
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
+				if top.VType.Equal(TFunction) {
+					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+				}
 				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
@@ -770,10 +773,11 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	}
 
 	// FnDefInfo body (from fn word): install typed signatures.
-	if body.VType.Equal(TFnDef) {
+	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
 		fnDef := body.Data.(FnDefInfo)
 		installFnDef(r, name, fnDef, isPrefixOnly)
-		r.DefStacks[name] = append(r.DefStacks[name], body)
+		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
+		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
 		return
 	}
 
@@ -1263,7 +1267,7 @@ func resolveTypeName(name string) Type {
 	case "list":
 		return TList
 	case "function":
-		return TList
+		return TFunction
 	case "map":
 		return TMap
 	default:

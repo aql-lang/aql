@@ -884,13 +884,13 @@ def sq fn [[x:number] [number] [x mul x]] dblcall 3 [sq]	36
 # empty list call is a no-op (value passes through)
 5 [] call	5
 
-# === def fn style dblcall (cb auto-expands via def) ===
+# === def fn style dblcall (passing functions as arguments) ===
 
-# define dblcall as a def fn: cb list body auto-splices when referenced
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 5 [dup mul]	100
+# define dblcall accepting a function, doubles n and calls cb with result
+def dupmul fn [[x:number] [number] [x dup mul]] def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 5 dupmul	100
 
-# def fn dblcall with simple callback
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 3 [dup add]	12
+# def fn dblcall with a different callback function
+def dupadd fn [[x:number] [number] [x dup add]] def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 3 dupadd	12
 
-# def fn dblcall with empty callback
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 4 []	8
+# def fn dblcall with identity callback
+def id fn [[x:number] [number] [x]] def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 4 id	8
