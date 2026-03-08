@@ -856,22 +856,19 @@ false or true	true
 true or true	true
 false or false	false
 
-# === apply (callback invocation via mark/move) ===
+# === dblcall (callback function example) ===
 
-# apply with arithmetic callback
-5 apply [dup mul]	25
+# dblcall doubles integer then invokes callback with result
+dblcall 5 [dup mul]	100
 
-# apply with string callback
-"hello" apply [upper]	'HELLO'
+# callback is a simple word
+dblcall 3 [dup add]	12
 
-# apply with multi-step callback
-3 apply [dup add dup mul]	36
+# prefix form
+5 dblcall [add 1]	11
 
-# apply with empty body returns value unchanged
-42 apply []	42
+# callback that just leaves the doubled value
+dblcall 4 []	8
 
-# apply suffix form
-apply 10 [dup mul]	100
-
-# apply with a named fn that the callback calls
-def dbl fn [[x:number] [number] [x add x]] 5 apply [dbl]	10
+# callback calls a fn-defined function
+def sq fn [[x:number] [number] [x mul x]] dblcall 3 [sq]	36

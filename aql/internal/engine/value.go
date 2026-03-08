@@ -158,11 +158,10 @@ type MarkInfo struct {
 // conditionally re-inserts mark+body+move for the next iteration, and
 // accumulates results across iterations.
 type MoveInfo struct {
-	To       string     // ID of the target mark
-	Reason   string     // human-readable reason (for error messages)
-	Cont     *ForCont   // optional: for-loop iteration state
-	IfCont   *IfCont    // optional: if-statement continuation state
-	ApplyCont *ApplyCont // optional: apply callback continuation state
+	To     string   // ID of the target mark
+	Reason string   // human-readable reason (for error messages)
+	Cont   *ForCont // optional: for-loop iteration state
+	IfCont *IfCont  // optional: if-statement continuation state
 }
 
 // ForCont holds the iteration state for a mark/move-driven for loop.
@@ -184,11 +183,6 @@ type IfCont struct {
 	Then []Value // tokens to splice if condition is truthy
 	Else []Value // tokens to splice if condition is falsy (nil for 2-arg if)
 }
-
-// ApplyCont holds the continuation state for a mark/move-driven apply.
-// When the move fires, the resolved values between mark and move are
-// collected and spliced in place, completing the callback invocation.
-type ApplyCont struct{}
 
 // ModuleDesc describes a module: its generated ID and named exports.
 // Each export call adds a named entry mapping export name → export map.
@@ -348,11 +342,6 @@ func NewMoveCont(to, reason string, cont *ForCont) Value {
 // NewMoveIf creates a move value with if-statement continuation state.
 func NewMoveIf(to, reason string, ifCont *IfCont) Value {
 	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, IfCont: ifCont}}
-}
-
-// NewMoveApply creates a move value with apply callback continuation state.
-func NewMoveApply(to, reason string) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, ApplyCont: &ApplyCont{}}}
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.
