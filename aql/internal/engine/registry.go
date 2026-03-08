@@ -1313,6 +1313,18 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			argTypes[i] = p.Type
 		}
 		s := sig // capture for closure
+		// Check if the body references "args" (from dotted args.N
+		// notation which expands to "get args N dot"). When the body
+		// uses args, unnamed params are not pushed — the body accesses
+		// them via args.0, args.1, etc. instead.
+		bodyUsesArgs := false
+		for i := 0; i < len(s.Body)-1; i++ {
+			if s.Body[i].IsWord() && s.Body[i].AsWord().Name == "get" &&
+				s.Body[i+1].IsWord() && s.Body[i+1].AsWord().Name == "args" {
+				bodyUsesArgs = true
+				break
+			}
+		}
 		handler := func(args []Value) ([]Value, error) {
 			var result []Value
 			var names []string
@@ -1337,8 +1349,9 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
 					names = append(names, p.Name)
-				} else {
-					// Unnamed parameter: push value back for the body to use
+				} else if !bodyUsesArgs {
+					// Unnamed parameter: push value back for the body to use.
+					// Skipped when the body uses args (accessed via args.N).
 					result = append(result, args[i])
 				}
 			}

@@ -887,10 +887,10 @@ def sq fn [[x:number] [number] [x mul x]] dblcall 3 [sq]	36
 # === def fn style dblcall (passing lambdas as arguments) ===
 
 # dblcall2 with lambda using args: args.0 is the first argument
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 5 (fn [[_:number] [number] [args.0 dup mul]])	100
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 5 (fn [[number] [number] [args.0 dup mul]])	100
 
 # dblcall2 with a different lambda callback using args
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 3 (fn [[_:number] [number] [args.0 dup add]])	12
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 3 (fn [[number] [number] [args.0 dup add]])	12
 
 # dblcall2 with identity lambda using args
-def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 4 (fn [[_:number] [number] [args.0]])	8
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 4 (fn [[number] [number] [args.0]])	8
