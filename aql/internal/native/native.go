@@ -79,5 +79,13 @@ func All() []NativeFunc {
 		cloneFunc(),
 		walkFunc(),
 		selectorFunc(),
+		sizeFunc(),
+		sliceFunc(),
+		padFunc(),
+		itemsFunc(),
+		flattenFunc(),
+		filterFunc(),
+		joinFunc(),
+		jsonifyFunc(),
 	}
 }
