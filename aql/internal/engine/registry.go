@@ -428,6 +428,7 @@ func registerBuiltins(r *Registry) {
 	registerContext(r)
 	registerDblcall(r)
 	registerCall(r)
+	registerArgs(r)
 	registerPopArgs(r)
 }
 
@@ -504,6 +505,19 @@ func registerCall(r *Registry) {
 	})
 }
 
+// registerArgs registers the "args" word which returns the current function's
+// argument list from the args stack. Used with dot notation: args.0, args.1.
+func registerArgs(r *Registry) {
+	r.Register("args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) == 0 {
+				return nil, fmt.Errorf("args: not inside a function")
+			}
+			return []Value{r.argsStack[len(r.argsStack)-1]}, nil
+		},
+	})
+}
+
 // registerPopArgs registers the internal "__pop-args" word used to clean up
 // the args stack after a fn-defined function body finishes executing.
 func registerPopArgs(r *Registry) {
@@ -511,11 +525,6 @@ func registerPopArgs(r *Registry) {
 		Handler: func(_ []Value) ([]Value, error) {
 			if len(r.argsStack) > 0 {
 				r.argsStack = r.argsStack[:len(r.argsStack)-1]
-			}
-			if len(r.argsStack) > 0 {
-				r.Store["args"] = r.argsStack[len(r.argsStack)-1]
-			} else {
-				delete(r.Store, "args")
 			}
 			return nil, nil
 		},
@@ -1325,13 +1334,12 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			// waiting for the full result).
 			result = append(result, NewOpenParen())
 
-			// Push args list onto the stack and store in Store for
-			// dotted access (args.0, args.1, etc.).
+			// Push args list onto the args stack for access via the
+			// "args" word (args.0, args.1, etc.).
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
 			r.argsStack = append(r.argsStack, argsList)
-			r.Store["args"] = argsList
 
 			for i, p := range s.Params {
 				if p.Name != "" {
