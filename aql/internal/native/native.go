@@ -78,5 +78,6 @@ func All() []NativeFunc {
 		injectFunc(),
 		cloneFunc(),
 		walkFunc(),
+		selectorFunc(),
 	}
 }
