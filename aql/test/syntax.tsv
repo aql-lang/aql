@@ -887,10 +887,10 @@ def sq fn [[x:number] [number] [x mul x]] dblcall 3 [sq]	36
 # === def fn style dblcall (cb auto-expands via def) ===
 
 # define dblcall as a def fn: cb list body auto-splices when referenced
-def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 5 [dup mul]	100
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 5 [dup mul]	100
 
 # def fn dblcall with simple callback
-def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 3 [dup add]	12
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 3 [dup add]	12
 
 # def fn dblcall with empty callback
-def dblcall2 fn [[n:number, cb:list] [number] [n add n cb]] dblcall2 4 []	8
+def dblcall2 fn [[n:number, cb:function] [number] [n add n cb]] dblcall2 4 []	8

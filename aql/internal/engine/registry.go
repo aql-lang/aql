@@ -1262,6 +1262,8 @@ func resolveTypeName(name string) Type {
 		return TBoolean
 	case "list":
 		return TList
+	case "function":
+		return TList
 	case "map":
 		return TMap
 	default:
