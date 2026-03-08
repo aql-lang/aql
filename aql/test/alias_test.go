@@ -528,8 +528,8 @@ func TestAliasWalkWithBefore(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "walk (before callback)",
 		defStep:   "def mywalk [walk]",
-		origSteps: []string{"{a:1 b:2} (fn [[m:map] [any] [m.value]]) walk"},
-		aliaSteps: []string{"{a:1 b:2} (fn [[m:map] [any] [m.value]]) mywalk"},
+		origSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk"},
+		aliaSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) mywalk"},
 	})
 }
 

@@ -1291,23 +1291,23 @@ func resolveSigType(v Value) Type {
 // resolveTypeName maps a type name string to its engine Type.
 func resolveTypeName(name string) Type {
 	switch name {
-	case "any":
+	case "Any":
 		return TAny
-	case "none":
+	case "None":
 		return TNone
-	case "number":
+	case "Number":
 		return TNumber
-	case "integer":
+	case "Integer":
 		return TInteger
-	case "string":
+	case "String":
 		return TString
-	case "boolean":
+	case "Boolean":
 		return TBoolean
-	case "list":
+	case "List":
 		return TList
-	case "function":
+	case "Function":
 		return TFunction
-	case "map":
+	case "Map":
 		return TMap
 	default:
 		return NewType(name)
@@ -2037,7 +2037,7 @@ func resolveWordValue(v Value) Value {
 		return NewBoolean(true)
 	case "false":
 		return NewBoolean(false)
-	case "none":
+	case "None":
 		return NewTypeLiteral(TNone)
 	default:
 		return NewAtom(name)
@@ -2540,7 +2540,7 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrNoneHandler := func(args []Value) ([]Value, error) {
-		return nil, fmt.Errorf("dotr: parent is none")
+		return nil, fmt.Errorf("dotr: parent is None")
 	}
 
 	sigs := []Signature{

@@ -405,7 +405,7 @@ func TestEngineConvert(t *testing.T) {
 	r := DefaultRegistry()
 	// convert 99 string
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(99), NewWord("string"),
+		NewWord("convert"), NewInteger(99), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "99" {
 		t.Errorf("convert 99 string = %v, want '99'", result)
@@ -551,7 +551,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	r := DefaultRegistry()
 	// convert 10 string "hex" → 'a'
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("hex"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsString() != "a" {
 		t.Errorf("convert 10 string hex = %v, want 'a'", result)
@@ -559,7 +559,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 255 string "HEX" → 'FF'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewString("HEX"),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("HEX"),
 	})
 	if len(result) != 1 || result[0].AsString() != "FF" {
 		t.Errorf("convert 255 string HEX = %v, want 'FF'", result)
@@ -567,7 +567,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 10 string "bin" → '1010'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("bin"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
 		t.Errorf("convert 10 string bin = %v, want '1010'", result)
@@ -575,7 +575,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 8 string "oct" → '10'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("string"), NewString("oct"),
+		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
 		t.Errorf("convert 8 string oct = %v, want '10'", result)
@@ -586,7 +586,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	r := DefaultRegistry()
 	// convert "42" number → 42
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("42"), NewWord("number"),
+		NewWord("convert"), NewString("42"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("convert '42' number = %v, want 42", result)
@@ -594,7 +594,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "ff" number "hex" → 255
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("ff"), NewWord("number"), NewString("hex"),
+		NewWord("convert"), NewString("ff"), NewWord("Number"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 255 {
 		t.Errorf("convert 'ff' number hex = %v, want 255", result)
@@ -602,7 +602,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "1010" number "bin" → 10
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("1010"), NewWord("number"), NewString("bin"),
+		NewWord("convert"), NewString("1010"), NewWord("Number"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 10 {
 		t.Errorf("convert '1010' number bin = %v, want 10", result)
@@ -610,7 +610,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "10" number "oct" → 8
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("10"), NewWord("number"), NewString("oct"),
+		NewWord("convert"), NewString("10"), NewWord("Number"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 8 {
 		t.Errorf("convert '10' number oct = %v, want 8", result)
@@ -621,7 +621,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	r := DefaultRegistry()
 	// convert 1 boolean → true
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("boolean"),
+		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert 1 boolean = %v, want true", result)
@@ -629,7 +629,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert 0 boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("boolean"),
+		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("convert 0 boolean = %v, want false", result)
@@ -637,7 +637,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert "true" boolean → true
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("boolean"),
+		NewWord("convert"), NewString("true"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert 'true' boolean = %v, want true", result)
@@ -645,7 +645,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert "" boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString(""), NewWord("boolean"),
+		NewWord("convert"), NewString(""), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("convert '' boolean = %v, want false", result)
@@ -653,7 +653,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert true boolean → true (passthrough)
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("boolean"),
+		NewWord("convert"), NewBoolean(true), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert true boolean = %v, want true", result)
@@ -663,7 +663,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 func TestEngineConvertToAtom(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("atom"),
+		NewWord("convert"), NewInteger(42), NewWord("Atom"),
 	})
 	if len(result) != 1 || !result[0].IsAtom() {
 		t.Errorf("convert 42 atom = %v, want atom", result)
@@ -682,7 +682,7 @@ func TestEngineBaseTypes(t *testing.T) {
 		{"boolean", TBoolean, "false"},
 		{"list", TList, "[]"},
 		{"map", TMap, "{}"},
-		{"none", TNone, "none"},
+		{"none", TNone, "None"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -698,8 +698,8 @@ func TestEngineFn(t *testing.T) {
 	r := DefaultRegistry()
 	// def double fn [[number] [number] [dup add]] end 7 double
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -715,10 +715,10 @@ func TestEngineFnNamed(t *testing.T) {
 	r := DefaultRegistry()
 	// def square fn [[x:number] [number] [x mul x]] end 5 square
 	xParam := NewOrderedMap()
-	xParam.Set("x", NewWord("number"))
+	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
 		NewList([]Value{NewMap(xParam)}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -735,8 +735,8 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [1 "a"|] -> catter -> all args from prefix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -753,8 +753,8 @@ func TestEngineFnCatterPartialSuffix(t *testing.T) {
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -771,8 +771,8 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [|] -> catter "c" 3 -> both args from suffix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -811,7 +811,7 @@ func TestEngineFnLiteralType(t *testing.T) {
 	// adder only matches the value 0, adds 2 to it
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
 	result := runAQL(t, r, []Value{
@@ -829,7 +829,7 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 	// adder should NOT match 5 (only matches 0)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
 	err := runAQLError(t, r, []Value{
@@ -847,10 +847,10 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 	// handler 0 → 10, handler 1 → 21
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(10)}),
 		NewList([]Value{NewInteger(1)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(20)}),
 	})
 	result := runAQL(t, r, []Value{
@@ -875,8 +875,8 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	// doubler/p registers as prefix-only: takes args from the stack only,
 	// never collects suffix args via forward.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
-		NewList([]Value{NewWord("integer")}),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
 	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
@@ -895,8 +895,8 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
-		NewList([]Value{NewWord("integer")}),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
 	err := runAQLError(t, r, []Value{
@@ -919,18 +919,18 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	fnBody := NewList([]Value{
 		// sig 1: [string] [string] [add "Q"]
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add"), NewString("Q")}),
 
 		// sig 2: integer string [add "P"]  (abbreviated input & output)
-		NewWord("integer"),
-		NewWord("string"),
+		NewWord("Integer"),
+		NewWord("String"),
 		NewList([]Value{NewWord("add"), NewString("P")}),
 
 		// sig 3: 99 string [drop "NN"]  (abbreviated input & output)
 		NewInteger(99),
-		NewWord("string"),
+		NewWord("String"),
 		NewList([]Value{NewWord("drop"), NewString("NN")}),
 	})
 
@@ -968,8 +968,8 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 	// def double fn [number number [dup add]] end 7 double
 	// All three elements abbreviated (single-valued)
 	fnBody := NewList([]Value{
-		NewWord("number"),
-		NewWord("number"),
+		NewWord("Number"),
+		NewWord("Number"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -987,15 +987,15 @@ func TestEngineFnFactorial(t *testing.T) {
 	fnBody := NewList([]Value{
 		// sig 1 (base case): 0 integer [drop 1]
 		NewInteger(0),
-		NewWord("integer"),
+		NewWord("Integer"),
 		NewList([]Value{NewWord("drop"), NewInteger(1)}),
 		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
 		func() Value {
 			m := NewOrderedMap()
-			m.Set("x", NewWord("integer"))
+			m.Set("x", NewWord("Integer"))
 			return NewList([]Value{NewMap(m)})
 		}(),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
 			NewWord("x"), NewWord("mul"),
 			NewWord("fact"),
@@ -1065,10 +1065,10 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 	for _, b := range bodies {
 		fnBody := NewList([]Value{
 			NewInteger(0),
-			NewWord("integer"),
+			NewWord("Integer"),
 			NewList([]Value{NewWord("drop"), NewInteger(1)}),
-			NewWord("integer"),
-			NewWord("integer"),
+			NewWord("Integer"),
+			NewWord("Integer"),
 			NewList(b.body),
 		})
 		allPass := true
@@ -1100,15 +1100,15 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 			m.Set("_", NewInteger(0))
 			return NewList([]Value{NewMap(m)})
 		}(),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewInteger(1)}),
 		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
 		func() Value {
 			m := NewOrderedMap()
-			m.Set("x", NewWord("integer"))
+			m.Set("x", NewWord("Integer"))
 			return NewList([]Value{NewMap(m)})
 		}(),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
 			NewWord("x"), NewWord("mul"),
 			NewWord("fact"),
@@ -1526,8 +1526,8 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 	r := DefaultRegistry()
 	// def double fn [[number] [number] [dup add]] end
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -1544,8 +1544,8 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 	// def bad fn [[number] [string] [dup add]] end
 	// Returns a number but declares string return type.
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	err := runAQLError(t, r, []Value{
@@ -1566,8 +1566,8 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 	// Body produces 2 values but signature declares 2 returns, dup produces 2 from 1.
 	// Actually let's make it expect 1 but body produces 2.
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup")}), // produces 2 values, signature expects 1
 	})
 	err := runAQLError(t, r, []Value{
@@ -1587,8 +1587,8 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 	// def identity fn [[any] [any] []] end
 	// [any] return type should accept any value.
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("any")}),
-		NewList([]Value{NewWord("any")}),
+		NewList([]Value{NewWord("Any")}),
+		NewList([]Value{NewWord("Any")}),
 		NewList([]Value{}),
 	})
 	result := runAQL(t, r, []Value{
@@ -1605,7 +1605,7 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 	// def dbl fn [[number] [] [dup add]] end
 	// Empty return sig means no checking (backwards compat).
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
@@ -1623,8 +1623,8 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 	// def dup2 fn [[number] [number number] [dup]] end
 	// Returns 2 numbers.
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number"), NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number"), NewWord("Number")}),
 		NewList([]Value{NewWord("dup")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -1640,10 +1640,10 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 	r := DefaultRegistry()
 	// def square fn [[x:number] [number] [x mul x]] end
 	xParam := NewOrderedMap()
-	xParam.Set("x", NewWord("number"))
+	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
 		NewList([]Value{NewMap(xParam)}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -1660,10 +1660,10 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 	// def isbig fn [[x:number] [number] [x gt 10]] end
 	// Declares number return but body returns boolean via gt.
 	xParam := NewOrderedMap()
-	xParam.Set("x", NewWord("number"))
+	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
 		NewList([]Value{NewMap(xParam)}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
 	})
 	err := runAQLError(t, r, []Value{
@@ -1682,11 +1682,11 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 	r := DefaultRegistry()
 	// def add1 fn [[number] [number] [1 add] [string] [string] ["1" add]] end
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewInteger(1), NewWord("add")}),
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewString("1"), NewWord("add")}),
 	})
 	// Test number overload
@@ -1711,13 +1711,13 @@ func TestPiecemealDef(t *testing.T) {
 
 	// Define foo with number sig, then add string sig
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	strBody := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 
@@ -1748,13 +1748,13 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 	r := DefaultRegistry()
 
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	strBody := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 
@@ -1777,20 +1777,20 @@ func TestFnUndefTargeted(t *testing.T) {
 	r := DefaultRegistry()
 
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	strBody := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 
 	// Targeted removal: def foo fn [[number] [number]] (pairs = remove sig)
 	undefSpec := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 	})
 
 	// def both sigs, targeted remove number sig, string sig still works
@@ -1814,20 +1814,20 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	r := DefaultRegistry()
 
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	strBody := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 
 	// Remove string sig, keep number sig
 	undefSpec := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 	})
 
 	_ = runAQL(t, r, []Value{
@@ -1850,15 +1850,15 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 	r := DefaultRegistry()
 
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 
 	// Remove a string sig that was never defined — should be a no-op
 	undefSpec := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 	})
 
 	_ = runAQL(t, r, []Value{
@@ -1880,15 +1880,15 @@ func TestFnUndefRemovesAll(t *testing.T) {
 	r := DefaultRegistry()
 
 	numBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 
 	// Remove the only sig — word should become undefined
 	undefSpec := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 	})
 
 	result := runAQL(t, r, []Value{
@@ -1910,13 +1910,13 @@ func TestPiecemealStackUnwind(t *testing.T) {
 
 	// def A (number -> dup mul), def B (string -> dup add), undef B, A still works
 	bodyA := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	bodyB := NewList([]Value{
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 

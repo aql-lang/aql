@@ -13,13 +13,13 @@ func TestNewTypeMultiLevel(t *testing.T) {
 		path  string
 		parts int
 	}{
-		{"a", 1},
-		{"a/b", 2},
-		{"a/b/c", 3},
-		{"a/b/c/d", 4},
-		{"a/b/c/d/e", 5},
-		{"a/b/c/d/e/f", 6},
-		{"a/b/c/d/e/f/g", 7},
+		{"A", 1},
+		{"A/B", 2},
+		{"A/B/C", 3},
+		{"A/B/C/D", 4},
+		{"A/B/C/D/E", 5},
+		{"A/B/C/D/E/F", 6},
+		{"A/B/C/D/E/F/G", 7},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -38,9 +38,9 @@ func TestNewTypeMultiLevel(t *testing.T) {
 
 func TestSpecificityScalesWithDepth(t *testing.T) {
 	for depth := 1; depth <= 7; depth++ {
-		path := "a"
+		path := "A"
 		for i := 1; i < depth; i++ {
-			path += fmt.Sprintf("/%c", 'a'+i)
+			path += fmt.Sprintf("/%c", 'A'+i)
 		}
 		typ := NewType(path)
 		if typ.Specificity() != depth {
@@ -53,13 +53,13 @@ func TestSpecificityScalesWithDepth(t *testing.T) {
 
 func TestSupertypeMatchesSubtype(t *testing.T) {
 	levels := []string{
-		"animal",
-		"animal/mammal",
-		"animal/mammal/canine",
-		"animal/mammal/canine/dog",
-		"animal/mammal/canine/dog/labrador",
-		"animal/mammal/canine/dog/labrador/golden",
-		"animal/mammal/canine/dog/labrador/golden/champion",
+		"Animal",
+		"Animal/Mammal",
+		"Animal/Mammal/Canine",
+		"Animal/Mammal/Canine/Dog",
+		"Animal/Mammal/Canine/Dog/Labrador",
+		"Animal/Mammal/Canine/Dog/Labrador/Golden",
+		"Animal/Mammal/Canine/Dog/Labrador/Golden/Champion",
 	}
 
 	for i := 0; i < len(levels); i++ {
@@ -77,13 +77,13 @@ func TestSupertypeMatchesSubtype(t *testing.T) {
 
 func TestParentDoesNotMatchChildPattern(t *testing.T) {
 	levels := []string{
-		"animal",
-		"animal/mammal",
-		"animal/mammal/canine",
-		"animal/mammal/canine/dog",
-		"animal/mammal/canine/dog/labrador",
-		"animal/mammal/canine/dog/labrador/golden",
-		"animal/mammal/canine/dog/labrador/golden/champion",
+		"Animal",
+		"Animal/Mammal",
+		"Animal/Mammal/Canine",
+		"Animal/Mammal/Canine/Dog",
+		"Animal/Mammal/Canine/Dog/Labrador",
+		"Animal/Mammal/Canine/Dog/Labrador/Golden",
+		"Animal/Mammal/Canine/Dog/Labrador/Golden/Champion",
 	}
 
 	for i := 0; i < len(levels); i++ {
@@ -101,13 +101,13 @@ func TestParentDoesNotMatchChildPattern(t *testing.T) {
 
 func TestIsSubtypeOfDeepHierarchy(t *testing.T) {
 	levels := []string{
-		"data",
-		"data/numeric",
-		"data/numeric/integer",
-		"data/numeric/integer/signed",
-		"data/numeric/integer/signed/i32",
-		"data/numeric/integer/signed/i32/nonzero",
-		"data/numeric/integer/signed/i32/nonzero/positive",
+		"Data",
+		"Data/Numeric",
+		"Data/Numeric/Integer",
+		"Data/Numeric/Integer/Signed",
+		"Data/Numeric/Integer/Signed/I32",
+		"Data/Numeric/Integer/Signed/I32/Nonzero",
+		"Data/Numeric/Integer/Signed/I32/Nonzero/Positive",
 	}
 
 	for i := 0; i < len(levels); i++ {
@@ -140,13 +140,13 @@ func TestIsSubtypeOfDeepHierarchy(t *testing.T) {
 
 func TestEqualMultiLevel(t *testing.T) {
 	paths := []string{
-		"x",
-		"x/y",
-		"x/y/z",
-		"x/y/z/w",
-		"x/y/z/w/v",
-		"x/y/z/w/v/u",
-		"x/y/z/w/v/u/t",
+		"X",
+		"X/Y",
+		"X/Y/Z",
+		"X/Y/Z/W",
+		"X/Y/Z/W/V",
+		"X/Y/Z/W/V/U",
+		"X/Y/Z/W/V/U/T",
 	}
 	for _, p := range paths {
 		a := NewType(p)
@@ -157,10 +157,10 @@ func TestEqualMultiLevel(t *testing.T) {
 	}
 
 	// Different paths should not be equal
-	if NewType("a/b/c").Equal(NewType("a/b/d")) {
+	if NewType("A/B/C").Equal(NewType("A/B/D")) {
 		t.Error("a/b/c should not equal a/b/d")
 	}
-	if NewType("a/b/c").Equal(NewType("a/b")) {
+	if NewType("A/B/C").Equal(NewType("A/B")) {
 		t.Error("a/b/c should not equal a/b")
 	}
 }
@@ -169,10 +169,10 @@ func TestEqualMultiLevel(t *testing.T) {
 
 func TestSiblingTypesDoNotMatch(t *testing.T) {
 	siblings := []string{
-		"vehicle/car/sedan",
-		"vehicle/car/suv",
-		"vehicle/truck/pickup",
-		"vehicle/motorcycle/sport",
+		"Vehicle/Car/Sedan",
+		"Vehicle/Car/Suv",
+		"Vehicle/Truck/Pickup",
+		"Vehicle/Motorcycle/Sport",
 	}
 	for i := 0; i < len(siblings); i++ {
 		for j := i + 1; j < len(siblings); j++ {
@@ -192,9 +192,9 @@ func TestSiblingTypesDoNotMatch(t *testing.T) {
 
 func TestAnyMatchesDeepTypes(t *testing.T) {
 	for depth := 1; depth <= 7; depth++ {
-		path := "data"
+		path := "Data"
 		for i := 1; i < depth; i++ {
-			path += fmt.Sprintf("/level%d", i)
+			path += fmt.Sprintf("/Level%d", i)
 		}
 		typ := NewType(path)
 		if !typ.Matches(TAny) {
@@ -207,13 +207,13 @@ func TestAnyMatchesDeepTypes(t *testing.T) {
 
 func TestScalarMatchesNumberSubtypes(t *testing.T) {
 	subtypes := []string{
-		"number",
-		"number/integer",
-		"number/integer/5",
-		"number/float",
-		"number/float/double",
-		"number/float/double/positive",
-		"number/float/double/positive/small",
+		"Number",
+		"Number/Integer",
+		"Number/Integer/5",
+		"Number/Float",
+		"Number/Float/Double",
+		"Number/Float/Double/Positive",
+		"Number/Float/Double/Positive/Small",
 	}
 	for _, path := range subtypes {
 		typ := NewType(path)
@@ -258,9 +258,9 @@ func TestNumberIntegerWellKnownRelationships(t *testing.T) {
 
 func TestUnifyIdenticalDeepTypeLiterals(t *testing.T) {
 	for depth := 1; depth <= 7; depth++ {
-		path := "category"
+		path := "Category"
 		for i := 1; i < depth; i++ {
-			path += fmt.Sprintf("/sub%d", i)
+			path += fmt.Sprintf("/Sub%d", i)
 		}
 		t.Run(fmt.Sprintf("depth_%d", depth), func(t *testing.T) {
 			a := Value{VType: NewType(path), Data: nil}
@@ -280,9 +280,9 @@ func TestUnifyIdenticalDeepTypeLiterals(t *testing.T) {
 
 func TestUnifySubtypeWithSupertype(t *testing.T) {
 	levels := []string{
-		"number",
-		"number/integer",
-		"number/integer/42",
+		"Number",
+		"Number/Integer",
+		"Number/Integer/42",
 	}
 
 	// Unifying each deeper type with each shallower type should return the deeper type
@@ -318,9 +318,9 @@ func TestUnifySubtypeWithSupertype(t *testing.T) {
 
 func TestUnifyAnyWithDeepTypes(t *testing.T) {
 	for depth := 1; depth <= 7; depth++ {
-		path := "shape"
+		path := "Shape"
 		for i := 1; i < depth; i++ {
-			path += fmt.Sprintf("/sub%d", i)
+			path += fmt.Sprintf("/Sub%d", i)
 		}
 		t.Run(fmt.Sprintf("depth_%d", depth), func(t *testing.T) {
 			specific := Value{VType: NewType(path), Data: nil}
@@ -351,9 +351,9 @@ func TestUnifyAnyWithDeepTypes(t *testing.T) {
 
 func TestUnifySiblingTypesFails(t *testing.T) {
 	siblings := [][2]string{
-		{"number/integer", "number/float"},
-		{"animal/mammal/cat", "animal/mammal/dog"},
-		{"a/b/c/d/e/f/g1", "a/b/c/d/e/f/g2"},
+		{"Number/Integer", "Number/Float"},
+		{"Animal/Mammal/Cat", "Animal/Mammal/Dog"},
+		{"A/B/C/D/E/F/G1", "A/B/C/D/E/F/G2"},
 	}
 	for _, pair := range siblings {
 		t.Run(fmt.Sprintf("%s_vs_%s", pair[0], pair[1]), func(t *testing.T) {
@@ -428,13 +428,13 @@ func TestUnifySameIntegerLiteralSucceeds(t *testing.T) {
 
 func TestUnifyDeepHierarchy7Levels(t *testing.T) {
 	// 7-level type hierarchy
-	t1 := NewType("a/b/c/d/e/f/g")
-	t2 := NewType("a/b/c/d/e/f")
-	t3 := NewType("a/b/c/d/e")
-	t4 := NewType("a/b/c/d")
-	t5 := NewType("a/b/c")
-	t6 := NewType("a/b")
-	t7 := NewType("a")
+	t1 := NewType("A/B/C/D/E/F/G")
+	t2 := NewType("A/B/C/D/E/F")
+	t3 := NewType("A/B/C/D/E")
+	t4 := NewType("A/B/C/D")
+	t5 := NewType("A/B/C")
+	t6 := NewType("A/B")
+	t7 := NewType("A")
 
 	deepest := Value{VType: t1, Data: nil}
 	ancestors := []Type{t2, t3, t4, t5, t6, t7}
@@ -456,9 +456,9 @@ func TestUnifyDeepHierarchy7Levels(t *testing.T) {
 
 func TestUnifyIncompatibleHierarchiesFails(t *testing.T) {
 	tests := [][2]string{
-		{"number/integer", "string/proper"},
-		{"a/b/c", "x/y/z"},
-		{"data/num/int/i32/signed/big/huge", "data/str/utf8/ascii/printable/alpha/upper"},
+		{"Number/Integer", "String/Proper"},
+		{"A/B/C", "X/Y/Z"},
+		{"Data/Num/Int/I32/Signed/Big/Huge", "Data/Str/Utf8/Ascii/Printable/Alpha/Upper"},
 	}
 	for _, pair := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", pair[0], pair[1]), func(t *testing.T) {
@@ -476,7 +476,7 @@ func TestUnifyIncompatibleHierarchiesFails(t *testing.T) {
 
 func TestUnifyNoneWithDeepTypeFails(t *testing.T) {
 	none := Value{VType: TNone, Data: nil}
-	deep := Value{VType: NewType("a/b/c/d/e/f/g"), Data: nil}
+	deep := Value{VType: NewType("A/B/C/D/E/F/G"), Data: nil}
 	_, ok := Unify(none, deep)
 	if ok {
 		t.Error("Unify(none, deep-type) should fail")
@@ -503,23 +503,23 @@ func TestUnifyNoneWithNoneSucceeds(t *testing.T) {
 func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 	// Register signatures at different specificity levels
 	sigs := []Signature{
-		{Args: []Type{NewType("data")}, Handler: dummyHandler},                             // depth 1
-		{Args: []Type{NewType("data/num")}, Handler: dummyHandler},                         // depth 2
-		{Args: []Type{NewType("data/num/int")}, Handler: dummyHandler},                     // depth 3
-		{Args: []Type{NewType("data/num/int/i32")}, Handler: dummyHandler},                 // depth 4
-		{Args: []Type{NewType("data/num/int/i32/signed")}, Handler: dummyHandler},           // depth 5
-		{Args: []Type{NewType("data/num/int/i32/signed/big")}, Handler: dummyHandler},       // depth 6
-		{Args: []Type{NewType("data/num/int/i32/signed/big/huge")}, Handler: dummyHandler},  // depth 7
+		{Args: []Type{NewType("Data")}, Handler: dummyHandler},                             // depth 1
+		{Args: []Type{NewType("Data/Num")}, Handler: dummyHandler},                         // depth 2
+		{Args: []Type{NewType("Data/Num/Int")}, Handler: dummyHandler},                     // depth 3
+		{Args: []Type{NewType("Data/Num/Int/I32")}, Handler: dummyHandler},                 // depth 4
+		{Args: []Type{NewType("Data/Num/Int/I32/Signed")}, Handler: dummyHandler},           // depth 5
+		{Args: []Type{NewType("Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},       // depth 6
+		{Args: []Type{NewType("Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler},  // depth 7
 	}
 
 	// A value with the deepest type should match the most specific signature
-	val := Value{VType: NewType("data/num/int/i32/signed/big/huge"), Data: nil}
+	val := Value{VType: NewType("Data/Num/Int/I32/Signed/Big/Huge"), Data: nil}
 	stack := []Value{val}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m == nil {
 		t.Fatal("expected match")
 	}
-	if !m.Sig.Args[0].Equal(NewType("data/num/int/i32/signed/big/huge")) {
+	if !m.Sig.Args[0].Equal(NewType("Data/Num/Int/I32/Signed/Big/Huge")) {
 		t.Errorf("expected deepest match, got %s", m.Sig.Args[0])
 	}
 }
@@ -527,20 +527,20 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 func TestMatchSignatureMidLevelType(t *testing.T) {
 	// Only register signatures up to depth 4
 	sigs := []Signature{
-		{Args: []Type{NewType("data")}, Handler: dummyHandler},
-		{Args: []Type{NewType("data/num")}, Handler: dummyHandler},
-		{Args: []Type{NewType("data/num/int")}, Handler: dummyHandler},
-		{Args: []Type{NewType("data/num/int/i32")}, Handler: dummyHandler},
+		{Args: []Type{NewType("Data")}, Handler: dummyHandler},
+		{Args: []Type{NewType("Data/Num")}, Handler: dummyHandler},
+		{Args: []Type{NewType("Data/Num/Int")}, Handler: dummyHandler},
+		{Args: []Type{NewType("Data/Num/Int/I32")}, Handler: dummyHandler},
 	}
 
 	// A value at depth 6 should match the deepest available signature (depth 4)
-	val := Value{VType: NewType("data/num/int/i32/signed/big"), Data: nil}
+	val := Value{VType: NewType("Data/Num/Int/I32/Signed/Big"), Data: nil}
 	stack := []Value{val}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m == nil {
 		t.Fatal("expected match")
 	}
-	if !m.Sig.Args[0].Equal(NewType("data/num/int/i32")) {
+	if !m.Sig.Args[0].Equal(NewType("Data/Num/Int/I32")) {
 		t.Errorf("expected data/num/int/i32 match, got %s", m.Sig.Args[0])
 	}
 }
@@ -569,11 +569,11 @@ func TestUnifyListsWithDeepTypedValues(t *testing.T) {
 
 func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 	m1 := NewOrderedMap()
-	m1.Set("x", NewInteger(10))
+	m1.Set("X", NewInteger(10))
 	m1.Set("y", NewInteger(20))
 
 	m2 := NewOrderedMap()
-	m2.Set("x", NewInteger(10))
+	m2.Set("X", NewInteger(10))
 	m2.Set("y", NewInteger(20))
 
 	result, ok := Unify(NewMap(m1), NewMap(m2))
@@ -581,7 +581,7 @@ func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 		t.Fatal("Unify of identical integer-valued maps should succeed")
 	}
 	rm := result.AsMap()
-	xv, _ := rm.Get("x")
+	xv, _ := rm.Get("X")
 	yv, _ := rm.Get("y")
 	if xv.AsInteger() != 10 || yv.AsInteger() != 20 {
 		t.Errorf("unexpected map values: x=%d y=%d", xv.AsInteger(), yv.AsInteger())
@@ -592,10 +592,10 @@ func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 
 func TestUnifyMapsWithMismatchedValuesFails(t *testing.T) {
 	m1 := NewOrderedMap()
-	m1.Set("x", NewInteger(10))
+	m1.Set("X", NewInteger(10))
 
 	m2 := NewOrderedMap()
-	m2.Set("x", NewInteger(99))
+	m2.Set("X", NewInteger(99))
 
 	_, ok := Unify(NewMap(m1), NewMap(m2))
 	if ok {
@@ -607,9 +607,9 @@ func TestUnifyMapsWithMismatchedValuesFails(t *testing.T) {
 
 func TestUnifySymmetry(t *testing.T) {
 	pairs := [][2]Value{
-		{Value{VType: NewType("a/b/c"), Data: nil}, Value{VType: NewType("a/b"), Data: nil}},
-		{Value{VType: NewType("number/integer"), Data: nil}, Value{VType: NewType("number"), Data: nil}},
-		{Value{VType: TAny, Data: nil}, Value{VType: NewType("x/y/z/w"), Data: nil}},
+		{Value{VType: NewType("A/B/C"), Data: nil}, Value{VType: NewType("A/B"), Data: nil}},
+		{Value{VType: NewType("Number/Integer"), Data: nil}, Value{VType: NewType("Number"), Data: nil}},
+		{Value{VType: TAny, Data: nil}, Value{VType: NewType("X/Y/Z/W"), Data: nil}},
 		{NewInteger(5), Value{VType: TNumber, Data: nil}},
 		{NewInteger(5), Value{VType: TInteger, Data: nil}},
 	}
@@ -640,18 +640,18 @@ func TestUnifySymmetry(t *testing.T) {
 // each one against the parent pattern takes constant time per check.
 func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
-	parent := NewType("a/b")
+	parent := NewType("A/B")
 
 	// Create 10,000 sibling types: a/b/0, a/b/1, ..., a/b/9999
 	siblings := make([]Type, numSiblings)
 	for i := 0; i < numSiblings; i++ {
-		siblings[i] = NewType(fmt.Sprintf("a/b/%d", i))
+		siblings[i] = NewType(fmt.Sprintf("A/B/%d", i))
 	}
 
 	// Every sibling must match the parent
 	for i, sib := range siblings {
 		if !sib.Matches(parent) {
-			t.Fatalf("sibling a/b/%d should match a/b", i)
+			t.Fatalf("sibling A/B/%d should match A/B", i)
 		}
 	}
 
@@ -672,16 +672,16 @@ func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
 // TestIsSubtypeOfEfficiencyThousandsOfSiblings confirms IsSubtypeOf is O(len(parent)).
 func TestIsSubtypeOfEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
-	parent := NewType("a/b")
+	parent := NewType("A/B")
 
 	siblings := make([]Type, numSiblings)
 	for i := 0; i < numSiblings; i++ {
-		siblings[i] = NewType(fmt.Sprintf("a/b/%d", i))
+		siblings[i] = NewType(fmt.Sprintf("A/B/%d", i))
 	}
 
 	for i, sib := range siblings {
 		if !sib.IsSubtypeOf(parent) {
-			t.Fatalf("sibling a/b/%d should be subtype of a/b", i)
+			t.Fatalf("sibling A/B/%d should be subtype of A/B", i)
 		}
 	}
 
@@ -702,7 +702,7 @@ func TestIsSubtypeOfEfficiencyThousandsOfSiblings(t *testing.T) {
 // sibling types and only a parent-level signature is registered.
 func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
-	parent := NewType("a/b")
+	parent := NewType("A/B")
 
 	sigs := []Signature{
 		{Args: []Type{parent}, Handler: dummyHandler},
@@ -710,10 +710,10 @@ func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 
 	start := time.Now()
 	for i := 0; i < numSiblings; i++ {
-		val := Value{VType: NewType(fmt.Sprintf("a/b/%d", i)), Data: nil}
+		val := Value{VType: NewType(fmt.Sprintf("A/B/%d", i)), Data: nil}
 		m := MatchSignature(sigs, []Value{val}, WordInfo{ArgCount: -1})
 		if m == nil {
-			t.Fatalf("a/b/%d should match signature [a/b]", i)
+			t.Fatalf("A/B/%d should match signature [A/B]", i)
 		}
 	}
 	elapsed := time.Since(start)
@@ -728,18 +728,18 @@ func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 // across thousands of distinct sibling types.
 func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
-	parentVal := Value{VType: NewType("a/b"), Data: nil}
+	parentVal := Value{VType: NewType("A/B"), Data: nil}
 
 	start := time.Now()
 	for i := 0; i < numSiblings; i++ {
-		child := Value{VType: NewType(fmt.Sprintf("a/b/%d", i)), Data: nil}
+		child := Value{VType: NewType(fmt.Sprintf("A/B/%d", i)), Data: nil}
 		result, ok := Unify(child, parentVal)
 		if !ok {
-			t.Fatalf("Unify(a/b/%d, a/b) should succeed", i)
+			t.Fatalf("Unify(A/B/%d, A/B) should succeed", i)
 		}
 		// Should return the child (narrower type)
 		if result.VType.Parts[2] != fmt.Sprintf("%d", i) {
-			t.Fatalf("Unify(a/b/%d, a/b) returned wrong type: %s", i, result.VType)
+			t.Fatalf("Unify(A/B/%d, A/B) returned wrong type: %s", i, result.VType)
 		}
 	}
 	elapsed := time.Since(start)
@@ -754,12 +754,12 @@ func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
 // does NOT grow with the number of existing sibling types. Compares timing
 // with 100 siblings vs 10,000 siblings — both should be similar.
 func TestMatchConstantTimeRegardlessOfSiblingCount(t *testing.T) {
-	parent := NewType("prefix/mid")
+	parent := NewType("Prefix/Mid")
 
 	// Warm up: create and match 100 siblings
 	small := make([]Type, 100)
 	for i := range small {
-		small[i] = NewType(fmt.Sprintf("prefix/mid/%d", i))
+		small[i] = NewType(fmt.Sprintf("Prefix/Mid/%d", i))
 	}
 
 	const iterations = 100_000
@@ -772,7 +772,7 @@ func TestMatchConstantTimeRegardlessOfSiblingCount(t *testing.T) {
 	// Now create 10,000 siblings (types are independent structs, no registry)
 	large := make([]Type, 10_000)
 	for i := range large {
-		large[i] = NewType(fmt.Sprintf("prefix/mid/%d", i))
+		large[i] = NewType(fmt.Sprintf("Prefix/Mid/%d", i))
 	}
 
 	start = time.Now()

@@ -8,7 +8,7 @@ import (
 // it is recognized as a record type.
 func TestResourceTypeDefine(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`resource`,
 	})
 	if err != nil {
@@ -18,7 +18,7 @@ func TestResourceTypeDefine(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	s := result[0].String()
-	if s != "record{name:string,kind:string,meta:map}" {
+	if s != "record{name:String,kind:String,meta:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
 }
@@ -26,7 +26,7 @@ func TestResourceTypeDefine(t *testing.T) {
 // TestResourceTypeMakePositional creates a resource using positional fields.
 func TestResourceTypeMakePositional(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`make resource ["users" "entity" {table:"usr"}]`,
 	})
 	if err != nil {
@@ -55,7 +55,7 @@ func TestResourceTypeMakePositional(t *testing.T) {
 // TestResourceTypeMakeNamed creates a resource using named fields.
 func TestResourceTypeMakeNamed(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`make resource [name:"users" kind:"entity" meta:{table:"usr"}]`,
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestResourceTypeMakeNamed(t *testing.T) {
 // a different order from the type definition.
 func TestResourceTypeMakeNamedReorder(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`make resource [meta:{x:1} name:"foo" kind:"bar"]`,
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func TestResourceTypeMakeNamedReorder(t *testing.T) {
 // TestResourceTypeTable creates a table of resource records and lists them.
 func TestResourceTypeTable(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`type resources table resource`,
 		`make resources [["users" "entity" {table:"usr"}] ["roles" "entity" {table:"role"}]]`,
 	})
@@ -136,7 +136,7 @@ func TestResourceTypeTable(t *testing.T) {
 // and verifies it is recognized as a record type with the correct fields.
 func TestEntityTypeDefine(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity`,
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestEntityTypeDefine(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	s := result[0].String()
-	if s != "record{name:string,kind:'entity',meta:map,entity:map,model:map}" {
+	if s != "record{name:String,kind:'entity',meta:Map,entity:Map,model:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
 }
@@ -154,7 +154,7 @@ func TestEntityTypeDefine(t *testing.T) {
 // TestEntityTypeMakePositional creates an entity using positional fields.
 func TestEntityTypeMakePositional(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`make entity ["users" "entity" {table:"usr"} {pk:"id"} {base:"user"}]`,
 	})
 	if err != nil {
@@ -195,7 +195,7 @@ func TestEntityTypeMakePositional(t *testing.T) {
 // TestEntityTypeMakeNamed creates an entity using named fields.
 func TestEntityTypeMakeNamed(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`make entity [name:"orders" kind:"entity" meta:{} entity:{pk:"id"} model:{}]`,
 	})
 	if err != nil {
@@ -221,7 +221,7 @@ func TestEntityTypeMakeNamed(t *testing.T) {
 // TestEntityTypeKindConstraint verifies the kind field is constrained to "entity".
 func TestEntityTypeKindConstraint(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`make entity ["users" "other" {} {} {}]`,
 	})
 	if err == nil {
@@ -232,7 +232,7 @@ func TestEntityTypeKindConstraint(t *testing.T) {
 // TestEntityTypeTable creates a table of entity records.
 func TestEntityTypeTable(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`type entities table entity`,
 		`make entities [["users" "entity" {} {fields:{}} {}] ["roles" "entity" {} {fields:{}} {}]]`,
 	})
@@ -263,8 +263,8 @@ func TestEntityTypeTable(t *testing.T) {
 // and verifies they coexist and work independently.
 func TestEntityTypeWithResourceType(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`make resource ["config" "setting" {}]`,
 	})
 	if err != nil {
@@ -277,8 +277,8 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 	}
 
 	result2, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`make entity ["users" "entity" {} {fields:{}} {}]`,
 	})
 	if err != nil {
@@ -297,7 +297,7 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 
 func TestEntityTypeList(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`list entity`,
 	})
 	if err != nil {
@@ -314,7 +314,7 @@ func TestEntityTypeList(t *testing.T) {
 
 func TestEntityTypeListFilter(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity list {name:"users"}`,
 	})
 	if err != nil {
@@ -328,7 +328,7 @@ func TestEntityTypeListFilter(t *testing.T) {
 
 func TestEntityTypeCreate(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity create {id:"1" name:"users"}`,
 	})
 	if err != nil {
@@ -342,7 +342,7 @@ func TestEntityTypeCreate(t *testing.T) {
 
 func TestEntityTypeLoad(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity load {id:"1"}`,
 	})
 	if err != nil {
@@ -360,7 +360,7 @@ func TestEntityTypeLoad(t *testing.T) {
 
 func TestEntityTypeUpdate(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity update {id:"1" name:"users-v2"}`,
 	})
 	if err != nil {
@@ -374,7 +374,7 @@ func TestEntityTypeUpdate(t *testing.T) {
 
 func TestEntityTypeRemove(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type entity record [name:string kind:"entity" meta:map entity:map model:map]`,
+		`type entity record [name:String kind:"entity" meta:Map entity:Map model:Map]`,
 		`entity remove {id:"1"}`,
 	})
 	if err != nil {
@@ -389,7 +389,7 @@ func TestEntityTypeRemove(t *testing.T) {
 // Test CRUD on the base resource type too.
 func TestResourceTypeListEmpty(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`list resource`,
 	})
 	if err != nil {
@@ -403,7 +403,7 @@ func TestResourceTypeListEmpty(t *testing.T) {
 
 func TestResourceTypeCreateEmpty(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`resource create {id:"1" name:"foo"}`,
 	})
 	if err != nil {
@@ -422,7 +422,7 @@ func TestResourceTypeCreateEmpty(t *testing.T) {
 // TestResourceTypeAlias verifies the resource type can be aliased via def.
 func TestResourceTypeAlias(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`type resource record [name:string kind:string meta:map]`,
+		`type resource record [name:String kind:String meta:Map]`,
 		`def res [resource]`,
 		`res`,
 	})
@@ -430,7 +430,7 @@ func TestResourceTypeAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := result[0].String()
-	if s != "record{name:string,kind:string,meta:map}" {
+	if s != "record{name:String,kind:String,meta:Map}" {
 		t.Errorf("unexpected alias type string: %s", s)
 	}
 }

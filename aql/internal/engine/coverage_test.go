@@ -656,8 +656,8 @@ func TestDotrNoneError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}
-	if !strings.Contains(err.Error(), "none") {
-		t.Errorf("expected 'none' error, got: %v", err)
+	if !strings.Contains(err.Error(), "None") {
+		t.Errorf("expected 'None' error, got: %v", err)
 	}
 }
 
@@ -797,7 +797,7 @@ func TestMakeRecordMap(t *testing.T) {
 func TestConvertIntToString(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("string"),
+		NewWord("convert"), NewInteger(42), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "42" {
 		t.Errorf("expected '42', got %v", result)
@@ -807,7 +807,7 @@ func TestConvertIntToString(t *testing.T) {
 func TestConvertIntToStringHex(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewString("hex"),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -817,7 +817,7 @@ func TestConvertIntToStringHex(t *testing.T) {
 func TestConvertIntToStringBin(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("bin"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
 		t.Errorf("expected '1010', got %v", result)
@@ -827,7 +827,7 @@ func TestConvertIntToStringBin(t *testing.T) {
 func TestConvertIntToStringOct(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("string"), NewString("oct"),
+		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
 		t.Errorf("expected '10', got %v", result)
@@ -837,7 +837,7 @@ func TestConvertIntToStringOct(t *testing.T) {
 func TestConvertStringToNumber(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("99"), NewWord("number"),
+		NewWord("convert"), NewString("99"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99, got %v", result)
@@ -847,7 +847,7 @@ func TestConvertStringToNumber(t *testing.T) {
 func TestConvertBoolToString(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("string"),
+		NewWord("convert"), NewBoolean(true), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "true" {
 		t.Errorf("expected 'true', got %v", result)
@@ -857,7 +857,7 @@ func TestConvertBoolToString(t *testing.T) {
 func TestConvertIntToBool(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("boolean"),
+		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -867,7 +867,7 @@ func TestConvertIntToBool(t *testing.T) {
 func TestConvertIntToBoolZero(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("boolean"),
+		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("expected false, got %v", result)
@@ -877,7 +877,7 @@ func TestConvertIntToBoolZero(t *testing.T) {
 func TestConvertStringToBool(t *testing.T) {
 	r := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("boolean"),
+		NewWord("convert"), NewString("true"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -889,7 +889,7 @@ func TestConvertWithSettingsMap(t *testing.T) {
 	settings := NewOrderedMap()
 	settings.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewMap(settings),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewMap(settings),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -1046,7 +1046,7 @@ func TestTraceColorize(t *testing.T) {
 		{NewBoolean(true), "true"},
 		{NewBoolean(false), "false"},
 		{NewAtom("foo"), "foo"},
-		{NewTypeLiteral(TNumber), "number"},
+		{NewTypeLiteral(TNumber), "Number"},
 		{NewList([]Value{NewInteger(1)}), "1"},
 	}
 	for _, tc := range cases {
@@ -1220,7 +1220,7 @@ func TestResolveWordValueFalse(t *testing.T) {
 }
 
 func TestResolveWordValueNone(t *testing.T) {
-	v := resolveWordValue(NewWord("none"))
+	v := resolveWordValue(NewWord("None"))
 	if !v.VType.Equal(TNone) {
 		t.Errorf("expected none, got %s", v)
 	}
@@ -1252,14 +1252,14 @@ func TestResolveSigTypeTypeLiteral(t *testing.T) {
 }
 
 func TestResolveSigTypeWord(t *testing.T) {
-	tp := resolveSigType(NewWord("string"))
+	tp := resolveSigType(NewWord("String"))
 	if !tp.Equal(TString) {
 		t.Errorf("expected string, got %s", tp)
 	}
 }
 
 func TestResolveSigTypeString(t *testing.T) {
-	tp := resolveSigType(NewString("boolean"))
+	tp := resolveSigType(NewString("Boolean"))
 	if !tp.Equal(TBoolean) {
 		t.Errorf("expected boolean, got %s", tp)
 	}
@@ -1292,9 +1292,9 @@ func TestResolveSigTypeDefault(t *testing.T) {
 
 func TestResolveTypeName(t *testing.T) {
 	cases := map[string]Type{
-		"any": TAny, "none": TNone, "number": TNumber,
-		"integer": TInteger, "string": TString, "boolean": TBoolean,
-		"atom": TAtom, "list": TList, "map": TMap, "scalar": TScalar,
+		"Any": TAny, "None": TNone, "Number": TNumber,
+		"Integer": TInteger, "String": TString, "Boolean": TBoolean,
+		"Atom": TAtom, "List": TList, "Map": TMap, "Scalar": TScalar,
 	}
 	for name, want := range cases {
 		got := resolveTypeName(name)
@@ -1306,9 +1306,9 @@ func TestResolveTypeName(t *testing.T) {
 
 func TestResolveTypeNameUnknown(t *testing.T) {
 	// Unknown names create a new named type via NewType
-	got := resolveTypeName("foobar")
-	if got.String() != "foobar" {
-		t.Errorf("expected named type 'foobar', got %s", got)
+	got := resolveTypeName("Foobar")
+	if got.String() != "Foobar" {
+		t.Errorf("expected named type 'Foobar', got %s", got)
 	}
 }
 
@@ -1389,7 +1389,7 @@ func TestFnMultiSignature(t *testing.T) {
 func TestValueStringTypedListCov(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TString))
 	s := tl.String()
-	if !strings.Contains(s, "string") {
+	if !strings.Contains(s, "String") {
 		t.Errorf("expected typed list string, got %q", s)
 	}
 }
@@ -1397,7 +1397,7 @@ func TestValueStringTypedListCov(t *testing.T) {
 func TestValueStringTypedMapCov(t *testing.T) {
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
 	s := tm.String()
-	if !strings.Contains(s, "number") {
+	if !strings.Contains(s, "Number") {
 		t.Errorf("expected typed map string, got %q", s)
 	}
 }
@@ -2055,8 +2055,8 @@ func TestValToStringAtom(t *testing.T) {
 
 func TestValToStringNone(t *testing.T) {
 	s := valToString(NewTypeLiteral(TNone))
-	if s != "none" {
-		t.Errorf("expected 'none', got %q", s)
+	if s != "None" {
+		t.Errorf("expected 'None', got %q", s)
 	}
 }
 
@@ -2610,10 +2610,10 @@ func TestNameFromValueOther(t *testing.T) {
 
 func TestAqlTypenameToSQLType(t *testing.T) {
 	tests := map[string]string{
-		"integer": "INTEGER", "int": "INTEGER",
-		"real": "REAL", "float": "REAL", "number": "REAL",
-		"text": "TEXT", "string": "TEXT",
-		"boolean": "INTEGER", "bool": "INTEGER",
+		"Integer": "INTEGER", "int": "INTEGER",
+		"real": "REAL", "float": "REAL", "Number": "REAL",
+		"text": "TEXT", "String": "TEXT",
+		"Boolean": "INTEGER", "bool": "INTEGER",
 	}
 	for input, expected := range tests {
 		if got := aqlTypenameToSQLType(input); got != expected {

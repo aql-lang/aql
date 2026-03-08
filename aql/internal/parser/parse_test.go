@@ -519,34 +519,34 @@ func TestParseMultilineScript(t *testing.T) {
 // --- Typed list tests (list.child) ---
 
 func TestParseTypedListString(t *testing.T) {
-	// [:string] → typed list with child type string
-	assertParse(t, "[:string]", []engine.Value{
+	// [:String] → typed list with child type string
+	assertParse(t, "[:String]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedListNumber(t *testing.T) {
-	// [:number] → typed list with child type number
-	assertParse(t, "[:number]", []engine.Value{
+	// [:Number] → typed list with child type number
+	assertParse(t, "[:Number]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)),
 	})
 }
 
 func TestParseTypedListBoolean(t *testing.T) {
-	assertParse(t, "[:boolean]", []engine.Value{
+	assertParse(t, "[:Boolean]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TBoolean)),
 	})
 }
 
 func TestParseTypedListAny(t *testing.T) {
-	assertParse(t, "[:any]", []engine.Value{
+	assertParse(t, "[:Any]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TAny)),
 	})
 }
 
 func TestParseTypedListMap(t *testing.T) {
-	// [:{x:number}] → typed list with child type {x:number}
-	got, err := Parse("[:{x:number}]")
+	// [:{x:Number}] → typed list with child type {x:Number}
+	got, err := Parse("[:{x:Number}]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -571,30 +571,30 @@ func TestParseTypedListMap(t *testing.T) {
 }
 
 func TestParseTypedListNested(t *testing.T) {
-	// [:[:string]] → typed list of typed lists of strings
-	assertParse(t, "[:[:string]]", []engine.Value{
+	// [:[:String]] → typed list of typed lists of strings
+	assertParse(t, "[:[:String]]", []engine.Value{
 		engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TString))),
 	})
 }
 
 func TestParseTypedListDeepNested(t *testing.T) {
-	// [:[:[:number]]] → three levels deep
-	assertParse(t, "[:[:[:number]]]", []engine.Value{
+	// [:[:[:Number]]] → three levels deep
+	assertParse(t, "[:[:[:Number]]]", []engine.Value{
 		engine.NewTypedList(engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)))),
 	})
 }
 
 func TestParseTypedListInExpression(t *testing.T) {
-	// 1 [:string] → integer then typed list
-	assertParse(t, "1 [:string]", []engine.Value{
+	// 1 [:String] → integer then typed list
+	assertParse(t, "1 [:String]", []engine.Value{
 		engine.NewInteger(1),
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedListMapChild(t *testing.T) {
-	// [:{a:string,b:number}] → typed list with multi-key map child
-	got, err := Parse("[:{a:string,b:number}]")
+	// [:{a:String,b:Number}] → typed list with multi-key map child
+	got, err := Parse("[:{a:String,b:Number}]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -611,63 +611,63 @@ func TestParseTypedListMapChild(t *testing.T) {
 // --- Typed map tests (map.child) ---
 
 func TestParseTypedMapString(t *testing.T) {
-	// {:string} → typed map with child type string
-	assertParse(t, "{:string}", []engine.Value{
+	// {:String} → typed map with child type string
+	assertParse(t, "{:String}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedMapNumber(t *testing.T) {
-	// {:number} → typed map with child type number
-	assertParse(t, "{:number}", []engine.Value{
+	// {:Number} → typed map with child type number
+	assertParse(t, "{:Number}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)),
 	})
 }
 
 func TestParseTypedMapBoolean(t *testing.T) {
-	assertParse(t, "{:boolean}", []engine.Value{
+	assertParse(t, "{:Boolean}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TBoolean)),
 	})
 }
 
 func TestParseTypedMapAny(t *testing.T) {
-	assertParse(t, "{:any}", []engine.Value{
+	assertParse(t, "{:Any}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TAny)),
 	})
 }
 
 func TestParseTypedMapList(t *testing.T) {
-	// {:[:number]} → typed map with child type [:number]
-	assertParse(t, "{:[:number]}", []engine.Value{
+	// {:[:Number]} → typed map with child type [:Number]
+	assertParse(t, "{:[:Number]}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber))),
 	})
 }
 
 func TestParseTypedMapNested(t *testing.T) {
-	// {:{:string}} → typed map of typed maps of strings
-	assertParse(t, "{:{:string}}", []engine.Value{
+	// {:{:String}} → typed map of typed maps of strings
+	assertParse(t, "{:{:String}}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TString))),
 	})
 }
 
 func TestParseTypedMapDeepNested(t *testing.T) {
-	// {:{:{:number}}} → three levels deep
-	assertParse(t, "{:{:{:number}}}", []engine.Value{
+	// {:{:{:Number}}} → three levels deep
+	assertParse(t, "{:{:{:Number}}}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)))),
 	})
 }
 
 func TestParseTypedMapInExpression(t *testing.T) {
-	// 1 {:string} → integer then typed map
-	assertParse(t, "1 {:string}", []engine.Value{
+	// 1 {:String} → integer then typed map
+	assertParse(t, "1 {:String}", []engine.Value{
 		engine.NewInteger(1),
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedMapConcreteChild(t *testing.T) {
-	// {:{x:number}} → typed map with map child type
-	got, err := Parse("{:{x:number}}")
+	// {:{x:Number}} → typed map with map child type
+	got, err := Parse("{:{x:Number}}")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -788,8 +788,8 @@ func TestParseMapWithNull(t *testing.T) {
 }
 
 func TestParseMapWithTypeName(t *testing.T) {
-	// {x:number} → map with type literal in data context
-	got, err := Parse(`{x:number}`)
+	// {x:Number} → map with type literal in data context
+	got, err := Parse(`{x:Number}`)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1003,8 +1003,8 @@ func TestParseDataMapWithNestedList(t *testing.T) {
 // --- Map containing typed list child ---
 
 func TestParseMapWithTypedListValue(t *testing.T) {
-	// {x:[:number]} → map key 'x' has typed list value
-	got, err := Parse("{x:[:number]}")
+	// {x:[:Number]} → map key 'x' has typed list value
+	got, err := Parse("{x:[:Number]}")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}

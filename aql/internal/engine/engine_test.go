@@ -1253,7 +1253,7 @@ func TestEdgeTypeForwardMatchesItself(t *testing.T) {
 
 func TestEdgeTypeOpenParenMatchesParen(t *testing.T) {
 	// paren/open should match pattern "paren"
-	tParen := NewType("paren")
+	tParen := NewType("Paren")
 	if !TOpenParen.Matches(tParen) {
 		t.Error("paren/open should match paren")
 	}
@@ -1266,16 +1266,16 @@ func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
 }
 
 func TestEdgeTypeUnrelatedTypes(t *testing.T) {
-	tFoo := NewType("foo/bar")
-	tBaz := NewType("baz")
+	tFoo := NewType("Foo/Bar")
+	tBaz := NewType("Baz")
 	if tFoo.Matches(tBaz) {
 		t.Error("foo/bar should not match baz")
 	}
 }
 
 func TestEdgeTypeDeeplyNested(t *testing.T) {
-	tDeep := NewType("a/b/c/d")
-	tShallow := NewType("a/b")
+	tDeep := NewType("A/B/C/D")
+	tShallow := NewType("A/B")
 	if !tDeep.Matches(tShallow) {
 		t.Error("a/b/c/d should match a/b")
 	}
@@ -3649,8 +3649,8 @@ func TestStackInsertWithHeadroom(t *testing.T) {
 func TestRecordTypeCreation(t *testing.T) {
 	e := New(DefaultRegistry())
 
-	// record [x:number y:number] => record{x:number,y:number}
-	// In the list, each pair x:number becomes a single-key map {x:number}.
+	// record [x:number y:number] => record{x:Number,y:Number}
+	// In the list, each pair x:Number becomes a single-key map {x:Number}.
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
@@ -3666,8 +3666,8 @@ func TestRecordTypeCreation(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:number,y:number}" {
-		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
@@ -3675,7 +3675,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	e := New(DefaultRegistry())
 
 	// def Point record [x:number y:number]
-	// Point => record{x:number,y:number}
+	// Point => record{x:Number,y:Number}
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
@@ -3696,8 +3696,8 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:number,y:number}" {
-		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
@@ -3723,8 +3723,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("x", NewTypeLiteral(TNumber))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:number} true" {
-			t.Errorf("got %s, want record{x:number} true", got)
+		if got != "record{x:Number} true" {
+			t.Errorf("got %s, want record{x:Number} true", got)
 		}
 	})
 
@@ -3761,8 +3761,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2.Set("x", NewTypeLiteral(TNumber))
 		f2.Set("y", NewTypeLiteral(TString))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:number,y:string} true" {
-			t.Errorf("got %s, want record{x:number,y:string} true", got)
+		if got != "record{x:Number,y:String} true" {
+			t.Errorf("got %s, want record{x:Number,y:String} true", got)
 		}
 	})
 
@@ -3776,8 +3776,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("a", NewRecordType(inner2))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{a:record{z:string}} true" {
-			t.Errorf("got %s, want record{a:record{z:string}} true", got)
+		if got != "record{a:record{z:String}} true" {
+			t.Errorf("got %s, want record{a:record{z:String}} true", got)
 		}
 	})
 

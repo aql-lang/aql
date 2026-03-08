@@ -144,7 +144,7 @@ func TestSignatureScoreMixedSpecificity(t *testing.T) {
 
 func TestSignatureScoreDeepType(t *testing.T) {
 	// A 3-level type like "number/integer/positive" has specificity 3
-	deep := NewType("number/integer/positive")
+	deep := NewType("Number/Integer/Positive")
 	sigDeep := Signature{Args: []Type{deep}}
 	sigShallow := Signature{Args: []Type{TInteger}} // specificity 2
 	sd, ss := SignatureScore(&sigDeep), SignatureScore(&sigShallow)
@@ -201,7 +201,7 @@ func TestRankSignaturesNarrowerFirst(t *testing.T) {
 
 func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
 	// 3 args of any (score 303) beats 2 args of deep types (score ~206)
-	deep := NewType("number/integer/positive")
+	deep := NewType("Number/Integer/Positive")
 	sigs := []Signature{
 		{Args: []Type{deep, deep}},        // 200 + 3+3 = 206
 		{Args: []Type{TAny, TAny, TAny}},  // 300 + 1+1+1 = 303

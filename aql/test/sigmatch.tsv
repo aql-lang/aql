@@ -149,7 +149,7 @@ true or false	true
 false or true	true
 
 # For non-boolean, or creates disjunct
-string or none	string|none
+String or None	String|None
 
 # --- Suffix with all args from future (no prefix args) ---
 

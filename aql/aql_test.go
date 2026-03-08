@@ -651,9 +651,9 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 
 func TestNewTypeCustom(t *testing.T) {
 	// Verify NewType creates usable custom types.
-	myType := aql.NewType("custom/special")
-	if myType.String() != "custom/special" {
-		t.Errorf("got %q, want custom/special", myType.String())
+	myType := aql.NewType("Custom/Special")
+	if myType.String() != "Custom/Special" {
+		t.Errorf("got %q, want Custom/Special", myType.String())
 	}
 }
 

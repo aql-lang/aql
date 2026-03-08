@@ -263,7 +263,7 @@ func TestCurryCompose(t *testing.T) {
 
 func TestCurryConvert(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def to_string convert string end`,
+		`def to_string convert String end`,
 		`42 to_string`,
 	})
 	if err != nil {

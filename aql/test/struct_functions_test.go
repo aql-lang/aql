@@ -259,12 +259,12 @@ func TestWalkNested(t *testing.T) {
 // --- walk with before callback ---
 
 func TestWalkBeforeIdentity(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) walk
+	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk
 	// Before callback returns m.value (identity) — tree is preserved unchanged.
 	// The before callback is called pre-order on every node; returning m.value
 	// leaves each node as-is, so the walk produces the original structure.
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) walk`,
+		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -284,10 +284,10 @@ func TestWalkBeforeIdentity(t *testing.T) {
 }
 
 func TestWalkBeforeIdentityNested(t *testing.T) {
-	// AQL: {a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) walk
+	// AQL: {a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) walk
 	// Identity before callback on a nested structure — entire tree preserved.
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) walk`,
+		`{a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -310,13 +310,13 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 }
 
 func TestWalkBeforeReplace(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:map] [any] [99]]) walk
+	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [99]]) walk
 	// Before callback replaces the root node with 99 (a non-node value).
 	// Since 99 is not a map/list, walk does NOT descend into children.
 	// This demonstrates that the before callback controls traversal:
 	// replacing a node with a scalar stops descent into that subtree.
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:map] [any] [99]]) walk`,
+		`{a:1 b:2} (fn [[m:Map] [Any] [99]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -330,12 +330,12 @@ func TestWalkBeforeReplace(t *testing.T) {
 }
 
 func TestWalkBeforeReturnPath(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.path]]) walk
+	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.path]]) walk
 	// Before callback returns the path string for every node.
 	// The root path is "" (empty string), which replaces the root map.
 	// Since a string is not a node, descent stops — result is "".
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:map] [any] [m.path]]) walk`,
+		`{a:1 b:2} (fn [[m:Map] [Any] [m.path]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -351,10 +351,10 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 // --- walk with before AND after callbacks ---
 
 func TestWalkBeforeAfterIdentity(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk
+	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
 	// Both before and after return m.value (identity) — tree is preserved.
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk`,
+		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +374,7 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 }
 
 func TestWalkBeforeAfterPostOrder(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [99]]) walk
+	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [99]]) walk
 	// Before callback is identity (allows descent), after callback replaces
 	// every node with 99 (post-order). Processing order:
 	//   1. before(root) → {a:1 b:2} (identity, descent proceeds)
@@ -385,7 +385,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	//   6. after(root={a:99 b:99}) → 99
 	// Final result: 99
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [99]]) walk`,
+		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [99]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -400,11 +400,11 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 
 func TestWalkBeforeAfterNested(t *testing.T) {
 	// AQL: {a:{x:1 y:2} b:3}
-	//        (fn [[m:map] [any] [m.value]])
-	//        (fn [[m:map] [any] [m.value]]) walk
+	//        (fn [[m:Map] [Any] [m.value]])
+	//        (fn [[m:Map] [Any] [m.value]]) walk
 	// Both callbacks are identity — nested tree preserved through full traversal.
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:{x:1 y:2} b:3} (fn [[m:map] [any] [m.value]]) (fn [[m:map] [any] [m.value]]) walk`,
+		`{a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk`,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -8,16 +8,16 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"any":     TAny,
-	"none":    TNone,
-	"scalar":  TScalar,
-	"number":  TNumber,
-	"integer": TInteger,
-	"string":  TString,
-	"boolean": TBoolean,
-	"atom":    TAtom,
-	"list":    TList,
-	"map":     TMap,
+	"Any":     TAny,
+	"None":    TNone,
+	"Scalar":  TScalar,
+	"Number":  TNumber,
+	"Integer": TInteger,
+	"String":  TString,
+	"Boolean": TBoolean,
+	"Atom":    TAtom,
+	"List":    TList,
+	"Map":     TMap,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -891,9 +891,16 @@ func (e *Engine) couldProduceType(v Value, expected Type) bool {
 		// Registered built-in function: could produce most types.
 		// Specialized internal types (TFnUndef, TFnDef) can only be
 		// produced by specific functions (fn).
-		if e.registry.Lookup(w.Name) != nil {
+		if fn := e.registry.Lookup(w.Name); fn != nil {
 			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
 				return w.Name == "fn"
+			}
+			// A function with suffix precedence will start its own
+			// argument collection, so it won't directly produce a
+			// value that feeds back as a suffix arg for the current
+			// forward. Resolve the current forward early.
+			if fn.SuffixPrecedence {
+				return false
 			}
 			return true
 		}

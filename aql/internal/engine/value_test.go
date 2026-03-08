@@ -14,9 +14,9 @@ func TestValueStringTypes(t *testing.T) {
 		{"bool_true", NewBoolean(true), "true"},
 		{"bool_false", NewBoolean(false), "false"},
 		{"atom", NewAtom("foo"), "foo"},
-		{"none_literal", NewTypeLiteral(TNone), "none"},
-		{"number_literal", NewTypeLiteral(TNumber), "number"},
-		{"string_literal", NewTypeLiteral(TString), "string"},
+		{"none_literal", NewTypeLiteral(TNone), "None"},
+		{"number_literal", NewTypeLiteral(TNumber), "Number"},
+		{"string_literal", NewTypeLiteral(TString), "String"},
 		{"word", NewWord("upper"), "word(upper)"},
 		{"open_paren", NewOpenParen(), "("},
 	}
@@ -52,16 +52,16 @@ func TestValueStringMap(t *testing.T) {
 func TestValueStringTypedList(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
 	got := v.String()
-	if got != "[:string]" {
-		t.Errorf("got %q, want %q", got, "[:string]")
+	if got != "[:String]" {
+		t.Errorf("got %q, want %q", got, "[:String]")
 	}
 }
 
 func TestValueStringTypedMap(t *testing.T) {
 	v := NewTypedMap(NewTypeLiteral(TNumber))
 	got := v.String()
-	if got != "{:number}" {
-		t.Errorf("got %q, want %q", got, "{:number}")
+	if got != "{:Number}" {
+		t.Errorf("got %q, want %q", got, "{:Number}")
 	}
 }
 
@@ -71,8 +71,8 @@ func TestValueStringRecordType(t *testing.T) {
 	fields.Set("y", NewTypeLiteral(TString))
 	v := NewRecordType(fields)
 	got := v.String()
-	if got != "record{x:number,y:string}" {
-		t.Errorf("got %q, want %q", got, "record{x:number,y:string}")
+	if got != "record{x:Number,y:String}" {
+		t.Errorf("got %q, want %q", got, "record{x:Number,y:String}")
 	}
 }
 
@@ -81,16 +81,16 @@ func TestValueStringTableType(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TNumber))
 	v := NewTableType(RecordTypeInfo{Fields: fields})
 	got := v.String()
-	if got != "table{a:number}" {
-		t.Errorf("got %q, want %q", got, "table{a:number}")
+	if got != "table{a:Number}" {
+		t.Errorf("got %q, want %q", got, "table{a:Number}")
 	}
 }
 
 func TestValueStringDisjunct(t *testing.T) {
 	v := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
 	got := v.String()
-	if got != "string|none" {
-		t.Errorf("got %q, want %q", got, "string|none")
+	if got != "String|None" {
+		t.Errorf("got %q, want %q", got, "String|None")
 	}
 }
 

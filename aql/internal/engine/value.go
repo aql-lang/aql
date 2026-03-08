@@ -229,7 +229,7 @@ func NewString(s string) Value {
 // making it a subtype of number/integer. This enables pattern matching
 // on specific values in function signatures.
 func NewInteger(n int64) Value {
-	return Value{VType: NewType(fmt.Sprintf("number/integer/%d", n)), Data: n}
+	return Value{VType: NewType(fmt.Sprintf("Number/Integer/%d", n)), Data: n}
 }
 
 // NewBoolean creates a boolean/true or boolean/false value.
