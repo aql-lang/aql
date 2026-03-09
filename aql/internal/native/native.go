@@ -83,6 +83,7 @@ func All() []NativeFunc {
 		sliceFunc(),
 		padFunc(),
 		itemsFunc(),
+		fetchFunc(),
 		flattenFunc(),
 		filterFunc(),
 		joinFunc(),
