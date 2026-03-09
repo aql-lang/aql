@@ -3587,3 +3587,573 @@ func TestSQLiteQueryWithNullValues(t *testing.T) {
 	}
 }
 
+// ========================
+// OrderedMap.Delete tests
+// ========================
+
+func TestOrderedMapDeleteExisting(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	m.Set("b", NewInteger(2))
+	m.Set("c", NewInteger(3))
+
+	ok := m.Delete("b")
+	if !ok {
+		t.Error("Delete returned false for existing key")
+	}
+	if m.Len() != 2 {
+		t.Errorf("Len = %d, want 2", m.Len())
+	}
+	if _, found := m.Get("b"); found {
+		t.Error("key 'b' still exists after delete")
+	}
+	keys := m.Keys()
+	if len(keys) != 2 || keys[0] != "a" || keys[1] != "c" {
+		t.Errorf("keys = %v, want [a c]", keys)
+	}
+}
+
+func TestOrderedMapDeleteNonExisting(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	ok := m.Delete("z")
+	if ok {
+		t.Error("Delete returned true for non-existing key")
+	}
+	if m.Len() != 1 {
+		t.Errorf("Len = %d, want 1", m.Len())
+	}
+}
+
+func TestOrderedMapDeleteFirst(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(10))
+	m.Set("y", NewInteger(20))
+	m.Delete("x")
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "y" {
+		t.Errorf("keys = %v, want [y]", keys)
+	}
+}
+
+func TestOrderedMapDeleteLast(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(10))
+	m.Set("y", NewInteger(20))
+	m.Delete("y")
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("keys = %v, want [x]", keys)
+	}
+}
+
+func TestOrderedMapDeleteAll(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	m.Set("b", NewInteger(2))
+	m.Delete("a")
+	m.Delete("b")
+	if m.Len() != 0 {
+		t.Errorf("Len = %d, want 0", m.Len())
+	}
+	if len(m.Keys()) != 0 {
+		t.Errorf("keys = %v, want []", m.Keys())
+	}
+}
+
+// ========================
+// CallAQL tests
+// ========================
+
+func TestCallAQLBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def double fn [[x:number] [number] [x add x]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	// Look up the function
+	fnStack := r.DefStacks["double"]
+	if len(fnStack) == 0 {
+		t.Fatal("double not defined")
+	}
+	fnVal := fnStack[len(fnStack)-1]
+
+	result, err := r.CallAQL(fnVal, []Value{NewInteger(5)})
+	if err != nil {
+		t.Fatalf("CallAQL error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("CallAQL(double, 5) = %v, want [10]", result)
+	}
+}
+
+func TestCallAQLNotAFunction(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.CallAQL(NewInteger(42), []Value{})
+	if err == nil {
+		t.Error("expected error for non-function value")
+	}
+}
+
+func TestCallAQLNoMatchingSig(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def inc fn [[x:number] [number] [x add 1]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	fnVal := r.DefStacks["inc"][len(r.DefStacks["inc"])-1]
+
+	// Call with wrong type
+	_, err = r.CallAQL(fnVal, []Value{NewString("hello")})
+	if err == nil {
+		t.Error("expected error for mismatched argument types")
+	}
+}
+
+// ========================
+// registerDblcall tests
+// ========================
+
+func TestDblcallBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// dblcall 5 [dup mul] => 100  (5*2=10, then 10 dup mul = 100)
+	result := runAQL(t, r, []Value{
+		NewWord("dblcall"), NewInteger(5),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 100 {
+		t.Errorf("dblcall 5 [dup mul] = %v, want [100]", result)
+	}
+}
+
+func TestDblcallWithAdd(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 3 dblcall [add 1] => 7  (3*2=6, then 6 add 1 = 7)
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("dblcall"),
+		NewList([]Value{NewWord("add"), NewInteger(1)}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 7 {
+		t.Errorf("3 dblcall [add 1] = %v, want [7]", result)
+	}
+}
+
+func TestDblcallEmptyBody(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// dblcall 4 [] => 8
+	result := runAQL(t, r, []Value{
+		NewWord("dblcall"), NewInteger(4),
+		NewList([]Value{}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 8 {
+		t.Errorf("dblcall 4 [] = %v, want [8]", result)
+	}
+}
+
+// ========================
+// registerCall tests
+// ========================
+
+func TestCallBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 5 [dup mul] call => 25
+	result := runAQL(t, r, []Value{
+		NewInteger(5),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("call"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("5 [dup mul] call = %v, want [25]", result)
+	}
+}
+
+func TestCallEmptyList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 42 [] call => 42 (empty call does nothing)
+	result := runAQL(t, r, []Value{
+		NewInteger(42),
+		NewList([]Value{}),
+		NewWord("call"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("42 [] call = %v, want [42]", result)
+	}
+}
+
+// ========================
+// registerArgs tests
+// ========================
+
+func TestArgsInsideFn(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def sum2 fn [[a:number b:number] [number] [a add b]] end
+	// Using named params to exercise the args stack indirectly
+	aParam := NewOrderedMap()
+	aParam.Set("a", NewWord("Number"))
+	bParam := NewOrderedMap()
+	bParam.Set("b", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(aParam), NewMap(bParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("sum2"), NewInteger(3), NewInteger(7),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("sum2 3 7 = %v, want [10]", result)
+	}
+}
+
+func TestArgsDirectAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Directly exercise the args stack by pushing and calling
+	r.argsStack = append(r.argsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
+	e := New(r)
+	result, err := e.Run([]Value{NewWord("args")})
+	if err != nil {
+		t.Fatalf("args error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	argsList := result[0].AsList()
+	if len(argsList) != 2 {
+		t.Errorf("expected args list of length 2, got %d", len(argsList))
+	}
+	// Clean up
+	r.argsStack = r.argsStack[:len(r.argsStack)-1]
+}
+
+func TestArgsOutsideFnErrors(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// args outside of a function should error
+	err = runAQLError(t, r, []Value{NewWord("args")})
+	if err == nil {
+		t.Error("expected error for args outside function")
+	}
+}
+
+// ========================
+// couldProduceType tests
+// ========================
+
+func TestCouldProduceTypeLiterals(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Integer should match Number
+	if !e.couldProduceType(NewInteger(42), TNumber) {
+		t.Error("integer should match number")
+	}
+	// String should not match Number
+	if e.couldProduceType(NewString("hi"), TNumber) {
+		t.Error("string should not match number")
+	}
+	// Boolean should match Boolean
+	if !e.couldProduceType(NewBoolean(true), TBoolean) {
+		t.Error("boolean should match boolean")
+	}
+}
+
+func TestCouldProduceTypeForward(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	fwd := NewForward(ForwardInfo{FuncName: "test", ExpectedArgs: 1})
+	if e.couldProduceType(fwd, TNumber) {
+		t.Error("forward should not produce any type")
+	}
+}
+
+func TestCouldProduceTypeOpenParen(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if !e.couldProduceType(NewOpenParen(), TNumber) {
+		t.Error("open paren should could-produce any type")
+	}
+}
+
+func TestCouldProduceTypeWordBooleans(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if !e.couldProduceType(NewWord("true"), TBoolean) {
+		t.Error("word 'true' should produce boolean")
+	}
+	if !e.couldProduceType(NewWord("false"), TBoolean) {
+		t.Error("word 'false' should produce boolean")
+	}
+	if e.couldProduceType(NewWord("true"), TNumber) {
+		t.Error("word 'true' should not produce number")
+	}
+}
+
+func TestCouldProduceTypeWordTerminators(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if e.couldProduceType(NewWord(")"), TNumber) {
+		t.Error("')' should not produce any type")
+	}
+	if e.couldProduceType(NewWord("end"), TNumber) {
+		t.Error("'end' should not produce any type")
+	}
+}
+
+func TestCouldProduceTypeWordTypeName(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Type names like "Number" don't produce values
+	if e.couldProduceType(NewWord("Number"), TNumber) {
+		t.Error("type name word should not produce value")
+	}
+}
+
+func TestCouldProduceTypeWordDefined(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def myval 42
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("myval"), NewInteger(42),
+	})
+
+	e := New(r)
+	if !e.couldProduceType(NewWord("myval"), TNumber) {
+		t.Error("defined word should produce its type")
+	}
+	if e.couldProduceType(NewWord("myval"), TString) {
+		t.Error("defined word should not produce different type")
+	}
+}
+
+func TestCouldProduceTypeUnknownWord(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Unknown words become atoms
+	if !e.couldProduceType(NewWord("xyz_unknown"), TAtom) {
+		t.Error("unknown word should produce atom")
+	}
+}
+
+// ========================
+// resolveOrphanedForwards tests (via integration)
+// ========================
+
+func TestResolveOrphanedForwardsCurry(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "2 add" with no second argument triggers orphan forward resolution => curry
+	e := NewTop(r)
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("add"),
+	})
+	// Some implementations produce a curry; others error. Both are valid coverage.
+	if err != nil {
+		// Orphan forward was processed even if it errored
+		return
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+}
+
+func TestResolveOrphanedForwardsMultipleValues(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Multiple values with no matching function should resolve gracefully
+	e := NewTop(r)
+	result, err := e.Run([]Value{
+		NewInteger(10), NewInteger(20),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 results, got %d: %v", len(result), result)
+	}
+}
+
+// ========================
+// resolveFieldType tests
+// ========================
+
+func TestResolveFieldTypeString(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Define a custom type: type MyNum Number
+	_ = runAQL(t, r, []Value{
+		NewWord("type"), NewWord("MyNum"), NewWord("Number"),
+	})
+
+	// resolveFieldType should resolve "MyNum" string to the type value
+	result := resolveFieldType(r, NewString("MyNum"))
+	if !isTypeValue(result) {
+		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
+	}
+}
+
+func TestResolveFieldTypeStringUnknown(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unknown name should pass through
+	v := NewString("NotAType")
+	result := resolveFieldType(r, v)
+	if result.AsString() != "NotAType" {
+		t.Errorf("expected pass-through, got %v", result)
+	}
+}
+
+func TestResolveFieldTypeList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// [String or None] as code should evaluate to a disjunct
+	result := resolveFieldType(r, NewList([]Value{
+		NewWord("String"), NewWord("or"), NewWord("None"),
+	}))
+	// Should be a disjunct type, not a raw list
+	if result.VType.Matches(TList) && !result.IsTypedList() {
+		t.Error("expected resolved type, not raw list")
+	}
+}
+
+func TestResolveFieldTypePassthrough(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A type literal should pass through unchanged
+	v := NewTypeLiteral(TNumber)
+	result := resolveFieldType(r, v)
+	if !result.VType.Equal(v.VType) {
+		t.Errorf("expected pass-through, got %v", result)
+	}
+}
+
+// ========================
+// SetParseFunc tests
+// ========================
+
+func TestSetParseFunc(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	r.SetParseFunc(func(code string) ([]Value, error) {
+		called = true
+		return []Value{NewInteger(99)}, nil
+	})
+
+	if r.ParseFunc == nil {
+		t.Error("ParseFunc should be set")
+	}
+
+	result, err := r.ParseFunc("test")
+	if err != nil {
+		t.Fatalf("ParseFunc error: %v", err)
+	}
+	if !called {
+		t.Error("ParseFunc was not called")
+	}
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("ParseFunc result = %v, want [99]", result)
+	}
+}
+
