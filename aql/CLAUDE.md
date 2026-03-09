@@ -19,21 +19,14 @@ Run a specific test:
 go test ./test/ -run "TestFactorialTypeScaling" -v
 ```
 
-## Dependency Issue: modernc.org/libc
+## Dependencies
 
-The `modernc.org/sqlite` dependency requires `modernc.org/libc`, whose zip may not be present in the Go module cache. DNS resolution to `storage.googleapis.com` can fail in restricted environments, blocking `go mod download`.
+The `github.com/voxgig/struct` module is published as a Go submodule at
+`github.com/voxgig/struct/go`. The `go.mod` replace directive handles this:
 
-**Fix:** Fetch the missing zip via curl, which uses a different resolution path:
-
-```bash
-curl -sL "https://proxy.golang.org/modernc.org/libc/@v/v1.67.6.zip" \
-  -o "$(go env GOMODCACHE)/cache/download/modernc.org/libc/@v/v1.67.6.zip"
+```
+replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 ```
 
-Then build/test with sum checks bypassed (since the zip wasn't fetched through the normal go toolchain):
-
-```bash
-GONOSUMCHECK='*' GONOSUMDB='*' GOPROXY=off go test ./...
-```
-
-If the version changes, update the version string in the curl URL to match what `go.mod` requires.
+All dependencies resolve via the standard Go module proxy. No special
+environment variables or workarounds are needed.
