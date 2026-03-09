@@ -48,7 +48,10 @@ func TestIsTruthyMap(t *testing.T) {
 // TestIfListConditionMarkMove verifies that list conditions are evaluated
 // via mark/move in the main engine (not a sub-engine).
 func TestIfListConditionMarkMove(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if [1 add 2 gt 2] 10 20 — condition evaluates to true (3>2)
 	condList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2), NewWord("gt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -60,7 +63,10 @@ func TestIfListConditionMarkMove(t *testing.T) {
 }
 
 func TestIfListConditionFalseMarkMove(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if [1 gt 2] 10 20 — condition is false
 	condList := NewList([]Value{NewInteger(1), NewWord("gt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -72,7 +78,10 @@ func TestIfListConditionFalseMarkMove(t *testing.T) {
 }
 
 func TestIfScalar2ArgTrue(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if true 42 — 2-arg, scalar true condition
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
@@ -83,7 +92,10 @@ func TestIfScalar2ArgTrue(t *testing.T) {
 }
 
 func TestIfScalar2ArgFalse(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if false 42 — 2-arg, scalar false condition returns nothing
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
@@ -96,7 +108,10 @@ func TestIfScalar2ArgFalse(t *testing.T) {
 // TestIfConditionSharesContext verifies that the condition, evaluated
 // via mark/move in the main engine, shares the parent's context.
 func TestIfConditionSharesContext(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	condList := NewList([]Value{NewWord("context"), NewWord("get"), NewString("flag")})
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("flag"), NewBoolean(true),
@@ -110,7 +125,10 @@ func TestIfConditionSharesContext(t *testing.T) {
 // TestIfConditionCanSetContext verifies that condition evaluation in the
 // main engine can modify the parent's context (unlike the old sub-engine).
 func TestIfConditionCanSetContext(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Condition sets a context value, then we read it after if
 	condList := NewList([]Value{
 		NewWord("context"), NewWord("set"), NewString("seen"), NewBoolean(true),

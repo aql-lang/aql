@@ -7,7 +7,10 @@ import (
 )
 
 func TestRegisterFormat(t *testing.T) {
-	a := New()
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a simple format that wraps text in brackets.
 	a.RegisterFormat("bracket", &bracketFormat{})

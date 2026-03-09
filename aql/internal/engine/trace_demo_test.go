@@ -6,7 +6,10 @@ import (
 )
 
 func TestTraceDemo(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Output = os.Stderr // so it shows with -v
 
 	// trace [1 add 2 mul 3]
@@ -26,7 +29,10 @@ func TestTraceDemo(t *testing.T) {
 }
 
 func TestTraceDemoStringOps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Output = os.Stderr
 
 	// trace ["hello" upper add " WORLD"]
@@ -46,7 +52,10 @@ func TestTraceDemoStringOps(t *testing.T) {
 }
 
 func TestTraceDemoStackOps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Output = os.Stderr
 
 	// trace [1 2 3 rot add mul]

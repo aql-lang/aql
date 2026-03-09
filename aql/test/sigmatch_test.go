@@ -44,7 +44,11 @@ func TestSigMatch(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 
-			eng := engine.NewTop(engine.DefaultRegistry())
+			reg, err := engine.DefaultRegistry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			eng := engine.NewTop(reg)
 			result, err := eng.Run(values)
 
 			if strings.HasPrefix(expected, "ERROR:") {

@@ -28,7 +28,10 @@ func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 // --- Comparison word integration tests ---
 
 func TestEngineLt(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("1 lt 2 = %v, want true", result)
@@ -36,7 +39,10 @@ func TestEngineLt(t *testing.T) {
 }
 
 func TestEngineGt(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(3), NewWord("gt"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("3 gt 1 = %v, want true", result)
@@ -44,7 +50,10 @@ func TestEngineGt(t *testing.T) {
 }
 
 func TestEngineLte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lte"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("1 lte 1 = %v, want true", result)
@@ -52,7 +61,10 @@ func TestEngineLte(t *testing.T) {
 }
 
 func TestEngineGte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("gte"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("2 gte 1 = %v, want true", result)
@@ -60,7 +72,10 @@ func TestEngineGte(t *testing.T) {
 }
 
 func TestEngineEq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("eq"), NewInteger(5)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("5 eq 5 = %v, want true", result)
@@ -68,7 +83,10 @@ func TestEngineEq(t *testing.T) {
 }
 
 func TestEngineNeq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(3)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("5 neq 3 = %v, want true", result)
@@ -80,7 +98,10 @@ func TestEngineNeq(t *testing.T) {
 }
 
 func TestEngineDeq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewString("a"), NewWord("deq"), NewString("a")})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("'a' deq 'a' = %v, want true", result)
@@ -88,8 +109,11 @@ func TestEngineDeq(t *testing.T) {
 }
 
 func TestEngineLtError(t *testing.T) {
-	r := DefaultRegistry()
-	err := runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
 	if err == nil {
 		t.Error("expected error for cross-type lt")
 	}
@@ -98,7 +122,10 @@ func TestEngineLtError(t *testing.T) {
 // --- If word integration tests ---
 
 func TestEngineIf3True(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(1), NewInteger(2),
 	})
@@ -108,7 +135,10 @@ func TestEngineIf3True(t *testing.T) {
 }
 
 func TestEngineIf3False(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(1), NewInteger(2),
 	})
@@ -118,7 +148,10 @@ func TestEngineIf3False(t *testing.T) {
 }
 
 func TestEngineIf2True(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
@@ -128,7 +161,10 @@ func TestEngineIf2True(t *testing.T) {
 }
 
 func TestEngineIf2False(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
 	})
@@ -138,7 +174,10 @@ func TestEngineIf2False(t *testing.T) {
 }
 
 func TestEngineIfListCondition(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if [1 lt 2] 10 20 → should evaluate condition [1 lt 2] → true → return 10
 	condList := NewList([]Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -150,7 +189,10 @@ func TestEngineIfListCondition(t *testing.T) {
 }
 
 func TestEngineIfListBranch(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if true [1 add 2] [3 add 4] → should evaluate [1 add 2] → 3
 	thenList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	elseList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
@@ -165,7 +207,10 @@ func TestEngineIfListBranch(t *testing.T) {
 func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	// Register a side-effect word that increments a counter
 	callCount := 0
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Register("side-effect",
 		Signature{
 			Args: []Type{TAny},
@@ -203,7 +248,10 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 }
 
 func TestEngineIfFalsy(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if 0 1 2 → 0 is falsy → return 2
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewInteger(0), NewInteger(1), NewInteger(2),
@@ -216,7 +264,10 @@ func TestEngineIfFalsy(t *testing.T) {
 // --- File I/O integration tests ---
 
 func TestEngineReadBasic(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("hello world")
 	r.SetFileOps(mem)
@@ -228,7 +279,10 @@ func TestEngineReadBasic(t *testing.T) {
 }
 
 func TestEngineReadWithOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a\nb\nc")
 	r.SetFileOps(mem)
@@ -246,7 +300,10 @@ func TestEngineReadWithOpts(t *testing.T) {
 }
 
 func TestEngineReadJSON(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"x":1}`)
 	r.SetFileOps(mem)
@@ -260,32 +317,41 @@ func TestEngineReadJSON(t *testing.T) {
 }
 
 func TestEngineReadNotFound(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
-	err := runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
+	err = runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
 }
 
 func TestEngineReadUnknownFormat(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("data")
 	r.SetFileOps(mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("yaml"))
-	err := runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
+	err = runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
 	if err == nil {
 		t.Error("expected error for unknown format")
 	}
 }
 
 func TestEngineWriteBasic(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -299,7 +365,10 @@ func TestEngineWriteBasic(t *testing.T) {
 }
 
 func TestEngineWriteWithOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -315,7 +384,10 @@ func TestEngineWriteWithOpts(t *testing.T) {
 }
 
 func TestEngineWriteAppend(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["log.txt"] = []byte("first\n")
 	r.SetFileOps(mem)
@@ -329,7 +401,10 @@ func TestEngineWriteAppend(t *testing.T) {
 }
 
 func TestEngineWriteAppendNewFile(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -342,7 +417,10 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 }
 
 func TestEngineWriteAnyOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -360,7 +438,10 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 }
 
 func TestEngineReadLineEndings(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["crlf.txt"] = []byte("a\r\nb\r\nc")
 	r.SetFileOps(mem)
@@ -383,7 +464,10 @@ func TestEngineReadLineEndings(t *testing.T) {
 // --- Registry integration tests ---
 
 func TestRegistrySetFileOps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 	if r.FileOps != mem {
@@ -392,7 +476,10 @@ func TestRegistrySetFileOps(t *testing.T) {
 }
 
 func TestRegistryMatchNoFunction(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := r.Match("nonexistent", []Value{}, WordInfo{})
 	if result != nil {
 		t.Error("expected nil for nonexistent function")
@@ -402,7 +489,10 @@ func TestRegistryMatchNoFunction(t *testing.T) {
 // --- Additional engine tests for coverage ---
 
 func TestEngineConvert(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 99 string
 	result := runAQL(t, r, []Value{
 		NewWord("convert"), NewInteger(99), NewWord("String"),
@@ -413,7 +503,10 @@ func TestEngineConvert(t *testing.T) {
 }
 
 func TestEngineTypeof(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("typeof"), NewInteger(42)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -421,7 +514,10 @@ func TestEngineTypeof(t *testing.T) {
 }
 
 func TestEngineBase(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
 	if len(result) != 1 || result[0].AsInteger() != 0 {
 		t.Errorf("base integer = %v, want 0", result)
@@ -429,7 +525,10 @@ func TestEngineBase(t *testing.T) {
 }
 
 func TestEngineDef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
 	result := runAQL(t, r, []Value{
@@ -442,7 +541,10 @@ func TestEngineDef(t *testing.T) {
 }
 
 func TestEngineUndef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def foo 42 end foo undef foo end foo
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
@@ -460,7 +562,10 @@ func TestEngineUndef(t *testing.T) {
 }
 
 func TestEngineRecord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := NewTop(r)
 	// Parse a pair list manually: jsonic produces maps for x:number syntax
 	m1 := NewOrderedMap()
@@ -478,7 +583,10 @@ func TestEngineRecord(t *testing.T) {
 }
 
 func TestEngineTable(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := NewTop(r)
 	// Create a record type first, then table
 	m1 := NewOrderedMap()
@@ -494,7 +602,10 @@ func TestEngineTable(t *testing.T) {
 }
 
 func TestEngineUnify(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewTypeLiteral(TNumber), NewWord("unify")})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
@@ -505,7 +616,10 @@ func TestEngineUnify(t *testing.T) {
 }
 
 func TestEngineDo(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	result := runAQL(t, r, []Value{NewWord("do"), list})
 	if len(result) != 1 || result[0].AsInteger() != 3 {
@@ -514,7 +628,10 @@ func TestEngineDo(t *testing.T) {
 }
 
 func TestEngineDoMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)}))
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
@@ -524,7 +641,10 @@ func TestEngineDoMap(t *testing.T) {
 }
 
 func TestEngineOr(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("true or false = %v, want true", result)
@@ -532,7 +652,10 @@ func TestEngineOr(t *testing.T) {
 }
 
 func TestEngineAnd(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("true and false = %v, want false", result)
@@ -540,7 +663,10 @@ func TestEngineAnd(t *testing.T) {
 }
 
 func TestEngineNot(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("not")})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("true not = %v, want false", result)
@@ -548,7 +674,10 @@ func TestEngineNot(t *testing.T) {
 }
 
 func TestEngineConvertStringVariants(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 10 string "hex" → 'a'
 	result := runAQL(t, r, []Value{
 		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("hex"),
@@ -583,7 +712,10 @@ func TestEngineConvertStringVariants(t *testing.T) {
 }
 
 func TestEngineConvertToNumber(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert "42" number → 42
 	result := runAQL(t, r, []Value{
 		NewWord("convert"), NewString("42"), NewWord("Number"),
@@ -618,7 +750,10 @@ func TestEngineConvertToNumber(t *testing.T) {
 }
 
 func TestEngineConvertToBoolean(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 1 boolean → true
 	result := runAQL(t, r, []Value{
 		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
@@ -661,7 +796,10 @@ func TestEngineConvertToBoolean(t *testing.T) {
 }
 
 func TestEngineConvertToAtom(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("convert"), NewInteger(42), NewWord("Atom"),
 	})
@@ -671,7 +809,10 @@ func TestEngineConvertToAtom(t *testing.T) {
 }
 
 func TestEngineBaseTypes(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name     string
 		typeLit  Type
@@ -695,7 +836,10 @@ func TestEngineBaseTypes(t *testing.T) {
 }
 
 func TestEngineFn(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double fn [[number] [number] [dup add]] end 7 double
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -712,7 +856,10 @@ func TestEngineFn(t *testing.T) {
 }
 
 func TestEngineFnNamed(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def square fn [[x:number] [number] [x mul x]] end 5 square
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
@@ -731,7 +878,10 @@ func TestEngineFnNamed(t *testing.T) {
 }
 
 func TestEngineFnCatterPrefixOnly(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [1 "a"|] -> catter -> all args from prefix
 	fnBody := NewList([]Value{
@@ -749,7 +899,10 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 }
 
 func TestEngineFnCatterPartialSuffix(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
 	fnBody := NewList([]Value{
@@ -767,7 +920,10 @@ func TestEngineFnCatterPartialSuffix(t *testing.T) {
 }
 
 func TestEngineFnCatterFullSuffix(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [|] -> catter "c" 3 -> both args from suffix
 	fnBody := NewList([]Value{
@@ -806,7 +962,10 @@ func TestIntegerLiteralType(t *testing.T) {
 }
 
 func TestEngineFnLiteralType(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder only matches the value 0, adds 2 to it
 	fnBody := NewList([]Value{
@@ -824,7 +983,10 @@ func TestEngineFnLiteralType(t *testing.T) {
 }
 
 func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder should NOT match 5 (only matches 0)
 	fnBody := NewList([]Value{
@@ -832,7 +994,7 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("adder"),
 	})
@@ -842,7 +1004,10 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 }
 
 func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def handler fn [[0] [integer] [add 10] [1] [integer] [add 20]] end
 	// handler 0 → 10, handler 1 → 21
 	fnBody := NewList([]Value{
@@ -870,7 +1035,10 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 }
 
 func TestEngineFnDefPrefixOnly(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def doubler/p fn [[x:integer] [integer] [x x add]] end
 	// doubler/p registers as prefix-only: takes args from the stack only,
 	// never collects suffix args via forward.
@@ -890,7 +1058,10 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 }
 
 func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def doubler/p fn [[x:integer] [integer] [x x add]] end
 	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
 	// It should fail because there's nothing on the stack for prefix match.
@@ -899,7 +1070,7 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
 		NewWord("doubler"), NewInteger(5),
 	})
@@ -909,7 +1080,10 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 }
 
 func TestEngineFnAbbreviatedSignature(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// def foo fn [
 	//   [string] [string] [add "Q"]    -- full form
@@ -964,7 +1138,10 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 }
 
 func TestEngineFnAbbreviatedSimple(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double fn [number number [dup add]] end 7 double
 	// All three elements abbreviated (single-valued)
 	fnBody := NewList([]Value{
@@ -982,7 +1159,10 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 }
 
 func TestEngineFnFactorial(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def fact fn [0 integer [drop 1] [x:integer] [integer] [x mul fact (x sub 1)]]
 	fnBody := NewList([]Value{
 		// sig 1 (base case): 0 integer [drop 1]
@@ -1024,7 +1204,10 @@ func TestEngineFnFactorial(t *testing.T) {
 }
 
 func TestEngineFnFactorialNoVars(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Try several variable-free body forms for the recursive case.
 	// Base case is always: 0 integer [drop 1]
 	bodies := []struct {
@@ -1089,7 +1272,10 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 }
 
 func TestEngineFnFactorialNamedZero(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def fact fn [[_:0] integer [1] [x:integer] [integer] [x mul fact (x sub 1)]]
 	// Using {_:0} instead of bare 0 in the base case.
 	// Named param "_" consumes the 0 from the stack, so the body is just [1].
@@ -1137,7 +1323,10 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 }
 
 func TestEngineTypeRecord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// type Point record [x:number y:number] end Point
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1154,7 +1343,10 @@ func TestEngineTypeRecord(t *testing.T) {
 }
 
 func TestEngineMakeRecord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// type P record [x:number y:string] end make P [1 "hi"]
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1177,7 +1369,10 @@ func TestEngineMakeRecord(t *testing.T) {
 }
 
 func TestEngineUnifyMaps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// {x:1} unify {x:1}
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(1))
@@ -1190,7 +1385,10 @@ func TestEngineUnifyMaps(t *testing.T) {
 }
 
 func TestEngineUnifyLists(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	l1 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	l2 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{l1, l2, NewWord("unify")})
@@ -1200,7 +1398,10 @@ func TestEngineUnifyLists(t *testing.T) {
 }
 
 func TestEngineUnifyFail(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
 	if len(result) != 2 || result[1].AsBoolean() {
 		t.Errorf("1 unify 'a' = %v, want false", result)
@@ -1208,7 +1409,10 @@ func TestEngineUnifyFail(t *testing.T) {
 }
 
 func TestEngineUnifyTypedList(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tl := NewTypedList(NewTypeLiteral(TNumber))
 	cl := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{tl, cl, NewWord("unify")})
@@ -1218,7 +1422,10 @@ func TestEngineUnifyTypedList(t *testing.T) {
 }
 
 func TestEngineUnifyTypedMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
 	cm := NewOrderedMap()
 	cm.Set("a", NewInteger(1))
@@ -1230,7 +1437,10 @@ func TestEngineUnifyTypedMap(t *testing.T) {
 }
 
 func TestEngineDisjunct(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// string or none
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TString), NewWord("or"), NewTypeLiteral(TNone),
@@ -1241,7 +1451,10 @@ func TestEngineDisjunct(t *testing.T) {
 }
 
 func TestEngineVar(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// 5 var [[x] x mul x]
 	varBody := NewList([]Value{
 		NewList([]Value{NewWord("x")}),
@@ -1256,7 +1469,10 @@ func TestEngineVar(t *testing.T) {
 }
 
 func TestEngineAddStrings(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
 	if len(result) != 1 || result[0].AsString() != "hello world" {
 		t.Errorf("'hello' add ' world' = %v, want 'hello world'", result)
@@ -1287,7 +1503,10 @@ func TestValToString(t *testing.T) {
 }
 
 func TestEngineReadCSVByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	r.SetFileOps(mem)
@@ -1315,7 +1534,10 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 }
 
 func TestEngineReadTSVByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	r.SetFileOps(mem)
@@ -1335,7 +1557,10 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 }
 
 func TestEngineReadCSVExplicitFormat(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a,b\n1,2")
 	r.SetFileOps(mem)
@@ -1353,7 +1578,10 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 }
 
 func TestEngineReadOverrideExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("hello,world")
 	r.SetFileOps(mem)
@@ -1374,7 +1602,10 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 }
 
 func TestEngineReadJSONByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	r.SetFileOps(mem)
@@ -1391,7 +1622,10 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 // --- Inspect word tests ---
 
 func TestEngineInspectBuiltin(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// inspect add => word_inspection map
 	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
 	if len(result) != 1 {
@@ -1440,7 +1674,10 @@ func TestEngineInspectBuiltin(t *testing.T) {
 }
 
 func TestEngineInspectUserDefined(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double [2 mul] ; inspect double
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
@@ -1463,7 +1700,10 @@ func TestEngineInspectUserDefined(t *testing.T) {
 }
 
 func TestEngineInspectUnknown(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("nonexistent")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -1482,7 +1722,10 @@ func TestEngineInspectUnknown(t *testing.T) {
 }
 
 func TestEngineInspectDotAccess(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// inspect upper .name => 'upper'
 	result := runAQL(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
@@ -1523,7 +1766,10 @@ func TestFormatFromExt(t *testing.T) {
 // --- Return type validation tests ---
 
 func TestEngineFnReturnTypeCorrect(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double fn [[number] [number] [dup add]] end
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1540,7 +1786,10 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeWrong(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def bad fn [[number] [string] [dup add]] end
 	// Returns a number but declares string return type.
 	fnBody := NewList([]Value{
@@ -1548,7 +1797,7 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("bad"),
 	})
@@ -1561,7 +1810,10 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 }
 
 func TestEngineFnReturnCountWrong(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def toomany fn [[number] [number number] [dup]] end
 	// Body produces 2 values but signature declares 2 returns, dup produces 2 from 1.
 	// Actually let's make it expect 1 but body produces 2.
@@ -1570,7 +1822,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup")}), // produces 2 values, signature expects 1
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("toomany"),
 	})
@@ -1583,7 +1835,10 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeAny(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def identity fn [[any] [any] []] end
 	// [any] return type should accept any value.
 	fnBody := NewList([]Value{
@@ -1601,7 +1856,10 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def dbl fn [[number] [] [dup add]] end
 	// Empty return sig means no checking (backwards compat).
 	fnBody := NewList([]Value{
@@ -1619,7 +1877,10 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def dup2 fn [[number] [number number] [dup]] end
 	// Returns 2 numbers.
 	fnBody := NewList([]Value{
@@ -1637,7 +1898,10 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeNamedParams(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def square fn [[x:number] [number] [x mul x]] end
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
@@ -1656,7 +1920,10 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def isbig fn [[x:number] [number] [x gt 10]] end
 	// Declares number return but body returns boolean via gt.
 	xParam := NewOrderedMap()
@@ -1666,7 +1933,7 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("isbig"),
 	})
@@ -1679,7 +1946,10 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 }
 
 func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def add1 fn [[number] [number] [1 add] [string] [string] ["1" add]] end
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1707,7 +1977,10 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 }
 
 func TestPiecemealDef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Define foo with number sig, then add string sig
 	numBody := NewList([]Value{
@@ -1745,7 +2018,10 @@ func TestPiecemealDef(t *testing.T) {
 }
 
 func TestPiecemealUndefPopsRecent(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1774,7 +2050,10 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 }
 
 func TestFnUndefTargeted(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1811,7 +2090,10 @@ func TestFnUndefTargeted(t *testing.T) {
 }
 
 func TestFnUndefTargetedReverse(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1847,7 +2129,10 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 }
 
 func TestFnUndefNonExistentNoOp(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1877,7 +2162,10 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 }
 
 func TestFnUndefRemovesAll(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -1906,7 +2194,10 @@ func TestFnUndefRemovesAll(t *testing.T) {
 }
 
 func TestPiecemealStackUnwind(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// def A (number -> dup mul), def B (string -> dup add), undef B, A still works
 	bodyA := NewList([]Value{

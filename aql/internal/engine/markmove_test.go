@@ -10,7 +10,10 @@ import (
 // Equivalent to: [11, mark(A), 22, printstr "x", 33, move(A)]
 // Expected: prints "xx", stack result is [11, 22, 33]
 func TestMarkMoveBasic(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -58,7 +61,10 @@ func TestMarkMoveBasic(t *testing.T) {
 // TestMarkMoveOneShotRemoval verifies mark/move are removed after one trigger,
 // preventing infinite loops.
 func TestMarkMoveOneShotRemoval(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -90,12 +96,15 @@ func TestMarkMoveOneShotRemoval(t *testing.T) {
 
 // TestMarkMoveNotFound tests error when move references nonexistent mark.
 func TestMarkMoveNotFound(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	input := []Value{
 		NewMove("nonexistent", "test: dangling move"),
 	}
 
-	err := runAQLError(t, r, input)
+	err = runAQLError(t, r, input)
 	if err == nil {
 		t.Fatal("expected error for move with missing mark")
 	}
@@ -109,7 +118,10 @@ func TestMarkMoveNotFound(t *testing.T) {
 
 // TestMarkMoveMultiplePairs tests multiple independent mark/move pairs.
 func TestMarkMoveMultiplePairs(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -161,7 +173,10 @@ func TestMarkMoveMultiplePairs(t *testing.T) {
 
 // TestMarkMoveWithLiterals tests that literals between mark/move survive.
 func TestMarkMoveWithLiterals(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	id := NextMarkID()
 	// [1, mark, 2, 3, add, move] → first pass: 2+3=5, move triggers,
@@ -246,14 +261,17 @@ func TestNextMarkIDUnique(t *testing.T) {
 
 // TestHaltOnUndefinedStackEntry tests that the engine halts on a zero-value entry.
 func TestHaltOnUndefinedStackEntry(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	input := []Value{
 		NewInteger(1),
 		{}, // undefined/zero Value
 		NewInteger(3),
 	}
 
-	err := runAQLError(t, r, input)
+	err = runAQLError(t, r, input)
 	if err == nil {
 		t.Fatal("expected error for undefined stack entry")
 	}

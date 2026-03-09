@@ -8,7 +8,10 @@ import (
 
 // TestForCount tests for with an integer count: for 3 [print i]
 func TestForCount(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -32,7 +35,10 @@ func TestForCount(t *testing.T) {
 
 // TestForRange tests for with a [start, end] range.
 func TestForRange(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -55,7 +61,10 @@ func TestForRange(t *testing.T) {
 
 // TestForRangeStep tests for with a [start, end, step] range.
 func TestForRangeStep(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -78,7 +87,10 @@ func TestForRangeStep(t *testing.T) {
 
 // TestForZeroIterations tests that for with 0 count produces nothing.
 func TestForZeroIterations(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -98,7 +110,10 @@ func TestForZeroIterations(t *testing.T) {
 
 // TestForBodyAccumulates tests that body results accumulate on the stack.
 func TestForBodyAccumulates(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// for 3 [i] → each iteration pushes i to results → [0, 1, 2]
 	result := runAQL(t, r, []Value{
@@ -119,7 +134,10 @@ func TestForBodyAccumulates(t *testing.T) {
 
 // TestForPrintstr tests the example from the spec: for 3 [printstr "x"] → "xxx"
 func TestForPrintstr(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -136,7 +154,10 @@ func TestForPrintstr(t *testing.T) {
 
 // TestForBreak tests that break exits the loop early.
 func TestForBreak(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -165,7 +186,10 @@ func TestForBreak(t *testing.T) {
 
 // TestForContinue tests that continue skips to the next iteration.
 func TestForContinue(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -193,8 +217,11 @@ func TestForContinue(t *testing.T) {
 
 // TestForStepZero tests that step=0 is an error.
 func TestForStepZero(t *testing.T) {
-	r := DefaultRegistry()
-	err := runAQLError(t, r, []Value{
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(0), NewInteger(10), NewInteger(0)}),
 		NewList([]Value{NewWord("i")}),
@@ -209,7 +236,10 @@ func TestForStepZero(t *testing.T) {
 
 // TestForNegativeStep tests counting down with a negative step.
 func TestForNegativeStep(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -233,7 +263,10 @@ func TestForNegativeStep(t *testing.T) {
 // TestForNoStackGrowth verifies the loop doesn't expand the body N times.
 // A large iteration count should work without hitting step limits.
 func TestForNoStackGrowth(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -251,7 +284,10 @@ func TestForNoStackGrowth(t *testing.T) {
 
 // TestForIteratorScoping tests that the iterator doesn't leak after the loop.
 func TestForIteratorScoping(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// After "for 3 [i]", the word "i" should resolve to atom (not integer)
 	result := runAQL(t, r, []Value{

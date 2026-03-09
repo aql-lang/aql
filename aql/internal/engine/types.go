@@ -15,46 +15,57 @@ type Type struct {
 
 // Well-known types.
 var (
-	TAny          = NewType("Any")
-	TNone         = NewType("None")
-	TScalar       = NewType("Scalar")
-	TString       = NewType("String")
-	TStringProper = NewType("String/Proper")
-	TStringEmpty  = NewType("String/Empty")
-	TNumber       = NewType("Number")
-	TInteger      = NewType("Number/Integer")
-	TBoolean      = NewType("Boolean")
-	TBooleanTrue  = NewType("Boolean/True")
-	TBooleanFalse = NewType("Boolean/False")
-	TAtom         = NewType("Atom")
-	TList         = NewType("List")
-	TMap          = NewType("Map")
-	TWord         = NewType("Word")
-	TForward      = NewType("Forward")
-	TOpenParen    = NewType("Paren/Open")
-	TFnDef        = NewType("Fndef")
-	TFnUndef      = NewType("Fnundef")
-	TFunction     = NewType("Function")
-	TReturnCheck     = NewType("Returncheck")
-	TDisjunct        = NewType("Disjunct")
-	TWordInspection  = NewType("Map/Word_inspection")
-	TMark            = NewType("Mark")
-	TMove            = NewType("Move")
-	TModule          = NewType("Module")
+	TAny          = mustType("Any")
+	TNone         = mustType("None")
+	TScalar       = mustType("Scalar")
+	TString       = mustType("String")
+	TStringProper = mustType("String/Proper")
+	TStringEmpty  = mustType("String/Empty")
+	TNumber       = mustType("Number")
+	TInteger      = mustType("Number/Integer")
+	TBoolean      = mustType("Boolean")
+	TBooleanTrue  = mustType("Boolean/True")
+	TBooleanFalse = mustType("Boolean/False")
+	TAtom         = mustType("Atom")
+	TList         = mustType("List")
+	TMap          = mustType("Map")
+	TWord         = mustType("Word")
+	TForward      = mustType("Forward")
+	TOpenParen    = mustType("Paren/Open")
+	TFnDef        = mustType("Fndef")
+	TFnUndef      = mustType("Fnundef")
+	TFunction     = mustType("Function")
+	TReturnCheck     = mustType("Returncheck")
+	TDisjunct        = mustType("Disjunct")
+	TWordInspection  = mustType("Map/Word_inspection")
+	TMark            = mustType("Mark")
+	TMove            = mustType("Move")
+	TModule          = mustType("Module")
 )
+
+// mustType is used only for well-known type constants at init time.
+// It panics on invalid paths — acceptable because these are compile-time
+// constants whose correctness is verified by tests.
+func mustType(path string) Type {
+	t, err := NewType(path)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
 
 // NewType creates a Type from a slash-separated path, e.g. "String/Proper".
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
-func NewType(path string) Type {
+func NewType(path string) (Type, error) {
 	parts := strings.Split(path, "/")
 	for _, p := range parts {
 		r, _ := utf8.DecodeRuneInString(p)
 		if unicode.IsLetter(r) && !unicode.IsUpper(r) {
-			panic(fmt.Sprintf("aql: type part %q in %q must start with an uppercase letter", p, path))
+			return Type{}, fmt.Errorf("aql: type part %q in %q must start with an uppercase letter", p, path)
 		}
 	}
-	return Type{Parts: parts}
+	return Type{Parts: parts}, nil
 }
 
 // Matches reports whether this type satisfies the given pattern.

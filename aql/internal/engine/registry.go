@@ -36,10 +36,10 @@ type Registry struct {
 }
 
 // NewRegistry creates an empty registry.
-func NewRegistry() *Registry {
+func NewRegistry() (*Registry, error) {
 	sqlStore, err := NewSQLiteStore()
 	if err != nil {
-		panic("failed to initialize SQLite store: " + err.Error())
+		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}
 	return &Registry{
 		funcs:     make(map[string]*Function),
@@ -52,7 +52,7 @@ func NewRegistry() *Registry {
 		Input:     os.Stdin,
 		SQLite:    sqlStore,
 		Modules:   make(map[string]ModuleDesc),
-	}
+	}, nil
 }
 
 // NextModuleID generates a unique module identifier.
@@ -132,10 +132,13 @@ func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives.
-func DefaultRegistry() *Registry {
-	r := NewRegistry()
+func DefaultRegistry() (*Registry, error) {
+	r, err := NewRegistry()
+	if err != nil {
+		return nil, err
+	}
 	registerBuiltins(r)
-	return r
+	return r, nil
 }
 
 func registerBuiltins(r *Registry) {
@@ -1199,7 +1202,10 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 func parseFnReturns(outputSig Value) ([]Type, error) {
 	if !outputSig.VType.Equal(TList) {
 		// Abbreviation: single value treated as [value].
-		t := resolveSigType(outputSig)
+		t, err := resolveSigType(outputSig)
+		if err != nil {
+			return nil, err
+		}
 		return []Type{t}, nil
 	}
 	elems := outputSig.AsList()
@@ -1208,7 +1214,11 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 	}
 	types := make([]Type, len(elems))
 	for i, e := range elems {
-		types[i] = resolveSigType(e)
+		var err error
+		types[i], err = resolveSigType(e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return types, nil
 }
@@ -1236,13 +1246,19 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			}
 			name := keys[0]
 			typeVal, _ := m.Get(name)
-			paramType := resolveSigType(typeVal)
+			paramType, err := resolveSigType(typeVal)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+			}
 			params = append(params, FnParam{Name: name, Type: paramType})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
 			typeName := elem.AsWord().Name
-			paramType := resolveTypeName(typeName)
+			paramType, err := resolveTypeName(typeName)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
+			}
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
@@ -1270,10 +1286,10 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 }
 
 // resolveSigType converts a Value (from a pair's value side) to a Type.
-func resolveSigType(v Value) Type {
+func resolveSigType(v Value) (Type, error) {
 	if v.Data == nil {
 		// Type literal (e.g., number, string) — already resolved by parser
-		return v.VType
+		return v.VType, nil
 	}
 	if v.IsWord() {
 		return resolveTypeName(v.AsWord().Name)
@@ -1283,32 +1299,32 @@ func resolveSigType(v Value) Type {
 	}
 	// Literal values (integers, booleans) carry their literal type.
 	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
-		return v.VType
+		return v.VType, nil
 	}
-	return TAny
+	return TAny, nil
 }
 
 // resolveTypeName maps a type name string to its engine Type.
-func resolveTypeName(name string) Type {
+func resolveTypeName(name string) (Type, error) {
 	switch name {
 	case "Any":
-		return TAny
+		return TAny, nil
 	case "None":
-		return TNone
+		return TNone, nil
 	case "Number":
-		return TNumber
+		return TNumber, nil
 	case "Integer":
-		return TInteger
+		return TInteger, nil
 	case "String":
-		return TString
+		return TString, nil
 	case "Boolean":
-		return TBoolean
+		return TBoolean, nil
 	case "List":
-		return TList
+		return TList, nil
 	case "Function":
-		return TFunction
+		return TFunction, nil
 	case "Map":
-		return TMap
+		return TMap, nil
 	default:
 		return NewType(name)
 	}
@@ -2642,7 +2658,10 @@ func registerModule(r *Registry) {
 // runModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
 func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
-	modReg := DefaultRegistry()
+	modReg, err := DefaultRegistry()
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
+	}
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
@@ -2706,7 +2725,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		input[i] = promoteToWord(e)
 	}
 	sub := New(modReg)
-	_, err := sub.Run(input)
+	_, err = sub.Run(input)
 	if err != nil {
 		return ModuleDesc{}, err
 	}
