@@ -33,7 +33,11 @@ func Start(in io.Reader, out io.Writer) {
 	defer rl.Close()
 
 	// Shared registry so set/get state persists across REPL lines.
-	registry := engine.DefaultRegistry()
+	registry, regErr := engine.DefaultRegistry()
+	if regErr != nil {
+		fmt.Fprintf(out, "init error: %s\n", regErr)
+		return
+	}
 	registry.SetParseFunc(parser.Parse)
 	registry.Output = out
 

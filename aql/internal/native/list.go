@@ -5,9 +5,11 @@ import (
 )
 
 // listFunc returns the "list" native function definition.
-// list has suffix precedence and two signatures:
-//   - [table]       — returns all records from the table
+// list has suffix precedence and four signatures:
 //   - [table, map]  — returns records whose fields match the map's key-value pairs
+//   - [table]       — returns all records from the table
+//   - [map, map]    — record type + filter: returns empty table
+//   - [map]         — record type: returns empty table
 func listFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "list",
@@ -21,12 +23,20 @@ func listFunc() NativeFunc {
 				Args:    []engine.Type{engine.TList},
 				Handler: listAllHandler,
 			},
+			{
+				Args:    []engine.Type{engine.TMap, engine.TMap},
+				Handler: listRecordFilterHandler,
+			},
+			{
+				Args:    []engine.Type{engine.TMap},
+				Handler: listRecordAllHandler,
+			},
 		},
 	}
 }
 
 // listAllHandler returns all records from a table as a list.
-func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
@@ -36,7 +46,7 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // listFilterHandler returns records from a table that match the given map.
 // A record matches when every key-value pair in the filter map has an equal
 // value in the corresponding record field.
-func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value) ([]engine.Value, error) {
+func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	rows := args[0].AsList()
 	filter := args[1].AsMap()
 
@@ -55,6 +65,18 @@ func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 		matched = []engine.Value{}
 	}
 	return []engine.Value{engine.NewList(matched)}, nil
+}
+
+// listRecordAllHandler handles list on a record type (not a table).
+// Returns an empty table.
+func listRecordAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewList([]engine.Value{})}, nil
+}
+
+// listRecordFilterHandler handles list on a record type with a filter.
+// Returns an empty table.
+func listRecordFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	return []engine.Value{engine.NewList([]engine.Value{})}, nil
 }
 
 // recordMatches reports whether all key-value pairs in filter are present

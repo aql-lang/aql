@@ -50,6 +50,21 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
+// Delete removes a key-value pair. Returns true if the key existed.
+func (m *OrderedMap) Delete(key string) bool {
+	if _, exists := m.vals[key]; !exists {
+		return false
+	}
+	delete(m.vals, key)
+	for i, k := range m.keys {
+		if k == key {
+			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
 // For example, [:string] constrains all list elements to be strings,
 // and {:string} constrains all map values to be strings.
@@ -214,7 +229,9 @@ func NewString(s string) Value {
 // making it a subtype of number/integer. This enables pattern matching
 // on specific values in function signatures.
 func NewInteger(n int64) Value {
-	return Value{VType: NewType(fmt.Sprintf("number/integer/%d", n)), Data: n}
+	// Format always starts with "Number/Integer/" — cannot fail.
+	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
+	return Value{VType: t, Data: n}
 }
 
 // NewBoolean creates a boolean/true or boolean/false value.
@@ -332,6 +349,13 @@ func NewMoveIf(to, reason string, ifCont *IfCont) Value {
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
+}
+
+// NewFunction creates a function reference value. The underlying data is a
+// FnDefInfo, but the type is TFunction so it can be matched by function-typed
+// parameters and passed to other functions without being called.
+func NewFunction(info FnDefInfo) Value {
+	return Value{VType: TFunction, Data: info}
 }
 
 // NewFnUndef creates a function undef spec value for targeted signature removal.

@@ -35,7 +35,10 @@ func makeTestTable(r *Registry) {
 }
 
 func TestQueryFrom(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -50,7 +53,10 @@ func TestQueryFrom(t *testing.T) {
 }
 
 func TestQueryFromSelect(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -63,7 +69,10 @@ func TestQueryFromSelect(t *testing.T) {
 }
 
 func TestQueryFromWhereSimple(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	// from people where [name eq "alice"]
@@ -79,7 +88,10 @@ func TestQueryFromWhereSimple(t *testing.T) {
 }
 
 func TestQueryFromWhere(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	// from people where [age gt 28]
@@ -113,7 +125,10 @@ func TestQueryFromWhere(t *testing.T) {
 }
 
 func TestQueryFromOrderBy(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -126,7 +141,10 @@ func TestQueryFromOrderBy(t *testing.T) {
 }
 
 func TestQueryFromLimit(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -139,7 +157,10 @@ func TestQueryFromLimit(t *testing.T) {
 }
 
 func TestQueryFromOffset(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -152,7 +173,10 @@ func TestQueryFromOffset(t *testing.T) {
 }
 
 func TestQueryFromDistinct(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -165,7 +189,10 @@ func TestQueryFromDistinct(t *testing.T) {
 }
 
 func TestQueryFromAs(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -178,7 +205,10 @@ func TestQueryFromAs(t *testing.T) {
 }
 
 func TestQueryFromGroupBy(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -191,7 +221,10 @@ func TestQueryFromGroupBy(t *testing.T) {
 }
 
 func TestQueryStarWord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("star")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -199,7 +232,10 @@ func TestQueryStarWord(t *testing.T) {
 }
 
 func TestQueryMaterializeSelectStar(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	// from people select star — triggers full materialization pipeline
@@ -224,7 +260,10 @@ func TestQueryMaterializeSelectStar(t *testing.T) {
 }
 
 func TestQueryJoin(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	// Create a second table "scores"
@@ -254,7 +293,10 @@ func TestQueryJoin(t *testing.T) {
 }
 
 func TestQueryUnion(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	// Create second table with same schema
@@ -562,7 +604,10 @@ func TestUnifyMapLiteralWithConcrete(t *testing.T) {
 // ========================
 
 func TestDotMapAtom(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dot")})
@@ -572,7 +617,10 @@ func TestDotMapAtom(t *testing.T) {
 }
 
 func TestDotMapString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dot")})
@@ -582,7 +630,10 @@ func TestDotMapString(t *testing.T) {
 }
 
 func TestDotListIndex(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
 	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("dot")})
 	if len(result) != 1 || result[0].AsString() != "b" {
@@ -591,7 +642,10 @@ func TestDotListIndex(t *testing.T) {
 }
 
 func TestDotListOutOfBounds(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := NewList([]Value{NewString("a")})
 	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("dot")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
@@ -600,7 +654,10 @@ func TestDotListOutOfBounds(t *testing.T) {
 }
 
 func TestDotMapMissing(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dot")})
@@ -610,7 +667,10 @@ func TestDotMapMissing(t *testing.T) {
 }
 
 func TestDotMapIntegerKey(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("dot")})
@@ -620,7 +680,10 @@ func TestDotMapIntegerKey(t *testing.T) {
 }
 
 func TestDotNone(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dot")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
@@ -628,7 +691,10 @@ func TestDotNone(t *testing.T) {
 }
 
 func TestDotrMapSuccess(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dotr")})
@@ -638,10 +704,13 @@ func TestDotrMapSuccess(t *testing.T) {
 }
 
 func TestDotrMapMissingError(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err := runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -651,20 +720,26 @@ func TestDotrMapMissingError(t *testing.T) {
 }
 
 func TestDotrNoneError(t *testing.T) {
-	r := DefaultRegistry()
-	err := runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dotr")})
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}
-	if !strings.Contains(err.Error(), "none") {
-		t.Errorf("expected 'none' error, got: %v", err)
+	if !strings.Contains(err.Error(), "None") {
+		t.Errorf("expected 'None' error, got: %v", err)
 	}
 }
 
 func TestDotrListOutOfBounds(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := NewList([]Value{NewString("a")})
-	err := runAQLError(t, r, []Value{list, NewInteger(5), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{list, NewInteger(5), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for out of bounds")
 	}
@@ -674,7 +749,10 @@ func TestDotrListOutOfBounds(t *testing.T) {
 }
 
 func TestDotrMapStringKey(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dotr")})
@@ -684,17 +762,23 @@ func TestDotrMapStringKey(t *testing.T) {
 }
 
 func TestDotrMapStringMissing(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err := runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for missing string key")
 	}
 }
 
 func TestDotrMapIntegerKey(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("5", NewString("five"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("dotr")})
@@ -704,10 +788,13 @@ func TestDotrMapIntegerKey(t *testing.T) {
 }
 
 func TestDotrMapIntegerKeyMissing(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
-	err := runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for missing integer key")
 	}
@@ -718,7 +805,10 @@ func TestDotrMapIntegerKeyMissing(t *testing.T) {
 // ========================
 
 func TestMakeRecordPositional(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// type Point record [x:number y:number]
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
@@ -748,7 +838,10 @@ func singleMap(key string, val Value) *OrderedMap {
 }
 
 func TestMakeRecordNamed(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("type"), NewWord("Pt"),
 		NewWord("record"), NewList([]Value{
@@ -773,7 +866,10 @@ func TestMakeRecordNamed(t *testing.T) {
 }
 
 func TestMakeRecordMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(5))
 	src.Set("y", NewInteger(6))
@@ -795,9 +891,12 @@ func TestMakeRecordMap(t *testing.T) {
 // ========================
 
 func TestConvertIntToString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("string"),
+		NewWord("convert"), NewInteger(42), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "42" {
 		t.Errorf("expected '42', got %v", result)
@@ -805,9 +904,12 @@ func TestConvertIntToString(t *testing.T) {
 }
 
 func TestConvertIntToStringHex(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewString("hex"),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -815,9 +917,12 @@ func TestConvertIntToStringHex(t *testing.T) {
 }
 
 func TestConvertIntToStringBin(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("bin"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
 		t.Errorf("expected '1010', got %v", result)
@@ -825,9 +930,12 @@ func TestConvertIntToStringBin(t *testing.T) {
 }
 
 func TestConvertIntToStringOct(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("string"), NewString("oct"),
+		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
 		t.Errorf("expected '10', got %v", result)
@@ -835,9 +943,12 @@ func TestConvertIntToStringOct(t *testing.T) {
 }
 
 func TestConvertStringToNumber(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("99"), NewWord("number"),
+		NewWord("convert"), NewString("99"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99, got %v", result)
@@ -845,9 +956,12 @@ func TestConvertStringToNumber(t *testing.T) {
 }
 
 func TestConvertBoolToString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("string"),
+		NewWord("convert"), NewBoolean(true), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "true" {
 		t.Errorf("expected 'true', got %v", result)
@@ -855,9 +969,12 @@ func TestConvertBoolToString(t *testing.T) {
 }
 
 func TestConvertIntToBool(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("boolean"),
+		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -865,9 +982,12 @@ func TestConvertIntToBool(t *testing.T) {
 }
 
 func TestConvertIntToBoolZero(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("boolean"),
+		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("expected false, got %v", result)
@@ -875,9 +995,12 @@ func TestConvertIntToBoolZero(t *testing.T) {
 }
 
 func TestConvertStringToBool(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("boolean"),
+		NewWord("convert"), NewString("true"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -885,11 +1008,14 @@ func TestConvertStringToBool(t *testing.T) {
 }
 
 func TestConvertWithSettingsMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	settings := NewOrderedMap()
 	settings.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewMap(settings),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewMap(settings),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -901,7 +1027,10 @@ func TestConvertWithSettingsMap(t *testing.T) {
 // ========================
 
 func TestVarStringName(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// 5 var [["x"] x mul x]
 	result := runAQL(t, r, []Value{
 		NewInteger(5),
@@ -916,7 +1045,10 @@ func TestVarStringName(t *testing.T) {
 }
 
 func TestVarWithDefault(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// var [[[x 10]] x add 1]
 	result := runAQL(t, r, []Value{
 		NewWord("var"), NewList([]Value{
@@ -1046,7 +1178,7 @@ func TestTraceColorize(t *testing.T) {
 		{NewBoolean(true), "true"},
 		{NewBoolean(false), "false"},
 		{NewAtom("foo"), "foo"},
-		{NewTypeLiteral(TNumber), "number"},
+		{NewTypeLiteral(TNumber), "Number"},
 		{NewList([]Value{NewInteger(1)}), "1"},
 	}
 	for _, tc := range cases {
@@ -1115,7 +1247,10 @@ func TestTraceVisibleLen(t *testing.T) {
 }
 
 func TestRunTrace(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(1), NewWord("add"), NewInteger(2)}
@@ -1137,14 +1272,17 @@ func TestRunTrace(t *testing.T) {
 
 func TestRunTraceLong(t *testing.T) {
 	// Force multi-line wrapping by using a long expression
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := make([]Value, 0)
 	for i := 0; i < 30; i++ {
 		tokens = append(tokens, NewInteger(int64(i)))
 	}
-	_, err := runTrace(r, tokens, &buf)
+	_, err = runTrace(r, tokens, &buf)
 	if err != nil {
 		t.Fatalf("runTrace error: %v", err)
 	}
@@ -1163,7 +1301,10 @@ func TestTraceWrapEmpty(t *testing.T) {
 
 func TestStepEndNoForward(t *testing.T) {
 	// "end" with no pending forward should just be removed
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("end")})
 	if len(result) != 1 || result[0].AsInteger() != 1 {
 		t.Errorf("expected [1], got %v", result)
@@ -1172,7 +1313,10 @@ func TestStepEndNoForward(t *testing.T) {
 
 func TestDefEndExplicit(t *testing.T) {
 	// "def foo 42 end foo" — end terminates def's suffix collection
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
 		NewWord("foo"),
@@ -1184,7 +1328,10 @@ func TestDefEndExplicit(t *testing.T) {
 
 func TestParenResolvesForward(t *testing.T) {
 	// (1 add 2) — paren should resolve the forward
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 	})
@@ -1194,8 +1341,11 @@ func TestParenResolvesForward(t *testing.T) {
 }
 
 func TestUnmatchedCloseParen(t *testing.T) {
-	r := DefaultRegistry()
-	err := runAQLError(t, r, []Value{NewInteger(1), NewWord(")")})
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{NewInteger(1), NewWord(")")})
 	if err == nil {
 		t.Fatal("expected error for unmatched close paren")
 	}
@@ -1220,7 +1370,7 @@ func TestResolveWordValueFalse(t *testing.T) {
 }
 
 func TestResolveWordValueNone(t *testing.T) {
-	v := resolveWordValue(NewWord("none"))
+	v := resolveWordValue(NewWord("None"))
 	if !v.VType.Equal(TNone) {
 		t.Errorf("expected none, got %s", v)
 	}
@@ -1245,21 +1395,30 @@ func TestResolveWordValueNonWord(t *testing.T) {
 // ========================
 
 func TestResolveSigTypeTypeLiteral(t *testing.T) {
-	tp := resolveSigType(NewTypeLiteral(TNumber))
+	tp, err := resolveSigType(NewTypeLiteral(TNumber))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Equal(TNumber) {
 		t.Errorf("expected number, got %s", tp)
 	}
 }
 
 func TestResolveSigTypeWord(t *testing.T) {
-	tp := resolveSigType(NewWord("string"))
+	tp, err := resolveSigType(NewWord("String"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Equal(TString) {
 		t.Errorf("expected string, got %s", tp)
 	}
 }
 
 func TestResolveSigTypeString(t *testing.T) {
-	tp := resolveSigType(NewString("boolean"))
+	tp, err := resolveSigType(NewString("Boolean"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Equal(TBoolean) {
 		t.Errorf("expected boolean, got %s", tp)
 	}
@@ -1267,7 +1426,10 @@ func TestResolveSigTypeString(t *testing.T) {
 
 func TestResolveSigTypeInteger(t *testing.T) {
 	v := NewInteger(42)
-	tp := resolveSigType(v)
+	tp, err := resolveSigType(v)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Matches(TInteger) {
 		t.Errorf("expected integer type, got %s", tp)
 	}
@@ -1275,7 +1437,10 @@ func TestResolveSigTypeInteger(t *testing.T) {
 
 func TestResolveSigTypeBoolean(t *testing.T) {
 	v := NewBoolean(true)
-	tp := resolveSigType(v)
+	tp, err := resolveSigType(v)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Matches(TBoolean) {
 		t.Errorf("expected boolean type, got %s", tp)
 	}
@@ -1284,7 +1449,10 @@ func TestResolveSigTypeBoolean(t *testing.T) {
 func TestResolveSigTypeDefault(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	tp := resolveSigType(NewMap(m))
+	tp, err := resolveSigType(NewMap(m))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tp.Equal(TAny) {
 		t.Errorf("expected any for map, got %s", tp)
 	}
@@ -1292,12 +1460,15 @@ func TestResolveSigTypeDefault(t *testing.T) {
 
 func TestResolveTypeName(t *testing.T) {
 	cases := map[string]Type{
-		"any": TAny, "none": TNone, "number": TNumber,
-		"integer": TInteger, "string": TString, "boolean": TBoolean,
-		"atom": TAtom, "list": TList, "map": TMap, "scalar": TScalar,
+		"Any": TAny, "None": TNone, "Number": TNumber,
+		"Integer": TInteger, "String": TString, "Boolean": TBoolean,
+		"Atom": TAtom, "List": TList, "Map": TMap, "Scalar": TScalar,
 	}
 	for name, want := range cases {
-		got := resolveTypeName(name)
+		got, err := resolveTypeName(name)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !got.Equal(want) {
 			t.Errorf("resolveTypeName(%q) = %s, want %s", name, got, want)
 		}
@@ -1306,9 +1477,12 @@ func TestResolveTypeName(t *testing.T) {
 
 func TestResolveTypeNameUnknown(t *testing.T) {
 	// Unknown names create a new named type via NewType
-	got := resolveTypeName("foobar")
-	if got.String() != "foobar" {
-		t.Errorf("expected named type 'foobar', got %s", got)
+	got, err := resolveTypeName("Foobar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.String() != "Foobar" {
+		t.Errorf("expected named type 'Foobar', got %s", got)
 	}
 }
 
@@ -1363,7 +1537,10 @@ func TestIsTypeValueTypedMap(t *testing.T) {
 // ========================
 
 func TestFnMultiSignature(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def f fn [[x:number] [number] [x mul x] [x:string] [string] [x upper]]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("f"), NewWord("fn"),
@@ -1389,7 +1566,7 @@ func TestFnMultiSignature(t *testing.T) {
 func TestValueStringTypedListCov(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TString))
 	s := tl.String()
-	if !strings.Contains(s, "string") {
+	if !strings.Contains(s, "String") {
 		t.Errorf("expected typed list string, got %q", s)
 	}
 }
@@ -1397,7 +1574,7 @@ func TestValueStringTypedListCov(t *testing.T) {
 func TestValueStringTypedMapCov(t *testing.T) {
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
 	s := tm.String()
-	if !strings.Contains(s, "number") {
+	if !strings.Contains(s, "Number") {
 		t.Errorf("expected typed map string, got %q", s)
 	}
 }
@@ -1533,7 +1710,10 @@ func TestEncodeNonTable(t *testing.T) {
 // ========================
 
 func TestQueryFromWhereLt(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1548,7 +1728,10 @@ func TestQueryFromWhereLt(t *testing.T) {
 }
 
 func TestQueryFromWhereGte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1563,7 +1746,10 @@ func TestQueryFromWhereGte(t *testing.T) {
 }
 
 func TestQueryFromWhereLte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1578,7 +1764,10 @@ func TestQueryFromWhereLte(t *testing.T) {
 }
 
 func TestQueryFromWhereNeq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1593,7 +1782,10 @@ func TestQueryFromWhereNeq(t *testing.T) {
 }
 
 func TestQueryFromOrderAsc(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1606,7 +1798,10 @@ func TestQueryFromOrderAsc(t *testing.T) {
 }
 
 func TestQueryFromLimitOffset(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1620,7 +1815,10 @@ func TestQueryFromLimitOffset(t *testing.T) {
 }
 
 func TestQueryPrintTable(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 	makeTestTable(r)
@@ -1897,11 +2095,14 @@ func TestSQLiteStoreWithBoolAndString(t *testing.T) {
 // ========================
 
 func TestRunTraceError(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(10), NewWord("div"), NewInteger(0)}
-	_, err := runTrace(r, tokens, &buf)
+	_, err = runTrace(r, tokens, &buf)
 	if err == nil {
 		t.Fatal("expected error for div by zero")
 	}
@@ -2055,8 +2256,8 @@ func TestValToStringAtom(t *testing.T) {
 
 func TestValToStringNone(t *testing.T) {
 	s := valToString(NewTypeLiteral(TNone))
-	if s != "none" {
-		t.Errorf("expected 'none', got %q", s)
+	if s != "None" {
+		t.Errorf("expected 'None', got %q", s)
 	}
 }
 
@@ -2065,7 +2266,10 @@ func TestValToStringNone(t *testing.T) {
 // ========================
 
 func TestAsListQueryBuilder(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -2086,7 +2290,10 @@ func TestAsListQueryBuilder(t *testing.T) {
 // ========================
 
 func TestStepEndWithForwardBeforeEnd(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def myval 42 end 1 add myval
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("myval"), NewInteger(42), NewWord("end"),
@@ -2098,7 +2305,10 @@ func TestStepEndWithForwardBeforeEnd(t *testing.T) {
 }
 
 func TestStepEndTerminatesDef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def a [1 add] end 10 a
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("a"),
@@ -2116,7 +2326,10 @@ func TestStepEndTerminatesDef(t *testing.T) {
 // ========================
 
 func TestNewRegistryHasStore(t *testing.T) {
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if r.Store == nil {
 		t.Error("expected Store to be initialized")
 	}
@@ -2610,10 +2823,10 @@ func TestNameFromValueOther(t *testing.T) {
 
 func TestAqlTypenameToSQLType(t *testing.T) {
 	tests := map[string]string{
-		"integer": "INTEGER", "int": "INTEGER",
-		"real": "REAL", "float": "REAL", "number": "REAL",
-		"text": "TEXT", "string": "TEXT",
-		"boolean": "INTEGER", "bool": "INTEGER",
+		"Integer": "INTEGER", "int": "INTEGER",
+		"real": "REAL", "float": "REAL", "Number": "REAL",
+		"text": "TEXT", "String": "TEXT",
+		"Boolean": "INTEGER", "bool": "INTEGER",
 	}
 	for input, expected := range tests {
 		if got := aqlTypenameToSQLType(input); got != expected {
@@ -2986,7 +3199,10 @@ func makeDeptTable(r *Registry) {
 }
 
 func TestQuerySelectWithColumnList(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	// select [name dept] from employees
@@ -3000,7 +3216,10 @@ func TestQuerySelectWithColumnList(t *testing.T) {
 }
 
 func TestQuerySelectWithAlias(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	// select [[name person_name]] from employees
@@ -3015,7 +3234,10 @@ func TestQuerySelectWithAlias(t *testing.T) {
 }
 
 func TestQuerySelectCountStar(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	// select [[count * total]] from employees
@@ -3030,7 +3252,10 @@ func TestQuerySelectCountStar(t *testing.T) {
 }
 
 func TestQuerySelectCast(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	// select [[cast age integer age_int]] from employees
@@ -3045,7 +3270,10 @@ func TestQuerySelectCast(t *testing.T) {
 }
 
 func TestQueryWhereIsNull(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3061,7 +3289,10 @@ func TestQueryWhereIsNull(t *testing.T) {
 }
 
 func TestQueryWhereBetween(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3077,7 +3308,10 @@ func TestQueryWhereBetween(t *testing.T) {
 }
 
 func TestQueryWhereIn(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3094,7 +3328,10 @@ func TestQueryWhereIn(t *testing.T) {
 }
 
 func TestQueryGroupByWithAggregate(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	// select [[count * cnt]] from employees group by [dept]
@@ -3110,7 +3347,10 @@ func TestQueryGroupByWithAggregate(t *testing.T) {
 }
 
 func TestQueryDistinct(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 
 	result := runAQL(t, r, []Value{
@@ -3124,7 +3364,10 @@ func TestQueryDistinct(t *testing.T) {
 }
 
 func TestQueryJoinOnCondition(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 	makeDeptTable(r)
 
@@ -3141,7 +3384,10 @@ func TestQueryJoinOnCondition(t *testing.T) {
 }
 
 func TestQueryJoinUsing(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTableWithDepts(r)
 	makeDeptTable(r)
 
@@ -3157,7 +3403,10 @@ func TestQueryJoinUsing(t *testing.T) {
 }
 
 func TestQueryOrderByList(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3171,7 +3420,10 @@ func TestQueryOrderByList(t *testing.T) {
 }
 
 func TestQueryLimitOffset(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3186,7 +3438,10 @@ func TestQueryLimitOffset(t *testing.T) {
 }
 
 func TestQueryAsAlias(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3200,7 +3455,10 @@ func TestQueryAsAlias(t *testing.T) {
 }
 
 func TestQueryWhereAndCondition(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3218,7 +3476,10 @@ func TestQueryWhereAndCondition(t *testing.T) {
 }
 
 func TestQueryWhereCollate(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -3239,7 +3500,10 @@ func TestQueryWhereCollate(t *testing.T) {
 // ========================
 
 func TestPeekSuffixValueInContext(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Exercise curryOrPrefix and peekSuffixValue through a word that uses suffix precedence
 	// e.g., "add" with suffix: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
@@ -3253,7 +3517,10 @@ func TestPeekSuffixValueInContext(t *testing.T) {
 // ========================
 
 func TestStepEndWithMoveAndMark(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def creates a mark; calling a def word triggers move
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("dbl"), NewList([]Value{NewWord("dup"), NewWord("add")}),
@@ -3270,7 +3537,10 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 
 func TestBaseValueForConstraintCoverage(t *testing.T) {
 	// Exercise baseValueForConstraint by testing type-related operations
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Create a typed list via the type system
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("typeof"),
@@ -3314,6 +3584,576 @@ func TestSQLiteQueryWithNullValues(t *testing.T) {
 	}
 	if len(result.Rows) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(result.Rows))
+	}
+}
+
+// ========================
+// OrderedMap.Delete tests
+// ========================
+
+func TestOrderedMapDeleteExisting(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	m.Set("b", NewInteger(2))
+	m.Set("c", NewInteger(3))
+
+	ok := m.Delete("b")
+	if !ok {
+		t.Error("Delete returned false for existing key")
+	}
+	if m.Len() != 2 {
+		t.Errorf("Len = %d, want 2", m.Len())
+	}
+	if _, found := m.Get("b"); found {
+		t.Error("key 'b' still exists after delete")
+	}
+	keys := m.Keys()
+	if len(keys) != 2 || keys[0] != "a" || keys[1] != "c" {
+		t.Errorf("keys = %v, want [a c]", keys)
+	}
+}
+
+func TestOrderedMapDeleteNonExisting(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	ok := m.Delete("z")
+	if ok {
+		t.Error("Delete returned true for non-existing key")
+	}
+	if m.Len() != 1 {
+		t.Errorf("Len = %d, want 1", m.Len())
+	}
+}
+
+func TestOrderedMapDeleteFirst(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(10))
+	m.Set("y", NewInteger(20))
+	m.Delete("x")
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "y" {
+		t.Errorf("keys = %v, want [y]", keys)
+	}
+}
+
+func TestOrderedMapDeleteLast(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(10))
+	m.Set("y", NewInteger(20))
+	m.Delete("y")
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("keys = %v, want [x]", keys)
+	}
+}
+
+func TestOrderedMapDeleteAll(t *testing.T) {
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	m.Set("b", NewInteger(2))
+	m.Delete("a")
+	m.Delete("b")
+	if m.Len() != 0 {
+		t.Errorf("Len = %d, want 0", m.Len())
+	}
+	if len(m.Keys()) != 0 {
+		t.Errorf("keys = %v, want []", m.Keys())
+	}
+}
+
+// ========================
+// CallAQL tests
+// ========================
+
+func TestCallAQLBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def double fn [[x:number] [number] [x add x]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	// Look up the function
+	fnStack := r.DefStacks["double"]
+	if len(fnStack) == 0 {
+		t.Fatal("double not defined")
+	}
+	fnVal := fnStack[len(fnStack)-1]
+
+	result, err := r.CallAQL(fnVal, []Value{NewInteger(5)})
+	if err != nil {
+		t.Fatalf("CallAQL error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("CallAQL(double, 5) = %v, want [10]", result)
+	}
+}
+
+func TestCallAQLNotAFunction(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.CallAQL(NewInteger(42), []Value{})
+	if err == nil {
+		t.Error("expected error for non-function value")
+	}
+}
+
+func TestCallAQLNoMatchingSig(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def inc fn [[x:number] [number] [x add 1]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	fnVal := r.DefStacks["inc"][len(r.DefStacks["inc"])-1]
+
+	// Call with wrong type
+	_, err = r.CallAQL(fnVal, []Value{NewString("hello")})
+	if err == nil {
+		t.Error("expected error for mismatched argument types")
+	}
+}
+
+// ========================
+// registerDblcall tests
+// ========================
+
+func TestDblcallBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// dblcall 5 [dup mul] => 100  (5*2=10, then 10 dup mul = 100)
+	result := runAQL(t, r, []Value{
+		NewWord("dblcall"), NewInteger(5),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 100 {
+		t.Errorf("dblcall 5 [dup mul] = %v, want [100]", result)
+	}
+}
+
+func TestDblcallWithAdd(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 3 dblcall [add 1] => 7  (3*2=6, then 6 add 1 = 7)
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("dblcall"),
+		NewList([]Value{NewWord("add"), NewInteger(1)}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 7 {
+		t.Errorf("3 dblcall [add 1] = %v, want [7]", result)
+	}
+}
+
+func TestDblcallEmptyBody(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// dblcall 4 [] => 8
+	result := runAQL(t, r, []Value{
+		NewWord("dblcall"), NewInteger(4),
+		NewList([]Value{}),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 8 {
+		t.Errorf("dblcall 4 [] = %v, want [8]", result)
+	}
+}
+
+// ========================
+// registerCall tests
+// ========================
+
+func TestCallBasic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 5 [dup mul] call => 25
+	result := runAQL(t, r, []Value{
+		NewInteger(5),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("call"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("5 [dup mul] call = %v, want [25]", result)
+	}
+}
+
+func TestCallEmptyList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 42 [] call => 42 (empty call does nothing)
+	result := runAQL(t, r, []Value{
+		NewInteger(42),
+		NewList([]Value{}),
+		NewWord("call"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("42 [] call = %v, want [42]", result)
+	}
+}
+
+// ========================
+// registerArgs tests
+// ========================
+
+func TestArgsInsideFn(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def sum2 fn [[a:number b:number] [number] [a add b]] end
+	// Using named params to exercise the args stack indirectly
+	aParam := NewOrderedMap()
+	aParam.Set("a", NewWord("Number"))
+	bParam := NewOrderedMap()
+	bParam.Set("b", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(aParam), NewMap(bParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
+	})
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("sum2"), NewInteger(3), NewInteger(7),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("sum2 3 7 = %v, want [10]", result)
+	}
+}
+
+func TestArgsDirectAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Directly exercise the args stack by pushing and calling
+	r.argsStack = append(r.argsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
+	e := New(r)
+	result, err := e.Run([]Value{NewWord("args")})
+	if err != nil {
+		t.Fatalf("args error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	argsList := result[0].AsList()
+	if len(argsList) != 2 {
+		t.Errorf("expected args list of length 2, got %d", len(argsList))
+	}
+	// Clean up
+	r.argsStack = r.argsStack[:len(r.argsStack)-1]
+}
+
+func TestArgsOutsideFnErrors(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// args outside of a function should error
+	err = runAQLError(t, r, []Value{NewWord("args")})
+	if err == nil {
+		t.Error("expected error for args outside function")
+	}
+}
+
+// ========================
+// couldProduceType tests
+// ========================
+
+func TestCouldProduceTypeLiterals(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Integer should match Number
+	if !e.couldProduceType(NewInteger(42), TNumber) {
+		t.Error("integer should match number")
+	}
+	// String should not match Number
+	if e.couldProduceType(NewString("hi"), TNumber) {
+		t.Error("string should not match number")
+	}
+	// Boolean should match Boolean
+	if !e.couldProduceType(NewBoolean(true), TBoolean) {
+		t.Error("boolean should match boolean")
+	}
+}
+
+func TestCouldProduceTypeForward(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	fwd := NewForward(ForwardInfo{FuncName: "test", ExpectedArgs: 1})
+	if e.couldProduceType(fwd, TNumber) {
+		t.Error("forward should not produce any type")
+	}
+}
+
+func TestCouldProduceTypeOpenParen(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if !e.couldProduceType(NewOpenParen(), TNumber) {
+		t.Error("open paren should could-produce any type")
+	}
+}
+
+func TestCouldProduceTypeWordBooleans(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if !e.couldProduceType(NewWord("true"), TBoolean) {
+		t.Error("word 'true' should produce boolean")
+	}
+	if !e.couldProduceType(NewWord("false"), TBoolean) {
+		t.Error("word 'false' should produce boolean")
+	}
+	if e.couldProduceType(NewWord("true"), TNumber) {
+		t.Error("word 'true' should not produce number")
+	}
+}
+
+func TestCouldProduceTypeWordTerminators(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	if e.couldProduceType(NewWord(")"), TNumber) {
+		t.Error("')' should not produce any type")
+	}
+	if e.couldProduceType(NewWord("end"), TNumber) {
+		t.Error("'end' should not produce any type")
+	}
+}
+
+func TestCouldProduceTypeWordTypeName(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Type names like "Number" don't produce values
+	if e.couldProduceType(NewWord("Number"), TNumber) {
+		t.Error("type name word should not produce value")
+	}
+}
+
+func TestCouldProduceTypeWordDefined(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def myval 42
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("myval"), NewInteger(42),
+	})
+
+	e := New(r)
+	if !e.couldProduceType(NewWord("myval"), TNumber) {
+		t.Error("defined word should produce its type")
+	}
+	if e.couldProduceType(NewWord("myval"), TString) {
+		t.Error("defined word should not produce different type")
+	}
+}
+
+func TestCouldProduceTypeUnknownWord(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(r)
+
+	// Unknown words become atoms
+	if !e.couldProduceType(NewWord("xyz_unknown"), TAtom) {
+		t.Error("unknown word should produce atom")
+	}
+}
+
+// ========================
+// resolveOrphanedForwards tests (via integration)
+// ========================
+
+func TestResolveOrphanedForwardsCurry(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "2 add" with no second argument triggers orphan forward resolution => curry
+	e := NewTop(r)
+	result, err := e.Run([]Value{
+		NewInteger(2), NewWord("add"),
+	})
+	// Some implementations produce a curry; others error. Both are valid coverage.
+	if err != nil {
+		// Orphan forward was processed even if it errored
+		return
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+}
+
+func TestResolveOrphanedForwardsMultipleValues(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Multiple values with no matching function should resolve gracefully
+	e := NewTop(r)
+	result, err := e.Run([]Value{
+		NewInteger(10), NewInteger(20),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 results, got %d: %v", len(result), result)
+	}
+}
+
+// ========================
+// resolveFieldType tests
+// ========================
+
+func TestResolveFieldTypeString(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Define a custom type: type MyNum Number
+	_ = runAQL(t, r, []Value{
+		NewWord("type"), NewWord("MyNum"), NewWord("Number"),
+	})
+
+	// resolveFieldType should resolve "MyNum" string to the type value
+	result := resolveFieldType(r, NewString("MyNum"))
+	if !isTypeValue(result) {
+		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
+	}
+}
+
+func TestResolveFieldTypeStringUnknown(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unknown name should pass through
+	v := NewString("NotAType")
+	result := resolveFieldType(r, v)
+	if result.AsString() != "NotAType" {
+		t.Errorf("expected pass-through, got %v", result)
+	}
+}
+
+func TestResolveFieldTypeList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// [String or None] as code should evaluate to a disjunct
+	result := resolveFieldType(r, NewList([]Value{
+		NewWord("String"), NewWord("or"), NewWord("None"),
+	}))
+	// Should be a disjunct type, not a raw list
+	if result.VType.Matches(TList) && !result.IsTypedList() {
+		t.Error("expected resolved type, not raw list")
+	}
+}
+
+func TestResolveFieldTypePassthrough(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A type literal should pass through unchanged
+	v := NewTypeLiteral(TNumber)
+	result := resolveFieldType(r, v)
+	if !result.VType.Equal(v.VType) {
+		t.Errorf("expected pass-through, got %v", result)
+	}
+}
+
+// ========================
+// SetParseFunc tests
+// ========================
+
+func TestSetParseFunc(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	r.SetParseFunc(func(code string) ([]Value, error) {
+		called = true
+		return []Value{NewInteger(99)}, nil
+	})
+
+	if r.ParseFunc == nil {
+		t.Error("ParseFunc should be set")
+	}
+
+	result, err := r.ParseFunc("test")
+	if err != nil {
+		t.Fatalf("ParseFunc error: %v", err)
+	}
+	if !called {
+		t.Error("ParseFunc was not called")
+	}
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("ParseFunc result = %v, want [99]", result)
 	}
 }
 

@@ -78,11 +78,14 @@ type AQL struct {
 }
 
 // New creates a new AQL instance with built-in functions.
-func New() *AQL {
-	reg := engine.DefaultRegistry()
+func New() (*AQL, error) {
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
-	return &AQL{registry: reg}
+	return &AQL{registry: reg}, nil
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.

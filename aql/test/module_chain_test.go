@@ -418,18 +418,21 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["mod.aql"] = []byte(`export M {x:1}`)
 
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(mem)
 	// No ParseFunc.
 
 	vals, _ := parser.Parse(`import "mod.aql"`)
 	eng := engine.New(reg)
-	_, err := eng.Run(vals)
-	if err == nil {
+	_, runErr := eng.Run(vals)
+	if runErr == nil {
 		t.Fatal("expected error when ParseFunc is nil")
 	}
-	if !strings.Contains(err.Error(), "parser not configured") {
-		t.Errorf("expected 'parser not configured', got: %v", err)
+	if !strings.Contains(runErr.Error(), "parser not configured") {
+		t.Errorf("expected 'parser not configured', got: %v", runErr)
 	}
 }
 
@@ -437,17 +440,20 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["mod.aql"] = []byte(`export M {x:1}`)
 
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(mem)
 
 	vals, _ := parser.Parse(`import [M R] "mod.aql"`)
 	eng := engine.New(reg)
-	_, err := eng.Run(vals)
-	if err == nil {
+	_, runErr := eng.Run(vals)
+	if runErr == nil {
 		t.Fatal("expected error when ParseFunc is nil")
 	}
-	if !strings.Contains(err.Error(), "parser not configured") {
-		t.Errorf("expected 'parser not configured', got: %v", err)
+	if !strings.Contains(runErr.Error(), "parser not configured") {
+		t.Errorf("expected 'parser not configured', got: %v", runErr)
 	}
 }
 
@@ -818,7 +824,10 @@ func TestMultiRenameWithStringNames(t *testing.T) {
 // =====================================================================
 
 func TestSetParseFuncNil(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetParseFunc(nil)
 	if reg.ParseFunc != nil {
 		t.Error("expected nil")
@@ -826,7 +835,10 @@ func TestSetParseFuncNil(t *testing.T) {
 }
 
 func TestSetParseFuncRoundTrip(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetParseFunc(parser.Parse)
 	if reg.ParseFunc == nil {
 		t.Error("expected non-nil")

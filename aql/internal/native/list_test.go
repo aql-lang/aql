@@ -39,7 +39,7 @@ func TestListAllHandler(t *testing.T) {
 		},
 	)
 
-	result, err := listAllHandler([]engine.Value{table}, nil, nil)
+	result, err := listAllHandler([]engine.Value{table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestListFilterHandler(t *testing.T) {
 
 	result, err := listFilterHandler(
 		[]engine.Value{table, engine.NewMap(filter)},
-		nil, nil,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestListFilterMultipleKeys(t *testing.T) {
 
 	result, err := listFilterHandler(
 		[]engine.Value{table, engine.NewMap(filter)},
-		nil, nil,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestListFilterNoMatch(t *testing.T) {
 
 	result, err := listFilterHandler(
 		[]engine.Value{table, engine.NewMap(filter)},
-		nil, nil,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestListFilterMissingField(t *testing.T) {
 
 	result, err := listFilterHandler(
 		[]engine.Value{table, engine.NewMap(filter)},
-		nil, nil,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestListFilterMissingField(t *testing.T) {
 func TestListAllEmptyTable(t *testing.T) {
 	table := makeTable([]string{"name"}, nil)
 
-	result, err := listAllHandler([]engine.Value{table}, nil, nil)
+	result, err := listAllHandler([]engine.Value{table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

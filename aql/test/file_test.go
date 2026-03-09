@@ -12,7 +12,10 @@ import (
 // Files are resolved relative to the test package directory (aql/test/).
 func runWithOSFiles(t *testing.T, expr string) ([]engine.Value, error) {
 	t.Helper()
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -217,7 +220,10 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 // --- Print with file-loaded tables ---
 
 func TestFileReadCSVPrint(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf strings.Builder
 	reg.Output = &buf
 
@@ -253,7 +259,10 @@ func TestFileReadCSVPrint(t *testing.T) {
 }
 
 func TestFileReadTSVPrint(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf strings.Builder
 	reg.Output = &buf
 

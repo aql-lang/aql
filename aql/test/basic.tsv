@@ -70,86 +70,86 @@ lower/s "E"	'e'
 set foo 99 end get foo	99
 
 # Make - scalar types
-make string 9	'9'
-make string 42	'42'
-make number "99"	99
-make boolean 1	true
-make boolean 0	false
+make String 9	'9'
+make String 42	'42'
+make Number "99"	99
+make Boolean 1	true
+make Boolean 0	false
 
 # Make - record type (positional)
-type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+type bar record [x:Number y:Boolean z:String] make bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # Make - record type (named fields, reordered)
-type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+type bar record [x:Number y:Boolean z:String] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # Table type - creation
-table record [x:number y:string]	table{x:number,y:string}
+table record [x:Number y:String]	table{x:Number,y:String}
 
 # Table type - with type def
-type foo record [x:integer y:string] type bar table foo bar	table{x:number/integer,y:string}
+type foo record [x:Integer y:String] type bar table foo bar	table{x:Number/Integer,y:String}
 
 # Make - table type (positional)
-type foo record [x:integer y:string] type bar table foo make bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+type foo record [x:Integer y:String] type bar table foo make bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Make - table type (named fields)
-type foo record [x:integer y:string] type bar table foo make bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+type foo record [x:Integer y:String] type bar table foo make bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Table unification - compatible schemas
-type foo record [x:any] type bar record [x:number] (table foo) unify (table bar)	table{x:number} true
+type foo record [x:Any] type bar record [x:Number] (table foo) unify (table bar)	table{x:Number} true
 
 # Table unification - incompatible schemas
-type foo record [x:number] type bar record [y:number] (table foo) unify (table bar)	'~unify-fail' false
+type foo record [x:Number] type bar record [y:Number] (table foo) unify (table bar)	'~unify-fail' false
 
 # Table does not unify with list
-list unify table record [x:number]	'~unify-fail' false
+List unify table record [x:Number]	'~unify-fail' false
 
 # Record with inline disjunct field (list evaluated as code)
-record [x:number y:[string or none]]	record{x:number,y:string|none}
+record [x:Number y:[String or None]]	record{x:Number,y:String|None}
 
 # Record with inline disjunct - unification narrows
-record [x:number y:[string or none]] unify record [x:number y:string]	record{x:number,y:string} true
+record [x:Number y:[String or None]] unify record [x:Number y:String]	record{x:Number,y:String} true
 
 # Make record with inline disjunct - none value
-type foo record [x:number y:[string or none]] make foo [42 none]	{x:42,y:none}
+type foo record [x:Number y:[String or None]] make foo [42 None]	{x:42,y:None}
 
 # Make record with inline disjunct - string value
-type foo record [x:number y:[string or none]] make foo [42 "hello"]	{x:42,y:'hello'}
+type foo record [x:Number y:[String or None]] make foo [42 "hello"]	{x:42,y:'hello'}
 
 # Record with user-defined type field (disjunct for optional)
-type OptStr (string or none) type foo record [x:number y:OptStr] foo	record{x:number,y:string|none}
+type OptStr (String or None) type foo record [x:Number y:OptStr] foo	record{x:Number,y:String|None}
 
 # Record with user-defined type - unification narrows disjunct
-type OptStr (string or none) type foo record [x:number y:OptStr] foo unify record [x:number y:string]	record{x:number,y:string} true
+type OptStr (String or None) type foo record [x:Number y:OptStr] foo unify record [x:Number y:String]	record{x:Number,y:String} true
 
 # Make record with optional field - string value
-type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
+type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
 
 # Make record with optional field - none value
-type OptStr (string or none) type foo record [x:number y:OptStr] make foo [42 none]	{x:42,y:none}
+type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 None]	{x:42,y:None}
 
 # Make record from map - all fields provided
-type foo record [x:number y:string] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+type foo record [x:Number y:String] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field provided
-type foo record [x:number y:[string or none]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+type foo record [x:Number y:[String or None]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field omitted (defaults to none)
-type foo record [x:number y:[string or none]] make foo {x:1}	{x:1,y:none}
+type foo record [x:Number y:[String or None]] make foo {x:1}	{x:1,y:None}
 
 # Make record from named list - optional field omitted (defaults to none)
-type foo record [x:number y:[string or none]] make foo [x:1]	{x:1,y:none}
+type foo record [x:Number y:[String or None]] make foo [x:1]	{x:1,y:None}
 
 # Make record from map - missing required field is an error
-type foo record [x:number y:string] make foo {x:1}	ERROR:make: missing field "y"
+type foo record [x:Number y:String] make foo {x:1}	ERROR:make: missing field "y"
 
 # Make record from map - unknown field is an error
-type foo record [x:number y:string] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+type foo record [x:Number y:String] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
 
 # Table with optional field - mixed string and none values
-type OptStr (string or none) type foo record [x:number y:OptStr] type bar table foo make bar [[1 "a"] [2 none]]	[{x:1,y:'a'},{x:2,y:none}]
+type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
 # Record with nested user-defined record type
-type Inner record [z:string] type Outer record [a:number b:Inner] Outer	record{a:number,b:record{z:string}}
+type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Number,b:record{z:String}}
 
 # Do - evaluate list contents
 do [1 add 2]	3
@@ -158,47 +158,47 @@ do [1 add 2]	3
 do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
 
 # Disjunct - union types via or
-string or none	string|none
-(string or none) unify "a"	'a' true
-(none or boolean) unify none	none true
+String or None	String|None
+(String or None) unify "a"	'a' true
+(None or Boolean) unify None	None true
 ({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
 
 # typeof - returns base type as atom
-typeof 42	number
-typeof "hello"	string
-typeof ""	string
-typeof true	boolean
-typeof false	boolean
-typeof [1 2 3]	list
-typeof {x:1}	map
-typeof none	none
+typeof 42	Number
+typeof "hello"	String
+typeof ""	String
+typeof true	Boolean
+typeof false	Boolean
+typeof [1 2 3]	List
+typeof {x:1}	Map
+typeof None	None
 
 # base - returns zero/default value for a type
-base integer	0
-base number	0
-base string	''
-base boolean	false
-base list	[]
-base map	{}
-base none	none
+base Integer	0
+base Number	0
+base String	''
+base Boolean	false
+base List	[]
+base Map	{}
+base None	None
 
 # make record with base:true - missing fields get zero values
-type P record [x:number y:string] make P {x:1} {base:true}	{x:1,y:''}
+type P record [x:Number y:String] make P {x:1} {base:true}	{x:1,y:''}
 
 # make record with base:true - all fields provided
-type P record [x:number y:string] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
+type P record [x:Number y:String] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
 
 # make record with base:true - optional field gets base not none
-type P record [x:number y:[string or none]] make P {x:1} {base:true}	{x:1,y:''}
+type P record [x:Number y:[String or None]] make P {x:1} {base:true}	{x:1,y:''}
 
 # make record with base:true - boolean field
-type P record [x:number y:boolean] make P {x:1} {base:true}	{x:1,y:false}
+type P record [x:Number y:Boolean] make P {x:1} {base:true}	{x:1,y:false}
 
 # make record with base:true - multiple missing fields
-type P record [x:number y:string z:boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
+type P record [x:Number y:String z:Boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
 
 # make record with base:true - named list form
-type P record [x:number y:string] make P [x:1] {base:true}	{x:1,y:''}
+type P record [x:Number y:String] make P [x:1] {base:true}	{x:1,y:''}
 
 # Comparison - lt (less than)
 1 lt 2	true
@@ -233,7 +233,7 @@ true lt false	false
 "abc" eq "def"	false
 true eq true	true
 true eq false	false
-none eq none	true
+None eq None	true
 
 # Comparison - deq (deep equality)
 1 deq 1	true
@@ -243,7 +243,7 @@ none eq none	true
 {x:1,y:2} deq {x:1,y:2}	true
 {x:1,y:2} deq {x:1,y:3}	false
 {x:1} deq {x:1,y:2}	false
-none deq none	true
+None deq None	true
 
 # Comparison - lt/gt error on incomparable types
 1 lt "a"	ERROR:lt: cannot compare
@@ -285,7 +285,7 @@ if false [10 div 0] 2	2
 # if - falsy values: 0, "", none, false
 if 0 1 2	2
 if "" 1 2	2
-if none 1 2	2
+if None 1 2	2
 
 # if - truthy values: non-zero, non-empty string, true
 if 1 10 20	10
@@ -348,11 +348,11 @@ def add5 add 5 end def add5_twice [add5 add5] 10 add5_twice	20
 {a:{b:1}} a dot b dot	1
 
 # Dot - missing key returns none
-{a:1} b dot	none
+{a:1} b dot	None
 
 # Dot - null safety (none parent returns none)
-none a dot	none
-none "x" dot	none
+None a dot	None
+None "x" dot	None
 
 # Dot - list index access
 [10,20,30] 0 dot	10
@@ -360,14 +360,14 @@ none "x" dot	none
 [10,20,30] 2 dot	30
 
 # Dot - list out of bounds returns none
-[10,20] 5 dot	none
+[10,20] 5 dot	None
 
 # Dot - integer key on map (converted to string)
 {0:"zero",1:"one"} 0 dot	'zero'
 {0:"zero",1:"one"} 1 dot	'one'
 
 # Dot - integer key missing from map returns none
-{a:1} 0 dot	none
+{a:1} 0 dot	None
 
 # Dot - string key
 {a:1} "a" dot	1
@@ -382,10 +382,10 @@ set bar {x:42} bar.x	42
 set m {a:{b:{c:99}}} m.a.b.c	99
 
 # Dot notation - missing key returns none
-set obj {a:1} obj.b	none
+set obj {a:1} obj.b	None
 
 # Dot notation - null propagation through chain
-set obj {a:1} obj.b.c	none
+set obj {a:1} obj.b.c	None
 
 # Dot notation - leading dot (stack access)
 {a:1} .a	1
@@ -401,7 +401,7 @@ set obj {a:1} obj.b.c	none
 {a:1} b dotr	ERROR:dotr: key "b" not found in map
 
 # Dotr - none parent is an error
-none a dotr	ERROR:dotr: parent is none
+None a dotr	ERROR:dotr: parent is None
 
 # Dotr - list out of bounds is an error
 [10,20] 5 dotr	ERROR:dotr: index 5 out of bounds (length 2)
@@ -414,21 +414,21 @@ none a dotr	ERROR:dotr: parent is none
 {a:1} b !.	ERROR:dotr: key "b" not found in map
 
 # Convert to string - default truncation at 222
-convert 99 string	'99'
-convert true string	'true'
+convert 99 String	'99'
+convert true String	'true'
 
 # Convert to string - size setting truncates
-convert "hello" string {size:3}	'hel'
-convert "abcdef" string {size:0}	''
-convert "ab" string {size:10}	'ab'
+convert "hello" String {size:3}	'hel'
+convert "abcdef" String {size:0}	''
+convert "ab" String {size:10}	'ab'
 
 # Convert to string - base in settings map (equivalent to string shorthand)
-convert 10 string {base:hex}	'a'
-convert 255 string {base:HEX}	'FF'
+convert 10 String {base:hex}	'a'
+convert 255 String {base:HEX}	'FF'
 
 # Convert to string - base and size combined in settings map
-convert 255 string {base:hex,size:1}	'f'
-convert 255 string {base:HEX,size:1}	'F'
+convert 255 String {base:hex,size:1}	'f'
+convert 255 String {base:HEX,size:1}	'F'
 
 # Convert to string - default size (222) truncates long strings
-convert "abcdefghij" string {size:5}	'abcde'
+convert "abcdefghij" String {size:5}	'abcde'

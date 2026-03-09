@@ -12,7 +12,10 @@ import (
 // returning the result of the last step.
 func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
 	t.Helper()
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	eng := engine.NewTop(reg)
 
 	var result []engine.Value
@@ -263,7 +266,7 @@ func TestCurryCompose(t *testing.T) {
 
 func TestCurryConvert(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def to_string convert string end`,
+		`def to_string convert String end`,
 		`42 to_string`,
 	})
 	if err != nil {
@@ -276,7 +279,10 @@ func TestCurryConvert(t *testing.T) {
 
 func TestCurryNoOuterForwardErrors(t *testing.T) {
 	// Without an outer forward context, insufficient args should error.
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	eng := engine.NewTop(reg)
 	vals, err := parser.Parse(`add 5`)
 	if err != nil {

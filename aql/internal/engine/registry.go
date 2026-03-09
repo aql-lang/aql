@@ -32,13 +32,14 @@ type Registry struct {
 	moduleSeq int                      // counter for generating module IDs
 	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
 	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
+	argsStack []Value            // stack of args lists for nested fn calls
 }
 
 // NewRegistry creates an empty registry.
-func NewRegistry() *Registry {
+func NewRegistry() (*Registry, error) {
 	sqlStore, err := NewSQLiteStore()
 	if err != nil {
-		panic("failed to initialize SQLite store: " + err.Error())
+		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}
 	return &Registry{
 		funcs:     make(map[string]*Function),
@@ -51,7 +52,7 @@ func NewRegistry() *Registry {
 		Input:     os.Stdin,
 		SQLite:    sqlStore,
 		Modules:   make(map[string]ModuleDesc),
-	}
+	}, nil
 }
 
 // NextModuleID generates a unique module identifier.
@@ -131,10 +132,13 @@ func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives.
-func DefaultRegistry() *Registry {
-	r := NewRegistry()
+func DefaultRegistry() (*Registry, error) {
+	r, err := NewRegistry()
+	if err != nil {
+		return nil, err
+	}
 	registerBuiltins(r)
-	return r
+	return r, nil
 }
 
 func registerBuiltins(r *Registry) {
@@ -425,6 +429,109 @@ func registerBuiltins(r *Registry) {
 	registerFor(r)
 	registerModule(r)
 	registerContext(r)
+	registerDblcall(r)
+	registerCall(r)
+	registerArgs(r)
+	registerPopArgs(r)
+}
+
+// registerDblcall registers "dblcall", an example function that takes an
+// integer and a callback (list body). It doubles the integer, then invokes
+// the callback with the doubled value on the stack.
+//
+// This demonstrates the general principle of a plain AQL function accepting
+// a callback parameter. The callback body is spliced onto the main engine
+// stack using internal mark/move markers — no sub-engine is created.
+//
+//	dblcall 5 [dup mul]   => 100  (doubles 5→10, then callback: 10 dup mul → 100)
+//	3 dblcall [add 1]     => 7    (doubles 3→6, then callback: 6 add 1 → 7)
+func registerDblcall(r *Registry) {
+	r.Register("dblcall", Signature{
+		Args: []Type{TInteger, TList},
+		Handler: func(args []Value) ([]Value, error) {
+			n := args[0].AsInteger()
+			body := args[1]
+
+			if body.IsTypedList() || body.IsTableType() {
+				return nil, fmt.Errorf("dblcall: callback must be a plain list")
+			}
+
+			doubled := NewInteger(n * 2)
+
+			bodyElems := body.AsList()
+			if len(bodyElems) == 0 {
+				return []Value{doubled}, nil
+			}
+
+			// Splice: ( doubled body_tokens... )
+			// The open/close paren pair creates a sub-expression scope
+			// on the main engine stack (no sub-engine). The callback
+			// body executes with the doubled value on the stack, and
+			// the paren scope collapses to the result.
+			tokens := make([]Value, 0, len(bodyElems)+3)
+			tokens = append(tokens, NewOpenParen())
+			tokens = append(tokens, doubled)
+			bodyCopy := make([]Value, len(bodyElems))
+			copy(bodyCopy, bodyElems)
+			tokens = append(tokens, bodyCopy...)
+			tokens = append(tokens, NewWord(")"))
+			return tokens, nil
+		},
+	})
+}
+
+// registerCall registers "call", which takes a list and splices its contents
+// onto the engine stack as code to execute (wrapped in a paren scope).
+// This enables higher-order functions defined with def fn to invoke callback
+// parameters.
+//
+//	[dup mul] call   => (evaluates "dup mul" on whatever is on the stack)
+func registerCall(r *Registry) {
+	r.Register("call", Signature{
+		Args: []Type{TList},
+		Handler: func(args []Value) ([]Value, error) {
+			body := args[0]
+
+			if body.IsTypedList() || body.IsTableType() {
+				return nil, fmt.Errorf("call: argument must be a plain list")
+			}
+
+			bodyElems := body.AsList()
+			if len(bodyElems) == 0 {
+				return nil, nil
+			}
+
+			bodyCopy := make([]Value, len(bodyElems))
+			copy(bodyCopy, bodyElems)
+			return bodyCopy, nil
+		},
+	})
+}
+
+// registerArgs registers the "args" word which returns the current function's
+// argument list from the args stack. Used with dot notation: args.0, args.1.
+func registerArgs(r *Registry) {
+	r.Register("args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) == 0 {
+				return nil, fmt.Errorf("args: not inside a function")
+			}
+			return []Value{r.argsStack[len(r.argsStack)-1]}, nil
+		},
+	})
+}
+
+// registerPopArgs registers the internal "__pop-args" word used to clean up
+// the args stack after a fn-defined function body finishes executing.
+func registerPopArgs(r *Registry) {
+	r.Register("__pop-args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) > 0 {
+				r.argsStack = r.argsStack[:len(r.argsStack)-1]
+			}
+			return nil, nil
+		},
+	})
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -492,6 +599,13 @@ func registerStorage(r *Registry) {
 	)
 
 	getHandler := func(args []Value) ([]Value, error) {
+		// If the argument was already resolved (e.g. a defined word
+		// that the engine evaluated before get collected it), return
+		// it directly — no Store lookup needed.
+		if args[0].VType.Matches(TMap) || args[0].VType.Matches(TList) ||
+			args[0].VType.Matches(TFunction) || args[0].VType.Equal(TFnDef) {
+			return []Value{args[0]}, nil
+		}
 		key := storeKey(args[0])
 		val, ok := r.Store[key]
 		if !ok {
@@ -683,6 +797,9 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				if _, ok := top.Data.(FnDefInfo); ok {
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
+				if top.VType.Equal(TFunction) {
+					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+				}
 				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
@@ -695,10 +812,11 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	}
 
 	// FnDefInfo body (from fn word): install typed signatures.
-	if body.VType.Equal(TFnDef) {
+	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
 		fnDef := body.Data.(FnDefInfo)
 		installFnDef(r, name, fnDef, isPrefixOnly)
-		r.DefStacks[name] = append(r.DefStacks[name], body)
+		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
+		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
 		return
 	}
 
@@ -963,7 +1081,10 @@ func registerVar(r *Registry) {
 // --- Function specification helpers ---
 
 // registerFn registers the "fn" word, which parses a list of signature
-// triples into a FnDefInfo value. Use with def: def name fn [[params] [out] [body]].
+// triples into a function value (lambda). Used standalone as a lambda:
+//   (fn [[x:number] [number] [x mul x]])
+// Or with def to bind a name:
+//   def square fn [[x:number] [number] [x mul x]]
 // When the list length is divisible by 2 but not 3, it is parsed as pairs
 // (input+output, no body) producing a FnUndefInfo for targeted undef.
 func registerFn(r *Registry) {
@@ -982,7 +1103,7 @@ func registerFn(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			return []Value{NewFnDef(fnDef)}, nil
+			return []Value{NewFunction(fnDef)}, nil
 		}
 		// Pairs (undef mode) when divisible by 2.
 		if len(elems)%2 == 0 {
@@ -1081,7 +1202,10 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 func parseFnReturns(outputSig Value) ([]Type, error) {
 	if !outputSig.VType.Equal(TList) {
 		// Abbreviation: single value treated as [value].
-		t := resolveSigType(outputSig)
+		t, err := resolveSigType(outputSig)
+		if err != nil {
+			return nil, err
+		}
 		return []Type{t}, nil
 	}
 	elems := outputSig.AsList()
@@ -1090,7 +1214,11 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 	}
 	types := make([]Type, len(elems))
 	for i, e := range elems {
-		types[i] = resolveSigType(e)
+		var err error
+		types[i], err = resolveSigType(e)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return types, nil
 }
@@ -1118,13 +1246,19 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			}
 			name := keys[0]
 			typeVal, _ := m.Get(name)
-			paramType := resolveSigType(typeVal)
+			paramType, err := resolveSigType(typeVal)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+			}
 			params = append(params, FnParam{Name: name, Type: paramType})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
 			typeName := elem.AsWord().Name
-			paramType := resolveTypeName(typeName)
+			paramType, err := resolveTypeName(typeName)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
+			}
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
@@ -1152,10 +1286,10 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 }
 
 // resolveSigType converts a Value (from a pair's value side) to a Type.
-func resolveSigType(v Value) Type {
+func resolveSigType(v Value) (Type, error) {
 	if v.Data == nil {
 		// Type literal (e.g., number, string) — already resolved by parser
-		return v.VType
+		return v.VType, nil
 	}
 	if v.IsWord() {
 		return resolveTypeName(v.AsWord().Name)
@@ -1165,30 +1299,32 @@ func resolveSigType(v Value) Type {
 	}
 	// Literal values (integers, booleans) carry their literal type.
 	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
-		return v.VType
+		return v.VType, nil
 	}
-	return TAny
+	return TAny, nil
 }
 
 // resolveTypeName maps a type name string to its engine Type.
-func resolveTypeName(name string) Type {
+func resolveTypeName(name string) (Type, error) {
 	switch name {
-	case "any":
-		return TAny
-	case "none":
-		return TNone
-	case "number":
-		return TNumber
-	case "integer":
-		return TInteger
-	case "string":
-		return TString
-	case "boolean":
-		return TBoolean
-	case "list":
-		return TList
-	case "map":
-		return TMap
+	case "Any":
+		return TAny, nil
+	case "None":
+		return TNone, nil
+	case "Number":
+		return TNumber, nil
+	case "Integer":
+		return TInteger, nil
+	case "String":
+		return TString, nil
+	case "Boolean":
+		return TBoolean, nil
+	case "List":
+		return TList, nil
+	case "Function":
+		return TFunction, nil
+	case "Map":
+		return TMap, nil
 	default:
 		return NewType(name)
 	}
@@ -1220,6 +1356,14 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			// mul's forward grabs x=1 from the inner body instead of
 			// waiting for the full result).
 			result = append(result, NewOpenParen())
+
+			// Push args list onto the args stack for access via the
+			// "args" word (args.0, args.1, etc.).
+			argsCopy := make([]Value, len(args))
+			copy(argsCopy, args)
+			argsList := NewList(argsCopy)
+			r.argsStack = append(r.argsStack, argsList)
+
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -1232,6 +1376,8 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
 			result = append(result, body...)
+			// Pop the args stack to restore the previous args (for nesting).
+			result = append(result, NewWord("__pop-args"))
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
 			}
@@ -1247,6 +1393,75 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 		}
 		registerFn(name, Signature{Args: argTypes, Handler: handler})
 	}
+}
+
+// CallAQL invokes an AQL function value (FnDefInfo) with the given arguments
+// in a sub-engine. This allows native Go code to call AQL callbacks.
+//
+//	result, err := r.CallAQL(callbackValue, []Value{someArg})
+func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		return nil, fmt.Errorf("CallAQL: value is not a function")
+	}
+
+	// Find matching signature.
+	for _, sig := range fnDef.Sigs {
+		if len(sig.Params) != len(args) {
+			continue
+		}
+		match := true
+		for i, p := range sig.Params {
+			if !args[i].VType.Matches(p.Type) {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+
+		// Build token sequence (same as installFnDef handler).
+		var tokens []Value
+		var names []string
+
+		// Push args list onto the args stack.
+		argsCopy := make([]Value, len(args))
+		copy(argsCopy, args)
+		argsList := NewList(argsCopy)
+		r.argsStack = append(r.argsStack, argsList)
+
+		for i, p := range sig.Params {
+			if p.Name != "" {
+				installDef(r, p.Name, args[i])
+				names = append(names, p.Name)
+			} else {
+				tokens = append(tokens, args[i])
+			}
+		}
+		body := make([]Value, len(sig.Body))
+		copy(body, sig.Body)
+		tokens = append(tokens, body...)
+
+		// Evaluate in a sub-engine.
+		sub := New(r)
+		result, err := sub.Run(tokens)
+
+		// Cleanup: pop args stack, undef named params.
+		if len(r.argsStack) > 0 {
+			r.argsStack = r.argsStack[:len(r.argsStack)-1]
+		}
+		for i := len(names) - 1; i >= 0; i-- {
+			uninstallDef(r, names[i])
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("CallAQL: %w", err)
+		}
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("CallAQL: no matching signature for arguments")
 }
 
 // registerConvert registers the "convert" word for type conversions.
@@ -1838,7 +2053,7 @@ func resolveWordValue(v Value) Value {
 		return NewBoolean(true)
 	case "false":
 		return NewBoolean(false)
-	case "none":
+	case "None":
 		return NewTypeLiteral(TNone)
 	default:
 		return NewAtom(name)
@@ -2341,7 +2556,7 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrNoneHandler := func(args []Value) ([]Value, error) {
-		return nil, fmt.Errorf("dotr: parent is none")
+		return nil, fmt.Errorf("dotr: parent is None")
 	}
 
 	sigs := []Signature{
@@ -2443,7 +2658,10 @@ func registerModule(r *Registry) {
 // runModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
 func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
-	modReg := DefaultRegistry()
+	modReg, err := DefaultRegistry()
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
+	}
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
@@ -2507,7 +2725,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		input[i] = promoteToWord(e)
 	}
 	sub := New(modReg)
-	_, err := sub.Run(input)
+	_, err = sub.Run(input)
 	if err != nil {
 		return ModuleDesc{}, err
 	}

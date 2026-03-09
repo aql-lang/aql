@@ -7,7 +7,10 @@ import (
 // --- Basic context set/get ---
 
 func TestContextSetGetString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("x"),
@@ -18,7 +21,10 @@ func TestContextSetGetString(t *testing.T) {
 }
 
 func TestContextSetGetWordKey(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewWord("context"), NewWord("get"), NewWord("foo"),
@@ -29,7 +35,10 @@ func TestContextSetGetWordKey(t *testing.T) {
 }
 
 func TestContextSetOverwrite(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
@@ -43,7 +52,10 @@ func TestContextSetOverwrite(t *testing.T) {
 // --- Unknown key returns none ---
 
 func TestContextGetUnknownKeyReturnsNone(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("get"), NewString("missing"),
 	})
@@ -58,7 +70,10 @@ func TestContextGetUnknownKeyReturnsNone(t *testing.T) {
 // --- Sub-engine inheritance via do ---
 
 func TestContextSubEngineInherits(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Set in parent, read in sub-engine via do
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(10),
@@ -74,7 +89,10 @@ func TestContextSubEngineInherits(t *testing.T) {
 // --- Sub-engine isolation: writes don't affect parent ---
 
 func TestContextSubEngineIsolation(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Set in parent, override in sub-engine, check parent still has original
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
@@ -91,7 +109,10 @@ func TestContextSubEngineIsolation(t *testing.T) {
 // --- Sub-engine new key doesn't leak to parent ---
 
 func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("set"), NewString("secret"), NewInteger(42),
@@ -109,7 +130,10 @@ func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
 // --- Nested 3-level sub-engines ---
 
 func TestContextNestedThreeLevels(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Level 0: set level=0
 	// Level 1 (do): set level=1, then do level 2
 	// Level 2 (do do): read level → should see 1, set level=2
@@ -143,7 +167,10 @@ func TestContextNestedThreeLevels(t *testing.T) {
 // --- Multiple keys ---
 
 func TestContextMultipleKeys(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("a"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("b"), NewInteger(2),
@@ -162,7 +189,10 @@ func TestContextMultipleKeys(t *testing.T) {
 // --- Context with different value types ---
 
 func TestContextDifferentValueTypes(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("str"), NewString("hello"),
 		NewWord("context"), NewWord("set"), NewString("num"), NewInteger(42),
@@ -188,7 +218,10 @@ func TestContextDifferentValueTypes(t *testing.T) {
 // --- Values are copied by reference (maps are shared, not deep-copied) ---
 
 func TestContextValuesByReference(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Store a map in context, retrieve it in sub-engine — should be the same map
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(100))
@@ -211,7 +244,10 @@ func TestContextValuesByReference(t *testing.T) {
 // --- Module inherits parent context ---
 
 func TestContextModuleInherits(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("parent_val"), NewInteger(77),
 		NewWord("module"), NewList([]Value{
@@ -236,7 +272,10 @@ func TestContextModuleInherits(t *testing.T) {
 // --- Module writes don't affect parent ---
 
 func TestContextModuleIsolation(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
 		NewWord("module"), NewList([]Value{
@@ -259,7 +298,10 @@ func TestContextModuleIsolation(t *testing.T) {
 // --- Direct unit tests for PushContext/PopContext/Context ---
 
 func TestRegistryContextStackMethods(t *testing.T) {
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Initially no context
 	if r.Context() != nil {
@@ -312,7 +354,10 @@ func TestRegistryContextStackMethods(t *testing.T) {
 // --- If condition sub-engine inherits context ---
 
 func TestContextIfSubEngineInherits(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("val"), NewInteger(5),
 		NewWord("if"), NewList([]Value{NewBoolean(true)}),

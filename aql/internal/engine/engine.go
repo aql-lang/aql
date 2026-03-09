@@ -8,16 +8,16 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"any":     TAny,
-	"none":    TNone,
-	"scalar":  TScalar,
-	"number":  TNumber,
-	"integer": TInteger,
-	"string":  TString,
-	"boolean": TBoolean,
-	"atom":    TAtom,
-	"list":    TList,
-	"map":     TMap,
+	"Any":     TAny,
+	"None":    TNone,
+	"Scalar":  TScalar,
+	"Number":  TNumber,
+	"Integer": TInteger,
+	"String":  TString,
+	"Boolean": TBoolean,
+	"Atom":    TAtom,
+	"List":    TList,
+	"Map":     TMap,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -276,6 +276,21 @@ func (e *Engine) stepWord(val Value) error {
 	// words (e.g. "undef foo" when foo is defined).
 	if e.hasPendingForwardExpectingWord() {
 		return e.stepLiteral()
+	}
+
+	// If a pending forward expects TFunction, resolve this word to a
+	// function reference value rather than executing it. The word must
+	// have a FnDef entry in DefStacks.
+	if e.hasPendingForwardExpectingFunction() {
+		if stack, ok := e.registry.DefStacks[w.Name]; ok {
+			for i := len(stack) - 1; i >= 0; i-- {
+				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+					e.stack[e.pointer] = NewFunction(fnDef)
+					return e.stepLiteral()
+				}
+			}
+		}
+		// Not a def fn — fall through to normal execution.
 	}
 
 	fn := e.registry.Lookup(w.Name)
@@ -876,9 +891,16 @@ func (e *Engine) couldProduceType(v Value, expected Type) bool {
 		// Registered built-in function: could produce most types.
 		// Specialized internal types (TFnUndef, TFnDef) can only be
 		// produced by specific functions (fn).
-		if e.registry.Lookup(w.Name) != nil {
+		if fn := e.registry.Lookup(w.Name); fn != nil {
 			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
 				return w.Name == "fn"
+			}
+			// A function with suffix precedence will start its own
+			// argument collection, so it won't directly produce a
+			// value that feeds back as a suffix arg for the current
+			// forward. Resolve the current forward early.
+			if fn.SuffixPrecedence {
+				return false
 			}
 			return true
 		}
@@ -1399,10 +1421,10 @@ func (e *Engine) hasSuffixValues(fn *Function) bool {
 			return false
 		}
 		if e.registry.Lookup(nw.Name) != nil {
-			// Known function — only collectible if fn expects TWord args.
+			// Known function — only collectible if fn expects TWord or TFunction args.
 			for si := range fn.Signatures {
 				for _, argType := range fn.Signatures[si].Args {
-					if argType.Equal(TWord) {
+					if argType.Equal(TWord) || argType.Equal(TFunction) {
 						return true
 					}
 				}
@@ -1429,6 +1451,14 @@ func (e *Engine) peekSuffixValue() Value {
 		case "false":
 			return NewBoolean(false)
 		default:
+			// If the word has a FnDef in DefStacks, peek as TFunction.
+			if stack, ok := e.registry.DefStacks[nw.Name]; ok {
+				for i := len(stack) - 1; i >= 0; i-- {
+					if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+						return NewFunction(fnDef)
+					}
+				}
+			}
 			return NewAtom(nw.Name)
 		}
 	}
@@ -1557,6 +1587,25 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TWord)
+			}
+			break
+		}
+	}
+	return false
+}
+
+// hasPendingForwardExpectingFunction checks if there is a pending forward
+// whose next expected argument is TFunction.
+func (e *Engine) hasPendingForwardExpectingFunction() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break
+		}
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			nextIdx := fwd.CollectedArgs
+			if nextIdx < len(fwd.Sig.Args) {
+				return fwd.Sig.Args[nextIdx].Equal(TFunction)
 			}
 			break
 		}

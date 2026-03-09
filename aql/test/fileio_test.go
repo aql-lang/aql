@@ -18,7 +18,10 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 		mem.Files[path] = []byte(content)
 	}
 
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(mem)
 
 	values, err := parser.Parse(expr)
@@ -44,7 +47,10 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.Me
 		mem.Files[path] = []byte(content)
 	}
 
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(mem)
 
 	values, err := parser.Parse(expr)
@@ -265,7 +271,10 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["src.txt"] = []byte("the content")
 
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(mem)
 
 	// Write with all suffix args to be explicit
@@ -309,7 +318,10 @@ func TestWriteCRLF(t *testing.T) {
 // runWithStdio creates a registry with custom stdin/stdout/stderr and runs AQL.
 func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stack string, err error) {
 	t.Helper()
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(fileops.NewMem())
 
 	var outBuf, errBuf bytes.Buffer
@@ -333,7 +345,10 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 
 func TestStdinWord(t *testing.T) {
 	// stdin should push a special path string.
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg.SetFileOps(fileops.NewMem())
 	var buf bytes.Buffer
 	reg.Output = &buf
@@ -354,7 +369,10 @@ func TestStdinWord(t *testing.T) {
 }
 
 func TestStdoutWord(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	values, err := parser.Parse(`stdout`)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +389,10 @@ func TestStdoutWord(t *testing.T) {
 }
 
 func TestStderrWord(t *testing.T) {
-	reg := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	values, err := parser.Parse(`stderr`)
 	if err != nil {
 		t.Fatal(err)

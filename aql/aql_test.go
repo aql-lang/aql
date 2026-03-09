@@ -9,7 +9,10 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -18,7 +21,10 @@ func TestNew(t *testing.T) {
 // --- Basic execution ---
 
 func TestRunInteger(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("42")
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +35,10 @@ func TestRunInteger(t *testing.T) {
 }
 
 func TestRunString(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run(`"hello"`)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +49,10 @@ func TestRunString(t *testing.T) {
 }
 
 func TestRunArithmetic(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1 add 2")
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +63,10 @@ func TestRunArithmetic(t *testing.T) {
 }
 
 func TestRunEmptyResult(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1 drop")
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +77,10 @@ func TestRunEmptyResult(t *testing.T) {
 }
 
 func TestRunMultipleValues(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1 2 3")
 	if err != nil {
 		t.Fatal(err)
@@ -80,11 +98,17 @@ func TestRunMultipleValues(t *testing.T) {
 // --- Independent instances ---
 
 func TestIndependentInstances(t *testing.T) {
-	a := aql.New()
-	b := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Store in a.
-	_, err := a.Run("set x 42 end")
+	_, err = a.Run("set x 42 end")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +130,12 @@ func TestIndependentInstances(t *testing.T) {
 }
 
 func TestStatePersistsAcrossRuns(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, err := a.Run("set counter 10 end")
+	_, err = a.Run("set counter 10 end")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +152,11 @@ func TestStatePersistsAcrossRuns(t *testing.T) {
 func TestManyIndependentInstances(t *testing.T) {
 	instances := make([]*aql.AQL, 5)
 	for i := range instances {
-		instances[i] = aql.New()
+		var err error
+		instances[i], err = aql.New()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Each instance stores its own index.
@@ -163,7 +194,10 @@ func itoa(n int) string {
 // --- Multiline scripts ---
 
 func TestMultilineNewlines(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1\nadd\n2")
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +208,10 @@ func TestMultilineNewlines(t *testing.T) {
 }
 
 func TestMultilineTabs(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1\tadd\t2")
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +222,10 @@ func TestMultilineTabs(t *testing.T) {
 }
 
 func TestMultilineMixed(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	src := "set x 10 end\nset y 20 end\nget x\nadd\nget y"
 	result, err := a.Run(src)
 	if err != nil {
@@ -197,7 +237,10 @@ func TestMultilineMixed(t *testing.T) {
 }
 
 func TestMultilineCRLF(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1\r\nadd\r\n2")
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +251,10 @@ func TestMultilineCRLF(t *testing.T) {
 }
 
 func TestMultilineBlankLines(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("1\n\n\nadd\n\n2")
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +265,10 @@ func TestMultilineBlankLines(t *testing.T) {
 }
 
 func TestMultilineScript(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	script := `
 		set width 10 end
 		set height 5 end
@@ -237,7 +286,10 @@ func TestMultilineScript(t *testing.T) {
 }
 
 func TestMultilineWithComments(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	script := `
 		# set up values
 		set x 7 end
@@ -260,23 +312,32 @@ func TestMultilineWithComments(t *testing.T) {
 // --- Error handling ---
 
 func TestRunParseError(t *testing.T) {
-	a := aql.New()
-	_, err := a.Run(`"unterminated`)
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run(`"unterminated`)
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
 }
 
 func TestRunEngineError(t *testing.T) {
-	a := aql.New()
-	_, err := a.Run("10 div 0")
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run("10 div 0")
 	if err == nil {
 		t.Fatal("expected engine error")
 	}
 }
 
 func TestRunEmpty(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err := a.Run("")
 	if err != nil {
 		t.Fatal(err)
@@ -296,12 +357,15 @@ func TestNewMemFileOps(t *testing.T) {
 }
 
 func TestSetFileOps(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ops := aql.NewMemFileOps()
 	a.SetFileOps(ops)
 
 	// Write and read back via the mem file ops.
-	_, err := a.Run(`write "test.txt" "hello"`)
+	_, err = a.Run(`write "test.txt" "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +381,10 @@ func TestSetFileOps(t *testing.T) {
 func TestRunDefaultBranch(t *testing.T) {
 	// Exercise the default branch in the result conversion switch by
 	// producing a value that is neither integer nor string (e.g. a map).
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ops := aql.NewMemFileOps()
 	a.SetFileOps(ops)
 
@@ -344,7 +411,10 @@ func TestRunDefaultBranch(t *testing.T) {
 // --- Register / RegisterPrefixOnly ---
 
 func TestRegisterSuffixWord(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Register "double" as a suffix-precedence word: 5 double => 10
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
@@ -364,7 +434,10 @@ func TestRegisterSuffixWord(t *testing.T) {
 }
 
 func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Register "double" with suffix precedence — can collect arg after the word.
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
@@ -384,7 +457,10 @@ func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
 }
 
 func TestRegisterPrefixOnlyWord(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Register "neg" as prefix-only: 5 neg => -5
 	a.RegisterPrefixOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
@@ -404,7 +480,10 @@ func TestRegisterPrefixOnlyWord(t *testing.T) {
 }
 
 func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.RegisterPrefixOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -415,14 +494,17 @@ func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
 
 	// "neg 5" — neg is prefix-only so it should not consume 5 from suffix.
 	// Without a value on the stack, it should error.
-	_, err := a.Run("neg 5")
+	_, err = a.Run("neg 5")
 	if err == nil {
 		t.Fatal("expected error: neg is prefix-only and has no prefix args")
 	}
 }
 
 func TestRegisterMultipleSignatures(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Register "square" with two signatures: integer and string.
 	a.Register("square",
 		aql.Signature{
@@ -461,7 +543,10 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 }
 
 func TestRegisterWithPrecedence(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Register "myadd" with low precedence and "mymul" with high precedence.
 	a.Register("myadd", aql.Signature{
@@ -490,7 +575,10 @@ func TestRegisterWithPrecedence(t *testing.T) {
 }
 
 func TestRegisterReturnsMultipleValues(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Register "divmod" that returns quotient and remainder.
 	a.Register("divmod", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
@@ -513,7 +601,10 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 }
 
 func TestRegisterErrorPropagation(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.Register("fail", aql.Signature{
 		Args: []aql.Type{aql.TAny},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -521,7 +612,7 @@ func TestRegisterErrorPropagation(t *testing.T) {
 		},
 	})
 
-	_, err := a.Run("42 fail")
+	_, err = a.Run("42 fail")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -531,7 +622,10 @@ func TestRegisterErrorPropagation(t *testing.T) {
 }
 
 func TestRegisterWorksWithBuiltins(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.Register("triple", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -550,8 +644,14 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 }
 
 func TestRegisterIsolatedBetweenInstances(t *testing.T) {
-	a := aql.New()
-	b := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	a.Register("custom", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
@@ -581,7 +681,10 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 }
 
 func TestRegisterStringHandler(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.Register("shout", aql.Signature{
 		Args: []aql.Type{aql.TString},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -600,7 +703,10 @@ func TestRegisterStringHandler(t *testing.T) {
 }
 
 func TestRegisterZeroArgWord(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	counter := 0
 	a.Register("tick", aql.Signature{
 		Args: []aql.Type{},
@@ -620,7 +726,10 @@ func TestRegisterZeroArgWord(t *testing.T) {
 }
 
 func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Add a new integer signature to the built-in "upper" word.
 	// The existing string signature still works; the new one handles integers.
 	a.Register("upper", aql.Signature{
@@ -651,14 +760,20 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 
 func TestNewTypeCustom(t *testing.T) {
 	// Verify NewType creates usable custom types.
-	myType := aql.NewType("custom/special")
-	if myType.String() != "custom/special" {
-		t.Errorf("got %q, want custom/special", myType.String())
+	myType, err := aql.NewType("Custom/Special")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if myType.String() != "Custom/Special" {
+		t.Errorf("got %q, want Custom/Special", myType.String())
 	}
 }
 
 func TestRegisterWithTypeAny(t *testing.T) {
-	a := aql.New()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	a.Register("identity", aql.Signature{
 		Args: []aql.Type{aql.TAny},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {

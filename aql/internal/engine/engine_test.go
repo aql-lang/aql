@@ -71,7 +71,11 @@ func TestNewWord(t *testing.T) {
 // --- Engine tests: literals ---
 
 func TestLiteralSelfInsert(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	tests := []struct {
 		name  string
@@ -101,7 +105,11 @@ func TestLiteralSelfInsert(t *testing.T) {
 
 func TestPrefixUpper(t *testing.T) {
 	// a upper -> 'A'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("a"), NewWord("upper")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -116,7 +124,11 @@ func TestPrefixUpper(t *testing.T) {
 
 func TestPrefixLower(t *testing.T) {
 	// C lower -> 'c'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("C"), NewWord("lower")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -133,7 +145,11 @@ func TestPrefixLower(t *testing.T) {
 
 func TestSuffixLower(t *testing.T) {
 	// lower B -> 'b'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewWord("lower"), NewString("B")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -150,8 +166,12 @@ func TestSuffixLower(t *testing.T) {
 
 func TestSignatureError(t *testing.T) {
 	// 99 lower -> signature error (integer doesn't match string)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewInteger(99), NewWord("lower")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewInteger(99), NewWord("lower")})
 	if err == nil {
 		t.Fatal("expected signature error, got nil")
 	}
@@ -160,7 +180,11 @@ func TestSignatureError(t *testing.T) {
 // --- Engine tests: forth primitives ---
 
 func TestDup(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("dup")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -174,7 +198,11 @@ func TestDup(t *testing.T) {
 }
 
 func TestSwap(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("swap")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -188,7 +216,11 @@ func TestSwap(t *testing.T) {
 }
 
 func TestDrop(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("drop")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -202,7 +234,11 @@ func TestDrop(t *testing.T) {
 
 func TestDupSuffix(t *testing.T) {
 	// dup/s 1 → [1, 1]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("dup", -1, false, true),
 		NewInteger(1),
@@ -220,7 +256,11 @@ func TestDupSuffix(t *testing.T) {
 
 func TestSwapSuffix(t *testing.T) {
 	// swap/s 1 2 → [2, 1]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("swap", -1, false, true),
 		NewInteger(1), NewInteger(2),
@@ -238,8 +278,12 @@ func TestSwapSuffix(t *testing.T) {
 
 func TestSwapInfix(t *testing.T) {
 	// 1 swap 2 → error (swap is prefix-only in the new model)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewInteger(1), NewWord("swap"), NewInteger(2),
 	})
 	if err == nil {
@@ -249,7 +293,11 @@ func TestSwapInfix(t *testing.T) {
 
 func TestDropSuffix(t *testing.T) {
 	// drop/s 1 → []
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("drop", -1, false, true),
 		NewInteger(1),
@@ -263,7 +311,11 @@ func TestDropSuffix(t *testing.T) {
 }
 
 func TestOver(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("over")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -274,7 +326,11 @@ func TestOver(t *testing.T) {
 }
 
 func TestRot(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("rot")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -285,7 +341,11 @@ func TestRot(t *testing.T) {
 }
 
 func TestNip(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("nip")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -296,7 +356,11 @@ func TestNip(t *testing.T) {
 }
 
 func TestTuck(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("tuck")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -307,7 +371,11 @@ func TestTuck(t *testing.T) {
 }
 
 func Test2Dup(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2dup")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -318,7 +386,11 @@ func Test2Dup(t *testing.T) {
 }
 
 func Test2Swap(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2swap")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -329,7 +401,11 @@ func Test2Swap(t *testing.T) {
 }
 
 func Test2Drop(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2drop")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -340,7 +416,11 @@ func Test2Drop(t *testing.T) {
 }
 
 func Test2Over(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2over")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -351,7 +431,11 @@ func Test2Over(t *testing.T) {
 }
 
 func TestDepthEmpty(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewWord("depth")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -362,7 +446,11 @@ func TestDepthEmpty(t *testing.T) {
 }
 
 func TestDepth(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("depth")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -374,7 +462,11 @@ func TestDepth(t *testing.T) {
 
 func TestPick0(t *testing.T) {
 	// pick 0 = dup: 1 2 3 0 pick → 1 2 3 3
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("pick")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -386,7 +478,11 @@ func TestPick0(t *testing.T) {
 
 func TestPick2(t *testing.T) {
 	// 1 2 3 2 pick → 1 2 3 1
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("pick")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -397,8 +493,12 @@ func TestPick2(t *testing.T) {
 }
 
 func TestPickOutOfRange(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewInteger(1), NewInteger(5), NewWord("pick")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewInteger(1), NewInteger(5), NewWord("pick")})
 	if err == nil {
 		t.Fatal("expected error for out-of-range pick")
 	}
@@ -406,7 +506,11 @@ func TestPickOutOfRange(t *testing.T) {
 
 func TestRoll2(t *testing.T) {
 	// 1 2 3 2 roll → 2 3 1 (same as rot)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("roll")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -418,7 +522,11 @@ func TestRoll2(t *testing.T) {
 
 func TestRoll1(t *testing.T) {
 	// 1 2 3 1 roll → 1 3 2 (same as swap)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(1), NewWord("roll")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -430,7 +538,11 @@ func TestRoll1(t *testing.T) {
 
 func TestRoll0(t *testing.T) {
 	// 1 2 3 0 roll → 1 2 3 (no-op)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("roll")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -441,7 +553,11 @@ func TestRoll0(t *testing.T) {
 }
 
 func TestAbs(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	// -5 abs → 5
 	result, err := e.Run([]Value{NewInteger(-5), NewWord("abs")})
 	if err != nil {
@@ -461,7 +577,11 @@ func TestAbs(t *testing.T) {
 }
 
 func TestNegate(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(5), NewWord("negate")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -472,7 +592,11 @@ func TestNegate(t *testing.T) {
 }
 
 func TestMin(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("min")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -483,7 +607,11 @@ func TestMin(t *testing.T) {
 }
 
 func TestMax(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("max")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -497,7 +625,11 @@ func TestMax(t *testing.T) {
 
 func TestForceSuffix(t *testing.T) {
 	// lower/s E -> 'e' (force suffix even though prefix exists)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("lower", -1, false, true),
 		NewString("E"),
@@ -515,7 +647,11 @@ func TestForceSuffix(t *testing.T) {
 
 func TestForcePrefix(t *testing.T) {
 	// F lower/p -> 'f' (force prefix, no suffix considered)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("F"),
 		NewWordModified("lower", -1, true, false),
@@ -533,7 +669,11 @@ func TestForcePrefix(t *testing.T) {
 
 func TestArgCountSuffix(t *testing.T) {
 	// lower/1 D -> 'd' (arg count 1 picks the suffix signature)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("lower", 1, false, false),
 		NewString("D"),
@@ -552,7 +692,11 @@ func TestArgCountSuffix(t *testing.T) {
 // --- Engine tests: unknown word ---
 
 func TestUnknownWordBecomesString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewWord("foo")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -568,7 +712,11 @@ func TestUnknownWordBecomesString(t *testing.T) {
 // --- Engine tests: arithmetic (prefix / Forth-style) ---
 
 func TestArithmeticPrefix(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -608,7 +756,11 @@ func TestArithmeticPrefix(t *testing.T) {
 // --- Engine tests: arithmetic (infix via forward mechanism) ---
 
 func TestArithmeticInfix(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -646,7 +798,11 @@ func TestArithmeticInfix(t *testing.T) {
 // --- Engine tests: arithmetic errors ---
 
 func TestArithmeticErrors(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	tests := []struct {
 		name  string
@@ -672,7 +828,11 @@ func TestArithmeticErrors(t *testing.T) {
 // --- Engine tests: arithmetic chaining ---
 
 func TestArithmeticChaining(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	tests := []struct {
 		name  string
@@ -715,7 +875,11 @@ func TestArithmeticChaining(t *testing.T) {
 // --- Engine tests: operator precedence ---
 
 func TestPrecedenceMulBeforeAdd(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -757,7 +921,11 @@ func TestPrecedenceMulBeforeAdd(t *testing.T) {
 }
 
 func TestPrecedenceSameLevel(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -790,7 +958,11 @@ func TestPrecedenceSameLevel(t *testing.T) {
 
 func TestPrecedencePrefixUnaffected(t *testing.T) {
 	// Prefix (Forth-style) should still work: 2 3 mul 4 add → 10
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewInteger(3), NewWord("mul"),
 		NewWord("add"), NewInteger(4),
@@ -810,7 +982,10 @@ func TestPrecedencePrefixUnaffected(t *testing.T) {
 
 func TestSetGetSuffix(t *testing.T) {
 	// set foo 99 end get foo → [99]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -830,7 +1005,10 @@ func TestSetGetSuffix(t *testing.T) {
 
 func TestSetGetWithoutEnd(t *testing.T) {
 	// set foo 99 get foo → [99] (end is optional)
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -849,9 +1027,12 @@ func TestSetGetWithoutEnd(t *testing.T) {
 
 func TestSetGetPrefix(t *testing.T) {
 	// "foo" 99 set → stores foo=99, then "foo" get → [99]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewString("bar"), NewInteger(42), NewWord("set"),
 	})
 	if err != nil {
@@ -873,7 +1054,10 @@ func TestSetGetPrefix(t *testing.T) {
 
 func TestSetGetString(t *testing.T) {
 	// set name hello end get name → ['hello']
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("name"), NewString("hello"),
@@ -893,7 +1077,10 @@ func TestSetGetString(t *testing.T) {
 
 func TestSetOverwrite(t *testing.T) {
 	// set x 1 end set x 2 end get x → [2]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("x"), NewInteger(1),
@@ -914,8 +1101,12 @@ func TestSetOverwrite(t *testing.T) {
 }
 
 func TestGetUnknownKey(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("get"), NewWord("missing")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("get"), NewWord("missing")})
 	if err == nil {
 		t.Fatal("expected error for unknown key, got nil")
 	}
@@ -923,7 +1114,11 @@ func TestGetUnknownKey(t *testing.T) {
 
 func TestEndNoOp(t *testing.T) {
 	// 42 end → [42] (end just removes itself)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(42), NewWord("end")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -938,7 +1133,11 @@ func TestEndNoOp(t *testing.T) {
 
 func TestEndMultiple(t *testing.T) {
 	// 1 end 2 end 3 → [1, 2, 3]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("end"),
 		NewInteger(2), NewWord("end"),
@@ -959,7 +1158,10 @@ func TestEndMultiple(t *testing.T) {
 
 func TestEndTerminatesForward(t *testing.T) {
 	// 99 set foo end 88 → stores foo=99, result=[88]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"), NewInteger(88),
@@ -985,7 +1187,10 @@ func TestEndTerminatesForward(t *testing.T) {
 
 func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 	// 99 set foo end → stores foo=99, result=[]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"),
@@ -1007,8 +1212,12 @@ func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 
 func TestEndInsufficientArgs(t *testing.T) {
 	// set foo end → forward expects 2, collected 1, no prefix → error
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewWord("set"), NewWord("foo"), NewWord("end"),
 	})
 	if err == nil {
@@ -1018,9 +1227,12 @@ func TestEndInsufficientArgs(t *testing.T) {
 
 func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
 	// Store persists across multiple Run calls on the same registry
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("set"), NewWord("key"), NewInteger(100),
 	})
 	if err != nil {
@@ -1041,7 +1253,11 @@ func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
 
 func TestChainedOps(t *testing.T) {
 	// a upper dup -> ['A', 'A']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("a"),
 		NewWord("upper"),
@@ -1061,7 +1277,11 @@ func TestChainedOps(t *testing.T) {
 // --- Engine tests: parentheses ---
 
 func TestParenSimpleArithmetic(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -1105,7 +1325,10 @@ func TestParenSimpleArithmetic(t *testing.T) {
 
 func TestParenWithSet(t *testing.T) {
 	// set foo (1 add 2) end get foo → [3]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("foo"),
@@ -1126,7 +1349,11 @@ func TestParenWithSet(t *testing.T) {
 
 func TestParenNested(t *testing.T) {
 	// (1 add (2 mul 3)) → 1+6 = 7
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("),
 		NewInteger(1), NewWord("add"),
@@ -1146,7 +1373,11 @@ func TestParenNested(t *testing.T) {
 
 func TestParenLiteral(t *testing.T) {
 	// (42) → [42]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(42), NewWord(")"),
 	})
@@ -1162,8 +1393,12 @@ func TestParenLiteral(t *testing.T) {
 }
 
 func TestParenUnmatchedOpen(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewWord("("), NewInteger(1),
 	})
 	if err == nil {
@@ -1172,8 +1407,12 @@ func TestParenUnmatchedOpen(t *testing.T) {
 }
 
 func TestParenUnmatchedClose(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewInteger(1), NewWord(")"),
 	})
 	if err == nil {
@@ -1182,7 +1421,11 @@ func TestParenUnmatchedClose(t *testing.T) {
 }
 
 func TestParenWithPrecedence(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -1253,7 +1496,10 @@ func TestEdgeTypeForwardMatchesItself(t *testing.T) {
 
 func TestEdgeTypeOpenParenMatchesParen(t *testing.T) {
 	// paren/open should match pattern "paren"
-	tParen := NewType("paren")
+	tParen, err := NewType("Paren")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !TOpenParen.Matches(tParen) {
 		t.Error("paren/open should match paren")
 	}
@@ -1266,16 +1512,28 @@ func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
 }
 
 func TestEdgeTypeUnrelatedTypes(t *testing.T) {
-	tFoo := NewType("foo/bar")
-	tBaz := NewType("baz")
+	tFoo, err := NewType("Foo/Bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tBaz, err := NewType("Baz")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if tFoo.Matches(tBaz) {
 		t.Error("foo/bar should not match baz")
 	}
 }
 
 func TestEdgeTypeDeeplyNested(t *testing.T) {
-	tDeep := NewType("a/b/c/d")
-	tShallow := NewType("a/b")
+	tDeep, err := NewType("A/B/C/D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tShallow, err := NewType("A/B")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !tDeep.Matches(tShallow) {
 		t.Error("a/b/c/d should match a/b")
 	}
@@ -1368,7 +1626,11 @@ func TestEdgeValueStringRepresentations(t *testing.T) {
 // --- Edge: empty input ---
 
 func TestEdgeEmptyInput(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1381,7 +1643,11 @@ func TestEdgeEmptyInput(t *testing.T) {
 // --- Edge: multiple literals ---
 
 func TestEdgeMultipleLiterals(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3),
 		NewString("a"), NewString("b"),
@@ -1398,7 +1664,11 @@ func TestEdgeMultipleLiterals(t *testing.T) {
 
 func TestEdgeMultipleUnknownWords(t *testing.T) {
 	// foo bar baz → ['foo', 'bar', 'baz']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("foo"), NewWord("bar"), NewWord("baz"),
 	})
@@ -1417,7 +1687,11 @@ func TestEdgeMultipleUnknownWords(t *testing.T) {
 
 func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
 	// lower foo → 'foo' (foo becomes string, then lower collects it)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewWord("lower"), NewWord("foo")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1432,7 +1706,10 @@ func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
 
 func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	// set mykey 42 end get mykey → [42]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("mykey"), NewInteger(42),
@@ -1450,7 +1727,11 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 // --- Edge: upper ---
 
 func TestEdgeUpperAlreadyUpper(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("ABC"), NewWord("upper")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1461,7 +1742,11 @@ func TestEdgeUpperAlreadyUpper(t *testing.T) {
 }
 
 func TestEdgeUpperEmptyString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString(""), NewWord("upper")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1473,8 +1758,12 @@ func TestEdgeUpperEmptyString(t *testing.T) {
 
 func TestEdgeUpperOnInteger(t *testing.T) {
 	// 42 upper → signature error (integer doesn't match string)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewInteger(42), NewWord("upper")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewInteger(42), NewWord("upper")})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -1483,7 +1772,11 @@ func TestEdgeUpperOnInteger(t *testing.T) {
 // --- Edge: lower ---
 
 func TestEdgeLowerAlreadyLower(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("abc"), NewWord("lower")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1495,8 +1788,12 @@ func TestEdgeLowerAlreadyLower(t *testing.T) {
 
 func TestEdgeLowerSuffixOnInteger(t *testing.T) {
 	// lower 42 → signature error (forward can't collect integer for string param)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("lower"), NewInteger(42)})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("lower"), NewInteger(42)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -1505,7 +1802,11 @@ func TestEdgeLowerSuffixOnInteger(t *testing.T) {
 // --- Edge: dup ---
 
 func TestEdgeDupString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewWord("dup")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1520,8 +1821,12 @@ func TestEdgeDupString(t *testing.T) {
 
 func TestEdgeDupNoArgs(t *testing.T) {
 	// dup with nothing on stack → error
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("dup")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("dup")})
 	if err == nil {
 		t.Fatal("expected error for dup with no args, got nil")
 	}
@@ -1531,7 +1836,11 @@ func TestEdgeDupNoArgs(t *testing.T) {
 
 func TestEdgeSwapMixedTypes(t *testing.T) {
 	// "hello" 42 swap → [42, 'hello']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewInteger(42), NewWord("swap")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1548,16 +1857,24 @@ func TestEdgeSwapMixedTypes(t *testing.T) {
 }
 
 func TestEdgeSwapNoArgs(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("swap")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("swap")})
 	if err == nil {
 		t.Fatal("expected error for swap with no args, got nil")
 	}
 }
 
 func TestEdgeSwapOneArg(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewInteger(1), NewWord("swap")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewInteger(1), NewWord("swap")})
 	if err == nil {
 		t.Fatal("expected error for swap with one arg, got nil")
 	}
@@ -1566,15 +1883,23 @@ func TestEdgeSwapOneArg(t *testing.T) {
 // --- Edge: drop ---
 
 func TestEdgeDropNoArgs(t *testing.T) {
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("drop")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("drop")})
 	if err == nil {
 		t.Fatal("expected error for drop with no args, got nil")
 	}
 }
 
 func TestEdgeDropString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("gone"), NewWord("drop")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1586,7 +1911,11 @@ func TestEdgeDropString(t *testing.T) {
 
 func TestEdgeDropPreservesOthers(t *testing.T) {
 	// 1 2 3 drop → [1, 2]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"),
 	})
@@ -1604,7 +1933,11 @@ func TestEdgeDropPreservesOthers(t *testing.T) {
 // --- Edge: arithmetic boundary conditions ---
 
 func TestEdgeArithmeticLargeNumbers(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	// 1000000 mul 1000000 → 1000000000000
 	result, err := e.Run([]Value{
 		NewInteger(1000000), NewWord("mul"), NewInteger(1000000),
@@ -1618,7 +1951,11 @@ func TestEdgeArithmeticLargeNumbers(t *testing.T) {
 }
 
 func TestEdgeArithmeticNegativeResults(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -1647,7 +1984,11 @@ func TestEdgeArithmeticNegativeResults(t *testing.T) {
 }
 
 func TestEdgeArithmeticZeroOperations(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -1674,7 +2015,11 @@ func TestEdgeArithmeticZeroOperations(t *testing.T) {
 }
 
 func TestEdgeArithmeticIdentity(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	tests := []struct {
 		name  string
 		input []Value
@@ -1700,8 +2045,12 @@ func TestEdgeArithmeticIdentity(t *testing.T) {
 
 func TestEdgeArithmeticNoArgs(t *testing.T) {
 	// add with no args → error
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord("add")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord("add")})
 	if err == nil {
 		t.Fatal("expected error for add with no args, got nil")
 	}
@@ -1710,8 +2059,12 @@ func TestEdgeArithmeticNoArgs(t *testing.T) {
 func TestEdgeArithmeticOneArg(t *testing.T) {
 	// 1 add → should use suffix signature and wait for arg
 	// Since there's no next arg, it should be an orphaned forward error
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewInteger(1), NewWord("add")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewInteger(1), NewWord("add")})
 	if err == nil {
 		t.Fatal("expected error for add with one arg and no suffix arg, got nil")
 	}
@@ -1719,7 +2072,11 @@ func TestEdgeArithmeticOneArg(t *testing.T) {
 
 func TestEdgeArithmeticStringOperands(t *testing.T) {
 	// "hello" add "world" → "helloworld" (string concatenation)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1733,7 +2090,11 @@ func TestEdgeArithmeticStringOperands(t *testing.T) {
 
 func TestEdgeLongInfixChain(t *testing.T) {
 	// 1 add 2 add 3 add 4 add 5 → 15 (left-to-right)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2),
 		NewWord("add"), NewInteger(3),
@@ -1753,7 +2114,11 @@ func TestEdgeLongInfixChain(t *testing.T) {
 
 func TestEdgeLongMixedPrecedence(t *testing.T) {
 	// 1 add 2 mul 3 add 4 mul 5 → 1+(2*3)+(4*5) = 1+6+20 = 27
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
 		NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5),
@@ -1772,7 +2137,11 @@ func TestEdgeLongMixedPrecedence(t *testing.T) {
 func TestEdgePrefixChain(t *testing.T) {
 	// 1 2 add 3 4 add mul → add takes 3 from suffix: (2+3)=5,
 	// then (5+4)=9, then 1*9=9
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("add"),
 		NewInteger(3), NewInteger(4), NewWord("add"),
@@ -1793,8 +2162,12 @@ func TestEdgePrefixChain(t *testing.T) {
 
 func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
 	// lower/p with no prefix arg → error (force prefix but no string on stack)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewWordModified("lower", -1, true, false),
 		NewString("X"),
 	})
@@ -1805,7 +2178,11 @@ func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
 
 func TestEdgeForceSuffixWithPrefixAvailable(t *testing.T) {
 	// "A" lower/s "B" → should use suffix, returning 'b', with 'a' remaining
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("A"),
 		NewWordModified("lower", -1, false, true),
@@ -1827,8 +2204,12 @@ func TestEdgeForceSuffixWithPrefixAvailable(t *testing.T) {
 
 func TestEdgeArgCountMismatch(t *testing.T) {
 	// lower/2 "X" → error (no signature with 2 args)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewString("X"),
 		NewWordModified("lower", 2, false, false),
 	})
@@ -1839,7 +2220,11 @@ func TestEdgeArgCountMismatch(t *testing.T) {
 
 func TestEdgeForcePrefixAdd(t *testing.T) {
 	// 1 2 add/p → 3 (force prefix on add)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2),
 		NewWordModified("add", -1, true, false),
@@ -1856,7 +2241,11 @@ func TestEdgeForcePrefixAdd(t *testing.T) {
 
 func TestEdgeEndAtStart(t *testing.T) {
 	// end → [] (no forward, no-op, removes itself)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewWord("end")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1868,7 +2257,11 @@ func TestEdgeEndAtStart(t *testing.T) {
 
 func TestEdgeEndConsecutive(t *testing.T) {
 	// end end end → []
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("end"), NewWord("end"), NewWord("end"),
 	})
@@ -1882,9 +2275,12 @@ func TestEdgeEndConsecutive(t *testing.T) {
 
 func TestEdgeEndTerminatesGetForward(t *testing.T) {
 	// "mykey" 42 set end → stores, then get mykey end → [42]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewString("mykey"), NewInteger(42), NewWord("set"),
 	})
 	if err != nil {
@@ -1907,7 +2303,10 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	// 99 set a end 88 set b end (get a) (get b) → [99, 88]
 	// Parentheses isolate each get so the first result doesn't become
 	// a prefix argument for the second get.
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(99), NewWord("set"), NewWord("a"), NewWord("end"),
@@ -1931,7 +2330,11 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 
 func TestEdgeEndBetweenLiterals(t *testing.T) {
 	// 1 2 end 3 → [1, 2, 3]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("end"), NewInteger(3),
 	})
@@ -1947,9 +2350,12 @@ func TestEdgeEndBetweenLiterals(t *testing.T) {
 
 func TestEdgeSetWithIntegerKey(t *testing.T) {
 	// 42 100 set → uses integer as key
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewInteger(42), NewInteger(100), NewWord("set"),
 	})
 	if err != nil {
@@ -1968,9 +2374,12 @@ func TestEdgeSetWithIntegerKey(t *testing.T) {
 }
 
 func TestEdgeSetEmptyString(t *testing.T) {
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewString(""), NewInteger(1), NewWord("set"),
 	})
 	if err != nil {
@@ -1989,7 +2398,10 @@ func TestEdgeSetEmptyString(t *testing.T) {
 
 func TestEdgeSetValueIsString(t *testing.T) {
 	// set greeting hello end get greeting → ['hello']
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("greeting"), NewString("hello"),
@@ -2006,7 +2418,10 @@ func TestEdgeSetValueIsString(t *testing.T) {
 
 func TestEdgeSetThenUseValue(t *testing.T) {
 	// set x 10 end get x add 5 → [15]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("x"), NewInteger(10),
@@ -2024,7 +2439,10 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 
 func TestEdgeSetComputedValue(t *testing.T) {
 	// set total (3 mul 7) end get total → [21]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("total"),
@@ -2044,7 +2462,11 @@ func TestEdgeSetComputedValue(t *testing.T) {
 
 func TestEdgePrecedenceSubMul(t *testing.T) {
 	// 10 sub 2 mul 3 → 10-(2*3) = 4
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(10), NewWord("sub"), NewInteger(2), NewWord("mul"), NewInteger(3),
 	})
@@ -2058,7 +2480,11 @@ func TestEdgePrecedenceSubMul(t *testing.T) {
 
 func TestEdgePrecedenceMulSub(t *testing.T) {
 	// 2 mul 3 sub 1 → (2*3)-1 = 5
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("sub"), NewInteger(1),
 	})
@@ -2072,7 +2498,11 @@ func TestEdgePrecedenceMulSub(t *testing.T) {
 
 func TestEdgePrecedenceDivAdd(t *testing.T) {
 	// 1 add 10 div 2 → 1+(10/2) = 6
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("div"), NewInteger(2),
 	})
@@ -2086,7 +2516,11 @@ func TestEdgePrecedenceDivAdd(t *testing.T) {
 
 func TestEdgePrecedenceModAdd(t *testing.T) {
 	// 1 add 10 mod 3 → 1+(10%3) = 1+1 = 2
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("mod"), NewInteger(3),
 	})
@@ -2100,7 +2534,11 @@ func TestEdgePrecedenceModAdd(t *testing.T) {
 
 func TestEdgePrecedenceAllOps(t *testing.T) {
 	// 1 add 2 mul 3 sub 4 div 2 → 1+(2*3)-(4/2) = 1+6-2 = 5
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
 		NewWord("sub"), NewInteger(4), NewWord("div"), NewInteger(2),
@@ -2117,7 +2555,11 @@ func TestEdgePrecedenceAllOps(t *testing.T) {
 
 func TestEdgeEmptyParens(t *testing.T) {
 	// () → [] (empty parens produce no values)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewWord(")"),
 	})
@@ -2131,7 +2573,11 @@ func TestEdgeEmptyParens(t *testing.T) {
 
 func TestEdgeParenMultipleValues(t *testing.T) {
 	// (1 2 3) → [1, 2, 3]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(1), NewInteger(2), NewInteger(3), NewWord(")"),
 	})
@@ -2150,7 +2596,11 @@ func TestEdgeParenMultipleValues(t *testing.T) {
 
 func TestEdgeParenDeeplyNested(t *testing.T) {
 	// ((( 5 ))) → [5]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewWord("("), NewWord("("),
 		NewInteger(5),
@@ -2166,7 +2616,11 @@ func TestEdgeParenDeeplyNested(t *testing.T) {
 
 func TestEdgeParenNestedArithmetic(t *testing.T) {
 	// ((2 add 3) mul (4 sub 1)) → (5 * 3) = 15
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("),
 		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
@@ -2184,7 +2638,11 @@ func TestEdgeParenNestedArithmetic(t *testing.T) {
 
 func TestEdgeParenWithFunction(t *testing.T) {
 	// (hello upper) → ['HELLO']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewString("hello"), NewWord("upper"), NewWord(")"),
 	})
@@ -2198,7 +2656,11 @@ func TestEdgeParenWithFunction(t *testing.T) {
 
 func TestEdgeParenWithDup(t *testing.T) {
 	// (1 dup) → [1, 1]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(1), NewWord("dup"), NewWord(")"),
 	})
@@ -2212,7 +2674,11 @@ func TestEdgeParenWithDup(t *testing.T) {
 
 func TestEdgeParenAfterLiteral(t *testing.T) {
 	// 10 (5) → [10, 5]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(10), NewWord("("), NewInteger(5), NewWord(")"),
 	})
@@ -2229,8 +2695,12 @@ func TestEdgeParenAfterLiteral(t *testing.T) {
 
 func TestEdgeParenCloseWithNoOpen(t *testing.T) {
 	// ) → error
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{NewWord(")")})
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{NewWord(")")})
 	if err == nil {
 		t.Fatal("expected error for ) with no (, got nil")
 	}
@@ -2238,8 +2708,12 @@ func TestEdgeParenCloseWithNoOpen(t *testing.T) {
 
 func TestEdgeParenMultipleOpenUnmatched(t *testing.T) {
 	// (( 1 ) → error (one ( left unmatched)
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewWord("("), NewWord("("), NewInteger(1), NewWord(")"),
 	})
 	if err == nil {
@@ -2249,7 +2723,11 @@ func TestEdgeParenMultipleOpenUnmatched(t *testing.T) {
 
 func TestEdgeParenConsecutive(t *testing.T) {
 	// (1) (2) add → 1+2 = 3
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(1), NewWord(")"),
 		NewWord("("), NewInteger(2), NewWord(")"),
@@ -2265,7 +2743,11 @@ func TestEdgeParenConsecutive(t *testing.T) {
 
 func TestEdgeParenWithUnknownWord(t *testing.T) {
 	// (foo) → ['foo']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewWord("foo"), NewWord(")"),
 	})
@@ -2280,8 +2762,12 @@ func TestEdgeParenWithUnknownWord(t *testing.T) {
 func TestEdgeParenOrphanedForwardInside(t *testing.T) {
 	// (add 1) → error: add creates forward inside paren, but only 1 arg collected
 	// There's not enough to resolve
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewWord("("), NewWord("add"), NewInteger(1), NewWord(")"),
 	})
 	if err == nil {
@@ -2292,7 +2778,11 @@ func TestEdgeParenOrphanedForwardInside(t *testing.T) {
 func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
 	// 1 add (2) → the forward for add should not cross the paren barrier.
 	// Instead, (2) resolves to 2, which then gets collected by add's forward.
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"),
 		NewWord("("), NewInteger(2), NewWord(")"),
@@ -2307,7 +2797,11 @@ func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
 
 func TestEdgeParenWithEndNoOp(t *testing.T) {
 	// (1 end) → end acts as no-op inside parens (no forward), yields [1]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(1), NewWord("end"), NewWord(")"),
 	})
@@ -2322,7 +2816,11 @@ func TestEdgeParenWithEndNoOp(t *testing.T) {
 func TestEdgeParenComplexExpression(t *testing.T) {
 	// 2 mul (3 add 4 mul 5) → 2*(3+(4*5)) = 2*(3+20) = 2*23 = 46
 	// Inside parens: precedence still applies: 3 add 4 mul 5 → 3+(4*5) = 23
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewWord("mul"),
 		NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5), NewWord(")"),
@@ -2337,7 +2835,11 @@ func TestEdgeParenComplexExpression(t *testing.T) {
 
 func TestEdgeParenSiblingExpressions(t *testing.T) {
 	// (1 add 2) mul (3 add 4) → 3*7 = 21
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 		NewWord("mul"),
@@ -2356,7 +2858,10 @@ func TestEdgeParenSiblingExpressions(t *testing.T) {
 func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 	// set (lower KEY) (2 add 3) end get key → [5]
 	// (lower KEY) → 'key', (2 add 3) → 5
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"),
@@ -2375,7 +2880,11 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 
 func TestEdgeDupThenAdd(t *testing.T) {
 	// 5 dup add → 5+5 = 10
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(5), NewWord("dup"), NewWord("add"),
 	})
@@ -2389,7 +2898,11 @@ func TestEdgeDupThenAdd(t *testing.T) {
 
 func TestEdgeSwapThenSub(t *testing.T) {
 	// 3 10 swap sub → 10-3 = 7 (swap makes 10 first arg)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(3), NewInteger(10), NewWord("swap"), NewWord("sub"),
 	})
@@ -2403,7 +2916,11 @@ func TestEdgeSwapThenSub(t *testing.T) {
 
 func TestEdgeDropThenOp(t *testing.T) {
 	// 1 2 3 drop add → 1+2 = 3
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"), NewWord("add"),
 	})
@@ -2417,7 +2934,11 @@ func TestEdgeDropThenOp(t *testing.T) {
 
 func TestEdgeUpperInParens(t *testing.T) {
 	// (abc upper) → ['ABC']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
 	})
@@ -2431,7 +2952,11 @@ func TestEdgeUpperInParens(t *testing.T) {
 
 func TestEdgeMixedStringAndIntOnStack(t *testing.T) {
 	// "hello" 42 "world" → ['hello', 42, 'world']
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(42), NewString("world"),
 	})
@@ -2445,7 +2970,11 @@ func TestEdgeMixedStringAndIntOnStack(t *testing.T) {
 
 func TestEdgeChainUpperLower(t *testing.T) {
 	// "Hello" upper lower → 'hello'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("Hello"), NewWord("upper"), NewWord("lower"),
 	})
@@ -2459,7 +2988,11 @@ func TestEdgeChainUpperLower(t *testing.T) {
 
 func TestEdgeSuffixUpperThenLower(t *testing.T) {
 	// lower (upper abc) → lower 'ABC' → 'abc'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
 		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
@@ -2476,7 +3009,11 @@ func TestEdgeSuffixUpperThenLower(t *testing.T) {
 
 func TestEdgeAddWithStringAndInt(t *testing.T) {
 	// "hello" 1 add → "hello1" (string concatenation via scalar+scalar)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(1), NewWord("add"),
 	})
@@ -2491,7 +3028,11 @@ func TestEdgeAddWithStringAndInt(t *testing.T) {
 func TestEdgePrefixMatchSpecificity(t *testing.T) {
 	// Verify that more specific signatures win
 	// upper takes [string], which matches "hello" (string/proper)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("test"), NewWord("upper")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2508,8 +3049,12 @@ func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
 	// Actually 2 add: prefix [int,int] needs 2 ints, but only 1 inside paren.
 	// So it falls through to suffix (infix) match: [int|int], but then needs suffix arg.
 	// ')' closes paren, orphaned forward error.
-	e := New(DefaultRegistry())
-	_, err := e.Run([]Value{
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
+	_, err = e.Run([]Value{
 		NewInteger(1),
 		NewWord("("), NewInteger(2), NewWord("add"), NewWord(")"),
 	})
@@ -2521,7 +3066,10 @@ func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
 // --- Edge: registry ---
 
 func TestEdgeLookupUnknown(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	fn := r.Lookup("nonexistent")
 	if fn != nil {
 		t.Errorf("expected nil for unknown function, got %v", fn)
@@ -2529,7 +3077,10 @@ func TestEdgeLookupUnknown(t *testing.T) {
 }
 
 func TestEdgeEmptyRegistry(t *testing.T) {
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := NewTop(r)
 	// Everything becomes unknown word → string
 	result, err := e.Run([]Value{NewWord("foo"), NewWord("bar")})
@@ -2545,7 +3096,10 @@ func TestEdgeEmptyRegistry(t *testing.T) {
 }
 
 func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := NewTop(r)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("end")})
 	if err != nil {
@@ -2557,7 +3111,10 @@ func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
 }
 
 func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := NewTop(r)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(42), NewWord(")"),
@@ -2575,7 +3132,11 @@ func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
 func TestEdgeResultCollectedByPendingForward(t *testing.T) {
 	// lower (upper abc) → forward for lower should collect result of (upper abc)
 	// (upper abc) → 'ABC', then lower's forward collects it → 'abc'
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
 		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
@@ -2592,7 +3153,11 @@ func TestEdgePrefixResultFeedsInfix(t *testing.T) {
 	// 2 3 add add 4 → (2+3) produces 5 via prefix, then 5 add 4 → but wait,
 	// the second add sees 5 on stack as prefix match [int], and sets up forward for 4
 	// Result: 9
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewInteger(3), NewWord("add"),
 		NewWord("add"), NewInteger(4),
@@ -2609,12 +3174,18 @@ func TestEdgePrefixResultFeedsInfix(t *testing.T) {
 
 func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	// Two different registries should have separate stores
-	reg1 := DefaultRegistry()
-	reg2 := DefaultRegistry()
+	reg1, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg2, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e1 := New(reg1)
 	e2 := New(reg2)
 
-	_, err := e1.Run([]Value{
+	_, err = e1.Run([]Value{
 		NewWord("set"), NewWord("key"), NewInteger(111),
 	})
 	if err != nil {
@@ -2632,7 +3203,11 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 // --- Edge: single-element inputs ---
 
 func TestEdgeSingleInteger(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(0)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2643,7 +3218,11 @@ func TestEdgeSingleInteger(t *testing.T) {
 }
 
 func TestEdgeSingleString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("x")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2654,7 +3233,11 @@ func TestEdgeSingleString(t *testing.T) {
 }
 
 func TestEdgeSingleEmptyString(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{NewString("")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2697,7 +3280,10 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 
 func TestEdgeSignatureNoPrefix(t *testing.T) {
 	// A function with only suffix should work when called with no prefix stack
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Register("echo", Signature{
 		Args:    []Type{TAny},
 		Handler: func(args []Value) ([]Value, error) { return args, nil },
@@ -2714,7 +3300,10 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 
 func TestEdgeSignatureMultipleSuffix(t *testing.T) {
 	// A function that takes 2 suffix args
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Register("pair", Signature{
 		Args: []Type{TAny, TAny},
 		Handler: func(args []Value) ([]Value, error) {
@@ -2735,7 +3324,10 @@ func TestEdgeSignatureMultipleSuffix(t *testing.T) {
 
 func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 	// A function that returns multiple values
-	r := NewRegistry()
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Register("triple", Signature{
 		Args: []Type{TAny},
 		Handler: func(args []Value) ([]Value, error) {
@@ -2759,7 +3351,11 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 
 func TestEdgeSignatureReturnsNothing(t *testing.T) {
 	// A function that returns nothing (like drop)
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("drop"), NewWord("drop"),
 	})
@@ -2775,7 +3371,11 @@ func TestEdgeSignatureReturnsNothing(t *testing.T) {
 
 func TestEdgeEndInsideParenNoForward(t *testing.T) {
 	// (42 end) → end is no-op inside parens, gives [42]
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("("), NewInteger(42), NewWord("end"), NewWord(")"),
 	})
@@ -2790,7 +3390,10 @@ func TestEdgeEndInsideParenNoForward(t *testing.T) {
 func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 	// set a (1 add 2) end get a → set has forward, (1 add 2)=3 is collected,
 	// end terminates the forward for set, get a → [3]
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("set"), NewWord("a"),
@@ -2810,11 +3413,14 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 
 func TestDefBasicListBody(t *testing.T) {
 	// def increment [1 add]  2 increment → 3
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	// First run: define increment
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("increment"),
 		NewList([]Value{NewInteger(1), NewWord("add")}),
 	})
@@ -2836,10 +3442,13 @@ func TestDefBasicListBody(t *testing.T) {
 
 func TestDefScalarBody(t *testing.T) {
 	// def myval 42  myval → 42
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("myval"), NewInteger(42),
 	})
 	if err != nil {
@@ -2859,10 +3468,13 @@ func TestDefScalarBody(t *testing.T) {
 
 func TestDefStringName(t *testing.T) {
 	// def "double" [dup add]  5 double → 10
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewString("double"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
@@ -2883,10 +3495,13 @@ func TestDefStringName(t *testing.T) {
 
 func TestDefPrefixBodyStringName(t *testing.T) {
 	// [1 add] def "inc" 10 inc → 11
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewList([]Value{NewInteger(1), NewWord("add")}),
 		NewWord("def"), NewString("inc"),
 	})
@@ -2907,10 +3522,13 @@ func TestDefPrefixBodyStringName(t *testing.T) {
 
 func TestDefPrefixBody(t *testing.T) {
 	// [1 sub] def decrement  3 decrement → 2
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewList([]Value{NewInteger(1), NewWord("sub")}),
 		NewWord("def"), NewWord("decrement"),
 	})
@@ -2931,7 +3549,10 @@ func TestDefPrefixBody(t *testing.T) {
 
 func TestDefAndUseSameRun(t *testing.T) {
 	// def triple [dup dup add add] 4 triple → 12
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2950,7 +3571,11 @@ func TestDefAndUseSameRun(t *testing.T) {
 func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
 	// Unknown words without a pending TWord forward still coerce to strings.
 	// a upper → "A"
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("a"), NewWord("upper"),
 	})
@@ -2965,7 +3590,10 @@ func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
 func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
 	// Undefined word "foo" is preserved as TWord when def's forward expects it.
 	// def foo 99  foo → 99
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2982,7 +3610,10 @@ func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
 
 func TestDefStringBody(t *testing.T) {
 	// def greeting "hello"  greeting → "hello"
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2999,7 +3630,10 @@ func TestDefStringBody(t *testing.T) {
 
 func TestDefUsedMultipleTimes(t *testing.T) {
 	// def inc [1 add]  1 inc inc inc → 4
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3021,7 +3655,10 @@ func TestDefForthSquare(t *testing.T) {
 	// : square dup mul ;
 	// Classic Forth square: duplicates top of stack and multiplies.
 	// def square [dup mul]  5 square → 25
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3041,7 +3678,10 @@ func TestDefForthNegate(t *testing.T) {
 	// : negate 0 swap sub ;
 	// Negates a number: 0 - n.
 	// def negate [0 swap sub]  7 negate → -7
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3063,7 +3703,10 @@ func TestDefForthOver(t *testing.T) {
 	// Without rot, we simulate: over = [swap dup] gives (a b → b a a)
 	// which isn't over. Instead test the concept of building combinators.
 	// def dup2 [dup dup]  3 dup2 → 3 3 3
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3089,11 +3732,14 @@ func TestDefForthComposition(t *testing.T) {
 	// : double dup add ;
 	// : quadruple double double ;
 	// 3 quadruple → 12
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	// Define double
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("double"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
@@ -3127,10 +3773,13 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 	// : inc2 inc inc ;
 	// : inc6 inc2 inc2 inc2 ;
 	// 0 inc6 → 6
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("inc"),
 		NewList([]Value{NewInteger(1), NewWord("add")}),
 	})
@@ -3170,10 +3819,13 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	// 3 square 4 square add → with suffix precedence, mul in
 	// square body grabs 4 from suffix: 3 dup mul 4 → mul(3,4)=12,
 	// then square(12)=144, add(3,144)=147
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
@@ -3199,10 +3851,13 @@ func TestDefForthCube(t *testing.T) {
 	// : cube dup square mul ;
 	// Note: cube duplicates n, squares one copy, then multiplies: n * n^2 = n^3
 	// 3 cube → 27
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
@@ -3233,10 +3888,13 @@ func TestDefForthWithInfixOps(t *testing.T) {
 	// Defined words work with infix operators from the calling context.
 	// : double dup add ;
 	// 3 double mul 2 → 6 * 2 = 12
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("double"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
@@ -3259,7 +3917,10 @@ func TestDefForthWithInfixOps(t *testing.T) {
 func TestDefForthConstant(t *testing.T) {
 	// : pi 3 ;   (Forth-style constant as a word that pushes a value)
 	// pi pi add → 6
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3278,7 +3939,10 @@ func TestDefForthStackEffectMultipleValues(t *testing.T) {
 	// A word that pushes multiple values onto the stack.
 	// : pair1 1 2 ;
 	// pair1 add → 3
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3298,7 +3962,10 @@ func TestDefForthSwapSub(t *testing.T) {
 	// : nip swap drop ;
 	// Nip removes second element: (a b → b)
 	// 10 20 nip → 20
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3323,7 +3990,10 @@ func TestDefForthAbsDiff(t *testing.T) {
 	// Actually sub is prefix [a, b] → a - b, so (3, 7) → 3 - 7 = -4.
 	// Let me reconsider: just demonstrate sub with swap.
 	// def rsub [swap sub]  3 7 rsub → swap gives (7,3), sub gives 7-3=4
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3344,7 +4014,10 @@ func TestDefForthMultipleDefsInSameRun(t *testing.T) {
 	// : inc 1 add ;
 	// : dec 1 sub ;
 	// 10 inc inc dec → 11
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3366,7 +4039,10 @@ func TestDefForthStringWord(t *testing.T) {
 	// A word that pushes a string and operates on it.
 	// : shout upper ;
 	// "hello" shout → "HELLO"
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3385,11 +4061,14 @@ func TestDefForthStringWord(t *testing.T) {
 func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	// Definitions persist in the registry across Run calls,
 	// mirroring how Forth words persist once defined.
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	// Run 1: define square
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
@@ -3433,7 +4112,10 @@ func TestDefForthDefWithEnd(t *testing.T) {
 	// Using end to terminate def's suffix collection early,
 	// with the body coming from the prefix stack.
 	// [dup add] def double end 5 double → 10
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3455,7 +4137,10 @@ func TestDefForthFactorial5(t *testing.T) {
 	// : mul5 5 mul ;    (just multiply by a constant)
 	// 1 mul5 → 5, then 4 mul → 20, then 3 mul → 60, then 2 mul → 120
 	// This tests defined words mixed with inline operations.
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -3479,10 +4164,13 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	// : save-x set x end ;
 	// : load-x get x ;
 	// 42 save-x load-x → 42
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := New(reg)
 
-	_, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("save-x"),
 		NewList([]Value{NewWord("set"), NewWord("x"), NewWord("end")}),
 	})
@@ -3647,10 +4335,14 @@ func TestStackInsertWithHeadroom(t *testing.T) {
 // --- Record type tests ---
 
 func TestRecordTypeCreation(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
-	// record [x:number y:number] => record{x:number,y:number}
-	// In the list, each pair x:number becomes a single-key map {x:number}.
+	// record [x:number y:number] => record{x:Number,y:Number}
+	// In the list, each pair x:Number becomes a single-key map {x:Number}.
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
@@ -3666,16 +4358,20 @@ func TestRecordTypeCreation(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:number,y:number}" {
-		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
 func TestRecordTypeWithDef(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	// def Point record [x:number y:number]
-	// Point => record{x:number,y:number}
+	// Point => record{x:Number,y:Number}
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
@@ -3696,13 +4392,17 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:number,y:number}" {
-		t.Errorf("got %s, want record{x:number,y:number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
 func TestRecordTypeUnify(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	// Helper to run a unify test and return "result_string bool_string".
 	runUnify := func(t *testing.T, input []Value) string {
@@ -3723,8 +4423,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("x", NewTypeLiteral(TNumber))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:number} true" {
-			t.Errorf("got %s, want record{x:number} true", got)
+		if got != "record{x:Number} true" {
+			t.Errorf("got %s, want record{x:Number} true", got)
 		}
 	})
 
@@ -3761,8 +4461,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2.Set("x", NewTypeLiteral(TNumber))
 		f2.Set("y", NewTypeLiteral(TString))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:number,y:string} true" {
-			t.Errorf("got %s, want record{x:number,y:string} true", got)
+		if got != "record{x:Number,y:String} true" {
+			t.Errorf("got %s, want record{x:Number,y:String} true", got)
 		}
 	})
 
@@ -3776,8 +4476,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("a", NewRecordType(inner2))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{a:record{z:string}} true" {
-			t.Errorf("got %s, want record{a:record{z:string}} true", got)
+		if got != "record{a:record{z:String}} true" {
+			t.Errorf("got %s, want record{a:record{z:String}} true", got)
 		}
 	})
 
@@ -3812,7 +4512,11 @@ func TestRecordTypeUnify(t *testing.T) {
 }
 
 func TestRecordTypeListWithMapElement(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 
 	// record [{x:{z:boolean}} "y":1]
 	// List element 0: map {x:{z:boolean}} — a map with nested map value
@@ -3847,7 +4551,11 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 // --- do word tests ---
 
 func TestDoList(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	// do [1 add 2] → 3
 	input := []Value{
 		NewWord("do"),
@@ -3863,7 +4571,11 @@ func TestDoList(t *testing.T) {
 }
 
 func TestDoMap(t *testing.T) {
-	e := New(DefaultRegistry())
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := New(reg)
 	// do {x:[3 add 4]} → {x:7}
 	innerList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
 	om := NewOrderedMap()
@@ -3890,7 +4602,10 @@ func TestDoMap(t *testing.T) {
 func TestModuleBasic(t *testing.T) {
 	// module [def inc [add 1] export Foo {inc:inc}]
 	// Should return a module descriptor.
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
@@ -3923,7 +4638,10 @@ func TestModuleBasic(t *testing.T) {
 func TestModuleImportBasic(t *testing.T) {
 	// import module [def inc [add 1] export Foo {inc:inc}]
 	// Then Foo should be a def that resolves to a map {inc:[add 1]}
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
@@ -3951,7 +4669,10 @@ func TestModuleImportBasic(t *testing.T) {
 func TestModuleImportDotAccess(t *testing.T) {
 	// import module [def inc [add 1] export Foo {inc:inc}]
 	// Foo.inc 2 → should evaluate to 3
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
@@ -3976,7 +4697,10 @@ func TestModuleImportDotAccess(t *testing.T) {
 
 func TestModuleIsolation(t *testing.T) {
 	// Module's internal defs should not leak to the parent.
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("secret"), NewInteger(42),
 		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
@@ -3992,7 +4716,10 @@ func TestModuleIsolation(t *testing.T) {
 func TestModuleDefSubject(t *testing.T) {
 	// Modules can be subjects of def.
 	// def MyMod module [export M {x:1}]
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
 	})
@@ -4017,7 +4744,10 @@ func TestModuleDefSubject(t *testing.T) {
 func TestModuleImportRename(t *testing.T) {
 	// import [Foo Bar] module [export Foo {x:1}]
 	// Bar should be defined, Foo should not.
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
 	})
@@ -4039,7 +4769,10 @@ func TestModuleImportRename(t *testing.T) {
 
 func TestModuleImportMultiRename(t *testing.T) {
 	// import [[Foo Baz]] module [export Foo {x:1}]
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := NewList([]Value{
 		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
 	})
@@ -4058,7 +4791,10 @@ func TestModuleImportMultiRename(t *testing.T) {
 
 func TestModuleFreshRegistry(t *testing.T) {
 	// Defs in parent should not be visible inside module.
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Define "foo" in parent.
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(99),
@@ -4095,7 +4831,10 @@ func makeMap(key string, val Value) Value {
 // --- Benchmarks ---
 
 func BenchmarkSimpleExpression(b *testing.B) {
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		b.Fatal(err)
+	}
 	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -4105,7 +4844,10 @@ func BenchmarkSimpleExpression(b *testing.B) {
 }
 
 func BenchmarkComplexExpression(b *testing.B) {
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		b.Fatal(err)
+	}
 	input := []Value{
 		NewInteger(1), NewInteger(2), NewWord("add"),
 		NewInteger(3), NewWord("mul"),
@@ -4118,7 +4860,10 @@ func BenchmarkComplexExpression(b *testing.B) {
 }
 
 func BenchmarkRepeatedRun(b *testing.B) {
-	reg := DefaultRegistry()
+	reg, err := DefaultRegistry()
+	if err != nil {
+		b.Fatal(err)
+	}
 	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
 	eng := New(reg)
 	b.ReportAllocs()
