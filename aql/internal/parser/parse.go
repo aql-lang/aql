@@ -11,16 +11,16 @@ import (
 
 // typeNames maps well-known type names to their engine Type.
 var typeNames = map[string]engine.Type{
-	"any":     engine.TAny,
-	"none":    engine.TNone,
-	"scalar":  engine.TScalar,
-	"number":  engine.TNumber,
-	"integer": engine.TInteger,
-	"string":  engine.TString,
-	"boolean": engine.TBoolean,
-	"atom":    engine.TAtom,
-	"list":    engine.TList,
-	"map":     engine.TMap,
+	"Any":     engine.TAny,
+	"None":    engine.TNone,
+	"Scalar":  engine.TScalar,
+	"Number":  engine.TNumber,
+	"Integer": engine.TInteger,
+	"String":  engine.TString,
+	"Boolean": engine.TBoolean,
+	"Atom":    engine.TAtom,
+	"List":    engine.TList,
+	"Map":     engine.TMap,
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -448,13 +448,19 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	var result []engine.Value
 
 	// First part (before first dot): retrieve from store via get.
+	// "args" is a registered word (not a Store variable), so it
+	// resolves directly without get.
 	if parts[0] != "" {
-		result = append(result, engine.NewWord("get"))
-		w, err := parseWord(parts[0])
-		if err != nil {
-			return nil, err
+		if parts[0] == "args" {
+			result = append(result, engine.NewWord("args"))
+		} else {
+			result = append(result, engine.NewWord("get"))
+			w, err := parseWord(parts[0])
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, w)
 		}
-		result = append(result, w)
 	}
 
 	// Subsequent parts (after each dot): emit key then dot (prefix).

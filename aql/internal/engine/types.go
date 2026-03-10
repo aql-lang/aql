@@ -1,6 +1,11 @@
 package engine
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // Type represents a hierarchical AQL type such as "string/proper" or "number/integer".
 // A child type matches a parent pattern: string/proper matches string.
@@ -10,30 +15,60 @@ type Type struct {
 
 // Well-known types.
 var (
-	TAny          = NewType("any")
-	TNone         = NewType("none")
-	TScalar       = NewType("scalar")
-	TString       = NewType("string")
-	TStringProper = NewType("string/proper")
-	TStringEmpty  = NewType("string/empty")
-	TNumber       = NewType("number")
-	TInteger      = NewType("number/integer")
-	TBoolean      = NewType("boolean")
-	TBooleanTrue  = NewType("boolean/true")
-	TBooleanFalse = NewType("boolean/false")
-	TAtom         = NewType("atom")
-	TList         = NewType("list")
-	TMap          = NewType("map")
-	TWord         = NewType("word")
-	TForward      = NewType("forward")
-	TOpenParen    = NewType("paren/open")
-	TFnDef        = NewType("fndef")
-	TDisjunct     = NewType("disjunct")
+	TAny          = mustType("Any")
+	TNone         = mustType("None")
+	TScalar       = mustType("Scalar")
+	TString       = mustType("String")
+	TStringProper = mustType("String/Proper")
+	TStringEmpty  = mustType("String/Empty")
+	TNumber       = mustType("Number")
+	TInteger      = mustType("Number/Integer")
+	TBoolean      = mustType("Boolean")
+	TBooleanTrue  = mustType("Boolean/True")
+	TBooleanFalse = mustType("Boolean/False")
+	TAtom         = mustType("Atom")
+	TList         = mustType("List")
+	TMap          = mustType("Map")
+	TWord         = mustType("Word")
+	TForward      = mustType("Forward")
+	TOpenParen    = mustType("Paren/Open")
+	TFnDef        = mustType("Fndef")
+	TFnUndef      = mustType("Fnundef")
+	TFunction     = mustType("Function")
+	TReturnCheck     = mustType("Returncheck")
+	TDisjunct        = mustType("Disjunct")
+	TWordInspection  = mustType("Map/Word_inspection")
+	TFetchFunction   = mustType("Word/Function/Fetch")
+	TFetchRequest    = mustType("Map/Fetch/Request")
+	TFetchResponse   = mustType("Map/Fetch/Response")
+	TMark            = mustType("Mark")
+	TMove            = mustType("Move")
+	TModule          = mustType("Module")
 )
 
-// NewType creates a Type from a slash-separated path, e.g. "string/proper".
-func NewType(path string) Type {
-	return Type{Parts: strings.Split(path, "/")}
+// mustType is used only for well-known type constants at init time.
+// It panics on invalid paths — acceptable because these are compile-time
+// constants whose correctness is verified by tests.
+func mustType(path string) Type {
+	t, err := NewType(path)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+// NewType creates a Type from a slash-separated path, e.g. "String/Proper".
+// Every alphabetic part must begin with an uppercase letter; lowercase is an error.
+// Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
+func NewType(path string) (Type, error) {
+	parts := strings.Split(path, "/")
+	for _, p := range parts {
+		r, _ := utf8.DecodeRuneInString(p)
+		if unicode.IsLetter(r) && !unicode.IsUpper(r) {
+			return Type{}, fmt.Errorf("aql: type part %q in %q must start with an uppercase letter", p, path)
+		}
+	}
+	return Type{Parts: parts}, nil
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -41,17 +76,17 @@ func NewType(path string) Type {
 //   - A child matches a parent: string/proper matches string.
 //   - A parent does NOT match a child: string does not match string/proper.
 func (t Type) Matches(pattern Type) bool {
-	if len(pattern.Parts) == 1 && pattern.Parts[0] == "any" {
-		// "any" matches all data types but not internal types (word, forward).
-		if t.Parts[0] == "word" || t.Parts[0] == "forward" || t.Parts[0] == "paren" {
+	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Any" {
+		// "Any" matches all data types but not internal types (Word, Forward).
+		if t.Parts[0] == "Word" || t.Parts[0] == "Forward" || t.Parts[0] == "Paren" || t.Parts[0] == "Mark" || t.Parts[0] == "Move" || t.Parts[0] == "Returncheck" {
 			return false
 		}
 		return true
 	}
-	if len(pattern.Parts) == 1 && pattern.Parts[0] == "scalar" {
-		// "scalar" is the supertype of string, number, boolean, and atom.
+	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Scalar" {
+		// "Scalar" is the supertype of String, Number, Boolean, and Atom.
 		switch t.Parts[0] {
-		case "string", "number", "boolean", "atom", "scalar":
+		case "String", "Number", "Boolean", "Atom", "Scalar":
 			return true
 		}
 		return false

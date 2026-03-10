@@ -8,16 +8,16 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"any":     TAny,
-	"none":    TNone,
-	"scalar":  TScalar,
-	"number":  TNumber,
-	"integer": TInteger,
-	"string":  TString,
-	"boolean": TBoolean,
-	"atom":    TAtom,
-	"list":    TList,
-	"map":     TMap,
+	"Any":     TAny,
+	"None":    TNone,
+	"Scalar":  TScalar,
+	"Number":  TNumber,
+	"Integer": TInteger,
+	"String":  TString,
+	"Boolean": TBoolean,
+	"Atom":    TAtom,
+	"List":    TList,
+	"Map":     TMap,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -36,11 +36,20 @@ type Engine struct {
 	registry  *Registry
 	trace     TraceCallback
 	traceNote string // annotation set during execution for the next trace call
+	stepLimit int    // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	marks     map[string]bool // active mark IDs (for mark/move control flow)
 }
 
 // New creates an Engine with the given function registry.
+// The returned engine uses the sub-engine step limit (2222).
+// Use NewTop for the top-level engine with a higher limit (22222).
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry}
+	return &Engine{registry: registry, stepLimit: 2222}
+}
+
+// NewTop creates a top-level Engine with the maximum step limit (22222).
+func NewTop(registry *Registry) *Engine {
+	return &Engine{registry: registry, stepLimit: 22222}
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -100,6 +109,14 @@ func (e *Engine) stackSplice(i, count int, replacements ...Value) {
 // Run executes the input values through the stack machine and returns the
 // resulting stack.
 func (e *Engine) Run(input []Value) ([]Value, error) {
+	// Push a scoped context layer (shallow copy of parent context).
+	parent := e.registry.Context()
+	if parent == nil {
+		parent = make(map[string]Value)
+	}
+	e.registry.PushContext(parent)
+	defer e.registry.PopContext()
+
 	if cap(e.stack) >= len(input) {
 		e.stack = e.stack[:len(input)]
 	} else {
@@ -108,7 +125,10 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	copy(e.stack, input)
 	e.pointer = 0
 
-	limit := 1000 // safety bound
+	limit := e.stepLimit
+	if limit <= 0 {
+		limit = 22222
+	}
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break
@@ -127,6 +147,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		switch {
 		case val.IsWord():
 			if err := e.stepWord(val); err != nil {
+				if isBreak(err) {
+					if e.handleLoopBreak() {
+						continue
+					}
+				}
+				if isContinue(err) {
+					if e.handleLoopContinue() {
+						continue
+					}
+				}
 				return nil, err
 			}
 
@@ -136,7 +166,21 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsOpenParen():
 			e.pointer++
 
+		case val.IsMark():
+			e.stepMark(val)
+
+		case val.IsMove():
+			if err := e.stepMove(val); err != nil {
+				return nil, err
+			}
+
+		case val.IsReturnCheck():
+			e.pointer++
+
 		default:
+			if val.VType.Equal(Type{}) {
+				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
+			}
 			if err := e.stepLiteral(); err != nil {
 				return nil, err
 			}
@@ -154,12 +198,15 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		}
 	}
 
+	// Remove any leftover marks and moves from the stack.
+	e.cleanMarks()
+
 	return e.stack, nil
 }
 
 // resolveOrphanedForwards handles end-of-input by resolving pending forwards.
 func (e *Engine) resolveOrphanedForwards() error {
-	for attempt := 0; attempt < 100; attempt++ {
+	for attempt := 0; attempt < 222; attempt++ {
 		fwdIdx := -1
 		for i, v := range e.stack {
 			if v.IsForward() {
@@ -231,6 +278,21 @@ func (e *Engine) stepWord(val Value) error {
 		return e.stepLiteral()
 	}
 
+	// If a pending forward expects TFunction, resolve this word to a
+	// function reference value rather than executing it. The word must
+	// have a FnDef entry in DefStacks.
+	if e.hasPendingForwardExpectingFunction() {
+		if stack, ok := e.registry.DefStacks[w.Name]; ok {
+			for i := len(stack) - 1; i >= 0; i-- {
+				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+					e.stack[e.pointer] = NewFunction(fnDef)
+					return e.stepLiteral()
+				}
+			}
+		}
+		// Not a def fn — fall through to normal execution.
+	}
+
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
@@ -275,15 +337,35 @@ func (e *Engine) stepWord(val Value) error {
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
 
-		// Use prefix match only if it has args (typed signature).
-		// Defer 0-arg matches (generic def handler) so suffix-mode
-		// typed signatures get a chance to collect arguments first.
+		// When prefix has a full match (typed signature), check if
+		// suffix tokens should take priority. Suffix precedence means
+		// we prefer to consume tokens after the word when available.
 		if match != nil && len(match.Sig.Args) > 0 {
+			if e.hasSuffixValues(fn) {
+				// Suffix tokens exist. Verify that collecting from
+				// suffix would still produce a valid signature match
+				// before switching away from the working prefix match.
+				suffixVal := e.peekSuffixValue()
+				extended := append(resolved, suffixVal)
+				if MatchSignature(fn.Signatures, extended, w) != nil {
+					bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+					if bestSig != nil {
+						suffixNeeded := len(bestSig.Args) - prefixCount
+						if suffixNeeded <= 0 {
+							suffixNeeded = 1
+						}
+						e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
+						return e.insertForward(w, bestSig, suffixNeeded)
+					}
+				}
+			}
+			// No viable suffix — use prefix match.
 			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
-		// Try suffix: create forward to collect remaining args.
+		// No full prefix match — try suffix (create forward to collect
+		// remaining args), preserving original behavior.
 		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
 		if bestSig != nil {
 			suffixNeeded := len(bestSig.Args) - prefixCount
@@ -511,9 +593,10 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 		if e.stack[i].IsOpenParen() {
 			break
 		}
-		if !e.stack[i].IsForward() {
-			indices = append(indices, i)
+		if e.stack[i].IsForward() || e.stack[i].IsMark() || e.stack[i].IsMove() {
+			continue
 		}
+		indices = append(indices, i)
 	}
 	// Reverse so indices are in stack order (ascending).
 	for i, j := 0, len(indices)-1; i < j; i, j = i+1, j-1 {
@@ -531,7 +614,7 @@ func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
 	}
 	var stack []Value
 	for i := 0; i < e.pointer; i++ {
-		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() {
+		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() || e.stack[i].IsMark() || e.stack[i].IsMove() {
 			continue
 		}
 		stack = append(stack, e.stack[i])
@@ -677,12 +760,156 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		e.pointer = funcIdx
+	} else if e.shouldResolveForwardEarly(fwd, fwdIdx) {
+		// A shorter sig is fully satisfied and the next token can't
+		// produce the longer sig's next expected type. Resolve now
+		// so the function fires before subsequent tokens evaluate.
+		e.traceNote = fmt.Sprintf("early-resolve %s %d/%d",
+			fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+		e.stackRemove(fwdIdx)
+
+		if e.stack[funcIdx].IsWord() {
+			w := e.stack[funcIdx].AsWord()
+			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+		}
+
+		e.pointer = funcIdx
 	} else {
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
 	}
 
 	return nil
+}
+
+// shouldResolveForwardEarly checks whether a forward that hasn't collected
+// all its expected args should resolve now because a shorter signature of the
+// same function is fully satisfied and the next token on the stack cannot
+// plausibly produce the longer sig's next expected type. This prevents the
+// forward from delaying the function's execution when it's clear the shorter
+// sig is the right match (e.g., "undef foo foo" should use the 1-arg [TWord]
+// sig immediately rather than waiting for a TFnUndef that won't come).
+func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
+	fn := e.registry.Lookup(fwd.FuncName)
+	if fn == nil {
+		return false
+	}
+
+	// Check if any shorter sig with exactly CollectedArgs args can
+	// accept the types of the already-collected suffix values.
+	funcIdx := fwd.FuncIndex
+	collectedTypes := make([]Type, fwd.CollectedArgs)
+	for i := 0; i < fwd.CollectedArgs; i++ {
+		collectedTypes[i] = e.stack[funcIdx-fwd.CollectedArgs+i].VType
+	}
+
+	hasShorterMatch := false
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+		if len(sig.Args) != fwd.CollectedArgs {
+			continue
+		}
+		// Flexible match: each collected type must match some sig arg.
+		used := make([]bool, len(sig.Args))
+		allMatch := true
+		for _, ct := range collectedTypes {
+			found := false
+			for j := range sig.Args {
+				if !used[j] && ct.Matches(sig.Args[j]) {
+					used[j] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			hasShorterMatch = true
+			break
+		}
+	}
+	if !hasShorterMatch {
+		return false
+	}
+
+	// A shorter sig is satisfied. Check whether the next token on the
+	// stack could produce the type needed for the longer sig's next slot.
+	nextArgType := fwd.Sig.Args[fwd.CollectedArgs]
+	peekIdx := fwdIdx + 1
+	if peekIdx >= len(e.stack) {
+		return true // no more tokens → resolve with shorter sig
+	}
+
+	return !e.couldProduceType(e.stack[peekIdx], nextArgType)
+}
+
+// couldProduceType predicts whether a stack value, when evaluated, could
+// produce a value matching the expected type. For literal values, this is
+// a direct type check. For words, it predicts based on definitions or
+// assumes built-in functions could produce any type.
+func (e *Engine) couldProduceType(v Value, expected Type) bool {
+	// Direct type match (works for all literals).
+	if v.VType.Matches(expected) {
+		return true
+	}
+
+	if v.IsForward() {
+		return false // structural, can't produce values
+	}
+
+	// An open paren starts a sub-expression that will evaluate to a
+	// value of unknown type, so assume it could produce anything.
+	if v.IsOpenParen() {
+		return true
+	}
+
+	if v.IsWord() {
+		w := v.AsWord()
+		// "(" starts a sub-expression that will produce a value.
+		if w.Name == "(" {
+			return true
+		}
+		// ")" and "end" are terminators, not value-producers.
+		if w.Name == ")" || w.Name == "end" {
+			return false
+		}
+		// Boolean literals.
+		if w.Name == "true" || w.Name == "false" {
+			return TBoolean.Matches(expected)
+		}
+		// Type names stay as type literals.
+		if _, isType := typeNames[w.Name]; isType {
+			return false
+		}
+		// Defined word (via DefStacks): resolves to a known type.
+		if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
+			return ds[len(ds)-1].VType.Matches(expected)
+		}
+		// Registered built-in function: could produce most types.
+		// Specialized internal types (TFnUndef, TFnDef) can only be
+		// produced by specific functions (fn).
+		if fn := e.registry.Lookup(w.Name); fn != nil {
+			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
+				return w.Name == "fn"
+			}
+			// A function with suffix precedence will start its own
+			// argument collection, so it won't directly produce a
+			// value that feeds back as a suffix arg for the current
+			// forward. Resolve the current forward early.
+			if fn.SuffixPrecedence {
+				return false
+			}
+			return true
+		}
+		// Unknown word → becomes atom.
+		return TAtom.Matches(expected)
+	}
+
+	// Non-word literal: already checked VType.Matches above.
+	return false
 }
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
@@ -752,6 +979,260 @@ func (e *Engine) stepEnd() error {
 	return nil
 }
 
+// stepMark records the mark's ID in the marks hash table and advances.
+func (e *Engine) stepMark(val Value) {
+	info := val.AsMark()
+	if e.marks == nil {
+		e.marks = make(map[string]bool)
+	}
+	e.marks[info.ID] = true
+	e.traceNote = "mark " + info.ID
+	e.pointer++
+}
+
+// stepMove jumps the pointer back to the corresponding mark, replaying the
+// original body. Both the mark and the move are removed from the stack after
+// the jump to prevent infinite loops. If the target mark is not found, an
+// error is returned using the move's reason metadata.
+//
+// When the move carries a ForCont (for-loop continuation), stepMoveCont is
+// called instead of the basic one-shot replay.
+func (e *Engine) stepMove(val Value) error {
+	info := val.AsMove()
+	moveIdx := e.pointer
+
+	if e.marks == nil || !e.marks[info.To] {
+		return fmt.Errorf("move error: mark %q not found (%s)", info.To, info.Reason)
+	}
+
+	// Scan the stack to find the mark's current position.
+	markIdx := -1
+	for i := 0; i < len(e.stack); i++ {
+		if e.stack[i].IsMark() && e.stack[i].AsMark().ID == info.To {
+			markIdx = i
+			break
+		}
+	}
+	if markIdx < 0 {
+		// Mark was removed from the stack (e.g. by a for-loop controller
+		// signalling loop completion). Remove this orphaned move quietly.
+		delete(e.marks, info.To)
+		e.stackRemove(e.pointer)
+		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		return nil
+	}
+
+	// Delegate to continuation handler for for-loops.
+	if info.Cont != nil {
+		return e.stepMoveCont(markIdx, moveIdx, info)
+	}
+
+	// Delegate to if-statement continuation handler.
+	if info.IfCont != nil {
+		return e.stepMoveIf(markIdx, moveIdx, info)
+	}
+
+	// Get the saved body from the mark.
+	markInfo := e.stack[markIdx].AsMark()
+
+	// Remove from hash table.
+	delete(e.marks, info.To)
+
+	// Replace everything from mark through move (inclusive) with the body copy.
+	body := make([]Value, len(markInfo.Body))
+	copy(body, markInfo.Body)
+	e.stackSplice(markIdx, moveIdx-markIdx+1, body...)
+
+	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+
+	// Set pointer to where the mark was (now the start of the replayed body).
+	e.pointer = markIdx
+	return nil
+}
+
+// stepMoveCont handles a for-loop continuation move. It collects this
+// iteration's results, advances the iterator, and either splices in a new
+// mark+body+move for the next iteration or finalizes the loop.
+func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
+	cont := info.Cont
+
+	// Collect resolved values between mark and move (this iteration's output).
+	for j := markIdx + 1; j < moveIdx; j++ {
+		cont.Results = append(cont.Results, e.stack[j])
+	}
+
+	// Advance iterator.
+	cont.Current += cont.Step
+
+	// Check if more iterations remain.
+	moreIterations := (cont.Step > 0 && cont.Current < cont.End) ||
+		(cont.Step < 0 && cont.Current > cont.End)
+
+	if moreIterations {
+		// Update iterator: uninstall old value, install new one.
+		// This keeps the DefStacks depth at 1 throughout the loop.
+		uninstallDef(cont.Registry, cont.IterName)
+		installDef(cont.Registry, cont.IterName, NewInteger(cont.Current))
+
+		// Generate new mark ID.
+		id := NextMarkID()
+
+		// Build replacement: mark + body + move.
+		body := cont.Body
+		tokens := make([]Value, 0, len(body)+2)
+		tokens = append(tokens, NewMark(id, body...))
+		bodyCopy := make([]Value, len(body))
+		copy(bodyCopy, body)
+		tokens = append(tokens, bodyCopy...)
+		tokens = append(tokens, NewMoveCont(id, info.Reason, cont))
+
+		// Remove old mark ID, register new one.
+		delete(e.marks, info.To)
+		e.stackSplice(markIdx, moveIdx-markIdx+1, tokens...)
+		if e.marks == nil {
+			e.marks = make(map[string]bool)
+		}
+		e.marks[id] = true
+
+		// Set pointer to the new mark so stepMark processes it.
+		e.pointer = markIdx
+		e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		return nil
+	}
+
+	// Done — uninstall iterator, splice in accumulated results.
+	uninstallDef(cont.Registry, cont.IterName)
+	delete(e.marks, info.To)
+	e.stackSplice(markIdx, moveIdx-markIdx+1, cont.Results...)
+	e.pointer = markIdx
+	e.traceNote = "for done"
+	return nil
+}
+
+// stepMoveIf handles an if-statement continuation move. It collects the
+// condition result (all resolved values between mark and move), evaluates
+// the last value for truthiness, and splices in the chosen branch.
+func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
+	ifCont := info.IfCont
+
+	// Collect condition results between mark and move.
+	var condResult Value
+	for j := markIdx + 1; j < moveIdx; j++ {
+		condResult = e.stack[j]
+	}
+
+	// Remove mark from hash table.
+	delete(e.marks, info.To)
+
+	// Check if condition produced a value.
+	if condResult.VType.Parts == nil {
+		e.stackSplice(markIdx, moveIdx-markIdx+1)
+		e.pointer = markIdx
+		return fmt.Errorf("if: condition produced no value")
+	}
+
+	// Evaluate truthiness and choose branch.
+	cond := isTruthy(condResult)
+
+	var branch []Value
+	if cond {
+		branch = ifCont.Then
+	} else {
+		branch = ifCont.Else
+	}
+
+	// Splice chosen branch (or nothing) in place of mark+condition+move.
+	e.stackSplice(markIdx, moveIdx-markIdx+1, branch...)
+	e.pointer = markIdx
+	e.traceNote = fmt.Sprintf("if %v", cond)
+	return nil
+}
+
+// handleLoopBreak handles a break sentinel error by finding the nearest
+// enclosing for-loop (move with continuation) and terminating it.
+// Returns true if break was handled, false if no enclosing loop was found.
+func (e *Engine) handleLoopBreak() bool {
+	// Scan forward from current pointer for a move with continuation.
+	for i := e.pointer; i < len(e.stack); i++ {
+		if e.stack[i].IsMove() {
+			info := e.stack[i].AsMove()
+			if info.Cont != nil {
+				// Found the for-loop's move. Find its mark.
+				markIdx := -1
+				for j := 0; j < i; j++ {
+					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+						markIdx = j
+						break
+					}
+				}
+				if markIdx < 0 {
+					delete(e.marks, info.To)
+					continue
+				}
+
+				// Uninstall iterator, splice in accumulated results.
+				uninstallDef(info.Cont.Registry, info.Cont.IterName)
+				delete(e.marks, info.To)
+				e.stackSplice(markIdx, i-markIdx+1, info.Cont.Results...)
+				e.pointer = markIdx
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// handleLoopContinue handles a continue sentinel error by finding the nearest
+// enclosing for-loop and advancing to the next iteration (discarding the
+// current iteration's partial results).
+// Returns true if continue was handled, false if no enclosing loop was found.
+func (e *Engine) handleLoopContinue() bool {
+	// Scan forward from current pointer for a move with continuation.
+	for i := e.pointer; i < len(e.stack); i++ {
+		if e.stack[i].IsMove() {
+			info := e.stack[i].AsMove()
+			if info.Cont != nil {
+				// Found the for-loop's move. Find its mark.
+				markIdx := -1
+				for j := 0; j < i; j++ {
+					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+						markIdx = j
+						break
+					}
+				}
+				if markIdx < 0 {
+					delete(e.marks, info.To)
+					continue
+				}
+
+				// Remove values between mark and move (discard partial results).
+				if i-markIdx > 1 {
+					e.stackSplice(markIdx+1, i-markIdx-1)
+					// Recalculate move position.
+					i = markIdx + 1
+				}
+				// Set pointer to the move so stepMove fires next.
+				e.pointer = i
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cleanMarks removes any leftover mark and move entries from the stack.
+func (e *Engine) cleanMarks() {
+	i := 0
+	for i < len(e.stack) {
+		if e.stack[i].IsMark() || e.stack[i].IsMove() {
+			e.stackRemove(i)
+		} else {
+			i++
+		}
+	}
+	e.marks = nil
+}
+
 // stepOpenParen replaces the "(" word with an open-paren marker.
 func (e *Engine) stepOpenParen() error {
 	e.stack[e.pointer] = NewOpenParen()
@@ -778,7 +1259,7 @@ func (e *Engine) stepCloseParen() error {
 
 	// Resolve any forwards inside the paren scope via implicit end.
 	// We loop because resolving a forward may cause re-evaluation.
-	for attempt := 0; attempt < 50; attempt++ {
+	for attempt := 0; attempt < 222; attempt++ {
 		hasFwd := false
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if e.stack[i].IsForward() {
@@ -820,6 +1301,8 @@ func (e *Engine) stepCloseParen() error {
 						e.pointer++
 					case val.IsOpenParen():
 						e.pointer++
+					case val.IsReturnCheck():
+						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil {
 							return err
@@ -844,6 +1327,33 @@ func (e *Engine) stepCloseParen() error {
 			fwd := e.stack[i].AsForward()
 			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
 				fwd.FuncName, fwd.ExpectedArgs)
+		}
+	}
+
+	// Check for return type validation.
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if e.stack[i].IsReturnCheck() {
+			rc := e.stack[i].AsReturnCheck()
+			e.stackRemove(i)
+			closeIdx--
+
+			// Collect resolved values in scope.
+			var results []Value
+			for j := openIdx + 1; j < closeIdx; j++ {
+				results = append(results, e.stack[j])
+			}
+
+			if len(results) != len(rc.Returns) {
+				return fmt.Errorf("%s: expected %d return value(s), got %d",
+					rc.FuncName, len(rc.Returns), len(results))
+			}
+			for k, exp := range rc.Returns {
+				if !results[k].VType.Matches(exp) {
+					return fmt.Errorf("%s: return value %d: expected %s, got %s",
+						rc.FuncName, k+1, exp, results[k].VType)
+				}
+			}
+			break
 		}
 	}
 
@@ -885,11 +1395,74 @@ func (e *Engine) effectiveResolved() []Value {
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
-		if !v.IsForward() && !v.IsOpenParen() {
+		if !v.IsForward() && !v.IsOpenParen() && !v.IsMark() && !v.IsMove() {
 			resolved = append(resolved, v)
 		}
 	}
 	return resolved
+}
+
+// hasSuffixValues checks whether there are collectible value tokens after the
+// current pointer. Literals and unknown words are collectible. Known function
+// words are not directly collectible (they execute via stepWord), so they
+// don't count — unless the function has signatures expecting TWord arguments
+// (e.g., def needs to collect word names).
+func (e *Engine) hasSuffixValues(fn *Function) bool {
+	if e.pointer+1 >= len(e.stack) {
+		return false
+	}
+	next := e.stack[e.pointer+1]
+	if next.IsForward() || next.IsOpenParen() {
+		return false
+	}
+	if next.IsWord() {
+		nw := next.AsWord()
+		if nw.Name == ")" || nw.Name == "end" {
+			return false
+		}
+		if e.registry.Lookup(nw.Name) != nil {
+			// Known function — only collectible if fn expects TWord or TFunction args.
+			for si := range fn.Signatures {
+				for _, argType := range fn.Signatures[si].Args {
+					if argType.Equal(TWord) || argType.Equal(TFunction) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// peekSuffixValue returns a value representing what the next stack element
+// would resolve to, for use in speculative signature matching. Unknown words
+// become atoms; true/false become booleans; literals are returned as-is.
+func (e *Engine) peekSuffixValue() Value {
+	if e.pointer+1 >= len(e.stack) {
+		return Value{}
+	}
+	next := e.stack[e.pointer+1]
+	if next.IsWord() {
+		nw := next.AsWord()
+		switch nw.Name {
+		case "true":
+			return NewBoolean(true)
+		case "false":
+			return NewBoolean(false)
+		default:
+			// If the word has a FnDef in DefStacks, peek as TFunction.
+			if stack, ok := e.registry.DefStacks[nw.Name]; ok {
+				for i := len(stack) - 1; i >= 0; i-- {
+					if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+						return NewFunction(fnDef)
+					}
+				}
+			}
+			return NewAtom(nw.Name)
+		}
+	}
+	return next
 }
 
 // peekPrecedence returns the highest precedence of the word at stack[idx].
@@ -1014,6 +1587,25 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TWord)
+			}
+			break
+		}
+	}
+	return false
+}
+
+// hasPendingForwardExpectingFunction checks if there is a pending forward
+// whose next expected argument is TFunction.
+func (e *Engine) hasPendingForwardExpectingFunction() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			break
+		}
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			nextIdx := fwd.CollectedArgs
+			if nextIdx < len(fwd.Sig.Args) {
+				return fwd.Sig.Args[nextIdx].Equal(TFunction)
 			}
 			break
 		}

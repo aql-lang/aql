@@ -1,7 +1,5 @@
 package engine
 
-import "fmt"
-
 // isTruthy converts a Value to a boolean using the same rules as convert boolean:
 // - booleans: direct value
 // - numbers: non-zero is true
@@ -40,62 +38,71 @@ func isTruthy(v Value) bool {
 	}
 }
 
-// evalArg evaluates an if-word argument. If the value is a list, it is
-// evaluated as code (like do). Otherwise the scalar value is returned as-is.
-func evalArg(r *Registry, v Value) ([]Value, error) {
+// spliceArg returns tokens for a branch value. If the value is a list,
+// its elements are returned wrapped in parens so the main engine evaluates
+// them as a sub-expression. Scalars are returned as-is.
+func spliceArg(v Value) []Value {
 	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList()
-		sub := New(r)
-		input := make([]Value, len(elems))
-		copy(input, elems)
-		return sub.Run(input)
+		result := make([]Value, 0, len(elems)+2)
+		result = append(result, NewOpenParen())
+		result = append(result, elems...)
+		result = append(result, NewWord(")"))
+		return result
 	}
-	return []Value{v}, nil
+	return []Value{v}
 }
 
 func registerIf(r *Registry) {
 	// if: [any, any, any] -> [any] — 3-arg (condition, then, else)
 	if3Handler := func(args []Value) ([]Value, error) {
-		condResults, err := evalArg(r, args[0])
-		if err != nil {
-			return nil, fmt.Errorf("if: %w", err)
-		}
-		if len(condResults) == 0 {
-			return nil, fmt.Errorf("if: condition produced no value")
-		}
-		cond := isTruthy(condResults[len(condResults)-1])
+		cond := args[0]
+		thenBranch := spliceArg(args[1])
+		elseBranch := spliceArg(args[2])
 
-		if cond {
-			result, err := evalArg(r, args[1])
-			if err != nil {
-				return nil, fmt.Errorf("if: %w", err)
-			}
-			return result, nil
+		// If condition is a list, use mark/move to evaluate it in-place.
+		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
+			condElems := cond.AsList()
+			id := NextMarkID()
+			tokens := make([]Value, 0, len(condElems)+2)
+			tokens = append(tokens, NewMark(id, condElems...))
+			tokens = append(tokens, condElems...)
+			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
+				Then: thenBranch,
+				Else: elseBranch,
+			}))
+			return tokens, nil
 		}
-		result, err := evalArg(r, args[2])
-		if err != nil {
-			return nil, fmt.Errorf("if: %w", err)
+
+		// Scalar condition: evaluate immediately.
+		if isTruthy(cond) {
+			return thenBranch, nil
 		}
-		return result, nil
+		return elseBranch, nil
 	}
 
 	// if: [any, any] -> [any] — 2-arg (condition, then)
 	if2Handler := func(args []Value) ([]Value, error) {
-		condResults, err := evalArg(r, args[0])
-		if err != nil {
-			return nil, fmt.Errorf("if: %w", err)
-		}
-		if len(condResults) == 0 {
-			return nil, fmt.Errorf("if: condition produced no value")
-		}
-		cond := isTruthy(condResults[len(condResults)-1])
+		cond := args[0]
+		thenBranch := spliceArg(args[1])
 
-		if cond {
-			result, err := evalArg(r, args[1])
-			if err != nil {
-				return nil, fmt.Errorf("if: %w", err)
-			}
-			return result, nil
+		// If condition is a list, use mark/move to evaluate it in-place.
+		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
+			condElems := cond.AsList()
+			id := NextMarkID()
+			tokens := make([]Value, 0, len(condElems)+2)
+			tokens = append(tokens, NewMark(id, condElems...))
+			tokens = append(tokens, condElems...)
+			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
+				Then: thenBranch,
+				Else: nil,
+			}))
+			return tokens, nil
+		}
+
+		// Scalar condition: evaluate immediately.
+		if isTruthy(cond) {
+			return thenBranch, nil
 		}
 		return nil, nil
 	}

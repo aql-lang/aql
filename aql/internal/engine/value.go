@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 )
 
 // OrderedMap is a map that preserves insertion order of keys.
@@ -49,6 +50,21 @@ func (m *OrderedMap) Len() int {
 	return len(m.keys)
 }
 
+// Delete removes a key-value pair. Returns true if the key existed.
+func (m *OrderedMap) Delete(key string) bool {
+	if _, exists := m.vals[key]; !exists {
+		return false
+	}
+	delete(m.vals, key)
+	for i, k := range m.keys {
+		if k == key {
+			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
 // For example, [:string] constrains all list elements to be strings,
 // and {:string} constrains all map values to be strings.
@@ -79,8 +95,9 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params []FnParam
-	Body   []Value
+	Params  []FnParam
+	Returns []Type // declared return types (nil = unchecked)
+	Body    []Value
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
@@ -88,10 +105,90 @@ type FnDefInfo struct {
 	Sigs []FnSig
 }
 
+// FnSigSpec describes a signature specification without a body, used for
+// targeted undef of specific function signatures.
+type FnSigSpec struct {
+	Params  []FnParam
+	Returns []Type
+}
+
+// FnUndefInfo holds signature specs for targeted undef of function signatures.
+type FnUndefInfo struct {
+	Sigs []FnSigSpec
+}
+
+// ReturnCheckInfo carries expected return types for fn-defined function validation.
+type ReturnCheckInfo struct {
+	FuncName string
+	Returns  []Type
+}
+
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
 // A disjunct unifies if any of its alternatives unifies with the target.
 type DisjunctInfo struct {
 	Alternatives []Value
+}
+
+// markCounter is a global counter for generating unique mark IDs.
+var markCounter atomic.Int64
+
+// NextMarkID generates a unique mark ID.
+func NextMarkID() string {
+	n := markCounter.Add(1)
+	return fmt.Sprintf("_m%d", n)
+}
+
+// MarkInfo identifies a mark on the stack. Marks are internal control-flow
+// anchors placed by constructs like for-loops. Each mark has a unique ID
+// so that a corresponding move can jump the pointer back to it.
+// Body stores the original values between the mark and its paired move,
+// enabling replay when the move fires.
+type MarkInfo struct {
+	ID   string  // unique identifier for this mark
+	Body []Value // original content to replay (set by the move on first encounter)
+}
+
+// MoveInfo identifies a move on the stack. When the stack pointer reaches
+// a move, it jumps back to the corresponding mark. The Reason field
+// describes why the move exists (e.g. "for loop") and is used in error
+// messages when the target mark cannot be found.
+//
+// Cont optionally carries for-loop continuation state. When set, stepMove
+// uses it to drive multi-iteration loops: each firing advances the iterator,
+// conditionally re-inserts mark+body+move for the next iteration, and
+// accumulates results across iterations.
+type MoveInfo struct {
+	To     string   // ID of the target mark
+	Reason string   // human-readable reason (for error messages)
+	Cont   *ForCont // optional: for-loop iteration state
+	IfCont *IfCont  // optional: if-statement continuation state
+}
+
+// ForCont holds the iteration state for a mark/move-driven for loop.
+// It is carried by the MoveInfo and mutated across iterations.
+type ForCont struct {
+	Registry *Registry
+	IterName string  // name of the iterator variable (e.g. "i")
+	Current  int64   // current iteration value
+	End      int64   // exclusive bound
+	Step     int64   // increment per iteration
+	Body     []Value // original body tokens (replayed each iteration)
+	Results  []Value // accumulated results from completed iterations
+}
+
+// IfCont holds the continuation state for a mark/move-driven if statement.
+// When the move fires, the condition result (between mark and move) is
+// evaluated for truthiness to select the appropriate branch.
+type IfCont struct {
+	Then []Value // tokens to splice if condition is truthy
+	Else []Value // tokens to splice if condition is falsy (nil for 2-arg if)
+}
+
+// ModuleDesc describes a module: its generated ID and named exports.
+// Each export call adds a named entry mapping export name → export map.
+type ModuleDesc struct {
+	ID      string                    // generated internal identifier
+	Exports map[string]*OrderedMap    // export name → export map (name → value)
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -132,7 +229,9 @@ func NewString(s string) Value {
 // making it a subtype of number/integer. This enables pattern matching
 // on specific values in function signatures.
 func NewInteger(n int64) Value {
-	return Value{VType: NewType(fmt.Sprintf("number/integer/%d", n)), Data: n}
+	// Format always starts with "Number/Integer/" — cannot fail.
+	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
+	return Value{VType: t, Data: n}
 }
 
 // NewBoolean creates a boolean/true or boolean/false value.
@@ -222,14 +321,61 @@ func NewOpenParen() Value {
 	return Value{VType: TOpenParen, Data: nil}
 }
 
+// NewMark creates a mark value with the given unique ID and the body to
+// replay when the corresponding move fires. The body should contain
+// the original values between the mark and its paired move.
+func NewMark(id string, body ...Value) Value {
+	b := make([]Value, len(body))
+	copy(b, body)
+	return Value{VType: TMark, Data: MarkInfo{ID: id, Body: b}}
+}
+
+// NewMove creates a move value targeting the mark with the given ID.
+// The reason string describes why this move exists (used in error messages).
+func NewMove(to string, reason string) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason}}
+}
+
+// NewMoveCont creates a move value with for-loop continuation state.
+func NewMoveCont(to, reason string, cont *ForCont) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
+}
+
+// NewMoveIf creates a move value with if-statement continuation state.
+func NewMoveIf(to, reason string, ifCont *IfCont) Value {
+	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, IfCont: ifCont}}
+}
+
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
 	return Value{VType: TFnDef, Data: info}
 }
 
+// NewFunction creates a function reference value. The underlying data is a
+// FnDefInfo, but the type is TFunction so it can be matched by function-typed
+// parameters and passed to other functions without being called.
+func NewFunction(info FnDefInfo) Value {
+	return Value{VType: TFunction, Data: info}
+}
+
+// NewFnUndef creates a function undef spec value for targeted signature removal.
+func NewFnUndef(info FnUndefInfo) Value {
+	return Value{VType: TFnUndef, Data: info}
+}
+
+// NewReturnCheck creates a return-check marker for fn return type validation.
+func NewReturnCheck(info ReturnCheckInfo) Value {
+	return Value{VType: TReturnCheck, Data: info}
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+}
+
+// NewModule creates a module descriptor value.
+func NewModule(desc ModuleDesc) Value {
+	return Value{VType: TModule, Data: desc}
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -252,6 +398,36 @@ func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
 }
 
+// IsMark reports whether this value is a mark.
+func (v Value) IsMark() bool {
+	return v.VType.Equal(TMark)
+}
+
+// AsMark returns the MarkInfo, panics if not a mark.
+func (v Value) AsMark() MarkInfo {
+	return v.Data.(MarkInfo)
+}
+
+// IsMove reports whether this value is a move.
+func (v Value) IsMove() bool {
+	return v.VType.Equal(TMove)
+}
+
+// AsMove returns the MoveInfo, panics if not a move.
+func (v Value) AsMove() MoveInfo {
+	return v.Data.(MoveInfo)
+}
+
+// IsReturnCheck reports whether this value is a return-check marker.
+func (v Value) IsReturnCheck() bool {
+	return v.VType.Equal(TReturnCheck)
+}
+
+// AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
+func (v Value) AsReturnCheck() ReturnCheckInfo {
+	return v.Data.(ReturnCheckInfo)
+}
+
 // IsDisjunct reports whether this value is a disjunction type.
 func (v Value) IsDisjunct() bool {
 	_, ok := v.Data.(DisjunctInfo)
@@ -261,6 +437,16 @@ func (v Value) IsDisjunct() bool {
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
 func (v Value) AsDisjunct() DisjunctInfo {
 	return v.Data.(DisjunctInfo)
+}
+
+// IsModule reports whether this value is a module descriptor.
+func (v Value) IsModule() bool {
+	return v.VType.Equal(TModule)
+}
+
+// AsModule returns the ModuleDesc, panics if not a module.
+func (v Value) AsModule() ModuleDesc {
+	return v.Data.(ModuleDesc)
 }
 
 // IsAtom reports whether this value is an atom.
@@ -386,6 +572,17 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsMark():
+		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
+	case v.IsMove():
+		m := v.AsMove()
+		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
+	case v.IsReturnCheck():
+		rc := v.AsReturnCheck()
+		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsModule():
+		md := v.AsModule()
+		return fmt.Sprintf("module(%s)", md.ID)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()
@@ -445,7 +642,7 @@ func (v Value) String() string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
-	case v.VType.Equal(TMap):
+	case v.VType.Matches(TMap):
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "{:" + ct.Child.String() + "}"
 		}

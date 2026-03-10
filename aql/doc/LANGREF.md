@@ -45,7 +45,7 @@ false   => false
 **Type literals** name a type without carrying a value.
 
 ```
-number    string    boolean    atom    scalar    any    none    list    map
+number    integer    string    boolean    atom    scalar    any    none    list    map
 ```
 
 ### Compound Data
@@ -328,7 +328,7 @@ tighter when words compete for suffix arguments.
 | Precedence | Words                                          |
 |------------|------------------------------------------------|
 | 2 (high)   | `mul`, `div`, `mod`, `and`, `nand`             |
-| 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `lt`, `gt`, `lte`, `gte`, `eq`, `deq` |
+| 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `min`, `max`, `lt`, `gt`, `lte`, `gte`, `eq`, `neq`, `deq` |
 
 ```
 2 add 3 mul 4               => 14      # 2+(3*4), mul binds tighter
@@ -441,17 +441,74 @@ Modulo. Precedence 2. Modulo by zero is an error.
 10 mod 0            => ERROR: modulo_by_zero
 ```
 
+#### `abs`
+
+Absolute value (unary).
+
+*Signature:* `[integer] -> [integer]`
+
+```
+-5 abs              => 5
+5 abs               => 5
+abs -3              => 3
+```
+
+#### `negate`
+
+Negate an integer (unary).
+
+*Signature:* `[integer] -> [integer]`
+
+```
+5 negate            => -5
+-3 negate           => 3
+negate 7            => -7
+```
+
+#### `min`
+
+Return the smaller of two integers. Precedence 1.
+
+*Signature:* `[integer, integer] -> [integer]`
+
+```
+3 min 5             => 3
+5 min 3             => 3
+```
+
+#### `max`
+
+Return the larger of two integers. Precedence 1.
+
+*Signature:* `[integer, integer] -> [integer]`
+
+```
+3 max 5             => 5
+5 max 3             => 5
+```
+
 ### Boolean Words
 
 #### `or`
 
-Logical OR. Precedence 1.
+Logical OR for booleans; disjunction (type union) for non-boolean
+values. Precedence 1.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]` — logical OR
+- `[any, any] -> [disjunct]` — type union
 
 ```
 true or false           => true
 false or false          => false
+```
+
+**Disjunction (type union):** When used with non-boolean values, `or`
+creates a disjunct type that matches any of its alternatives.
+
+```
+string or none                  => string|none
+number or string or boolean     => number|string|boolean
 ```
 
 #### `and`
@@ -638,11 +695,11 @@ none deq none           => true
 #### `convert`
 
 Convert a value to a target scalar type. An optional third argument
-specifies a variant (e.g., numeric base).
+specifies a variant (string shorthand) or a settings map.
 
 *Signatures:*
 - `[any, any] -> [scalar]` — 2-arg form: value and target type
-- `[any, any, string] -> [scalar]` — 3-arg form: value, target type, variant
+- `[any, any, any] -> [scalar]` — 3-arg form: value, target type, variant or settings map
 
 *Precedence:* suffix
 
@@ -688,6 +745,20 @@ convert 42 atom                => 42
 convert "hello" atom           => hello
 ```
 
+**Settings map form.** The third argument can be a map with `base`
+and/or `size` keys:
+
+| Key    | Default | Values                               |
+|--------|---------|--------------------------------------|
+| `base` | (none)  | `"hex"`, `"HEX"`, `"bin"`, `"oct"`  |
+| `size` | 222     | Max output string length             |
+
+```
+convert 10 string {base:hex}              => 'a'
+convert "hello" string {size:3}           => 'hel'
+convert 255 string {base:hex, size:1}     => 'f'
+```
+
 ### Stack Words
 
 Stack words are prefix-only by default.
@@ -722,6 +793,119 @@ Remove the top value.
 ```
 1 drop              =>
 99 drop             =>
+```
+
+#### `over`
+
+Copy the second value over the top.
+
+*Signature:* `[any, any] -> [any, any, any]`
+
+```
+1 2 over            => 1 2 1
+```
+
+#### `rot`
+
+Rotate the third value to the top.
+
+*Signature:* `[any, any, any] -> [any, any, any]`
+
+```
+1 2 3 rot           => 2 3 1
+```
+
+#### `nip`
+
+Remove the second value, keeping the top.
+
+*Signature:* `[any, any] -> [any]`
+
+```
+1 2 nip             => 2
+```
+
+#### `tuck`
+
+Copy the top value below the second.
+
+*Signature:* `[any, any] -> [any, any, any]`
+
+```
+1 2 tuck            => 2 1 2
+```
+
+#### `2dup`
+
+Duplicate the top two values.
+
+*Signature:* `[any, any] -> [any, any, any, any]`
+
+```
+1 2 2dup            => 1 2 1 2
+```
+
+#### `2swap`
+
+Swap the top two pairs.
+
+*Signature:* `[any, any, any, any] -> [any, any, any, any]`
+
+```
+1 2 3 4 2swap       => 3 4 1 2
+```
+
+#### `2drop`
+
+Remove the top two values.
+
+*Signature:* `[any, any] -> []`
+
+```
+1 2 2drop           =>
+```
+
+#### `2over`
+
+Copy the second pair over the top pair.
+
+*Signature:* `[any, any, any, any] -> [any, any, any, any, any, any]`
+
+```
+1 2 3 4 2over       => 1 2 3 4 1 2
+```
+
+#### `depth`
+
+Push the current stack depth (number of items on the stack).
+
+*Signature:* `[] -> [integer]`
+
+```
+1 2 3 depth         => 1 2 3 3
+depth               => 0
+```
+
+#### `pick`
+
+Copy the nth item from the top of the stack (0-indexed).
+
+*Signature:* `[integer] -> [any]`
+
+```
+1 2 3 0 pick        => 1 2 3 3
+1 2 3 2 pick        => 1 2 3 1
+```
+
+#### `roll`
+
+Rotate the nth item to the top of the stack (0-indexed).
+
+*Signature:* `[integer] -> []`
+
+```
+1 2 3 2 roll        => 2 3 1
+1 2 3 1 roll        => 1 3 2
 ```
 
 ### Storage Words
@@ -1282,6 +1466,55 @@ type Num number
 Num unify 42                               => 42 true
 ```
 
+#### `make`
+
+Create instances of record types, table types, or convert scalar
+values. Takes a type and a value (with an optional options map).
+
+*Signatures:*
+- `[any, any] -> [any]` — type and value
+- `[any, any, map] -> [any]` — type, value, and options
+
+*Precedence:* suffix
+
+**Scalar conversion:**
+
+```
+make string 42                 => '42'
+make number "99"               => 99
+make boolean 1                 => true
+```
+
+**Record creation (positional):**
+
+```
+type Point record [x:number y:number]
+make Point [1 2]               => {x:1,y:2}
+```
+
+**Record creation (named):**
+
+```
+type Point record [x:number y:number]
+make Point {x:1 y:2}          => {x:1,y:2}
+```
+
+**Table creation:**
+
+```
+type Row record [x:integer y:string]
+type T table Row
+make T [[1 a] [2 b]]          => [{x:1,y:'a'},{x:2,y:'b'}]
+```
+
+**Options map** with `base:true` fills missing fields with their
+type's zero value:
+
+```
+type Item record [name:string qty:number]
+make Item {name:"Widget"} {base:true}     => {name:'Widget',qty:0}
+```
+
 ### Evaluation Words
 
 #### `do`
@@ -1345,6 +1578,62 @@ base map               => {}
 base none              => none
 ```
 
+### Data Access Words
+
+#### `dot` (alias `.`)
+
+Access a key in a map or an index in a list. Null-safe: if the
+target is `none`, returns `none` without error.
+
+*Signatures:*
+- `[atom, map] -> [any]`
+- `[string, map] -> [any]`
+- `[integer, list] -> [any]`
+- `[integer, map] -> [any]`
+- `[any, none] -> [none]`
+
+*Precedence:* suffix
+
+```
+{x:1,y:2} dot x            => 1
+{x:1,y:2} . x              => 1
+[10,20,30] . 1              => 20
+none . x                    => none
+```
+
+#### `dotr` (alias `!.`)
+
+Strict variant of `dot`. Same signatures but errors when the target
+is `none` or when the key/index is missing.
+
+*Signatures:*
+- `[atom, map] -> [any]`
+- `[string, map] -> [any]`
+- `[integer, list] -> [any]`
+- `[integer, map] -> [any]`
+- `[any, none] -> ERROR`
+
+*Precedence:* suffix
+
+```
+{x:1,y:2} dotr x           => 1
+{x:1,y:2} !. x             => 1
+none !. x                   => ERROR
+```
+
+### Inspection Words
+
+#### `inspect`
+
+Return an introspection map for a word, containing its name, kind
+(`builtin` or `defined`), whether it has suffix precedence, and its
+list of signatures.
+
+*Signature:* `[word] -> [map]`
+
+```
+inspect add    => {name:'add', kind:builtin, suffix_precedence:true, signatures:[...]}
+```
 
 ### Output Words
 
@@ -1463,6 +1752,69 @@ if true (if false 1 2) 3       => 2
 if false 1 (if true 2 3)       => 2
 ```
 
+### Iteration Words
+
+#### `for`
+
+Numeric iteration. Takes a range and a body list. The iterator
+variable `i` is automatically defined during each iteration and
+undefined after the loop completes.
+
+*Signatures:*
+- `[integer, list] -> [results...]` — iterate 0 to N-1
+- `[list, list] -> [results...]` — iterate with range spec
+
+**Count form** — iterate from 0 to N-1:
+
+```
+for 3 [i]                       => 0 1 2
+for 5 [i mul i]                 => 0 1 4 9 16
+```
+
+**Range spec** — `[end]`, `[start, end]`, or `[start, end, step]`:
+
+```
+for [5] [i]                     => 0 1 2 3 4
+for [1,4] [i]                   => 1 2 3
+for [0,10,3] [i]                => 0 3 6 9
+```
+
+The range is exclusive of the end value (like Go's `for i := start; i < end; i += step`).
+
+#### `break`
+
+Exit the current `for` loop immediately. Prefix-only.
+
+*Signature:* `[] -> []`
+
+```
+for 5 [if [i eq 3] [break] i]  => 0 1 2
+```
+
+#### `continue`
+
+Skip the rest of the current iteration and advance to the next.
+Prefix-only.
+
+*Signature:* `[] -> []`
+
+```
+for 5 [if [i eq 2] [continue] i]   => 0 1 3 4
+```
+
+### Debugging Words
+
+#### `trace`
+
+Evaluate a list with step-by-step tracing output. Shows the stack
+state at each step of evaluation, useful for understanding how
+expressions are processed.
+
+*Signature:* `[list] -> [results...]`
+
+```
+trace [1 add 2]                 # prints step-by-step evaluation, returns 3
+```
 
 ### File I/O Words
 
@@ -1602,7 +1954,7 @@ or a list of column names. Column aliases use nested lists.
 - `[atom("*"), table] -> [table]` — select all columns
 - `[list, table] -> [table]` — select named columns
 
-*Precedence:* suffix
+*Precedence:* 1
 
 ```
 select * from people                          # all columns
@@ -1616,8 +1968,6 @@ select star from people                       # star word = *
 Look up a named table from the registry store.
 
 *Signature:* `[atom] -> [table]`
-
-*Precedence:* suffix
 
 ```
 set people ("file/people.csv" read)
@@ -1634,7 +1984,7 @@ Supported operators: `eq` (=), `neq` (!=), `lt` (<), `gt` (>),
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 1
+*Precedence:* 2
 
 ```
 from people where [age gt "25"]
@@ -1652,7 +2002,7 @@ with optional `asc`/`desc` direction.
 - `[atom, table] -> [table]` — order by single column
 - `[list, table] -> [table]` — order by column list
 
-*Precedence:* 1
+*Precedence:* 2
 
 ```
 from people order name
@@ -1682,11 +2032,156 @@ Restrict the number of rows returned.
 
 *Signature:* `[integer, table] -> [table]`
 
-*Precedence:* 1
+*Precedence:* 2
 
 ```
 from people limit 2
 from people limit 1
+```
+
+#### `offset`
+
+Skip a number of rows from the result.
+
+*Signature:* `[integer, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from people offset 5
+from people limit 10 offset 20
+```
+
+#### `distinct`
+
+Remove duplicate rows from the result.
+
+*Signature:* `[table] -> [table]`
+
+*Precedence:* 2
+
+```
+select * (distinct (from people))
+```
+
+#### `as`
+
+Add a table alias to a query (useful for joins and subqueries).
+
+*Signature:* `[atom, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from people as p
+```
+
+#### `group`
+
+Group rows by one or more columns. Accepts a column name (atom) or
+a list of columns.
+
+*Signatures:*
+- `[atom, table] -> [table]` — group by single column
+- `[list, table] -> [table]` — group by column list
+
+*Precedence:* 2
+
+```
+from sales group by [region]
+from sales group by [region product]
+```
+
+#### `having`
+
+Filter groups after `group by`. Uses the same condition syntax as
+`where`.
+
+*Signature:* `[condition-list, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from sales group by [region] having [count gt 5]
+```
+
+#### `join` / `innerjoin` / `leftjoin` / `crossjoin`
+
+Join two tables. `join` and `innerjoin` produce an inner join,
+`leftjoin` a left outer join, `crossjoin` a cross join. Use `on` or
+`using` to specify the join condition.
+
+*Signature:* `[atom, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from orders join products on [orders.product_id eq products.id]
+from orders leftjoin customers on [orders.cust_id eq customers.id]
+from a crossjoin b
+```
+
+#### `on`
+
+Set the ON condition for the most recent join.
+
+*Signature:* `[condition-list, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from orders join products on [orders.pid eq products.id]
+```
+
+#### `using`
+
+Set a USING clause for the most recent join (join on columns with
+the same name in both tables).
+
+*Signature:* `[column-list, table] -> [table]`
+
+*Precedence:* 2
+
+```
+from orders join products using [id]
+```
+
+#### `union` / `unionall` / `intersect` / `except`
+
+Set operations that combine the results of two queries. `union`
+removes duplicates, `unionall` keeps all rows, `intersect` returns
+rows in both, `except` returns rows in the left but not the right.
+
+*Signature:* `[table, table] -> [table]`
+
+*Precedence:* 2
+
+```
+(from employees) union (from contractors)
+(from a) intersect (from b)
+(from a) except (from b)
+(from a) unionall (from b)
+```
+
+#### Aggregate Functions in Select
+
+The `select` column list supports aggregate functions and casts as
+nested lists. These are not standalone words — they are parsed inside
+the column spec.
+
+| Syntax                  | SQL equivalent           |
+|-------------------------|--------------------------|
+| `[count name cnt]`      | `COUNT("name") AS "cnt"` |
+| `[sum amount total]`    | `SUM("amount") AS "total"` |
+| `[avg score mean]`      | `AVG("score") AS "mean"` |
+| `[min age youngest]`    | `MIN("age") AS "youngest"` |
+| `[max age oldest]`      | `MAX("age") AS "oldest"` |
+| `[cast age integer]`    | `CAST("age" AS INTEGER)` |
+
+```
+select [[count name cnt]] from people
+select [[sum amount total], region] from sales group by [region]
+select [[cast age integer]] from people
 ```
 
 #### Chaining

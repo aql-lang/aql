@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
@@ -9,7 +10,7 @@ import (
 // helper to run AQL expressions through the engine and return results
 func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 	t.Helper()
-	e := New(r)
+	e := NewTop(r)
 	result, err := e.Run(tokens)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -19,7 +20,7 @@ func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 
 func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 	t.Helper()
-	e := New(r)
+	e := NewTop(r)
 	_, err := e.Run(tokens)
 	return err
 }
@@ -27,7 +28,10 @@ func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 // --- Comparison word integration tests ---
 
 func TestEngineLt(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("1 lt 2 = %v, want true", result)
@@ -35,7 +39,10 @@ func TestEngineLt(t *testing.T) {
 }
 
 func TestEngineGt(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(3), NewWord("gt"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("3 gt 1 = %v, want true", result)
@@ -43,7 +50,10 @@ func TestEngineGt(t *testing.T) {
 }
 
 func TestEngineLte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lte"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("1 lte 1 = %v, want true", result)
@@ -51,7 +61,10 @@ func TestEngineLte(t *testing.T) {
 }
 
 func TestEngineGte(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("gte"), NewInteger(1)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("2 gte 1 = %v, want true", result)
@@ -59,7 +72,10 @@ func TestEngineGte(t *testing.T) {
 }
 
 func TestEngineEq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("eq"), NewInteger(5)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("5 eq 5 = %v, want true", result)
@@ -67,7 +83,10 @@ func TestEngineEq(t *testing.T) {
 }
 
 func TestEngineNeq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(3)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("5 neq 3 = %v, want true", result)
@@ -79,7 +98,10 @@ func TestEngineNeq(t *testing.T) {
 }
 
 func TestEngineDeq(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewString("a"), NewWord("deq"), NewString("a")})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("'a' deq 'a' = %v, want true", result)
@@ -87,8 +109,11 @@ func TestEngineDeq(t *testing.T) {
 }
 
 func TestEngineLtError(t *testing.T) {
-	r := DefaultRegistry()
-	err := runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
 	if err == nil {
 		t.Error("expected error for cross-type lt")
 	}
@@ -97,7 +122,10 @@ func TestEngineLtError(t *testing.T) {
 // --- If word integration tests ---
 
 func TestEngineIf3True(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(1), NewInteger(2),
 	})
@@ -107,7 +135,10 @@ func TestEngineIf3True(t *testing.T) {
 }
 
 func TestEngineIf3False(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(1), NewInteger(2),
 	})
@@ -117,7 +148,10 @@ func TestEngineIf3False(t *testing.T) {
 }
 
 func TestEngineIf2True(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
@@ -127,7 +161,10 @@ func TestEngineIf2True(t *testing.T) {
 }
 
 func TestEngineIf2False(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
 	})
@@ -137,7 +174,10 @@ func TestEngineIf2False(t *testing.T) {
 }
 
 func TestEngineIfListCondition(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if [1 lt 2] 10 20 → should evaluate condition [1 lt 2] → true → return 10
 	condList := NewList([]Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -149,7 +189,10 @@ func TestEngineIfListCondition(t *testing.T) {
 }
 
 func TestEngineIfListBranch(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if true [1 add 2] [3 add 4] → should evaluate [1 add 2] → 3
 	thenList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	elseList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
@@ -161,8 +204,54 @@ func TestEngineIfListBranch(t *testing.T) {
 	}
 }
 
+func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
+	// Register a side-effect word that increments a counter
+	callCount := 0
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Register("side-effect",
+		Signature{
+			Args: []Type{TAny},
+			Handler: func(args []Value) ([]Value, error) {
+				callCount++
+				return args, nil
+			},
+		},
+	)
+
+	// if true [side-effect 1] [side-effect 2] → only then-branch runs
+	thenList := NewList([]Value{NewWord("side-effect"), NewInteger(1)})
+	elseList := NewList([]Value{NewWord("side-effect"), NewInteger(2)})
+	result := runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(true), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected [1], got %v", result)
+	}
+
+	// Reset and test false branch
+	callCount = 0
+	result = runAQL(t, r, []Value{
+		NewWord("if"), NewBoolean(false), thenList, elseList,
+	})
+	if callCount != 1 {
+		t.Errorf("expected side-effect called once, got %d", callCount)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("expected [2], got %v", result)
+	}
+}
+
 func TestEngineIfFalsy(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// if 0 1 2 → 0 is falsy → return 2
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewInteger(0), NewInteger(1), NewInteger(2),
@@ -175,7 +264,10 @@ func TestEngineIfFalsy(t *testing.T) {
 // --- File I/O integration tests ---
 
 func TestEngineReadBasic(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("hello world")
 	r.SetFileOps(mem)
@@ -187,7 +279,10 @@ func TestEngineReadBasic(t *testing.T) {
 }
 
 func TestEngineReadWithOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a\nb\nc")
 	r.SetFileOps(mem)
@@ -205,7 +300,10 @@ func TestEngineReadWithOpts(t *testing.T) {
 }
 
 func TestEngineReadJSON(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"x":1}`)
 	r.SetFileOps(mem)
@@ -219,32 +317,41 @@ func TestEngineReadJSON(t *testing.T) {
 }
 
 func TestEngineReadNotFound(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
-	err := runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
+	err = runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
 }
 
 func TestEngineReadUnknownFormat(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("data")
 	r.SetFileOps(mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("yaml"))
-	err := runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
+	err = runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
 	if err == nil {
 		t.Error("expected error for unknown format")
 	}
 }
 
 func TestEngineWriteBasic(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -258,7 +365,10 @@ func TestEngineWriteBasic(t *testing.T) {
 }
 
 func TestEngineWriteWithOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -274,7 +384,10 @@ func TestEngineWriteWithOpts(t *testing.T) {
 }
 
 func TestEngineWriteAppend(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["log.txt"] = []byte("first\n")
 	r.SetFileOps(mem)
@@ -288,7 +401,10 @@ func TestEngineWriteAppend(t *testing.T) {
 }
 
 func TestEngineWriteAppendNewFile(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -301,7 +417,10 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 }
 
 func TestEngineWriteAnyOpts(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 
@@ -319,7 +438,10 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 }
 
 func TestEngineReadLineEndings(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["crlf.txt"] = []byte("a\r\nb\r\nc")
 	r.SetFileOps(mem)
@@ -342,7 +464,10 @@ func TestEngineReadLineEndings(t *testing.T) {
 // --- Registry integration tests ---
 
 func TestRegistrySetFileOps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	r.SetFileOps(mem)
 	if r.FileOps != mem {
@@ -351,7 +476,10 @@ func TestRegistrySetFileOps(t *testing.T) {
 }
 
 func TestRegistryMatchNoFunction(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := r.Match("nonexistent", []Value{}, WordInfo{})
 	if result != nil {
 		t.Error("expected nil for nonexistent function")
@@ -361,10 +489,13 @@ func TestRegistryMatchNoFunction(t *testing.T) {
 // --- Additional engine tests for coverage ---
 
 func TestEngineConvert(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 99 string
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(99), NewWord("string"),
+		NewWord("convert"), NewInteger(99), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "99" {
 		t.Errorf("convert 99 string = %v, want '99'", result)
@@ -372,7 +503,10 @@ func TestEngineConvert(t *testing.T) {
 }
 
 func TestEngineTypeof(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("typeof"), NewInteger(42)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -380,7 +514,10 @@ func TestEngineTypeof(t *testing.T) {
 }
 
 func TestEngineBase(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
 	if len(result) != 1 || result[0].AsInteger() != 0 {
 		t.Errorf("base integer = %v, want 0", result)
@@ -388,7 +525,10 @@ func TestEngineBase(t *testing.T) {
 }
 
 func TestEngineDef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
 	result := runAQL(t, r, []Value{
@@ -401,7 +541,10 @@ func TestEngineDef(t *testing.T) {
 }
 
 func TestEngineUndef(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def foo 42 end foo undef foo end foo
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
@@ -419,8 +562,11 @@ func TestEngineUndef(t *testing.T) {
 }
 
 func TestEngineRecord(t *testing.T) {
-	r := DefaultRegistry()
-	e := New(r)
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := NewTop(r)
 	// Parse a pair list manually: jsonic produces maps for x:number syntax
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
@@ -437,8 +583,11 @@ func TestEngineRecord(t *testing.T) {
 }
 
 func TestEngineTable(t *testing.T) {
-	r := DefaultRegistry()
-	e := New(r)
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := NewTop(r)
 	// Create a record type first, then table
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
@@ -453,7 +602,10 @@ func TestEngineTable(t *testing.T) {
 }
 
 func TestEngineUnify(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewTypeLiteral(TNumber), NewWord("unify")})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
@@ -464,7 +616,10 @@ func TestEngineUnify(t *testing.T) {
 }
 
 func TestEngineDo(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	result := runAQL(t, r, []Value{NewWord("do"), list})
 	if len(result) != 1 || result[0].AsInteger() != 3 {
@@ -473,7 +628,10 @@ func TestEngineDo(t *testing.T) {
 }
 
 func TestEngineDoMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := NewOrderedMap()
 	m.Set("x", NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)}))
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
@@ -483,7 +641,10 @@ func TestEngineDoMap(t *testing.T) {
 }
 
 func TestEngineOr(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("true or false = %v, want true", result)
@@ -491,7 +652,10 @@ func TestEngineOr(t *testing.T) {
 }
 
 func TestEngineAnd(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("true and false = %v, want false", result)
@@ -499,7 +663,10 @@ func TestEngineAnd(t *testing.T) {
 }
 
 func TestEngineNot(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("not")})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("true not = %v, want false", result)
@@ -507,10 +674,13 @@ func TestEngineNot(t *testing.T) {
 }
 
 func TestEngineConvertStringVariants(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 10 string "hex" → 'a'
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("hex"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsString() != "a" {
 		t.Errorf("convert 10 string hex = %v, want 'a'", result)
@@ -518,7 +688,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 255 string "HEX" → 'FF'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("string"), NewString("HEX"),
+		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("HEX"),
 	})
 	if len(result) != 1 || result[0].AsString() != "FF" {
 		t.Errorf("convert 255 string HEX = %v, want 'FF'", result)
@@ -526,7 +696,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 10 string "bin" → '1010'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("string"), NewString("bin"),
+		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
 		t.Errorf("convert 10 string bin = %v, want '1010'", result)
@@ -534,7 +704,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 
 	// convert 8 string "oct" → '10'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("string"), NewString("oct"),
+		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
 		t.Errorf("convert 8 string oct = %v, want '10'", result)
@@ -542,10 +712,13 @@ func TestEngineConvertStringVariants(t *testing.T) {
 }
 
 func TestEngineConvertToNumber(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert "42" number → 42
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("42"), NewWord("number"),
+		NewWord("convert"), NewString("42"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("convert '42' number = %v, want 42", result)
@@ -553,7 +726,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "ff" number "hex" → 255
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("ff"), NewWord("number"), NewString("hex"),
+		NewWord("convert"), NewString("ff"), NewWord("Number"), NewString("hex"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 255 {
 		t.Errorf("convert 'ff' number hex = %v, want 255", result)
@@ -561,7 +734,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "1010" number "bin" → 10
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("1010"), NewWord("number"), NewString("bin"),
+		NewWord("convert"), NewString("1010"), NewWord("Number"), NewString("bin"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 10 {
 		t.Errorf("convert '1010' number bin = %v, want 10", result)
@@ -569,7 +742,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 
 	// convert "10" number "oct" → 8
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("10"), NewWord("number"), NewString("oct"),
+		NewWord("convert"), NewString("10"), NewWord("Number"), NewString("oct"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 8 {
 		t.Errorf("convert '10' number oct = %v, want 8", result)
@@ -577,10 +750,13 @@ func TestEngineConvertToNumber(t *testing.T) {
 }
 
 func TestEngineConvertToBoolean(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// convert 1 boolean → true
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("boolean"),
+		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert 1 boolean = %v, want true", result)
@@ -588,7 +764,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert 0 boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("boolean"),
+		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("convert 0 boolean = %v, want false", result)
@@ -596,7 +772,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert "true" boolean → true
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("boolean"),
+		NewWord("convert"), NewString("true"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert 'true' boolean = %v, want true", result)
@@ -604,7 +780,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert "" boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString(""), NewWord("boolean"),
+		NewWord("convert"), NewString(""), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("convert '' boolean = %v, want false", result)
@@ -612,7 +788,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 
 	// convert true boolean → true (passthrough)
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("boolean"),
+		NewWord("convert"), NewBoolean(true), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("convert true boolean = %v, want true", result)
@@ -620,9 +796,12 @@ func TestEngineConvertToBoolean(t *testing.T) {
 }
 
 func TestEngineConvertToAtom(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("atom"),
+		NewWord("convert"), NewInteger(42), NewWord("Atom"),
 	})
 	if len(result) != 1 || !result[0].IsAtom() {
 		t.Errorf("convert 42 atom = %v, want atom", result)
@@ -630,7 +809,10 @@ func TestEngineConvertToAtom(t *testing.T) {
 }
 
 func TestEngineBaseTypes(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name     string
 		typeLit  Type
@@ -641,7 +823,7 @@ func TestEngineBaseTypes(t *testing.T) {
 		{"boolean", TBoolean, "false"},
 		{"list", TList, "[]"},
 		{"map", TMap, "{}"},
-		{"none", TNone, "none"},
+		{"none", TNone, "None"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -654,11 +836,14 @@ func TestEngineBaseTypes(t *testing.T) {
 }
 
 func TestEngineFn(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double fn [[number] [number] [dup add]] end 7 double
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("number")}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -671,13 +856,16 @@ func TestEngineFn(t *testing.T) {
 }
 
 func TestEngineFnNamed(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def square fn [[x:number] [number] [x mul x]] end 5 square
 	xParam := NewOrderedMap()
-	xParam.Set("x", NewWord("number"))
+	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
 		NewList([]Value{NewMap(xParam)}),
-		NewList([]Value{NewWord("number")}),
+		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -690,12 +878,15 @@ func TestEngineFnNamed(t *testing.T) {
 }
 
 func TestEngineFnCatterPrefixOnly(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [1 "a"|] -> catter -> all args from prefix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -708,12 +899,15 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 }
 
 func TestEngineFnCatterPartialSuffix(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -726,12 +920,15 @@ func TestEngineFnCatterPartialSuffix(t *testing.T) {
 }
 
 func TestEngineFnCatterFullSuffix(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [|] -> catter "c" 3 -> both args from suffix
 	fnBody := NewList([]Value{
-		NewList([]Value{NewWord("integer"), NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("Integer"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -765,12 +962,15 @@ func TestIntegerLiteralType(t *testing.T) {
 }
 
 func TestEngineFnLiteralType(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder only matches the value 0, adds 2 to it
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
 	result := runAQL(t, r, []Value{
@@ -783,15 +983,18 @@ func TestEngineFnLiteralType(t *testing.T) {
 }
 
 func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder should NOT match 5 (only matches 0)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("adder"),
 	})
@@ -801,15 +1004,18 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 }
 
 func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def handler fn [[0] [integer] [add 10] [1] [integer] [add 20]] end
 	// handler 0 → 10, handler 1 → 21
 	fnBody := NewList([]Value{
 		NewList([]Value{NewInteger(0)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(10)}),
 		NewList([]Value{NewInteger(1)}),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(20)}),
 	})
 	result := runAQL(t, r, []Value{
@@ -829,13 +1035,16 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 }
 
 func TestEngineFnDefPrefixOnly(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def doubler/p fn [[x:integer] [integer] [x x add]] end
 	// doubler/p registers as prefix-only: takes args from the stack only,
 	// never collects suffix args via forward.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
-		NewList([]Value{NewWord("integer")}),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
 	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
@@ -849,16 +1058,19 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 }
 
 func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def doubler/p fn [[x:integer] [integer] [x x add]] end
 	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("integer")); return NewList([]Value{NewMap(m)}) }(),
-		NewList([]Value{NewWord("integer")}),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
-	err := runAQLError(t, r, []Value{
+	err = runAQLError(t, r, []Value{
 		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
 		NewWord("doubler"), NewInteger(5),
 	})
@@ -868,7 +1080,10 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 }
 
 func TestEngineFnAbbreviatedSignature(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// def foo fn [
 	//   [string] [string] [add "Q"]    -- full form
@@ -878,18 +1093,18 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	fnBody := NewList([]Value{
 		// sig 1: [string] [string] [add "Q"]
-		NewList([]Value{NewWord("string")}),
-		NewList([]Value{NewWord("string")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add"), NewString("Q")}),
 
 		// sig 2: integer string [add "P"]  (abbreviated input & output)
-		NewWord("integer"),
-		NewWord("string"),
+		NewWord("Integer"),
+		NewWord("String"),
 		NewList([]Value{NewWord("add"), NewString("P")}),
 
 		// sig 3: 99 string [drop "NN"]  (abbreviated input & output)
 		NewInteger(99),
-		NewWord("string"),
+		NewWord("String"),
 		NewList([]Value{NewWord("drop"), NewString("NN")}),
 	})
 
@@ -923,12 +1138,15 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 }
 
 func TestEngineFnAbbreviatedSimple(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def double fn [number number [dup add]] end 7 double
 	// All three elements abbreviated (single-valued)
 	fnBody := NewList([]Value{
-		NewWord("number"),
-		NewWord("number"),
+		NewWord("Number"),
+		NewWord("Number"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
@@ -941,20 +1159,142 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 }
 
 func TestEngineFnFactorial(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// def fact fn [0 integer [drop 1] [x:integer] [integer] [x mul fact (x sub 1)]]
 	fnBody := NewList([]Value{
 		// sig 1 (base case): 0 integer [drop 1]
 		NewInteger(0),
-		NewWord("integer"),
+		NewWord("Integer"),
 		NewList([]Value{NewWord("drop"), NewInteger(1)}),
 		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
 		func() Value {
 			m := NewOrderedMap()
-			m.Set("x", NewWord("integer"))
+			m.Set("x", NewWord("Integer"))
 			return NewList([]Value{NewMap(m)})
 		}(),
-		NewList([]Value{NewWord("integer")}),
+		NewList([]Value{NewWord("Integer")}),
+		NewList([]Value{
+			NewWord("x"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}),
+	})
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+	for _, tc := range tests {
+		result := runAQL(t, r, []Value{
+			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewInteger(tc.input), NewWord("fact"),
+		})
+		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
+		}
+	}
+}
+
+func TestEngineFnFactorialNoVars(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Try several variable-free body forms for the recursive case.
+	// Base case is always: 0 integer [drop 1]
+	bodies := []struct {
+		name string
+		body []Value
+	}{
+		// Approach A: dup sub 1 fact swap mul
+		// n dup → n n; n sub 1 → n-1; fact → fact(n-1); swap mul → n*fact(n-1)
+		{"dup sub 1 fact swap mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("swap"), NewWord("mul"),
+		}},
+		// Approach B: dup sub 1 fact mul (rely on mul grabbing n as prefix)
+		{"dup sub 1 fact mul", []Value{
+			NewWord("dup"), NewWord("sub"), NewInteger(1),
+			NewWord("fact"), NewWord("mul"),
+		}},
+		// Approach C: dup mul fact (dup sub 1)  — same structure as named version
+		// but dup in inner parens has no prefix, so this likely fails
+		{"dup mul fact (dup sub 1)", []Value{
+			NewWord("dup"), NewWord("mul"),
+			NewWord("fact"),
+			NewWord("("), NewWord("dup"), NewWord("sub"), NewInteger(1), NewWord(")"),
+		}},
+	}
+
+	tests := []struct {
+		input    int64
+		expected int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{5, 120},
+		{7, 5040},
+	}
+
+	for _, b := range bodies {
+		fnBody := NewList([]Value{
+			NewInteger(0),
+			NewWord("Integer"),
+			NewList([]Value{NewWord("drop"), NewInteger(1)}),
+			NewWord("Integer"),
+			NewWord("Integer"),
+			NewList(b.body),
+		})
+		allPass := true
+		for _, tc := range tests {
+			result := runAQL(t, r, []Value{
+				NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+				NewInteger(tc.input), NewWord("fact"),
+			})
+			if len(result) != 1 || result[0].AsInteger() != tc.expected {
+				t.Logf("FAIL body=%q: fact %d = %v, want %d", b.name, tc.input, result, tc.expected)
+				allPass = false
+			}
+		}
+		if allPass {
+			t.Logf("PASS body=%q", b.name)
+		}
+	}
+}
+
+func TestEngineFnFactorialNamedZero(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def fact fn [[_:0] integer [1] [x:integer] [integer] [x mul fact (x sub 1)]]
+	// Using {_:0} instead of bare 0 in the base case.
+	// Named param "_" consumes the 0 from the stack, so the body is just [1].
+	fnBody := NewList([]Value{
+		// sig 1 (base case): [_:0] integer [1]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("_", NewInteger(0))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("Integer")}),
+		NewList([]Value{NewInteger(1)}),
+		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("Integer"))
+			return NewList([]Value{NewMap(m)})
+		}(),
+		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
 			NewWord("x"), NewWord("mul"),
 			NewWord("fact"),
@@ -983,7 +1323,10 @@ func TestEngineFnFactorial(t *testing.T) {
 }
 
 func TestEngineTypeRecord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// type Point record [x:number y:number] end Point
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1000,7 +1343,10 @@ func TestEngineTypeRecord(t *testing.T) {
 }
 
 func TestEngineMakeRecord(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// type P record [x:number y:string] end make P [1 "hi"]
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1023,7 +1369,10 @@ func TestEngineMakeRecord(t *testing.T) {
 }
 
 func TestEngineUnifyMaps(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// {x:1} unify {x:1}
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(1))
@@ -1036,7 +1385,10 @@ func TestEngineUnifyMaps(t *testing.T) {
 }
 
 func TestEngineUnifyLists(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	l1 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	l2 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{l1, l2, NewWord("unify")})
@@ -1046,7 +1398,10 @@ func TestEngineUnifyLists(t *testing.T) {
 }
 
 func TestEngineUnifyFail(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
 	if len(result) != 2 || result[1].AsBoolean() {
 		t.Errorf("1 unify 'a' = %v, want false", result)
@@ -1054,7 +1409,10 @@ func TestEngineUnifyFail(t *testing.T) {
 }
 
 func TestEngineUnifyTypedList(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tl := NewTypedList(NewTypeLiteral(TNumber))
 	cl := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{tl, cl, NewWord("unify")})
@@ -1064,7 +1422,10 @@ func TestEngineUnifyTypedList(t *testing.T) {
 }
 
 func TestEngineUnifyTypedMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
 	cm := NewOrderedMap()
 	cm.Set("a", NewInteger(1))
@@ -1076,7 +1437,10 @@ func TestEngineUnifyTypedMap(t *testing.T) {
 }
 
 func TestEngineDisjunct(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// string or none
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TString), NewWord("or"), NewTypeLiteral(TNone),
@@ -1087,7 +1451,10 @@ func TestEngineDisjunct(t *testing.T) {
 }
 
 func TestEngineVar(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// 5 var [[x] x mul x]
 	varBody := NewList([]Value{
 		NewList([]Value{NewWord("x")}),
@@ -1102,7 +1469,10 @@ func TestEngineVar(t *testing.T) {
 }
 
 func TestEngineAddStrings(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
 	if len(result) != 1 || result[0].AsString() != "hello world" {
 		t.Errorf("'hello' add ' world' = %v, want 'hello world'", result)
@@ -1133,7 +1503,10 @@ func TestValToString(t *testing.T) {
 }
 
 func TestEngineReadCSVByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	r.SetFileOps(mem)
@@ -1161,7 +1534,10 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 }
 
 func TestEngineReadTSVByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	r.SetFileOps(mem)
@@ -1181,7 +1557,10 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 }
 
 func TestEngineReadCSVExplicitFormat(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a,b\n1,2")
 	r.SetFileOps(mem)
@@ -1199,7 +1578,10 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 }
 
 func TestEngineReadOverrideExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("hello,world")
 	r.SetFileOps(mem)
@@ -1220,7 +1602,10 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 }
 
 func TestEngineReadJSONByExtension(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	r.SetFileOps(mem)
@@ -1231,6 +1616,126 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	}
 	if !result[0].VType.Equal(TMap) {
 		t.Errorf("expected map type, got %s", result[0].VType)
+	}
+}
+
+// --- Inspect word tests ---
+
+func TestEngineInspectBuiltin(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// inspect add => word_inspection map
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.VType.Equal(TWordInspection) {
+		t.Fatalf("expected type %s, got %s", TWordInspection, v.VType)
+	}
+	m := v.AsMap()
+
+	// Check name field.
+	name, ok := m.Get("name")
+	if !ok || name.AsString() != "add" {
+		t.Errorf("name = %v, want 'add'", name)
+	}
+
+	// Check kind field.
+	kind, ok := m.Get("kind")
+	if !ok || kind.AsAtom() != "builtin" {
+		t.Errorf("kind = %v, want builtin", kind)
+	}
+
+	// Check signatures field is a non-empty list.
+	sigs, ok := m.Get("signatures")
+	if !ok {
+		t.Fatal("missing signatures field")
+	}
+	sigList := sigs.AsList()
+	if len(sigList) == 0 {
+		t.Error("expected at least one signature for add")
+	}
+
+	// Check first signature has args and precedence.
+	sig0 := sigList[0].AsMap()
+	args, _ := sig0.Get("args")
+	argList := args.AsList()
+	if len(argList) != 2 {
+		t.Errorf("expected 2 args for add, got %d", len(argList))
+	}
+
+	prec, _ := sig0.Get("precedence")
+	if prec.AsInteger() == 0 {
+		t.Error("expected non-zero precedence for add")
+	}
+}
+
+func TestEngineInspectUserDefined(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def double [2 mul] ; inspect double
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
+		NewWord("inspect"), NewWord("double"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "defined" {
+		t.Errorf("kind = %v, want defined", kind)
+	}
+
+	name, _ := m.Get("name")
+	if name.AsString() != "double" {
+		t.Errorf("name = %v, want 'double'", name)
+	}
+}
+
+func TestEngineInspectUnknown(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("nonexistent")})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "unknown" {
+		t.Errorf("kind = %v, want unknown", kind)
+	}
+
+	sigs, _ := m.Get("signatures")
+	if len(sigs.AsList()) != 0 {
+		t.Errorf("expected empty signatures for unknown word")
+	}
+}
+
+func TestEngineInspectDotAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// inspect upper .name => 'upper'
+	result := runAQL(t, r, []Value{
+		NewWord("inspect"), NewWord("upper"),
+		NewWord("."), NewWord("name"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if result[0].AsString() != "upper" {
+		t.Errorf("inspect upper .name = %v, want 'upper'", result[0])
 	}
 }
 
@@ -1255,5 +1760,485 @@ func TestFormatFromExt(t *testing.T) {
 				t.Errorf("formatFromExt(%q) = %q, want %q", tt.path, got, tt.want)
 			}
 		})
+	}
+}
+
+// --- Return type validation tests ---
+
+func TestEngineFnReturnTypeCorrect(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def double fn [[number] [number] [dup add]] end
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("double"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("5 double = %v, want 10", result)
+	}
+}
+
+func TestEngineFnReturnTypeWrong(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def bad fn [[number] [string] [dup add]] end
+	// Returns a number but declares string return type.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	err = runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("bad"),
+	})
+	if err == nil {
+		t.Fatal("expected return type error, got nil")
+	}
+	if !strings.Contains(err.Error(), "bad") || !strings.Contains(err.Error(), "expected") {
+		t.Errorf("error should mention function name and expected type, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnCountWrong(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def toomany fn [[number] [number number] [dup]] end
+	// Body produces 2 values but signature declares 2 returns, dup produces 2 from 1.
+	// Actually let's make it expect 1 but body produces 2.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup")}), // produces 2 values, signature expects 1
+	})
+	err = runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("toomany"),
+	})
+	if err == nil {
+		t.Fatal("expected return count error, got nil")
+	}
+	if !strings.Contains(err.Error(), "toomany") {
+		t.Errorf("error should mention function name, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnTypeAny(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def identity fn [[any] [any] []] end
+	// [any] return type should accept any value.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Any")}),
+		NewList([]Value{NewWord("Any")}),
+		NewList([]Value{}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(42), NewWord("identity"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Errorf("42 identity = %v, want 42", result)
+	}
+}
+
+func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def dbl fn [[number] [] [dup add]] end
+	// Empty return sig means no checking (backwards compat).
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(7), NewWord("dbl"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 14 {
+		t.Errorf("7 dbl = %v, want 14", result)
+	}
+}
+
+func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def dup2 fn [[number] [number number] [dup]] end
+	// Returns 2 numbers.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number"), NewWord("Number")}),
+		NewList([]Value{NewWord("dup")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(3), NewWord("dup2"),
+	})
+	if len(result) != 2 || result[0].AsInteger() != 3 || result[1].AsInteger() != 3 {
+		t.Errorf("3 dup2 = %v, want [3 3]", result)
+	}
+}
+
+func TestEngineFnReturnTypeNamedParams(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def square fn [[x:number] [number] [x mul x]] end
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(6), NewWord("square"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 36 {
+		t.Errorf("6 square = %v, want 36", result)
+	}
+}
+
+func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def isbig fn [[x:number] [number] [x gt 10]] end
+	// Declares number return but body returns boolean via gt.
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewWord("Number"))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
+	})
+	err = runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("isbig"),
+	})
+	if err == nil {
+		t.Fatal("expected return type error for named param fn, got nil")
+	}
+	if !strings.Contains(err.Error(), "isbig") {
+		t.Errorf("error should mention function name, got: %v", err)
+	}
+}
+
+func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// def add1 fn [[number] [number] [1 add] [string] [string] ["1" add]] end
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewString("1"), NewWord("add")}),
+	})
+	// Test number overload
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(10), NewWord("add1"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 11 {
+		t.Errorf("10 add1 = %v, want 11", result)
+	}
+	// Test string overload
+	result = runAQL(t, r, []Value{
+		NewString("hello"), NewWord("add1"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hello1" {
+		t.Errorf("'hello' add1 = %v, want 'hello1'", result)
+	}
+}
+
+func TestPiecemealDef(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Define foo with number sig, then add string sig
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Define both sigs
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+	})
+
+	// Test number sig
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Errorf("3 foo = %v, want 9", result)
+	}
+
+	// Test string sig
+	result = runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hihi" {
+		t.Errorf("\"hi\" foo = %v, want \"hihi\"", result)
+	}
+}
+
+func TestPiecemealUndefPopsRecent(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// def number sig, def string sig, undef (pops string sig), test number sig
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("undef"), NewWord("foo"), NewWord("end"),
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after undef = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefTargeted(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Targeted removal: def foo fn [[number] [number]] (pairs = remove sig)
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+	})
+
+	// def both sigs, targeted remove number sig, string sig still works
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsString() != "hihi" {
+		t.Errorf("\"hi\" foo after targeted undef = %v, want \"hihi\"", result[0])
+	}
+}
+
+func TestFnUndefTargetedReverse(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	strBody := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Remove string sig, keep number sig
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+	})
+
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after targeted undef string = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefNonExistentNoOp(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+
+	// Remove a string sig that was never defined — should be a no-op
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+	})
+
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+	})
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsInteger() != 9 {
+		t.Errorf("3 foo after no-op undef = %v, want 9", result[0])
+	}
+}
+
+func TestFnUndefRemovesAll(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	numBody := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+
+	// Remove the only sig — word should become undefined
+	undefSpec := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+	})
+
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("foo"),
+	})
+	// foo should fall through to atom (string)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if result[0].AsString() != "foo" {
+		t.Errorf("foo after removing all sigs = %v, want atom \"foo\"", result[0])
+	}
+}
+
+func TestPiecemealStackUnwind(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def A (number -> dup mul), def B (string -> dup add), undef B, A still works
+	bodyA := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+	})
+	bodyB := NewList([]Value{
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("dup"), NewWord("add")}),
+	})
+
+	// Define both
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyA, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyB, NewWord("end"),
+	})
+
+	// Both sigs work
+	result := runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Fatalf("3 foo = %v, want 9", result)
+	}
+	result = runAQL(t, r, []Value{
+		NewString("hi"), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "hihi" {
+		t.Fatalf("\"hi\" foo = %v, want \"hihi\"", result)
+	}
+
+	// Undef pops B (string sig), A (number sig) remains
+	_ = runAQL(t, r, []Value{
+		NewWord("undef"), NewWord("foo"), NewWord("end"),
+	})
+	result = runAQL(t, r, []Value{
+		NewInteger(3), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Fatalf("3 foo after undef B = %v, want 9", result)
 	}
 }

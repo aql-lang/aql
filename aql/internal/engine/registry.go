@@ -28,13 +28,18 @@ type Registry struct {
 	ErrOutput io.Writer          // error output writer for stderr
 	Input     io.Reader          // input reader for stdin
 	SQLite    *SQLiteStore       // in-memory SQLite store for table data
+	Modules   map[string]ModuleDesc    // child modules keyed by generated ID
+	moduleSeq int                      // counter for generating module IDs
+	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
+	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
+	argsStack []Value            // stack of args lists for nested fn calls
 }
 
 // NewRegistry creates an empty registry.
-func NewRegistry() *Registry {
+func NewRegistry() (*Registry, error) {
 	sqlStore, err := NewSQLiteStore()
 	if err != nil {
-		panic("failed to initialize SQLite store: " + err.Error())
+		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}
 	return &Registry{
 		funcs:     make(map[string]*Function),
@@ -46,12 +51,49 @@ func NewRegistry() *Registry {
 		ErrOutput: os.Stderr,
 		Input:     os.Stdin,
 		SQLite:    sqlStore,
-	}
+		Modules:   make(map[string]ModuleDesc),
+	}, nil
+}
+
+// NextModuleID generates a unique module identifier.
+func (r *Registry) NextModuleID() string {
+	r.moduleSeq++
+	return fmt.Sprintf("mod_%d", r.moduleSeq)
 }
 
 // SetFileOps replaces the file operations implementation.
 func (r *Registry) SetFileOps(ops fileops.FileOps) {
 	r.FileOps = ops
+}
+
+// SetParseFunc sets the parser callback used by file-based import.
+func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
+	r.ParseFunc = fn
+}
+
+// PushContext pushes a new context layer that is a shallow copy of parent.
+// Values are copied by reference (like Go's context.WithValue pattern).
+func (r *Registry) PushContext(parent map[string]Value) {
+	child := make(map[string]Value, len(parent))
+	for k, v := range parent {
+		child[k] = v
+	}
+	r.ctxStack = append(r.ctxStack, child)
+}
+
+// PopContext removes the top context layer, restoring the parent.
+func (r *Registry) PopContext() {
+	if len(r.ctxStack) > 0 {
+		r.ctxStack = r.ctxStack[:len(r.ctxStack)-1]
+	}
+}
+
+// Context returns the current (top) context map, or nil if no context is active.
+func (r *Registry) Context() map[string]Value {
+	if len(r.ctxStack) == 0 {
+		return nil
+	}
+	return r.ctxStack[len(r.ctxStack)-1]
 }
 
 // Register adds one or more signatures to a named function with suffix precedence.
@@ -90,10 +132,13 @@ func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives.
-func DefaultRegistry() *Registry {
-	r := NewRegistry()
+func DefaultRegistry() (*Registry, error) {
+	r, err := NewRegistry()
+	if err != nil {
+		return nil, err
+	}
 	registerBuiltins(r)
-	return r
+	return r, nil
 }
 
 func registerBuiltins(r *Registry) {
@@ -380,6 +425,113 @@ func registerBuiltins(r *Registry) {
 	registerDot(r)
 	registerDotr(r)
 	registerTrace(r)
+	registerInspect(r)
+	registerFor(r)
+	registerModule(r)
+	registerContext(r)
+	registerDblcall(r)
+	registerCall(r)
+	registerArgs(r)
+	registerPopArgs(r)
+}
+
+// registerDblcall registers "dblcall", an example function that takes an
+// integer and a callback (list body). It doubles the integer, then invokes
+// the callback with the doubled value on the stack.
+//
+// This demonstrates the general principle of a plain AQL function accepting
+// a callback parameter. The callback body is spliced onto the main engine
+// stack using internal mark/move markers — no sub-engine is created.
+//
+//	dblcall 5 [dup mul]   => 100  (doubles 5→10, then callback: 10 dup mul → 100)
+//	3 dblcall [add 1]     => 7    (doubles 3→6, then callback: 6 add 1 → 7)
+func registerDblcall(r *Registry) {
+	r.Register("dblcall", Signature{
+		Args: []Type{TInteger, TList},
+		Handler: func(args []Value) ([]Value, error) {
+			n := args[0].AsInteger()
+			body := args[1]
+
+			if body.IsTypedList() || body.IsTableType() {
+				return nil, fmt.Errorf("dblcall: callback must be a plain list")
+			}
+
+			doubled := NewInteger(n * 2)
+
+			bodyElems := body.AsList()
+			if len(bodyElems) == 0 {
+				return []Value{doubled}, nil
+			}
+
+			// Splice: ( doubled body_tokens... )
+			// The open/close paren pair creates a sub-expression scope
+			// on the main engine stack (no sub-engine). The callback
+			// body executes with the doubled value on the stack, and
+			// the paren scope collapses to the result.
+			tokens := make([]Value, 0, len(bodyElems)+3)
+			tokens = append(tokens, NewOpenParen())
+			tokens = append(tokens, doubled)
+			bodyCopy := make([]Value, len(bodyElems))
+			copy(bodyCopy, bodyElems)
+			tokens = append(tokens, bodyCopy...)
+			tokens = append(tokens, NewWord(")"))
+			return tokens, nil
+		},
+	})
+}
+
+// registerCall registers "call", which takes a list and splices its contents
+// onto the engine stack as code to execute (wrapped in a paren scope).
+// This enables higher-order functions defined with def fn to invoke callback
+// parameters.
+//
+//	[dup mul] call   => (evaluates "dup mul" on whatever is on the stack)
+func registerCall(r *Registry) {
+	r.Register("call", Signature{
+		Args: []Type{TList},
+		Handler: func(args []Value) ([]Value, error) {
+			body := args[0]
+
+			if body.IsTypedList() || body.IsTableType() {
+				return nil, fmt.Errorf("call: argument must be a plain list")
+			}
+
+			bodyElems := body.AsList()
+			if len(bodyElems) == 0 {
+				return nil, nil
+			}
+
+			bodyCopy := make([]Value, len(bodyElems))
+			copy(bodyCopy, bodyElems)
+			return bodyCopy, nil
+		},
+	})
+}
+
+// registerArgs registers the "args" word which returns the current function's
+// argument list from the args stack. Used with dot notation: args.0, args.1.
+func registerArgs(r *Registry) {
+	r.Register("args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) == 0 {
+				return nil, fmt.Errorf("args: not inside a function")
+			}
+			return []Value{r.argsStack[len(r.argsStack)-1]}, nil
+		},
+	})
+}
+
+// registerPopArgs registers the internal "__pop-args" word used to clean up
+// the args stack after a fn-defined function body finishes executing.
+func registerPopArgs(r *Registry) {
+	r.Register("__pop-args", Signature{
+		Handler: func(_ []Value) ([]Value, error) {
+			if len(r.argsStack) > 0 {
+				r.argsStack = r.argsStack[:len(r.argsStack)-1]
+			}
+			return nil, nil
+		},
+	})
 }
 
 // valToString converts any scalar Value to its string representation.
@@ -447,6 +599,13 @@ func registerStorage(r *Registry) {
 	)
 
 	getHandler := func(args []Value) ([]Value, error) {
+		// If the argument was already resolved (e.g. a defined word
+		// that the engine evaluated before get collected it), return
+		// it directly — no Store lookup needed.
+		if args[0].VType.Matches(TMap) || args[0].VType.Matches(TList) ||
+			args[0].VType.Matches(TFunction) || args[0].VType.Equal(TFnDef) {
+			return []Value{args[0]}, nil
+		}
 		key := storeKey(args[0])
 		val, ok := r.Store[key]
 		if !ok {
@@ -460,6 +619,70 @@ func registerStorage(r *Registry) {
 		Args:    []Type{TAny},
 		Handler: getHandler,
 	})
+}
+
+// registerContext registers the "context" word for scoped key-value storage.
+// Usage:
+//
+//	context set "key" value   — store value under key in current context
+//	context set foo value     — store with word key
+//	context get "key"         — retrieve value (returns none if key not found)
+//	context get foo           — retrieve with word key
+func registerContext(r *Registry) {
+	ctxSetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return nil, fmt.Errorf("context: no active context")
+		}
+		key := storeKey(args[0])
+		ctx[key] = args[1]
+		return nil, nil
+	}
+
+	ctxGetHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		key := storeKey(args[0])
+		val, ok := ctx[key]
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	// Register "context-set" and "context-get" as the implementation words.
+	r.Register("context-set",
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetHandler},
+		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetHandler},
+	)
+
+	r.Register("context-get",
+		Signature{Args: []Type{TString}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TWord}, Handler: ctxGetHandler},
+		Signature{Args: []Type{TAny}, Handler: ctxGetHandler},
+	)
+
+	// Register "context" as a dispatcher that converts the sub-command
+	// into the appropriate hyphenated word call.
+	r.Register("context",
+		Signature{
+			Args: []Type{TWord},
+			Handler: func(args []Value) ([]Value, error) {
+				cmd := args[0].AsWord().Name
+				switch cmd {
+				case "set":
+					return []Value{NewWord("context-set")}, nil
+				case "get":
+					return []Value{NewWord("context-get")}, nil
+				default:
+					return nil, fmt.Errorf("context: unknown sub-command: %s (expected set or get)", cmd)
+				}
+			},
+		},
+	)
 }
 
 // registerBinaryIntOp registers a binary integer operation with a single
@@ -574,6 +797,9 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				if _, ok := top.Data.(FnDefInfo); ok {
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
+				if top.VType.Equal(TFunction) {
+					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+				}
 				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 					elems := top.AsList()
 					result := make([]Value, len(elems))
@@ -586,10 +812,18 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	}
 
 	// FnDefInfo body (from fn word): install typed signatures.
-	if body.VType.Equal(TFnDef) {
+	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
 		fnDef := body.Data.(FnDefInfo)
 		installFnDef(r, name, fnDef, isPrefixOnly)
-		r.DefStacks[name] = append(r.DefStacks[name], body)
+		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
+		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+		return
+	}
+
+	// FnUndefInfo body (from fn word in pair mode): remove targeted signatures.
+	if body.VType.Equal(TFnUndef) {
+		undefInfo := body.Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
 		return
 	}
 
@@ -656,6 +890,103 @@ func registerUndef(r *Registry) {
 			Handler: undefHandler,
 		},
 	)
+
+	// Targeted undef: undef foo fn [[number] [number]]
+	undefFnHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		undefInfo := args[1].Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
+		return nil, nil
+	}
+	r.Register("undef",
+		Signature{
+			Args:    []Type{TWord, TFnUndef},
+			Handler: undefFnHandler,
+		},
+		Signature{
+			Args:    []Type{TString, TFnUndef},
+			Handler: undefFnHandler,
+		},
+	)
+}
+
+// fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
+// (same param types and return types, ignoring param names).
+func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
+	if len(sig.Params) != len(spec.Params) {
+		return false
+	}
+	for i := range sig.Params {
+		if !sig.Params[i].Type.Equal(spec.Params[i].Type) {
+			return false
+		}
+	}
+	if len(sig.Returns) != len(spec.Returns) {
+		return false
+	}
+	for i := range sig.Returns {
+		if !sig.Returns[i].Equal(spec.Returns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// uninstallFnSigs removes specific function signatures from a word's DefStack.
+// For each spec in the FnUndefInfo, it finds and removes the most recent
+// DefStack entry containing a matching signature, then rebuilds the
+// Function.Signatures slice from the remaining entries.
+func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return
+	}
+
+	// For each spec, find and remove the most recent matching DefStack entry.
+	for _, spec := range specs.Sigs {
+		for j := len(stack) - 1; j >= 0; j-- {
+			fnDef, ok := stack[j].Data.(FnDefInfo)
+			if !ok {
+				continue
+			}
+			matched := false
+			for _, sig := range fnDef.Sigs {
+				if fnSigMatchesSpec(sig, spec) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				stack = append(stack[:j], stack[j+1:]...)
+				break
+			}
+		}
+	}
+
+	r.DefStacks[name] = stack
+
+	fn := r.funcs[name]
+	if fn == nil {
+		return
+	}
+
+	// If no DefStack entries remain, clean up entirely.
+	if len(stack) == 0 {
+		delete(r.funcs, name)
+		delete(r.DefStacks, name)
+		return
+	}
+
+	// Rebuild: keep the generic fallback (index 0), remove all typed sigs,
+	// then re-register from remaining DefStack entries.
+	if len(fn.Signatures) > 0 {
+		fn.Signatures = fn.Signatures[:1] // keep generic fallback
+	}
+	for _, entry := range stack {
+		if fnDef, ok := entry.Data.(FnDefInfo); ok {
+			installFnDef(r, name, fnDef)
+		}
+	}
 }
 
 // registerVar registers the "var" word for scoped variable definitions.
@@ -750,7 +1081,12 @@ func registerVar(r *Registry) {
 // --- Function specification helpers ---
 
 // registerFn registers the "fn" word, which parses a list of signature
-// triples into a FnDefInfo value. Use with def: def name fn [[params] [out] [body]].
+// triples into a function value (lambda). Used standalone as a lambda:
+//   (fn [[x:number] [number] [x mul x]])
+// Or with def to bind a name:
+//   def square fn [[x:number] [number] [x mul x]]
+// When the list length is divisible by 2 but not 3, it is parsed as pairs
+// (input+output, no body) producing a FnUndefInfo for targeted undef.
 func registerFn(r *Registry) {
 	fnHandler := func(args []Value) ([]Value, error) {
 		list := args[0]
@@ -758,14 +1094,26 @@ func registerFn(r *Registry) {
 			return nil, fmt.Errorf("fn: argument must be a list")
 		}
 		elems := list.AsList()
-		if len(elems) == 0 || len(elems)%3 != 0 {
-			return nil, fmt.Errorf("fn: list must contain signature triples (length must be a multiple of 3)")
+		if len(elems) == 0 {
+			return nil, fmt.Errorf("fn: list must not be empty")
 		}
-		fnDef, err := parseFnDef(elems)
-		if err != nil {
-			return nil, err
+		// Triples (def mode) take precedence when divisible by 3.
+		if len(elems)%3 == 0 {
+			fnDef, err := parseFnDef(elems)
+			if err != nil {
+				return nil, err
+			}
+			return []Value{NewFunction(fnDef)}, nil
 		}
-		return []Value{NewFnDef(fnDef)}, nil
+		// Pairs (undef mode) when divisible by 2.
+		if len(elems)%2 == 0 {
+			undefInfo, err := parseFnUndefSpec(elems)
+			if err != nil {
+				return nil, err
+			}
+			return []Value{NewFnUndef(undefInfo)}, nil
+		}
+		return nil, fmt.Errorf("fn: list length must be a multiple of 3 (def) or 2 (undef spec)")
 	}
 
 	r.Register("fn", Signature{
@@ -782,7 +1130,7 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
 		inputSig := list[i]
-		// list[i+1] is the output signature — informational only
+		outputSig := list[i+1]
 		body := list[i+2]
 
 		// Abbreviation: non-list input sig is treated as [inputSig].
@@ -791,6 +1139,11 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnDefInfo{}, err
+		}
+
+		returns, err := parseFnReturns(outputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
@@ -804,11 +1157,70 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params: params,
-			Body:   bodyElems,
+			Params:  params,
+			Returns: returns,
+			Body:    bodyElems,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// parseFnUndefSpec parses a list of signature pairs (input+output, no body)
+// into a FnUndefInfo for targeted undef. Used when fn receives a list whose
+// length is divisible by 2 but not 3.
+func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
+	var sigs []FnSigSpec
+	for i := 0; i < len(list); i += 2 {
+		inputSig := list[i]
+		outputSig := list[i+1]
+
+		if !inputSig.VType.Equal(TList) {
+			inputSig = NewList([]Value{inputSig})
+		}
+
+		params, err := parseFnParams(inputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		returns, err := parseFnReturns(outputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		sigs = append(sigs, FnSigSpec{
+			Params:  params,
+			Returns: returns,
+		})
+	}
+	return FnUndefInfo{Sigs: sigs}, nil
+}
+
+// parseFnReturns extracts return types from an output signature.
+// A non-list value is treated as a single-element list.
+// An empty list means no return type checking.
+func parseFnReturns(outputSig Value) ([]Type, error) {
+	if !outputSig.VType.Equal(TList) {
+		// Abbreviation: single value treated as [value].
+		t, err := resolveSigType(outputSig)
+		if err != nil {
+			return nil, err
+		}
+		return []Type{t}, nil
+	}
+	elems := outputSig.AsList()
+	if len(elems) == 0 {
+		return nil, nil
+	}
+	types := make([]Type, len(elems))
+	for i, e := range elems {
+		var err error
+		types[i], err = resolveSigType(e)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return types, nil
 }
 
 // parseFnParams extracts parameters from an input signature list.
@@ -834,13 +1246,19 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			}
 			name := keys[0]
 			typeVal, _ := m.Get(name)
-			paramType := resolveSigType(typeVal)
+			paramType, err := resolveSigType(typeVal)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+			}
 			params = append(params, FnParam{Name: name, Type: paramType})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
 			typeName := elem.AsWord().Name
-			paramType := resolveTypeName(typeName)
+			paramType, err := resolveTypeName(typeName)
+			if err != nil {
+				return nil, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
+			}
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
@@ -868,10 +1286,10 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 }
 
 // resolveSigType converts a Value (from a pair's value side) to a Type.
-func resolveSigType(v Value) Type {
+func resolveSigType(v Value) (Type, error) {
 	if v.Data == nil {
 		// Type literal (e.g., number, string) — already resolved by parser
-		return v.VType
+		return v.VType, nil
 	}
 	if v.IsWord() {
 		return resolveTypeName(v.AsWord().Name)
@@ -881,30 +1299,32 @@ func resolveSigType(v Value) Type {
 	}
 	// Literal values (integers, booleans) carry their literal type.
 	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
-		return v.VType
+		return v.VType, nil
 	}
-	return TAny
+	return TAny, nil
 }
 
 // resolveTypeName maps a type name string to its engine Type.
-func resolveTypeName(name string) Type {
+func resolveTypeName(name string) (Type, error) {
 	switch name {
-	case "any":
-		return TAny
-	case "none":
-		return TNone
-	case "number":
-		return TNumber
-	case "integer":
-		return TInteger
-	case "string":
-		return TString
-	case "boolean":
-		return TBoolean
-	case "list":
-		return TList
-	case "map":
-		return TMap
+	case "Any":
+		return TAny, nil
+	case "None":
+		return TNone, nil
+	case "Number":
+		return TNumber, nil
+	case "Integer":
+		return TInteger, nil
+	case "String":
+		return TString, nil
+	case "Boolean":
+		return TBoolean, nil
+	case "List":
+		return TList, nil
+	case "Function":
+		return TFunction, nil
+	case "Map":
+		return TMap, nil
 	default:
 		return NewType(name)
 	}
@@ -928,6 +1348,22 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 		handler := func(args []Value) ([]Value, error) {
 			var result []Value
 			var names []string
+			// Wrap the entire expansion (unnamed args + body + undef
+			// cleanup) in parens so it evaluates as a single
+			// sub-expression. Without this, an outer forward can grab
+			// intermediate values from the body before the body
+			// finishes executing (e.g. recursive factorial: the outer
+			// mul's forward grabs x=1 from the inner body instead of
+			// waiting for the full result).
+			result = append(result, NewOpenParen())
+
+			// Push args list onto the args stack for access via the
+			// "args" word (args.0, args.1, etc.).
+			argsCopy := make([]Value, len(args))
+			copy(argsCopy, args)
+			argsList := NewList(argsCopy)
+			r.argsStack = append(r.argsStack, argsList)
+
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -940,13 +1376,92 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
 			result = append(result, body...)
+			// Pop the args stack to restore the previous args (for nesting).
+			result = append(result, NewWord("__pop-args"))
 			for i := len(names) - 1; i >= 0; i-- {
 				result = append(result, NewWord("undef"), NewWord(names[i]))
 			}
+			// Inject return-check if return types are declared.
+			if len(s.Returns) > 0 {
+				result = append(result, NewReturnCheck(ReturnCheckInfo{
+					FuncName: name,
+					Returns:  s.Returns,
+				}))
+			}
+			result = append(result, NewWord(")"))
 			return result, nil
 		}
 		registerFn(name, Signature{Args: argTypes, Handler: handler})
 	}
+}
+
+// CallAQL invokes an AQL function value (FnDefInfo) with the given arguments
+// in a sub-engine. This allows native Go code to call AQL callbacks.
+//
+//	result, err := r.CallAQL(callbackValue, []Value{someArg})
+func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		return nil, fmt.Errorf("CallAQL: value is not a function")
+	}
+
+	// Find matching signature.
+	for _, sig := range fnDef.Sigs {
+		if len(sig.Params) != len(args) {
+			continue
+		}
+		match := true
+		for i, p := range sig.Params {
+			if !args[i].VType.Matches(p.Type) {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+
+		// Build token sequence (same as installFnDef handler).
+		var tokens []Value
+		var names []string
+
+		// Push args list onto the args stack.
+		argsCopy := make([]Value, len(args))
+		copy(argsCopy, args)
+		argsList := NewList(argsCopy)
+		r.argsStack = append(r.argsStack, argsList)
+
+		for i, p := range sig.Params {
+			if p.Name != "" {
+				installDef(r, p.Name, args[i])
+				names = append(names, p.Name)
+			} else {
+				tokens = append(tokens, args[i])
+			}
+		}
+		body := make([]Value, len(sig.Body))
+		copy(body, sig.Body)
+		tokens = append(tokens, body...)
+
+		// Evaluate in a sub-engine.
+		sub := New(r)
+		result, err := sub.Run(tokens)
+
+		// Cleanup: pop args stack, undef named params.
+		if len(r.argsStack) > 0 {
+			r.argsStack = r.argsStack[:len(r.argsStack)-1]
+		}
+		for i := len(names) - 1; i >= 0; i-- {
+			uninstallDef(r, names[i])
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("CallAQL: %w", err)
+		}
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("CallAQL: no matching signature for arguments")
 }
 
 // registerConvert registers the "convert" word for type conversions.
@@ -1538,7 +2053,7 @@ func resolveWordValue(v Value) Value {
 		return NewBoolean(true)
 	case "false":
 		return NewBoolean(false)
-	case "none":
+	case "None":
 		return NewTypeLiteral(TNone)
 	default:
 		return NewAtom(name)
@@ -1777,6 +2292,73 @@ func registerTypeof(r *Registry) {
 	)
 }
 
+// registerInspect registers the "inspect" word that returns a map describing
+// a word. The result is a map with type word_inspection containing:
+//
+//	name:       string  — the word name
+//	kind:       atom    — "builtin", "defined", or "unknown"
+//	signatures: list    — list of signature maps, each with:
+//	  args:       list of type name strings
+//	  precedence: integer
+//
+//	inspect add => {name:'add', kind:builtin, signatures:[{args:['number/integer','number/integer'], precedence:10}]}
+func registerInspect(r *Registry) {
+	r.Register("inspect", Signature{
+		Args: []Type{TWord},
+		Handler: func(args []Value) ([]Value, error) {
+			name := args[0].AsWord().Name
+			return []Value{buildInspection(r, name)}, nil
+		},
+	})
+}
+
+// buildInspection constructs a word_inspection map for the named word.
+func buildInspection(r *Registry, name string) Value {
+	result := NewOrderedMap()
+	result.Set("name", NewString(name))
+
+	fn := r.Lookup(name)
+	if fn == nil {
+		result.Set("kind", NewAtom("unknown"))
+		result.Set("signatures", NewList(nil))
+		return Value{VType: TWordInspection, Data: result}
+	}
+
+	// Determine kind: if there's a DefStacks entry, it's user-defined.
+	if len(r.DefStacks[name]) > 0 {
+		result.Set("kind", NewAtom("defined"))
+	} else {
+		result.Set("kind", NewAtom("builtin"))
+	}
+
+	// Add suffix_precedence flag.
+	result.Set("suffix_precedence", NewBoolean(fn.SuffixPrecedence))
+
+	// Build signature list.
+	var sigMaps []Value
+	for _, sig := range fn.Signatures {
+		sm := NewOrderedMap()
+
+		var argVals []Value
+		for _, argType := range sig.Args {
+			argVals = append(argVals, NewString(argType.String()))
+		}
+		if argVals == nil {
+			argVals = []Value{}
+		}
+		sm.Set("args", NewList(argVals))
+		sm.Set("precedence", NewInteger(int64(sig.Precedence)))
+
+		sigMaps = append(sigMaps, NewMap(sm))
+	}
+	if sigMaps == nil {
+		sigMaps = []Value{}
+	}
+	result.Set("signatures", NewList(sigMaps))
+
+	return Value{VType: TWordInspection, Data: result}
+}
+
 // registerBase registers the "base" word that returns the zero/default value
 // for a given type, similar to Go's zero values.
 //
@@ -1974,7 +2556,7 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrNoneHandler := func(args []Value) ([]Value, error) {
-		return nil, fmt.Errorf("dotr: parent is none")
+		return nil, fmt.Errorf("dotr: parent is None")
 	}
 
 	sigs := []Signature{
@@ -1987,4 +2569,283 @@ func registerDotr(r *Registry) {
 
 	r.Register("dotr", sigs...)
 	r.Register("!.", sigs...)
+}
+
+// registerModule registers the "module", "export", and "import" words.
+//
+// module works like do but with a completely fresh, isolated sub-engine
+// (new registry, new bus). Inside a module the "export" word is available
+// to declare exports. The return value is a module descriptor (ModuleDesc)
+// which can be the subject of def.
+//
+// export: [atom_or_string map] registers an export name and map within
+// the module. The export map's values are evaluated in the module context.
+//
+// import: injects exported names from a module descriptor into the current
+// engine as defs.
+//   - [module-desc]                    — use export names as-is
+//   - [[atom atom] module-desc]        — rename single export (from to)
+//   - [[:pairs...] module-desc]        — rename multiple exports
+func registerModule(r *Registry) {
+	// module: [list] -> [module-desc]
+	r.Register("module", Signature{
+		Args: []Type{TList},
+		Handler: func(args []Value) ([]Value, error) {
+			desc, err := runModuleBody(r, args[0].AsList())
+			if err != nil {
+				return nil, fmt.Errorf("module: %w", err)
+			}
+			return []Value{NewModule(desc)}, nil
+		},
+	})
+
+	// import: [module-desc] -> [] — import all exports as defs
+	importAllHandler := func(args []Value) ([]Value, error) {
+		desc := args[0].AsModule()
+		installExports(r, desc, nil)
+		return nil, nil
+	}
+
+	// import: [list module-desc] -> [] — rename imports
+	importRenameHandler := func(args []Value) ([]Value, error) {
+		desc := args[1].AsModule()
+		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	// import: [string] -> [] — import from a file path.
+	// The file is read, parsed, and executed in an isolated module engine.
+	// The file should contain export statements (no module word needed).
+	importFileHandler := func(args []Value) ([]Value, error) {
+		path := args[0].AsString()
+		desc, err := loadFileModule(r, path)
+		if err != nil {
+			return nil, err
+		}
+		installExports(r, desc, nil)
+		return nil, nil
+	}
+
+	// import: [list string] -> [] — import from file with renaming.
+	importFileRenameHandler := func(args []Value) ([]Value, error) {
+		path := args[1].AsString()
+		desc, err := loadFileModule(r, path)
+		if err != nil {
+			return nil, err
+		}
+		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	r.Register("import",
+		Signature{
+			Args:    []Type{TModule},
+			Handler: importAllHandler,
+		},
+		Signature{
+			Args:    []Type{TList, TModule},
+			Handler: importRenameHandler,
+		},
+		Signature{
+			Args:    []Type{TString},
+			Handler: importFileHandler,
+		},
+		Signature{
+			Args:    []Type{TList, TString},
+			Handler: importFileRenameHandler,
+		},
+	)
+}
+
+// runModuleBody creates an isolated module engine, runs the given values,
+// and returns a ModuleDesc with the collected exports.
+func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
+	modReg, err := DefaultRegistry()
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
+	}
+	modReg.Output = parent.Output
+	modReg.ErrOutput = parent.ErrOutput
+	modReg.Input = parent.Input
+	modReg.FileOps = parent.FileOps
+	modReg.ParseFunc = parent.ParseFunc
+
+	// Inherit parent context so module can read parent values.
+	// The module's Run will push its own copy-on-write layer on top.
+	if parentCtx := parent.Context(); parentCtx != nil {
+		copied := make(map[string]Value, len(parentCtx))
+		for k, v := range parentCtx {
+			copied[k] = v
+		}
+		modReg.ctxStack = append(modReg.ctxStack, copied)
+	}
+
+	exports := make(map[string]*OrderedMap)
+
+	exportHandler := func(name string, rawMap *OrderedMap) {
+		resolved := NewOrderedMap()
+		for _, key := range rawMap.Keys() {
+			val, _ := rawMap.Get(key)
+			resolved.Set(key, resolveModuleExport(modReg, val))
+		}
+		exports[name] = resolved
+	}
+
+	modReg.Register("export", Signature{
+		Args: []Type{TWord, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(defName(eargs[0]), eargs[1].AsMap())
+			return nil, nil
+		},
+	}, Signature{
+		Args: []Type{TAtom, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
+			return nil, nil
+		},
+	}, Signature{
+		Args: []Type{TString, TMap},
+		Handler: func(eargs []Value) ([]Value, error) {
+			exportHandler(eargs[0].AsString(), eargs[1].AsMap())
+			return nil, nil
+		},
+	})
+
+	// Promote strings to words for code evaluation inside module.
+	promoteToWord := func(v Value) Value {
+		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
+			name := v.AsString()
+			if modReg.Lookup(name) != nil {
+				return NewWord(name)
+			}
+		}
+		return v
+	}
+
+	input := make([]Value, len(elems))
+	for i, e := range elems {
+		input[i] = promoteToWord(e)
+	}
+	sub := New(modReg)
+	_, err = sub.Run(input)
+	if err != nil {
+		return ModuleDesc{}, err
+	}
+
+	modID := parent.NextModuleID()
+	desc := ModuleDesc{
+		ID:      modID,
+		Exports: exports,
+	}
+	parent.Modules[modID] = desc
+	return desc, nil
+}
+
+// loadFileModule reads a file, parses it as AQL, and runs it as a module.
+func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
+	if parent.ParseFunc == nil {
+		return ModuleDesc{}, fmt.Errorf("import: parser not configured for file import")
+	}
+
+	data, err := parent.FileOps.ReadFile(path)
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %w", err)
+	}
+
+	parsed, err := parent.ParseFunc(string(data))
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", path, err)
+	}
+
+	desc, err := runModuleBody(parent, parsed)
+	if err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", path, err)
+	}
+	return desc, nil
+}
+
+// installExports installs all exports from a module descriptor as defs.
+// If names is nil, all exports are installed using their original names.
+func installExports(r *Registry, desc ModuleDesc, names []string) {
+	if names == nil {
+		for name, exportMap := range desc.Exports {
+			installDef(r, name, NewMap(exportMap))
+		}
+		return
+	}
+	for _, name := range names {
+		if exportMap, ok := desc.Exports[name]; ok {
+			installDef(r, name, NewMap(exportMap))
+		}
+	}
+}
+
+// installRenamedExports applies a rename list to module exports and installs them.
+func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) error {
+	if len(renameList) == 0 {
+		return fmt.Errorf("import: empty rename list")
+	}
+
+	if renameList[0].VType.Equal(TList) {
+		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
+		for _, pair := range renameList {
+			pairElems := pair.AsList()
+			if len(pairElems) != 2 {
+				return fmt.Errorf("import: rename pair must have exactly 2 elements")
+			}
+			fromName := valToAtomOrString(pairElems[0])
+			toName := valToAtomOrString(pairElems[1])
+			exportMap, ok := desc.Exports[fromName]
+			if !ok {
+				return fmt.Errorf("import: export %q not found in module", fromName)
+			}
+			installDef(r, toName, NewMap(exportMap))
+		}
+	} else {
+		// Single rename pair: [from to]
+		if len(renameList) != 2 {
+			return fmt.Errorf("import: rename list must have exactly 2 elements (from to)")
+		}
+		fromName := valToAtomOrString(renameList[0])
+		toName := valToAtomOrString(renameList[1])
+		exportMap, ok := desc.Exports[fromName]
+		if !ok {
+			return fmt.Errorf("import: export %q not found in module", fromName)
+		}
+		installDef(r, toName, NewMap(exportMap))
+	}
+	return nil
+}
+
+// resolveModuleExport resolves an export map value through the module's
+// def stacks. If the value is a string, atom, or word that names a def'd word,
+// the def body is returned. Otherwise the value is returned as-is.
+func resolveModuleExport(modReg *Registry, v Value) Value {
+	var name string
+	if v.IsWord() {
+		name = v.AsWord().Name
+	} else if v.VType.Matches(TString) {
+		name = v.AsString()
+	} else if v.IsAtom() {
+		name = v.AsAtom()
+	} else {
+		return v
+	}
+	stack := modReg.DefStacks[name]
+	if len(stack) > 0 {
+		return stack[len(stack)-1]
+	}
+	return v
+}
+
+// valToAtomOrString extracts a string from a Value that is an atom, string, or word.
+func valToAtomOrString(v Value) string {
+	if v.IsWord() {
+		return v.AsWord().Name
+	}
+	if v.IsAtom() {
+		return v.AsAtom()
+	}
+	if v.VType.Matches(TString) {
+		return v.AsString()
+	}
+	return v.String()
 }

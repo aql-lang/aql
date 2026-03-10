@@ -519,34 +519,34 @@ func TestParseMultilineScript(t *testing.T) {
 // --- Typed list tests (list.child) ---
 
 func TestParseTypedListString(t *testing.T) {
-	// [:string] → typed list with child type string
-	assertParse(t, "[:string]", []engine.Value{
+	// [:String] → typed list with child type string
+	assertParse(t, "[:String]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedListNumber(t *testing.T) {
-	// [:number] → typed list with child type number
-	assertParse(t, "[:number]", []engine.Value{
+	// [:Number] → typed list with child type number
+	assertParse(t, "[:Number]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)),
 	})
 }
 
 func TestParseTypedListBoolean(t *testing.T) {
-	assertParse(t, "[:boolean]", []engine.Value{
+	assertParse(t, "[:Boolean]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TBoolean)),
 	})
 }
 
 func TestParseTypedListAny(t *testing.T) {
-	assertParse(t, "[:any]", []engine.Value{
+	assertParse(t, "[:Any]", []engine.Value{
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TAny)),
 	})
 }
 
 func TestParseTypedListMap(t *testing.T) {
-	// [:{x:number}] → typed list with child type {x:number}
-	got, err := Parse("[:{x:number}]")
+	// [:{x:Number}] → typed list with child type {x:Number}
+	got, err := Parse("[:{x:Number}]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -571,30 +571,30 @@ func TestParseTypedListMap(t *testing.T) {
 }
 
 func TestParseTypedListNested(t *testing.T) {
-	// [:[:string]] → typed list of typed lists of strings
-	assertParse(t, "[:[:string]]", []engine.Value{
+	// [:[:String]] → typed list of typed lists of strings
+	assertParse(t, "[:[:String]]", []engine.Value{
 		engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TString))),
 	})
 }
 
 func TestParseTypedListDeepNested(t *testing.T) {
-	// [:[:[:number]]] → three levels deep
-	assertParse(t, "[:[:[:number]]]", []engine.Value{
+	// [:[:[:Number]]] → three levels deep
+	assertParse(t, "[:[:[:Number]]]", []engine.Value{
 		engine.NewTypedList(engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)))),
 	})
 }
 
 func TestParseTypedListInExpression(t *testing.T) {
-	// 1 [:string] → integer then typed list
-	assertParse(t, "1 [:string]", []engine.Value{
+	// 1 [:String] → integer then typed list
+	assertParse(t, "1 [:String]", []engine.Value{
 		engine.NewInteger(1),
 		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedListMapChild(t *testing.T) {
-	// [:{a:string,b:number}] → typed list with multi-key map child
-	got, err := Parse("[:{a:string,b:number}]")
+	// [:{a:String,b:Number}] → typed list with multi-key map child
+	got, err := Parse("[:{a:String,b:Number}]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -611,63 +611,63 @@ func TestParseTypedListMapChild(t *testing.T) {
 // --- Typed map tests (map.child) ---
 
 func TestParseTypedMapString(t *testing.T) {
-	// {:string} → typed map with child type string
-	assertParse(t, "{:string}", []engine.Value{
+	// {:String} → typed map with child type string
+	assertParse(t, "{:String}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedMapNumber(t *testing.T) {
-	// {:number} → typed map with child type number
-	assertParse(t, "{:number}", []engine.Value{
+	// {:Number} → typed map with child type number
+	assertParse(t, "{:Number}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)),
 	})
 }
 
 func TestParseTypedMapBoolean(t *testing.T) {
-	assertParse(t, "{:boolean}", []engine.Value{
+	assertParse(t, "{:Boolean}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TBoolean)),
 	})
 }
 
 func TestParseTypedMapAny(t *testing.T) {
-	assertParse(t, "{:any}", []engine.Value{
+	assertParse(t, "{:Any}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TAny)),
 	})
 }
 
 func TestParseTypedMapList(t *testing.T) {
-	// {:[:number]} → typed map with child type [:number]
-	assertParse(t, "{:[:number]}", []engine.Value{
+	// {:[:Number]} → typed map with child type [:Number]
+	assertParse(t, "{:[:Number]}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber))),
 	})
 }
 
 func TestParseTypedMapNested(t *testing.T) {
-	// {:{:string}} → typed map of typed maps of strings
-	assertParse(t, "{:{:string}}", []engine.Value{
+	// {:{:String}} → typed map of typed maps of strings
+	assertParse(t, "{:{:String}}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TString))),
 	})
 }
 
 func TestParseTypedMapDeepNested(t *testing.T) {
-	// {:{:{:number}}} → three levels deep
-	assertParse(t, "{:{:{:number}}}", []engine.Value{
+	// {:{:{:Number}}} → three levels deep
+	assertParse(t, "{:{:{:Number}}}", []engine.Value{
 		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)))),
 	})
 }
 
 func TestParseTypedMapInExpression(t *testing.T) {
-	// 1 {:string} → integer then typed map
-	assertParse(t, "1 {:string}", []engine.Value{
+	// 1 {:String} → integer then typed map
+	assertParse(t, "1 {:String}", []engine.Value{
 		engine.NewInteger(1),
 		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
 	})
 }
 
 func TestParseTypedMapConcreteChild(t *testing.T) {
-	// {:{x:number}} → typed map with map child type
-	got, err := Parse("{:{x:number}}")
+	// {:{x:Number}} → typed map with map child type
+	got, err := Parse("{:{x:Number}}")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -788,8 +788,8 @@ func TestParseMapWithNull(t *testing.T) {
 }
 
 func TestParseMapWithTypeName(t *testing.T) {
-	// {x:number} → map with type literal in data context
-	got, err := Parse(`{x:number}`)
+	// {x:Number} → map with type literal in data context
+	got, err := Parse(`{x:Number}`)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -845,5 +845,199 @@ func TestParseEscapeInParenString(t *testing.T) {
 	}
 	if len(got) < 1 {
 		t.Fatalf("expected at least 1 value, got %d", len(got))
+	}
+}
+
+// --- expandDottedWord direct tests ---
+
+func assertExpand(t *testing.T, text string, want []engine.Value) {
+	t.Helper()
+	got, err := expandDottedWord(text)
+	if err != nil {
+		t.Fatalf("expandDottedWord(%q) error: %v", text, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expandDottedWord(%q) got %d values, want %d\n  got:  %v\n  want: %v",
+			text, len(got), len(want), got, want)
+	}
+	for i := range got {
+		if !valuesEqual(got[i], want[i]) {
+			t.Errorf("expandDottedWord(%q)[%d] = %s, want %s", text, i, got[i], want[i])
+		}
+	}
+}
+
+func TestExpandDotStandalone(t *testing.T) {
+	assertExpand(t, ".", []engine.Value{engine.NewWord("dot")})
+}
+
+func TestExpandBangDotStandalone(t *testing.T) {
+	assertExpand(t, "!.", []engine.Value{engine.NewWord("dotr")})
+}
+
+func TestExpandDottedSimple(t *testing.T) {
+	assertExpand(t, "foo.bar", []engine.Value{
+		engine.NewWord("get"),
+		engine.NewWord("foo"),
+		engine.NewWord("bar"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+func TestExpandDottedChain(t *testing.T) {
+	assertExpand(t, "foo.a.b", []engine.Value{
+		engine.NewWord("get"),
+		engine.NewWord("foo"),
+		engine.NewWord("a"),
+		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord("b"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+func TestExpandDottedLeading(t *testing.T) {
+	assertExpand(t, ".a.b", []engine.Value{
+		engine.NewWord("a"),
+		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord("b"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+func TestExpandDottedIntegerKey(t *testing.T) {
+	assertExpand(t, "foo.0", []engine.Value{
+		engine.NewWord("get"),
+		engine.NewWord("foo"),
+		engine.NewInteger(0),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+func TestExpandDottedTrailingDot(t *testing.T) {
+	assertExpand(t, "foo.", []engine.Value{
+		engine.NewWord("get"),
+		engine.NewWord("foo"),
+	})
+}
+
+func TestExpandDottedEmptyMiddle(t *testing.T) {
+	// "foo..bar" → empty segment skipped
+	assertExpand(t, "foo..bar", []engine.Value{
+		engine.NewWord("get"),
+		engine.NewWord("foo"),
+		engine.NewWord("bar"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+func TestExpandDottedLeadingSingle(t *testing.T) {
+	// ".x" → leading dot, just x dot/p
+	assertExpand(t, ".x", []engine.Value{
+		engine.NewWord("x"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+// --- Boolean and nil as top-level values ---
+
+func TestParseBooleanTopLevel(t *testing.T) {
+	// Test bool and nil through convertTopLevelValue
+	// jsonic with Lex=false means true/false are Text, but let's test
+	// nil handling by parsing a map with nil value
+	got, err := Parse("{x:null}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Data context: nested map with booleans and nil ---
+
+func TestParseDataMapWithNil(t *testing.T) {
+	// {a:null,b:true,c:false,d:1}
+	got, err := Parse("{a:null,b:true,c:false,d:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	// b should be boolean true
+	bVal, _ := m.Get("b")
+	if !bVal.VType.Matches(engine.TBoolean) || !bVal.AsBoolean() {
+		t.Errorf("expected true, got %s", bVal)
+	}
+	// c should be boolean false
+	cVal, _ := m.Get("c")
+	if !cVal.VType.Matches(engine.TBoolean) || cVal.AsBoolean() {
+		t.Errorf("expected false, got %s", cVal)
+	}
+}
+
+// --- Data context: nested structures ---
+
+func TestParseDataMapWithNestedList(t *testing.T) {
+	// {x:{y:[1,2,3]}} — nested map with data list inside
+	got, err := Parse("{x:{y:[1,2,3]}}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	if !xVal.VType.Equal(engine.TMap) {
+		t.Fatalf("expected nested map, got %s", xVal.VType)
+	}
+	inner := xVal.AsMap()
+	yVal, _ := inner.Get("y")
+	if !yVal.VType.Equal(engine.TList) {
+		t.Errorf("expected list, got %s", yVal.VType)
+	}
+}
+
+// --- Map containing typed list child ---
+
+func TestParseMapWithTypedListValue(t *testing.T) {
+	// {x:[:Number]} → map key 'x' has typed list value
+	got, err := Parse("{x:[:Number]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- List in data context with bool/nil ---
+
+func TestParseDataListWithBoolAndNil(t *testing.T) {
+	// {x:[true,false,null,1]} → data list with bool and nil
+	got, err := Parse("{x:[true,false,null,1]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	elems := xVal.AsList()
+	if len(elems) != 4 {
+		t.Fatalf("expected 4 elements, got %d", len(elems))
+	}
+	if !elems[0].VType.Matches(engine.TBoolean) || !elems[0].AsBoolean() {
+		t.Errorf("expected true, got %s", elems[0])
+	}
+	if !elems[1].VType.Matches(engine.TBoolean) || elems[1].AsBoolean() {
+		t.Errorf("expected false, got %s", elems[1])
+	}
+	// null in jsonic data context becomes Text("null") → resolveTextValue → string "null"
+	if !elems[2].VType.Matches(engine.TString) {
+		t.Errorf("expected string, got %s", elems[2])
 	}
 }

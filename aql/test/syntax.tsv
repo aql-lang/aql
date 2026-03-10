@@ -27,13 +27,13 @@ true	true
 false	false
 
 # === Type literals ===
-number	number
-string	string
-boolean	boolean
-any	any
-none	none
-list	list
-map	map
+Number	Number
+String	String
+Boolean	Boolean
+Any	Any
+None	None
+List	List
+Map	Map
 
 # === Unknown words become atoms ===
 foo	foo
@@ -157,84 +157,84 @@ true unify 1	'~unify-fail' false
 false unify "world"	'~unify-fail' false
 
 # === Unify - type narrowing with parent types ===
-1 unify number	1 true
-number unify 1	1 true
-42 unify number	42 true
-"hello" unify string	'hello' true
-string unify "hello"	'hello' true
-"" unify string	'' true
-true unify boolean	true true
-boolean unify false	false true
+1 unify Number	1 true
+Number unify 1	1 true
+42 unify Number	42 true
+"hello" unify String	'hello' true
+String unify "hello"	'hello' true
+"" unify String	'' true
+true unify Boolean	true true
+Boolean unify false	false true
 
 # === Unify - type with any ===
-1 unify any	1 true
-any unify 1	1 true
-"hello" unify any	'hello' true
-any unify "hello"	'hello' true
-true unify any	true true
-any unify false	false true
+1 unify Any	1 true
+Any unify 1	1 true
+"hello" unify Any	'hello' true
+Any unify "hello"	'hello' true
+true unify Any	true true
+Any unify false	false true
 
 # === Unify - parent type with parent type ===
-number unify number	number true
-string unify string	string true
-boolean unify boolean	boolean true
-any unify any	any true
+Number unify Number	Number true
+String unify String	String true
+Boolean unify Boolean	Boolean true
+Any unify Any	Any true
 
 # === Unify - any narrows to parent type ===
-any unify number	number true
-number unify any	number true
-any unify string	string true
-string unify any	string true
-any unify boolean	boolean true
-boolean unify any	boolean true
+Any unify Number	Number true
+Number unify Any	Number true
+Any unify String	String true
+String unify Any	String true
+Any unify Boolean	Boolean true
+Boolean unify Any	Boolean true
 
 # === Unify - incompatible parent types ===
-number unify string	'~unify-fail' false
-string unify number	'~unify-fail' false
-number unify boolean	'~unify-fail' false
-boolean unify string	'~unify-fail' false
+Number unify String	'~unify-fail' false
+String unify Number	'~unify-fail' false
+Number unify Boolean	'~unify-fail' false
+Boolean unify String	'~unify-fail' false
 
 # === Unify - none only unifies with itself ===
-none unify none	none true
-none unify any	'~unify-fail' false
-any unify none	'~unify-fail' false
-none unify 1	'~unify-fail' false
-1 unify none	'~unify-fail' false
-none unify "hello"	'~unify-fail' false
-"hello" unify none	'~unify-fail' false
-none unify true	'~unify-fail' false
-false unify none	'~unify-fail' false
-none unify number	'~unify-fail' false
-number unify none	'~unify-fail' false
-none unify string	'~unify-fail' false
-string unify none	'~unify-fail' false
-none unify boolean	'~unify-fail' false
-boolean unify none	'~unify-fail' false
+None unify None	None true
+None unify Any	'~unify-fail' false
+Any unify None	'~unify-fail' false
+None unify 1	'~unify-fail' false
+1 unify None	'~unify-fail' false
+None unify "hello"	'~unify-fail' false
+"hello" unify None	'~unify-fail' false
+None unify true	'~unify-fail' false
+false unify None	'~unify-fail' false
+None unify Number	'~unify-fail' false
+Number unify None	'~unify-fail' false
+None unify String	'~unify-fail' false
+String unify None	'~unify-fail' false
+None unify Boolean	'~unify-fail' false
+Boolean unify None	'~unify-fail' false
 
 # === Unify - none with arg forms ===
-none none unify	none true
-none unify none	none true
-unify none none end	none true
+None None unify	None true
+None unify None	None true
+unify None None end	None true
 
 # === Unify - prefix/infix/suffix arg forms ===
 
 # Prefix form: left right unify
-1 number unify	1 true
+1 Number unify	1 true
 
 # Infix form: left unify right
-1 unify number	1 true
+1 unify Number	1 true
 
 # Suffix form: unify left right end
-unify 1 number end	1 true
+unify 1 Number end	1 true
 
 # All three forms produce same result
-"hello" string unify	'hello' true
-"hello" unify string	'hello' true
-unify "hello" string end	'hello' true
+"hello" String unify	'hello' true
+"hello" unify String	'hello' true
+unify "hello" String end	'hello' true
 
-true boolean unify	true true
-true unify boolean	true true
-unify true boolean end	true true
+true Boolean unify	true true
+true unify Boolean	true true
+unify true Boolean end	true true
 
 42 42 unify	42 true
 42 unify 42	42 true
@@ -242,11 +242,11 @@ unify 42 42 end	42 true
 
 # Suffix with end, failing unification
 unify 1 "hello" end	'~unify-fail' false
-unify number string end	'~unify-fail' false
+unify Number String end	'~unify-fail' false
 
 # === Unify with expressions ===
 (1 add 2) unify 3	3 true
-(2 mul 3) unify number	6 true
+(2 mul 3) unify Number	6 true
 (1 add 1) unify (3 sub 1)	2 true
 (1 add 1) unify (3 sub 2)	'~unify-fail' false
 
@@ -256,14 +256,14 @@ unify number string end	'~unify-fail' false
 []	[]
 [true,false]	[word(true),word(false)]
 [1,"a",true]	[1,'a',word(true)]
-[number,string]	[word(number),word(string)]
+[Number,String]	[word(Number),word(String)]
 
 # === Map literals ===
 {x:1}	{x:1}
 {x:1,y:2}	{x:1,y:2}
 {}	{}
 {a:"hello"}	{a:'hello'}
-{x:string,y:number}	{x:string,y:number}
+{x:String,y:Number}	{x:String,y:Number}
 
 # === Nested structures ===
 [[1,2],[3,4]]	[[1,2],[3,4]]
@@ -272,213 +272,213 @@ unify number string end	'~unify-fail' false
 {a:[1,2,3]}	{a:[1,2,3]}
 
 # === Unify - lists ===
-[1,string] unify [number,"a"]	'~unify-fail' false
+[1,String] unify [Number,"a"]	'~unify-fail' false
 [1,"a"] unify [1,"a"]	[1,'a'] true
 [] unify []	[] true
 [1,2] unify [1,3]	'~unify-fail' false
 [1] unify [1,2]	'~unify-fail' false
-list unify [1,2]	[1,2] true
-[1,2] unify list	[1,2] true
-list unify list	list true
+List unify [1,2]	[1,2] true
+[1,2] unify List	[1,2] true
+List unify List	List true
 
 # === Unify - maps ===
-{x:string} unify {x:"hello"}	{x:'hello'} true
+{x:String} unify {x:"hello"}	{x:'hello'} true
 {x:1} unify {x:1}	{x:1} true
 {x:1} unify {x:2}	'~unify-fail' false
 {x:1} unify {x:1,y:2}	'~unify-fail' false
 {x:1} unify {y:1}	'~unify-fail' false
 {} unify {}	{} true
-map unify {x:1}	{x:1} true
-{x:1} unify map	{x:1} true
-map unify map	map true
+Map unify {x:1}	{x:1} true
+{x:1} unify Map	{x:1} true
+Map unify Map	Map true
 
 # === Unify - nested structures ===
-{x:[1,string]} unify {x:[number,"a"]}	{x:[1,'a']} true
-[{a:1},{b:string}] unify [{a:number},{b:"z"}]	[{a:1},{b:'z'}] true
-[[string]] unify [["hello"]]	'~unify-fail' false
-{a:{b:number}} unify {a:{b:42}}	{a:{b:42}} true
+{x:[1,String]} unify {x:[Number,"a"]}	{x:[1,'a']} true
+[{a:1},{b:String}] unify [{a:Number},{b:"z"}]	[{a:1},{b:'z'}] true
+[[String]] unify [["hello"]]	'~unify-fail' false
+{a:{b:Number}} unify {a:{b:42}}	{a:{b:42}} true
 
 # === Unify - list/map vs incompatible types ===
 [1] unify {x:1}	'~unify-fail' false
-list unify map	'~unify-fail' false
+List unify Map	'~unify-fail' false
 [1] unify 1	'~unify-fail' false
 {x:1} unify "hello"	'~unify-fail' false
 
 # === Unify - any with list/map ===
-any unify [1,2]	[1,2] true
-[1,2] unify any	[1,2] true
-any unify {x:1}	{x:1} true
-{x:1} unify any	{x:1} true
+Any unify [1,2]	[1,2] true
+[1,2] unify Any	[1,2] true
+Any unify {x:1}	{x:1} true
+{x:1} unify Any	{x:1} true
 
 # === Unify - none with list/map ===
-none unify [1]	'~unify-fail' false
-none unify {x:1}	'~unify-fail' false
-none unify list	'~unify-fail' false
-none unify map	'~unify-fail' false
+None unify [1]	'~unify-fail' false
+None unify {x:1}	'~unify-fail' false
+None unify List	'~unify-fail' false
+None unify Map	'~unify-fail' false
 
 # === Typed list literals ===
-[:string]	[:string]
-[:number]	[:number]
-[:boolean]	[:boolean]
-[:any]	[:any]
-[:list]	[:list]
-[:map]	[:map]
-[:{x:number}]	[:{x:number}]
-[:{a:string,b:number}]	[:{a:string,b:number}]
-[:[:string]]	[:[:string]]
-[:[:number]]	[:[:number]]
-[:[:{x:number}]]	[:[:{x:number}]]
-[:[:[:number]]]	[:[:[:number]]]
+[:String]	[:String]
+[:Number]	[:Number]
+[:Boolean]	[:Boolean]
+[:Any]	[:Any]
+[:List]	[:List]
+[:Map]	[:Map]
+[:{x:Number}]	[:{x:Number}]
+[:{a:String,b:Number}]	[:{a:String,b:Number}]
+[:[:String]]	[:[:String]]
+[:[:Number]]	[:[:Number]]
+[:[:{x:Number}]]	[:[:{x:Number}]]
+[:[:[:Number]]]	[:[:[:Number]]]
 
 # === Unify - typed lists with identical child types ===
-[:string] unify [:string]	[:string] true
-[:number] unify [:number]	[:number] true
-[:boolean] unify [:boolean]	[:boolean] true
+[:String] unify [:String]	[:String] true
+[:Number] unify [:Number]	[:Number] true
+[:Boolean] unify [:Boolean]	[:Boolean] true
 
 # === Unify - typed lists with concrete lists ===
-[:number] unify [1,2,3]	[1,2,3] true
-[:string] unify ["a","b"]	['a','b'] true
-[:number] unify [42]	[42] true
-[:string] unify []	[] true
-[:number] unify []	[] true
+[:Number] unify [1,2,3]	[1,2,3] true
+[:String] unify ["a","b"]	['a','b'] true
+[:Number] unify [42]	[42] true
+[:String] unify []	[] true
+[:Number] unify []	[] true
 
 # === Unify - typed lists with concrete (fail) ===
-[:string] unify [1,2]	'~unify-fail' false
-[:number] unify ["hello"]	'~unify-fail' false
+[:String] unify [1,2]	'~unify-fail' false
+[:Number] unify ["hello"]	'~unify-fail' false
 
 # === Unify - typed list narrowing ===
-[:any] unify [:number]	[:number] true
-[:any] unify [:string]	[:string] true
-[:number] unify [:any]	[:number] true
+[:Any] unify [:Number]	[:Number] true
+[:Any] unify [:String]	[:String] true
+[:Number] unify [:Any]	[:Number] true
 
 # === Unify - typed list child type mismatch ===
-[:string] unify [:number]	'~unify-fail' false
-[:number] unify [:boolean]	'~unify-fail' false
+[:String] unify [:Number]	'~unify-fail' false
+[:Number] unify [:Boolean]	'~unify-fail' false
 
 # === Unify - typed list with type literal ===
-list unify [:string]	[:string] true
-[:string] unify list	[:string] true
-list unify [:number]	[:number] true
+List unify [:String]	[:String] true
+[:String] unify List	[:String] true
+List unify [:Number]	[:Number] true
 
 # === Unify - typed list with any ===
-any unify [:string]	[:string] true
-[:number] unify any	[:number] true
+Any unify [:String]	[:String] true
+[:Number] unify Any	[:Number] true
 
 # === Unify - typed list with none ===
-none unify [:string]	'~unify-fail' false
-[:number] unify none	'~unify-fail' false
+None unify [:String]	'~unify-fail' false
+[:Number] unify None	'~unify-fail' false
 
 # === Unify - typed list with map child type ===
-[:{x:number}] unify [{x:1},{x:2}]	[{x:1},{x:2}] true
-[:{x:string}] unify [{x:"a"},{x:"b"}]	[{x:'a'},{x:'b'}] true
-[:{x:number}] unify [{x:1},{y:1}]	'~unify-fail' false
-[:{x:number}] unify []	[] true
+[:{x:Number}] unify [{x:1},{x:2}]	[{x:1},{x:2}] true
+[:{x:String}] unify [{x:"a"},{x:"b"}]	[{x:'a'},{x:'b'}] true
+[:{x:Number}] unify [{x:1},{y:1}]	'~unify-fail' false
+[:{x:Number}] unify []	[] true
 
 # === Unify - deeper typed lists ===
-[:[:number]] unify [[1,2],[3]]	[[1,2],[3]] true
-[:[:string]] unify [["a"],["b","c"]]	[['a'],['b','c']] true
-[:[:number]] unify [["a"]]	'~unify-fail' false
-[:[:number]] unify [[1],[2,3],[]]	[[1],[2,3],[]] true
+[:[:Number]] unify [[1,2],[3]]	[[1,2],[3]] true
+[:[:String]] unify [["a"],["b","c"]]	[['a'],['b','c']] true
+[:[:Number]] unify [["a"]]	'~unify-fail' false
+[:[:Number]] unify [[1],[2,3],[]]	[[1],[2,3],[]] true
 
 # === Unify - typed list symmetry ===
-[1,2,3] unify [:number]	[1,2,3] true
-["a","b"] unify [:string]	['a','b'] true
-[1,2] unify [:string]	'~unify-fail' false
+[1,2,3] unify [:Number]	[1,2,3] true
+["a","b"] unify [:String]	['a','b'] true
+[1,2] unify [:String]	'~unify-fail' false
 
 # === Typed map literals ===
-{:string}	{:string}
-{:number}	{:number}
-{:boolean}	{:boolean}
-{:any}	{:any}
-{:list}	{:list}
-{:map}	{:map}
-{:{x:number}}	{:{x:number}}
-{:{a:string,b:number}}	{:{a:string,b:number}}
-{:[:string]}	{:[:string]}
-{:[:number]}	{:[:number]}
-{:{:string}}	{:{:string}}
-{:{:number}}	{:{:number}}
-{:[:{x:number}]}	{:[:{x:number}]}
-{:{:{:number}}}	{:{:{:number}}}
+{:String}	{:String}
+{:Number}	{:Number}
+{:Boolean}	{:Boolean}
+{:Any}	{:Any}
+{:List}	{:List}
+{:Map}	{:Map}
+{:{x:Number}}	{:{x:Number}}
+{:{a:String,b:Number}}	{:{a:String,b:Number}}
+{:[:String]}	{:[:String]}
+{:[:Number]}	{:[:Number]}
+{:{:String}}	{:{:String}}
+{:{:Number}}	{:{:Number}}
+{:[:{x:Number}]}	{:[:{x:Number}]}
+{:{:{:Number}}}	{:{:{:Number}}}
 
 # === Unify - typed maps with identical child types ===
-{:string} unify {:string}	{:string} true
-{:number} unify {:number}	{:number} true
-{:boolean} unify {:boolean}	{:boolean} true
+{:String} unify {:String}	{:String} true
+{:Number} unify {:Number}	{:Number} true
+{:Boolean} unify {:Boolean}	{:Boolean} true
 
 # === Unify - typed maps with concrete maps ===
-{:number} unify {a:1,b:2}	{a:1,b:2} true
-{:string} unify {x:"a",y:"b"}	{x:'a',y:'b'} true
-{:number} unify {x:42}	{x:42} true
-{:string} unify {a:"hello"}	{a:'hello'} true
+{:Number} unify {a:1,b:2}	{a:1,b:2} true
+{:String} unify {x:"a",y:"b"}	{x:'a',y:'b'} true
+{:Number} unify {x:42}	{x:42} true
+{:String} unify {a:"hello"}	{a:'hello'} true
 
 # === Unify - typed maps with empty concrete map ===
-{:string} unify {}	{} true
-{:number} unify {}	{} true
-{:{x:number}} unify {}	{} true
+{:String} unify {}	{} true
+{:Number} unify {}	{} true
+{:{x:Number}} unify {}	{} true
 
 # === Unify - typed maps with concrete (fail - type mismatch) ===
-{:string} unify {a:1}	'~unify-fail' false
-{:number} unify {x:"hello"}	'~unify-fail' false
-{:boolean} unify {x:1}	'~unify-fail' false
+{:String} unify {a:1}	'~unify-fail' false
+{:Number} unify {x:"hello"}	'~unify-fail' false
+{:Boolean} unify {x:1}	'~unify-fail' false
 
 # === Unify - typed map narrowing ===
-{:any} unify {:number}	{:number} true
-{:any} unify {:string}	{:string} true
-{:number} unify {:any}	{:number} true
-{:string} unify {:any}	{:string} true
+{:Any} unify {:Number}	{:Number} true
+{:Any} unify {:String}	{:String} true
+{:Number} unify {:Any}	{:Number} true
+{:String} unify {:Any}	{:String} true
 
 # === Unify - typed map child type mismatch ===
-{:string} unify {:number}	'~unify-fail' false
-{:number} unify {:boolean}	'~unify-fail' false
-{:string} unify {:boolean}	'~unify-fail' false
+{:String} unify {:Number}	'~unify-fail' false
+{:Number} unify {:Boolean}	'~unify-fail' false
+{:String} unify {:Boolean}	'~unify-fail' false
 
 # === Unify - typed map symmetry ===
-{a:1,b:2} unify {:number}	{a:1,b:2} true
-{x:"hello"} unify {:string}	{x:'hello'} true
-{a:1} unify {:string}	'~unify-fail' false
-{x:"hello"} unify {:number}	'~unify-fail' false
+{a:1,b:2} unify {:Number}	{a:1,b:2} true
+{x:"hello"} unify {:String}	{x:'hello'} true
+{a:1} unify {:String}	'~unify-fail' false
+{x:"hello"} unify {:Number}	'~unify-fail' false
 
 # === Unify - typed map with type literal ===
-map unify {:string}	{:string} true
-{:string} unify map	{:string} true
-map unify {:number}	{:number} true
-{:number} unify map	{:number} true
-map unify {:{x:number}}	{:{x:number}} true
+Map unify {:String}	{:String} true
+{:String} unify Map	{:String} true
+Map unify {:Number}	{:Number} true
+{:Number} unify Map	{:Number} true
+Map unify {:{x:Number}}	{:{x:Number}} true
 
 # === Unify - typed map with any ===
-any unify {:string}	{:string} true
-{:string} unify any	{:string} true
-any unify {:number}	{:number} true
-{:number} unify any	{:number} true
+Any unify {:String}	{:String} true
+{:String} unify Any	{:String} true
+Any unify {:Number}	{:Number} true
+{:Number} unify Any	{:Number} true
 
 # === Unify - typed map with none ===
-none unify {:string}	'~unify-fail' false
-{:string} unify none	'~unify-fail' false
-none unify {:number}	'~unify-fail' false
-{:number} unify none	'~unify-fail' false
+None unify {:String}	'~unify-fail' false
+{:String} unify None	'~unify-fail' false
+None unify {:Number}	'~unify-fail' false
+{:Number} unify None	'~unify-fail' false
 
 # === Unify - typed map with map child type ===
-{:{x:number}} unify {a:{x:1},b:{x:2}}	{a:{x:1},b:{x:2}} true
-{:{x:string}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'},b:{x:'b'}} true
-{:{x:number}} unify {a:{x:1},b:{y:1}}	'~unify-fail' false
-{:{x:number}} unify {}	{} true
+{:{x:Number}} unify {a:{x:1},b:{x:2}}	{a:{x:1},b:{x:2}} true
+{:{x:String}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'},b:{x:'b'}} true
+{:{x:Number}} unify {a:{x:1},b:{y:1}}	'~unify-fail' false
+{:{x:Number}} unify {}	{} true
 
 # === Unify - deeper typed maps ===
-{:{:number}} unify {a:{x:1},b:{y:2}}	{a:{x:1},b:{y:2}} true
-{:{:string}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'},b:{y:'b'}} true
-{:{:number}} unify {a:{x:"a"}}	'~unify-fail' false
-{:{:number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
+{:{:Number}} unify {a:{x:1},b:{y:2}}	{a:{x:1},b:{y:2}} true
+{:{:String}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'},b:{y:'b'}} true
+{:{:Number}} unify {a:{x:"a"}}	'~unify-fail' false
+{:{:Number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
 
 # === Unify - deeper typed map child type unification ===
-{:{:string}} unify {:{:string}}	{:{:string}} true
-{:{:number}} unify {:{:any}}	{:{:number}} true
-{:{:string}} unify {:{:number}}	'~unify-fail' false
+{:{:String}} unify {:{:String}}	{:{:String}} true
+{:{:Number}} unify {:{:Any}}	{:{:Number}} true
+{:{:String}} unify {:{:Number}}	'~unify-fail' false
 
 # === Unify - typed map vs incompatible types ===
-{:string} unify [1]	'~unify-fail' false
-{:number} unify "hello"	'~unify-fail' false
-{:string} unify 1	'~unify-fail' false
+{:String} unify [1]	'~unify-fail' false
+{:Number} unify "hello"	'~unify-fail' false
+{:String} unify 1	'~unify-fail' false
 
 # === def - word definition ===
 
@@ -590,28 +590,34 @@ def foo 99 5 var [[x] x add foo] foo	104 99
 # === def with function signatures (fn word) ===
 
 # Named parameter function
-def square fn [[x:number] [number] [x mul x]] 5 square	25
+def square fn [[x:Number] [Number] [x mul x]] 5 square	25
 
 # Multiple named parameters
-def add2 fn [[x:number,y:number] [number] [x add y]] 3 5 add2	8
+def add2 fn [[x:Number,y:Number] [Number] [x add y]] 3 5 add2	8
 
 # Unnamed parameters (positional, no pair syntax)
-def double fn [[number] [number] [dup add]] 7 double	14
+def double fn [[Number] [Number] [dup add]] 7 double	14
 
 # Named parameters don't leak after call
-def sq fn [[x:number] [number] [x mul x]] 4 sq x	16 x
+def sq fn [[x:Number] [Number] [x mul x]] 4 sq x	16 x
 
 # undef removes function def
-def sq fn [[x:number] [number] [x mul x]] 4 sq undef sq sq	16 sq
+def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq	16 sq
+
+# targeted undef: remove 2-arg sig, 1-arg remains
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number,Number] [Number]] 5 foo	25
+
+# targeted undef: remove 1-arg sig, 2-arg remains
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number] [Number]] 3 5 foo	8
 
 # Function def with infix call
-def sq fn [[x:number] [number] [x mul x]] sq 6	36
+def sq fn [[x:Number] [Number] [x mul x]] sq 6	36
 
 # Multiple calls to function def
-def inc fn [[x:number] [number] [x add 1]] 1 inc inc inc	4
+def inc fn [[x:Number] [Number] [x add 1]] 1 inc inc inc	4
 
 # Function def shadows regular def
-(def foo 42) (def foo fn [[number] [number] [dup mul]]) (3 foo) (undef foo) foo	9 42
+(def foo 42) (def foo fn [[Number] [Number] [dup mul]]) (3 foo) (undef foo) foo	9 42
 
 # === Boolean operators ===
 
@@ -662,119 +668,119 @@ not true or false	false
 # === convert - type conversions ===
 
 # Integer to string
-convert 99 string	'99'
-convert 0 string	'0'
-convert -5 string	'-5'
+convert 99 String	'99'
+convert 0 String	'0'
+convert -5 String	'-5'
 
 # Integer to string with variant
-convert 10 string "hex"	'a'
-convert 255 string "hex"	'ff'
-convert 255 string "HEX"	'FF'
-convert 10 string "bin"	'1010'
-convert 8 string "oct"	'10'
+convert 10 String "hex"	'a'
+convert 255 String "hex"	'ff'
+convert 255 String "HEX"	'FF'
+convert 10 String "bin"	'1010'
+convert 8 String "oct"	'10'
 
 # String to number
-convert "42" number	42
-convert "-5" number	-5
+convert "42" Number	42
+convert "-5" Number	-5
 
 # String to number with variant
-convert "ff" number "hex"	255
-convert "1010" number "bin"	10
-convert "10" number "oct"	8
+convert "ff" Number "hex"	255
+convert "1010" Number "bin"	10
+convert "10" Number "oct"	8
 
 # Boolean to string
-convert true string	'true'
-convert false string	'false'
+convert true String	'true'
+convert false String	'false'
 
 # Number to boolean
-convert 1 boolean	true
-convert 0 boolean	false
+convert 1 Boolean	true
+convert 0 Boolean	false
 
 # String to boolean
-convert "true" boolean	true
-convert "false" boolean	false
-convert "" boolean	false
-convert "anything" boolean	true
+convert "true" Boolean	true
+convert "false" Boolean	false
+convert "" Boolean	false
+convert "anything" Boolean	true
 
 # Atom to string
-convert foo string	'foo'
+convert foo String	'foo'
 
 # Any to atom
-convert 42 atom	42
-convert "hello" atom	hello
+convert 42 Atom	42
+convert "hello" Atom	hello
 
 # === make - type instance creation ===
 
 # make scalar: integer to string
-make string 9	'9'
-make string 42	'42'
-make string 0	'0'
-make string -5	'-5'
+make String 9	'9'
+make String 42	'42'
+make String 0	'0'
+make String -5	'-5'
 
 # make scalar: string to number
-make number "99"	99
-make number "-5"	-5
+make Number "99"	99
+make Number "-5"	-5
 
 # make scalar: to boolean
-make boolean 1	true
-make boolean 0	false
-make boolean "true"	true
-make boolean "false"	false
+make Boolean 1	true
+make Boolean 0	false
+make Boolean "true"	true
+make Boolean "false"	false
 
 # make scalar: to atom
-make atom 42	42
-make atom "hello"	hello
+make Atom 42	42
+make Atom "hello"	hello
 
 # make scalar: already correct type (passthrough)
-make string "hello"	'hello'
-make number 42	42
-make boolean true	true
+make String "hello"	'hello'
+make Number 42	42
+make Boolean true	true
 
 # make scalar: boolean to string
-make string true	'true'
-make string false	'false'
+make String true	'true'
+make String false	'false'
 
 # make record: positional fields
-type Point record [x:number y:number] make Point [1 2]	{x:1,y:2}
+type Point record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
 
 # make record: named fields in declaration order
-type Point record [x:number y:number] make Point [x:1 y:2]	{x:1,y:2}
+type Point record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
 
 # make record: named fields in different order
-type Point record [x:number y:number] make Point [y:3 x:4]	{x:4,y:3}
+type Point record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
 
 # make record: type conversion applied to fields
-type bar record [x:number y:boolean z:string] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+type bar record [x:Number y:Boolean z:String] make bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # make record: named fields reordered with type conversion
-type bar record [x:number y:boolean z:string] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+type bar record [x:Number y:Boolean z:String] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # make record: field value conversion (string to number)
-type Pair record [a:number b:number] make Pair ["3" "7"]	{a:3,b:7}
+type Pair record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
 
 # make with infix form
-type P record [x:number y:number] P make [1 2]	{x:1,y:2}
+type P record [x:Number y:Number] P make [1 2]	{x:1,y:2}
 
 # === type - custom type definitions ===
 
 # type with record
-type Vec record [x:number y:number] make Vec [3 4]	{x:3,y:4}
+type Vec record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
 
 # type with disjunct
-type OptNum (number or none) OptNum unify 5	5 true
-type OptNum (number or none) OptNum unify none	none true
-type OptNum (number or none) OptNum unify "hi"	'~unify-fail' false
+type OptNum (Number or None) OptNum unify 5	5 true
+type OptNum (Number or None) OptNum unify None	None true
+type OptNum (Number or None) OptNum unify "hi"	'~unify-fail' false
 
 # type with type alias
-type Num number Num unify 42	42 true
-type Num number Num unify "hi"	'~unify-fail' false
+type Num Number Num unify 42	42 true
+type Num Number Num unify "hi"	'~unify-fail' false
 
 # type with typed list
-type Nums [:number] Nums unify [1,2,3]	[1,2,3] true
-type Nums [:number] Nums unify ["a"]	'~unify-fail' false
+type Nums [:Number] Nums unify [1,2,3]	[1,2,3] true
+type Nums [:Number] Nums unify ["a"]	'~unify-fail' false
 
 # type with typed map
-type NumMap {:number} NumMap unify {a:1,b:2}	{a:1,b:2} true
+type NumMap {:Number} NumMap unify {a:1,b:2}	{a:1,b:2} true
 
 # === do - evaluate list and map contents ===
 
@@ -805,33 +811,33 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # === disjunct - union types via or ===
 
 # Disjunct creation: type literals
-string or number	string|number
-string or none	string|none
-none or boolean	none|boolean
+String or Number	String|Number
+String or None	String|None
+None or Boolean	None|Boolean
 
 # Disjunct chaining (flattened)
-string or number or boolean	string|number|boolean
+String or Number or Boolean	String|Number|Boolean
 
 # Disjunct unify with scalar types
-(string or none) unify "a"	'a' true
-(string or none) unify none	none true
-(none or boolean) unify none	none true
-(none or boolean) unify true	true true
-(number or string) unify 42	42 true
-(number or string) unify "hi"	'hi' true
+(String or None) unify "a"	'a' true
+(String or None) unify None	None true
+(None or Boolean) unify None	None true
+(None or Boolean) unify true	true true
+(Number or String) unify 42	42 true
+(Number or String) unify "hi"	'hi' true
 
 # Disjunct unify: no match
-(string or boolean) unify 42	'~unify-fail' false
-(number or boolean) unify "hi"	'~unify-fail' false
+(String or Boolean) unify 42	'~unify-fail' false
+(Number or Boolean) unify "hi"	'~unify-fail' false
 
 # Disjunct unify with type narrowing
-(string or number) unify number	number true
-(string or number) unify string	string true
-(number or none) unify 5	5 true
-(number or none) unify none	none true
+(String or Number) unify Number	Number true
+(String or Number) unify String	String true
+(Number or None) unify 5	5 true
+(Number or None) unify None	None true
 
 # Disjunct with any
-(string or number) unify any	string|number true
+(String or Number) unify Any	String|Number true
 
 # Disjunct with concrete maps (open matching)
 ({x:1} or {y:2}) unify {x:1}	{x:1} true
@@ -849,3 +855,48 @@ true or false	true
 false or true	true
 true or true	true
 false or false	false
+
+# === dblcall (callback function example) ===
+
+# dblcall doubles integer then invokes callback with result
+dblcall 5 [dup mul]	100
+
+# callback is a simple word
+dblcall 3 [dup add]	12
+
+# prefix form
+5 dblcall [add 1]	11
+
+# callback that just leaves the doubled value
+dblcall 4 []	8
+
+# callback calls a fn-defined function
+def sq fn [[x:Number] [Number] [x mul x]] dblcall 3 [sq]	36
+
+# === call (execute a list as code) ===
+
+# call splices list contents as code in a paren scope
+10 [dup mul] call	100
+
+# call with add
+3 [add 7] call	10
+
+# empty list call is a no-op (value passes through)
+5 [] call	5
+
+# === def fn style dblcall (passing lambdas as arguments) ===
+
+# lambda using named param
+def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 5 (fn [[x:Number] [Number] [x dup mul]])	100
+
+# lambda using args.0 alongside named param (args is a convenience)
+def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 5 (fn [[x:Number] [Number] [args.0 dup mul]])	100
+
+# lambda using args.0 with different callback
+def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 3 (fn [[x:Number] [Number] [args.0 dup add]])	12
+
+# lambda with identity using args.0
+def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [[x:Number] [Number] [args.0]])	8
+
+# args works alongside named params: x by name, z via args.2
+def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6

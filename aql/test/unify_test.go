@@ -59,7 +59,11 @@ func TestUnify(t *testing.T) {
 			}
 
 			// Build and run the unify expression: left unify right
-			eng := engine.New(engine.DefaultRegistry())
+			reg, err := engine.DefaultRegistry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			eng := engine.NewTop(reg)
 			result, err := eng.Run([]engine.Value{leftVal, engine.NewWord("unify"), rightVal})
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
@@ -104,7 +108,11 @@ func evalSingle(expr string) (engine.Value, error) {
 		return engine.Value{}, fmt.Errorf("parse %q: %w", expr, err)
 	}
 
-	eng := engine.New(engine.DefaultRegistry())
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		return engine.Value{}, fmt.Errorf("registry: %w", err)
+	}
+	eng := engine.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return engine.Value{}, fmt.Errorf("run %q: %w", expr, err)

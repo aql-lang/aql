@@ -7,7 +7,10 @@ import (
 )
 
 func TestPrintString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -20,7 +23,10 @@ func TestPrintString(t *testing.T) {
 }
 
 func TestPrintInteger(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -33,7 +39,10 @@ func TestPrintInteger(t *testing.T) {
 }
 
 func TestPrintBoolean(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -46,7 +55,10 @@ func TestPrintBoolean(t *testing.T) {
 }
 
 func TestPrintMap(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -62,7 +74,10 @@ func TestPrintMap(t *testing.T) {
 }
 
 func TestPrintMapMultiKey(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -79,7 +94,10 @@ func TestPrintMapMultiKey(t *testing.T) {
 }
 
 func TestPrintList(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -94,7 +112,10 @@ func TestPrintList(t *testing.T) {
 }
 
 func TestPrintTable(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -142,7 +163,10 @@ func TestPrintTable(t *testing.T) {
 }
 
 func TestPrintConsumesValue(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -154,7 +178,10 @@ func TestPrintConsumesValue(t *testing.T) {
 }
 
 func TestPrintEmptyTable(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -174,7 +201,10 @@ func TestPrintEmptyTable(t *testing.T) {
 }
 
 func TestPrintstrString(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -187,7 +217,10 @@ func TestPrintstrString(t *testing.T) {
 }
 
 func TestPrintstrNoNewline(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -200,7 +233,10 @@ func TestPrintstrNoNewline(t *testing.T) {
 }
 
 func TestPrintstrInteger(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -213,7 +249,10 @@ func TestPrintstrInteger(t *testing.T) {
 }
 
 func TestPrintstrConsumesValue(t *testing.T) {
-	r := DefaultRegistry()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	r.Output = &buf
 

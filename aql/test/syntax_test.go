@@ -62,7 +62,11 @@ func TestSyntax(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 
-			eng := engine.New(engine.DefaultRegistry())
+			reg, err := engine.DefaultRegistry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			eng := engine.NewTop(reg)
 			result, err := eng.Run(values)
 
 			if errorCode != "" {

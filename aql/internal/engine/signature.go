@@ -184,3 +184,29 @@ func signatureScore(sig *Signature) int {
 	}
 	return score
 }
+
+// SignatureScore exports signatureScore for testing.
+func SignatureScore(sig *Signature) int {
+	return signatureScore(sig)
+}
+
+// RankSignatures returns the indices of sigs sorted by priority (best first).
+// Longer signatures and narrower (more specific) types rank higher.
+func RankSignatures(sigs []Signature) []int {
+	indices := make([]int, len(sigs))
+	for i := range indices {
+		indices[i] = i
+	}
+	// Stable sort: preserve registration order for equal scores.
+	for i := 1; i < len(indices); i++ {
+		for j := i; j > 0; j-- {
+			si, sj := signatureScore(&sigs[indices[j]]), signatureScore(&sigs[indices[j-1]])
+			if si > sj {
+				indices[j], indices[j-1] = indices[j-1], indices[j]
+			} else {
+				break
+			}
+		}
+	}
+	return indices
+}

@@ -3,6 +3,7 @@ package aql
 import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -11,6 +12,58 @@ type FileOps = fileops.FileOps
 
 // Format handles encoding and decoding file content for a specific format.
 type Format = engine.Format
+
+// Type represents an AQL type such as "string", "number/integer", or "any".
+// Use NewType to create types from slash-separated paths.
+type Type = engine.Type
+
+// Value is a typed entry on the AQL stack.
+type Value = engine.Value
+
+// Signature describes one way a function can be called.
+// Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
+// on the stack, Args[last] = top of the stack for prefix matching).
+//
+// Precedence controls binding strength for suffix-precedence words;
+// higher values bind tighter (0 = default).
+//
+// Handler receives the matched args and returns replacement values for the stack.
+type Signature = engine.Signature
+
+// Well-known AQL types for use in Signature definitions.
+var (
+	TAny     = engine.TAny
+	TScalar  = engine.TScalar
+	TString  = engine.TString
+	TNumber  = engine.TNumber
+	TInteger = engine.TInteger
+	TBoolean = engine.TBoolean
+	TAtom    = engine.TAtom
+	TList    = engine.TList
+	TMap     = engine.TMap
+)
+
+// NewType creates a Type from a slash-separated path (e.g. "string/proper",
+// "number/integer"). Use this for custom or hierarchical types.
+var NewType = engine.NewType
+
+// NewString creates a string Value.
+var NewString = engine.NewString
+
+// NewInteger creates a number/integer Value.
+var NewInteger = engine.NewInteger
+
+// NewBoolean creates a boolean Value.
+var NewBoolean = engine.NewBoolean
+
+// NewList creates a list Value from a slice of Values.
+var NewList = engine.NewList
+
+// NewMap creates a map Value from an OrderedMap.
+var NewMap = engine.NewMap
+
+// NewAtom creates an atom Value from a bare name.
+var NewAtom = engine.NewAtom
 
 // NewMemFileOps creates an in-memory file system for testing.
 func NewMemFileOps() *fileops.MemFileOps {
@@ -25,8 +78,14 @@ type AQL struct {
 }
 
 // New creates a new AQL instance with built-in functions.
-func New() *AQL {
-	return &AQL{registry: engine.DefaultRegistry()}
+func New() (*AQL, error) {
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+	return &AQL{registry: reg}, nil
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.
@@ -38,6 +97,43 @@ func (a *AQL) SetFileOps(ops FileOps) {
 // Formats are used by read/write words via the {fmt:"name"} option.
 func (a *AQL) RegisterFormat(name string, f Format) {
 	a.registry.Formats[name] = f
+}
+
+// Register adds a named word with one or more signatures.
+// Registered words use suffix precedence: the engine tries to collect
+// arguments from after the word before falling back to prefix matching.
+//
+// Example — register a word "double" that doubles an integer:
+//
+//	a.Register("double", aql.Signature{
+//	    Args: []aql.Type{aql.TInteger},
+//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	        n := args[0].AsInteger()
+//	        return []aql.Value{aql.NewInteger(n * 2)}, nil
+//	    },
+//	})
+//
+// Use the Precedence field on Signature to control binding strength
+// for suffix argument collection (higher binds tighter, 0 = default).
+func (a *AQL) Register(name string, sigs ...Signature) {
+	a.registry.Register(name, sigs...)
+}
+
+// RegisterPrefixOnly adds a named word with one or more signatures that
+// only match prefix arguments (values already on the stack before the word).
+// No suffix argument collection is attempted.
+//
+// Example — register a prefix-only word "neg" that negates an integer:
+//
+//	a.RegisterPrefixOnly("neg", aql.Signature{
+//	    Args: []aql.Type{aql.TInteger},
+//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	        n := args[0].AsInteger()
+//	        return []aql.Value{aql.NewInteger(-n)}, nil
+//	    },
+//	})
+func (a *AQL) RegisterPrefixOnly(name string, sigs ...Signature) {
+	a.registry.RegisterPrefixOnly(name, sigs...)
 }
 
 // Run parses and executes an AQL source string.
@@ -55,7 +151,7 @@ func (a *AQL) Run(src string) ([]any, error) {
 		return nil, err
 	}
 
-	eng := engine.New(a.registry)
+	eng := engine.NewTop(a.registry)
 	result, err := eng.Run(values)
 	if err != nil {
 		return nil, err
