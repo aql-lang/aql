@@ -23,4 +23,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/voxgig/struct v0.1.0 => /tmp/voxgig-struct/go
+replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0

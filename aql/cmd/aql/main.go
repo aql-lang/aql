@@ -28,8 +28,22 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n\nOptions:\n")
 		fs.PrintDefaults()
+	}
+
+	// Handle "do" subcommand before flag parsing: aql do <words...>
+	if len(args) > 0 && args[0] == "do" {
+		doSource := strings.Join(args[1:], " ")
+		if doSource == "" {
+			fmt.Fprintf(stderr, "error: aql do requires an expression\n")
+			return 1
+		}
+		if err := run(stdout, doSource); err != nil {
+			fmt.Fprintf(stderr, "%s\n", err)
+			return 1
+		}
+		return 0
 	}
 
 	if err := fs.Parse(args); err != nil {
