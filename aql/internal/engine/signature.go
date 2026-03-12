@@ -94,12 +94,78 @@ func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
 		return values, true
 	}
 
-	// Try permutations for small N.
-	if n >= 2 && n <= 6 {
-		return permMatch(values[:n], types)
+	if match, ok := stableTypeAssignment(values[:n], types); ok {
+		result := make([]Value, n)
+		for vi, ti := range match {
+			result[ti] = values[vi]
+		}
+		return result, true
 	}
 
 	return nil, false
+}
+
+// stableTypeAssignment returns a deterministic assignment from values to types.
+// The result is a slice where result[valueIdx] = typeIdx.
+// Preference order is stable and minimizes movement from the source ordering.
+func stableTypeAssignment(values []Value, types []Type) ([]int, bool) {
+	n := len(types)
+	if len(values) < n {
+		return nil, false
+	}
+
+	// Build candidate type slots per value, preferring same index first.
+	options := make([][]int, n)
+	for vi := 0; vi < n; vi++ {
+		if values[vi].VType.Matches(types[vi]) {
+			options[vi] = append(options[vi], vi)
+		}
+		for ti := 0; ti < n; ti++ {
+			if ti == vi {
+				continue
+			}
+			if values[vi].VType.Matches(types[ti]) {
+				options[vi] = append(options[vi], ti)
+			}
+		}
+		if len(options[vi]) == 0 {
+			return nil, false
+		}
+	}
+
+	assignedType := make([]int, n)
+	for i := range assignedType {
+		assignedType[i] = -1
+	}
+	matchTypeToVal := make([]int, n)
+	for i := range matchTypeToVal {
+		matchTypeToVal[i] = -1
+	}
+
+	var dfs func(v int, seen []bool) bool
+	dfs = func(v int, seen []bool) bool {
+		for _, t := range options[v] {
+			if seen[t] {
+				continue
+			}
+			seen[t] = true
+			if matchTypeToVal[t] == -1 || dfs(matchTypeToVal[t], seen) {
+				matchTypeToVal[t] = v
+				assignedType[v] = t
+				return true
+			}
+		}
+		return false
+	}
+
+	for vi := 0; vi < n; vi++ {
+		seen := make([]bool, n)
+		if !dfs(vi, seen) {
+			return nil, false
+		}
+	}
+
+	return assignedType, true
 }
 
 // permMatch finds a permutation of values that matches types.

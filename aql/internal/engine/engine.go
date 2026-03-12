@@ -35,8 +35,8 @@ type Engine struct {
 	pointer   int
 	registry  *Registry
 	trace     TraceCallback
-	traceNote string // annotation set during execution for the next trace call
-	stepLimit int    // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	traceNote string          // annotation set during execution for the next trace call
+	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 }
 
@@ -325,7 +325,7 @@ func (e *Engine) stepWord(val Value) error {
 	if w.ForceSuffix {
 		// Force suffix: skip prefix attempt, collect all args from suffix.
 		resolved := e.effectiveResolved()
-		bestSig, _ := e.bestSigForForward(fn, w, resolved)
+		bestSig, _ := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
@@ -348,7 +348,7 @@ func (e *Engine) stepWord(val Value) error {
 				suffixVal := e.peekSuffixValue()
 				extended := append(resolved, suffixVal)
 				if MatchSignature(fn.Signatures, extended, w) != nil {
-					bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+					bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
 					if bestSig != nil {
 						suffixNeeded := len(bestSig.Args) - prefixCount
 						if suffixNeeded <= 0 {
@@ -366,7 +366,7 @@ func (e *Engine) stepWord(val Value) error {
 
 		// No full prefix match — try suffix (create forward to collect
 		// remaining args), preserving original behavior.
-		bestSig, prefixCount := e.bestSigForForward(fn, w, resolved)
+		bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig != nil {
 			suffixNeeded := len(bestSig.Args) - prefixCount
 			if suffixNeeded <= 0 {
@@ -393,129 +393,6 @@ func (e *Engine) stepWord(val Value) error {
 	}
 	e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 	return e.execMatch(match)
-}
-
-// bestSigForForward finds the best signature for creating a forward and how
-// many prefix args from the resolved stack can be consumed.
-func (e *Engine) bestSigForForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
-	var best *Signature
-	var bestScore int
-	var bestPrefixCount int
-
-	// Peek at the first potential suffix value to help disambiguate sigs.
-	// Skip special words ("(", ")", "end") since they're not real suffix args.
-	var peekVal *Value
-	peekIdx := e.pointer + 1
-	if peekIdx < len(e.stack) {
-		v := e.stack[peekIdx]
-		if !v.IsForward() && !v.IsOpenParen() {
-			skip := false
-			if v.IsWord() {
-				w := v.AsWord()
-				if w.Name == "(" || w.Name == ")" || w.Name == "end" {
-					skip = true
-				}
-			}
-			if !skip {
-				peekVal = &v
-			}
-		}
-	}
-
-	for i := range fn.Signatures {
-		sig := &fn.Signatures[i]
-		if len(sig.Args) == 0 {
-			continue
-		}
-		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
-			continue
-		}
-
-		// Count how many args from the top of the resolved stack match
-		// sig.Args in any position (flexible prefix matching).
-		// Only consider the top N contiguous resolved values.
-		prefixCount := 0
-		usedArgs := make([]bool, len(sig.Args))
-		maxTry := len(sig.Args)
-		if maxTry > len(resolved) {
-			maxTry = len(resolved)
-		}
-		for tryN := maxTry; tryN >= 1; tryN-- {
-			top := resolved[len(resolved)-tryN:]
-			tempUsed := make([]bool, len(sig.Args))
-			matched := 0
-			for _, v := range top {
-				for si := 0; si < len(sig.Args); si++ {
-					if !tempUsed[si] && v.VType.Matches(sig.Args[si]) {
-						tempUsed[si] = true
-						matched++
-						break
-					}
-				}
-			}
-			if matched == tryN {
-				prefixCount = tryN
-				copy(usedArgs, tempUsed)
-				break
-			}
-		}
-
-		score := signatureScore(sig)
-
-		// Bonus for prefix args already on the stack: each matching
-		// prefix arg adds 25 to the score. This helps signatures that
-		// partially match the existing stack win over those that don't.
-		score += prefixCount * 25
-
-		// Bonus: if the peeked suffix value matches the first unmatched
-		// sig arg type, boost this sig's score. Only check the first
-		// unmatched arg to avoid false positives on heterogeneous sigs.
-		if peekVal != nil && prefixCount < len(sig.Args) {
-			firstUnmatched := -1
-			for si := 0; si < len(sig.Args); si++ {
-				if !usedArgs[si] {
-					firstUnmatched = si
-					break
-				}
-			}
-			matched := false
-			if firstUnmatched >= 0 {
-				firstSuffixType := sig.Args[firstUnmatched]
-				matched = peekVal.VType.Matches(firstSuffixType)
-				// Predict resolved types for words that haven't executed yet.
-				if !matched && peekVal.IsWord() {
-					pw := peekVal.AsWord()
-					switch {
-					case pw.Name == "true" || pw.Name == "false":
-						matched = TBoolean.Matches(firstSuffixType)
-					case pw.Name == "(" || pw.Name == ")" || pw.Name == "end":
-						// Skip structural words.
-					default:
-						if _, isType := typeNames[pw.Name]; isType {
-							// Type names stay as type literals.
-						} else if e.registry.Lookup(pw.Name) == nil {
-							// Unknown word → will resolve to atom.
-							matched = TAtom.Matches(firstSuffixType)
-						}
-						// Also check TWord for sigs expecting word literals.
-						if !matched {
-							matched = peekVal.VType.Matches(firstSuffixType)
-						}
-					}
-				}
-			}
-			if matched {
-				score += 50
-			}
-		}
-
-		if best == nil || score > bestScore {
-			best = sig
-			bestScore = score
-			bestPrefixCount = prefixCount
-		}
-	}
-	return best, bestPrefixCount
 }
 
 // execMatch executes a matched signature, splicing args and results.
