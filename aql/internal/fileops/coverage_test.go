@@ -1,107 +1,67 @@
 package fileops
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
+var errNoWD = errors.New("working directory unavailable")
+
+func failGetwd() (string, error) {
+	return "", errNoWD
+}
+
 // TestOSFileOpsResolvePathGetwdError triggers the os.Getwd error path
-// by removing the current working directory temporarily.
+// using an injected getwd function (cross-platform).
 func TestOSFileOpsResolvePathGetwdError(t *testing.T) {
-	o := &OSFileOps{}
+	o := &OSFileOps{getwd: failGetwd}
 
-	// Create a temporary directory, cd into it, then remove it.
-	tmpDir, err := os.MkdirTemp("", "fileops-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(origDir) //nolint:errcheck
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	// Remove the directory while we're in it, making Getwd fail.
-	if err := os.Remove(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = o.ResolvePath("relative.txt")
+	_, err := o.ResolvePath("relative.txt")
 	if err == nil {
-		t.Fatal("expected error from ResolvePath when cwd is removed")
+		t.Fatal("expected error from ResolvePath when getwd fails")
+	}
+	if !errors.Is(err, errNoWD) {
+		t.Fatalf("expected errNoWD, got: %v", err)
 	}
 }
 
 // TestOSFileOpsReadFileResolveError triggers the ResolvePath error path
-// in ReadFile by the same cwd-removal trick.
+// in ReadFile via an injected getwd function.
 func TestOSFileOpsReadFileResolveError(t *testing.T) {
-	o := &OSFileOps{}
+	o := &OSFileOps{getwd: failGetwd}
 
-	tmpDir, err := os.MkdirTemp("", "fileops-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(origDir) //nolint:errcheck
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = o.ReadFile("relative.txt")
+	_, err := o.ReadFile("relative.txt")
 	if err == nil {
-		t.Fatal("expected error from ReadFile when cwd is removed")
+		t.Fatal("expected error from ReadFile when getwd fails")
 	}
 }
 
 // TestOSFileOpsWriteFileResolveError triggers the ResolvePath error path
-// in WriteFile by the same cwd-removal trick.
+// in WriteFile via an injected getwd function.
 func TestOSFileOpsWriteFileResolveError(t *testing.T) {
-	o := &OSFileOps{}
+	o := &OSFileOps{getwd: failGetwd}
 
-	tmpDir, err := os.MkdirTemp("", "fileops-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chdir(origDir) //nolint:errcheck
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-
-	err = o.WriteFile("relative.txt", []byte("data"), 0644)
+	err := o.WriteFile("relative.txt", []byte("data"), 0644)
 	if err == nil {
-		t.Fatal("expected error from WriteFile when cwd is removed")
+		t.Fatal("expected error from WriteFile when getwd fails")
 	}
 }
 
 // TestOSFileOpsWriteMkdirAllError triggers the MkdirAll error path
-// by writing to a path under /proc which is a special filesystem.
+// by writing into an unwritable directory (cross-platform).
 func TestOSFileOpsWriteMkdirAllError(t *testing.T) {
 	o := &OSFileOps{}
-	// /proc/1/fdinfo is not writable even as root
-	err := o.WriteFile("/proc/1/fdinfo/newsubdir/file.txt", []byte("data"), 0644)
+
+	tmpDir := t.TempDir()
+	readonlyDir := filepath.Join(tmpDir, "readonly")
+	if err := os.Mkdir(readonlyDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(readonlyDir, "newsubdir", "file.txt")
+	err := o.WriteFile(target, []byte("data"), 0644)
 	if err == nil {
 		t.Fatal("expected error from WriteFile due to MkdirAll failure")
 	}
@@ -122,6 +82,18 @@ func TestOSFileOpsWriteFileError(t *testing.T) {
 	err := o.WriteFile(dirAsFile, []byte("data"), 0644)
 	if err == nil {
 		t.Fatal("expected error writing to a directory path")
+	}
+}
+
+// TestOSFileOpsResolvePathAbsolute verifies absolute paths pass through unchanged.
+func TestOSFileOpsResolvePathAbsolute(t *testing.T) {
+	o := &OSFileOps{}
+	got, err := o.ResolvePath("/absolute/path.txt")
+	if err != nil {
+		t.Fatalf("ResolvePath error: %v", err)
+	}
+	if got != "/absolute/path.txt" {
+		t.Errorf("got %q, want %q", got, "/absolute/path.txt")
 	}
 }
 

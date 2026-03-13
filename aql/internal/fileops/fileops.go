@@ -18,7 +18,10 @@ type FileOps interface {
 }
 
 // OSFileOps is the default implementation using the real file system.
-type OSFileOps struct{}
+// The unexported getwd field allows tests to inject a failing os.Getwd.
+type OSFileOps struct {
+	getwd func() (string, error)
+}
 
 func (o *OSFileOps) ReadFile(path string) ([]byte, error) {
 	resolved, err := o.ResolvePath(path)
@@ -45,7 +48,11 @@ func (o *OSFileOps) ResolvePath(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
 	}
-	wd, err := os.Getwd()
+	getwdFn := o.getwd
+	if getwdFn == nil {
+		getwdFn = os.Getwd
+	}
+	wd, err := getwdFn()
 	if err != nil {
 		return "", err
 	}
