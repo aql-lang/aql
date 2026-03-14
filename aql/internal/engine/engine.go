@@ -13,6 +13,7 @@ var typeNames = map[string]Type{
 	"Scalar":  TScalar,
 	"Number":  TNumber,
 	"Integer": TInteger,
+	"Decimal": TDecimal,
 	"String":  TString,
 	"Boolean": TBoolean,
 	"Atom":    TAtom,

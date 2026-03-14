@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -324,6 +325,23 @@ func registerBuiltins(r *Registry) {
 		return a % b, nil
 	})
 
+	// Decimal overloads for arithmetic (at least one operand is decimal).
+	registerBinaryNumOp(r, "add", 1, func(a, b float64) (float64, error) { return a + b, nil })
+	registerBinaryNumOp(r, "sub", 1, func(a, b float64) (float64, error) { return a - b, nil })
+	registerBinaryNumOp(r, "mul", 2, func(a, b float64) (float64, error) { return a * b, nil })
+	registerBinaryNumOp(r, "div", 2, func(a, b float64) (float64, error) {
+		if b == 0 {
+			return 0, fmt.Errorf("division by zero")
+		}
+		return a / b, nil
+	})
+	registerBinaryNumOp(r, "mod", 2, func(a, b float64) (float64, error) {
+		if b == 0 {
+			return 0, fmt.Errorf("modulo by zero")
+		}
+		return math.Mod(a, b), nil
+	})
+
 	// abs: [int] -> [int] (suffix precedence)
 	r.Register("abs", Signature{
 		Args: []Type{TInteger},
@@ -354,6 +372,32 @@ func registerBuiltins(r *Registry) {
 
 	// max: [int, int] -> [int] (suffix precedence)
 	registerBinaryIntOp(r, "max", 1, func(a, b int64) (int64, error) {
+		if a > b {
+			return a, nil
+		}
+		return b, nil
+	})
+
+	// Decimal overloads for abs, negate, min, max.
+	r.Register("abs", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(math.Abs(args[0].AsDecimal()))}, nil
+		},
+	})
+	r.Register("negate", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(-args[0].AsDecimal())}, nil
+		},
+	})
+	registerBinaryNumOp(r, "min", 1, func(a, b float64) (float64, error) {
+		if a < b {
+			return a, nil
+		}
+		return b, nil
+	})
+	registerBinaryNumOp(r, "max", 1, func(a, b float64) (float64, error) {
 		if a > b {
 			return a, nil
 		}
@@ -541,6 +585,8 @@ func valToString(v Value) string {
 		return v.AsString()
 	case v.IsAtom():
 		return v.AsAtom()
+	case v.VType.Matches(TDecimal):
+		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
 	case v.VType.Matches(TInteger):
 		return strconv.FormatInt(v.AsInteger(), 10)
 	case v.VType.Matches(TBoolean):
@@ -697,6 +743,38 @@ func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64)
 	}
 	r.Register(name, Signature{
 		Args:       []Type{TInteger, TInteger},
+		Precedence: prec,
+		Handler:    handler,
+	})
+}
+
+// registerBinaryNumOp registers a binary numeric operation with three
+// overloads: [decimal, decimal], [number, decimal], and [decimal, number].
+// Integer+integer is handled by registerBinaryIntOp; when at least one
+// operand is decimal the result is decimal.
+func registerBinaryNumOp(r *Registry, name string, prec int, op func(a, b float64) (float64, error)) {
+	handler := func(args []Value) ([]Value, error) {
+		result, err := op(args[0].AsNumber(), args[1].AsNumber())
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewDecimal(result)}, nil
+	}
+	// [decimal, decimal]
+	r.Register(name, Signature{
+		Args:       []Type{TDecimal, TDecimal},
+		Precedence: prec,
+		Handler:    handler,
+	})
+	// [number, decimal] — catches integer + decimal
+	r.Register(name, Signature{
+		Args:       []Type{TNumber, TDecimal},
+		Precedence: prec,
+		Handler:    handler,
+	})
+	// [decimal, number] — catches decimal + integer
+	r.Register(name, Signature{
+		Args:       []Type{TDecimal, TNumber},
 		Precedence: prec,
 		Handler:    handler,
 	})
@@ -1315,6 +1393,8 @@ func resolveTypeName(name string) (Type, error) {
 		return TNumber, nil
 	case "Integer":
 		return TInteger, nil
+	case "Decimal":
+		return TDecimal, nil
 	case "String":
 		return TString, nil
 	case "Boolean":
@@ -1504,9 +1584,9 @@ func registerConvert(r *Registry) {
 			if variant == "" {
 				return NewString(truncate(valToString(src), size)), nil
 			}
-			// Variant-based string conversion (only for numbers).
-			if !src.VType.Matches(TNumber) {
-				return Value{}, fmt.Errorf("convert: variant %q only supported for number to string", variant)
+			// Variant-based string conversion (only for integer numbers).
+			if !src.VType.Matches(TInteger) {
+				return Value{}, fmt.Errorf("convert: variant %q only supported for integer to string", variant)
 			}
 			n := src.AsInteger()
 			var s string
@@ -1523,6 +1603,15 @@ func registerConvert(r *Registry) {
 				return Value{}, fmt.Errorf("convert: unknown string variant %q", variant)
 			}
 			return NewString(truncate(s, size)), nil
+
+		case targetType.Matches(TDecimal):
+			// Convert to decimal.
+			text := valToString(src)
+			f, err := strconv.ParseFloat(text, 64)
+			if err != nil {
+				return Value{}, fmt.Errorf("convert: cannot convert %q to decimal", text)
+			}
+			return NewDecimal(f), nil
 
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
@@ -1557,7 +1646,7 @@ func registerConvert(r *Registry) {
 			case src.VType.Matches(TBoolean):
 				return src, nil
 			case src.VType.Matches(TNumber):
-				return NewBoolean(src.AsInteger() != 0), nil
+				return NewBoolean(src.AsNumber() != 0), nil
 			default:
 				text := valToString(src)
 				switch text {
@@ -1982,11 +2071,24 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 	case targetType.Matches(TString):
 		return NewString(valToString(src)), nil
 
+	case targetType.Matches(TDecimal):
+		text := valToString(src)
+		f, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return Value{}, fmt.Errorf("make: cannot convert %q to decimal", text)
+		}
+		return NewDecimal(f), nil
+
 	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 		text := valToString(src)
 		n, err := strconv.ParseInt(text, 10, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("make: cannot convert %q to number", text)
+			// Try parsing as float and truncating to integer.
+			f, ferr := strconv.ParseFloat(text, 64)
+			if ferr != nil {
+				return Value{}, fmt.Errorf("make: cannot convert %q to number", text)
+			}
+			return NewInteger(int64(f)), nil
 		}
 		return NewInteger(n), nil
 
@@ -1995,7 +2097,7 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 		case src.VType.Matches(TBoolean):
 			return src, nil
 		case src.VType.Matches(TNumber):
-			return NewBoolean(src.AsInteger() != 0), nil
+			return NewBoolean(src.AsNumber() != 0), nil
 		default:
 			text := valToString(src)
 			switch text {
@@ -2374,6 +2476,8 @@ func baseValue(t Type) (Value, error) {
 	switch {
 	case t.Matches(TInteger):
 		return NewInteger(0), nil
+	case t.Matches(TDecimal):
+		return NewDecimal(0), nil
 	case t.Matches(TNumber):
 		return NewInteger(0), nil
 	case t.Matches(TString):

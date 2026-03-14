@@ -45,6 +45,8 @@ func aqlTypeToSQLType(t Type) string {
 	switch {
 	case t.Matches(TInteger):
 		return "INTEGER"
+	case t.Matches(TDecimal):
+		return "REAL"
 	case t.Matches(TNumber):
 		return "REAL"
 	case t.Matches(TBoolean):
@@ -261,6 +263,9 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 
 	case colType.Matches(TNumber):
 		// Column wants REAL.
+		if v.VType.Matches(TDecimal) {
+			return v.AsDecimal()
+		}
 		if v.VType.Matches(TInteger) {
 			return float64(v.AsInteger())
 		}
@@ -307,8 +312,7 @@ func sqlResultToAQLValue(raw interface{}, colType Type) Value {
 	case colType.Matches(TInteger):
 		return NewInteger(toInt64(raw))
 	case colType.Matches(TNumber):
-		// For now, number/integer is the only numeric subtype.
-		return NewInteger(toInt64(raw))
+		return NewDecimal(toFloat64(raw))
 	case colType.Matches(TBoolean):
 		return NewBoolean(toInt64(raw) != 0)
 	default:
@@ -329,6 +333,24 @@ func toInt64(v interface{}) int64 {
 	case []byte:
 		n, _ := strconv.ParseInt(string(x), 10, 64)
 		return n
+	default:
+		return 0
+	}
+}
+
+// toFloat64 coerces a database/sql scanned value to float64.
+func toFloat64(v interface{}) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int64:
+		return float64(x)
+	case string:
+		f, _ := strconv.ParseFloat(x, 64)
+		return f
+	case []byte:
+		f, _ := strconv.ParseFloat(string(x), 64)
+		return f
 	default:
 		return 0
 	}

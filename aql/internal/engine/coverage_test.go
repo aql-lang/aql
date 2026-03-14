@@ -2839,8 +2839,8 @@ func TestSqlTypeToAQLType(t *testing.T) {
 	if got := sqlTypeToAQLType("INTEGER"); !got.Equal(TInteger) {
 		t.Errorf("expected TInteger, got %v", got)
 	}
-	if got := sqlTypeToAQLType("REAL"); !got.Equal(TNumber) {
-		t.Errorf("expected TNumber, got %v", got)
+	if got := sqlTypeToAQLType("REAL"); !got.Equal(TDecimal) {
+		t.Errorf("expected TDecimal, got %v", got)
 	}
 	if got := sqlTypeToAQLType("TEXT"); !got.Equal(TString) {
 		t.Errorf("expected TString, got %v", got)
