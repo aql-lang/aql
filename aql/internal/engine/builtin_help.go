@@ -31,14 +31,24 @@ func registerHelp(r *Registry) {
 		return nil, nil
 	}
 
+	// help: [word] -> [] (captures registered words like add, concat)
+	wordRefHandler := func(args []Value) ([]Value, error) {
+		name := args[0].AsWord().Name
+		entry := help.Lookup(name)
+		if entry == nil {
+			fmt.Fprintf(r.Output, "help: no help available for %q\n", name)
+			return nil, nil
+		}
+		fmt.Fprint(r.Output, formatHelp(entry))
+		return nil, nil
+	}
+
 	r.Register("help",
+		Signature{Args: []Type{TWord}, Handler: wordRefHandler},
 		Signature{Args: []Type{TString}, Handler: wordHandler},
 		Signature{Args: []Type{TAtom}, Handler: wordHandler},
+		Signature{Args: []Type{}, Handler: selfHandler},
 	)
-	r.RegisterPrefixOnly("help", Signature{
-		Args:    []Type{},
-		Handler: selfHandler,
-	})
 }
 
 func formatHelp(e *help.Entry) string {
