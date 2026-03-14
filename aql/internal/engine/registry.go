@@ -144,6 +144,19 @@ func registerBuiltins(r *Registry) {
 	// String
 	registerUpper(r)
 	registerLower(r)
+	registerConcat(r)
+	registerSplit(r)
+	registerTrim(r)
+	registerContains(r)
+	registerIndexOf(r)
+	registerReplace(r)
+	registerSlice(r)
+	registerChangeCase(r)
+	registerNormalize(r)
+	registerRepeat(r)
+	registerPad(r)
+	registerMatch(r)
+	registerEscape(r)
 
 	// Stack
 	registerDup(r)
