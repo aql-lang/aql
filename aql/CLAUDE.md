@@ -28,5 +28,13 @@ The `github.com/voxgig/struct` module is published as a Go submodule at
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 ```
 
-All dependencies resolve via the standard Go module proxy. No special
-environment variables or workarounds are needed.
+If `go build` or `go test` fails downloading `modernc.org/sqlite` (or
+other large modules) with a timeout from `storage.googleapis.com`, run:
+
+```bash
+GOPROXY=direct go mod download
+```
+
+This bypasses the Go module proxy and downloads directly from the source
+repositories. After that, `go build ./...` and `go test ./...` will work
+normally using the cached modules.
