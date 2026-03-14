@@ -20,7 +20,8 @@ type FileOps interface {
 // OSFileOps is the default implementation using the real file system.
 // The unexported getwd field allows tests to inject a failing os.Getwd.
 type OSFileOps struct {
-	getwd func() (string, error)
+	getwd    func() (string, error)
+	mkdirAll func(string, os.FileMode) error
 }
 
 func (o *OSFileOps) ReadFile(path string) ([]byte, error) {
@@ -37,7 +38,11 @@ func (o *OSFileOps) WriteFile(path string, data []byte, perm os.FileMode) error 
 		return err
 	}
 	dir := filepath.Dir(resolved)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	mkdirFn := o.mkdirAll
+	if mkdirFn == nil {
+		mkdirFn = os.MkdirAll
+	}
+	if err := mkdirFn(dir, 0755); err != nil {
 		return err
 	}
 	return os.WriteFile(resolved, data, perm)

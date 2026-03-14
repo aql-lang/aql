@@ -50,20 +50,20 @@ func TestOSFileOpsWriteFileResolveError(t *testing.T) {
 }
 
 // TestOSFileOpsWriteMkdirAllError triggers the MkdirAll error path
-// by writing into an unwritable directory (cross-platform).
+// using an injected mkdirAll function (cross-platform, works as root).
 func TestOSFileOpsWriteMkdirAllError(t *testing.T) {
-	o := &OSFileOps{}
-
-	tmpDir := t.TempDir()
-	readonlyDir := filepath.Join(tmpDir, "readonly")
-	if err := os.Mkdir(readonlyDir, 0555); err != nil {
-		t.Fatal(err)
+	errMkdir := errors.New("mkdir failure")
+	o := &OSFileOps{
+		mkdirAll: func(string, os.FileMode) error { return errMkdir },
 	}
 
-	target := filepath.Join(readonlyDir, "newsubdir", "file.txt")
+	target := filepath.Join(t.TempDir(), "newsubdir", "file.txt")
 	err := o.WriteFile(target, []byte("data"), 0644)
 	if err == nil {
 		t.Fatal("expected error from WriteFile due to MkdirAll failure")
+	}
+	if !errors.Is(err, errMkdir) {
+		t.Fatalf("expected errMkdir, got: %v", err)
 	}
 }
 
