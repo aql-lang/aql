@@ -272,6 +272,9 @@ func registerBuiltins(r *Registry) {
 
 	// Module
 	registerModule(r)
+
+	// Help
+	registerHelp(r)
 }
 
 // --- Shared helpers used by multiple builtin files ---
