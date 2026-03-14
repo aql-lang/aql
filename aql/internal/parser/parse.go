@@ -50,6 +50,14 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
+	// Intercept number tokens at lex time: wrap float64 values in numberVal
+	// so the converter can distinguish "5" (integer) from "5.0" (decimal).
+	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
+		if tkn.Tin == jsonic.TinNR && strings.Contains(tkn.Src, ".") {
+			tkn.Val = numberVal{Val: tkn.Val.(float64), Src: tkn.Src}
+		}
+	}, nil)
+
 	result, err := j.Parse(processed)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
@@ -183,6 +191,9 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		}
 		return engine.NewString(val.Str), nil
 
+	case numberVal:
+		return numberValToValue(val), nil
+
 	case float64:
 		return floatToValue(val), nil
 
@@ -262,6 +273,9 @@ func convertDataValue(v any) (engine.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		return resolveTextValue(val.Str), nil
+
+	case numberVal:
+		return numberValToValue(val), nil
 
 	case float64:
 		return floatToValue(val), nil
@@ -481,6 +495,14 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	return result, nil
 }
 
+// numberVal wraps a float64 with source text so we can distinguish
+// integer literals (e.g. "5") from decimal literals (e.g. "5.0").
+// Injected by the jsonic LexSub callback when the source contains a ".".
+type numberVal struct {
+	Val float64
+	Src string
+}
+
 // floatToValue converts a JSON float64 to the appropriate AQL numeric value.
 // Whole numbers become integers; fractional values become decimals.
 func floatToValue(f float64) engine.Value {
@@ -488,4 +510,14 @@ func floatToValue(f float64) engine.Value {
 		return engine.NewInteger(int64(f))
 	}
 	return engine.NewDecimal(f)
+}
+
+// numberValToValue converts a numberVal (float64 + source) to the appropriate
+// AQL numeric value. If the source text contains a ".", the value is always
+// treated as a decimal — even for whole numbers like 5.0.
+func numberValToValue(nv numberVal) engine.Value {
+	if strings.Contains(nv.Src, ".") {
+		return engine.NewDecimal(nv.Val)
+	}
+	return floatToValue(nv.Val)
 }
