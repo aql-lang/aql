@@ -30,7 +30,7 @@ func init() {
 		Description: "Subtracts: a b sub produces a - b.",
 		Examples: []string{
 			`5 3 sub              => 2`,
-			`10.5 3.5 sub         => 7`,
+			`10.5 3.0 sub         => 7.5`,
 			`1 5 sub              => -4`,
 			`0 0 sub              => 0`,
 		},
@@ -46,7 +46,7 @@ func init() {
 		Description: "Multiplies two numeric values.",
 		Examples: []string{
 			`3 4 mul              => 12`,
-			`2.5 2.0 mul          => 5`,
+			`2.5 4.0 mul          => 10`,
 			`0 100 mul            => 0`,
 			`-3 -4 mul            => 12`,
 		},
@@ -63,7 +63,7 @@ func init() {
 		Examples: []string{
 			`10 3 div             => 3`,
 			`7 2 div              => 3`,
-			`7.3 2.3 div          => 3.173913043478261`,
+			`7.0 2.0 div          => 3.5`,
 			`-7 2 div             => -3`,
 		},
 		Notes: []string{
@@ -324,7 +324,7 @@ func init() {
 		Description: "Returns the sine of the input angle in radians.",
 		Examples: []string{
 			`0 sin                => 0`,
-			`math-pi 0.5 mul sin  => 1`,
+			`math-pi 2.0 div sin  => 1`,
 			`1 sin                => 0.8414709848078965`,
 			`-1 sin               => -0.8414709848078965`,
 		},
@@ -350,7 +350,7 @@ func init() {
 		Description: "Returns the tangent of the input angle in radians.",
 		Examples: []string{
 			`0 tan                => 0`,
-			`math-pi 0.25 mul tan => 1`,
+			`math-pi 4.0 div tan  => 1`,
 			`1 tan                => 1.557407724654902`,
 			`-1 tan               => -1.557407724654902`,
 		},
@@ -429,7 +429,7 @@ func init() {
 		Examples: []string{
 			`math-pi              => 3.141592653589793`,
 			`math-pi 2 mul        => 6.283185307179586`,
-			`math-pi 0.5 mul      => 1.5707963267948966`,
+			`math-pi 2.0 div      => 1.5707963267948966`,
 			`math-pi math-pi mul  => 9.869604401089358`,
 		},
 	})
@@ -441,9 +441,9 @@ func init() {
 		Description: "Pushes the mathematical constant e (2.71828...). Prefix-only.",
 		Examples: []string{
 			`math-e               => 2.718281828459045`,
-			`math-e math-e mul    => 7.3890560989306495`,
+			`math-e 2.0 div       => 1.3591409142295225`,
 			`math-e log           => 1`,
-			`2 exp                => 7.38905609893065`,
+			`math-e math-e mul    => 7.3890560989306495`,
 		},
 	})
 }
