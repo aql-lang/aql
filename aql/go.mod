@@ -9,6 +9,8 @@ require (
 	modernc.org/sqlite v1.46.1
 )
 
+require golang.org/x/text v0.24.0
+
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

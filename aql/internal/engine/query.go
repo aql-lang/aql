@@ -1010,7 +1010,7 @@ func aqlTypenameToSQLType(name string) string {
 	switch strings.ToLower(name) {
 	case "integer", "int":
 		return "INTEGER"
-	case "real", "float", "number":
+	case "real", "float", "number", "decimal":
 		return "REAL"
 	case "text", "string":
 		return "TEXT"
@@ -1027,7 +1027,7 @@ func sqlTypeToAQLType(sqlType string) Type {
 	case "INTEGER":
 		return TInteger
 	case "REAL":
-		return TNumber
+		return TDecimal
 	case "TEXT":
 		return TString
 	default:

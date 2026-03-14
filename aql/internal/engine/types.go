@@ -23,6 +23,7 @@ var (
 	TStringEmpty  = mustType("String/Empty")
 	TNumber       = mustType("Number")
 	TInteger      = mustType("Number/Integer")
+	TDecimal      = mustType("Number/Decimal")
 	TBoolean      = mustType("Boolean")
 	TBooleanTrue  = mustType("Boolean/True")
 	TBooleanFalse = mustType("Boolean/False")

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	csvpkg "github.com/jsonicjs/csv/go"
@@ -175,7 +176,11 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 				case string:
 					om.Set(col, NewString(v))
 				case float64:
-					om.Set(col, NewInteger(int64(v)))
+					if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+						om.Set(col, NewInteger(int64(v)))
+					} else {
+						om.Set(col, NewDecimal(v))
+					}
 				case bool:
 					om.Set(col, NewBoolean(v))
 				default:

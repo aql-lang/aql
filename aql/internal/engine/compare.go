@@ -11,13 +11,13 @@ import "fmt"
 //   - Cross-type: ordered by type name (atom < boolean < number < string)
 //   - Lists, maps, and other types: not orderable, returns error
 func compareValues(a, b Value) (int, error) {
-	// Same-type comparisons.
-	if a.VType.Matches(TInteger) && b.VType.Matches(TInteger) {
-		ai, bi := a.AsInteger(), b.AsInteger()
-		if ai < bi {
+	// Numeric comparisons: both operands are some form of Number.
+	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+		af, bf := a.AsNumber(), b.AsNumber()
+		if af < bf {
 			return -1, nil
 		}
-		if ai > bi {
+		if af > bf {
 			return 1, nil
 		}
 		return 0, nil
@@ -69,8 +69,8 @@ func exactEqual(a, b Value) bool {
 	}
 
 	// Scalars: compare by value.
-	if a.VType.Matches(TInteger) && b.VType.Matches(TInteger) {
-		return a.AsInteger() == b.AsInteger()
+	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+		return a.AsNumber() == b.AsNumber()
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
 		return a.AsString() == b.AsString()
@@ -102,8 +102,8 @@ func deepEqual(a, b Value) bool {
 	}
 
 	// Scalars.
-	if a.VType.Matches(TInteger) && b.VType.Matches(TInteger) {
-		return a.AsInteger() == b.AsInteger()
+	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+		return a.AsNumber() == b.AsNumber()
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
 		return a.AsString() == b.AsString()

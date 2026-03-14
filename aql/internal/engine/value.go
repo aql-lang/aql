@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -232,6 +233,11 @@ func NewInteger(n int64) Value {
 	// Format always starts with "Number/Integer/" — cannot fail.
 	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
 	return Value{VType: t, Data: n}
+}
+
+// NewDecimal creates a number/decimal value with a float64 payload.
+func NewDecimal(f float64) Value {
+	return Value{VType: TDecimal, Data: f}
 }
 
 // NewBoolean creates a boolean/true or boolean/false value.
@@ -534,6 +540,20 @@ func (v Value) AsInteger() int64 {
 	return v.Data.(int64)
 }
 
+// AsDecimal returns the float64 payload, panics if not a decimal type.
+func (v Value) AsDecimal() float64 {
+	return v.Data.(float64)
+}
+
+// AsNumber returns the numeric value as float64 regardless of whether it is
+// an integer or decimal.
+func (v Value) AsNumber() float64 {
+	if v.VType.Matches(TDecimal) {
+		return v.AsDecimal()
+	}
+	return float64(v.AsInteger())
+}
+
 // AsBoolean returns the bool payload, panics if not a boolean type.
 func (v Value) AsBoolean() bool {
 	return v.Data.(bool)
@@ -590,6 +610,8 @@ func (v Value) String() string {
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):
 		return v.Data.(string)
+	case v.VType.Matches(TDecimal):
+		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):

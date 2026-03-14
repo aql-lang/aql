@@ -1041,3 +1041,631 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 		t.Errorf("expected string, got %s", elems[2])
 	}
 }
+
+// --- Decimal number tests ---
+
+func TestParseDecimalNumber(t *testing.T) {
+	// 1.5 → decimal (float64 path in convertTopLevelValue and floatToValue)
+	got, err := Parse("1.5")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].VType.Matches(engine.TDecimal) {
+		t.Errorf("expected decimal type, got %s", got[0].VType)
+	}
+}
+
+func TestParseDecimalInExpression(t *testing.T) {
+	// 1.5 add 2.3 → two decimals and a word
+	got, err := Parse("1.5 add 2.3")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(got))
+	}
+	if !got[0].VType.Matches(engine.TDecimal) {
+		t.Errorf("expected decimal, got %s", got[0].VType)
+	}
+}
+
+func TestParseMapWithDecimal(t *testing.T) {
+	// {x:1.5} → map with decimal in data context (float64 path in convertDataValue)
+	got, err := Parse("{x:1.5}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	if !xVal.VType.Matches(engine.TDecimal) {
+		t.Errorf("expected decimal, got %s", xVal.VType)
+	}
+}
+
+// --- Nested list/map in word context ---
+
+func TestParseListWithMap(t *testing.T) {
+	// [{x:1}] → list containing a map (convertTopLevelValue MapRef path)
+	got, err := Parse("[{x:1}]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	elems := got[0].AsList()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element, got %d", len(elems))
+	}
+	if !elems[0].VType.Equal(engine.TMap) {
+		t.Errorf("expected map element, got %s", elems[0].VType)
+	}
+}
+
+func TestParseNestedList(t *testing.T) {
+	// [[1,2],[3,4]] in data context — data list with nested lists
+	got, err := Parse("{x:[[1,2],[3,4]]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	elems := xVal.AsList()
+	if len(elems) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(elems))
+	}
+}
+
+// --- List with dotted word ---
+
+func TestParseListWithDottedWord(t *testing.T) {
+	// [foo.bar] → list with dotted word expansion in word context
+	got, err := Parse("[foo.bar]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	elems := got[0].AsList()
+	if len(elems) != 4 {
+		t.Fatalf("expected 4 elements (get foo bar dot/p), got %d", len(elems))
+	}
+}
+
+// --- Map with single key (sortedKeys edge case) ---
+
+func TestParseMapSingleKey(t *testing.T) {
+	// {a:1} → sortedKeys with 1 key (no sorting needed)
+	got, err := Parse("{a:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	if m.Len() != 1 {
+		t.Errorf("expected 1 key, got %d", m.Len())
+	}
+}
+
+// --- Word modifier edge cases ---
+
+func TestParseUnrecognizedModifier(t *testing.T) {
+	// foo/x → unrecognized modifier, treated as plain word "foo/x"
+	assertParse(t, "foo/x", []engine.Value{engine.NewWord("foo/x")})
+}
+
+func TestParseSlashOnly(t *testing.T) {
+	// foo/ → trailing slash with no modifier text (idx == len(name)-1),
+	// so it's not matched by the modifier parsing
+	assertParse(t, "foo/", []engine.Value{engine.NewWord("foo/")})
+}
+
+func TestParseEmptyDigitsEmptyRest(t *testing.T) {
+	// This covers the case where modifier is just "/" at end of string
+	// which doesn't trigger the modifier parsing (idx >= len(name)-1 check)
+	assertParse(t, "x/", []engine.Value{engine.NewWord("x/")})
+}
+
+// --- Parens within different quote types ---
+
+func TestParseSingleQuoteWithParens(t *testing.T) {
+	// '(test)' → parens inside single-quoted string
+	assertParse(t, "'(test)'", []engine.Value{engine.NewString("(test)")})
+}
+
+func TestParseBacktickWithParens(t *testing.T) {
+	// `(test)` → parens inside backtick-quoted string
+	assertParse(t, "`(test)`", []engine.Value{engine.NewString("(test)")})
+}
+
+// --- Data context: typed list inside data value ---
+
+func TestParseDataMapWithTypedList(t *testing.T) {
+	// {x:[:String]} → typed list in data context (ListRef.Child path in convertDataValue)
+	got, err := Parse("{x:[:String]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Data context: typed map inside data value ---
+
+func TestParseDataMapWithTypedMap(t *testing.T) {
+	// {x:{:Number}} → typed map in data context (MapRef with child$ in convertDataValue)
+	got, err := Parse("{x:{:Number}}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Args expansion ---
+
+func TestExpandDottedArgs(t *testing.T) {
+	// args.x → resolves "args" as a word directly (not via get)
+	assertExpand(t, "args.x", []engine.Value{
+		engine.NewWord("args"),
+		engine.NewWord("x"),
+		engine.NewWordModified("dot", -1, true, false),
+	})
+}
+
+// --- Top-level dotted expansion ---
+
+func TestParseDottedWordTopLevel(t *testing.T) {
+	// foo.bar at top level — jsonic may parse this as a single text token
+	// with a dot or as a map. Either way, it should not error.
+	got, err := Parse("foo.bar")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) < 1 {
+		t.Fatalf("expected at least 1 value, got %d", len(got))
+	}
+}
+
+func TestParseDottedWordInExpression(t *testing.T) {
+	// 1 foo.bar → triggers dotted expansion in convertTopLevel
+	got, err := Parse("1 foo.bar")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("expected 5 values (1 get foo bar dot/p), got %d", len(got))
+	}
+}
+
+// --- Map as top-level value ---
+
+func TestParseTopLevelMap(t *testing.T) {
+	// {a:1,b:2} as the only input → hits the MapRef branch in Parse
+	got, err := Parse("{a:1,b:2}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].VType.Equal(engine.TMap) {
+		t.Errorf("expected map, got %s", got[0].VType)
+	}
+}
+
+// --- List pair syntax: maps inside lists ---
+
+func TestParseListPairSyntax(t *testing.T) {
+	// [x:1] → list with pair syntax creates map inside list
+	// This hits map[string]any case in convertTopLevelValue
+	got, err := Parse("[x:1]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+func TestParseListPairTypedMap(t *testing.T) {
+	// [x:Number] → list with pair syntax, type name in value
+	got, err := Parse("[x:Number]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Data context: map with string values ---
+
+func TestParseMapWithStringValues(t *testing.T) {
+	// {x:"hello"} → quoted string in data context (Text with quote)
+	got, err := Parse(`{x:"hello"}`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	if !xVal.VType.Matches(engine.TString) || xVal.AsString() != "hello" {
+		t.Errorf("expected string hello, got %s", xVal)
+	}
+}
+
+// --- Nested typed structures in data context ---
+
+func TestParseDataNestedTypedMap(t *testing.T) {
+	// {x:{:String},y:{:Number}} → multiple typed maps in data context
+	got, err := Parse("{x:{:String},y:{:Number}}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Data list with typed list child ---
+
+func TestParseDataListWithTypedList(t *testing.T) {
+	// {x:[[:String]]} → list containing a typed list in data context
+	got, err := Parse("{x:[[:String]]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- convertTopLevelValue: bool path (only reachable from list-pair context) ---
+
+func TestParseListWithBoolean(t *testing.T) {
+	// [1, true, false] with booleans in list context
+	got, err := Parse("[1, true, false]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Nil/null at top level ---
+
+func TestParseNullValue(t *testing.T) {
+	// null at top level → word "null" (with Lex=false)
+	assertParse(t, "null", []engine.Value{engine.NewWord("null")})
+}
+
+// --- Data context: map with nil value via jsonic ---
+
+func TestParseDataMapNilValue(t *testing.T) {
+	// Testing data paths more thoroughly
+	got, err := Parse("{a:1,b:hello,c:true,d:false,e:Number,f:Any}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	// Check type literal resolution in data context
+	eVal, _ := m.Get("e")
+	if !eVal.VType.Equal(engine.TNumber) {
+		t.Errorf("expected Number type literal, got %s", eVal.VType)
+	}
+	fVal, _ := m.Get("f")
+	if !fVal.VType.Equal(engine.TAny) {
+		t.Errorf("expected Any type literal, got %s", fVal.VType)
+	}
+}
+
+// --- List inside list (word context) ---
+
+func TestParseListInsideList(t *testing.T) {
+	// [[1,2]] → list containing a nested list in word context
+	got, err := Parse("[[1,2]]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Empty map ---
+
+func TestParseEmptyMap(t *testing.T) {
+	got, err := Parse("{}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+}
+
+// --- Map with many keys (sortedKeys with >1 key) ---
+
+func TestParseMapManyKeys(t *testing.T) {
+	got, err := Parse("{c:3,a:1,b:2}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	if m.Len() != 3 {
+		t.Errorf("expected 3 keys, got %d", m.Len())
+	}
+}
+
+// --- Decimal inside data list ---
+
+func TestParseDataListWithDecimal(t *testing.T) {
+	got, err := Parse("{x:[1.5,2.7]}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	m := got[0].AsMap()
+	xVal, _ := m.Get("x")
+	elems := xVal.AsList()
+	if len(elems) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(elems))
+	}
+}
+
+// --- preprocessParens: escape inside string with parens ---
+
+func TestParseEscapeInStringWithParens(t *testing.T) {
+	// Escape char inside a string when parens are also present
+	// This covers the escape-in-string path in preprocessParens (lines 124-127)
+	got, err := Parse(`"a\"b" (1)`)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) < 1 {
+		t.Fatalf("expected at least 1 value, got %d", len(got))
+	}
+}
+
+// --- parseWord edge cases ---
+
+func TestParseEmptyNameAfterModifier(t *testing.T) {
+	// /1s → modifier on empty name, should error
+	assertParseError(t, "/1s")
+}
+
+func TestParseSlashSModifier(t *testing.T) {
+	// /s → empty name with suffix modifier, should error
+	assertParseError(t, "/s")
+}
+
+// --- convertTopLevelValue / convertDataValue unreachable cases ---
+// These are defensive code paths for jsonic types not produced by
+// the current configuration. We test the reachable paths thoroughly
+// and accept the defensive branches as uncovered.
+
+// --- Direct function tests for better coverage ---
+
+func TestFloatToValueWholeNumber(t *testing.T) {
+	// Whole number float → integer
+	v := floatToValue(42.0)
+	if !v.VType.Matches(engine.TInteger) {
+		t.Errorf("expected integer, got %s", v.VType)
+	}
+}
+
+func TestFloatToValueFractional(t *testing.T) {
+	// Fractional float → decimal
+	v := floatToValue(3.14)
+	if !v.VType.Matches(engine.TDecimal) {
+		t.Errorf("expected decimal, got %s", v.VType)
+	}
+}
+
+func TestSortedKeysEmpty(t *testing.T) {
+	keys := sortedKeys(map[string]any{})
+	if len(keys) != 0 {
+		t.Errorf("expected 0 keys, got %d", len(keys))
+	}
+}
+
+func TestSortedKeysSingle(t *testing.T) {
+	keys := sortedKeys(map[string]any{"a": 1})
+	if len(keys) != 1 || keys[0] != "a" {
+		t.Errorf("expected [a], got %v", keys)
+	}
+}
+
+func TestSortedKeysMultiple(t *testing.T) {
+	keys := sortedKeys(map[string]any{"c": 3, "a": 1, "b": 2})
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("expected [a b c], got %v", keys)
+	}
+}
+
+func TestResolveTextValueTypes(t *testing.T) {
+	tests := []struct {
+		input string
+		check func(engine.Value) bool
+	}{
+		{"true", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && v.AsBoolean() }},
+		{"false", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && !v.AsBoolean() }},
+		{"Number", func(v engine.Value) bool { return v.VType.Equal(engine.TNumber) }},
+		{"String", func(v engine.Value) bool { return v.VType.Equal(engine.TString) }},
+		{"hello", func(v engine.Value) bool { return v.VType.Matches(engine.TString) && v.AsString() == "hello" }},
+	}
+	for _, tt := range tests {
+		v := resolveTextValue(tt.input)
+		if !tt.check(v) {
+			t.Errorf("resolveTextValue(%q) = %s, unexpected", tt.input, v)
+		}
+	}
+}
+
+func TestExpandDottedWordModifier(t *testing.T) {
+	// foo/1.bar → first part has modifier, should work
+	got, err := expandDottedWord("foo/1.bar")
+	if err != nil {
+		t.Fatalf("expandDottedWord error: %v", err)
+	}
+	if len(got) < 3 {
+		t.Fatalf("expected at least 3 values, got %d", len(got))
+	}
+}
+
+// --- Direct unexported function tests for defensive code paths ---
+
+func TestConvertTopLevelValueBool(t *testing.T) {
+	v, err := convertTopLevelValue(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+		t.Errorf("expected true, got %s", v)
+	}
+	v, err = convertTopLevelValue(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Matches(engine.TBoolean) || v.AsBoolean() {
+		t.Errorf("expected false, got %s", v)
+	}
+}
+
+func TestConvertTopLevelValueNil(t *testing.T) {
+	v, err := convertTopLevelValue(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Equal(engine.TNone) {
+		t.Errorf("expected none type, got %s", v.VType)
+	}
+}
+
+func TestConvertTopLevelValueUnsupported(t *testing.T) {
+	_, err := convertTopLevelValue(struct{}{})
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
+}
+
+func TestConvertDataValueBool(t *testing.T) {
+	v, err := convertDataValue(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+		t.Errorf("expected true, got %s", v)
+	}
+}
+
+func TestConvertDataValueNil(t *testing.T) {
+	v, err := convertDataValue(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Equal(engine.TNone) {
+		t.Errorf("expected none type, got %s", v.VType)
+	}
+}
+
+func TestConvertDataValueUnsupported(t *testing.T) {
+	_, err := convertDataValue(struct{}{})
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
+}
+
+func TestConvertDataValueRawMap(t *testing.T) {
+	// map[string]any without child$ key
+	v, err := convertDataValue(map[string]any{"x": float64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Equal(engine.TMap) {
+		t.Errorf("expected map, got %s", v.VType)
+	}
+}
+
+func TestConvertDataValueRawMapWithChild(t *testing.T) {
+	// map[string]any with child$ key → typed map
+	v, err := convertDataValue(map[string]any{"child$": float64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.IsTypedMap() {
+		t.Errorf("expected typed map, got %s", v)
+	}
+}
+
+func TestConvertTopLevelValueRawMap(t *testing.T) {
+	v, err := convertTopLevelValue(map[string]any{"x": float64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Equal(engine.TMap) {
+		t.Errorf("expected map, got %s", v.VType)
+	}
+}
+
+func TestConvertTopLevelValueRawMapWithChild(t *testing.T) {
+	v, err := convertTopLevelValue(map[string]any{"child$": float64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.IsTypedMap() {
+		t.Errorf("expected typed map, got %s", v)
+	}
+}
+
+func TestParseWordDirectCoverage(t *testing.T) {
+	// Test parseWord directly for various modifiers
+	tests := []struct {
+		input string
+		name  string
+		ok    bool
+	}{
+		{"hello", "hello", true},
+		{"foo/2p", "foo", true},
+		{"foo/0", "foo", true},
+		{"foo/bad", "foo/bad", true},   // unrecognized modifier
+		{"foo/", "foo/", true},         // slash at end not processed
+	}
+	for _, tt := range tests {
+		v, err := parseWord(tt.input)
+		if tt.ok && err != nil {
+			t.Errorf("parseWord(%q) error: %v", tt.input, err)
+		} else if !tt.ok && err == nil {
+			t.Errorf("parseWord(%q) expected error", tt.input)
+		}
+		if tt.ok && v.AsWord().Name != tt.name {
+			t.Errorf("parseWord(%q) name = %q, want %q", tt.input, v.AsWord().Name, tt.name)
+		}
+	}
+}

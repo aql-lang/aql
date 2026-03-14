@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -183,7 +184,7 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		return engine.NewString(val.Str), nil
 
 	case float64:
-		return engine.NewInteger(int64(val)), nil
+		return floatToValue(val), nil
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
@@ -263,7 +264,7 @@ func convertDataValue(v any) (engine.Value, error) {
 		return resolveTextValue(val.Str), nil
 
 	case float64:
-		return engine.NewInteger(int64(val)), nil
+		return floatToValue(val), nil
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
@@ -478,4 +479,13 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	}
 
 	return result, nil
+}
+
+// floatToValue converts a JSON float64 to the appropriate AQL numeric value.
+// Whole numbers become integers; fractional values become decimals.
+func floatToValue(f float64) engine.Value {
+	if f == float64(int64(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
+		return engine.NewInteger(int64(f))
+	}
+	return engine.NewDecimal(f)
 }

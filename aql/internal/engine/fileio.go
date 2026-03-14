@@ -3,7 +3,9 @@ package engine
 import (
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	jsonic "github.com/jsonicjs/jsonic/go"
@@ -106,7 +108,10 @@ func jsonicToValue(v any) (Value, error) {
 	case bool:
 		return NewBoolean(val), nil
 	case float64:
-		return NewInteger(int64(val)), nil
+		if val == float64(int64(val)) && !math.IsInf(val, 0) && !math.IsNaN(val) {
+			return NewInteger(int64(val)), nil
+		}
+		return NewDecimal(val), nil
 	case string:
 		return NewString(val), nil
 	case []any:
@@ -159,6 +164,8 @@ func valueToJsonic(v Value) string {
 	switch {
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("%q", v.AsString())
+	case v.VType.Matches(TDecimal):
+		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.AsInteger())
 	case v.VType.Matches(TBoolean):

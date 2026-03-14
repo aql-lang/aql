@@ -117,6 +117,83 @@ func TestValueToAnyRoundtrip(t *testing.T) {
 	}
 }
 
+func TestValueToAnyAtom(t *testing.T) {
+	v := engine.NewAtom("hello")
+	result := valueToAny(v)
+	s, ok := result.(string)
+	if !ok || s != "hello" {
+		t.Errorf("expected string hello, got %v", result)
+	}
+}
+
+func TestValueToAnyNone(t *testing.T) {
+	v := engine.NewTypeLiteral(engine.TNone)
+	result := valueToAny(v)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+func TestValueToAnyDefault(t *testing.T) {
+	// A decimal value should fall through to default and return String()
+	v := engine.NewDecimal(3.14)
+	result := valueToAny(v)
+	s, ok := result.(string)
+	if !ok {
+		t.Errorf("expected string from default, got %T", result)
+	}
+	if s == "" {
+		t.Error("expected non-empty string")
+	}
+}
+
+func TestAnyToValueNil(t *testing.T) {
+	v, err := anyToValue(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.VType.Equal(engine.TNone) {
+		t.Errorf("expected none, got %s", v.VType)
+	}
+}
+
+func TestAnyToValueBool(t *testing.T) {
+	v, err := anyToValue(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.AsBoolean() {
+		t.Error("expected true")
+	}
+}
+
+func TestAnyToValueInt(t *testing.T) {
+	v, err := anyToValue(int(42))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.AsInteger() != 42 {
+		t.Errorf("expected 42, got %d", v.AsInteger())
+	}
+}
+
+func TestAnyToValueInt64(t *testing.T) {
+	v, err := anyToValue(int64(99))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.AsInteger() != 99 {
+		t.Errorf("expected 99, got %d", v.AsInteger())
+	}
+}
+
+func TestAnyToValueUnsupported(t *testing.T) {
+	_, err := anyToValue(struct{}{})
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
+}
+
 func TestValueToAnyList(t *testing.T) {
 	elems := []engine.Value{
 		engine.NewInteger(1),
