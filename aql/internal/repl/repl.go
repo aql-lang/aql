@@ -16,9 +16,24 @@ import (
 // PROMPT is the REPL prompt string.
 const PROMPT = ">> "
 
+// newReadline and newRegistry are package-level vars for testability.
+var newReadline = func(cfg *readline.Config) (readliner, error) {
+	return readline.NewEx(cfg)
+}
+
+var newRegistry = func() (*engine.Registry, error) {
+	return engine.DefaultRegistry()
+}
+
+// readliner abstracts the readline interface for testing.
+type readliner interface {
+	Readline() (string, error)
+	Close() error
+}
+
 // Start runs the REPL loop, reading from in and writing to out.
 func Start(in io.Reader, out io.Writer) {
-	rl, err := readline.NewEx(&readline.Config{
+	rl, err := newReadline(&readline.Config{
 		Prompt:          PROMPT,
 		HistoryFile:     historyFile(),
 		InterruptPrompt: "^C",
@@ -33,7 +48,7 @@ func Start(in io.Reader, out io.Writer) {
 	defer rl.Close()
 
 	// Shared registry so set/get state persists across REPL lines.
-	registry, regErr := engine.DefaultRegistry()
+	registry, regErr := newRegistry()
 	if regErr != nil {
 		fmt.Fprintf(out, "init error: %s\n", regErr)
 		return
@@ -74,8 +89,11 @@ func Start(in io.Reader, out io.Writer) {
 	}
 }
 
+// userHomeDir is a package-level var for testability.
+var userHomeDir = os.UserHomeDir
+
 func historyFile() string {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return ""
 	}

@@ -30,7 +30,7 @@ func TestValueStringTypes(t *testing.T) {
 	}
 }
 
-func TestValueStringList(t *testing.T) {
+func TestValueStringListOrig(t *testing.T) {
 	v := NewList([]Value{NewInteger(1), NewString("a")})
 	got := v.String()
 	if got != "[1,'a']" {
@@ -38,7 +38,7 @@ func TestValueStringList(t *testing.T) {
 	}
 }
 
-func TestValueStringMap(t *testing.T) {
+func TestValueStringMapOrig(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	m.Set("y", NewString("hi"))
@@ -49,7 +49,7 @@ func TestValueStringMap(t *testing.T) {
 	}
 }
 
-func TestValueStringTypedList(t *testing.T) {
+func TestValueStringTypedListOrig(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
 	got := v.String()
 	if got != "[:String]" {
@@ -57,7 +57,7 @@ func TestValueStringTypedList(t *testing.T) {
 	}
 }
 
-func TestValueStringTypedMap(t *testing.T) {
+func TestValueStringTypedMapOrig(t *testing.T) {
 	v := NewTypedMap(NewTypeLiteral(TNumber))
 	got := v.String()
 	if got != "{:Number}" {
@@ -65,7 +65,7 @@ func TestValueStringTypedMap(t *testing.T) {
 	}
 }
 
-func TestValueStringRecordType(t *testing.T) {
+func TestValueStringRecordTypeOrig(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -76,7 +76,7 @@ func TestValueStringRecordType(t *testing.T) {
 	}
 }
 
-func TestValueStringTableType(t *testing.T) {
+func TestValueStringTableTypeOrig(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("a", NewTypeLiteral(TNumber))
 	v := NewTableType(RecordTypeInfo{Fields: fields})
@@ -86,7 +86,7 @@ func TestValueStringTableType(t *testing.T) {
 	}
 }
 
-func TestValueStringDisjunct(t *testing.T) {
+func TestValueStringDisjunctOrig(t *testing.T) {
 	v := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
 	got := v.String()
 	if got != "String|None" {

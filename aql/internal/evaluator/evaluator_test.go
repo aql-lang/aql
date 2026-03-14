@@ -59,3 +59,21 @@ func TestEvalNonProgramNode(t *testing.T) {
 		t.Errorf("expected NULL, got %v", result)
 	}
 }
+
+func TestEvalProgramWithStatements(t *testing.T) {
+	// Directly construct a Program with statements to cover the evalProgram loop.
+	program := &ast.Program{
+		Statements: []ast.Statement{
+			&ast.ExpressionStatement{
+				Token: token.Token{Type: token.IDENT, Literal: "a"},
+			},
+			&ast.ExpressionStatement{
+				Token: token.Token{Type: token.IDENT, Literal: "b"},
+			},
+		},
+	}
+	result := Eval(program)
+	if result != NULL {
+		t.Errorf("expected NULL, got %v", result)
+	}
+}

@@ -1,6 +1,7 @@
 package native
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -538,6 +539,22 @@ func TestMakeFullStackHandler(t *testing.T) {
 	}
 	if result[1].AsInteger() != 42 {
 		t.Errorf("expected 42, got %d", result[1].AsInteger())
+	}
+}
+
+func TestMakeFullStackHandlerError(t *testing.T) {
+	r, err := engine.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+		return nil, fmt.Errorf("test error")
+	}
+	handler := makeFullStackHandler(r, inner)
+
+	_, herr := handler(nil, nil)
+	if herr == nil {
+		t.Fatal("expected error")
 	}
 }
 
