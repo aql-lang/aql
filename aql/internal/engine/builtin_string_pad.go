@@ -14,6 +14,12 @@ func registerPad(r *Registry) {
 		if opts.fill == "" {
 			opts.fill = " "
 		}
+		// Default side for pad is "right", not "both" from parseStrOpts.
+		if m := args[2].AsMap(); m != nil {
+			if _, ok := m.Get("side"); !ok {
+				opts.side = "right"
+			}
+		}
 		return doPad(args[0].AsString(), args[1].AsInteger(), opts)
 	}
 

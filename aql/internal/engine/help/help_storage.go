@@ -8,7 +8,10 @@ func init() {
 		Description: "Stores the second value under the key derived from the first value. " +
 			"The key is typically a string or atom.",
 		Examples: []string{
-			`x 42 set     => (stores 42 under key "x")`,
+			`"x" 42 set "x" get            => 42`,
+			`("n" "Alice" set) "n" get     => 'Alice'`,
+			`("a" 1 set) ("b" 2 set) "a" get => 1`,
+			`"flag" true set "flag" get     => true`,
 		},
 	})
 
@@ -18,20 +21,10 @@ func init() {
 		Signatures: []string{"[any] -> [any]"},
 		Description: "Retrieves the value stored under the given key. Returns None if the key does not exist.",
 		Examples: []string{
-			`x get        => 42 (if previously set)`,
-		},
-	})
-
-	register(&Entry{
-		Word:    "context",
-		Summary: "Access or set values in the current execution context.",
-		Signatures: []string{
-			"[map] -> [map]",
-		},
-		Description: "Provides access to the current execution context. Context values are " +
-			"scoped and inherited by child contexts.",
-		Examples: []string{
-			`context`,
+			`"x" 42 set "x" get            => 42`,
+			`"a" 1 set "a" get             => 1`,
+			`"flag" true set "flag" get     => true`,
+			`"x" 10 set "x" 20 set "x" get => 20`,
 		},
 	})
 
@@ -42,23 +35,30 @@ func init() {
 			"[map atom] -> [any]",
 			"[map string] -> [any]",
 		},
-		Description: "Retrieves the value of a field from a map. Can be written with dot " +
-			"syntax: .fieldname is shorthand for \"fieldname\" dot.",
+		Description: "Retrieves the value of a field from a map. Dot syntax shorthand: " +
+			".fieldname is equivalent to \"fieldname\" dot.",
 		Examples: []string{
-			`{name: "Alice"} .name   => "Alice"`,
+			`{name: "Alice" age: 30} .name  => 'Alice'`,
+			`{name: "Alice" age: 30} .age   => 30`,
+			`{x: 1 y: 2} .x                => 1`,
+			`{flag: true} .flag             => true`,
 		},
 	})
 
 	register(&Entry{
-		Word:    "dotr",
-		Summary: "Access a field in a map (reversed argument order).",
+		Word:    "context",
+		Summary: "Dispatch context set or context get for scoped storage.",
 		Signatures: []string{
-			"[atom map] -> [any]",
-			"[string map] -> [any]",
+			"[word] -> []",
 		},
-		Description: "Same as dot but with reversed argument order. Also available as \"!.\".",
+		Description: "Dispatches to context-set or context-get. Use 'context set key value' " +
+			"to store a value, and 'context get key' to retrieve it. Context values are " +
+			"scoped to the current execution context.",
 		Examples: []string{
-			`name {name: "Alice"} dotr   => "Alice"`,
+			`context set "x" 42 context get "x"       => 42`,
+			`context set "a" 10 context get "a"        => 10`,
+			`context set "flag" true context get "flag" => true`,
+			`context get "missing"                      => None`,
 		},
 	})
 }
