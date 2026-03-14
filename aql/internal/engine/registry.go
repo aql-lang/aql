@@ -404,6 +404,141 @@ func registerBuiltins(r *Registry) {
 		return b, nil
 	})
 
+	// pow: integer exponentiation [int, int] -> [int]
+	registerBinaryIntOp(r, "pow", 2, func(a, b int64) (int64, error) {
+		if b < 0 {
+			return 0, fmt.Errorf("pow: negative exponent %d", b)
+		}
+		result := int64(1)
+		base := a
+		exp := b
+		for exp > 0 {
+			if exp%2 == 1 {
+				result *= base
+			}
+			base *= base
+			exp /= 2
+		}
+		return result, nil
+	})
+	// pow: decimal exponentiation
+	registerBinaryNumOp(r, "pow", 2, func(a, b float64) (float64, error) {
+		return math.Pow(a, b), nil
+	})
+
+	// sign: [int] -> [int] returns -1, 0, or 1
+	r.Register("sign", Signature{
+		Args: []Type{TInteger},
+		Handler: func(args []Value) ([]Value, error) {
+			v := args[0].AsInteger()
+			switch {
+			case v < 0:
+				return []Value{NewInteger(-1)}, nil
+			case v > 0:
+				return []Value{NewInteger(1)}, nil
+			default:
+				return []Value{NewInteger(0)}, nil
+			}
+		},
+	})
+	// sign: [decimal] -> [int]
+	r.Register("sign", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			v := args[0].AsDecimal()
+			switch {
+			case v < 0:
+				return []Value{NewInteger(-1)}, nil
+			case v > 0:
+				return []Value{NewInteger(1)}, nil
+			default:
+				return []Value{NewInteger(0)}, nil
+			}
+		},
+	})
+
+	// Rounding: decimal -> integer
+	r.Register("ceil", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(int64(math.Ceil(args[0].AsDecimal())))}, nil
+		},
+	})
+	r.Register("floor", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(int64(math.Floor(args[0].AsDecimal())))}, nil
+		},
+	})
+	r.Register("round", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(int64(math.Round(args[0].AsDecimal())))}, nil
+		},
+	})
+	r.Register("trunc", Signature{
+		Args: []Type{TDecimal},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewInteger(int64(math.Trunc(args[0].AsDecimal())))}, nil
+		},
+	})
+
+	// Roots: number -> decimal
+	registerUnaryNumOp(r, "sqrt", func(x float64) float64 { return math.Sqrt(x) })
+	registerUnaryNumOp(r, "cbrt", func(x float64) float64 { return math.Cbrt(x) })
+
+	// Exponential/logarithmic: number -> decimal
+	registerUnaryNumOp(r, "exp", func(x float64) float64 { return math.Exp(x) })
+	registerUnaryNumOp(r, "log", func(x float64) float64 { return math.Log(x) })
+	registerUnaryNumOp(r, "log2", func(x float64) float64 { return math.Log2(x) })
+	registerUnaryNumOp(r, "log10", func(x float64) float64 { return math.Log10(x) })
+
+	// Trigonometric: number -> decimal
+	registerUnaryNumOp(r, "sin", func(x float64) float64 { return math.Sin(x) })
+	registerUnaryNumOp(r, "cos", func(x float64) float64 { return math.Cos(x) })
+	registerUnaryNumOp(r, "tan", func(x float64) float64 { return math.Tan(x) })
+	registerUnaryNumOp(r, "asin", func(x float64) float64 { return math.Asin(x) })
+	registerUnaryNumOp(r, "acos", func(x float64) float64 { return math.Acos(x) })
+	registerUnaryNumOp(r, "atan", func(x float64) float64 { return math.Atan(x) })
+
+	// atan2, hypot: [number, number] -> decimal
+	registerBinaryNumOp(r, "atan2", 2, func(a, b float64) (float64, error) {
+		return math.Atan2(a, b), nil
+	})
+	registerBinaryNumOp(r, "hypot", 2, func(a, b float64) (float64, error) {
+		return math.Hypot(a, b), nil
+	})
+	// Also register [int, int] overloads for atan2/hypot so they work without explicit decimal args.
+	r.Register("atan2", Signature{
+		Args:       []Type{TInteger, TInteger},
+		Precedence: 2,
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(math.Atan2(float64(args[0].AsInteger()), float64(args[1].AsInteger())))}, nil
+		},
+	})
+	r.Register("hypot", Signature{
+		Args:       []Type{TInteger, TInteger},
+		Precedence: 2,
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(math.Hypot(float64(args[0].AsInteger()), float64(args[1].AsInteger())))}, nil
+		},
+	})
+
+	// Math constants (zero-arg, prefix-only).
+	// Named with "math-" prefix to avoid colliding with user-defined words.
+	r.RegisterPrefixOnly("math-pi", Signature{
+		Args: []Type{},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(math.Pi)}, nil
+		},
+	})
+	r.RegisterPrefixOnly("math-e", Signature{
+		Args: []Type{},
+		Handler: func(args []Value) ([]Value, error) {
+			return []Value{NewDecimal(math.E)}, nil
+		},
+	})
+
 	// Boolean: binary ops have Args:[boolean, boolean] with suffix precedence.
 	// Precedence: or/xor/implies=1, and/nand=2 (higher binds tighter).
 	// not is unary with suffix precedence and no precedence level.
@@ -777,6 +912,22 @@ func registerBinaryNumOp(r *Registry, name string, prec int, op func(a, b float6
 		Args:       []Type{TDecimal, TNumber},
 		Precedence: prec,
 		Handler:    handler,
+	})
+}
+
+// registerUnaryNumOp registers a unary numeric operation with two overloads:
+// [integer] -> [decimal] and [decimal] -> [decimal].
+func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
+	handler := func(args []Value) ([]Value, error) {
+		return []Value{NewDecimal(op(args[0].AsNumber()))}, nil
+	}
+	r.Register(name, Signature{
+		Args:    []Type{TInteger},
+		Handler: handler,
+	})
+	r.Register(name, Signature{
+		Args:    []Type{TDecimal},
+		Handler: handler,
 	})
 }
 
