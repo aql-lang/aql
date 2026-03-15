@@ -925,7 +925,7 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 		t.Fatal(err)
 	}
 	// def catter fn [[integer string] [string] [add]] end
-	// Case: [|] -> catter "c" 3 -> both args from suffix
+	// Case: [|] -> catter 3 "c" -> both args from suffix (positional match)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Integer"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -933,7 +933,7 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 	})
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
-		NewWord("catter"), NewString("c"), NewInteger(3),
+		NewWord("catter"), NewInteger(3), NewString("c"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
 		t.Errorf("catter 'c' 3 = %v, want string result", result)

@@ -22,20 +22,36 @@ func registerUndef(r *Registry) {
 	)
 
 	// Targeted undef: undef foo fn [[number] [number]]
-	undefFnHandler := func(args []Value) ([]Value, error) {
+	// All-suffix: args=[foo(name), fnUndefInfo]
+	undefFnSuffixHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		undefInfo := args[1].Data.(FnUndefInfo)
+		uninstallFnSigs(r, name, undefInfo)
+		return nil, nil
+	}
+	// Infix: args=[fnUndefInfo, foo(name)]
+	undefFnInfixHandler := func(args []Value) ([]Value, error) {
+		undefInfo := args[0].Data.(FnUndefInfo)
+		name := defName(args[1])
 		uninstallFnSigs(r, name, undefInfo)
 		return nil, nil
 	}
 	r.Register("undef",
 		Signature{
 			Args:    []Type{TWord, TFnUndef},
-			Handler: undefFnHandler,
+			Handler: undefFnSuffixHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TFnUndef},
-			Handler: undefFnHandler,
+			Handler: undefFnSuffixHandler,
+		},
+		Signature{
+			Args:    []Type{TFnUndef, TWord},
+			Handler: undefFnInfixHandler,
+		},
+		Signature{
+			Args:    []Type{TFnUndef, TString},
+			Handler: undefFnInfixHandler,
 		},
 	)
 }

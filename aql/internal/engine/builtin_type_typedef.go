@@ -3,11 +3,24 @@ package engine
 import "fmt"
 
 func registerTypeDef(r *Registry) {
-	typeHandler := func(args []Value) ([]Value, error) {
+	// All-suffix handler: "type foo number" → args=[foo(name), number(body)]
+	typeSuffixHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
 
-		// Validate that the body is a type-like value.
+		if !isTypeValue(body) {
+			return nil, fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
+		}
+
+		installDef(r, name, body)
+		return nil, nil
+	}
+
+	// Infix handler: "number type foo" → args=[number(body), foo(name)]
+	typeInfixHandler := func(args []Value) ([]Value, error) {
+		body := args[0]
+		name := defName(args[1])
+
 		if !isTypeValue(body) {
 			return nil, fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
 		}
@@ -19,11 +32,19 @@ func registerTypeDef(r *Registry) {
 	r.Register("type",
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: typeHandler,
+			Handler: typeSuffixHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: typeHandler,
+			Handler: typeSuffixHandler,
+		},
+		Signature{
+			Args:    []Type{TAny, TWord},
+			Handler: typeInfixHandler,
+		},
+		Signature{
+			Args:    []Type{TAny, TString},
+			Handler: typeInfixHandler,
 		},
 	)
 }

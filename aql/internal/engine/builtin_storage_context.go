@@ -10,13 +10,25 @@ import "fmt"
 //	context get "key"         — retrieve value (returns none if key not found)
 //	context get foo           — retrieve with word key
 func registerContext(r *Registry) {
-	ctxSetHandler := func(args []Value) ([]Value, error) {
+	// All-suffix handler: "context-set key value" → args=[key, value]
+	ctxSetSuffixHandler := func(args []Value) ([]Value, error) {
 		ctx := r.Context()
 		if ctx == nil {
 			return nil, fmt.Errorf("context: no active context")
 		}
 		key := storeKey(args[0])
 		ctx[key] = args[1]
+		return nil, nil
+	}
+
+	// Infix handler: "value context-set key" → args=[value, key]
+	ctxSetInfixHandler := func(args []Value) ([]Value, error) {
+		ctx := r.Context()
+		if ctx == nil {
+			return nil, fmt.Errorf("context: no active context")
+		}
+		key := storeKey(args[1])
+		ctx[key] = args[0]
 		return nil, nil
 	}
 
@@ -35,9 +47,14 @@ func registerContext(r *Registry) {
 
 	// Register "context-set" and "context-get" as the implementation words.
 	r.Register("context-set",
-		Signature{Args: []Type{TString, TAny}, Handler: ctxSetHandler},
-		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetHandler},
-		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetHandler},
+		// All-suffix: key first, value second
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetSuffixHandler},
+		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetSuffixHandler},
+		// Infix: value first (prefix), key second (suffix)
+		Signature{Args: []Type{TAny, TString}, Handler: ctxSetInfixHandler},
+		Signature{Args: []Type{TAny, TWord}, Handler: ctxSetInfixHandler},
+		// Fallback
+		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetSuffixHandler},
 	)
 
 	r.Register("context-get",

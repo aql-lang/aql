@@ -389,11 +389,11 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// as: [atom(suffix), table/query(prefix)] -> [query-builder with alias]
+	// as: [table/query(prefix), atom(suffix)] -> [query-builder with alias]
 	// Usage: from people as p
 	asHandler := func(args []Value) ([]Value, error) {
-		alias := args[0].AsAtom()
-		table := args[1]
+		table := args[0]
+		alias := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -405,15 +405,28 @@ func registerQuery(r *Registry) {
 
 	r.Register("as",
 		Signature{
-			Args:       []Type{TAtom, TList},
+			Args:       []Type{TList, TAtom},
 			Precedence: 2,
 			Handler:    asHandler,
 		},
 	)
 
-	// select: [atom, list] -> [table]  (select * from ...)
+	// select: [list, atom] -> [table]  (select * from ...)
 	// select: [list, list] -> [table]  (select [a, b] from ...)
-	selectStarHandler := func(args []Value) ([]Value, error) {
+	// Infix star handler: "from products select star" → args=[table, star]
+	selectStarInfixHandler := func(args []Value) ([]Value, error) {
+		table := args[0]
+		colSpec := args[1]
+
+		if colSpec.AsAtom() != "*" {
+			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
+		}
+
+		return doSelect(r, nil, table)
+	}
+
+	// Suffix star handler: "select star from products" → args=[star, table]
+	selectStarSuffixHandler := func(args []Value) ([]Value, error) {
 		colSpec := args[0]
 		table := args[1]
 
@@ -443,10 +456,17 @@ func registerQuery(r *Registry) {
 	}
 
 	r.Register("select",
+		// Suffix: "select star from ..." → [TAtom, TList]
 		Signature{
 			Args:       []Type{TAtom, TList},
 			Precedence: 1,
-			Handler:    selectStarHandler,
+			Handler:    selectStarSuffixHandler,
+		},
+		// Infix: "from ... select star" → [TList, TAtom]
+		Signature{
+			Args:       []Type{TList, TAtom},
+			Precedence: 1,
+			Handler:    selectStarInfixHandler,
 		},
 		Signature{
 			Args:       []Type{TList, TList},
@@ -506,8 +526,8 @@ func registerQuery(r *Registry) {
 	}
 
 	orderAtomHandler := func(args []Value) ([]Value, error) {
-		col := args[0]
-		table := args[1]
+		table := args[0]
+		col := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -524,7 +544,7 @@ func registerQuery(r *Registry) {
 			Handler:    orderListHandler,
 		},
 		Signature{
-			Args:       []Type{TAtom, TList},
+			Args:       []Type{TList, TAtom},
 			Precedence: 2,
 			Handler:    orderAtomHandler,
 		},
@@ -546,10 +566,10 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// limit: [integer(suffix), table/query(prefix)] -> [query-builder]
+	// limit: [table/query(prefix), integer(suffix)] -> [query-builder]
 	limitHandler := func(args []Value) ([]Value, error) {
-		n := args[0].AsInteger()
-		table := args[1]
+		table := args[0]
+		n := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -561,16 +581,16 @@ func registerQuery(r *Registry) {
 
 	r.Register("limit",
 		Signature{
-			Args:       []Type{TInteger, TList},
+			Args:       []Type{TList, TInteger},
 			Precedence: 2,
 			Handler:    limitHandler,
 		},
 	)
 
-	// offset: [integer(suffix), table/query(prefix)] -> [query-builder]
+	// offset: [table/query(prefix), integer(suffix)] -> [query-builder]
 	offsetHandler := func(args []Value) ([]Value, error) {
-		n := args[0].AsInteger()
-		table := args[1]
+		table := args[0]
+		n := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -582,7 +602,7 @@ func registerQuery(r *Registry) {
 
 	r.Register("offset",
 		Signature{
-			Args:       []Type{TInteger, TList},
+			Args:       []Type{TList, TInteger},
 			Precedence: 2,
 			Handler:    offsetHandler,
 		},
@@ -630,8 +650,8 @@ func registerQuery(r *Registry) {
 	}
 
 	groupAtomHandler := func(args []Value) ([]Value, error) {
-		col := args[0]
-		table := args[1]
+		table := args[0]
+		col := args[1]
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -648,7 +668,7 @@ func registerQuery(r *Registry) {
 			Handler:    groupListHandler,
 		},
 		Signature{
-			Args:       []Type{TAtom, TList},
+			Args:       []Type{TList, TAtom},
 			Precedence: 2,
 			Handler:    groupAtomHandler,
 		},
@@ -775,8 +795,8 @@ func registerQuery(r *Registry) {
 // registerJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
 func registerJoinWord(r *Registry, name string, joinType string) {
 	handler := func(args []Value) ([]Value, error) {
-		tableName := args[0].AsAtom()
-		table := args[1]
+		table := args[0]
+		tableName := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -791,7 +811,7 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 
 	r.Register(name,
 		Signature{
-			Args:       []Type{TAtom, TList},
+			Args:       []Type{TList, TAtom},
 			Precedence: 2,
 			Handler:    handler,
 		},

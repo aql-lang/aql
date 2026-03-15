@@ -2,19 +2,6 @@ package engine
 
 import "testing"
 
-func TestStableTypeAssignment_Deterministic(t *testing.T) {
-	vals := []Value{NewInteger(1), NewString("x")}
-	types := []Type{TScalar, TInteger}
-
-	assign, ok := stableTypeAssignment(vals, types)
-	if !ok {
-		t.Fatal("expected assignment")
-	}
-	if assign[0] != 1 || assign[1] != 0 {
-		t.Fatalf("unexpected assignment: %#v", assign)
-	}
-}
-
 func TestPlannerPrefixCoverage(t *testing.T) {
 	resolved := []Value{NewInteger(1), NewString("a")}
 	count, used := plannerPrefixCoverage([]Type{TInteger, TString}, resolved)
@@ -87,14 +74,14 @@ func TestPlannerBestSigForForward_NoCandidates(t *testing.T) {
 	}
 }
 
-func TestStableSubsetTypeAssignment_PartialPrefix(t *testing.T) {
-	vals := []Value{NewInteger(2)}
-	types := []Type{TInteger, TInteger}
-	assign, ok := stableSubsetTypeAssignment(vals, types)
-	if !ok {
-		t.Fatal("expected subset assignment")
+func TestPlannerPrefixCoverage_PartialPositional(t *testing.T) {
+	// One integer value should positionally match first arg of [integer, integer].
+	resolved := []Value{NewInteger(2)}
+	count, used := plannerPrefixCoverage([]Type{TInteger, TInteger}, resolved)
+	if count != 1 {
+		t.Fatalf("expected 1 prefix value, got %d", count)
 	}
-	if len(assign) != 1 {
-		t.Fatalf("unexpected assignment size: %#v", assign)
+	if !used[0] || used[1] {
+		t.Fatalf("expected only first arg slot used, got %#v", used)
 	}
 }

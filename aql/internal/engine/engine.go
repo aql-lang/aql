@@ -356,7 +356,7 @@ func (e *Engine) stepWord(val Value) error {
 							suffixNeeded = 1
 						}
 						e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
-						return e.insertForward(w, bestSig, suffixNeeded)
+						return e.insertForward(w, bestSig, suffixNeeded, prefixCount)
 					}
 				}
 			}
@@ -374,7 +374,7 @@ func (e *Engine) stepWord(val Value) error {
 				suffixNeeded = len(bestSig.Args)
 			}
 			e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
-			return e.insertForward(w, bestSig, suffixNeeded)
+			return e.insertForward(w, bestSig, suffixNeeded, prefixCount)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
@@ -502,10 +502,15 @@ func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
 
 // insertForward handles a suffix-precedence word by placing a forward
 // primitive after the word on the stack.
-func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int) error {
+func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int, prefixArgs ...int) error {
+	pArgs := 0
+	if len(prefixArgs) > 0 {
+		pArgs = prefixArgs[0]
+	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
 		ExpectedArgs: suffixNeeded,
+		PrefixArgs:   pArgs,
 		FuncIndex:    e.pointer,
 		Precedence:   sig.Precedence,
 		Sig:          sig,
@@ -544,7 +549,7 @@ func (e *Engine) stepLiteral() error {
 	// Check if the value matches ANY remaining (uncollected) arg type.
 	// Suffix collection is flexible: the value can satisfy any arg slot,
 	// with final ordering handled by flexibleMatch during prefix retry.
-	if fwd.CollectedArgs < len(fwd.Sig.Args) {
+	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
 		matchesAny := false
 		for i := 0; i < len(fwd.Sig.Args); i++ {
@@ -610,10 +615,10 @@ func (e *Engine) stepLiteral() error {
 		fwdIdx--
 	}
 
-	// Insert the suffix value right before the function word (on top of the
-	// stack relative to prefix args). This means after collection, the stack is:
-	// [..., prefix_args..., suffix0, suffix1, ..., func_word, fwd, ...]
-	// The word retries as prefix with args in their natural order.
+	// Insert the suffix value right before the function word. Suffix values
+	// are appended in collection order (first collected = deepest).
+	// After collection the stack is:
+	// [..., prefix_args..., suffix0, suffix1, ..., func_word]
 	insertIdx := funcIdx
 
 	e.stackInsert(insertIdx, val)
@@ -687,19 +692,10 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 		if len(sig.Args) != fwd.CollectedArgs {
 			continue
 		}
-		// Flexible match: each collected type must match some sig arg.
-		used := make([]bool, len(sig.Args))
+		// Positional match: collectedTypes[i] must match sig.Args[i].
 		allMatch := true
-		for _, ct := range collectedTypes {
-			found := false
-			for j := range sig.Args {
-				if !used[j] && ct.Matches(sig.Args[j]) {
-					used[j] = true
-					found = true
-					break
-				}
-			}
-			if !found {
+		for i := range sig.Args {
+			if !collectedTypes[i].Matches(sig.Args[i]) {
 				allMatch = false
 				break
 			}
@@ -715,7 +711,7 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 
 	// A shorter sig is satisfied. Check whether the next token on the
 	// stack could produce the type needed for the longer sig's next slot.
-	nextArgType := fwd.Sig.Args[fwd.CollectedArgs]
+	nextArgType := fwd.Sig.Args[fwd.PrefixArgs+fwd.CollectedArgs]
 	peekIdx := fwdIdx + 1
 	if peekIdx >= len(e.stack) {
 		return true // no more tokens → resolve with shorter sig
@@ -1462,7 +1458,8 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			nextIdx := fwd.CollectedArgs
+			// Suffix args start after prefix-consumed slots in the sig.
+			nextIdx := fwd.PrefixArgs + fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TWord)
 			}
@@ -1481,7 +1478,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			nextIdx := fwd.CollectedArgs
+			nextIdx := fwd.PrefixArgs + fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TFunction)
 			}
