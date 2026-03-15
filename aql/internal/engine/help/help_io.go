@@ -9,8 +9,10 @@ func init() {
 			"followed by a newline. Strings are printed as-is; maps and lists as JSON-like text; " +
 			"tables are formatted with column headers.",
 		Examples: []string{
-			`"hello" print        => (prints: hello)`,
-			`42 print             => (prints: 42)`,
+			`"hello" print                  (prints: hello)`,
+			`42 print                       (prints: 42)`,
+			`[1 2 3] print                  (prints: [1, 2, 3])`,
+			`{name: "Alice"} print          (prints: {"name": "Alice"})`,
 		},
 	})
 
@@ -20,7 +22,10 @@ func init() {
 		Signatures: []string{"[any] -> []"},
 		Description: "Same as print but does not append a newline at the end.",
 		Examples: []string{
-			`"hello" printstr "world" print   => (prints: helloworld)`,
+			`"hello" printstr               (prints: hello, no newline)`,
+			`42 printstr                    (prints: 42, no newline)`,
+			`"a" printstr "b" print         (prints: ab)`,
+			`1 printstr 2 print             (prints: 12)`,
 		},
 	})
 
@@ -35,9 +40,10 @@ func init() {
 			"file extension (.csv, .tsv, .json, .jsonic, .txt) or can be set via {fmt: \"...\"}. " +
 			"CSV/TSV files are loaded into SQLite-backed tables automatically.",
 		Examples: []string{
-			`"data.csv" read              => (table value)`,
-			`"config.json" read           => (map value)`,
-			`"notes.txt" read             => (string value)`,
+			`"data.csv" read                => (table value)`,
+			`"config.json" read             => (map value)`,
+			`"notes.txt" read               => (string value)`,
+			`stdin read                     => (reads from standard input)`,
 		},
 		Notes: []string{
 			"Options: enc, fmt, nl.",
@@ -56,7 +62,10 @@ func init() {
 		Description: "Writes content to the file at path. Returns the path. " +
 			"Use {mode: \"append\"} to append instead of overwriting.",
 		Examples: []string{
-			`"output.txt" "hello" write`,
+			`"out.txt" "hello" write        => 'out.txt'`,
+			`stdout "hello" write           (prints: hello)`,
+			`stderr "error!" write          (prints to stderr)`,
+			`"log.txt" "line" {mode: "append"} write => 'log.txt'`,
 		},
 		Notes: []string{
 			"Options: enc, fmt, mode (write/append), nl.",
@@ -66,34 +75,55 @@ func init() {
 
 	register(&Entry{
 		Word:    "trace",
-		Summary: "Print a debug trace of a value without consuming it.",
-		Signatures: []string{"[any] -> [any]"},
-		Description: "Prints a debug representation of the top value to stderr, " +
-			"then leaves the value on the stack.",
-		Examples: []string{`42 trace => 42 (and prints debug info)`},
+		Summary: "Evaluate a list with step-by-step tracing output.",
+		Signatures: []string{"[list] -> [any...]"},
+		Description: "Evaluates a list as code (like do) and prints a color-coded trace showing " +
+			"the stack state at each step. Shows resolved vs pending values, pointer position, " +
+			"and annotations for dispatch decisions (suffix/prefix, precedence, collection).",
+		Examples: []string{
+			`trace [1 add 2]                => 3 (prints step-by-step stack trace)`,
+			`trace [3 4 mul]                => 12 (traces multiplication)`,
+			`trace ["hello" upper]          => 'HELLO' (traces string op)`,
+			`trace [1 2 3 rot add mul]      => 8 (traces stack operations)`,
+		},
 	})
 
 	register(&Entry{
 		Word:    "stdin",
 		Summary: "Push the stdin path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stdin>\" for use with read.",
-		Examples: []string{`stdin read`},
+		Description: "Pushes the special path \"<stdin>\" for use with read. Prefix-only.",
+		Examples: []string{
+			`stdin read                     => (reads all of standard input)`,
+			`stdin                          => '<stdin>'`,
+			`stdin read trim                => (reads stdin and trims whitespace)`,
+			`stdin read "," split           => (reads stdin and splits by comma)`,
+		},
 	})
 
 	register(&Entry{
 		Word:    "stdout",
 		Summary: "Push the stdout path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stdout>\" for use with write.",
-		Examples: []string{`stdout "hello" write`},
+		Description: "Pushes the special path \"<stdout>\" for use with write. Prefix-only.",
+		Examples: []string{
+			`stdout "hello" write           (writes hello to stdout)`,
+			`stdout                         => '<stdout>'`,
+			`stdout "line1\nline2" write     (writes two lines to stdout)`,
+			`stdout 42 String convert write (writes 42 to stdout)`,
+		},
 	})
 
 	register(&Entry{
 		Word:    "stderr",
 		Summary: "Push the stderr path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stderr>\" for use with write.",
-		Examples: []string{`stderr "error!" write`},
+		Description: "Pushes the special path \"<stderr>\" for use with write. Prefix-only.",
+		Examples: []string{
+			`stderr "error!" write          (writes to stderr)`,
+			`stderr                         => '<stderr>'`,
+			`stderr "warning: x" write      (writes warning to stderr)`,
+			`stderr "debug\n" write         (writes debug line to stderr)`,
+		},
 	})
 }

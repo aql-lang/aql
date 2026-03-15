@@ -15,8 +15,8 @@ import (
 //	set foo a:b:1 foo.a.b  => 1
 func registerDot(r *Registry) {
 	dotMapAtomHandler := func(args []Value) ([]Value, error) {
-		key := args[0].AsAtom()
-		m := args[1].AsMap()
+		m := args[0].AsMap()
+		key := args[1].AsAtom()
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -25,8 +25,8 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapStringHandler := func(args []Value) ([]Value, error) {
-		key := args[0].AsString()
-		m := args[1].AsMap()
+		m := args[0].AsMap()
+		key := args[1].AsString()
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -35,8 +35,8 @@ func registerDot(r *Registry) {
 	}
 
 	dotListHandler := func(args []Value) ([]Value, error) {
-		idx := int(args[0].AsInteger())
-		list := args[1].AsList()
+		list := args[0].AsList()
+		idx := int(args[1].AsInteger())
 		if idx < 0 || idx >= len(list) {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
@@ -44,8 +44,8 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
-		key := strconv.FormatInt(args[0].AsInteger(), 10)
-		m := args[1].AsMap()
+		m := args[0].AsMap()
+		key := strconv.FormatInt(args[1].AsInteger(), 10)
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -58,11 +58,11 @@ func registerDot(r *Registry) {
 	}
 
 	sigs := []Signature{
-		{Args: []Type{TAtom, TMap}, Handler: dotMapAtomHandler},
-		{Args: []Type{TString, TMap}, Handler: dotMapStringHandler},
-		{Args: []Type{TInteger, TList}, Handler: dotListHandler},
-		{Args: []Type{TInteger, TMap}, Handler: dotMapIntegerHandler},
-		{Args: []Type{TAny, TNone}, Handler: dotNoneHandler},
+		{Args: []Type{TMap, TAtom}, Handler: dotMapAtomHandler},
+		{Args: []Type{TMap, TString}, Handler: dotMapStringHandler},
+		{Args: []Type{TList, TInteger}, Handler: dotListHandler},
+		{Args: []Type{TMap, TInteger}, Handler: dotMapIntegerHandler},
+		{Args: []Type{TNone, TAny}, Handler: dotNoneHandler},
 	}
 
 	r.Register("dot", sigs...)

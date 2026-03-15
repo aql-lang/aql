@@ -34,7 +34,8 @@ func defPrefixOnly(v Value) bool {
 // name(TWord), pushes it, then prefix sees [body, name] and flexible match
 // reorders to [name, body] matching [TWord, TAny].
 func registerDef(r *Registry) {
-	defHandler := func(args []Value) ([]Value, error) {
+	// All-suffix handler: "def foo 42 end" → args=[foo(name), 42(body)]
+	defSuffixHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		prefixOnly := defPrefixOnly(args[0])
 		body := args[1]
@@ -42,16 +43,33 @@ func registerDef(r *Registry) {
 		return nil, nil
 	}
 
+	// Infix handler: "42 def foo" → args=[42(body), foo(name)]
+	defInfixHandler := func(args []Value) ([]Value, error) {
+		body := args[0]
+		name := defName(args[1])
+		prefixOnly := defPrefixOnly(args[1])
+		installDef(r, name, body, prefixOnly)
+		return nil, nil
+	}
+
 	r.Register("def",
-		// Args:[TWord, TAny] — word name
+		// All-suffix: name first, body second
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: defHandler,
+			Handler: defSuffixHandler,
 		},
-		// Args:[TString, TAny] — string name
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: defHandler,
+			Handler: defSuffixHandler,
+		},
+		// Infix: body first (prefix), name second (suffix)
+		Signature{
+			Args:    []Type{TAny, TWord},
+			Handler: defInfixHandler,
+		},
+		Signature{
+			Args:    []Type{TAny, TString},
+			Handler: defInfixHandler,
 		},
 	)
 }

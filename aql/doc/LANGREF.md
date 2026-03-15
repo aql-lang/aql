@@ -378,28 +378,268 @@ lower "ABC"         => 'abc'
 lower B             => 'b'
 ```
 
+#### `concat`
+
+Concatenate list elements into a single string. Each element is
+converted to its string representation. Use an options map to set a
+separator or to skip empty/nullish parts.
+
+*Signatures:* `[list] -> [string]`, `[list, map] -> [string]`
+*Precedence:* suffix
+
+```
+["a","b","c"] concat                          => 'abc'
+["a","b","c"] {sep:", "} concat               => 'a, b, c'
+[1,2,3] {sep:"-"} concat                      => '1-2-3'
+["a","","c"] {skipEmpty:true} concat           => 'ac'
+```
+
+Options: `sep` (string), `skipEmpty` (bool), `skipNullish` (bool).
+
+#### `split`
+
+Split a string into a list of parts by a separator.
+
+*Signatures:* `[string, string] -> [list]`, `[string, string, map] -> [list]`
+*Precedence:* suffix
+
+```
+"a,b,c" "," split                             => ['a','b','c']
+"hello world" " " split                       => ['hello','world']
+"a,,b" "," {keepEmpty:true} split             => ['a','','b']
+"hello" "" split                               => ['h','e','l','l','o']
+" a : b : c " ":" {trimParts:true} split       => ['a','b','c']
+```
+
+Options: `cs`, `mode`, `lim`, `keepEmpty`, `trimParts`, `u`, `norm`.
+
+#### `trim`
+
+Trim whitespace or specific characters from a string.
+
+*Signatures:*
+- `[string] -> [string]`
+- `[string, map] -> [string]`
+- `[atom] -> [string]`
+- `[atom, map] -> [string]`
+
+*Precedence:* suffix
+
+```
+"  hello  " trim                               => 'hello'
+"xxhelloxx" {chars:"x"} trim                   => 'hello'
+"  hello  " {side:"left"} trim                 => 'hello  '
+"  hello  " {side:"right"} trim                => '  hello'
+```
+
+Options: `side` (left/right/both), `chars`, `cs`, `u`, `norm`.
+
+#### `contains`
+
+Test whether a string contains a search term.
+
+*Signatures:* `[string, string] -> [boolean]`, `[string, string, map] -> [boolean]`
+*Precedence:* suffix
+
+```
+"hello world" "world" contains                           => true
+"hello world" "xyz" contains                             => false
+"Hello" "hello" {cs:"insensitive"} contains              => true
+"hello world" "hello" {anchored:"start"} contains        => true
+"hello world" "world" {anchored:"end"} contains          => true
+```
+
+Options: `cs`, `mode`, `anchored`, `wholeWord`, `u`, `norm`.
+
+#### `indexof`
+
+Find the byte index of a search term in a string. Returns -1 if not
+found.
+
+*Signatures:* `[string, string] -> [integer]`, `[string, string, map] -> [integer]`
+*Precedence:* suffix
+
+```
+"hello world" "world" indexof                            => 6
+"hello world" "xyz" indexof                              => -1
+"abcabc" "abc" {occ:"last"} indexof                      => 3
+"HELLO" "hello" {cs:"insensitive"} indexof               => 0
+```
+
+Options: `cs`, `mode`, `from`, `occ` (first/last), `u`, `norm`.
+
+#### `replace`
+
+Replace occurrences of a search term in a string.
+
+*Signatures:*
+- `[string, string, string] -> [string]`
+- `[string, string, string, map] -> [string]`
+
+*Precedence:* suffix
+
+```
+"hello world" "world" "earth" replace                    => 'hello earth'
+"aaa" "a" "b" {scope:"all"} replace                      => 'bbb'
+"Hello" "hello" "hi" {cs:"insensitive"} replace          => 'hi'
+"aaa" "a" "b" {scope:"all",count:2} replace              => 'bba'
+```
+
+Options: `cs`, `mode`, `scope` (first/all), `from`, `count`, `u`, `norm`.
+
+#### `slice`
+
+Extract a substring by numeric position.
+
+*Signatures:*
+- `[string, integer] -> [string]`
+- `[string, integer, integer] -> [string]`
+- `[string, integer, map] -> [string]`
+- `[string, integer, integer, map] -> [string]`
+
+*Precedence:* suffix
+
+```
+"hello" 0 3 slice                                       => 'hel'
+"hello" 2 slice                                         => 'llo'
+"hello" -3 slice                                        => 'llo'
+"hello" 1 -1 slice                                      => 'ell'
+```
+
+Negative indices are Python-style: -1 means one before the end.
+Options: `unit` (code-unit/code-point), `fromEnd`, `u`, `norm`.
+
+#### `changecase`
+
+Apply a casing transformation to a string. Defaults to `"lower"`.
+
+*Signatures:*
+- `[string] -> [string]`
+- `[string, map] -> [string]`
+- `[atom] -> [string]`
+- `[atom, map] -> [string]`
+
+*Precedence:* suffix
+
+```
+"Hello World" changecase                                => 'hello world'
+"hello world" {style:"upper"} changecase                => 'HELLO WORLD'
+"hello world" {style:"title"} changecase                => 'Hello World'
+"hello world" {style:"capitalize"} changecase           => 'Hello world'
+"HELLO WORLD" {style:"sentence"} changecase             => 'Hello world'
+```
+
+Styles: `lower`, `upper`, `capitalize`, `title`, `sentence`, `fold`.
+Options: `style`, `u`, `norm`, `loc`.
+
+#### `normalize`
+
+Normalize Unicode and optionally clean whitespace and line endings.
+
+*Signatures:* `[string] -> [string]`, `[string, map] -> [string]`
+*Precedence:* suffix
+
+```
+"café" normalize                                        => 'café'
+"  hello  " {trim:true} normalize                       => 'hello'
+"a  b   c" {collapseWs:true} normalize                  => 'a b c'
+"hello" {form:"NFD"} normalize                          => 'hello'
+```
+
+Options: `form` (NFC/NFD/NFKC/NFKD), `trim`, `collapseWs`,
+`eol` (preserve/lf/crlf).
+
+#### `repeat`
+
+Repeat a string a fixed number of times.
+
+*Signatures:* `[string, integer] -> [string]`, `[string, integer, map] -> [string]`
+*Precedence:* suffix
+
+```
+"ab" 3 repeat                                           => 'ababab'
+"ha" 3 {sep:" "} repeat                                 => 'ha ha ha'
+"-" 5 repeat                                            => '-----'
+"x" 0 repeat                                            => ''
+```
+
+Options: `sep`.
+
+#### `pad`
+
+Pad a string to a desired length. Defaults to right-padding with
+spaces.
+
+*Signatures:* `[string, integer] -> [string]`, `[string, integer, map] -> [string]`
+*Precedence:* suffix
+
+```
+"hi" 5 pad                                              => 'hi   '
+"hi" 5 {side:"left"} pad                                => '   hi'
+"hi" 6 {side:"both"} pad                                => '  hi  '
+"hi" 5 {fill:"."} pad                                   => 'hi...'
+"hi" 5 {side:"left",fill:"0"} pad                       => '000hi'
+"hello world" 5 {trunc:true} pad                        => 'hello'
+```
+
+Options: `side` (left/right/both), `fill`, `trunc`.
+
+#### `match`
+
+Match a pattern and return a structured result map with fields: `ok`
+(boolean), `ms` (list of match maps), `fst` (first match), `lst`
+(last match), `n` (count). Each match map has `m` (matched text), `i`
+(start index), `e` (end index).
+
+*Signatures:* `[string, string] -> [map]`, `[string, string, map] -> [map]`
+*Precedence:* suffix
+
+```
+"hello world" "world" match .ok                         => true
+"hello world" "world" match .fst .m                     => 'world'
+"hello world" "xyz" match .ok                           => false
+"abab" "ab" {scope:"all"} match .n                      => 2
+```
+
+Options: `cs`, `mode`, `scope` (first/all), `u`, `norm`.
+
+#### `escape`
+
+Escape a string for safe use in shells and text tools.
+
+*Signatures:* `[string] -> [string]`, `[string, map] -> [string]`
+*Precedence:* suffix
+
+```
+"hello world" escape                                    => 'hello\ world'
+"a.b" {tgt:"sed"} escape                                => 'a\.b'
+"a*b" {tgt:"grep"} escape                               => 'a\*b'
+```
+
+Options: `tgt` (sh/bash/sed/awk/grep), `quote` (none/single/double).
+
 ### Arithmetic Words
 
-Arithmetic words take two integers and produce one integer.
-
-*Signature:* `[integer, integer] -> [integer]`
+Arithmetic words operate on integers and decimals. When both operands
+are integers the result is an integer; when either is a decimal the
+result is a decimal.
 
 #### `add`
 
-Addition for integers; string concatenation when at least one argument
-is a string. Non-string scalars are converted to their string
-representation before concatenation. Precedence 1.
+Addition for numbers; string concatenation when at least one argument
+is a non-numeric scalar. Precedence 1.
 
 *Signatures:*
-- `[integer, integer] -> [integer]` — numeric addition
+- `[integer, integer] -> [integer]`
+- `[decimal, decimal] -> [decimal]`
 - `[scalar, scalar] -> [string]` — string concatenation
 
 ```
 1 2 add             => 3
+2.5 1.5 add         => 4
 1 add 2             => 3
 "hello" add " world"    => 'hello world'
 "count: " add 42        => 'count: 42'
-42 add " items"         => '42 items'
 ```
 
 #### `sub`
@@ -407,33 +647,45 @@ representation before concatenation. Precedence 1.
 Subtraction. Precedence 1. The first argument is the minuend, the
 second is the subtrahend.
 
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
+
 ```
 10 3 sub            => 7
 10 sub 3            => 7
+10.5 3.0 sub        => 7.5
 ```
 
 #### `mul`
 
 Multiplication. Precedence 2.
 
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
+
 ```
 4 5 mul             => 20
 4 mul 5             => 20
+2.5 4.0 mul         => 10
 ```
 
 #### `div`
 
-Integer division. Precedence 2. Division by zero is an error.
+Division. Precedence 2. Integer division truncates toward zero.
+Division by zero is an error.
+
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
 ```
 10 3 div            => 3
 10 div 3            => 3
+7.0 2.0 div         => 3.5
 10 div 0            => ERROR: division_by_zero
 ```
 
 #### `mod`
 
 Modulo. Precedence 2. Modulo by zero is an error.
+
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
 ```
 10 3 mod            => 1
@@ -445,31 +697,33 @@ Modulo. Precedence 2. Modulo by zero is an error.
 
 Absolute value (unary).
 
-*Signature:* `[integer] -> [integer]`
+*Signatures:* `[integer] -> [integer]`, `[decimal] -> [decimal]`
 
 ```
 -5 abs              => 5
 5 abs               => 5
 abs -3              => 3
+-2.5 abs            => 2.5
 ```
 
 #### `negate`
 
-Negate an integer (unary).
+Negate a number (unary).
 
-*Signature:* `[integer] -> [integer]`
+*Signatures:* `[integer] -> [integer]`, `[decimal] -> [decimal]`
 
 ```
 5 negate            => -5
 -3 negate           => 3
 negate 7            => -7
+2.5 negate          => -2.5
 ```
 
 #### `min`
 
-Return the smaller of two integers. Precedence 1.
+Return the smaller of two numbers. Precedence 1.
 
-*Signature:* `[integer, integer] -> [integer]`
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
 ```
 3 min 5             => 3
@@ -478,13 +732,298 @@ Return the smaller of two integers. Precedence 1.
 
 #### `max`
 
-Return the larger of two integers. Precedence 1.
+Return the larger of two numbers. Precedence 1.
 
-*Signature:* `[integer, integer] -> [integer]`
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
 ```
 3 max 5             => 5
 5 max 3             => 5
+```
+
+#### `pow`
+
+Raise a number to a power. Precedence 2.
+
+*Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
+
+```
+2 10 pow            => 1024
+3 3 pow             => 27
+5 0 pow             => 1
+10 2 pow            => 100
+```
+
+Negative exponents produce an error for integer `pow`.
+
+#### `sign`
+
+Return the sign of a number: -1 for negative, 0 for zero, 1 for
+positive.
+
+*Signatures:* `[integer] -> [integer]`, `[decimal] -> [decimal]`
+
+```
+-7 sign             => -1
+0 sign              => 0
+42 sign             => 1
+-2.5 sign           => -1
+```
+
+### Rounding Words
+
+#### `ceil`
+
+Round a decimal up to the nearest integer.
+
+*Signature:* `[decimal] -> [integer]`
+
+```
+2.3 ceil            => 3
+2.7 ceil            => 3
+-2.3 ceil           => -2
+-2.7 ceil           => -2
+```
+
+#### `floor`
+
+Round a decimal down to the nearest integer.
+
+*Signature:* `[decimal] -> [integer]`
+
+```
+2.7 floor           => 2
+2.3 floor           => 2
+-2.3 floor          => -3
+-2.7 floor          => -3
+```
+
+#### `round`
+
+Round a decimal to the nearest integer. Ties round away from zero.
+
+*Signature:* `[decimal] -> [integer]`
+
+```
+2.7 round           => 3
+2.3 round           => 2
+2.5 round           => 3
+-2.5 round          => -3
+```
+
+#### `trunc`
+
+Truncate a decimal toward zero, removing the fractional part.
+
+*Signature:* `[decimal] -> [integer]`
+
+```
+2.9 trunc           => 2
+-2.9 trunc          => -2
+0.5 trunc           => 0
+-0.5 trunc          => 0
+```
+
+### Roots, Exponentials, and Logarithms
+
+#### `sqrt`
+
+Compute the square root.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+9 sqrt              => 3
+4 sqrt              => 2
+2 sqrt              => 1.4142135623730951
+0 sqrt              => 0
+```
+
+#### `cbrt`
+
+Compute the cube root.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+27 cbrt             => 3
+8 cbrt              => 2
+1 cbrt              => 1
+0 cbrt              => 0
+```
+
+#### `exp`
+
+Compute *e* raised to a power.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 exp               => 1
+1 exp               => 2.718281828459045
+2 exp               => 7.38905609893065
+-1 exp              => 0.36787944117144233
+```
+
+#### `log`
+
+Compute the natural logarithm (base *e*).
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+1 log               => 0
+math-e log          => 1
+10 log              => 2.302585092994046
+100 log             => 4.605170185988092
+```
+
+#### `log2`
+
+Compute the base-2 logarithm.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+8 log2              => 3
+1 log2              => 0
+1024 log2           => 10
+2 log2              => 1
+```
+
+#### `log10`
+
+Compute the base-10 logarithm.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+100 log10           => 2
+1000 log10          => 3
+1 log10             => 0
+10 log10            => 1
+```
+
+### Trigonometric Words
+
+All trigonometric words work in radians.
+
+#### `sin`
+
+Compute the sine.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 sin               => 0
+1 sin               => 0.8414709848078965
+```
+
+#### `cos`
+
+Compute the cosine.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 cos               => 1
+math-pi cos         => -1
+```
+
+#### `tan`
+
+Compute the tangent.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 tan               => 0
+1 tan               => 1.557407724654902
+```
+
+#### `asin`
+
+Compute the arc sine. Input must be in [-1, 1].
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 asin              => 0
+1 asin              => 1.5707963267948966
+```
+
+#### `acos`
+
+Compute the arc cosine. Input must be in [-1, 1].
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+1 acos              => 0
+0 acos              => 1.5707963267948966
+-1 acos             => 3.141592653589793
+```
+
+#### `atan`
+
+Compute the arc tangent.
+
+*Signatures:* `[integer] -> [decimal]`, `[decimal] -> [decimal]`
+
+```
+0 atan              => 0
+1 atan              => 0.7853981633974483
+```
+
+#### `atan2`
+
+Compute the two-argument arc tangent. Handles quadrant correctly:
+`y x atan2`.
+
+*Signature:* `[number, number] -> [decimal]`
+*Precedence:* 1
+
+```
+1 1 atan2           => 0.7853981633974483
+1 0 atan2           => 1.5707963267948966
+0 1 atan2           => 0
+```
+
+#### `hypot`
+
+Compute the hypotenuse length: `sqrt(x*x + y*y)` without overflow.
+
+*Signature:* `[number, number] -> [decimal]`
+*Precedence:* 1
+
+```
+3 4 hypot           => 5
+5 12 hypot          => 13
+1 1 hypot           => 1.4142135623730951
+```
+
+### Math Constants
+
+#### `math-pi`
+
+Push the constant *π* (3.14159...). Prefix-only.
+
+*Signature:* `[] -> [decimal]`
+
+```
+math-pi             => 3.141592653589793
+math-pi 2 mul       => 6.283185307179586
+```
+
+#### `math-e`
+
+Push Euler's number *e* (2.71828...). Prefix-only.
+
+*Signature:* `[] -> [decimal]`
+
+```
+math-e              => 2.718281828459045
+math-e log          => 1
 ```
 
 ### Boolean Words
@@ -939,6 +1478,21 @@ set foo 99 end get foo      => 99
 set bar "hello" end get bar => 'hello'
 ```
 
+#### `context`
+
+Scoped key-value storage. Use `context set key value` to store a
+value and `context get key` to retrieve it. Context values are scoped
+to the current execution context.
+
+*Signature:* `[word] -> []`
+*Precedence:* suffix
+
+```
+context set "x" 42 context get "x"        => 42
+context set "a" 10 context get "a"        => 10
+context get "missing"                     => None
+```
+
 ### Type Words
 
 #### `unify`
@@ -1272,6 +1826,36 @@ def square fn [[x:number] [number] [x mul x]]
 
 See [Function Signatures with `fn`](#function-signatures-with-fn)
 above for full details.
+
+#### `call`
+
+Evaluate a list as code on the current stack. Similar to `do` but
+designed for invoking callback lists in higher-order patterns.
+
+*Signature:* `[list] -> [any...]`
+*Precedence:* suffix
+
+```
+5 [dup mul] call            => 25
+2 3 [add] call              => 5
+"hello" [upper] call        => 'HELLO'
+1 2 [add 10 mul] call       => 30
+```
+
+#### `args`
+
+Push the current function's argument list onto the stack. Only
+available inside a `fn`-defined function. Prefix-only.
+
+*Signature:* `[] -> [list]`
+
+```
+def show fn [[x:number] [] [args]]
+42 show                     => [42]
+
+def f fn [[a:number,b:number] [] [args]]
+1 2 f                       => [1,2]
+```
 
 ### Record Type Words
 
@@ -1806,14 +2390,42 @@ for 5 [if [i eq 2] [continue] i]   => 0 1 3 4
 
 #### `trace`
 
-Evaluate a list with step-by-step tracing output. Shows the stack
-state at each step of evaluation, useful for understanding how
-expressions are processed.
+Evaluate a list as code (like `do`) with step-by-step tracing output.
+Shows the stack state at each step of evaluation, including
+resolved vs pending values, pointer position, and annotations for
+dispatch decisions (suffix/prefix matching, precedence deferral,
+argument collection). Output is color-coded for terminals.
 
-*Signature:* `[list] -> [results...]`
+*Signature:* `[list] -> [any...]`
 
 ```
-trace [1 add 2]                 # prints step-by-step evaluation, returns 3
+trace [1 add 2]                 # prints step-by-step stack trace, returns 3
+trace [3 4 mul]                 # traces multiplication, returns 12
+trace ["hello" upper]           # traces string operation, returns 'HELLO'
+trace [1 2 3 rot add mul]       # traces stack operations, returns 8
+```
+
+### Help Words
+
+#### `help`
+
+Show help for an AQL word. With no argument, prints a summary of the
+`help` word itself. Given a word name, prints detailed help including
+description, signatures, examples, and notes.
+
+*Signatures:*
+- `[] -> []`
+- `[word] -> []`
+- `[atom] -> []`
+- `[string] -> []`
+
+*Precedence:* suffix
+
+```
+help                           # prints help about help
+add help                       # prints help about add
+concat help                    # prints help about concat
+"split" help                   # prints help about split
 ```
 
 ### File I/O Words
@@ -2182,6 +2794,46 @@ the column spec.
 select [[count name cnt]] from people
 select [[sum amount total], region] from sales group by [region]
 select [[cast age integer]] from people
+```
+
+#### `star`
+
+Push the wildcard column selector (`*`). Prefix-only.
+
+*Signature:* `[] -> [atom]`
+
+```
+"users" from star select
+"orders" from star select 10 limit
+```
+
+### Module Words
+
+#### `module`
+
+Define a module with exported words. The list is evaluated in an
+isolated scope and exported words become available under the module
+name.
+
+*Signature:* `[atom, list] -> []`
+*Precedence:* suffix
+
+```
+def mymod [def double [2 mul]] module
+def utils [def inc [1 add] def dec [1 sub]] module
+```
+
+#### `import`
+
+Import a module from a `.aql` file, making its exported words
+available. Use a list argument to rename imports.
+
+*Signatures:* `[string] -> []`, `[list, string] -> []`
+*Precedence:* suffix
+
+```
+"utils.aql" import
+[Orig Renamed] "utils.aql" import
 ```
 
 #### Chaining

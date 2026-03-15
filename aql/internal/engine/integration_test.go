@@ -925,7 +925,7 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 		t.Fatal(err)
 	}
 	// def catter fn [[integer string] [string] [add]] end
-	// Case: [|] -> catter "c" 3 -> both args from suffix
+	// Case: [|] -> catter 3 "c" -> both args from suffix (positional match)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Integer"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -933,11 +933,466 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 	})
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
-		NewWord("catter"), NewString("c"), NewInteger(3),
+		NewWord("catter"), NewInteger(3), NewString("c"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
 		t.Errorf("catter 'c' 3 = %v, want string result", result)
 	}
+}
+
+func TestEngineFnConcatArgOrder(t *testing.T) {
+	// def joiner fn [[string string string] [string] [args concat]] end
+	// Uses args+concat to reveal the exact ordering of 3 args.
+	// args returns all fn arguments as a list, concat joins them.
+	// The concatenated output string directly reveals argument order.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("String"), NewWord("String"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("drop"), NewWord("drop"), NewWord("drop"), NewWord("args"), NewWord("concat")}),
+	})
+
+	defTokens := []Value{
+		NewWord("def"), NewWord("joiner"), NewWord("fn"), fnBody, NewWord("end"),
+	}
+
+	// Subtest: all args from prefix (stack)
+	// "A" "B" "C" joiner -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("AllPrefix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" "B" "C" joiner = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: 1 prefix + 2 suffix
+	// "A" joiner "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("MixedPrefixSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewWord("joiner"), NewString("B"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" joiner "B" "C" = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: 2 prefix + 1 suffix
+	// "A" "B" joiner "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("TwoPrefixOneSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewString("B"), NewWord("joiner"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" "B" joiner "C" = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: all args from suffix
+	// joiner "A" "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("AllSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewWord("joiner"), NewString("A"), NewString("B"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`joiner "A" "B" "C" = %v, want ["ABC"]`, result)
+		}
+	})
+}
+
+// concatDropBody builds the body [drop..drop args concat] for n unnamed params.
+func concatDropBody(n int) []Value {
+	var body []Value
+	for i := 0; i < n; i++ {
+		body = append(body, NewWord("drop"))
+	}
+	body = append(body, NewWord("args"), NewWord("concat"))
+	return body
+}
+
+func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
+	// def mix4 fn [[string integer boolean string] [string]
+	//              [drop drop drop drop args concat]] end
+	// 4 args: string, integer, boolean, string -> concat reveals ordering.
+	// valToString: integer->digits, boolean->"true"/"false"
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("String"), NewWord("Integer"), NewWord("Boolean"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList(concatDropBody(4)),
+	})
+	defTokens := []Value{
+		NewWord("def"), NewWord("mix4"), NewWord("fn"), fnBody, NewWord("end"),
+	}
+
+	// "X" 7 true "Z" mix4 -> "X7trueZ"
+	t.Run("AllPrefix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"), NewWord("mix4"),
+		))
+		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+			t.Errorf(`all-prefix mix4 = %v, want ["X7trueZ"]`, result)
+		}
+	})
+
+	// "X" mix4 7 true "Z" -> 1 prefix, 3 suffix
+	t.Run("OnePrefixThreeSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewString("X"), NewWord("mix4"), NewInteger(7), NewBoolean(true), NewString("Z"),
+		))
+		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+			t.Errorf(`1+3 mix4 = %v, want ["X7trueZ"]`, result)
+		}
+	})
+
+	// "X" 7 mix4 true "Z" -> 2 prefix, 2 suffix
+	t.Run("TwoPrefixTwoSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewString("X"), NewInteger(7), NewWord("mix4"), NewBoolean(true), NewString("Z"),
+		))
+		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+			t.Errorf(`2+2 mix4 = %v, want ["X7trueZ"]`, result)
+		}
+	})
+
+	// mix4 "X" 7 true "Z" -> all suffix
+	t.Run("AllSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
+		))
+		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+			t.Errorf(`all-suffix mix4 = %v, want ["X7trueZ"]`, result)
+		}
+	})
+}
+
+func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
+	// def mix5 fn [[string integer decimal boolean string] [string]
+	//              [drop..drop args concat]] end
+	// 5 args: string, integer, decimal, boolean, string
+	fnBody := NewList([]Value{
+		NewList([]Value{
+			NewWord("String"), NewWord("Integer"), NewWord("Decimal"),
+			NewWord("Boolean"), NewWord("String"),
+		}),
+		NewList([]Value{NewWord("String")}),
+		NewList(concatDropBody(5)),
+	})
+	defTokens := []Value{
+		NewWord("def"), NewWord("mix5"), NewWord("fn"), fnBody, NewWord("end"),
+	}
+
+	// "a" 3 1.5 false "z" mix5 -> "a31.5falsez"
+	t.Run("AllPrefix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewString("a"), NewInteger(3), NewDecimal(1.5), NewBoolean(false), NewString("z"),
+			NewWord("mix5"),
+		))
+		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+			t.Errorf(`all-prefix mix5 = %v, want ["a31.5falsez"]`, result)
+		}
+	})
+
+	// "a" 3 mix5 1.5 false "z" -> 2 prefix, 3 suffix
+	t.Run("TwoPrefixThreeSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewString("a"), NewInteger(3), NewWord("mix5"),
+			NewDecimal(1.5), NewBoolean(false), NewString("z"),
+		))
+		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+			t.Errorf(`2+3 mix5 = %v, want ["a31.5falsez"]`, result)
+		}
+	})
+
+	// mix5 "a" 3 1.5 false "z" -> all suffix
+	t.Run("AllSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+			NewWord("mix5"), NewString("a"), NewInteger(3),
+			NewDecimal(1.5), NewBoolean(false), NewString("z"),
+		))
+		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+			t.Errorf(`all-suffix mix5 = %v, want ["a31.5falsez"]`, result)
+		}
+	})
+}
+
+func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
+	// def mix7 fn [[string integer decimal boolean string integer string]
+	//              [string] [drop..drop args concat]] end
+	// 7 args covering all scalar types with repeats.
+	fnBody := NewList([]Value{
+		NewList([]Value{
+			NewWord("String"), NewWord("Integer"), NewWord("Decimal"),
+			NewWord("Boolean"), NewWord("String"), NewWord("Integer"), NewWord("String"),
+		}),
+		NewList([]Value{NewWord("String")}),
+		NewList(concatDropBody(7)),
+	})
+	defTokens := []Value{
+		NewWord("def"), NewWord("mix7"), NewWord("fn"), fnBody, NewWord("end"),
+	}
+	// Expected: "p1" 2 3.5 true "q4" 56 "r7" -> "p123.5trueq456r7"
+	want := "p123.5trueq456r7"
+	argVals := []Value{
+		NewString("p1"), NewInteger(2), NewDecimal(3.5),
+		NewBoolean(true), NewString("q4"), NewInteger(56), NewString("r7"),
+	}
+
+	// All prefix
+	t.Run("AllPrefix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...), argVals...)
+		tokens = append(tokens, NewWord("mix7"))
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != want {
+			t.Errorf("all-prefix mix7 = %v, want [%q]", result, want)
+		}
+	})
+
+	// 3 prefix + 4 suffix
+	t.Run("ThreePrefixFourSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...), argVals[:3]...)
+		tokens = append(tokens, NewWord("mix7"))
+		tokens = append(tokens, argVals[3:]...)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != want {
+			t.Errorf("3+4 mix7 = %v, want [%q]", result, want)
+		}
+	})
+
+	// 1 prefix + 6 suffix
+	t.Run("OnePrefixSixSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...), argVals[0])
+		tokens = append(tokens, NewWord("mix7"))
+		tokens = append(tokens, argVals[1:]...)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != want {
+			t.Errorf("1+6 mix7 = %v, want [%q]", result, want)
+		}
+	})
+
+	// All suffix
+	t.Run("AllSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
+		tokens = append(tokens, argVals...)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != want {
+			t.Errorf("all-suffix mix7 = %v, want [%q]", result, want)
+		}
+	})
+}
+
+func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
+	// Tests that the "end" word stops suffix argument collection,
+	// preventing the fn from consuming tokens that follow.
+
+	// def cat3 fn [[string string string] [string]
+	//              [drop drop drop args concat]] end
+	cat3Body := NewList([]Value{
+		NewList([]Value{NewWord("String"), NewWord("String"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList(concatDropBody(3)),
+	})
+	cat3Def := []Value{
+		NewWord("def"), NewWord("cat3"), NewWord("fn"), cat3Body, NewWord("end"),
+	}
+
+	// def cat4 fn [[string integer boolean string] [string]
+	//              [drop drop drop drop args concat]] end
+	cat4Body := NewList([]Value{
+		NewList([]Value{NewWord("String"), NewWord("Integer"), NewWord("Boolean"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList(concatDropBody(4)),
+	})
+	cat4Def := []Value{
+		NewWord("def"), NewWord("cat4"), NewWord("fn"), cat4Body, NewWord("end"),
+	}
+
+	// cat3 "A" "B" "C" end "trailing" -> cat3 gets "ABC", "trailing" on stack
+	t.Run("EndStopsSuffix3", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, cat3Def...),
+			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"),
+			NewWord("end"), NewString("trailing"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 2 {
+			t.Fatalf("cat3 A B C end trailing: got %d results, want 2: %v", len(result), result)
+		}
+		if result[0].AsString() != "ABC" {
+			t.Errorf("cat3 result = %q, want %q", result[0].AsString(), "ABC")
+		}
+		if result[1].AsString() != "trailing" {
+			t.Errorf("trailing = %v, want 'trailing'", result[1])
+		}
+	})
+
+	// "X" cat4 7 true "Z" end "after" -> cat4 gets "X7trueZ", "after" untouched
+	t.Run("EndStopsSuffix4Mixed", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, cat4Def...),
+			NewString("X"), NewWord("cat4"), NewInteger(7), NewBoolean(true), NewString("Z"),
+			NewWord("end"), NewString("after"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 2 {
+			t.Fatalf("X cat4 7 true Z end after: got %d results, want 2: %v", len(result), result)
+		}
+		if result[0].AsString() != "X7trueZ" {
+			t.Errorf("cat4 result = %q, want %q", result[0].AsString(), "X7trueZ")
+		}
+		if result[1].AsString() != "after" {
+			t.Errorf("trailing = %v, want 'after'", result[1])
+		}
+	})
+
+	// Two fn calls using parens and end: (cat3 "A" "B" "C" end) (cat3 "D" "E" "F" end)
+	// Parens isolate each call; end stops suffix collection within each group.
+	t.Run("EndSeparatesTwoCalls", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, cat3Def...),
+			NewWord("("),
+			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"), NewWord("end"),
+			NewWord(")"),
+			NewWord("("),
+			NewWord("cat3"), NewString("D"), NewString("E"), NewString("F"), NewWord("end"),
+			NewWord(")"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 2 {
+			t.Fatalf("two cat3 calls: got %d results, want 2: %v", len(result), result)
+		}
+		if result[0].AsString() != "ABC" {
+			t.Errorf("first cat3 = %q, want %q", result[0].AsString(), "ABC")
+		}
+		if result[1].AsString() != "DEF" {
+			t.Errorf("second cat3 = %q, want %q", result[1].AsString(), "DEF")
+		}
+	})
+
+	// Mixed types with end in parens:
+	// (cat4 "m" 9 false "n" end) (cat3 "x" "y" "z" end)
+	// Verifies end works when switching between fns of different arity/types.
+	t.Run("EndSeparatesDifferentFns", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append([]Value{}, cat4Def...)
+		tokens = append(tokens, cat3Def...)
+		tokens = append(tokens,
+			NewWord("("),
+			NewWord("cat4"), NewString("m"), NewInteger(9), NewBoolean(false), NewString("n"), NewWord("end"),
+			NewWord(")"),
+			NewWord("("),
+			NewWord("cat3"), NewString("x"), NewString("y"), NewString("z"), NewWord("end"),
+			NewWord(")"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 2 {
+			t.Fatalf("cat4+cat3 with end: got %d results, want 2: %v", len(result), result)
+		}
+		if result[0].AsString() != "m9falsen" {
+			t.Errorf("cat4 = %q, want %q", result[0].AsString(), "m9falsen")
+		}
+		if result[1].AsString() != "xyz" {
+			t.Errorf("cat3 = %q, want %q", result[1].AsString(), "xyz")
+		}
+	})
+
+	// Prefix-heavy with end: "P" "Q" cat3 "R" end "extra"
+	// 2 prefix, 1 suffix, end stops collection, "extra" remains.
+	t.Run("EndAfterPartialSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, cat3Def...),
+			NewString("P"), NewString("Q"), NewWord("cat3"), NewString("R"),
+			NewWord("end"), NewString("extra"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 2 {
+			t.Fatalf("P Q cat3 R end extra: got %d results, want 2: %v", len(result), result)
+		}
+		if result[0].AsString() != "PQR" {
+			t.Errorf("cat3 = %q, want %q", result[0].AsString(), "PQR")
+		}
+		if result[1].AsString() != "extra" {
+			t.Errorf("trailing = %v, want 'extra'", result[1])
+		}
+	})
 }
 
 func TestIntegerLiteralType(t *testing.T) {

@@ -205,6 +205,7 @@ type ForwardInfo struct {
 	FuncName      string
 	ExpectedArgs  int
 	CollectedArgs int
+	PrefixArgs    int // number of sig args already consumed from the prefix (stack)
 	// FuncIndex records where the deferred function word sits in the stack.
 	FuncIndex  int
 	Precedence int        // copied from matched Signature
