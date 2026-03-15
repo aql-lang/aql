@@ -940,6 +940,86 @@ func TestEngineFnCatterFullSuffix(t *testing.T) {
 	}
 }
 
+func TestEngineFnConcatArgOrder(t *testing.T) {
+	// def joiner fn [[string string string] [string] [args concat]] end
+	// Uses args+concat to reveal the exact ordering of 3 args.
+	// args returns all fn arguments as a list, concat joins them.
+	// The concatenated output string directly reveals argument order.
+	fnBody := NewList([]Value{
+		NewList([]Value{NewWord("String"), NewWord("String"), NewWord("String")}),
+		NewList([]Value{NewWord("String")}),
+		NewList([]Value{NewWord("drop"), NewWord("drop"), NewWord("drop"), NewWord("args"), NewWord("concat")}),
+	})
+
+	defTokens := []Value{
+		NewWord("def"), NewWord("joiner"), NewWord("fn"), fnBody, NewWord("end"),
+	}
+
+	// Subtest: all args from prefix (stack)
+	// "A" "B" "C" joiner -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("AllPrefix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" "B" "C" joiner = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: 1 prefix + 2 suffix
+	// "A" joiner "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("MixedPrefixSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewWord("joiner"), NewString("B"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" joiner "B" "C" = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: 2 prefix + 1 suffix
+	// "A" "B" joiner "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("TwoPrefixOneSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewString("A"), NewString("B"), NewWord("joiner"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`"A" "B" joiner "C" = %v, want ["ABC"]`, result)
+		}
+	})
+
+	// Subtest: all args from suffix
+	// joiner "A" "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
+	t.Run("AllSuffix", func(t *testing.T) {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens := append(append([]Value{}, defTokens...),
+			NewWord("joiner"), NewString("A"), NewString("B"), NewString("C"),
+		)
+		result := runAQL(t, r, tokens)
+		if len(result) != 1 || result[0].AsString() != "ABC" {
+			t.Errorf(`joiner "A" "B" "C" = %v, want ["ABC"]`, result)
+		}
+	})
+}
+
 func TestIntegerLiteralType(t *testing.T) {
 	// NewInteger encodes literal value in type path: number/integer/5
 	v := NewInteger(5)
