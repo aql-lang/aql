@@ -2390,14 +2390,19 @@ for 5 [if [i eq 2] [continue] i]   => 0 1 3 4
 
 #### `trace`
 
-Evaluate a list with step-by-step tracing output. Shows the stack
-state at each step of evaluation, useful for understanding how
-expressions are processed.
+Evaluate a list as code (like `do`) with step-by-step tracing output.
+Shows the stack state at each step of evaluation, including
+resolved vs pending values, pointer position, and annotations for
+dispatch decisions (suffix/prefix matching, precedence deferral,
+argument collection). Output is color-coded for terminals.
 
-*Signature:* `[list] -> [results...]`
+*Signature:* `[list] -> [any...]`
 
 ```
-trace [1 add 2]                 # prints step-by-step evaluation, returns 3
+trace [1 add 2]                 # prints step-by-step stack trace, returns 3
+trace [3 4 mul]                 # traces multiplication, returns 12
+trace ["hello" upper]           # traces string operation, returns 'HELLO'
+trace [1 2 3 rot add mul]       # traces stack operations, returns 8
 ```
 
 ### Help Words

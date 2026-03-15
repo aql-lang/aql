@@ -75,15 +75,16 @@ func init() {
 
 	register(&Entry{
 		Word:    "trace",
-		Summary: "Print a debug trace of a value without consuming it.",
-		Signatures: []string{"[any] -> [any]"},
-		Description: "Prints a debug representation of the top value to stderr, " +
-			"then leaves the value on the stack. Useful for debugging.",
+		Summary: "Evaluate a list with step-by-step tracing output.",
+		Signatures: []string{"[list] -> [any...]"},
+		Description: "Evaluates a list as code (like do) and prints a color-coded trace showing " +
+			"the stack state at each step. Shows resolved vs pending values, pointer position, " +
+			"and annotations for dispatch decisions (suffix/prefix, precedence, collection).",
 		Examples: []string{
-			`42 trace                       => 42 (and prints debug info to stderr)`,
-			`"hi" trace upper               => 'HI' (traces "hi" then uppercases)`,
-			`[1 2 3] trace                  => [1 2 3] (traces the list)`,
-			`true trace not                 => false (traces true then negates)`,
+			`trace [1 add 2]                => 3 (prints step-by-step stack trace)`,
+			`trace [3 4 mul]                => 12 (traces multiplication)`,
+			`trace ["hello" upper]          => 'HELLO' (traces string op)`,
+			`trace [1 2 3 rot add mul]      => 8 (traces stack operations)`,
 		},
 	})
 
