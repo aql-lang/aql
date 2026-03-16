@@ -70,9 +70,9 @@ Boolean	None	false
 [true,false]	[true,false]	true	[word(true),word(false)]
 
 # List element-wise narrowing
-[1,String]	[Number,"a"]	false
-[Number,Number]	[1,2]	false
-[String,String]	["x","y"]	false
+[1,String]	[Number,"a"]	true	[1,'a']
+[Number,Number]	[1,2]	true	[1,2]
+[String,String]	["x","y"]	true	['x','y']
 
 # List length mismatch (fail)
 [1]	[1,2]	false
@@ -90,7 +90,7 @@ List	[]	true	[]
 
 # Nested lists
 [[1,2],[3,4]]	[[1,2],[3,4]]	true	[[1,2],[3,4]]
-[[String],[Number]]	[["a"],[1]]	false
+[[String],[Number]]	[["a"],[1]]	true	[['a'],[1]]
 [[1]]	[[2]]	false
 
 # Identical maps

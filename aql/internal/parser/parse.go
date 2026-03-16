@@ -443,6 +443,13 @@ func parseWord(text string) (engine.Value, error) {
 	if forcePrefix || forceSuffix || argCount >= 0 {
 		return engine.NewWordModified(name, argCount, forcePrefix, forceSuffix), nil
 	}
+
+	// Type names resolve to type literals even in word context, so that
+	// they retain their meaning inside quotations (e.g. [String,Decimal]).
+	if t, ok := typeNames[name]; ok {
+		return engine.NewTypeLiteral(t), nil
+	}
+
 	return engine.NewWord(name), nil
 }
 
