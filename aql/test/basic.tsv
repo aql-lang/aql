@@ -229,6 +229,18 @@ None is None	true
 ["a" 1] is [:String]	false
 ["a" 1] is [:Number]	false
 
+# is - per-element type list: type names in lists match element-wise
+["a" 1.1] is [String Decimal]	true
+[1 2] is [Integer Integer]	true
+[1 "a"] is [Integer String]	true
+["a" 1] is [String Integer]	true
+["a" 1] is [Integer String]	false
+[1 2 3] is [Number Number Number]	true
+[1] is [String]	false
+[] is []	true
+[1 2] is [Integer]	false
+[1] is [Integer Integer]	false
+
 # is - record type equality (records only unify with records)
 record [x:Number y:String] is record [x:Number y:String]	true
 record [x:Number y:String] is record [x:Any y:Any]	true

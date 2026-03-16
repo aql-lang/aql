@@ -69,10 +69,14 @@ Boolean	None	false
 []	[]	true	[]
 [true,false]	[true,false]	true	[word(true),word(false)]
 
-# List element-wise narrowing
+# List element-wise narrowing (type names in lists are type literals)
 [1,String]	[Number,"a"]	true	[1,'a']
 [Number,Number]	[1,2]	true	[1,2]
 [String,String]	["x","y"]	true	['x','y']
+[Decimal,String]	[1.1,"b"]	true	[1.1,'b']
+[String,Integer]	["a",1]	true	['a',1]
+[Number,String]	["a",1]	false
+[Integer,Integer]	[1,"a"]	false
 
 # List length mismatch (fail)
 [1]	[1,2]	false
