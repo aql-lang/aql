@@ -1053,16 +1053,16 @@ func TestSetGetPrefix(t *testing.T) {
 }
 
 func TestSetGetString(t *testing.T) {
-	// set name hello end get name → ['hello']
+	// set "name" "hello" end get "name" → ['hello']
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("name"), NewString("hello"),
+		NewWord("set"), NewString("name"), NewString("hello"),
 		NewWord("end"),
-		NewWord("get"), NewWord("name"),
+		NewWord("get"), NewString("name"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1464,21 +1464,21 @@ func TestParenWithPrecedence(t *testing.T) {
 
 // --- Edge: type system ---
 
-func TestEdgeTypeAnyDoesNotMatchWord(t *testing.T) {
-	if TWord.Matches(TAny) {
-		t.Error("word should not match any")
+func TestEdgeTypeAnyMatchesWord(t *testing.T) {
+	if !TWord.Matches(TAny) {
+		t.Error("word should match any")
 	}
 }
 
-func TestEdgeTypeAnyDoesNotMatchForward(t *testing.T) {
-	if TForward.Matches(TAny) {
-		t.Error("forward should not match any")
+func TestEdgeTypeAnyMatchesForward(t *testing.T) {
+	if !TForward.Matches(TAny) {
+		t.Error("forward should match any")
 	}
 }
 
-func TestEdgeTypeAnyDoesNotMatchOpenParen(t *testing.T) {
-	if TOpenParen.Matches(TAny) {
-		t.Error("paren/open should not match any")
+func TestEdgeTypeAnyMatchesOpenParen(t *testing.T) {
+	if !TOpenParen.Matches(TAny) {
+		t.Error("paren/open should match any")
 	}
 }
 
@@ -2397,16 +2397,16 @@ func TestEdgeSetEmptyString(t *testing.T) {
 }
 
 func TestEdgeSetValueIsString(t *testing.T) {
-	// set greeting hello end get greeting → ['hello']
+	// set "greeting" "hello" end get "greeting" → ['hello']
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("greeting"), NewString("hello"),
+		NewWord("set"), NewString("greeting"), NewString("hello"),
 		NewWord("end"),
-		NewWord("get"), NewWord("greeting"),
+		NewWord("get"), NewString("greeting"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3609,7 +3609,7 @@ func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
 }
 
 func TestDefStringBody(t *testing.T) {
-	// def greeting "hello"  greeting → "hello"
+	// def "greeting" "hello"  greeting → "hello"
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3617,7 +3617,7 @@ func TestDefStringBody(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewWord("def"), NewWord("greeting"), NewString("hello"),
+		NewWord("def"), NewString("greeting"), NewString("hello"),
 		NewWord("greeting"),
 	})
 	if err != nil {
@@ -3677,7 +3677,7 @@ func TestDefForthSquare(t *testing.T) {
 func TestDefForthNegate(t *testing.T) {
 	// : negate 0 swap sub ;
 	// Negates a number: 0 - n.
-	// def negate [0 swap sub]  7 negate → -7
+	// def "negate" [0 swap sub]  7 negate → -7
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3685,7 +3685,7 @@ func TestDefForthNegate(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewWord("def"), NewWord("negate"),
+		NewWord("def"), NewString("negate"),
 		NewList([]Value{NewInteger(0), NewWord("swap"), NewWord("sub")}),
 		NewInteger(7), NewWord("negate"),
 	})
@@ -3969,7 +3969,7 @@ func TestDefForthSwapSub(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewWord("def"), NewWord("nip"),
+		NewWord("def"), NewString("nip"),
 		NewList([]Value{NewWord("swap"), NewWord("drop")}),
 		NewInteger(10), NewInteger(20), NewWord("nip"),
 	})
@@ -4358,8 +4358,8 @@ func TestRecordTypeCreation(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Number,y:Number}" {
-		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
+	if result[0].String() != "record{x:Scalar/Number,y:Scalar/Number}" {
+		t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/Number}", result[0].String())
 	}
 }
 
@@ -4392,8 +4392,8 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Number,y:Number}" {
-		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
+	if result[0].String() != "record{x:Scalar/Number,y:Scalar/Number}" {
+		t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/Number}", result[0].String())
 	}
 }
 
@@ -4423,8 +4423,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("x", NewTypeLiteral(TNumber))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:Number} true" {
-			t.Errorf("got %s, want record{x:Number} true", got)
+		if got != "record{x:Scalar/Number} true" {
+			t.Errorf("got %s, want record{x:Scalar/Number} true", got)
 		}
 	})
 
@@ -4461,8 +4461,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2.Set("x", NewTypeLiteral(TNumber))
 		f2.Set("y", NewTypeLiteral(TString))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:Number,y:String} true" {
-			t.Errorf("got %s, want record{x:Number,y:String} true", got)
+		if got != "record{x:Scalar/Number,y:Scalar/String} true" {
+			t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/String} true", got)
 		}
 	})
 
@@ -4476,8 +4476,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("a", NewRecordType(inner2))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{a:record{z:String}} true" {
-			t.Errorf("got %s, want record{a:record{z:String}} true", got)
+		if got != "record{a:record{z:Scalar/String}} true" {
+			t.Errorf("got %s, want record{a:record{z:Scalar/String}} true", got)
 		}
 	})
 

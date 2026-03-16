@@ -104,10 +104,10 @@ type foo record [x:Number] type bar record [y:Number] (table foo) unify (table b
 List unify table record [x:Number]	'~unify-fail' false
 
 # Record with inline disjunct field (list evaluated as code)
-record [x:Number y:[String or None]]	record{x:Number,y:String|None}
+record [x:Number y:[String or None]]	record{x:Scalar/Number,y:Scalar/String|None}
 
 # Record with inline disjunct - unification narrows
-record [x:Number y:[String or None]] unify record [x:Number y:String]	record{x:Number,y:String} true
+record [x:Number y:[String or None]] unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
 
 # Make record with inline disjunct - none value
 type foo record [x:Number y:[String or None]] make foo [42 None]	{x:42,y:None}
@@ -116,10 +116,10 @@ type foo record [x:Number y:[String or None]] make foo [42 None]	{x:42,y:None}
 type foo record [x:Number y:[String or None]] make foo [42 "hello"]	{x:42,y:'hello'}
 
 # Record with user-defined type field (disjunct for optional)
-type OptStr (String or None) type foo record [x:Number y:OptStr] foo	record{x:Number,y:String|None}
+type OptStr (String or None) type foo record [x:Number y:OptStr] foo	record{x:Scalar/Number,y:Scalar/String|None}
 
 # Record with user-defined type - unification narrows disjunct
-type OptStr (String or None) type foo record [x:Number y:OptStr] foo unify record [x:Number y:String]	record{x:Number,y:String} true
+type OptStr (String or None) type foo record [x:Number y:OptStr] foo unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
 
 # Make record with optional field - string value
 type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
@@ -149,7 +149,7 @@ type foo record [x:Number y:String] make foo {x:1 y:"hi" z:3}	ERROR:make: unknow
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
 # Record with nested user-defined record type
-type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Number,b:record{z:String}}
+type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Scalar/Number,b:record{z:Scalar/String}}
 
 # Do - evaluate list contents
 do [1 add 2]	3
@@ -158,19 +158,19 @@ do [1 add 2]	3
 do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
 
 # Disjunct - union types via or
-String or None	String|None
+String or None	Scalar/String|None
 (String or None) unify "a"	'a' true
 (None or Boolean) unify None	None true
 ({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
 
 # typeof - returns base type as atom
-typeof 42	Number
-typeof "hello"	String
-typeof ""	String
-typeof true	Boolean
-typeof false	Boolean
-typeof [1 2 3]	List
-typeof {x:1}	Map
+typeof 42	Scalar/Number/Integer
+typeof "hello"	Scalar/String/Proper
+typeof ""	Scalar/String/Empty
+typeof true	Scalar/Boolean
+typeof false	Scalar/Boolean
+typeof [1 2 3]	Node/List
+typeof {x:1}	Node/Map
 typeof None	None
 
 # base - returns zero/default value for a type

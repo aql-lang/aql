@@ -85,7 +85,7 @@ Boolean	None	false
 # List with type literal
 List	[1,2]	true	[1,2]
 [1,2]	List	true	[1,2]
-List	List	true	List
+List	List	true	Node/List
 List	[]	true	[]
 
 # Nested lists
@@ -116,7 +116,7 @@ List	[]	true	[]
 # Map with type literal
 Map	{x:1}	true	{x:1}
 {x:1}	Map	true	{x:1}
-Map	Map	true	Map
+Map	Map	true	Node/Map
 Map	{}	true	{}
 
 # Nested maps
@@ -156,15 +156,15 @@ Any	{x:1}	true	{x:1}
 {x:1}	Any	true	{x:1}
 
 # Typed list - identical child types
-[:String]	[:String]	true	[:String]
-[:Number]	[:Number]	true	[:Number]
-[:Boolean]	[:Boolean]	true	[:Boolean]
+[:String]	[:String]	true	[:Scalar/String]
+[:Number]	[:Number]	true	[:Scalar/Number]
+[:Boolean]	[:Boolean]	true	[:Scalar/Boolean]
 
 # Typed list - child type narrowing
-[:Any]	[:Number]	true	[:Number]
-[:Any]	[:String]	true	[:String]
-[:Number]	[:Any]	true	[:Number]
-[:String]	[:Any]	true	[:String]
+[:Any]	[:Number]	true	[:Scalar/Number]
+[:Any]	[:String]	true	[:Scalar/String]
+[:Number]	[:Any]	true	[:Scalar/Number]
+[:String]	[:Any]	true	[:Scalar/String]
 
 # Typed list - incompatible child types
 [:String]	[:Number]	false
@@ -199,17 +199,17 @@ Any	{x:1}	true	{x:1}
 [:{x:Number}]	[{x:1},{y:1}]	false
 
 # Typed list vs bare list type literal
-List	[:String]	true	[:String]
-[:String]	List	true	[:String]
-List	[:Number]	true	[:Number]
-[:Number]	List	true	[:Number]
-List	[:{x:Number}]	true	[:{x:Number}]
+List	[:String]	true	[:Scalar/String]
+[:String]	List	true	[:Scalar/String]
+List	[:Number]	true	[:Scalar/Number]
+[:Number]	List	true	[:Scalar/Number]
+List	[:{x:Number}]	true	[:{x:Scalar/Number}]
 
 # Typed list vs any
-Any	[:String]	true	[:String]
-[:String]	Any	true	[:String]
-Any	[:Number]	true	[:Number]
-[:Number]	Any	true	[:Number]
+Any	[:String]	true	[:Scalar/String]
+[:String]	Any	true	[:Scalar/String]
+Any	[:Number]	true	[:Scalar/Number]
+[:Number]	Any	true	[:Scalar/Number]
 
 # Typed list vs none
 None	[:String]	false
@@ -224,8 +224,8 @@ None	[:Number]	false
 [:[:Number]]	[[1],[2,3],[]]	true	[[1],[2,3],[]]
 
 # Deeper typed list child type unification
-[:[:String]]	[:[:String]]	true	[:[:String]]
-[:[:Number]]	[:[:Any]]	true	[:[:Number]]
+[:[:String]]	[:[:String]]	true	[:[:Scalar/String]]
+[:[:Number]]	[:[:Any]]	true	[:[:Scalar/Number]]
 [:[:String]]	[:[:Number]]	false
 
 # Typed list vs incompatible types
@@ -234,15 +234,15 @@ None	[:Number]	false
 [:String]	1	false
 
 # Typed map - identical child types
-{:String}	{:String}	true	{:String}
-{:Number}	{:Number}	true	{:Number}
-{:Boolean}	{:Boolean}	true	{:Boolean}
+{:String}	{:String}	true	{:Scalar/String}
+{:Number}	{:Number}	true	{:Scalar/Number}
+{:Boolean}	{:Boolean}	true	{:Scalar/Boolean}
 
 # Typed map - child type narrowing
-{:Any}	{:Number}	true	{:Number}
-{:Any}	{:String}	true	{:String}
-{:Number}	{:Any}	true	{:Number}
-{:String}	{:Any}	true	{:String}
+{:Any}	{:Number}	true	{:Scalar/Number}
+{:Any}	{:String}	true	{:Scalar/String}
+{:Number}	{:Any}	true	{:Scalar/Number}
+{:String}	{:Any}	true	{:Scalar/String}
 
 # Typed map - incompatible child types
 {:String}	{:Number}	false
@@ -277,17 +277,17 @@ None	[:Number]	false
 {:{x:Number}}	{a:{x:1},b:{y:1}}	false
 
 # Typed map vs bare map type literal
-Map	{:String}	true	{:String}
-{:String}	Map	true	{:String}
-Map	{:Number}	true	{:Number}
-{:Number}	Map	true	{:Number}
-Map	{:{x:Number}}	true	{:{x:Number}}
+Map	{:String}	true	{:Scalar/String}
+{:String}	Map	true	{:Scalar/String}
+Map	{:Number}	true	{:Scalar/Number}
+{:Number}	Map	true	{:Scalar/Number}
+Map	{:{x:Number}}	true	{:{x:Scalar/Number}}
 
 # Typed map vs any
-Any	{:String}	true	{:String}
-{:String}	Any	true	{:String}
-Any	{:Number}	true	{:Number}
-{:Number}	Any	true	{:Number}
+Any	{:String}	true	{:Scalar/String}
+{:String}	Any	true	{:Scalar/String}
+Any	{:Number}	true	{:Scalar/Number}
+{:Number}	Any	true	{:Scalar/Number}
 
 # Typed map vs none
 None	{:String}	false
@@ -302,8 +302,8 @@ None	{:Number}	false
 {:{:Number}}	{a:{x:1,y:2},b:{z:3}}	true	{a:{x:1,y:2},b:{z:3}}
 
 # Deeper typed map child type unification
-{:{:String}}	{:{:String}}	true	{:{:String}}
-{:{:Number}}	{:{:Any}}	true	{:{:Number}}
+{:{:String}}	{:{:String}}	true	{:{:Scalar/String}}
+{:{:Number}}	{:{:Any}}	true	{:{:Scalar/Number}}
 {:{:String}}	{:{:Number}}	false
 
 # Typed map vs incompatible types
