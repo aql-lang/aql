@@ -1383,20 +1383,38 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 
 	// Check if prefix match exists with current resolved values.
 	if fn != nil {
-		// Build resolved slice up to funcIdx.
+		// Build resolved slice up to funcIdx, excluding function words
+		// and their collected suffix args that are tracked by active
+		// forwards. This prevents prefix matching from consuming values
+		// that belong to an outer forward's context.
 		start := 0
+		excludeIndices := make(map[int]bool)
 		for i := funcIdx - 1; i >= 0; i-- {
 			if e.stack[i].IsOpenParen() {
 				start = i + 1
 				break
 			}
+			if e.stack[i].IsForward() {
+				fwd := e.stack[i].AsForward()
+				// Exclude the function word itself.
+				excludeIndices[fwd.FuncIndex] = true
+				// Exclude already-collected suffix args (positioned
+				// before the function word).
+				for j := 0; j < fwd.CollectedArgs; j++ {
+					idx := fwd.FuncIndex - 1 - j
+					if idx >= 0 {
+						excludeIndices[idx] = true
+					}
+				}
+			}
 		}
 		var resolved []Value
 		for i := start; i < funcIdx; i++ {
 			v := e.stack[i]
-			if !v.IsForward() && !v.IsOpenParen() {
-				resolved = append(resolved, v)
+			if v.IsForward() || v.IsOpenParen() || excludeIndices[i] {
+				continue
 			}
+			resolved = append(resolved, v)
 		}
 
 		testW := WordInfo{Name: w.Name, ArgCount: -1, ForcePrefix: true}

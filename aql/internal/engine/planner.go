@@ -38,7 +38,14 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 				}
 			}
 			if firstUnmatched >= 0 && e.couldProduceType(*peekVal, sig.Args[firstUnmatched]) {
-				score += 50
+				// Specific type matches get a stronger bonus than catch-all
+				// TAny matches. This ensures e.g. [TWord, TAny] is preferred
+				// over [TAny, TString] when the peek value is a word.
+				if sig.Args[firstUnmatched].Equal(TAny) {
+					score += 25
+				} else {
+					score += 50
+				}
 			}
 		}
 
