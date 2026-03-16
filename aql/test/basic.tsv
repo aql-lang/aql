@@ -197,6 +197,70 @@ None is None	true
 42 is 42	true
 42 is 43	false
 
+# is - typed list: instance matches typed list constraint
+[1 2 3] is [:Number]	true
+[1 2 3] is [:Integer]	true
+[1 2 3] is [:String]	false
+["a" "b"] is [:String]	true
+[] is [:Number]	true
+
+# is - typed map: instance matches typed map constraint
+{x:1 y:2} is {:Number}	true
+{x:1 y:2} is {:Integer}	true
+{x:1 y:2} is {:String}	false
+{x:"a" y:"b"} is {:String}	true
+
+# is - record type equality (records only unify with records)
+record [x:Number y:String] is record [x:Number y:String]	true
+record [x:Number y:String] is record [x:Any y:Any]	true
+record [x:Number y:String] is record [x:String y:String]	false
+
+# is - table type equality (tables only unify with tables)
+type R record [x:Number] (table R) is (table R)	true
+
+# is - Node type hierarchy (values use concrete List/Map types)
+[1 2 3] is List	true
+{x:1} is Map	true
+[1 2 3] is Map	false
+{x:1} is List	false
+42 is Node	false
+
+# eq/neq - typed list types
+[:Number] eq [:Number]	true
+[:Number] eq [:String]	false
+[:Number] neq [:String]	true
+[:Integer] eq [:Integer]	true
+[:Number] eq [:Integer]	false
+
+# eq/neq - typed map types
+{:Number} eq {:Number}	true
+{:Number} eq {:String}	false
+{:Number} neq {:String}	true
+
+# eq/neq - record types
+record [x:Number y:String] eq record [x:Number y:String]	true
+record [x:Number y:String] eq record [x:Number y:Number]	false
+record [x:Number y:String] neq record [x:Number y:Number]	true
+record [x:Number] eq record [x:Number y:String]	false
+
+# eq/neq - table types
+type R record [x:Number] (table R) eq (table R)	true
+
+# eq/neq - disjunct types
+(String or None) eq (String or None)	true
+(String or None) eq (Number or None)	false
+(String or None) neq (Number or None)	true
+
+# eq/neq - user-defined types
+type Foo [:Number] type Bar [:Number] Foo eq Bar	true
+type Foo [:Number] type Bar [:String] Foo neq Bar	true
+
+# eq/neq - nested complex types
+[:[:Number]] eq [:[:Number]]	true
+[:[:Number]] eq [:[:String]]	false
+{:[:Number]} eq {:[:Number]}	true
+{:[:Number]} eq {:[:String]}	false
+
 # base - returns zero/default value for a type
 base Integer	0
 base Number	0
