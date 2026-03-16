@@ -183,6 +183,20 @@ fulltypeof [1 2 3]	Node/List
 fulltypeof {x:1}	Node/Map
 fulltypeof None	None
 
+# is - type/value check: true if a unify b -> a
+42 is Number	true
+42 is Integer	true
+42 is String	false
+"hello" is String	true
+true is Boolean	true
+true is Scalar	true
+[1 2 3] is List	true
+{x:1} is Map	true
+None is None	true
+42 is Any	true
+42 is 42	true
+42 is 43	false
+
 # base - returns zero/default value for a type
 base Integer	0
 base Number	0

@@ -261,6 +261,7 @@ func registerBuiltins(r *Registry) {
 	registerTypeDef(r)
 	registerTypeof(r)
 	registerFullTypeof(r)
+	registerIs(r)
 	registerInspect(r)
 	registerBase(r)
 
