@@ -61,11 +61,17 @@ func compareValues(a, b Value) (int, error) {
 
 // exactEqual returns true if two values are exactly equal.
 // For scalars (integer, string, boolean, atom, none): compares by value.
+// For types: compares structurally via valuesEqual.
 // For non-scalars (list, map): compares by identity (same pointer).
 func exactEqual(a, b Value) bool {
 	// none == none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
 		return true
+	}
+
+	// Types: structural comparison.
+	if isTypeValue(a) && isTypeValue(b) {
+		return a.VType.Equal(b.VType) && valuesEqual(a, b)
 	}
 
 	// Scalars: compare by value.

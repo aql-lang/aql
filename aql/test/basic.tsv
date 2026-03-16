@@ -261,6 +261,12 @@ true lt false	false
 true eq true	true
 true eq false	false
 None eq None	true
+Number eq Number	true
+Number eq String	false
+Integer eq Integer	true
+Number eq Integer	false
+Number neq String	true
+Number neq Number	false
 
 # Comparison - deq (deep equality)
 1 deq 1	true
