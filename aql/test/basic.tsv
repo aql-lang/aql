@@ -216,6 +216,19 @@ None is None	true
 {a:1,b:"x"} is {a:Integer,b:String}	true
 {a:1} is {a:Integer,b:String}	false
 
+# is - closed map: extra keys cause failure
+{x:1,z:"q"} is {x:Number}	false
+{x:1,y:2,z:3} is {x:Integer,y:Integer}	false
+{x:1} is {x:Integer,y:Integer}	false
+
+# is - closed list: length must match
+[1 2 3] is [:Integer]	true
+[1 2 3] is [:String]	false
+[1 2] is [:Number]	true
+[] is [:String]	true
+["a" 1] is [:String]	false
+["a" 1] is [:Number]	false
+
 # is - record type equality (records only unify with records)
 record [x:Number y:String] is record [x:Number y:String]	true
 record [x:Number y:String] is record [x:Any y:Any]	true
