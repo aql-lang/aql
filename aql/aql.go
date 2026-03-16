@@ -70,22 +70,40 @@ func NewMemFileOps() *fileops.MemFileOps {
 	return fileops.NewMem()
 }
 
+// Options configures an AQL instance.
+type Options struct {
+	// Registry is a string identifier for the registry to use.
+	Registry string
+}
+
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
 // Create multiple instances with New() for independent execution contexts.
 type AQL struct {
 	registry *engine.Registry
+	options  Options
 }
 
 // New creates a new AQL instance with built-in functions.
-func New() (*AQL, error) {
+// An optional Options value may be provided to configure the instance.
+func New(opts ...Options) (*AQL, error) {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
-	return &AQL{registry: reg}, nil
+	return &AQL{registry: reg, options: o}, nil
+}
+
+// Options returns the Options the instance was created with.
+func (a *AQL) Options() Options {
+	return a.options
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.
