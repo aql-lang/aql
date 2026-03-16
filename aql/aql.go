@@ -5,6 +5,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+
+	udk "voxgiguniversalsdk"
 )
 
 // FileOps is the interface for file system operations used by read/write words.
@@ -86,6 +88,7 @@ type Options struct {
 type AQL struct {
 	registry *engine.Registry
 	options  Options
+	manager  *udk.UniversalManager
 }
 
 // New creates a new AQL instance with built-in functions.
@@ -102,7 +105,12 @@ func New(opts ...Options) (*AQL, error) {
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
-	return &AQL{registry: reg, options: o}, nil
+
+	um := udk.NewUniversalManager(map[string]any{
+		"registry": o.Registry,
+	})
+
+	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
 // Options returns the Options the instance was created with.
