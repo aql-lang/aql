@@ -1395,7 +1395,7 @@ func TestResolveWordValueNonWord(t *testing.T) {
 // ========================
 
 func TestResolveSigTypeTypeLiteral(t *testing.T) {
-	tp, err := resolveSigType(NewTypeLiteral(TNumber))
+	tp, _, err := resolveSigType(NewTypeLiteral(TNumber))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1405,7 +1405,7 @@ func TestResolveSigTypeTypeLiteral(t *testing.T) {
 }
 
 func TestResolveSigTypeWord(t *testing.T) {
-	tp, err := resolveSigType(NewWord("String"))
+	tp, _, err := resolveSigType(NewWord("String"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1415,7 +1415,7 @@ func TestResolveSigTypeWord(t *testing.T) {
 }
 
 func TestResolveSigTypeString(t *testing.T) {
-	tp, err := resolveSigType(NewString("Boolean"))
+	tp, _, err := resolveSigType(NewString("Boolean"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1426,7 +1426,7 @@ func TestResolveSigTypeString(t *testing.T) {
 
 func TestResolveSigTypeInteger(t *testing.T) {
 	v := NewInteger(42)
-	tp, err := resolveSigType(v)
+	tp, _, err := resolveSigType(v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1437,7 +1437,7 @@ func TestResolveSigTypeInteger(t *testing.T) {
 
 func TestResolveSigTypeBoolean(t *testing.T) {
 	v := NewBoolean(true)
-	tp, err := resolveSigType(v)
+	tp, _, err := resolveSigType(v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1446,15 +1446,22 @@ func TestResolveSigTypeBoolean(t *testing.T) {
 	}
 }
 
-func TestResolveSigTypeDefault(t *testing.T) {
+func TestResolveSigTypeMap(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	tp, err := resolveSigType(NewMap(m))
+	mapVal := NewMap(m)
+	tp, pattern, err := resolveSigType(mapVal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Equal(TAny) {
-		t.Errorf("expected any for map, got %s", tp)
+	if !tp.Equal(TMap) {
+		t.Errorf("expected Map for map, got %s", tp)
+	}
+	if pattern == nil {
+		t.Fatal("expected non-nil pattern for map")
+	}
+	if !pattern.VType.Equal(TMap) {
+		t.Errorf("expected pattern to be a map, got %s", pattern.VType)
 	}
 }
 

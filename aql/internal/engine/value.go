@@ -90,8 +90,9 @@ type TableTypeInfo struct {
 
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
-	Name string // empty for unnamed positional parameters
-	Type Type
+	Name    string // empty for unnamed positional parameters
+	Type    Type
+	Pattern *Value // optional: map/list pattern for structural matching
 }
 
 // FnSig describes one overload of a function definition.

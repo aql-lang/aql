@@ -17,6 +17,12 @@ type Signature struct {
 	// Use this for words like depth, pick, roll that need to inspect
 	// or manipulate the entire stack.
 	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
+
+	// Patterns holds optional structural patterns for arguments (e.g. map
+	// literals in fn signatures). Key is arg index, value is the pattern.
+	// When set, the argument must unify with the pattern in addition to
+	// matching the type.
+	Patterns map[int]Value
 }
 
 // TotalArgs returns the number of arguments.
@@ -61,6 +67,20 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		ordered, ok := flexibleMatch(top, sig.Args)
 		if !ok {
 			continue
+		}
+
+		// Check structural patterns (e.g. map literals in fn signatures).
+		if sig.Patterns != nil {
+			patternOk := true
+			for idx, pattern := range sig.Patterns {
+				if _, uOk := Unify(ordered[idx], pattern); !uOk {
+					patternOk = false
+					break
+				}
+			}
+			if !patternOk {
+				continue
+			}
 		}
 
 		score := signatureScore(sig)
