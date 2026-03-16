@@ -8,17 +8,20 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"Any":     TAny,
-	"None":    TNone,
-	"Scalar":  TScalar,
-	"Number":  TNumber,
-	"Integer": TInteger,
-	"Decimal": TDecimal,
-	"String":  TString,
-	"Boolean": TBoolean,
-	"Atom":    TAtom,
-	"List":    TList,
-	"Map":     TMap,
+	"Any":       TAny,
+	"None":      TNone,
+	"Scalar":    TScalar,
+	"Number":    TNumber,
+	"Integer":   TInteger,
+	"Decimal":   TDecimal,
+	"String":    TString,
+	"Boolean":   TBoolean,
+	"Atom":      TAtom,
+	"Node":      TNode,
+	"List":      TList,
+	"Map":       TMap,
+	"Table":     TTable,
+	"Record":    TRecord,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,

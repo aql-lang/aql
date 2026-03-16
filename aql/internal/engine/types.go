@@ -7,10 +7,46 @@ import (
 	"unicode/utf8"
 )
 
-// Type represents a hierarchical AQL type such as "string/proper" or "number/integer".
-// A child type matches a parent pattern: string/proper matches string.
+// Type represents a hierarchical AQL type such as "Scalar/String/Proper" or
+// "Scalar/Number/Integer". A child type matches a parent pattern:
+// Scalar/String/Proper matches Scalar/String matches Scalar.
 type Type struct {
 	Parts []string
+}
+
+// typeRoots are the top-level type hierarchy roots. If Parts[0] is already
+// one of these, the path is considered fully qualified and is not expanded.
+var typeRoots = map[string]bool{
+	"Scalar": true,
+	"Node":   true,
+	"Word":   true,
+	"Any":    true,
+	"None":   true,
+}
+
+// typeAncestry maps short (legacy) first-part names to their full ancestry
+// prefix. NewType auto-expands paths whose first part appears here.
+var typeAncestry = map[string]string{
+	"String":      "Scalar/String",
+	"Number":      "Scalar/Number",
+	"Integer":     "Scalar/Number/Integer",
+	"Decimal":     "Scalar/Number/Decimal",
+	"Boolean":     "Scalar/Boolean",
+	"Atom":        "Word/Atom",
+	"List":        "Node/List",
+	"Map":         "Node/Map",
+	"Table":       "Node/Table",
+	"Record":      "Node/Record",
+	"Mark":        "Word/Internal/Mark",
+	"Move":        "Word/Internal/Move",
+	"Forward":     "Word/Internal/Forward",
+	"Paren":       "Word/Internal/Paren",
+	"Fndef":       "Word/Internal/Fndef",
+	"Fnundef":     "Word/Internal/Fnundef",
+	"Function":    "Word/Function",
+	"Returncheck": "Word/Internal/Return",
+	"Disjunct":    "Word/Internal/Disjunct",
+	"Module":      "Word/Internal/Module",
 }
 
 // Well-known types.
@@ -18,33 +54,41 @@ var (
 	TAny          = mustType("Any")
 	TNone         = mustType("None")
 	TScalar       = mustType("Scalar")
-	TString       = mustType("String")
-	TStringProper = mustType("String/Proper")
-	TStringEmpty  = mustType("String/Empty")
-	TNumber       = mustType("Number")
-	TInteger      = mustType("Number/Integer")
-	TDecimal      = mustType("Number/Decimal")
-	TBoolean      = mustType("Boolean")
-	TBooleanTrue  = mustType("Boolean/True")
-	TBooleanFalse = mustType("Boolean/False")
-	TAtom         = mustType("Atom")
-	TList         = mustType("List")
-	TMap          = mustType("Map")
+	TString       = mustType("Scalar/String")
+	TStringProper = mustType("Scalar/String/Proper")
+	TStringEmpty  = mustType("Scalar/String/Empty")
+	TNumber       = mustType("Scalar/Number")
+	TInteger      = mustType("Scalar/Number/Integer")
+	TDecimal      = mustType("Scalar/Number/Decimal")
+	TBoolean      = mustType("Scalar/Boolean")
+	TNode         = mustType("Node")
+	TList         = mustType("Node/List")
+	TListArgs     = mustType("Node/List/Args")
+	TMap          = mustType("Node/Map")
+	TTable        = mustType("Node/Table")
+	TRecord       = mustType("Node/Record")
+	TAtom         = mustType("Word/Atom")
 	TWord         = mustType("Word")
-	TForward      = mustType("Forward")
-	TOpenParen    = mustType("Paren/Open")
-	TFnDef        = mustType("Fndef")
-	TFnUndef      = mustType("Fnundef")
-	TFunction     = mustType("Function")
-	TReturnCheck     = mustType("Returncheck")
-	TDisjunct        = mustType("Disjunct")
-	TWordInspection  = mustType("Map/Word_inspection")
-	TFetchFunction   = mustType("Word/Function/Fetch")
-	TFetchRequest    = mustType("Map/Fetch/Request")
-	TFetchResponse   = mustType("Map/Fetch/Response")
-	TMark            = mustType("Mark")
-	TMove            = mustType("Move")
-	TModule          = mustType("Module")
+	TFunction     = mustType("Word/Function")
+	TForward      = mustType("Word/Internal/Forward")
+	TOpenParen    = mustType("Word/Internal/Paren")
+	TFnDef        = mustType("Word/Internal/Fndef")
+	TFnUndef      = mustType("Word/Internal/Fnundef")
+	TReturnCheck  = mustType("Word/Internal/Return")
+	TDisjunct     = mustType("Word/Internal/Disjunct")
+	TMark         = mustType("Word/Internal/Mark")
+	TMove         = mustType("Word/Internal/Move")
+	TModule       = mustType("Word/Internal/Module")
+	TInternal     = mustType("Word/Internal")
+	TWordInspect  = mustType("Node/Map/Word/Inspect")
+	TFetchFunction = mustType("Word/Function/Fetch")
+	TFetchRequest  = mustType("Node/Map/Fetch/Request")
+	TFetchResponse = mustType("Node/Map/Fetch/Response")
+
+	// Deprecated aliases — kept temporarily for migration.
+	TBooleanTrue    = TBoolean
+	TBooleanFalse   = TBoolean
+	TWordInspection = TWordInspect
 )
 
 // mustType is used only for well-known type constants at init time.
@@ -59,6 +103,9 @@ func mustType(path string) Type {
 }
 
 // NewType creates a Type from a slash-separated path, e.g. "String/Proper".
+// Short names are auto-expanded to their full hierarchy path: "String/Proper"
+// becomes "Scalar/String/Proper", "Map/Fetch/Request" becomes
+// "Node/Map/Fetch/Request", etc.
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
 func NewType(path string) (Type, error) {
@@ -69,28 +116,30 @@ func NewType(path string) (Type, error) {
 			return Type{}, fmt.Errorf("aql: type part %q in %q must start with an uppercase letter", p, path)
 		}
 	}
+
+	// Auto-expand short names to full hierarchy paths.
+	// If the first part is already a root, no expansion needed.
+	if !typeRoots[parts[0]] {
+		if fullPrefix, ok := typeAncestry[parts[0]]; ok {
+			expanded := fullPrefix
+			if len(parts) > 1 {
+				expanded += "/" + strings.Join(parts[1:], "/")
+			}
+			parts = strings.Split(expanded, "/")
+		}
+	}
+
 	return Type{Parts: parts}, nil
 }
 
 // Matches reports whether this type satisfies the given pattern.
-//   - "any" pattern matches everything.
-//   - A child matches a parent: string/proper matches string.
-//   - A parent does NOT match a child: string does not match string/proper.
+//   - "Any" pattern matches everything.
+//   - A child matches a parent: Scalar/String/Proper matches Scalar/String.
+//   - A parent does NOT match a child: Scalar/String does not match Scalar/String/Proper.
 func (t Type) Matches(pattern Type) bool {
+	// "Any" matches everything unconditionally.
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Any" {
-		// "Any" matches all data types but not internal types (Word, Forward).
-		if t.Parts[0] == "Word" || t.Parts[0] == "Forward" || t.Parts[0] == "Paren" || t.Parts[0] == "Mark" || t.Parts[0] == "Move" || t.Parts[0] == "Returncheck" {
-			return false
-		}
 		return true
-	}
-	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Scalar" {
-		// "Scalar" is the supertype of String, Number, Boolean, and Atom.
-		switch t.Parts[0] {
-		case "String", "Number", "Boolean", "Atom", "Scalar":
-			return true
-		}
-		return false
 	}
 	if len(t.Parts) < len(pattern.Parts) {
 		return false
@@ -113,8 +162,17 @@ func (t Type) String() string {
 	return strings.Join(t.Parts, "/")
 }
 
+// Leaf returns the last part of the type path.
+// For example, "Node/Map/Fetch/Request" returns "Request".
+func (t Type) Leaf() string {
+	if len(t.Parts) == 0 {
+		return ""
+	}
+	return t.Parts[len(t.Parts)-1]
+}
+
 // IsSubtypeOf reports whether t is a strict subtype of parent.
-// For example: string/proper is a subtype of string, number/integer is a subtype of number.
+// For example: Scalar/String/Proper is a subtype of Scalar/String.
 // A type is NOT a subtype of itself.
 func (t Type) IsSubtypeOf(parent Type) bool {
 	if len(t.Parts) <= len(parent.Parts) {

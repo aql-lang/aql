@@ -12,16 +12,20 @@ import (
 
 // typeNames maps well-known type names to their engine Type.
 var typeNames = map[string]engine.Type{
-	"Any":     engine.TAny,
-	"None":    engine.TNone,
-	"Scalar":  engine.TScalar,
-	"Number":  engine.TNumber,
-	"Integer": engine.TInteger,
-	"String":  engine.TString,
-	"Boolean": engine.TBoolean,
-	"Atom":    engine.TAtom,
-	"List":    engine.TList,
-	"Map":     engine.TMap,
+	"Any":       engine.TAny,
+	"None":      engine.TNone,
+	"Scalar":    engine.TScalar,
+	"Number":    engine.TNumber,
+	"Integer":   engine.TInteger,
+	"Decimal":   engine.TDecimal,
+	"String":    engine.TString,
+	"Boolean":   engine.TBoolean,
+	"Atom":      engine.TAtom,
+	"Node":      engine.TNode,
+	"List":      engine.TList,
+	"Map":       engine.TMap,
+	"Table":     engine.TTable,
+	"Record":    engine.TRecord,
 }
 
 func boolPtr(b bool) *bool { return &b }

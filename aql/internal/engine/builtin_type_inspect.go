@@ -19,7 +19,7 @@ func buildInspection(r *Registry, name string) Value {
 	if fn == nil {
 		result.Set("kind", NewAtom("unknown"))
 		result.Set("signatures", NewList(nil))
-		return Value{VType: TWordInspection, Data: result}
+		return Value{VType: TWordInspect, Data: result}
 	}
 
 	// Determine kind: if there's a DefStacks entry, it's user-defined.
@@ -54,5 +54,5 @@ func buildInspection(r *Registry, name string) Value {
 	}
 	result.Set("signatures", NewList(sigMaps))
 
-	return Value{VType: TWordInspection, Data: result}
+	return Value{VType: TWordInspect, Data: result}
 }

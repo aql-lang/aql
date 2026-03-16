@@ -37,10 +37,14 @@ var (
 	TString  = engine.TString
 	TNumber  = engine.TNumber
 	TInteger = engine.TInteger
+	TDecimal = engine.TDecimal
 	TBoolean = engine.TBoolean
+	TNode    = engine.TNode
 	TAtom    = engine.TAtom
 	TList    = engine.TList
 	TMap     = engine.TMap
+	TTable   = engine.TTable
+	TRecord  = engine.TRecord
 )
 
 // NewType creates a Type from a slash-separated path (e.g. "string/proper",

@@ -16,11 +16,20 @@ type Function struct {
 	SuffixPrecedence bool // true = engine tries suffix-first; false = prefix-only
 }
 
+// TypeDef describes a named complex type in the type registry.
+// The Type field holds the full type path (e.g. Node/Map/Resource/Table).
+// The Constraint holds the type's structure — a record type, disjunct, etc.
+type TypeDef struct {
+	Type       Type  // full type path
+	Constraint Value // structural constraint (RecordTypeInfo, ChildTypeInfo, etc.)
+}
+
 // Registry maps function names to their definitions.
 type Registry struct {
 	funcs     map[string]*Function
 	Store     map[string]Value   // key-value store for set/get
 	DefStacks map[string][]Value // stacked bodies for def-defined words
+	Types     map[string]TypeDef // complex type registry keyed by full type path
 	FileOps   fileops.FileOps    // file operations for read/write words
 	Formats   map[string]Format  // format registry for read/write (keyed by name)
 	Output    io.Writer          // output writer for print/printstr and stdout
@@ -44,6 +53,7 @@ func NewRegistry() (*Registry, error) {
 		funcs:     make(map[string]*Function),
 		Store:     make(map[string]Value),
 		DefStacks: make(map[string][]Value),
+		Types:     make(map[string]TypeDef),
 		FileOps:   fileops.NewDefault(),
 		Formats:   DefaultFormats(),
 		Output:    os.Stdout,

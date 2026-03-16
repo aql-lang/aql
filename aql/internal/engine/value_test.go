@@ -15,8 +15,8 @@ func TestValueStringTypes(t *testing.T) {
 		{"bool_false", NewBoolean(false), "false"},
 		{"atom", NewAtom("foo"), "foo"},
 		{"none_literal", NewTypeLiteral(TNone), "None"},
-		{"number_literal", NewTypeLiteral(TNumber), "Number"},
-		{"string_literal", NewTypeLiteral(TString), "String"},
+		{"number_literal", NewTypeLiteral(TNumber), "Scalar/Number"},
+		{"string_literal", NewTypeLiteral(TString), "Scalar/String"},
 		{"word", NewWord("upper"), "word(upper)"},
 		{"open_paren", NewOpenParen(), "("},
 	}
@@ -52,16 +52,16 @@ func TestValueStringMapOrig(t *testing.T) {
 func TestValueStringTypedListOrig(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
 	got := v.String()
-	if got != "[:String]" {
-		t.Errorf("got %q, want %q", got, "[:String]")
+	if got != "[:Scalar/String]" {
+		t.Errorf("got %q, want %q", got, "[:Scalar/String]")
 	}
 }
 
 func TestValueStringTypedMapOrig(t *testing.T) {
 	v := NewTypedMap(NewTypeLiteral(TNumber))
 	got := v.String()
-	if got != "{:Number}" {
-		t.Errorf("got %q, want %q", got, "{:Number}")
+	if got != "{:Scalar/Number}" {
+		t.Errorf("got %q, want %q", got, "{:Scalar/Number}")
 	}
 }
 
@@ -71,8 +71,8 @@ func TestValueStringRecordTypeOrig(t *testing.T) {
 	fields.Set("y", NewTypeLiteral(TString))
 	v := NewRecordType(fields)
 	got := v.String()
-	if got != "record{x:Number,y:String}" {
-		t.Errorf("got %q, want %q", got, "record{x:Number,y:String}")
+	if got != "record{x:Scalar/Number,y:Scalar/String}" {
+		t.Errorf("got %q, want %q", got, "record{x:Scalar/Number,y:Scalar/String}")
 	}
 }
 
@@ -81,16 +81,16 @@ func TestValueStringTableTypeOrig(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TNumber))
 	v := NewTableType(RecordTypeInfo{Fields: fields})
 	got := v.String()
-	if got != "table{a:Number}" {
-		t.Errorf("got %q, want %q", got, "table{a:Number}")
+	if got != "table{a:Scalar/Number}" {
+		t.Errorf("got %q, want %q", got, "table{a:Scalar/Number}")
 	}
 }
 
 func TestValueStringDisjunctOrig(t *testing.T) {
 	v := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
 	got := v.String()
-	if got != "String|None" {
-		t.Errorf("got %q, want %q", got, "String|None")
+	if got != "Scalar/String|None" {
+		t.Errorf("got %q, want %q", got, "Scalar/String|None")
 	}
 }
 
