@@ -198,3 +198,35 @@ func (t Type) Equal(other Type) bool {
 	}
 	return true
 }
+
+// builtinTypeParts returns a set of all parts used in well-known types.
+// Used to initialize Registry.KnownTypeParts for uniqueness enforcement.
+func builtinTypeParts() map[string]bool {
+	parts := make(map[string]bool)
+	builtins := []Type{
+		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
+		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
+		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
+		TOpenParen, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
+		TMove, TModule, TInternal, TWordInspect, TFetchFunction,
+		TFetchRequest, TFetchResponse,
+	}
+	for _, t := range builtins {
+		for _, p := range t.Parts {
+			parts[p] = true
+		}
+	}
+	return parts
+}
+
+// ValidateTypeNameParts checks that a type name (slash-separated) does not
+// reuse any part that is already known. Returns an error if a conflict is found.
+func ValidateTypeNameParts(name string, known map[string]bool) error {
+	parts := strings.Split(name, "/")
+	for _, p := range parts {
+		if known[p] {
+			return fmt.Errorf("type: name part %q in %q conflicts with an existing type name", p, name)
+		}
+	}
+	return nil
+}

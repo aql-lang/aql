@@ -36,11 +36,12 @@ type Registry struct {
 	ErrOutput io.Writer          // error output writer for stderr
 	Input     io.Reader          // input reader for stdin
 	SQLite    *SQLiteStore       // in-memory SQLite store for table data
-	Modules   map[string]ModuleDesc    // child modules keyed by generated ID
-	moduleSeq int                      // counter for generating module IDs
-	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
-	ctxStack  []map[string]Value // scoped context stack; top = current engine's context
-	argsStack []Value            // stack of args lists for nested fn calls
+	Modules        map[string]ModuleDesc    // child modules keyed by generated ID
+	moduleSeq      int                      // counter for generating module IDs
+	ParseFunc      func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
+	ctxStack       []map[string]Value // scoped context stack; top = current engine's context
+	argsStack      []Value            // stack of args lists for nested fn calls
+	KnownTypeParts map[string]bool    // set of all type path parts (for uniqueness enforcement)
 }
 
 // NewRegistry creates an empty registry.
@@ -49,19 +50,21 @@ func NewRegistry() (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}
-	return &Registry{
-		funcs:     make(map[string]*Function),
-		Store:     make(map[string]Value),
-		DefStacks: make(map[string][]Value),
-		Types:     make(map[string]TypeDef),
-		FileOps:   fileops.NewDefault(),
-		Formats:   DefaultFormats(),
-		Output:    os.Stdout,
-		ErrOutput: os.Stderr,
-		Input:     os.Stdin,
-		SQLite:    sqlStore,
-		Modules:   make(map[string]ModuleDesc),
-	}, nil
+	r := &Registry{
+		funcs:          make(map[string]*Function),
+		Store:          make(map[string]Value),
+		DefStacks:      make(map[string][]Value),
+		Types:          make(map[string]TypeDef),
+		FileOps:        fileops.NewDefault(),
+		Formats:        DefaultFormats(),
+		Output:         os.Stdout,
+		ErrOutput:      os.Stderr,
+		Input:          os.Stdin,
+		SQLite:         sqlStore,
+		Modules:        make(map[string]ModuleDesc),
+		KnownTypeParts: builtinTypeParts(),
+	}
+	return r, nil
 }
 
 // NextModuleID generates a unique module identifier.
@@ -257,6 +260,7 @@ func registerBuiltins(r *Registry) {
 	registerMake(r)
 	registerTypeDef(r)
 	registerTypeof(r)
+	registerFullTypeof(r)
 	registerInspect(r)
 	registerBase(r)
 

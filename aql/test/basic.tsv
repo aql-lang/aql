@@ -163,15 +163,25 @@ String or None	Scalar/String|None
 (None or Boolean) unify None	None true
 ({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
 
-# typeof - returns base type as atom
-typeof 42	Scalar/Number/Integer
-typeof "hello"	Scalar/String/Proper
-typeof ""	Scalar/String/Empty
-typeof true	Scalar/Boolean
-typeof false	Scalar/Boolean
-typeof [1 2 3]	Node/List
-typeof {x:1}	Node/Map
+# typeof - returns second type part (or first if single)
+typeof 42	Number
+typeof "hello"	String
+typeof ""	String
+typeof true	Boolean
+typeof false	Boolean
+typeof [1 2 3]	List
+typeof {x:1}	Map
 typeof None	None
+
+# fulltypeof - returns full type path
+fulltypeof 42	Scalar/Number/Integer
+fulltypeof "hello"	Scalar/String/Proper
+fulltypeof ""	Scalar/String/Empty
+fulltypeof true	Scalar/Boolean
+fulltypeof false	Scalar/Boolean
+fulltypeof [1 2 3]	Node/List
+fulltypeof {x:1}	Node/Map
+fulltypeof None	None
 
 # base - returns zero/default value for a type
 base Integer	0
@@ -199,6 +209,9 @@ type P record [x:Number y:String z:Boolean] make P {x:1} {base:true}	{x:1,y:'',z
 
 # make record with base:true - named list form
 type P record [x:Number y:String] make P [x:1] {base:true}	{x:1,y:''}
+
+# type name uniqueness - conflicting parts are rejected
+type Foo/String Number	ERROR:type: name part "String" in "Foo/String" conflicts with an existing type name
 
 # Comparison - lt (less than)
 1 lt 2	true
