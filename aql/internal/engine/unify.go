@@ -62,6 +62,15 @@ func Unify(a, b Value) (Value, bool) {
 		return unifyMaps(a, aMap, b, bMap)
 	}
 
+	// Type literal unification: a type literal (Data==nil) unifies with
+	// any concrete value whose type matches. Return the concrete value.
+	if a.Data == nil && b.Data != nil && bType.Matches(aType) {
+		return b, true
+	}
+	if b.Data == nil && a.Data != nil && aType.Matches(bType) {
+		return a, true
+	}
+
 	// If both types are exactly equal, compare literal values.
 	if aType.Equal(bType) {
 		if valuesEqual(a, b) {

@@ -163,8 +163,8 @@ Number unify 1	1 true
 "hello" unify String	'hello' true
 String unify "hello"	'hello' true
 "" unify String	'' true
-true unify Boolean	'~unify-fail' false
-Boolean unify false	'~unify-fail' false
+true unify Boolean	true true
+Boolean unify false	false true
 
 # === Unify - type with any ===
 1 unify Any	1 true
@@ -232,9 +232,9 @@ unify 1 Number end	1 true
 "hello" unify String	'hello' true
 unify "hello" String end	'hello' true
 
-true Boolean unify	'~unify-fail' false
-true unify Boolean	'~unify-fail' false
-unify true Boolean end	'~unify-fail' false
+true Boolean unify	true true
+true unify Boolean	true true
+unify true Boolean end	true true
 
 42 42 unify	42 true
 42 unify 42	42 true

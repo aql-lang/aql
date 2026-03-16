@@ -1260,21 +1260,44 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 }
 
 // effectiveResolved returns the resolved portion of the stack visible for
-// prefix matching.
+// prefix matching. Function words and their collected suffix args that are
+// tracked by active forwards are excluded — they belong to the outer
+// forward's context and should not be consumed by inner prefix matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
+	excludeIndices := make(map[int]bool)
 	for i := e.pointer - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
 			start = i + 1
 			break
 		}
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			// Exclude the function word itself.
+			excludeIndices[fwd.FuncIndex] = true
+			// Exclude collected suffix args (positioned before function word).
+			for j := 0; j < fwd.CollectedArgs; j++ {
+				idx := fwd.FuncIndex - 1 - j
+				if idx >= 0 {
+					excludeIndices[idx] = true
+				}
+			}
+			// Exclude claimed prefix args (positioned before collected suffix args).
+			prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
+			for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+				if j >= 0 {
+					excludeIndices[j] = true
+				}
+			}
+		}
 	}
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
-		if !v.IsForward() && !v.IsOpenParen() && !v.IsMark() && !v.IsMove() {
-			resolved = append(resolved, v)
+		if v.IsForward() || v.IsOpenParen() || v.IsMark() || v.IsMove() || excludeIndices[i] {
+			continue
 		}
+		resolved = append(resolved, v)
 	}
 	return resolved
 }
@@ -1398,12 +1421,18 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 				fwd := e.stack[i].AsForward()
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
-				// Exclude already-collected suffix args (positioned
-				// before the function word).
+				// Exclude collected suffix args (before function word).
 				for j := 0; j < fwd.CollectedArgs; j++ {
 					idx := fwd.FuncIndex - 1 - j
 					if idx >= 0 {
 						excludeIndices[idx] = true
+					}
+				}
+				// Exclude claimed prefix args.
+				prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
+				for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+					if j >= 0 {
+						excludeIndices[j] = true
 					}
 				}
 			}

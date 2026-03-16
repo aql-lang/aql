@@ -65,6 +65,21 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 
 		score := signatureScore(sig)
 
+		// Match quality bonus: reward signatures where the actual values
+		// match specific (non-Any) type constraints. This prevents TAny
+		// from inflating scores when competing with specific types at
+		// different hierarchy depths (e.g. TWord vs TString).
+		for j := 0; j < n; j++ {
+			if sig.Args[j].Equal(TAny) {
+				continue
+			}
+			if ordered[j].VType.Equal(sig.Args[j]) {
+				score += 50 // exact type match
+			} else {
+				score += 10 // prefix (inexact) match
+			}
+		}
+
 		if best != nil && score <= bestScore {
 			continue
 		}
@@ -104,7 +119,7 @@ func positionalMatch(values []Value, types []Type) bool {
 	return true
 }
 
-// signatureScore computes a ranking score for tie-breaking.
+// signatureScore computes an intrinsic ranking score for a signature.
 // Higher is better: more args and more specific types win.
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 100 // arg count dominates
