@@ -235,11 +235,25 @@ None is None	true
 [1 "a"] is [Integer String]	true
 ["a" 1] is [String Integer]	true
 ["a" 1] is [Integer String]	false
+[1 "a" true] is [Integer String Boolean]	true
 [1 2 3] is [Number Number Number]	true
 [1] is [String]	false
 [] is []	true
 [1 2] is [Integer]	false
 [1] is [Integer Integer]	false
+
+# is - booleans in lists resolve correctly
+[true false] is [Boolean Boolean]	true
+[true] is [Boolean]	true
+[1 true] is [Integer Boolean]	true
+[true "a"] is [Boolean String]	true
+[true] is [String]	false
+
+# is - atoms in lists resolve correctly
+[foo] is [Atom]	true
+[foo bar] is [Atom Atom]	true
+[1 foo] is [Integer Atom]	true
+[foo] is [String]	false
 
 # is - record type equality (records only unify with records)
 record [x:Number y:String] is record [x:Number y:String]	true

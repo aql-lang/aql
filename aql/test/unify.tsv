@@ -67,7 +67,7 @@ Boolean	None	false
 [1,2,3]	[1,2,3]	true	[1,2,3]
 ["a","b"]	["a","b"]	true	['a','b']
 []	[]	true	[]
-[true,false]	[true,false]	true	[word(true),word(false)]
+[true,false]	[true,false]	true	[true,false]
 
 # List element-wise narrowing (type names in lists are type literals)
 [1,String]	[Number,"a"]	true	[1,'a']
@@ -77,6 +77,8 @@ Boolean	None	false
 [String,Integer]	["a",1]	true	['a',1]
 [Number,String]	["a",1]	false
 [Integer,Integer]	[1,"a"]	false
+[Boolean,Integer]	[true,1]	true	[true,1]
+[Integer,Boolean]	[1,false]	true	[1,false]
 
 # List length mismatch (fail)
 [1]	[1,2]	false

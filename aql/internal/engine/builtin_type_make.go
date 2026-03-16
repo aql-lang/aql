@@ -345,8 +345,8 @@ func makeFieldValue(val Value, constraint Value) (Value, error) {
 }
 
 // resolveWordValue converts a word value to its semantic value.
-// Words named "true"/"false" become booleans, "none" becomes a type literal,
-// and other words become atoms (bare strings).
+// Words named "true"/"false" become booleans, known type names become type
+// literals, and other words become atoms (bare strings).
 func resolveWordValue(v Value) Value {
 	if !v.IsWord() {
 		return v
@@ -357,9 +357,10 @@ func resolveWordValue(v Value) Value {
 		return NewBoolean(true)
 	case "false":
 		return NewBoolean(false)
-	case "None":
-		return NewTypeLiteral(TNone)
 	default:
+		if t, ok := typeNames[name]; ok {
+			return NewTypeLiteral(t)
+		}
 		return NewAtom(name)
 	}
 }
