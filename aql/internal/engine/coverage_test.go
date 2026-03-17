@@ -4164,3 +4164,322 @@ func TestSetParseFunc(t *testing.T) {
 	}
 }
 
+// ========================
+// resolveSigType coverage
+// ========================
+
+func TestResolveSigTypeList(t *testing.T) {
+	listVal := NewList([]Value{NewInteger(1), NewInteger(2)})
+	tp, pattern, err := resolveSigType(listVal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tp.Equal(TList) {
+		t.Errorf("expected List for list, got %s", tp)
+	}
+	if pattern == nil {
+		t.Fatal("expected non-nil pattern for list")
+	}
+	if !pattern.VType.Equal(TList) {
+		t.Errorf("expected pattern to be a list, got %s", pattern.VType)
+	}
+}
+
+func TestResolveSigTypeDecimalDefault(t *testing.T) {
+	// Decimal is not integer or boolean, and has Data != nil, so falls through
+	// to the map/list checks and then to TAny.
+	v := NewDecimal(3.14)
+	tp, pattern, err := resolveSigType(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tp.Equal(TAny) {
+		t.Errorf("expected Any for decimal, got %s", tp)
+	}
+	if pattern != nil {
+		t.Errorf("expected nil pattern for decimal, got %v", pattern)
+	}
+}
+
+// ========================
+// MatchSignature pattern coverage
+// ========================
+
+func TestMatchSignaturePatternReject(t *testing.T) {
+	// Signature with a map pattern that should reject a non-matching map.
+	patternMap := NewOrderedMap()
+	patternMap.Set("x", NewInteger(99))
+	patternVal := NewMap(patternMap)
+
+	sig := Signature{
+		Args:     []Type{TMap},
+		Patterns: map[int]Value{0: patternVal},
+		Handler:  func(args []Value) ([]Value, error) { return args, nil },
+	}
+
+	// Matching map: {x:99}
+	matchMap := NewOrderedMap()
+	matchMap.Set("x", NewInteger(99))
+	stack := []Value{NewMap(matchMap)}
+
+	result := MatchSignature([]Signature{sig}, stack, WordInfo{ArgCount: -1})
+	if result == nil {
+		t.Error("expected match for {x:99} against pattern {x:99}")
+	}
+
+	// Non-matching map: {x:100}
+	noMatchMap := NewOrderedMap()
+	noMatchMap.Set("x", NewInteger(100))
+	stack2 := []Value{NewMap(noMatchMap)}
+
+	result2 := MatchSignature([]Signature{sig}, stack2, WordInfo{ArgCount: -1})
+	if result2 != nil {
+		t.Error("expected no match for {x:100} against pattern {x:99}")
+	}
+}
+
+func TestMatchSignaturePatternFallthrough(t *testing.T) {
+	// Two signatures: one with pattern (more specific), one without (fallback).
+	patternMap := NewOrderedMap()
+	patternMap.Set("a", NewInteger(1))
+	patternVal := NewMap(patternMap)
+
+	specificSig := Signature{
+		Args:     []Type{TMap},
+		Patterns: map[int]Value{0: patternVal},
+		Handler:  func(args []Value) ([]Value, error) { return []Value{NewString("specific")}, nil },
+	}
+	fallbackSig := Signature{
+		Args:    []Type{TMap},
+		Handler: func(args []Value) ([]Value, error) { return []Value{NewString("fallback")}, nil },
+	}
+
+	// Non-matching map should fall through to fallback.
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(2))
+	stack := []Value{NewMap(m)}
+
+	result := MatchSignature([]Signature{specificSig, fallbackSig}, stack, WordInfo{ArgCount: -1})
+	if result == nil {
+		t.Fatal("expected fallback match")
+	}
+	out, _ := result.Sig.Handler(result.Args)
+	if out[0].AsString() != "fallback" {
+		t.Errorf("expected fallback, got %s", out[0].AsString())
+	}
+}
+
+// ========================
+// CallAQL pattern coverage
+// ========================
+
+func TestCallAQLMapPattern(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a function with map pattern: fn [[x:{k:1}] [String] ["yes"]]
+	patternMap := NewOrderedMap()
+	patternMap.Set("k", NewInteger(1))
+	patternVal := NewMap(patternMap)
+
+	fnDef := FnDefInfo{
+		Sigs: []FnSig{
+			{
+				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
+				Returns: []Type{TString},
+				Body:    []Value{NewString("yes")},
+			},
+		},
+	}
+	fnVal := NewFunction(fnDef)
+
+	// Matching call: {k:1}
+	argMap := NewOrderedMap()
+	argMap.Set("k", NewInteger(1))
+	result, callErr := r.CallAQL(fnVal, []Value{NewMap(argMap)})
+	if callErr != nil {
+		t.Fatalf("expected match, got error: %v", callErr)
+	}
+	if len(result) != 1 || result[0].AsString() != "yes" {
+		t.Errorf("expected [yes], got %v", result)
+	}
+
+	// Non-matching call: {k:2}
+	noArgMap := NewOrderedMap()
+	noArgMap.Set("k", NewInteger(2))
+	_, callErr = r.CallAQL(fnVal, []Value{NewMap(noArgMap)})
+	if callErr == nil {
+		t.Error("expected no matching signature error for {k:2}")
+	}
+}
+
+// ========================
+// registerFn error paths
+// ========================
+
+func TestRegisterFnNonList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// fn with a non-list argument should error.
+	err = runAQLError(t, r, []Value{NewInteger(42), NewWord("fn")})
+	if err == nil {
+		t.Error("expected error for fn with non-list argument")
+	}
+}
+
+func TestRegisterFnEmptyList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runAQLError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
+	if err == nil {
+		t.Error("expected error for fn with empty list")
+	}
+}
+
+func TestRegisterFnBadTriple(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Triple with invalid input sig (non-list, non-map param element).
+	err = runAQLError(t, r, []Value{
+		NewList([]Value{
+			NewList([]Value{NewDecimal(1.5)}), // invalid param type
+			NewTypeLiteral(TString),
+			NewList([]Value{NewString("body")}),
+		}),
+		NewWord("fn"),
+	})
+	if err == nil {
+		t.Error("expected error for fn with invalid param type")
+	}
+}
+
+// ========================
+// parseFnUndefSpec error paths
+// ========================
+
+func TestParseFnUndefSpecParamError(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 elements = 2 pairs, first pair has bad input sig (invalid param type).
+	err = runAQLError(t, r, []Value{
+		NewList([]Value{
+			NewList([]Value{NewDecimal(1.5)}), // invalid param
+			NewTypeLiteral(TString),
+			NewList([]Value{NewDecimal(1.5)}), // invalid param
+			NewTypeLiteral(TString),
+		}),
+		NewWord("fn"),
+	})
+	if err == nil {
+		t.Error("expected error for fn undef spec with invalid param")
+	}
+}
+
+func TestParseFnUndefSpecReturnError(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 elements = 2 pairs, valid input sig but invalid return type.
+	err = runAQLError(t, r, []Value{
+		NewList([]Value{
+			NewList([]Value{NewTypeLiteral(TString)}), // valid param
+			NewString("nonexistent_type"),              // invalid return type
+			NewList([]Value{NewTypeLiteral(TString)}),
+			NewString("nonexistent_type"),
+		}),
+		NewWord("fn"),
+	})
+	if err == nil {
+		t.Error("expected error for fn undef spec with invalid return type")
+	}
+}
+
+// ========================
+// parseFnReturns error paths
+// ========================
+
+func TestParseFnReturnsSingleError(t *testing.T) {
+	// A single non-list return type that is an invalid type name.
+	_, err := parseFnReturns(NewString("nonexistent_type"))
+	if err == nil {
+		t.Error("expected error for invalid return type name")
+	}
+}
+
+func TestParseFnReturnsListError(t *testing.T) {
+	// A list with an invalid return type element.
+	_, err := parseFnReturns(NewList([]Value{NewString("nonexistent_type")}))
+	if err == nil {
+		t.Error("expected error for invalid return type in list")
+	}
+}
+
+// ========================
+// flexibleMatch coverage
+// ========================
+
+func TestFlexibleMatchTooFewValues(t *testing.T) {
+	// Fewer values than types should return nil, false.
+	values := []Value{NewInteger(1)}
+	types := []Type{TInteger, TString}
+	result, ok := flexibleMatch(values, types)
+	if ok || result != nil {
+		t.Errorf("expected no match with fewer values than types")
+	}
+}
+
+// ========================
+// fn with map pattern via engine (exercises MatchSignature patterns)
+// ========================
+
+func TestFnMapPatternViaEngine(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// def foo fn [[x:{x:99}] [String] ["A"] [x:Map] [String] ["B"]]
+	patternMap := NewOrderedMap()
+	patternMap.Set("x", NewInteger(99))
+
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"),
+		NewList([]Value{
+			// Overload 1: x matches {x:99}
+			NewList([]Value{NewMap(singleMap("x", NewMap(patternMap)))}),
+			NewList([]Value{NewTypeLiteral(TString)}),
+			NewList([]Value{NewString("A")}),
+			// Overload 2: x matches any Map
+			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TMap)))}),
+			NewList([]Value{NewTypeLiteral(TString)}),
+			NewList([]Value{NewString("B")}),
+		}),
+		// Call with {x:99} — should match overload 1
+		NewMap(patternMap), NewWord("foo"),
+	})
+	if len(result) != 1 || result[0].AsString() != "A" {
+		t.Errorf("expected 'A' for {x:99}, got %v", result)
+	}
+
+	// Call with {x:100} — should match overload 2 (fallback)
+	noMatchMap := NewOrderedMap()
+	noMatchMap.Set("x", NewInteger(100))
+	result2 := runAQL(t, r, []Value{
+		NewMap(noMatchMap), NewWord("foo"),
+	})
+	if len(result2) != 1 || result2[0].AsString() != "B" {
+		t.Errorf("expected 'B' for {x:100}, got %v", result2)
+	}
+}
+
