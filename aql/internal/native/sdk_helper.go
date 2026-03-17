@@ -13,10 +13,13 @@ import (
 // looks up or creates the SDK instance, and returns the SDK and entity name.
 func getSDK(apiMap *engine.OrderedMap, opName string, r *engine.Registry) (*udk.UniversalSDK, string, error) {
 	specVal, _ := apiMap.Get("spec")
-	entityVal, _ := apiMap.Get("entity")
 
 	spec := specVal.AsString()
-	entityName := entityVal.AsString()
+
+	var entityName string
+	if entityVal, ok := apiMap.Get("entity"); ok {
+		entityName = entityVal.AsString()
+	}
 
 	// Strip .json extension if present.
 	spec = strings.TrimSuffix(spec, ".json")

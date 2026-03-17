@@ -86,6 +86,8 @@ func All() []NativeFunc {
 		padFunc(),
 		itemsFunc(),
 		fetchFunc(),
+		prepareFunc(),
+		directFunc(),
 		flattenFunc(),
 		filterFunc(),
 		joinFunc(),
