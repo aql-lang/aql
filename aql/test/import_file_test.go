@@ -345,3 +345,94 @@ export Math {pi:pi,e:e}`,
 	}
 	assertResult(t, result, "2")
 }
+
+// --- JSON / Jsonic data file import ---
+
+func TestImportJSONFile(t *testing.T) {
+	files := map[string]string{
+		"data.json": `{"name":"Earth","diameter":12756}`,
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "data.json"`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || !result[0].VType.Equal(engine.TMap) {
+		t.Fatalf("expected map on stack, got %v", result)
+	}
+	assertResult(t, result, "{diameter:12756,name:'Earth'}")
+}
+
+func TestImportJSONFileAccess(t *testing.T) {
+	files := map[string]string{
+		"data.json": `{"name":"Earth","diameter":12756}`,
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "data.json" name .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'Earth'")
+}
+
+func TestImportJSONFileList(t *testing.T) {
+	files := map[string]string{
+		"items.json": `[1,2,3]`,
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "items.json"`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || !result[0].VType.Equal(engine.TList) {
+		t.Fatalf("expected list on stack, got %v", result)
+	}
+	assertResult(t, result, "[1,2,3]")
+}
+
+func TestImportJsonicFile(t *testing.T) {
+	files := map[string]string{
+		"config.jsonic": `{name:Earth, diameter:12756}`,
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "config.jsonic" name .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'Earth'")
+}
+
+func TestImportJSONFileNested(t *testing.T) {
+	files := map[string]string{
+		"nested.json": `{"planet":{"name":"Mars","moons":["Phobos","Deimos"]}}`,
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "nested.json" planet . name .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'Mars'")
+}
+
+func TestImportJSONFileRenameError(t *testing.T) {
+	files := map[string]string{
+		"data.json": `{"x":1}`,
+	}
+
+	_, err := runModuleSteps(t, files, []string{
+		`import [A B] "data.json"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for rename on data file")
+	}
+}
