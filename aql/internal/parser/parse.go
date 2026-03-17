@@ -454,15 +454,17 @@ func parseWord(text string) (engine.Value, error) {
 }
 
 // expandDottedWord expands dot notation like "foo.a.b" into a sequence of
-// engine values: [( get foo a dot b dot )]. The first segment is retrieved
-// from the store via "get", and each subsequent segment extracts a key using
-// the "dot" word. A standalone "." becomes the "dot" word.
-// Leading dot (e.g. ".a.b") omits the get and emits [a, dot, b, dot],
+// engine values: [( foo a dot b dot )]. The first segment is emitted as a
+// plain word, resolved by the engine (def lookup, registered function, or
+// atom). Each subsequent segment extracts a key using the "dot" word.
+// A standalone "." becomes the "dot" word.
+// Leading dot (e.g. ".a.b") omits the first word and emits [a, dot, b, dot],
 // operating on whatever value is already on the stack (no paren wrapping).
 //
 // The entire multi-token expansion is wrapped in parentheses so that it
-// evaluates as a single sub-expression. This lets suffix-precedence words
-// like "list" consume the result: list foo.a → list ( get foo a dot ).
+// evaluates as a single sub-expression. This gives dot very high binding,
+// letting suffix-precedence words like "list" consume the result:
+// list foo.a → list ( foo a dot ).
 func expandDottedWord(text string) ([]engine.Value, error) {
 	// Standalone "." → just the dot word.
 	if text == "." {
@@ -477,21 +479,15 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	parts := strings.Split(text, ".")
 	var inner []engine.Value
 
-	// First part (before first dot): retrieve from store via get.
-	// "args" is a registered word (not a Store variable), so it
-	// resolves directly without get.
+	// First part (before first dot): emit as a plain word.
+	// The engine resolves it naturally — def, registered function, or atom.
 	leadingDot := parts[0] == ""
 	if !leadingDot {
-		if parts[0] == "args" {
-			inner = append(inner, engine.NewWord("args"))
-		} else {
-			inner = append(inner, engine.NewWord("get"))
-			w, err := parseWord(parts[0])
-			if err != nil {
-				return nil, err
-			}
-			inner = append(inner, w)
+		w, err := parseWord(parts[0])
+		if err != nil {
+			return nil, err
 		}
+		inner = append(inner, w)
 	}
 
 	// Subsequent parts (after each dot): emit key then dot (prefix).

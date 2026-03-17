@@ -514,20 +514,23 @@ None "x" dot	None
 # Dot - string key
 {a:1} "a" dot	1
 
-# Dot notation - simple
-set foo a:b:1 foo.a.b	1
+# Dot notation - simple (def)
+def foo a:b:1 foo.a.b	1
 
-# Dot notation - single level
-set bar {x:42} bar.x	42
+# Dot notation - single level (def)
+def bar {x:42} bar.x	42
 
-# Dot notation - with set storing map
-set m {a:{b:{c:99}}} m.a.b.c	99
+# Dot notation - with def storing map
+def m {a:{b:{c:99}}} m.a.b.c	99
 
-# Dot notation - missing key returns none
-set obj {a:1} obj.b	None
+# Dot notation - missing key returns none (def)
+def obj {a:1} obj.b	None
 
-# Dot notation - null propagation through chain
-set obj {a:1} obj.b.c	None
+# Dot notation - null propagation through chain (def)
+def obj {a:1} obj.b.c	None
+
+# Dot notation - store requires explicit get
+set sv {x:42} (get sv) x .	42
 
 # Dot notation - leading dot (stack access)
 {a:1} .a	1

@@ -878,7 +878,6 @@ func TestExpandBangDotStandalone(t *testing.T) {
 func TestExpandDottedSimple(t *testing.T) {
 	assertExpand(t, "foo.bar", []engine.Value{
 		engine.NewOpenParen(),
-		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("bar"),
 		engine.NewWordModified("dot", -1, true, false),
@@ -889,7 +888,6 @@ func TestExpandDottedSimple(t *testing.T) {
 func TestExpandDottedChain(t *testing.T) {
 	assertExpand(t, "foo.a.b", []engine.Value{
 		engine.NewOpenParen(),
-		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("a"),
 		engine.NewWordModified("dot", -1, true, false),
@@ -911,7 +909,6 @@ func TestExpandDottedLeading(t *testing.T) {
 func TestExpandDottedIntegerKey(t *testing.T) {
 	assertExpand(t, "foo.0", []engine.Value{
 		engine.NewOpenParen(),
-		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewInteger(0),
 		engine.NewWordModified("dot", -1, true, false),
@@ -922,7 +919,6 @@ func TestExpandDottedIntegerKey(t *testing.T) {
 func TestExpandDottedTrailingDot(t *testing.T) {
 	assertExpand(t, "foo.", []engine.Value{
 		engine.NewOpenParen(),
-		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord(")"),
 	})
@@ -932,7 +928,6 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 	// "foo..bar" → empty segment skipped
 	assertExpand(t, "foo..bar", []engine.Value{
 		engine.NewOpenParen(),
-		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("bar"),
 		engine.NewWordModified("dot", -1, true, false),
@@ -1147,9 +1142,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList()
-	// ( get foo bar dot/p ) = 6 elements
-	if len(elems) != 6 {
-		t.Fatalf("expected 6 elements (( get foo bar dot/p )), got %d", len(elems))
+	// ( foo bar dot/p ) = 5 elements
+	if len(elems) != 5 {
+		t.Fatalf("expected 5 elements (( foo bar dot/p )), got %d", len(elems))
 	}
 }
 
@@ -1260,9 +1255,9 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	// 1 ( get foo bar dot ) = 7 values
-	if len(got) != 7 {
-		t.Fatalf("expected 7 values (1 ( get foo bar dot/p )), got %d", len(got))
+	// 1 ( foo bar dot ) = 6 values
+	if len(got) != 6 {
+		t.Fatalf("expected 6 values (1 ( foo bar dot/p )), got %d", len(got))
 	}
 }
 
