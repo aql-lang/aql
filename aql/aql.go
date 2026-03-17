@@ -110,6 +110,8 @@ func New(opts ...Options) (*AQL, error) {
 		"registry": o.Registry,
 	})
 
+	reg.Manager = um
+
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
@@ -164,6 +166,12 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 //	})
 func (a *AQL) RegisterPrefixOnly(name string, sigs ...Signature) {
 	a.registry.RegisterPrefixOnly(name, sigs...)
+}
+
+// SetSDK injects an SDK instance for the given spec name.
+// Used in tests to provide a pre-configured SDK (e.g. test mode with mock data).
+func (a *AQL) SetSDK(spec string, sdk any) {
+	a.registry.SDKCache[spec] = sdk
 }
 
 // Run parses and executes an AQL source string.

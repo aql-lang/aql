@@ -42,6 +42,8 @@ type Registry struct {
 	ctxStack       []map[string]Value // scoped context stack; top = current engine's context
 	argsStack      []Value            // stack of args lists for nested fn calls
 	KnownTypeParts map[string]bool    // set of all type path parts (for uniqueness enforcement)
+	Manager        any                // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache       map[string]any     // cached SDK instances keyed by spec name
 }
 
 // NewRegistry creates an empty registry.
@@ -63,6 +65,7 @@ func NewRegistry() (*Registry, error) {
 		SQLite:         sqlStore,
 		Modules:        make(map[string]ModuleDesc),
 		KnownTypeParts: builtinTypeParts(),
+		SDKCache:       make(map[string]any),
 	}
 	return r, nil
 }

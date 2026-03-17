@@ -70,12 +70,23 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		}
 
 		// Check structural patterns (e.g. map literals in fn signatures).
+		// Maps use open (subset) matching: the pattern's key-value pairs
+		// must be present in the argument, but extra keys are allowed.
 		if sig.Patterns != nil {
 			patternOk := true
 			for idx, pattern := range sig.Patterns {
-				if _, uOk := Unify(ordered[idx], pattern); !uOk {
-					patternOk = false
-					break
+				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+					pattern.Data != nil && ordered[idx].Data != nil &&
+					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() {
+					if !openUnifyMap(pattern, ordered[idx]) {
+						patternOk = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(ordered[idx], pattern); !uOk {
+						patternOk = false
+						break
+					}
 				}
 			}
 			if !patternOk {

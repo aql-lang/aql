@@ -370,9 +370,18 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 			}
 			// Check structural pattern (e.g. map literal).
 			if p.Pattern != nil {
-				if _, uOk := Unify(args[i], *p.Pattern); !uOk {
-					match = false
-					break
+				pat := *p.Pattern
+				if pat.VType.Equal(TMap) && args[i].VType.Equal(TMap) &&
+					pat.Data != nil && args[i].Data != nil {
+					if !openUnifyMap(pat, args[i]) {
+						match = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(args[i], pat); !uOk {
+						match = false
+						break
+					}
 				}
 			}
 		}
