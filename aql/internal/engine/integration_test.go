@@ -2199,6 +2199,99 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	}
 }
 
+func TestEngineInspectTypeLiteral(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Qty number ; inspect Qty
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Qty"), NewTypeLiteral(TNumber),
+		NewWord("inspect"), NewWord("Qty"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.VType.Equal(TTypeInspect) {
+		t.Fatalf("expected type %s, got %s", TTypeInspect, v.VType)
+	}
+	m := v.AsMap()
+
+	name, _ := m.Get("name")
+	if name.AsString() != "Qty" {
+		t.Errorf("name = %v, want 'Qty'", name)
+	}
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "literal" {
+		t.Errorf("kind = %v, want literal", kind)
+	}
+	typ, _ := m.Get("type")
+	if typ.AsString() != "Scalar/Number" {
+		t.Errorf("type = %v, want 'Scalar/Number'", typ)
+	}
+}
+
+func TestEngineInspectRecordType(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Pos record{x:number,y:number} ; inspect Pos
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	fields.Set("y", NewTypeLiteral(TNumber))
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Pos"), NewRecordType(fields),
+		NewWord("inspect"), NewWord("Pos"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	name, _ := m.Get("name")
+	if name.AsString() != "Pos" {
+		t.Errorf("name = %v, want 'Pos'", name)
+	}
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "record" {
+		t.Errorf("kind = %v, want record", kind)
+	}
+	flds, ok := m.Get("fields")
+	if !ok {
+		t.Fatal("missing fields")
+	}
+	fm := flds.AsMap()
+	xType, _ := fm.Get("x")
+	if xType.AsString() != "Scalar/Number" {
+		t.Errorf("fields.x = %v, want 'Scalar/Number'", xType)
+	}
+	yType, _ := fm.Get("y")
+	if yType.AsString() != "Scalar/Number" {
+		t.Errorf("fields.y = %v, want 'Scalar/Number'", yType)
+	}
+}
+
+func TestEngineInspectTypeDotAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Qty number ; inspect Qty .kind
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Qty"), NewTypeLiteral(TNumber),
+		NewWord("inspect"), NewWord("Qty"),
+		NewWord("."), NewWord("kind"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if result[0].AsAtom() != "literal" {
+		t.Errorf("inspect Qty .kind = %v, want literal", result[0])
+	}
+}
+
 func TestFormatFromExt(t *testing.T) {
 	tests := []struct {
 		path string
