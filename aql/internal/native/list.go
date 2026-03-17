@@ -2,11 +2,8 @@ package native
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
-
-	udk "voxgiguniversalsdk"
 )
 
 // listFunc returns the "list" native function definition.
@@ -52,52 +49,25 @@ func listFunc() NativeFunc {
 
 // listAPIHandler handles list with {kind:"api", spec:String, entity:String}.
 // It uses the UniversalManager to create/cache an SDK, then calls entity.List().
+// An optional query field ({query:{...}}) is passed as the reqmatch filter.
 func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := args[0].AsMap()
 
-	specVal, _ := apiMap.Get("spec")
-	entityVal, _ := apiMap.Get("entity")
-
-	spec := specVal.AsString()
-	entityName := entityVal.AsString()
-
-	// Strip .json extension if present.
-	spec = strings.TrimSuffix(spec, ".json")
-
-	// Get or create SDK.
-	var sdkInst *udk.UniversalSDK
-	if cached, ok := r.SDKCache[spec]; ok {
-		sdkInst, _ = cached.(*udk.UniversalSDK)
-	}
-	if sdkInst == nil {
-		mgr, ok := r.Manager.(*udk.UniversalManager)
-		if !ok || mgr == nil {
-			return nil, fmt.Errorf("list: no manager configured")
-		}
-		sdkInst = mgr.Make(spec)
-		r.SDKCache[spec] = sdkInst
+	sdkInst, entityName, err := getSDK(apiMap, "list", r)
+	if err != nil {
+		return nil, err
 	}
 
-	// Create entity and call list.
 	ent := sdkInst.Entity(entityName, nil)
-	result, err := ent.List(nil, nil)
+	result, err := ent.List(extractQuery(apiMap), nil)
 	if err != nil {
 		return nil, fmt.Errorf("list: entity %q: %w", entityName, err)
 	}
 
-	// Convert result ([]any of entities/maps) to AQL list of maps.
 	items, _ := result.([]any)
-	rows := make([]engine.Value, 0, len(items))
-	for _, item := range items {
-		// Entity objects must be unwrapped via .Data().
-		if ent, ok := item.(udk.Entity); ok {
-			item = ent.Data()
-		}
-		v, err := anyToValue(item)
-		if err != nil {
-			return nil, fmt.Errorf("list: converting result: %w", err)
-		}
-		rows = append(rows, v)
+	rows, err := convertResultList(items, "list")
+	if err != nil {
+		return nil, err
 	}
 
 	return []engine.Value{engine.NewList(rows)}, nil

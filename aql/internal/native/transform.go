@@ -111,6 +111,17 @@ func anyToValue(v any) (engine.Value, error) {
 	}
 }
 
+// valueToMap converts a map-typed Value to map[string]any for use with SDK calls.
+func valueToMap(v engine.Value) map[string]any {
+	m := v.AsMap()
+	out := make(map[string]any, m.Len())
+	for _, key := range m.Keys() {
+		val, _ := m.Get(key)
+		out[key] = valueToAny(val)
+	}
+	return out
+}
+
 // sortedAnyMapKeys returns map keys in sorted order for deterministic output.
 func sortedAnyMapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
