@@ -45,11 +45,14 @@ func registerModule(r *Registry) {
 		return nil, installRenamedExports(r, desc, args[0].AsList())
 	}
 
-	// import: [string] -> [] — import from a file path.
-	// The file is read, parsed, and executed in an isolated module engine.
-	// The file should contain export statements (no module word needed).
+	// import: [string] -> [] or [value] — import from a file path.
+	// For .json/.jsonic files, parses the file and pushes the data value.
+	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
+		if isDataFile(path) {
+			return loadDataFile(r, path)
+		}
 		desc, err := loadFileModule(r, path)
 		if err != nil {
 			return nil, err
@@ -61,6 +64,9 @@ func registerModule(r *Registry) {
 	// import: [list string] -> [] — import from file with renaming.
 	importFileRenameHandler := func(args []Value) ([]Value, error) {
 		path := args[1].AsString()
+		if isDataFile(path) {
+			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
+		}
 		desc, err := loadFileModule(r, path)
 		if err != nil {
 			return nil, err
@@ -170,6 +176,34 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 	parent.Modules[modID] = desc
 	return desc, nil
+}
+
+// isDataFile returns true if the path has a .json or .jsonic extension.
+func isDataFile(path string) bool {
+	f := formatFromExt(path)
+	return f == "json" || f == "jsonic"
+}
+
+// loadDataFile reads a .json or .jsonic file, parses it with jsonic,
+// and returns the result as an AQL data value on the stack.
+func loadDataFile(parent *Registry, path string) ([]Value, error) {
+	data, err := parent.FileOps.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("import: %w", err)
+	}
+
+	format := formatFromExt(path)
+	f, ok := parent.Formats[format]
+	if !ok {
+		return nil, fmt.Errorf("import: unknown format: %s", format)
+	}
+
+	result, err := f.Decode(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("import: %s: %w", path, err)
+	}
+
+	return result, nil
 }
 
 // loadFileModule reads a file, parses it as AQL, and runs it as a module.

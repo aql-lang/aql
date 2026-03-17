@@ -90,8 +90,9 @@ type TableTypeInfo struct {
 
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
-	Name string // empty for unnamed positional parameters
-	Type Type
+	Name    string // empty for unnamed positional parameters
+	Type    Type
+	Pattern *Value // optional: map/list pattern for structural matching
 }
 
 // FnSig describes one overload of a function definition.
@@ -241,12 +242,10 @@ func NewDecimal(f float64) Value {
 	return Value{VType: TDecimal, Data: f}
 }
 
-// NewBoolean creates a boolean/true or boolean/false value.
+// NewBoolean creates a boolean value. The boolean payload (true/false) is the
+// value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	if b {
-		return Value{VType: TBooleanTrue, Data: b}
-	}
-	return Value{VType: TBooleanFalse, Data: b}
+	return Value{VType: TBoolean, Data: b}
 }
 
 // NewList creates a list value from a slice of Values.

@@ -27,13 +27,13 @@ true	true
 false	false
 
 # === Type literals ===
-Number	Number
-String	String
-Boolean	Boolean
+Number	Scalar/Number
+String	Scalar/String
+Boolean	Scalar/Boolean
 Any	Any
 None	None
-List	List
-Map	Map
+List	Node/List
+Map	Node/Map
 
 # === Unknown words become atoms ===
 foo	foo
@@ -175,18 +175,18 @@ true unify Any	true true
 Any unify false	false true
 
 # === Unify - parent type with parent type ===
-Number unify Number	Number true
-String unify String	String true
-Boolean unify Boolean	Boolean true
+Number unify Number	Scalar/Number true
+String unify String	Scalar/String true
+Boolean unify Boolean	Scalar/Boolean true
 Any unify Any	Any true
 
 # === Unify - any narrows to parent type ===
-Any unify Number	Number true
-Number unify Any	Number true
-Any unify String	String true
-String unify Any	String true
-Any unify Boolean	Boolean true
-Boolean unify Any	Boolean true
+Any unify Number	Scalar/Number true
+Number unify Any	Scalar/Number true
+Any unify String	Scalar/String true
+String unify Any	Scalar/String true
+Any unify Boolean	Scalar/Boolean true
+Boolean unify Any	Scalar/Boolean true
 
 # === Unify - incompatible parent types ===
 Number unify String	'~unify-fail' false
@@ -256,14 +256,17 @@ unify Number String end	'~unify-fail' false
 []	[]
 [true,false]	[word(true),word(false)]
 [1,"a",true]	[1,'a',word(true)]
-[Number,String]	[word(Number),word(String)]
+[Number,String]	[Scalar/Number,Scalar/String]
+[Integer,Decimal,Boolean]	[Scalar/Number/Integer,Scalar/Number/Decimal,Scalar/Boolean]
+[Any,None]	[Any,None]
+[String,foo]	[Scalar/String,word(foo)]
 
 # === Map literals ===
 {x:1}	{x:1}
 {x:1,y:2}	{x:1,y:2}
 {}	{}
 {a:"hello"}	{a:'hello'}
-{x:String,y:Number}	{x:String,y:Number}
+{x:String,y:Number}	{x:Scalar/String,y:Scalar/Number}
 
 # === Nested structures ===
 [[1,2],[3,4]]	[[1,2],[3,4]]
@@ -272,14 +275,14 @@ unify Number String end	'~unify-fail' false
 {a:[1,2,3]}	{a:[1,2,3]}
 
 # === Unify - lists ===
-[1,String] unify [Number,"a"]	'~unify-fail' false
+[1,String] unify [Number,"a"]	[1,'a'] true
 [1,"a"] unify [1,"a"]	[1,'a'] true
 [] unify []	[] true
 [1,2] unify [1,3]	'~unify-fail' false
 [1] unify [1,2]	'~unify-fail' false
 List unify [1,2]	[1,2] true
 [1,2] unify List	[1,2] true
-List unify List	List true
+List unify List	Node/List true
 
 # === Unify - maps ===
 {x:String} unify {x:"hello"}	{x:'hello'} true
@@ -290,12 +293,12 @@ List unify List	List true
 {} unify {}	{} true
 Map unify {x:1}	{x:1} true
 {x:1} unify Map	{x:1} true
-Map unify Map	Map true
+Map unify Map	Node/Map true
 
 # === Unify - nested structures ===
 {x:[1,String]} unify {x:[Number,"a"]}	{x:[1,'a']} true
 [{a:1},{b:String}] unify [{a:Number},{b:"z"}]	[{a:1},{b:'z'}] true
-[[String]] unify [["hello"]]	'~unify-fail' false
+[[String]] unify [["hello"]]	[['hello']] true
 {a:{b:Number}} unify {a:{b:42}}	{a:{b:42}} true
 
 # === Unify - list/map vs incompatible types ===
@@ -317,23 +320,23 @@ None unify List	'~unify-fail' false
 None unify Map	'~unify-fail' false
 
 # === Typed list literals ===
-[:String]	[:String]
-[:Number]	[:Number]
-[:Boolean]	[:Boolean]
+[:String]	[:Scalar/String]
+[:Number]	[:Scalar/Number]
+[:Boolean]	[:Scalar/Boolean]
 [:Any]	[:Any]
-[:List]	[:List]
-[:Map]	[:Map]
-[:{x:Number}]	[:{x:Number}]
-[:{a:String,b:Number}]	[:{a:String,b:Number}]
-[:[:String]]	[:[:String]]
-[:[:Number]]	[:[:Number]]
-[:[:{x:Number}]]	[:[:{x:Number}]]
-[:[:[:Number]]]	[:[:[:Number]]]
+[:List]	[:Node/List]
+[:Map]	[:Node/Map]
+[:{x:Number}]	[:{x:Scalar/Number}]
+[:{a:String,b:Number}]	[:{a:Scalar/String,b:Scalar/Number}]
+[:[:String]]	[:[:Scalar/String]]
+[:[:Number]]	[:[:Scalar/Number]]
+[:[:{x:Number}]]	[:[:{x:Scalar/Number}]]
+[:[:[:Number]]]	[:[:[:Scalar/Number]]]
 
 # === Unify - typed lists with identical child types ===
-[:String] unify [:String]	[:String] true
-[:Number] unify [:Number]	[:Number] true
-[:Boolean] unify [:Boolean]	[:Boolean] true
+[:String] unify [:String]	[:Scalar/String] true
+[:Number] unify [:Number]	[:Scalar/Number] true
+[:Boolean] unify [:Boolean]	[:Scalar/Boolean] true
 
 # === Unify - typed lists with concrete lists ===
 [:Number] unify [1,2,3]	[1,2,3] true
@@ -347,22 +350,22 @@ None unify Map	'~unify-fail' false
 [:Number] unify ["hello"]	'~unify-fail' false
 
 # === Unify - typed list narrowing ===
-[:Any] unify [:Number]	[:Number] true
-[:Any] unify [:String]	[:String] true
-[:Number] unify [:Any]	[:Number] true
+[:Any] unify [:Number]	[:Scalar/Number] true
+[:Any] unify [:String]	[:Scalar/String] true
+[:Number] unify [:Any]	[:Scalar/Number] true
 
 # === Unify - typed list child type mismatch ===
 [:String] unify [:Number]	'~unify-fail' false
 [:Number] unify [:Boolean]	'~unify-fail' false
 
 # === Unify - typed list with type literal ===
-List unify [:String]	[:String] true
-[:String] unify List	[:String] true
-List unify [:Number]	[:Number] true
+List unify [:String]	[:Scalar/String] true
+[:String] unify List	[:Scalar/String] true
+List unify [:Number]	[:Scalar/Number] true
 
 # === Unify - typed list with any ===
-Any unify [:String]	[:String] true
-[:Number] unify Any	[:Number] true
+Any unify [:String]	[:Scalar/String] true
+[:Number] unify Any	[:Scalar/Number] true
 
 # === Unify - typed list with none ===
 None unify [:String]	'~unify-fail' false
@@ -386,25 +389,25 @@ None unify [:String]	'~unify-fail' false
 [1,2] unify [:String]	'~unify-fail' false
 
 # === Typed map literals ===
-{:String}	{:String}
-{:Number}	{:Number}
-{:Boolean}	{:Boolean}
+{:String}	{:Scalar/String}
+{:Number}	{:Scalar/Number}
+{:Boolean}	{:Scalar/Boolean}
 {:Any}	{:Any}
-{:List}	{:List}
-{:Map}	{:Map}
-{:{x:Number}}	{:{x:Number}}
-{:{a:String,b:Number}}	{:{a:String,b:Number}}
-{:[:String]}	{:[:String]}
-{:[:Number]}	{:[:Number]}
-{:{:String}}	{:{:String}}
-{:{:Number}}	{:{:Number}}
-{:[:{x:Number}]}	{:[:{x:Number}]}
-{:{:{:Number}}}	{:{:{:Number}}}
+{:List}	{:Node/List}
+{:Map}	{:Node/Map}
+{:{x:Number}}	{:{x:Scalar/Number}}
+{:{a:String,b:Number}}	{:{a:Scalar/String,b:Scalar/Number}}
+{:[:String]}	{:[:Scalar/String]}
+{:[:Number]}	{:[:Scalar/Number]}
+{:{:String}}	{:{:Scalar/String}}
+{:{:Number}}	{:{:Scalar/Number}}
+{:[:{x:Number}]}	{:[:{x:Scalar/Number}]}
+{:{:{:Number}}}	{:{:{:Scalar/Number}}}
 
 # === Unify - typed maps with identical child types ===
-{:String} unify {:String}	{:String} true
-{:Number} unify {:Number}	{:Number} true
-{:Boolean} unify {:Boolean}	{:Boolean} true
+{:String} unify {:String}	{:Scalar/String} true
+{:Number} unify {:Number}	{:Scalar/Number} true
+{:Boolean} unify {:Boolean}	{:Scalar/Boolean} true
 
 # === Unify - typed maps with concrete maps ===
 {:Number} unify {a:1,b:2}	{a:1,b:2} true
@@ -423,10 +426,10 @@ None unify [:String]	'~unify-fail' false
 {:Boolean} unify {x:1}	'~unify-fail' false
 
 # === Unify - typed map narrowing ===
-{:Any} unify {:Number}	{:Number} true
-{:Any} unify {:String}	{:String} true
-{:Number} unify {:Any}	{:Number} true
-{:String} unify {:Any}	{:String} true
+{:Any} unify {:Number}	{:Scalar/Number} true
+{:Any} unify {:String}	{:Scalar/String} true
+{:Number} unify {:Any}	{:Scalar/Number} true
+{:String} unify {:Any}	{:Scalar/String} true
 
 # === Unify - typed map child type mismatch ===
 {:String} unify {:Number}	'~unify-fail' false
@@ -440,17 +443,17 @@ None unify [:String]	'~unify-fail' false
 {x:"hello"} unify {:Number}	'~unify-fail' false
 
 # === Unify - typed map with type literal ===
-Map unify {:String}	{:String} true
-{:String} unify Map	{:String} true
-Map unify {:Number}	{:Number} true
-{:Number} unify Map	{:Number} true
-Map unify {:{x:Number}}	{:{x:Number}} true
+Map unify {:String}	{:Scalar/String} true
+{:String} unify Map	{:Scalar/String} true
+Map unify {:Number}	{:Scalar/Number} true
+{:Number} unify Map	{:Scalar/Number} true
+Map unify {:{x:Number}}	{:{x:Scalar/Number}} true
 
 # === Unify - typed map with any ===
-Any unify {:String}	{:String} true
-{:String} unify Any	{:String} true
-Any unify {:Number}	{:Number} true
-{:Number} unify Any	{:Number} true
+Any unify {:String}	{:Scalar/String} true
+{:String} unify Any	{:Scalar/String} true
+Any unify {:Number}	{:Scalar/Number} true
+{:Number} unify Any	{:Scalar/Number} true
 
 # === Unify - typed map with none ===
 None unify {:String}	'~unify-fail' false
@@ -471,8 +474,8 @@ None unify {:Number}	'~unify-fail' false
 {:{:Number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
 
 # === Unify - deeper typed map child type unification ===
-{:{:String}} unify {:{:String}}	{:{:String}} true
-{:{:Number}} unify {:{:Any}}	{:{:Number}} true
+{:{:String}} unify {:{:String}}	{:{:Scalar/String}} true
+{:{:Number}} unify {:{:Any}}	{:{:Scalar/Number}} true
 {:{:String}} unify {:{:Number}}	'~unify-fail' false
 
 # === Unify - typed map vs incompatible types ===
@@ -811,12 +814,12 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # === disjunct - union types via or ===
 
 # Disjunct creation: type literals
-String or Number	String|Number
-String or None	String|None
-None or Boolean	None|Boolean
+String or Number	Scalar/String|Scalar/Number
+String or None	Scalar/String|None
+None or Boolean	None|Scalar/Boolean
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	String|Number|Boolean
+String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
 
 # Disjunct unify with scalar types
 (String or None) unify "a"	'a' true
@@ -831,13 +834,13 @@ String or Number or Boolean	String|Number|Boolean
 (Number or Boolean) unify "hi"	'~unify-fail' false
 
 # Disjunct unify with type narrowing
-(String or Number) unify Number	Number true
-(String or Number) unify String	String true
+(String or Number) unify Number	Scalar/Number true
+(String or Number) unify String	Scalar/String true
 (Number or None) unify 5	5 true
 (Number or None) unify None	None true
 
 # Disjunct with any
-(String or Number) unify Any	String|Number true
+(String or Number) unify Any	Scalar/String|Scalar/Number true
 
 # Disjunct with concrete maps (open matching)
 ({x:1} or {y:2}) unify {x:1}	{x:1} true

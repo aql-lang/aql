@@ -143,8 +143,8 @@ func TestExtraStringOpenParen(t *testing.T) {
 func TestExtraStringTypeLiteral(t *testing.T) {
 	v := NewTypeLiteral(TNumber)
 	s := v.String()
-	if s != "Number" {
-		t.Errorf("type literal String() = %q, want 'Number'", s)
+	if s != "Scalar/Number" {
+		t.Errorf("type literal String() = %q, want 'Scalar/Number'", s)
 	}
 }
 
@@ -849,8 +849,8 @@ func TestExtraNewTypeValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewType('String/Proper') error: %v", err)
 	}
-	if tp.String() != "String/Proper" {
-		t.Errorf("got %q, want 'String/Proper'", tp.String())
+	if tp.String() != "Scalar/String/Proper" {
+		t.Errorf("got %q, want 'Scalar/String/Proper'", tp.String())
 	}
 }
 
@@ -866,7 +866,7 @@ func TestExtraNewTypeSinglePart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewType('Number') error: %v", err)
 	}
-	if len(tp.Parts) != 1 || tp.Parts[0] != "Number" {
+	if len(tp.Parts) != 2 || tp.Parts[0] != "Scalar" || tp.Parts[1] != "Number" {
 		t.Errorf("unexpected parts: %v", tp.Parts)
 	}
 }
@@ -882,8 +882,8 @@ func TestExtraMustTypePanics(t *testing.T) {
 
 func TestExtraTypeSpecificity(t *testing.T) {
 	tp, _ := NewType("Number/Integer")
-	if tp.Specificity() != 2 {
-		t.Errorf("specificity = %d, want 2", tp.Specificity())
+	if tp.Specificity() != 3 {
+		t.Errorf("specificity = %d, want 3", tp.Specificity())
 	}
 }
 

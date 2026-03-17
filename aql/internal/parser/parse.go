@@ -12,16 +12,20 @@ import (
 
 // typeNames maps well-known type names to their engine Type.
 var typeNames = map[string]engine.Type{
-	"Any":     engine.TAny,
-	"None":    engine.TNone,
-	"Scalar":  engine.TScalar,
-	"Number":  engine.TNumber,
-	"Integer": engine.TInteger,
-	"String":  engine.TString,
-	"Boolean": engine.TBoolean,
-	"Atom":    engine.TAtom,
-	"List":    engine.TList,
-	"Map":     engine.TMap,
+	"Any":       engine.TAny,
+	"None":      engine.TNone,
+	"Scalar":    engine.TScalar,
+	"Number":    engine.TNumber,
+	"Integer":   engine.TInteger,
+	"Decimal":   engine.TDecimal,
+	"String":    engine.TString,
+	"Boolean":   engine.TBoolean,
+	"Atom":      engine.TAtom,
+	"Node":      engine.TNode,
+	"List":      engine.TList,
+	"Map":       engine.TMap,
+	"Table":     engine.TTable,
+	"Record":    engine.TRecord,
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -439,15 +443,28 @@ func parseWord(text string) (engine.Value, error) {
 	if forcePrefix || forceSuffix || argCount >= 0 {
 		return engine.NewWordModified(name, argCount, forcePrefix, forceSuffix), nil
 	}
+
+	// Type names resolve to type literals even in word context, so that
+	// they retain their meaning inside quotations (e.g. [String,Decimal]).
+	if t, ok := typeNames[name]; ok {
+		return engine.NewTypeLiteral(t), nil
+	}
+
 	return engine.NewWord(name), nil
 }
 
 // expandDottedWord expands dot notation like "foo.a.b" into a sequence of
-// engine values: [get, foo, a, dot, b, dot]. The first segment is retrieved
-// from the store via "get", and each subsequent segment extracts a key using
-// the "dot" word. A standalone "." becomes the "dot" word.
-// Leading dot (e.g. ".a.b") omits the get and emits [a, dot, b, dot],
-// operating on whatever value is already on the stack.
+// engine values: [( foo a dot b dot )]. The first segment is emitted as a
+// plain word, resolved by the engine (def lookup, registered function, or
+// atom). Each subsequent segment extracts a key using the "dot" word.
+// A standalone "." becomes the "dot" word.
+// Leading dot (e.g. ".a.b") omits the first word and emits [a, dot, b, dot],
+// operating on whatever value is already on the stack (no paren wrapping).
+//
+// The entire multi-token expansion is wrapped in parentheses so that it
+// evaluates as a single sub-expression. This gives dot very high binding,
+// letting suffix-precedence words like "list" consume the result:
+// list foo.a → list ( foo a dot ).
 func expandDottedWord(text string) ([]engine.Value, error) {
 	// Standalone "." → just the dot word.
 	if text == "." {
@@ -460,22 +477,17 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	}
 
 	parts := strings.Split(text, ".")
-	var result []engine.Value
+	var inner []engine.Value
 
-	// First part (before first dot): retrieve from store via get.
-	// "args" is a registered word (not a Store variable), so it
-	// resolves directly without get.
-	if parts[0] != "" {
-		if parts[0] == "args" {
-			result = append(result, engine.NewWord("args"))
-		} else {
-			result = append(result, engine.NewWord("get"))
-			w, err := parseWord(parts[0])
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, w)
+	// First part (before first dot): emit as a plain word.
+	// The engine resolves it naturally — def, registered function, or atom.
+	leadingDot := parts[0] == ""
+	if !leadingDot {
+		w, err := parseWord(parts[0])
+		if err != nil {
+			return nil, err
 		}
+		inner = append(inner, w)
 	}
 
 	// Subsequent parts (after each dot): emit key then dot (prefix).
@@ -485,13 +497,24 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 		}
 		// Integer keys for list access.
 		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
-			result = append(result, engine.NewInteger(n))
+			inner = append(inner, engine.NewInteger(n))
 		} else {
-			result = append(result, engine.NewWord(part))
+			inner = append(inner, engine.NewWord(part))
 		}
-		result = append(result, engine.NewWordModified("dot", -1, true, false))
+		inner = append(inner, engine.NewWordModified("dot", -1, true, false))
 	}
 
+	// Leading dot operates on whatever is already on the stack,
+	// so don't wrap in parens (it needs the stack value).
+	if leadingDot {
+		return inner, nil
+	}
+
+	// Wrap in parentheses so the expression evaluates as a unit.
+	result := make([]engine.Value, 0, len(inner)+2)
+	result = append(result, engine.NewOpenParen())
+	result = append(result, inner...)
+	result = append(result, engine.NewWord(")"))
 	return result, nil
 }
 

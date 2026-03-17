@@ -1,6 +1,8 @@
 package native
 
 import (
+	"fmt"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
@@ -11,10 +13,25 @@ import (
 //   - [map, map]    — record type + filter: returns empty table
 //   - [map]         — record type: returns empty table
 func listFunc() NativeFunc {
+	// Pattern for {kind:"api", ...} — matches maps where kind is literal "api".
+	apiPattern := engine.NewOrderedMap()
+	apiPattern.Set("kind", engine.NewString("api"))
+	apiPatternVal := engine.NewMap(apiPattern)
+
 	return NativeFunc{
 		Name:             "list",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				Args:     []engine.Type{engine.TMap, engine.TMap},
+				Handler:  listAPIOptsHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
+			{
+				Args:     []engine.Type{engine.TMap},
+				Handler:  listAPIHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
 			{
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: listFilterHandler,
@@ -33,6 +50,39 @@ func listFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// listAPIOptsHandler handles list with {kind:"api",...} and an extra options map.
+// The options map is merged into the query field of the API map.
+func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+}
+
+// listAPIHandler handles list with {kind:"api", spec:String, entity:String}.
+// It uses the UniversalManager to create/cache an SDK, then calls entity.List().
+// An optional query field ({query:{...}}) is passed as the reqmatch filter.
+func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := args[0].AsMap()
+
+	sdkInst, entityName, err := getSDK(apiMap, "list", r)
+	if err != nil {
+		return nil, err
+	}
+
+	ent := sdkInst.Entity(entityName, nil)
+	result, err := ent.List(extractQuery(apiMap), nil)
+	if err != nil {
+		return nil, fmt.Errorf("list: entity %q: %w", entityName, err)
+	}
+
+	items, _ := result.([]any)
+	rows, err := convertResultList(items, "list")
+	if err != nil {
+		return nil, err
+	}
+
+	return []engine.Value{engine.NewList(rows)}, nil
 }
 
 // listAllHandler returns all records from a table as a list.

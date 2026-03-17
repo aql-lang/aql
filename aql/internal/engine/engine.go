@@ -8,17 +8,20 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"Any":     TAny,
-	"None":    TNone,
-	"Scalar":  TScalar,
-	"Number":  TNumber,
-	"Integer": TInteger,
-	"Decimal": TDecimal,
-	"String":  TString,
-	"Boolean": TBoolean,
-	"Atom":    TAtom,
-	"List":    TList,
-	"Map":     TMap,
+	"Any":       TAny,
+	"None":      TNone,
+	"Scalar":    TScalar,
+	"Number":    TNumber,
+	"Integer":   TInteger,
+	"Decimal":   TDecimal,
+	"String":    TString,
+	"Boolean":   TBoolean,
+	"Atom":      TAtom,
+	"Node":      TNode,
+	"List":      TList,
+	"Map":       TMap,
+	"Table":     TTable,
+	"Record":    TRecord,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -1257,21 +1260,44 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 }
 
 // effectiveResolved returns the resolved portion of the stack visible for
-// prefix matching.
+// prefix matching. Function words and their collected suffix args that are
+// tracked by active forwards are excluded — they belong to the outer
+// forward's context and should not be consumed by inner prefix matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
+	excludeIndices := make(map[int]bool)
 	for i := e.pointer - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
 			start = i + 1
 			break
 		}
+		if e.stack[i].IsForward() {
+			fwd := e.stack[i].AsForward()
+			// Exclude the function word itself.
+			excludeIndices[fwd.FuncIndex] = true
+			// Exclude collected suffix args (positioned before function word).
+			for j := 0; j < fwd.CollectedArgs; j++ {
+				idx := fwd.FuncIndex - 1 - j
+				if idx >= 0 {
+					excludeIndices[idx] = true
+				}
+			}
+			// Exclude claimed prefix args (positioned before collected suffix args).
+			prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
+			for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+				if j >= 0 {
+					excludeIndices[j] = true
+				}
+			}
+		}
 	}
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
-		if !v.IsForward() && !v.IsOpenParen() && !v.IsMark() && !v.IsMove() {
-			resolved = append(resolved, v)
+		if v.IsForward() || v.IsOpenParen() || v.IsMark() || v.IsMove() || excludeIndices[i] {
+			continue
 		}
+		resolved = append(resolved, v)
 	}
 	return resolved
 }
@@ -1380,20 +1406,44 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 
 	// Check if prefix match exists with current resolved values.
 	if fn != nil {
-		// Build resolved slice up to funcIdx.
+		// Build resolved slice up to funcIdx, excluding function words
+		// and their collected suffix args that are tracked by active
+		// forwards. This prevents prefix matching from consuming values
+		// that belong to an outer forward's context.
 		start := 0
+		excludeIndices := make(map[int]bool)
 		for i := funcIdx - 1; i >= 0; i-- {
 			if e.stack[i].IsOpenParen() {
 				start = i + 1
 				break
 			}
+			if e.stack[i].IsForward() {
+				fwd := e.stack[i].AsForward()
+				// Exclude the function word itself.
+				excludeIndices[fwd.FuncIndex] = true
+				// Exclude collected suffix args (before function word).
+				for j := 0; j < fwd.CollectedArgs; j++ {
+					idx := fwd.FuncIndex - 1 - j
+					if idx >= 0 {
+						excludeIndices[idx] = true
+					}
+				}
+				// Exclude claimed prefix args.
+				prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
+				for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+					if j >= 0 {
+						excludeIndices[j] = true
+					}
+				}
+			}
 		}
 		var resolved []Value
 		for i := start; i < funcIdx; i++ {
 			v := e.stack[i]
-			if !v.IsForward() && !v.IsOpenParen() {
-				resolved = append(resolved, v)
+			if v.IsForward() || v.IsOpenParen() || excludeIndices[i] {
+				continue
 			}
+			resolved = append(resolved, v)
 		}
 
 		testW := WordInfo{Name: w.Name, ArgCount: -1, ForcePrefix: true}

@@ -7,6 +7,7 @@ require (
 	github.com/jsonicjs/csv/go v0.1.1
 	github.com/jsonicjs/jsonic/go v0.1.4
 	modernc.org/sqlite v1.46.1
+	voxgiguniversalsdk v0.1.1
 )
 
 require golang.org/x/text v0.24.0
@@ -26,3 +27,5 @@ require (
 )
 
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
+
+replace voxgiguniversalsdk v0.1.1 => github.com/voxgig/udk/go v0.1.1

@@ -238,12 +238,12 @@ func TestMarkMoveIsMethods(t *testing.T) {
 		t.Error("NewMove should not be IsMark()")
 	}
 
-	// Marks and moves should not match "any"
-	if m.VType.Matches(TAny) {
-		t.Error("mark should not match TAny")
+	// Marks and moves should match "any" (Any matches everything now)
+	if !m.VType.Matches(TAny) {
+		t.Error("mark should match TAny")
 	}
-	if mv.VType.Matches(TAny) {
-		t.Error("move should not match TAny")
+	if !mv.VType.Matches(TAny) {
+		t.Error("move should match TAny")
 	}
 }
 

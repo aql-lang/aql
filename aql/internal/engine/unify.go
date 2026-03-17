@@ -18,6 +18,12 @@ import "fmt"
 //   - Lists: unify element-by-element in order; lengths must match
 //   - Maps: closed unification; key sets must be identical; each value pair must unify
 func Unify(a, b Value) (Value, bool) {
+	// Resolve words to their semantic values (true/false → boolean,
+	// type names → type literal, other words → atom) so that
+	// unresolved words inside list literals participate correctly.
+	a = resolveWordsDeep(a)
+	b = resolveWordsDeep(b)
+
 	aType := a.VType
 	bType := b.VType
 
@@ -60,6 +66,15 @@ func Unify(a, b Value) (Value, bool) {
 	bMap := bType.Equal(TMap)
 	if aMap || bMap {
 		return unifyMaps(a, aMap, b, bMap)
+	}
+
+	// Type literal unification: a type literal (Data==nil) unifies with
+	// any concrete value whose type matches. Return the concrete value.
+	if a.Data == nil && b.Data != nil && bType.Matches(aType) {
+		return b, true
+	}
+	if b.Data == nil && a.Data != nil && aType.Matches(bType) {
+		return a, true
 	}
 
 	// If both types are exactly equal, compare literal values.
@@ -464,6 +479,33 @@ func openUnifyMap(pattern, candidate Value) bool {
 		}
 	}
 	return true
+}
+
+// resolveWordsDeep recursively resolves word values to their semantic form.
+// For lists, each element is resolved; for maps, each value is resolved.
+// Scalar words are resolved via resolveWordValue.
+func resolveWordsDeep(v Value) Value {
+	if v.IsWord() {
+		return resolveWordValue(v)
+	}
+	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
+		elems := v.AsList()
+		resolved := make([]Value, len(elems))
+		for i, e := range elems {
+			resolved[i] = resolveWordsDeep(e)
+		}
+		return NewList(resolved)
+	}
+	if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() {
+		m := v.AsMap()
+		result := NewOrderedMap()
+		for _, key := range m.Keys() {
+			val, _ := m.Get(key)
+			result.Set(key, resolveWordsDeep(val))
+		}
+		return NewMap(result)
+	}
+	return v
 }
 
 // registerUnify registers the "unify" word in the given registry.

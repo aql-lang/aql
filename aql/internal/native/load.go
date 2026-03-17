@@ -7,14 +7,29 @@ import (
 )
 
 // loadFunc returns the "load" native function definition.
-// load has suffix precedence and two signatures:
-//   - [table, map] — finds a single record by matching the map's key-value pairs (typically {id:"..."})
-//   - [map, map]   — record type + filter: returns empty map
+// load has suffix precedence and three signatures:
+//   - [map(kind:"api")] — loads a single entity via the SDK
+//   - [table, map]      — finds a single record by matching the map's key-value pairs (typically {id:"..."})
+//   - [map, map]        — record type + filter: returns empty map
 func loadFunc() NativeFunc {
+	apiPattern := engine.NewOrderedMap()
+	apiPattern.Set("kind", engine.NewString("api"))
+	apiPatternVal := engine.NewMap(apiPattern)
+
 	return NativeFunc{
 		Name:             "load",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				Args:     []engine.Type{engine.TMap, engine.TMap},
+				Handler:  loadAPIOptsHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
+			{
+				Args:     []engine.Type{engine.TMap},
+				Handler:  loadAPIHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
 			{
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: loadHandler,
@@ -25,6 +40,36 @@ func loadFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// loadAPIOptsHandler handles load with {kind:"api",...} and an extra options map.
+// The options map is merged into the query field of the API map.
+func loadAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+}
+
+// loadAPIHandler handles load with {kind:"api", spec:String, entity:String, query:{...}}.
+func loadAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := args[0].AsMap()
+
+	sdkInst, entityName, err := getSDK(apiMap, "load", r)
+	if err != nil {
+		return nil, err
+	}
+
+	ent := sdkInst.Entity(entityName, nil)
+	result, err := ent.Load(extractQuery(apiMap), nil)
+	if err != nil {
+		return nil, fmt.Errorf("load: entity %q: %w", entityName, err)
+	}
+
+	v, err := convertResultItem(result, "load")
+	if err != nil {
+		return nil, err
+	}
+
+	return []engine.Value{v}, nil
 }
 
 // loadRecordHandler handles load on a record type (not a table).

@@ -7,14 +7,29 @@ import (
 )
 
 // updateFunc returns the "update" native function definition.
-// update has suffix precedence and two signatures:
-//   - [table, map] — finds a record by "id" and merges the map's fields into it
-//   - [map, map]   — record type + patch: returns empty table
+// update has suffix precedence and three signatures:
+//   - [map(kind:"api")] — updates an entity via the SDK
+//   - [table, map]      — finds a record by "id" and merges the map's fields into it
+//   - [map, map]        — record type + patch: returns empty table
 func updateFunc() NativeFunc {
+	apiPattern := engine.NewOrderedMap()
+	apiPattern.Set("kind", engine.NewString("api"))
+	apiPatternVal := engine.NewMap(apiPattern)
+
 	return NativeFunc{
 		Name:             "update",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				Args:     []engine.Type{engine.TMap, engine.TMap},
+				Handler:  updateAPIOptsHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
+			{
+				Args:     []engine.Type{engine.TMap},
+				Handler:  updateAPIHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
 			{
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: updateHandler,
@@ -25,6 +40,36 @@ func updateFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// updateAPIOptsHandler handles update with {kind:"api",...} and an extra data map.
+// The options map is merged into the data field of the API map.
+func updateAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "data")
+	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+}
+
+// updateAPIHandler handles update with {kind:"api", spec:String, entity:String, data:{...}}.
+func updateAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := args[0].AsMap()
+
+	sdkInst, entityName, err := getSDK(apiMap, "update", r)
+	if err != nil {
+		return nil, err
+	}
+
+	ent := sdkInst.Entity(entityName, nil)
+	result, err := ent.Update(extractData(apiMap), nil)
+	if err != nil {
+		return nil, fmt.Errorf("update: entity %q: %w", entityName, err)
+	}
+
+	v, err := convertResultItem(result, "update")
+	if err != nil {
+		return nil, err
+	}
+
+	return []engine.Value{v}, nil
 }
 
 // updateRecordHandler handles update on a record type (not a table).

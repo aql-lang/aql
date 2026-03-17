@@ -7,14 +7,29 @@ import (
 )
 
 // createFunc returns the "create" native function definition.
-// create has suffix precedence and two signatures:
-//   - [table, map] — appends the map as a new record to the table; the map must contain an "id" field
-//   - [map, map]   — record type + record: returns empty table
+// create has suffix precedence and three signatures:
+//   - [map(kind:"api")] — creates an entity via the SDK
+//   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
+//   - [map, map]        — record type + record: returns empty table
 func createFunc() NativeFunc {
+	apiPattern := engine.NewOrderedMap()
+	apiPattern.Set("kind", engine.NewString("api"))
+	apiPatternVal := engine.NewMap(apiPattern)
+
 	return NativeFunc{
 		Name:             "create",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				Args:     []engine.Type{engine.TMap, engine.TMap},
+				Handler:  createAPIOptsHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
+			{
+				Args:     []engine.Type{engine.TMap},
+				Handler:  createAPIHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
 			{
 				Args:    []engine.Type{engine.TList, engine.TMap},
 				Handler: createHandler,
@@ -25,6 +40,36 @@ func createFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// createAPIOptsHandler handles create with {kind:"api",...} and an extra data map.
+// The options map is merged into the data field of the API map.
+func createAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "data")
+	return createAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+}
+
+// createAPIHandler handles create with {kind:"api", spec:String, entity:String, data:{...}}.
+func createAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := args[0].AsMap()
+
+	sdkInst, entityName, err := getSDK(apiMap, "create", r)
+	if err != nil {
+		return nil, err
+	}
+
+	ent := sdkInst.Entity(entityName, nil)
+	result, err := ent.Create(extractData(apiMap), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create: entity %q: %w", entityName, err)
+	}
+
+	v, err := convertResultItem(result, "create")
+	if err != nil {
+		return nil, err
+	}
+
+	return []engine.Value{v}, nil
 }
 
 // createRecordHandler handles create on a record type (not a table).

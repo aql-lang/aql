@@ -338,17 +338,17 @@ func TestSignatureScoreValues(t *testing.T) {
 	}{
 		{"empty", nil, 0},
 		{"1 any", []Type{TAny}, 101},
-		{"1 integer", []Type{TInteger}, 102},
+		{"1 integer", []Type{TInteger}, 103},
 		{"2 any", []Type{TAny, TAny}, 202},
-		{"2 integer", []Type{TInteger, TInteger}, 204},
+		{"2 integer", []Type{TInteger, TInteger}, 206},
 		{"2 scalar", []Type{TScalar, TScalar}, 202},
 		{"3 any", []Type{TAny, TAny, TAny}, 303},
-		{"3 mixed", []Type{TInteger, TString, TAny}, 303 + 1},
+		{"3 mixed", []Type{TInteger, TString, TAny}, 306},
 		{"4 any", []Type{TAny, TAny, TAny, TAny}, 404},
 		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 505},
 		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 606},
 		{"7 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 707},
-		{"7 integer", []Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 714},
+		{"7 integer", []Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 721},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -17,6 +17,12 @@ type Signature struct {
 	// Use this for words like depth, pick, roll that need to inspect
 	// or manipulate the entire stack.
 	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
+
+	// Patterns holds optional structural patterns for arguments (e.g. map
+	// literals in fn signatures). Key is arg index, value is the pattern.
+	// When set, the argument must unify with the pattern in addition to
+	// matching the type.
+	Patterns map[int]Value
 }
 
 // TotalArgs returns the number of arguments.
@@ -63,7 +69,47 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			continue
 		}
 
+		// Check structural patterns (e.g. map literals in fn signatures).
+		// Maps use open (subset) matching: the pattern's key-value pairs
+		// must be present in the argument, but extra keys are allowed.
+		if sig.Patterns != nil {
+			patternOk := true
+			for idx, pattern := range sig.Patterns {
+				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+					pattern.Data != nil && ordered[idx].Data != nil &&
+					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() {
+					if !openUnifyMap(pattern, ordered[idx]) {
+						patternOk = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(ordered[idx], pattern); !uOk {
+						patternOk = false
+						break
+					}
+				}
+			}
+			if !patternOk {
+				continue
+			}
+		}
+
 		score := signatureScore(sig)
+
+		// Match quality bonus: reward signatures where the actual values
+		// match specific (non-Any) type constraints. This prevents TAny
+		// from inflating scores when competing with specific types at
+		// different hierarchy depths (e.g. TWord vs TString).
+		for j := 0; j < n; j++ {
+			if sig.Args[j].Equal(TAny) {
+				continue
+			}
+			if ordered[j].VType.Equal(sig.Args[j]) {
+				score += 50 // exact type match
+			} else {
+				score += 10 // prefix (inexact) match
+			}
+		}
 
 		if best != nil && score <= bestScore {
 			continue
@@ -104,7 +150,7 @@ func positionalMatch(values []Value, types []Type) bool {
 	return true
 }
 
-// signatureScore computes a ranking score for tie-breaking.
+// signatureScore computes an intrinsic ranking score for a signature.
 // Higher is better: more args and more specific types win.
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 100 // arg count dominates

@@ -5,8 +5,31 @@ func registerInspect(r *Registry) {
 		Args: []Type{TWord},
 		Handler: func(args []Value) ([]Value, error) {
 			name := args[0].AsWord().Name
+
+			// If the word names a user-defined type, return a type inspection.
+			if stack := r.DefStacks[name]; len(stack) > 0 {
+				top := stack[len(stack)-1]
+				if isTypeValue(top) {
+					return []Value{buildTypeInspection(name, top)}, nil
+				}
+			}
+
 			return []Value{buildInspection(r, name)}, nil
 		},
+	})
+
+	// Type literal (Data==nil): inspect number, inspect string, etc.
+	typeHandler := func(args []Value) ([]Value, error) {
+		return []Value{buildTypeInspection("", args[0])}, nil
+	}
+
+	r.Register("inspect", Signature{
+		Args:    []Type{TNode},
+		Handler: typeHandler,
+	})
+	r.Register("inspect", Signature{
+		Args:    []Type{TScalar},
+		Handler: typeHandler,
 	})
 }
 
@@ -19,7 +42,7 @@ func buildInspection(r *Registry, name string) Value {
 	if fn == nil {
 		result.Set("kind", NewAtom("unknown"))
 		result.Set("signatures", NewList(nil))
-		return Value{VType: TWordInspection, Data: result}
+		return Value{VType: TWordInspect, Data: result}
 	}
 
 	// Determine kind: if there's a DefStacks entry, it's user-defined.
@@ -54,5 +77,63 @@ func buildInspection(r *Registry, name string) Value {
 	}
 	result.Set("signatures", NewList(sigMaps))
 
-	return Value{VType: TWordInspection, Data: result}
+	return Value{VType: TWordInspect, Data: result}
+}
+
+// buildTypeInspection constructs a type_inspection map for a type value.
+func buildTypeInspection(name string, tv Value) Value {
+	result := NewOrderedMap()
+
+	if name != "" {
+		result.Set("name", NewString(name))
+	}
+
+	result.Set("type", NewString(tv.VType.String()))
+
+	switch {
+	case tv.IsRecordType():
+		result.Set("kind", NewAtom("record"))
+		rt := tv.AsRecordType()
+		fields := NewOrderedMap()
+		for _, k := range rt.Fields.Keys() {
+			v, _ := rt.Fields.Get(k)
+			fields.Set(k, NewString(v.VType.String()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case tv.IsTableType():
+		result.Set("kind", NewAtom("table"))
+		tt := tv.AsTableType()
+		fields := NewOrderedMap()
+		for _, k := range tt.Record.Fields.Keys() {
+			v, _ := tt.Record.Fields.Get(k)
+			fields.Set(k, NewString(v.VType.String()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case tv.IsDisjunct():
+		result.Set("kind", NewAtom("disjunct"))
+		di := tv.AsDisjunct()
+		alts := make([]Value, len(di.Alternatives))
+		for i, alt := range di.Alternatives {
+			alts[i] = NewString(alt.VType.String())
+		}
+		result.Set("alternatives", NewList(alts))
+
+	case tv.IsTypedList():
+		result.Set("kind", NewAtom("typed_list"))
+		child := tv.AsChildType().Child
+		result.Set("child", NewString(child.VType.String()))
+
+	case tv.IsTypedMap():
+		result.Set("kind", NewAtom("typed_map"))
+		child := tv.AsChildType().Child
+		result.Set("child", NewString(child.VType.String()))
+
+	default:
+		// Simple type literal (Data==nil): number, string, boolean, etc.
+		result.Set("kind", NewAtom("literal"))
+	}
+
+	return Value{VType: TTypeInspect, Data: result}
 }

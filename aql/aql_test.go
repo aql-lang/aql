@@ -18,6 +18,39 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestNewWithOptions(t *testing.T) {
+	a, err := aql.New(aql.Options{Registry: "custom"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("New() returned nil")
+	}
+	if a.Options().Registry != "custom" {
+		t.Errorf("got registry %q, want %q", a.Options().Registry, "custom")
+	}
+}
+
+func TestNewWithEmptyOptions(t *testing.T) {
+	a, err := aql.New(aql.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Options().Registry != "" {
+		t.Errorf("got registry %q, want empty", a.Options().Registry)
+	}
+}
+
+func TestNewWithoutOptionsDefaultsRegistry(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Options().Registry != "" {
+		t.Errorf("got registry %q, want empty", a.Options().Registry)
+	}
+}
+
 // --- Basic execution ---
 
 func TestRunInteger(t *testing.T) {

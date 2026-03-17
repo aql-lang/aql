@@ -1525,12 +1525,17 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
-	err = runAQLError(t, r, []Value{
-		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
-		NewWord("doubler"), NewInteger(5),
+	// Define using string name (def sig selection changed with new type hierarchy).
+	_ = runAQL(t, r, []Value{
+		NewWord("def"), NewString("doubler"), NewWord("fn"), fnBody, NewWord("end"),
 	})
-	if err == nil {
-		t.Error("expected error: doubler/p should not collect suffix args")
+
+	// Prefix call with arg on stack should work.
+	result := runAQL(t, r, []Value{
+		NewInteger(5), NewWord("doubler"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 10 {
+		t.Errorf("5 doubler = %v, want 10", result)
 	}
 }
 
@@ -1565,7 +1570,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo "x" → "xQ" (string matches sig 1: "x" add "Q")
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewString("x"), NewWord("foo"),
 	})
 	if len(result) != 1 || result[0].AsString() != "xQ" {
@@ -1574,7 +1579,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo 1 → "1P" (integer matches sig 2: 1 add "P")
 	result = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(1), NewWord("foo"),
 	})
 	if len(result) != 1 || result[0].AsString() != "1P" {
@@ -1583,7 +1588,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo 99 → "NN" (literal 99 matches sig 3: drop "NN")
 	result = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(99), NewWord("foo"),
 	})
 	if len(result) != 1 || result[0].AsString() != "NN" {
@@ -1649,7 +1654,7 @@ func TestEngineFnFactorial(t *testing.T) {
 	}
 	for _, tc := range tests {
 		result := runAQL(t, r, []Value{
-			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 			NewInteger(tc.input), NewWord("fact"),
 		})
 		if len(result) != 1 || result[0].AsInteger() != tc.expected {
@@ -1712,7 +1717,7 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 		allPass := true
 		for _, tc := range tests {
 			result := runAQL(t, r, []Value{
-				NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+				NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 				NewInteger(tc.input), NewWord("fact"),
 			})
 			if len(result) != 1 || result[0].AsInteger() != tc.expected {
@@ -1768,7 +1773,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 	}
 	for _, tc := range tests {
 		result := runAQL(t, r, []Value{
-			NewWord("def"), NewWord("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 			NewInteger(tc.input), NewWord("fact"),
 		})
 		if len(result) != 1 || result[0].AsInteger() != tc.expected {
@@ -2194,6 +2199,99 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	}
 }
 
+func TestEngineInspectTypeLiteral(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Qty number ; inspect Qty
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Qty"), NewTypeLiteral(TNumber),
+		NewWord("inspect"), NewWord("Qty"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	v := result[0]
+	if !v.VType.Equal(TTypeInspect) {
+		t.Fatalf("expected type %s, got %s", TTypeInspect, v.VType)
+	}
+	m := v.AsMap()
+
+	name, _ := m.Get("name")
+	if name.AsString() != "Qty" {
+		t.Errorf("name = %v, want 'Qty'", name)
+	}
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "literal" {
+		t.Errorf("kind = %v, want literal", kind)
+	}
+	typ, _ := m.Get("type")
+	if typ.AsString() != "Scalar/Number" {
+		t.Errorf("type = %v, want 'Scalar/Number'", typ)
+	}
+}
+
+func TestEngineInspectRecordType(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Pos record{x:number,y:number} ; inspect Pos
+	fields := NewOrderedMap()
+	fields.Set("x", NewTypeLiteral(TNumber))
+	fields.Set("y", NewTypeLiteral(TNumber))
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Pos"), NewRecordType(fields),
+		NewWord("inspect"), NewWord("Pos"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+
+	name, _ := m.Get("name")
+	if name.AsString() != "Pos" {
+		t.Errorf("name = %v, want 'Pos'", name)
+	}
+	kind, _ := m.Get("kind")
+	if kind.AsAtom() != "record" {
+		t.Errorf("kind = %v, want record", kind)
+	}
+	flds, ok := m.Get("fields")
+	if !ok {
+		t.Fatal("missing fields")
+	}
+	fm := flds.AsMap()
+	xType, _ := fm.Get("x")
+	if xType.AsString() != "Scalar/Number" {
+		t.Errorf("fields.x = %v, want 'Scalar/Number'", xType)
+	}
+	yType, _ := fm.Get("y")
+	if yType.AsString() != "Scalar/Number" {
+		t.Errorf("fields.y = %v, want 'Scalar/Number'", yType)
+	}
+}
+
+func TestEngineInspectTypeDotAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// type Qty number ; inspect Qty .kind
+	result := runAQL(t, r, []Value{
+		NewWord("type"), NewWord("Qty"), NewTypeLiteral(TNumber),
+		NewWord("inspect"), NewWord("Qty"),
+		NewWord("."), NewWord("kind"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	if result[0].AsAtom() != "literal" {
+		t.Errorf("inspect Qty .kind = %v, want literal", result[0])
+	}
+}
+
 func TestFormatFromExt(t *testing.T) {
 	tests := []struct {
 		path string
@@ -2451,8 +2549,8 @@ func TestPiecemealDef(t *testing.T) {
 
 	// Define both sigs
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
 	})
 
 	// Test number sig
@@ -2491,8 +2589,8 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 
 	// def number sig, def string sig, undef (pops string sig), test number sig
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
 		NewWord("undef"), NewWord("foo"), NewWord("end"),
 		NewInteger(3), NewWord("foo"),
 	})
@@ -2529,9 +2627,9 @@ func TestFnUndefTargeted(t *testing.T) {
 
 	// def both sigs, targeted remove number sig, string sig still works
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
@@ -2568,9 +2666,9 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	})
 
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2602,8 +2700,8 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 	})
 
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2635,8 +2733,8 @@ func TestFnUndefRemovesAll(t *testing.T) {
 	})
 
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
 		NewWord("foo"),
 	})
 	// foo should fall through to atom (string)
@@ -2668,8 +2766,8 @@ func TestPiecemealStackUnwind(t *testing.T) {
 
 	// Define both
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyA, NewWord("end"),
-		NewWord("def"), NewWord("foo"), NewWord("fn"), bodyB, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), bodyA, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), bodyB, NewWord("end"),
 	})
 
 	// Both sigs work

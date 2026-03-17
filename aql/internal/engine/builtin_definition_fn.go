@@ -128,7 +128,7 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 func parseFnReturns(outputSig Value) ([]Type, error) {
 	if !outputSig.VType.Equal(TList) {
 		// Abbreviation: single value treated as [value].
-		t, err := resolveSigType(outputSig)
+		t, _, err := resolveSigType(outputSig)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 	types := make([]Type, len(elems))
 	for i, e := range elems {
 		var err error
-		types[i], err = resolveSigType(e)
+		types[i], _, err = resolveSigType(e)
 		if err != nil {
 			return nil, err
 		}
@@ -172,11 +172,11 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 			}
 			name := keys[0]
 			typeVal, _ := m.Get(name)
-			paramType, err := resolveSigType(typeVal)
+			paramType, pattern, err := resolveSigType(typeVal)
 			if err != nil {
 				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
 			}
-			params = append(params, FnParam{Name: name, Type: paramType})
+			params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
@@ -212,22 +212,33 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 }
 
 // resolveSigType converts a Value (from a pair's value side) to a Type.
-func resolveSigType(v Value) (Type, error) {
+// The second return value is a non-nil pattern when the value is a map or list
+// literal that requires structural matching beyond basic type checking.
+func resolveSigType(v Value) (Type, *Value, error) {
 	if v.Data == nil {
 		// Type literal (e.g., number, string) — already resolved by parser
-		return v.VType, nil
+		return v.VType, nil, nil
 	}
 	if v.IsWord() {
-		return resolveTypeName(v.AsWord().Name)
+		t, err := resolveTypeName(v.AsWord().Name)
+		return t, nil, err
 	}
 	if v.VType.Matches(TString) {
-		return resolveTypeName(v.AsString())
+		t, err := resolveTypeName(v.AsString())
+		return t, nil, err
 	}
 	// Literal values (integers, booleans) carry their literal type.
 	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
-		return v.VType, nil
+		return v.VType, nil, nil
 	}
-	return TAny, nil
+	// Map/list literals: match by type and store pattern for structural unification.
+	if v.VType.Equal(TMap) {
+		return TMap, &v, nil
+	}
+	if v.VType.Equal(TList) {
+		return TList, &v, nil
+	}
+	return TAny, nil, nil
 }
 
 // resolveTypeName maps a type name string to its engine Type.
@@ -269,8 +280,15 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 	}
 	for _, sig := range fnDef.Sigs {
 		argTypes := make([]Type, len(sig.Params))
+		var patterns map[int]Value
 		for i, p := range sig.Params {
 			argTypes[i] = p.Type
+			if p.Pattern != nil {
+				if patterns == nil {
+					patterns = make(map[int]Value)
+				}
+				patterns[i] = *p.Pattern
+			}
 		}
 		s := sig // capture for closure
 		handler := func(args []Value) ([]Value, error) {
@@ -325,7 +343,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			result = append(result, NewWord(")"))
 			return result, nil
 		}
-		registerFn(name, Signature{Args: argTypes, Handler: handler})
+		registerFn(name, Signature{Args: argTypes, Handler: handler, Patterns: patterns})
 	}
 }
 
@@ -349,6 +367,22 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 			if !args[i].VType.Matches(p.Type) {
 				match = false
 				break
+			}
+			// Check structural pattern (e.g. map literal).
+			if p.Pattern != nil {
+				pat := *p.Pattern
+				if pat.VType.Equal(TMap) && args[i].VType.Equal(TMap) &&
+					pat.Data != nil && args[i].Data != nil {
+					if !openUnifyMap(pat, args[i]) {
+						match = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(args[i], pat); !uOk {
+						match = false
+						break
+					}
+				}
 			}
 		}
 		if !match {

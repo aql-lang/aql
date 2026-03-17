@@ -5,6 +5,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+
+	udk "voxgiguniversalsdk"
 )
 
 // FileOps is the interface for file system operations used by read/write words.
@@ -37,10 +39,14 @@ var (
 	TString  = engine.TString
 	TNumber  = engine.TNumber
 	TInteger = engine.TInteger
+	TDecimal = engine.TDecimal
 	TBoolean = engine.TBoolean
+	TNode    = engine.TNode
 	TAtom    = engine.TAtom
 	TList    = engine.TList
 	TMap     = engine.TMap
+	TTable   = engine.TTable
+	TRecord  = engine.TRecord
 )
 
 // NewType creates a Type from a slash-separated path (e.g. "string/proper",
@@ -70,22 +76,48 @@ func NewMemFileOps() *fileops.MemFileOps {
 	return fileops.NewMem()
 }
 
+// Options configures an AQL instance.
+type Options struct {
+	// Registry is a string identifier for the registry to use.
+	Registry string
+}
+
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
 // Create multiple instances with New() for independent execution contexts.
 type AQL struct {
 	registry *engine.Registry
+	options  Options
+	manager  *udk.UniversalManager
 }
 
 // New creates a new AQL instance with built-in functions.
-func New() (*AQL, error) {
+// An optional Options value may be provided to configure the instance.
+func New(opts ...Options) (*AQL, error) {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
-	return &AQL{registry: reg}, nil
+
+	um := udk.NewUniversalManager(map[string]any{
+		"registry": o.Registry,
+	})
+
+	reg.Manager = um
+
+	return &AQL{registry: reg, options: o, manager: um}, nil
+}
+
+// Options returns the Options the instance was created with.
+func (a *AQL) Options() Options {
+	return a.options
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.
@@ -134,6 +166,12 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 //	})
 func (a *AQL) RegisterPrefixOnly(name string, sigs ...Signature) {
 	a.registry.RegisterPrefixOnly(name, sigs...)
+}
+
+// SetSDK injects an SDK instance for the given spec name.
+// Used in tests to provide a pre-configured SDK (e.g. test mode with mock data).
+func (a *AQL) SetSDK(spec string, sdk any) {
+	a.registry.SDKCache[spec] = sdk
 }
 
 // Run parses and executes an AQL source string.

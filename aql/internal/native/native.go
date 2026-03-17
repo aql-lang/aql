@@ -23,6 +23,7 @@ type NativeSig struct {
 	Args       []engine.Type
 	Precedence int
 	Handler    NativeHandler
+	Patterns   map[int]engine.Value // optional structural patterns for args
 }
 
 // Register installs all built-in native functions into the given registry.
@@ -34,6 +35,7 @@ func Register(r *engine.Registry) {
 				Args:             sig.Args,
 				Precedence:       sig.Precedence,
 				FullStackHandler: handler,
+				Patterns:         sig.Patterns,
 			}
 			if fn.SuffixPrecedence {
 				r.Register(fn.Name, s)
@@ -84,6 +86,8 @@ func All() []NativeFunc {
 		padFunc(),
 		itemsFunc(),
 		fetchFunc(),
+		prepareFunc(),
+		directFunc(),
 		flattenFunc(),
 		filterFunc(),
 		joinFunc(),

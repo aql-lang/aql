@@ -1,18 +1,33 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func registerTypeDef(r *Registry) {
+	validateAndInstall := func(name string, body Value) error {
+		if !isTypeValue(body) {
+			return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
+		}
+		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
+			return err
+		}
+		installDef(r, name, body)
+		// Register the new name parts as known.
+		for _, p := range strings.Split(name, "/") {
+			r.KnownTypeParts[p] = true
+		}
+		return nil
+	}
+
 	// All-suffix handler: "type foo number" → args=[foo(name), number(body)]
 	typeSuffixHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
-
-		if !isTypeValue(body) {
-			return nil, fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
+		if err := validateAndInstall(name, body); err != nil {
+			return nil, err
 		}
-
-		installDef(r, name, body)
 		return nil, nil
 	}
 
@@ -20,12 +35,9 @@ func registerTypeDef(r *Registry) {
 	typeInfixHandler := func(args []Value) ([]Value, error) {
 		body := args[0]
 		name := defName(args[1])
-
-		if !isTypeValue(body) {
-			return nil, fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
+		if err := validateAndInstall(name, body); err != nil {
+			return nil, err
 		}
-
-		installDef(r, name, body)
 		return nil, nil
 	}
 

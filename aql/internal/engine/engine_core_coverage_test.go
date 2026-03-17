@@ -250,12 +250,12 @@ func TestEngineCoreUndefBasic(t *testing.T) {
 
 func TestEngineCoreUndefShadowing(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def x 1 end def x 2 end x => 2
+	// def "xShadow" 1 end def "xShadow" 2 end xShadow => 2
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("xShadow"), NewInteger(1), NewWord("end"),
+		NewWord("def"), NewString("xShadow"), NewInteger(1), NewWord("end"),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("xShadow"), NewInteger(2), NewWord("end"),
+		NewWord("def"), NewString("xShadow"), NewInteger(2), NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{NewWord("xShadow")})
 	if len(result) != 1 || result[0].AsNumber() != 2 {
