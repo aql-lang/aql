@@ -7,8 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
-	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+	aql "github.com/metsitaba/voxgig-exp/aql"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
 
@@ -25,6 +24,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 
 	evalExpr := fs.String("e", "", "evaluate expression")
+	registry := fs.String("r", "", "registry path")
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
@@ -39,7 +39,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: aql do requires an expression\n")
 			return 1
 		}
-		if err := run(stdout, doSource); err != nil {
+		if err := run(stdout, doSource, ""); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -74,7 +74,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if hasSource {
-		if err := run(stdout, source); err != nil {
+		if err := run(stdout, source, *registry); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -87,19 +87,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func run(w io.Writer, source string) error {
-	values, err := parser.Parse(source)
+func run(w io.Writer, source string, registry string) error {
+	a, err := aql.New(aql.Options{Registry: registry})
 	if err != nil {
-		return fmt.Errorf("parse error: %s", err)
+		return fmt.Errorf("init error: %s", err)
 	}
 
-	reg, regErr := engine.DefaultRegistry()
-	if regErr != nil {
-		return fmt.Errorf("init error: %s", regErr)
-	}
-	reg.SetParseFunc(parser.Parse)
-	eng := engine.NewTop(reg)
-	result, err := eng.Run(values)
+	result, err := a.Run(source)
 	if err != nil {
 		return fmt.Errorf("error: %s", err)
 	}
@@ -107,7 +101,7 @@ func run(w io.Writer, source string) error {
 	if len(result) > 0 {
 		parts := make([]string, len(result))
 		for i, v := range result {
-			parts[i] = v.String()
+			parts[i] = fmt.Sprint(v)
 		}
 		fmt.Fprintln(w, strings.Join(parts, " "))
 	}

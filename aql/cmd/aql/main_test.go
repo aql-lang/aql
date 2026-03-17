@@ -113,7 +113,7 @@ func TestExecuteBadFlag(t *testing.T) {
 
 func TestRunSuccess(t *testing.T) {
 	var buf bytes.Buffer
-	err := run(&buf, "1 add 2")
+	err := run(&buf, "1 add 2", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestRunSuccess(t *testing.T) {
 
 func TestRunParseError(t *testing.T) {
 	var buf bytes.Buffer
-	err := run(&buf, `"unterminated`)
+	err := run(&buf, `"unterminated`, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -181,7 +181,7 @@ func TestExecuteDoError(t *testing.T) {
 
 func TestRunEngineError(t *testing.T) {
 	var buf bytes.Buffer
-	err := run(&buf, "10 div 0")
+	err := run(&buf, "10 div 0", "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
