@@ -1,0 +1,1 @@
+export solardemo {planet:{kind:"api",spec:"voxgig-solardemo",entity:"planet"},moon:{kind:"api",spec:"voxgig-solardemo",entity:"moon"}}

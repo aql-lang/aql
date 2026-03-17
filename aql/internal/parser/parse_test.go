@@ -877,21 +877,25 @@ func TestExpandBangDotStandalone(t *testing.T) {
 
 func TestExpandDottedSimple(t *testing.T) {
 	assertExpand(t, "foo.bar", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("bar"),
 		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord(")"),
 	})
 }
 
 func TestExpandDottedChain(t *testing.T) {
 	assertExpand(t, "foo.a.b", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("a"),
 		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord("b"),
 		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord(")"),
 	})
 }
 
@@ -906,27 +910,33 @@ func TestExpandDottedLeading(t *testing.T) {
 
 func TestExpandDottedIntegerKey(t *testing.T) {
 	assertExpand(t, "foo.0", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewInteger(0),
 		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord(")"),
 	})
 }
 
 func TestExpandDottedTrailingDot(t *testing.T) {
 	assertExpand(t, "foo.", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("get"),
 		engine.NewWord("foo"),
+		engine.NewWord(")"),
 	})
 }
 
 func TestExpandDottedEmptyMiddle(t *testing.T) {
 	// "foo..bar" → empty segment skipped
 	assertExpand(t, "foo..bar", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("get"),
 		engine.NewWord("foo"),
 		engine.NewWord("bar"),
 		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord(")"),
 	})
 }
 
@@ -1137,8 +1147,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList()
-	if len(elems) != 4 {
-		t.Fatalf("expected 4 elements (get foo bar dot/p), got %d", len(elems))
+	// ( get foo bar dot/p ) = 6 elements
+	if len(elems) != 6 {
+		t.Fatalf("expected 6 elements (( get foo bar dot/p )), got %d", len(elems))
 	}
 }
 
@@ -1219,11 +1230,13 @@ func TestParseDataMapWithTypedMap(t *testing.T) {
 // --- Args expansion ---
 
 func TestExpandDottedArgs(t *testing.T) {
-	// args.x → resolves "args" as a word directly (not via get)
+	// args.x → resolves "args" as a word directly (not via get), wrapped in parens
 	assertExpand(t, "args.x", []engine.Value{
+		engine.NewOpenParen(),
 		engine.NewWord("args"),
 		engine.NewWord("x"),
 		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord(")"),
 	})
 }
 
@@ -1242,13 +1255,14 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → triggers dotted expansion in convertTopLevel
+	// 1 foo.bar → triggers dotted expansion in convertTopLevel, wrapped in parens
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 5 {
-		t.Fatalf("expected 5 values (1 get foo bar dot/p), got %d", len(got))
+	// 1 ( get foo bar dot ) = 7 values
+	if len(got) != 7 {
+		t.Fatalf("expected 7 values (1 ( get foo bar dot/p )), got %d", len(got))
 	}
 }
 

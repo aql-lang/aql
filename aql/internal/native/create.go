@@ -21,6 +21,11 @@ func createFunc() NativeFunc {
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
 			{
+				Args:     []engine.Type{engine.TMap, engine.TMap},
+				Handler:  createAPIOptsHandler,
+				Patterns: map[int]engine.Value{0: apiPatternVal},
+			},
+			{
 				Args:     []engine.Type{engine.TMap},
 				Handler:  createAPIHandler,
 				Patterns: map[int]engine.Value{0: apiPatternVal},
@@ -35,6 +40,13 @@ func createFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// createAPIOptsHandler handles create with {kind:"api",...} and an extra data map.
+// The options map is merged into the data field of the API map.
+func createAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "data")
+	return createAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // createAPIHandler handles create with {kind:"api", spec:String, entity:String, data:{...}}.

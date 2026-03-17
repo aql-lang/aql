@@ -84,3 +84,34 @@ func extractData(apiMap *engine.OrderedMap) map[string]any {
 	}
 	return nil
 }
+
+// mergeAPIOptions merges the keys of an options map into the base API map.
+// For query operations (list, load, remove), options keys go into query.
+// For data operations (create, update), options keys go into data.
+// Returns a new map; the original is not modified.
+func mergeAPIOptions(base *engine.OrderedMap, opts *engine.OrderedMap, field string) *engine.OrderedMap {
+	merged := engine.NewOrderedMap()
+	for _, k := range base.Keys() {
+		v, _ := base.Get(k)
+		merged.Set(k, v)
+	}
+
+	// Get existing field map or create a new one.
+	existing := engine.NewOrderedMap()
+	if v, ok := merged.Get(field); ok && v.VType.Matches(engine.TMap) {
+		src := v.AsMap()
+		for _, k := range src.Keys() {
+			val, _ := src.Get(k)
+			existing.Set(k, val)
+		}
+	}
+
+	// Merge opts into the field map.
+	for _, k := range opts.Keys() {
+		v, _ := opts.Get(k)
+		existing.Set(k, v)
+	}
+
+	merged.Set(field, engine.NewMap(existing))
+	return merged
+}
