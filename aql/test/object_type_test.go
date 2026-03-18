@@ -433,6 +433,19 @@ func TestValueIDPrefixes(t *testing.T) {
 
 // --- make object tests ---
 
+// objFields is a test helper that extracts fields from an object instance result.
+func objFields(t *testing.T, result []engine.Value) *engine.OrderedMap {
+	t.Helper()
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	v := result[0]
+	if !v.IsObjectInstance() {
+		t.Fatalf("expected object instance, got %s", v.String())
+	}
+	return v.AsObjectInstance().Fields
+}
+
 // TestMakeObjectBasic creates an object instance with type-literal fields.
 func TestMakeObjectBasic(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
@@ -442,15 +455,15 @@ func TestMakeObjectBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
+	inst := result[0]
+	if !inst.IsObjectInstance() {
+		t.Fatalf("expected object instance, got %s", inst.String())
 	}
-	m := result[0]
-	if !m.VType.Equal(engine.TMap) {
-		t.Fatalf("expected map result, got %s", m.VType)
+	oi := inst.AsObjectInstance()
+	if oi.TypeRef.Name != "Object/Foo" {
+		t.Errorf("expected type ref Object/Foo, got %s", oi.TypeRef.Name)
 	}
-	om := m.Data.(*engine.OrderedMap)
-	v, ok := om.Get("x")
+	v, ok := oi.Fields.Get("x")
 	if !ok {
 		t.Fatal("missing field x")
 	}
@@ -468,7 +481,7 @@ func TestMakeObjectTypeConversion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if v.AsString() != "42" {
 		t.Errorf("expected x='42' (converted), got %s", v.AsString())
@@ -484,7 +497,7 @@ func TestMakeObjectDefaultValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, ok := om.Get("x")
 	if !ok {
 		t.Fatal("missing field x")
@@ -503,7 +516,7 @@ func TestMakeObjectOverrideDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if v.AsInteger() != 2 {
 		t.Errorf("expected x=2, got %d", v.AsInteger())
@@ -519,7 +532,7 @@ func TestMakeObjectMultipleFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
 	if x.AsString() != "hi" {
@@ -539,7 +552,7 @@ func TestMakeObjectMixedDefaultsAndTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
 	if x.AsString() != "hi" {
@@ -601,7 +614,7 @@ func TestMakeObjectEmptyMapAllDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
 	if x.AsInteger() != 1 {
@@ -622,7 +635,7 @@ func TestMakeObjectInheritedFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	a, _ := om.Get("a")
 	b, _ := om.Get("b")
 	c, _ := om.Get("c")
@@ -647,7 +660,7 @@ func TestMakeObjectInheritedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	a, _ := om.Get("a")
 	b, _ := om.Get("b")
 	c, _ := om.Get("c")
@@ -687,7 +700,7 @@ func TestMakeObjectOverrideInheritedDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	a, _ := om.Get("a")
 	if a.AsInteger() != 99 {
 		t.Errorf("expected a=99, got %d", a.AsInteger())
@@ -703,7 +716,7 @@ func TestMakeObjectStringDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if v.AsString() != "hello" {
 		t.Errorf("expected x='hello', got %s", v.AsString())
@@ -719,7 +732,7 @@ func TestMakeObjectStringDefaultOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if v.AsString() != "world" {
 		t.Errorf("expected x='world', got %s", v.AsString())
@@ -735,7 +748,7 @@ func TestMakeObjectBooleanDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if !v.Data.(bool) {
 		t.Error("expected x=true (default)")
@@ -751,7 +764,7 @@ func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	v, _ := om.Get("x")
 	if v.Data.(bool) {
 		t.Error("expected x=false (overridden)")
@@ -767,7 +780,7 @@ func TestMakeObjectMultipleInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om1 := result[0].Data.(*engine.OrderedMap)
+	om1 := objFields(t, result)
 
 	result2, err := runNativeSteps(t, nil, []string{
 		`def Foo object {x:1}`,
@@ -776,7 +789,7 @@ func TestMakeObjectMultipleInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om2 := result2[0].Data.(*engine.OrderedMap)
+	om2 := objFields(t, result2)
 
 	v1, _ := om1.Get("x")
 	v2, _ := om2.Get("x")
@@ -808,7 +821,7 @@ func TestMakeObjectFieldOrderPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	keys := om.Keys()
 	// Fields should be in definition order, not input order.
 	if keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
@@ -827,7 +840,7 @@ func TestMakeObjectDeepInheritance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
 	z, _ := om.Get("z")
@@ -846,10 +859,69 @@ func TestMakeObjectChildOverridesParentField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	om := result[0].Data.(*engine.OrderedMap)
+	om := objFields(t, result)
 	x, _ := om.Get("x")
 	if x.AsInteger() != 99 {
 		t.Errorf("expected x=99 (child override), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectInstanceTypeMatchesObjectType verifies instance type path matches its type.
+func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {x:5}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst := result[0]
+	if !inst.VType.Matches(engine.TObject) {
+		t.Errorf("expected instance type to match TObject, got %s", inst.VType)
+	}
+	oi := inst.AsObjectInstance()
+	if oi.TypeRef.Name != "Object/Foo" {
+		t.Errorf("expected TypeRef.Name='Object/Foo', got %s", oi.TypeRef.Name)
+	}
+}
+
+// TestMakeObjectInstanceChildTypeRef verifies child instance references child type.
+func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:1}`,
+		`def Bar object {b:2} Foo`,
+		`make Bar {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	if oi.TypeRef.Name != "Object/Foo/Bar" {
+		t.Errorf("expected TypeRef.Name='Object/Foo/Bar', got %s", oi.TypeRef.Name)
+	}
+	if oi.TypeRef.Parent == nil {
+		t.Fatal("expected child TypeRef to have a parent")
+	}
+	if oi.TypeRef.Parent.Name != "Object/Foo" {
+		t.Errorf("expected parent name='Object/Foo', got %s", oi.TypeRef.Parent.Name)
+	}
+}
+
+// TestMakeObjectInstanceStringFormat verifies the String() representation.
+func TestMakeObjectInstanceStringFormat(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {x:5}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := result[0].String()
+	if !strings.Contains(s, "Object/Foo") {
+		t.Errorf("expected String() to contain 'Object/Foo', got %s", s)
+	}
+	if !strings.Contains(s, "x:5") {
+		t.Errorf("expected String() to contain 'x:5', got %s", s)
 	}
 }
 

@@ -194,7 +194,10 @@ func registerMake(r *Registry) {
 			}
 		}
 
-		return []Value{NewMap(result)}, nil
+		return []Value{NewObjectInstance(ObjectInstanceInfo{
+			TypeRef: &objType,
+			Fields:  result,
+		})}, nil
 	}
 
 	makeHandler := func(args []Value) ([]Value, error) {

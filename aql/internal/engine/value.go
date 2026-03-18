@@ -168,7 +168,13 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 	return result
 }
 
-// GenerateObjectTypeID creates a unique internal ID for an object type:
+// ObjectInstanceInfo holds a concrete instance of an object type.
+// TypeRef points back to the ObjectTypeInfo that created this instance.
+// Fields holds the resolved field values (including defaults).
+type ObjectInstanceInfo struct {
+	TypeRef *ObjectTypeInfo // the object type this is an instance of
+	Fields  *OrderedMap     // field name → resolved Value
+}
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -480,6 +486,17 @@ func NewObjectType(info ObjectTypeInfo) Value {
 	return newValue(t, info)
 }
 
+// NewObjectInstance creates an object instance value. The type path matches
+// the object type's Name so instances are subtypes of their type's hierarchy.
+func NewObjectInstance(info ObjectInstanceInfo) Value {
+	name := info.TypeRef.Name
+	if name == "" {
+		name = "Object/" + info.TypeRef.ID
+	}
+	t, _ := NewType(name)
+	return newValue(t, info)
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
@@ -555,6 +572,17 @@ func (v Value) IsObjectType() bool {
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
 func (v Value) AsObjectType() ObjectTypeInfo {
 	return v.Data.(ObjectTypeInfo)
+}
+
+// IsObjectInstance reports whether this value is an object instance.
+func (v Value) IsObjectInstance() bool {
+	_, ok := v.Data.(ObjectInstanceInfo)
+	return ok && v.VType.Matches(TObject)
+}
+
+// AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
+func (v Value) AsObjectInstance() ObjectInstanceInfo {
+	return v.Data.(ObjectInstanceInfo)
 }
 
 // IsModule reports whether this value is a module descriptor.
@@ -769,6 +797,18 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsObjectInstance():
+		oi := v.AsObjectInstance()
+		parts := make([]string, 0, oi.Fields.Len())
+		for _, k := range oi.Fields.Keys() {
+			val, _ := oi.Fields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := oi.TypeRef.Name
+		if name == "" {
+			name = "Object/" + oi.TypeRef.ID
+		}
+		return name + "{" + strings.Join(parts, ",") + "}"
 	case v.IsObjectType():
 		ot := v.AsObjectType()
 		allFields := ot.AllFields()
