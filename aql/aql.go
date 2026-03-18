@@ -45,8 +45,10 @@ var (
 	TAtom    = engine.TAtom
 	TList    = engine.TList
 	TMap     = engine.TMap
-	TTable   = engine.TTable
-	TRecord  = engine.TRecord
+	TTable          = engine.TTable
+	TRecord         = engine.TRecord
+	TResource       = engine.TResource
+	TResourceEntity = engine.TResourceEntity
 )
 
 // NewType creates a Type from a slash-separated path (e.g. "string/proper",

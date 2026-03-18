@@ -54,6 +54,8 @@ var typeAncestry = map[string]string{
 	"Returncheck": "Word/Internal/Return",
 	"Disjunct":    "Word/Internal/Disjunct",
 	"Module":      "Word/Internal/Module",
+	"Resource":    "Object/Resource",
+	"Entity":      "Object/Resource/Entity",
 }
 
 // Well-known types.
@@ -89,8 +91,10 @@ var (
 	TInternal     = mustType("Word/Internal")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
-	TObject        = mustType("Object")
-	TFetchFunction = mustType("Word/Function/Fetch")
+	TObject         = mustType("Object")
+	TResource       = mustType("Object/Resource")
+	TResourceEntity = mustType("Object/Resource/Entity")
+	TFetchFunction  = mustType("Word/Function/Fetch")
 	TFetchRequest  = mustType("Node/Map/Fetch/Request")
 	TFetchResponse = mustType("Node/Map/Fetch/Response")
 
@@ -139,6 +143,8 @@ var builtinTypeIDs = map[string]int{
 	"Word/Function/Fetch":      33,
 	"Node/Map/Fetch/Request":   34,
 	"Node/Map/Fetch/Response":  35,
+	"Object/Resource":          36,
+	"Object/Resource/Entity":   37,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -291,7 +297,7 @@ func builtinTypeParts() map[string]bool {
 		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
-		TFetchFunction, TFetchRequest, TFetchResponse,
+		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {

@@ -41,6 +41,30 @@ func getSDK(apiMap *engine.OrderedMap, opName string, r *engine.Registry) (*udk.
 	return sdkInst, entityName, nil
 }
 
+// entityToAPIMap converts an Object/Resource/Entity instance into the
+// OrderedMap that getSDK expects ({kind:..., spec:..., entity:...}).
+func entityToAPIMap(v engine.Value) *engine.OrderedMap {
+	inst := v.AsObjectInstance()
+	m := engine.NewOrderedMap()
+	if kind, ok := inst.GetField("kind"); ok {
+		m.Set("kind", kind)
+	}
+	if spec, ok := inst.GetField("spec"); ok {
+		m.Set("spec", spec)
+	}
+	if entity, ok := inst.GetField("entity"); ok {
+		m.Set("entity", entity)
+	}
+	return m
+}
+
+// entityToAPIMapWithOpts converts an Entity instance into an API map and
+// merges an options map into the given field (query or data).
+func entityToAPIMapWithOpts(v engine.Value, opts *engine.OrderedMap, field string) *engine.OrderedMap {
+	m := entityToAPIMap(v)
+	return mergeAPIOptions(m, opts, field)
+}
+
 // convertResultList converts a []any result from the SDK into an AQL list of maps.
 func convertResultList(items []any, opName string) ([]engine.Value, error) {
 	rows := make([]engine.Value, 0, len(items))

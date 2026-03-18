@@ -20,6 +20,15 @@ func removeFunc() NativeFunc {
 		Name:             "remove",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			// Entity object signatures (highest priority).
+			{
+				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
+				Handler: removeEntityOptsHandler,
+			},
+			{
+				Args:    []engine.Type{engine.TResourceEntity},
+				Handler: removeEntityHandler,
+			},
 			{
 				Args:     []engine.Type{engine.TMap, engine.TMap},
 				Handler:  removeAPIOptsHandler,
@@ -40,6 +49,18 @@ func removeFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// removeEntityHandler handles remove with an Entity object instance.
+func removeEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := entityToAPIMap(args[0])
+	return removeAPIHandler([]engine.Value{engine.NewMap(apiMap)}, ctx, stack, r)
+}
+
+// removeEntityOptsHandler handles remove with an Entity object instance and an options map.
+func removeEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	return removeAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // removeAPIOptsHandler handles remove with {kind:"api",...} and an extra options map.

@@ -20,6 +20,15 @@ func loadFunc() NativeFunc {
 		Name:             "load",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			// Entity object signatures (highest priority).
+			{
+				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
+				Handler: loadEntityOptsHandler,
+			},
+			{
+				Args:    []engine.Type{engine.TResourceEntity},
+				Handler: loadEntityHandler,
+			},
 			{
 				Args:     []engine.Type{engine.TMap, engine.TMap},
 				Handler:  loadAPIOptsHandler,
@@ -40,6 +49,18 @@ func loadFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// loadEntityHandler handles load with an Entity object instance.
+func loadEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := entityToAPIMap(args[0])
+	return loadAPIHandler([]engine.Value{engine.NewMap(apiMap)}, ctx, stack, r)
+}
+
+// loadEntityOptsHandler handles load with an Entity object instance and an options map.
+func loadEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // loadAPIOptsHandler handles load with {kind:"api",...} and an extra options map.

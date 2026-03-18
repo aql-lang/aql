@@ -22,6 +22,15 @@ func listFunc() NativeFunc {
 		Name:             "list",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			// Entity object signatures (highest priority).
+			{
+				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
+				Handler: listEntityOptsHandler,
+			},
+			{
+				Args:    []engine.Type{engine.TResourceEntity},
+				Handler: listEntityHandler,
+			},
 			{
 				Args:     []engine.Type{engine.TMap, engine.TMap},
 				Handler:  listAPIOptsHandler,
@@ -50,6 +59,18 @@ func listFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// listEntityHandler handles list with an Entity object instance.
+func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := entityToAPIMap(args[0])
+	return listAPIHandler([]engine.Value{engine.NewMap(apiMap)}, ctx, stack, r)
+}
+
+// listEntityOptsHandler handles list with an Entity object instance and an options map.
+func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // listAPIOptsHandler handles list with {kind:"api",...} and an extra options map.

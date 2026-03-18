@@ -383,3 +383,138 @@ func TestRemoveAPINonAPIMapFallsThrough(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 }
+
+// --- Entity object type operations ---
+
+func TestListEntityAll(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+list planets`)
+	if err != nil {
+		t.Fatalf("list entity failed: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result[0])
+	}
+
+	for _, name := range []string{"Mercury", "Venus", "Earth"} {
+		if !strings.Contains(s, name) {
+			t.Errorf("expected %q in result: %s", name, s)
+		}
+	}
+}
+
+func TestListEntityWithQuery(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+list planets {id:"planet01"}`)
+	if err != nil {
+		t.Fatalf("list entity with query failed: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result[0])
+	}
+
+	if !strings.Contains(s, "Mercury") {
+		t.Errorf("expected Mercury in result: %s", s)
+	}
+}
+
+func TestLoadEntity(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+load planets {id:"planet01"}`)
+	if err != nil {
+		t.Fatalf("load entity failed: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result[0])
+	}
+
+	if !strings.Contains(s, "Mercury") {
+		t.Errorf("expected Mercury in result: %s", s)
+	}
+}
+
+func TestCreateEntity(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+create planets {name:"Mars", kind:"terrestrial", diameter:6792}`)
+	if err != nil {
+		t.Fatalf("create entity failed: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result[0])
+	}
+
+	if !strings.Contains(s, "Mars") {
+		t.Errorf("expected Mars in result: %s", s)
+	}
+}
+
+func TestUpdateEntity(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+update planets {id:"planet01", name:"Mercury Updated"}`)
+	if err != nil {
+		t.Fatalf("update entity failed: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result[0])
+	}
+
+	if !strings.Contains(s, "Mercury Updated") {
+		t.Errorf("expected 'Mercury Updated' in result: %s", s)
+	}
+}
+
+func TestRemoveEntity(t *testing.T) {
+	a := newAQLWithSDK(t)
+
+	_, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
+remove planets {id:"planet01"}`)
+	if err != nil {
+		t.Fatalf("remove entity failed: %v", err)
+	}
+
+	// Verify planet01 is gone.
+	_, err = a.Run(`load {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet01"}}`)
+	if err == nil {
+		t.Fatal("expected error loading removed planet")
+	}
+}
