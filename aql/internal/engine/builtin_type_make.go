@@ -128,9 +128,84 @@ func registerMake(r *Registry) {
 		return useBase, nil
 	}
 
+	// makeObject creates an object instance from an ObjectTypeInfo and a map source.
+	// Field constraints with concrete values act as defaults: missing fields
+	// use the default, and provided values must match the default's type.
+	// Type-literal constraints (Data==nil) work like record fields.
+	// Unknown fields are rejected.
+	makeObject := func(objType ObjectTypeInfo, srcVal Value) ([]Value, error) {
+		allFields := objType.AllFields()
+		fieldKeys := allFields.Keys()
+		result := NewOrderedMap()
+
+		if !srcVal.VType.Equal(TMap) {
+			return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
+		}
+		provided, ok := srcVal.Data.(*OrderedMap)
+		if !ok {
+			return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
+		}
+
+		// Reject unknown fields.
+		for _, key := range provided.Keys() {
+			if _, ok := allFields.Get(key); !ok {
+				return nil, fmt.Errorf("make: unknown field %q for object type %s", key, objType.Name)
+			}
+		}
+
+		for _, key := range fieldKeys {
+			constraint, _ := allFields.Get(key)
+			val, hasVal := provided.Get(key)
+
+			if !hasVal {
+				// Missing field: use default if constraint has a concrete value.
+				if constraint.Data != nil {
+					result.Set(key, constraint)
+					continue
+				}
+				return nil, fmt.Errorf("make: missing field %q for object type %s", key, objType.Name)
+			}
+
+			val = resolveWordValue(val)
+
+			if constraint.Data == nil {
+				// Type-literal constraint: convert value to that type.
+				if val.VType.Matches(constraint.VType) {
+					result.Set(key, val)
+				} else {
+					converted, err := makeConvert(val, constraint.VType)
+					if err != nil {
+						return nil, fmt.Errorf("make: field %q: %w", key, err)
+					}
+					result.Set(key, converted)
+				}
+				continue
+			}
+
+			// Concrete default: accept any value of the same base type.
+			if val.VType.Matches(constraint.VType) {
+				result.Set(key, val)
+			} else {
+				converted, err := makeConvert(val, constraint.VType)
+				if err != nil {
+					return nil, fmt.Errorf("make: field %q: %w", key, err)
+				}
+				result.Set(key, converted)
+			}
+		}
+
+		return []Value{NewMap(result)}, nil
+	}
+
 	makeHandler := func(args []Value) ([]Value, error) {
 		targetVal := args[0]
 		srcVal := args[1]
+
+		// Object type instance creation.
+		if targetVal.IsObjectType() {
+			objType := targetVal.AsObjectType()
+			return makeObject(objType, srcVal)
+		}
 
 		// Record type instance creation.
 		if targetVal.IsRecordType() {
@@ -246,12 +321,17 @@ func registerMake(r *Registry) {
 			return nil, err
 		}
 
+		if targetVal.IsObjectType() {
+			objType := targetVal.AsObjectType()
+			return makeObject(objType, srcVal)
+		}
+
 		if targetVal.IsRecordType() {
 			recType := targetVal.AsRecordType()
 			return makeRecord(recType, srcVal, useBase)
 		}
 
-		// For non-record types, options are ignored — delegate to 2-arg.
+		// For non-record/object types, options are ignored — delegate to 2-arg.
 		return makeHandler(args[:2])
 	}
 

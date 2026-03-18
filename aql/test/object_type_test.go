@@ -431,6 +431,428 @@ func TestValueIDPrefixes(t *testing.T) {
 	}
 }
 
+// --- make object tests ---
+
+// TestMakeObjectBasic creates an object instance with type-literal fields.
+func TestMakeObjectBasic(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo {x:"hello"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	m := result[0]
+	if !m.VType.Equal(engine.TMap) {
+		t.Fatalf("expected map result, got %s", m.VType)
+	}
+	om := m.Data.(*engine.OrderedMap)
+	v, ok := om.Get("x")
+	if !ok {
+		t.Fatal("missing field x")
+	}
+	if v.AsString() != "hello" {
+		t.Errorf("expected x='hello', got %s", v.AsString())
+	}
+}
+
+// TestMakeObjectTypeConversion converts field values to match type constraints.
+func TestMakeObjectTypeConversion(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo {x:42}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if v.AsString() != "42" {
+		t.Errorf("expected x='42' (converted), got %s", v.AsString())
+	}
+}
+
+// TestMakeObjectDefaultValues uses concrete defaults when fields are omitted.
+func TestMakeObjectDefaultValues(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, ok := om.Get("x")
+	if !ok {
+		t.Fatal("missing field x")
+	}
+	if v.AsInteger() != 1 {
+		t.Errorf("expected x=1 (default), got %d", v.AsInteger())
+	}
+}
+
+// TestMakeObjectOverrideDefault overrides a concrete default with a new value.
+func TestMakeObjectOverrideDefault(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {x:2}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if v.AsInteger() != 2 {
+		t.Errorf("expected x=2, got %d", v.AsInteger())
+	}
+}
+
+// TestMakeObjectMultipleFields handles multiple fields with mixed types.
+func TestMakeObjectMultipleFields(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String,y:Integer}`,
+		`make Foo {x:"hi",y:7}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	x, _ := om.Get("x")
+	y, _ := om.Get("y")
+	if x.AsString() != "hi" {
+		t.Errorf("expected x='hi', got %s", x.AsString())
+	}
+	if y.AsInteger() != 7 {
+		t.Errorf("expected y=7, got %d", y.AsInteger())
+	}
+}
+
+// TestMakeObjectMixedDefaultsAndTypes mixes type-literal and concrete-default fields.
+func TestMakeObjectMixedDefaultsAndTypes(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String,y:10}`,
+		`make Foo {x:"hi"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	x, _ := om.Get("x")
+	y, _ := om.Get("y")
+	if x.AsString() != "hi" {
+		t.Errorf("expected x='hi', got %s", x.AsString())
+	}
+	if y.AsInteger() != 10 {
+		t.Errorf("expected y=10 (default), got %d", y.AsInteger())
+	}
+}
+
+// TestMakeObjectUnknownFieldError rejects unknown fields.
+func TestMakeObjectUnknownFieldError(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo {x:"hi",z:1}`,
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown field z")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("expected 'unknown field' error, got: %s", err)
+	}
+}
+
+// TestMakeObjectMissingRequiredFieldError rejects missing type-literal fields.
+func TestMakeObjectMissingRequiredFieldError(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo {}`,
+	})
+	if err == nil {
+		t.Fatal("expected error for missing required field x")
+	}
+	if !strings.Contains(err.Error(), "missing field") {
+		t.Errorf("expected 'missing field' error, got: %s", err)
+	}
+}
+
+// TestMakeObjectNonMapSourceError rejects non-map source values.
+func TestMakeObjectNonMapSourceError(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo [1 2 3]`,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-map source")
+	}
+	if !strings.Contains(err.Error(), "must be a map") {
+		t.Errorf("expected 'must be a map' error, got: %s", err)
+	}
+}
+
+// TestMakeObjectEmptyMapAllDefaults creates instance with all-default fields.
+func TestMakeObjectEmptyMapAllDefaults(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1,y:"default"}`,
+		`make Foo {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	x, _ := om.Get("x")
+	y, _ := om.Get("y")
+	if x.AsInteger() != 1 {
+		t.Errorf("expected x=1, got %d", x.AsInteger())
+	}
+	if y.AsString() != "default" {
+		t.Errorf("expected y='default', got %s", y.AsString())
+	}
+}
+
+// TestMakeObjectInheritedFields creates instance of child type with parent fields.
+func TestMakeObjectInheritedFields(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:String,b:Integer}`,
+		`def Bar object {c:Boolean} Foo`,
+		`make Bar {a:"hi",b:3,c:true}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	a, _ := om.Get("a")
+	b, _ := om.Get("b")
+	c, _ := om.Get("c")
+	if a.AsString() != "hi" {
+		t.Errorf("expected a='hi', got %s", a.AsString())
+	}
+	if b.AsInteger() != 3 {
+		t.Errorf("expected b=3, got %d", b.AsInteger())
+	}
+	if !c.Data.(bool) {
+		t.Error("expected c=true")
+	}
+}
+
+// TestMakeObjectInheritedDefaults uses parent defaults in child type.
+func TestMakeObjectInheritedDefaults(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:1,b:2}`,
+		`def Bar object {c:3} Foo`,
+		`make Bar {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	a, _ := om.Get("a")
+	b, _ := om.Get("b")
+	c, _ := om.Get("c")
+	if a.AsInteger() != 1 {
+		t.Errorf("expected a=1, got %d", a.AsInteger())
+	}
+	if b.AsInteger() != 2 {
+		t.Errorf("expected b=2, got %d", b.AsInteger())
+	}
+	if c.AsInteger() != 3 {
+		t.Errorf("expected c=3, got %d", c.AsInteger())
+	}
+}
+
+// TestMakeObjectInheritedUnknownFieldError rejects fields not in parent or child.
+func TestMakeObjectInheritedUnknownFieldError(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:String}`,
+		`def Bar object {b:Integer} Foo`,
+		`make Bar {a:"hi",b:1,z:99}`,
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown field z")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("expected 'unknown field' error, got: %s", err)
+	}
+}
+
+// TestMakeObjectOverrideInheritedDefault overrides a parent's default in child instance.
+func TestMakeObjectOverrideInheritedDefault(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:1}`,
+		`def Bar object {b:String} Foo`,
+		`make Bar {a:99,b:"x"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	a, _ := om.Get("a")
+	if a.AsInteger() != 99 {
+		t.Errorf("expected a=99, got %d", a.AsInteger())
+	}
+}
+
+// TestMakeObjectStringDefault uses string default value.
+func TestMakeObjectStringDefault(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:"hello"}`,
+		`make Foo {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if v.AsString() != "hello" {
+		t.Errorf("expected x='hello', got %s", v.AsString())
+	}
+}
+
+// TestMakeObjectStringDefaultOverride overrides string default with different string.
+func TestMakeObjectStringDefaultOverride(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:"hello"}`,
+		`make Foo {x:"world"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if v.AsString() != "world" {
+		t.Errorf("expected x='world', got %s", v.AsString())
+	}
+}
+
+// TestMakeObjectBooleanDefault uses boolean default value.
+func TestMakeObjectBooleanDefault(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:true}`,
+		`make Foo {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if !v.Data.(bool) {
+		t.Error("expected x=true (default)")
+	}
+}
+
+// TestMakeObjectBooleanDefaultOverride overrides boolean default.
+func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:true}`,
+		`make Foo {x:false}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	v, _ := om.Get("x")
+	if v.Data.(bool) {
+		t.Error("expected x=false (overridden)")
+	}
+}
+
+// TestMakeObjectMultipleInstances creates multiple independent instances.
+func TestMakeObjectMultipleInstances(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {x:10}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om1 := result[0].Data.(*engine.OrderedMap)
+
+	result2, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`make Foo {x:20}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om2 := result2[0].Data.(*engine.OrderedMap)
+
+	v1, _ := om1.Get("x")
+	v2, _ := om2.Get("x")
+	if v1.AsInteger() == v2.AsInteger() {
+		t.Error("expected independent instances with different values")
+	}
+}
+
+// TestMakeObjectOnlyUnknownFieldsError rejects when only unknown fields given.
+func TestMakeObjectOnlyUnknownFieldsError(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:String}`,
+		`make Foo {z:"hi"}`,
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("expected 'unknown field' error, got: %s", err)
+	}
+}
+
+// TestMakeObjectFieldOrderPreserved verifies field order matches type definition.
+func TestMakeObjectFieldOrderPreserved(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {a:1,b:2,c:3}`,
+		`make Foo {c:30,a:10,b:20}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	keys := om.Keys()
+	// Fields should be in definition order, not input order.
+	if keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Errorf("expected field order [a,b,c], got %v", keys)
+	}
+}
+
+// TestMakeObjectDeepInheritance tests 3-level inheritance chain.
+func TestMakeObjectDeepInheritance(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def A object {x:1}`,
+		`def B object {y:2} A`,
+		`def C object {z:3} B`,
+		`make C {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	x, _ := om.Get("x")
+	y, _ := om.Get("y")
+	z, _ := om.Get("z")
+	if x.AsInteger() != 1 || y.AsInteger() != 2 || z.AsInteger() != 3 {
+		t.Errorf("expected x=1,y=2,z=3, got x=%d,y=%d,z=%d", x.AsInteger(), y.AsInteger(), z.AsInteger())
+	}
+}
+
+// TestMakeObjectChildOverridesParentField tests that child field overrides parent.
+func TestMakeObjectChildOverridesParentField(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:1}`,
+		`def Bar object {x:99} Foo`,
+		`make Bar {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	om := result[0].Data.(*engine.OrderedMap)
+	x, _ := om.Get("x")
+	if x.AsInteger() != 99 {
+		t.Errorf("expected x=99 (child override), got %d", x.AsInteger())
+	}
+}
+
 // TestObjectTypeNonObjectParentIgnored verifies that when the second arg
 // doesn't match TObject, object uses the 1-arg signature (map only).
 func TestObjectTypeNonObjectParentIgnored(t *testing.T) {
