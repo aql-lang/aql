@@ -10,13 +10,9 @@ func registerStackCollect(r *Registry) {
 			if n < 0 || n > len(stack) {
 				return nil, fmt.Errorf("stack: count %d out of range (stack depth %d)", n, len(stack))
 			}
-			startIdx := len(stack) - n
 			items := make([]Value, n)
-			copy(items, stack[startIdx:])
-			result := make([]Value, startIdx+1)
-			copy(result, stack[:startIdx])
-			result[startIdx] = NewList(items)
-			return result, nil
+			copy(items, stack[len(stack)-n:])
+			return append(stack, NewList(items)), nil
 		},
 	})
 }
