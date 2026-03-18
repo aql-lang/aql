@@ -40,6 +40,10 @@ lower B	'b'
 4 5 mul	20
 10 3 div	3
 10 3 mod	1
+0 increment	1
+5 increment	6
+-1 increment	0
+42 increment	43
 
 # Arithmetic - infix
 1 add 2	3
