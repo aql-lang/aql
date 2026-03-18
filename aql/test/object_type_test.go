@@ -1404,6 +1404,84 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	}
 }
 
+// TestMakeObjectPrototypeDotAccessEndToEnd runs the full prototype example
+// as a single program: define Foo, create foo1, define Bar extending Foo,
+// create barA with foo1 as prototype, then print each dot-access result.
+func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`foo1.x`,
+		`def Bar object {y:String} Foo`,
+		`def barA make Bar {y:"A"} foo1`,
+		`barA.y`,
+		`barA.x`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// barA.x is the last step, so result comes from that.
+	if result[0].AsInteger() != 1 {
+		t.Errorf("expected barA.x=1 (inherited from prototype foo1), got %d", result[0].AsInteger())
+	}
+
+	// Also verify each step individually in a single shared engine.
+	var results []string
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// foo1.x => 1
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`foo1.x`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	results = append(results, result[0].String())
+
+	// barA.y => A
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`def barA make Bar {y:"A"} foo1`,
+		`barA.y`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	results = append(results, result[0].String())
+
+	// barA.x => 1
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`def barA make Bar {y:"A"} foo1`,
+		`barA.x`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	results = append(results, result[0].String())
+
+	// Verify: 1, 'A', 1 (strings include quotes in String() output)
+	want := []string{"1", "'A'", "1"}
+	for i, w := range want {
+		if results[i] != w {
+			t.Errorf("step %d: got %q, want %q", i, results[i], w)
+		}
+	}
+}
+
 // TestObjectTypeNonObjectParentIgnored verifies that when the second arg
 // doesn't match TObject, object uses the 1-arg signature (map only).
 func TestObjectTypeNonObjectParentIgnored(t *testing.T) {
