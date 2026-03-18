@@ -1356,6 +1356,54 @@ func TestMakeObjectDeep7AutoPrototypeStringFormat(t *testing.T) {
 	}
 }
 
+// TestMakeObjectPrototypeDotAccess verifies the full prototype example:
+// define Foo, create foo1, define Bar extending Foo, create barA with foo1
+// as prototype, then access fields via dot notation.
+func TestMakeObjectPrototypeDotAccess(t *testing.T) {
+	// foo1.x => 1
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`foo1 x dot`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0].AsInteger() != 1 {
+		t.Errorf("expected foo1.x=1, got %d", result[0].AsInteger())
+	}
+
+	// barA.y => 'A'
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`def barA make Bar {y:"A"} foo1`,
+		`barA y dot`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0].AsString() != "A" {
+		t.Errorf("expected barA.y='A', got %s", result[0].AsString())
+	}
+
+	// barA.x => 1 (from prototype foo1)
+	result, err = runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`def barA make Bar {y:"A"} foo1`,
+		`barA x dot`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0].AsInteger() != 1 {
+		t.Errorf("expected barA.x=1 (from prototype foo1), got %d", result[0].AsInteger())
+	}
+}
+
 // TestObjectTypeNonObjectParentIgnored verifies that when the second arg
 // doesn't match TObject, object uses the 1-arg signature (map only).
 func TestObjectTypeNonObjectParentIgnored(t *testing.T) {
