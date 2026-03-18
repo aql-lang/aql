@@ -42,8 +42,8 @@ var typeAncestry = map[string]string{
 	"Atom":        "Word/Atom",
 	"List":        "Node/List",
 	"Map":         "Node/Map",
-	"Table":       "Node/Table",
-	"Record":      "Node/Record",
+	"Table":       "Object/Table",
+	"Record":      "Object/Record",
 	"Mark":        "Word/Internal/Mark",
 	"Move":        "Word/Internal/Move",
 	"Forward":     "Word/Internal/Forward",
@@ -72,8 +72,8 @@ var (
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
 	TMap          = mustType("Node/Map")
-	TTable        = mustType("Node/Table")
-	TRecord       = mustType("Node/Record")
+	TTable        = mustType("Object/Table")
+	TRecord       = mustType("Object/Record")
 	TAtom         = mustType("Word/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
@@ -118,8 +118,8 @@ var builtinTypeIDs = map[string]int{
 	"Node/List":                12,
 	"Node/List/Args":           13,
 	"Node/Map":                 14,
-	"Node/Table":               15,
-	"Node/Record":              16,
+	"Object/Table":             15,
+	"Object/Record":            16,
 	"Word":                     17,
 	"Word/Atom":                18,
 	"Word/Function":            19,
