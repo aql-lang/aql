@@ -545,6 +545,26 @@ func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
 }
 
+// ErrorInfo holds the details of an AQL error value.
+type ErrorInfo struct {
+	Message string // the error description
+}
+
+// NewError creates an error value from a Go error.
+func NewError(err error) Value {
+	return newValue(TError, ErrorInfo{Message: err.Error()})
+}
+
+// IsError reports whether this value is an error.
+func (v Value) IsError() bool {
+	return v.VType.Equal(TError)
+}
+
+// AsError returns the ErrorInfo for an error value.
+func (v Value) AsError() ErrorInfo {
+	return v.Data.(ErrorInfo)
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -786,6 +806,8 @@ func (v Value) String() string {
 	case v.IsModule():
 		md := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)
+	case v.IsError():
+		return fmt.Sprintf("error(%s)", v.AsError().Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()

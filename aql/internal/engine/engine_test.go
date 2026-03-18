@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -4869,5 +4872,171 @@ func BenchmarkRepeatedRun(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_, _ = eng.Run(input)
+	}
+}
+
+// =============================================================================
+// Error value and error word tests
+// =============================================================================
+
+func TestErrorValueType(t *testing.T) {
+	err := fmt.Errorf("something went wrong")
+	v := NewError(err)
+	if !v.IsError() {
+		t.Fatal("expected IsError() == true")
+	}
+	if v.AsError().Message != "something went wrong" {
+		t.Errorf("message = %q, want %q", v.AsError().Message, "something went wrong")
+	}
+	if v.String() != "error(something went wrong)" {
+		t.Errorf("String() = %q, want %q", v.String(), "error(something went wrong)")
+	}
+}
+
+func TestTopLevelErrorHalts(t *testing.T) {
+	// 1 div 0 mul 2 → halts with error, mul 2 never runs
+	reg, _ := DefaultRegistry()
+	e := NewTop(reg)
+	_, err := e.Run([]Value{
+		NewInteger(1), NewWord("div"), NewInteger(0),
+		NewWord("mul"), NewInteger(2),
+	})
+	if err == nil {
+		t.Fatal("expected error from div 0")
+	}
+	if !strings.Contains(err.Error(), "division by zero") {
+		t.Errorf("expected 'division by zero', got %q", err.Error())
+	}
+}
+
+func TestDoBlockCatchesError(t *testing.T) {
+	// do [1 div 0] → error value on stack (not a Go error)
+	reg, _ := DefaultRegistry()
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+	})
+	if err != nil {
+		t.Fatalf("do block should catch error, got: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if !result[0].IsError() {
+		t.Fatalf("expected error value, got %s", result[0].String())
+	}
+	if !strings.Contains(result[0].AsError().Message, "division by zero") {
+		t.Errorf("error message = %q", result[0].AsError().Message)
+	}
+}
+
+func TestErrorWordSimple(t *testing.T) {
+	// do [1 div 0] error → prints error, continues
+	reg, _ := DefaultRegistry()
+	reg.Output = &bytes.Buffer{}
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+		NewWord("error"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected empty stack after error, got %v", result)
+	}
+	out := reg.Output.(*bytes.Buffer).String()
+	if !strings.Contains(out, "division by zero") {
+		t.Errorf("expected 'division by zero' in output, got %q", out)
+	}
+}
+
+func TestErrorWordWithList(t *testing.T) {
+	// do [1 div 0] error [print "handled"] 3 mul 4 → 12
+	reg, _ := DefaultRegistry()
+	reg.Output = &bytes.Buffer{}
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+		NewWord("error"),
+		NewList([]Value{NewWord("print"), NewString("handled")}),
+		NewInteger(3), NewWord("mul"), NewInteger(4),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("expected [12], got %v", result)
+	}
+	out := reg.Output.(*bytes.Buffer).String()
+	if !strings.Contains(out, "division by zero") {
+		t.Errorf("expected error message in output, got %q", out)
+	}
+	if !strings.Contains(out, "handled") {
+		t.Errorf("expected 'handled' in output, got %q", out)
+	}
+}
+
+func TestErrorWordContinuesExecution(t *testing.T) {
+	// do [1 div 0] error 3 mul 4 → 12
+	reg, _ := DefaultRegistry()
+	reg.Output = &bytes.Buffer{}
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+		NewWord("error"),
+		NewInteger(3), NewWord("mul"), NewInteger(4),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 12 {
+		t.Errorf("expected [12], got %v", result)
+	}
+}
+
+func TestDoBlockSuccessNoError(t *testing.T) {
+	// do [1 add 2] → 3 (no error, normal result)
+	reg, _ := DefaultRegistry()
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 3 {
+		t.Errorf("expected [3], got %v", result)
+	}
+}
+
+func TestUnhandledErrorOnStack(t *testing.T) {
+	// do [1 div 0] 3 mul 4 → error value stays on stack alongside 12
+	// The error is inert data — it doesn't block subsequent operations
+	// that don't consume it.
+	reg, _ := DefaultRegistry()
+	reg.Output = &bytes.Buffer{}
+	e := NewTop(reg)
+	result, err := e.Run([]Value{
+		NewWord("do"),
+		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+		NewInteger(3), NewWord("mul"), NewInteger(4),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
+	}
+	if !result[0].IsError() {
+		t.Errorf("result[0] should be error, got %s", result[0].String())
+	}
+	if result[1].AsInteger() != 12 {
+		t.Errorf("result[1] = %v, want 12", result[1])
 	}
 }

@@ -29,7 +29,12 @@ func registerDo(r *Registry) {
 		sub := New(r)
 		input := make([]Value, len(elems))
 		copy(input, elems)
-		return sub.Run(input)
+		result, err := sub.Run(input)
+		if err != nil {
+			// Catch the error and leave it on the stack as an error value.
+			return []Value{NewError(err)}, nil
+		}
+		return result, nil
 	}
 
 	// evalDataList evaluates a list from data context (inside a map).

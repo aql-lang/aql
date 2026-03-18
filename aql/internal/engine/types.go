@@ -97,6 +97,7 @@ var (
 	TFetchFunction  = mustType("Word/Function/Fetch")
 	TFetchRequest  = mustType("Node/Map/Fetch/Request")
 	TFetchResponse = mustType("Node/Map/Fetch/Response")
+	TError         = mustType("Node/Error")
 
 	// Deprecated aliases — kept temporarily for migration.
 	TBooleanTrue    = TBoolean
