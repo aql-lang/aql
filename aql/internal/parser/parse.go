@@ -60,11 +60,12 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
+	TinSC := j.Token("#SC", ";")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -80,6 +81,10 @@ func Parse(src string) ([]engine.Value, error) {
 			}},
 			{S: [][]jsonic.Tin{{TinCP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: ")", Quote: ""}
+			}},
+			{S: [][]jsonic.Tin{{TinSC}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Semicolon is an alias for the "end" keyword.
+				r.Node = jsonic.Text{Str: "end", Quote: ""}
 			}},
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				si := r.O0.SI
