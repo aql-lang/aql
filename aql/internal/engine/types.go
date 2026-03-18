@@ -12,7 +12,7 @@ import (
 // Scalar/String/Proper matches Scalar/String matches Scalar.
 //
 // Builtin types carry a fixed ID that is stable across runs and independent
-// of creation order. The ID format is "<prefix>_" followed by 32 lowercase
+// of creation order. The ID format is "<prefix>_" followed by 12 lowercase
 // hex characters encoding the type's assigned number. Runtime-created types
 // have an empty ID.
 type Type struct {
@@ -142,11 +142,11 @@ var builtinTypeIDs = map[string]int{
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
-// for the given type path, producing the same 34-character format as random
-// IDs: "<prefix>_" + 32 hex digits.
+// for the given type path, producing the same 14-character format as random
+// IDs: "<prefix>_" + 12 hex digits.
 func formatFixedTypeID(path string, num int) string {
 	prefix := IDPrefixForParts(strings.Split(path, "/"))
-	return fmt.Sprintf("%s%032x", prefix, num)
+	return fmt.Sprintf("%s%012x", prefix, num)
 }
 
 // IDPrefixForParts returns the ID prefix for a type given its parts.

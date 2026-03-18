@@ -183,8 +183,8 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if !strings.HasPrefix(fooID, "T_") {
 		t.Errorf("expected ID to start with 'T_', got %s", fooID)
 	}
-	if len(fooID) != 34 { // "T_" + 32 hex chars
-		t.Errorf("expected ID length 34, got %d for %s", len(fooID), fooID)
+	if len(fooID) != 14 { // "T_" + 12 hex chars
+		t.Errorf("expected ID length 14, got %d for %s", len(fooID), fooID)
 	}
 }
 
@@ -294,9 +294,9 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 		t.Error("TObject should have a fixed ID")
 	}
 
-	// Fixed IDs must be 34 chars (prefix + 32 hex)
-	if len(engine.TAny.ID) != 34 {
-		t.Errorf("TAny ID should be 34 chars, got %d: %s", len(engine.TAny.ID), engine.TAny.ID)
+	// Fixed IDs must be 14 chars (prefix + 12 hex)
+	if len(engine.TAny.ID) != 14 {
+		t.Errorf("TAny ID should be 14 chars, got %d: %s", len(engine.TAny.ID), engine.TAny.ID)
 	}
 
 	// Correct prefixes
@@ -317,15 +317,15 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 	}
 
 	// Specific known values: TAny=1, TNone=2, TScalar=3, TString=4
-	expectedAny := "T_00000000000000000000000000000001"
+	expectedAny := "T_000000000001"
 	if engine.TAny.ID != expectedAny {
 		t.Errorf("TAny ID should be %s, got %s", expectedAny, engine.TAny.ID)
 	}
-	expectedNone := "T_00000000000000000000000000000002"
+	expectedNone := "T_000000000002"
 	if engine.TNone.ID != expectedNone {
 		t.Errorf("TNone ID should be %s, got %s", expectedNone, engine.TNone.ID)
 	}
-	expectedString := "S_00000000000000000000000000000004"
+	expectedString := "S_000000000004"
 	if engine.TString.ID != expectedString {
 		t.Errorf("TString ID should be %s, got %s", expectedString, engine.TString.ID)
 	}
@@ -371,8 +371,8 @@ func TestValueIDPrefixes(t *testing.T) {
 	if !strings.HasPrefix(str.ID, "S_") {
 		t.Errorf("string ID should start with S_, got %s", str.ID)
 	}
-	if len(str.ID) != 34 { // "S_" + 32 hex chars
-		t.Errorf("string ID should be 34 chars, got %d: %s", len(str.ID), str.ID)
+	if len(str.ID) != 14 { // "S_" + 12 hex chars
+		t.Errorf("string ID should be 14 chars, got %d: %s", len(str.ID), str.ID)
 	}
 
 	num := engine.NewInteger(42)

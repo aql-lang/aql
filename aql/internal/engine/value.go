@@ -138,13 +138,13 @@ type DisjunctInfo struct {
 // For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
 // Fields are the type's own fields (not including inherited ones).
 // Parent points to the parent object type (nil for direct children of Object root).
-// ID is a unique internal identifier: "T_" followed by 32 lowercase hex characters.
+// ID is a unique internal identifier: "T_" followed by 12 lowercase hex characters.
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
 type ObjectTypeInfo struct {
 	Fields *OrderedMap      // own fields (field name → type-constraint Value)
 	Parent *ObjectTypeInfo  // parent object type (nil if direct child of Object)
-	ID     string           // unique internal ID: "T_" + 32 hex chars
+	ID     string           // unique internal ID: "T_" + 12 hex chars
 	Name   string           // full type path (e.g. "Object/Foo/Bar")
 }
 
@@ -168,7 +168,7 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 }
 
 // GenerateObjectTypeID creates a unique internal ID for an object type:
-// "T_" followed by 32 lowercase hex characters (16 random bytes).
+// "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
 }
@@ -262,17 +262,17 @@ type ForwardInfo struct {
 //   - "W_" for word values (Word, Atom, Function, Internal/*)
 //   - "T_" for type/object values (Object/*, type literals, Any, None)
 //
-// Each ID is the prefix followed by 32 lowercase hex characters (16 random bytes).
+// Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
 	ID    string
 	VType Type
 	Data  interface{}
 }
 
-// GenerateID creates a unique ID with the given prefix followed by 32
-// lowercase hex characters (16 random bytes).
+// GenerateID creates a unique ID with the given prefix followed by 12
+// lowercase hex characters (6 random bytes).
 func GenerateID(prefix string) string {
-	b := make([]byte, 16)
+	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	return prefix + hex.EncodeToString(b)
 }
