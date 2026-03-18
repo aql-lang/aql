@@ -189,6 +189,7 @@ func registerBuiltins(r *Registry) {
 	registerDepth(r)
 	registerPick(r)
 	registerRoll(r)
+	registerStackCollect(r)
 
 	// Math: arithmetic
 	registerAdd(r)
