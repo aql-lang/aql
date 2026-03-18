@@ -1,13 +1,14 @@
 package engine
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // OrderedMap is a map that preserves insertion order of keys.
@@ -269,12 +270,33 @@ type Value struct {
 	Data  interface{}
 }
 
+// idRand is the package-level RNG used for ID generation.
+// Defaults to time-seeded; can be overridden via SetIDSeed.
+var idRand = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+
+// idMin is the minimum random value for generated IDs (0x100000000000).
+const idMin uint64 = 0x100000000000
+
+// idMax is the exclusive upper bound so values fit in 12 hex chars.
+const idMax uint64 = 0x1000000000000 - 0x100000000000
+
+// SetIDSeed configures the package-level RNG with the given seed.
+func SetIDSeed(seed int64) {
+	idRand = rand.New(rand.NewPCG(uint64(seed), 0))
+}
+
 // GenerateID creates a unique ID with the given prefix followed by 12
-// lowercase hex characters (6 random bytes).
+// lowercase hex characters. The random value is >= 0x100000000000.
 func GenerateID(prefix string) string {
-	b := make([]byte, 6)
-	_, _ = rand.Read(b)
-	return prefix + hex.EncodeToString(b)
+	n := idMin + idRand.Uint64N(idMax)
+	var buf [6]byte
+	buf[0] = byte(n >> 40)
+	buf[1] = byte(n >> 32)
+	buf[2] = byte(n >> 24)
+	buf[3] = byte(n >> 16)
+	buf[4] = byte(n >> 8)
+	buf[5] = byte(n)
+	return prefix + hex.EncodeToString(buf[:])
 }
 
 // IDPrefixForType returns the ID prefix for a given type:

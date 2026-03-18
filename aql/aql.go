@@ -80,6 +80,9 @@ func NewMemFileOps() *fileops.MemFileOps {
 type Options struct {
 	// Registry is a string identifier for the registry to use.
 	Registry string
+	// Seed sets the random seed for ID generation.
+	// If zero, the current time is used.
+	Seed int64
 }
 
 // AQL is an independent AQL execution instance.
@@ -97,6 +100,10 @@ func New(opts ...Options) (*AQL, error) {
 	var o Options
 	if len(opts) > 0 {
 		o = opts[0]
+	}
+
+	if o.Seed != 0 {
+		engine.SetIDSeed(o.Seed)
 	}
 
 	reg, err := engine.DefaultRegistry()
