@@ -202,7 +202,6 @@ func registerBuiltins(r *Registry) {
 	registerMax(r)
 	registerPow(r)
 	registerSign(r)
-	registerIncrement(r)
 
 	// Math: rounding
 	registerCeil(r)
