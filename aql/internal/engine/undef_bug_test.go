@@ -19,7 +19,7 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	cParam.Set("c", NewWord("String"))
 
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(aParam), NewMap(bParam), NewMap(cParam)}),
+		NewList([]Value{NewImplicitMap(aParam), NewImplicitMap(bParam), NewImplicitMap(cParam)}),
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("a"), NewWord("b"), NewWord("add"), NewWord("c"), NewWord("add")}),
 	})

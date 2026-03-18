@@ -59,39 +59,9 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		outputSig := list[i+1]
 		body := list[i+2]
 
-		// Abbreviation: non-list, non-map input sig is treated as [inputSig].
-		// Maps are NOT wrapped — a bare {x:Integer} means "takes a map
-		// argument with that structure", not a named parameter declaration.
-		// Named parameters only come from implicit pair syntax inside lists
-		// (e.g., [x:Integer]).
-		if !inputSig.VType.Equal(TList) && !inputSig.VType.Equal(TMap) {
+		// Abbreviation: non-list input sig is treated as [inputSig].
+		if !inputSig.VType.Equal(TList) {
 			inputSig = NewList([]Value{inputSig})
-		}
-		if inputSig.VType.Equal(TMap) {
-			paramType, pattern, err := resolveSigType(inputSig)
-			if err != nil {
-				return FnDefInfo{}, fmt.Errorf("function spec: invalid map input: %w", err)
-			}
-			params := []FnParam{{Type: paramType, Pattern: pattern}}
-
-			returns, err := parseFnReturns(outputSig)
-			if err != nil {
-				return FnDefInfo{}, err
-			}
-
-			var bodyElems []Value
-			if body.VType.Equal(TList) {
-				bodyElems = body.AsList()
-			} else {
-				bodyElems = []Value{body}
-			}
-
-			sigs = append(sigs, FnSig{
-				Params:  params,
-				Returns: returns,
-				Body:    bodyElems,
-			})
-			continue
 		}
 
 		params, err := parseFnParams(inputSig)
@@ -130,26 +100,8 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 		inputSig := list[i]
 		outputSig := list[i+1]
 
-		if !inputSig.VType.Equal(TList) && !inputSig.VType.Equal(TMap) {
+		if !inputSig.VType.Equal(TList) {
 			inputSig = NewList([]Value{inputSig})
-		}
-		if inputSig.VType.Equal(TMap) {
-			paramType, pattern, err := resolveSigType(inputSig)
-			if err != nil {
-				return FnUndefInfo{}, fmt.Errorf("function spec: invalid map input: %w", err)
-			}
-			params := []FnParam{{Type: paramType, Pattern: pattern}}
-
-			returns, err := parseFnReturns(outputSig)
-			if err != nil {
-				return FnUndefInfo{}, err
-			}
-
-			sigs = append(sigs, FnSigSpec{
-				Params:  params,
-				Returns: returns,
-			})
-			continue
 		}
 
 		params, err := parseFnParams(inputSig)
@@ -212,19 +164,28 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 	for _, elem := range elems {
 		switch {
 		case elem.VType.Equal(TMap):
-			// Named parameter from pair syntax: {name: type}
 			m := elem.AsMap()
-			keys := m.Keys()
-			if len(keys) != 1 {
-				return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+			if m.Implicit {
+				// Named parameter from implicit pair syntax: [x:Integer]
+				keys := m.Keys()
+				if len(keys) != 1 {
+					return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+				}
+				name := keys[0]
+				typeVal, _ := m.Get(name)
+				paramType, pattern, err := resolveSigType(typeVal)
+				if err != nil {
+					return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+				}
+				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
+			} else {
+				// Explicit map: unnamed parameter with structural pattern
+				paramType, pattern, err := resolveSigType(elem)
+				if err != nil {
+					return nil, fmt.Errorf("function spec: invalid map param: %w", err)
+				}
+				params = append(params, FnParam{Type: paramType, Pattern: pattern})
 			}
-			name := keys[0]
-			typeVal, _ := m.Get(name)
-			paramType, pattern, err := resolveSigType(typeVal)
-			if err != nil {
-				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
-			}
-			params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name

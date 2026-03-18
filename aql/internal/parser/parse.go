@@ -148,7 +148,7 @@ func Parse(src string) ([]engine.Value, error) {
 			}
 			return []engine.Value{tv}, nil
 		}
-		mv, err := convertMapData(val.Val)
+		mv, err := convertMapData(val.Val, val.Implicit)
 		if err != nil {
 			return nil, err
 		}
@@ -336,7 +336,7 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val)
+		return convertMapData(val.Val, val.Implicit)
 
 	case map[string]any:
 		// Raw map from list.pair syntax (e.g., [x:number] produces
@@ -344,7 +344,7 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val) {
 			return convertTypedMap(val)
 		}
-		return convertMapData(val)
+		return convertMapData(val, true)
 
 	case jsonic.ListRef:
 		if val.Child != nil {
@@ -375,9 +375,14 @@ func convertWordList(items []any) (engine.Value, error) {
 }
 
 // convertMapData converts a map in data context. All text values are
-// scalar data regardless of quoting.
-func convertMapData(m map[string]any) (engine.Value, error) {
+// scalar data regardless of quoting. When implicit is true the
+// resulting OrderedMap is marked as coming from pair syntax (e.g.,
+// [x:Integer] rather than {x:Integer}).
+func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 	om := engine.NewOrderedMap()
+	if len(implicit) > 0 && implicit[0] {
+		om.Implicit = true
+	}
 	for _, key := range sortedKeys(m) {
 		child, err := convertDataValue(m[key])
 		if err != nil {
@@ -406,13 +411,13 @@ func convertDataValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val)
+		return convertMapData(val.Val, val.Implicit)
 
 	case map[string]any:
 		if hasMapChild(val) {
 			return convertTypedMap(val)
 		}
-		return convertMapData(val)
+		return convertMapData(val, true)
 
 	case jsonic.ListRef:
 		if val.Child != nil {

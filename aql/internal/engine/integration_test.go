@@ -864,7 +864,7 @@ func TestEngineFnNamed(t *testing.T) {
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewImplicitMap(xParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
@@ -1498,7 +1498,7 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	// doubler/p registers as prefix-only: takes args from the stack only,
 	// never collects suffix args via forward.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
@@ -1521,7 +1521,7 @@ func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
 	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewMap(m)}) }(),
+		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
@@ -1633,7 +1633,7 @@ func TestEngineFnFactorial(t *testing.T) {
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("x", NewWord("Integer"))
-			return NewList([]Value{NewMap(m)})
+			return NewList([]Value{NewImplicitMap(m)})
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
@@ -1744,7 +1744,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("_", NewInteger(0))
-			return NewList([]Value{NewMap(m)})
+			return NewList([]Value{NewImplicitMap(m)})
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewInteger(1)}),
@@ -1752,7 +1752,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("x", NewWord("Integer"))
-			return NewList([]Value{NewMap(m)})
+			return NewList([]Value{NewImplicitMap(m)})
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
@@ -2459,7 +2459,7 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewImplicitMap(xParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
@@ -2482,7 +2482,7 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewImplicitMap(xParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
 	})

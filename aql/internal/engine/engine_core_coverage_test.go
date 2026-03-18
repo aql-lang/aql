@@ -130,7 +130,7 @@ func TestEngineCoreFnDefNamedParam(t *testing.T) {
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX)}),
+		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
@@ -155,10 +155,10 @@ func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 	pairXStr := NewOrderedMap()
 	pairXStr.Set("x", NewTypeLiteral(TString))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairXInt)}),
+		NewList([]Value{NewImplicitMap(pairXInt)}),
 		NewList([]Value{NewTypeLiteral(TInteger)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(10)}),
-		NewList([]Value{NewMap(pairXStr)}),
+		NewList([]Value{NewImplicitMap(pairXStr)}),
 		NewList([]Value{NewTypeLiteral(TString)}),
 		NewList([]Value{NewWord("x")}),
 	})
@@ -187,7 +187,7 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX)}),
+		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{NewTypeLiteral(TString)}), // expects String return
 		NewList([]Value{NewWord("x")}),             // but returns Number
 	})
@@ -208,7 +208,7 @@ func TestEngineCoreFnNonListBody(t *testing.T) {
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX)}),
+		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{}),
 		NewInteger(42), // non-list body: abbreviation for [42]
 	})
@@ -288,7 +288,7 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX)}),
+		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
@@ -1047,7 +1047,7 @@ func TestEngineCoreParseFnParamsMapBadKeyCount(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewTypeLiteral(TNumber))
 	m.Set("y", NewTypeLiteral(TString))
-	input := NewList([]Value{NewMap(m)})
+	input := NewList([]Value{NewImplicitMap(m)})
 	_, err := parseFnParams(input)
 	if err == nil {
 		t.Error("expected error for map with 2 keys")

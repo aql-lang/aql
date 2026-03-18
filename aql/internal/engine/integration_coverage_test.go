@@ -164,7 +164,7 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX)}),
+		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
@@ -194,7 +194,7 @@ func TestIntegFnMultipleParams(t *testing.T) {
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(pairX), NewMap(pairY)}),
+		NewList([]Value{NewImplicitMap(pairX), NewImplicitMap(pairY)}),
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("y")}),
 	})

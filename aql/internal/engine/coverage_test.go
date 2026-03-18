@@ -1552,10 +1552,10 @@ func TestFnMultiSignature(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("f"), NewWord("fn"),
 		NewList([]Value{
-			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TNumber)))}),
+			NewList([]Value{NewImplicitMap(singleMap("x", NewTypeLiteral(TNumber)))}),
 			NewList([]Value{NewTypeLiteral(TNumber)}),
 			NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
-			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TString)))}),
+			NewList([]Value{NewImplicitMap(singleMap("x", NewTypeLiteral(TString)))}),
 			NewList([]Value{NewTypeLiteral(TString)}),
 			NewList([]Value{NewWord("x"), NewWord("upper")}),
 		}),
@@ -3682,7 +3682,7 @@ func TestCallAQLBasic(t *testing.T) {
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewImplicitMap(xParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
@@ -3727,7 +3727,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(xParam)}),
+		NewList([]Value{NewImplicitMap(xParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
@@ -3845,7 +3845,7 @@ func TestArgsInsideFn(t *testing.T) {
 	bParam := NewOrderedMap()
 	bParam.Set("b", NewWord("Number"))
 	fnBody := NewList([]Value{
-		NewList([]Value{NewMap(aParam), NewMap(bParam)}),
+		NewList([]Value{NewImplicitMap(aParam), NewImplicitMap(bParam)}),
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
@@ -4457,11 +4457,11 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 		NewWord("def"), NewWord("foo"), NewWord("fn"),
 		NewList([]Value{
 			// Overload 1: x matches {x:99}
-			NewList([]Value{NewMap(singleMap("x", NewMap(patternMap)))}),
+			NewList([]Value{NewImplicitMap(singleMap("x", NewMap(patternMap)))}),
 			NewList([]Value{NewTypeLiteral(TString)}),
 			NewList([]Value{NewString("A")}),
 			// Overload 2: x matches any Map
-			NewList([]Value{NewMap(singleMap("x", NewTypeLiteral(TMap)))}),
+			NewList([]Value{NewImplicitMap(singleMap("x", NewTypeLiteral(TMap)))}),
 			NewList([]Value{NewTypeLiteral(TString)}),
 			NewList([]Value{NewString("B")}),
 		}),

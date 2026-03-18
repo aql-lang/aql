@@ -13,8 +13,9 @@ import (
 
 // OrderedMap is a map that preserves insertion order of keys.
 type OrderedMap struct {
-	keys []string
-	vals map[string]Value
+	keys     []string
+	vals     map[string]Value
+	Implicit bool // true when created from implicit pair syntax (e.g., [x:Integer])
 }
 
 // NewOrderedMap creates an empty OrderedMap.
@@ -396,6 +397,14 @@ func NewTypedList(child Value) Value {
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
+	return newValue(TMap, entries)
+}
+
+// NewImplicitMap creates a map value marked as implicit (from pair syntax).
+// In fn signatures, implicit maps are treated as named parameter declarations
+// (e.g., [x:Integer]), while explicit maps are structural patterns.
+func NewImplicitMap(entries *OrderedMap) Value {
+	entries.Implicit = true
 	return newValue(TMap, entries)
 }
 
