@@ -280,6 +280,85 @@ func TestMetaStackWithValues(t *testing.T) {
 	}
 }
 
+func TestMetaStackTopN(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	stack := []engine.Value{
+		engine.NewInteger(10),
+		engine.NewInteger(20),
+		engine.NewInteger(30),
+		engine.NewInteger(40),
+	}
+	ctx := &MetaContext{Out: out, Stack: stack}
+	_, err := mr.ParseAndRun("/stack 2", ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := out.String()
+	// Should show only the top 2: [2] 30 and [3] 40
+	if strings.Contains(output, "[0]") || strings.Contains(output, "[1]") {
+		t.Errorf("should not contain [0] or [1], got %q", output)
+	}
+	if !strings.Contains(output, "[2] 30") {
+		t.Errorf("expected [2] 30, got %q", output)
+	}
+	if !strings.Contains(output, "[3] 40") {
+		t.Errorf("expected [3] 40, got %q", output)
+	}
+}
+
+func TestMetaStackTopNExceedsDepth(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	stack := []engine.Value{engine.NewInteger(1), engine.NewInteger(2)}
+	ctx := &MetaContext{Out: out, Stack: stack}
+	// n > stack depth → show all
+	_, err := mr.ParseAndRun("/stack 99", ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := out.String()
+	if !strings.Contains(output, "[0] 1") || !strings.Contains(output, "[1] 2") {
+		t.Errorf("expected all entries, got %q", output)
+	}
+}
+
+func TestMetaStackTopZero(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	stack := []engine.Value{engine.NewInteger(1)}
+	ctx := &MetaContext{Out: out, Stack: stack}
+	_, err := mr.ParseAndRun("/stack 0", ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// n=0 → nothing shown
+	if strings.Contains(out.String(), "[") {
+		t.Errorf("expected no output for /stack 0, got %q", out.String())
+	}
+}
+
+func TestMetaStackNegative(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	stack := []engine.Value{engine.NewInteger(1)}
+	ctx := &MetaContext{Out: out, Stack: stack}
+	_, err := mr.ParseAndRun("/stack -1", ctx)
+	if err == nil || !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("expected non-negative error, got: %v", err)
+	}
+}
+
+func TestMetaStackBadArg(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	ctx := &MetaContext{Out: out, Stack: []engine.Value{engine.NewInteger(1)}}
+	_, err := mr.ParseAndRun("/stack foo", ctx)
+	if err == nil || !strings.Contains(err.Error(), "expected integer") {
+		t.Errorf("expected integer arg error, got: %v", err)
+	}
+}
+
 // --- splitCommand tests ---
 
 func TestSplitCommand(t *testing.T) {

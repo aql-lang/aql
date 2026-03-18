@@ -174,15 +174,45 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 }
 
 // metaStack prints the current stack entries without consuming them.
+// An optional integer argument limits output to the top n items.
 func metaStack(args []any, ctx *MetaContext) error {
 	if len(ctx.Stack) == 0 {
 		fmt.Fprintln(ctx.Out, "(empty stack)")
 		return nil
 	}
-	for i, v := range ctx.Stack {
-		fmt.Fprintf(ctx.Out, "  [%d] %s\n", i, v.String())
+
+	start := 0
+	if len(args) > 0 {
+		n, ok := toInt(args[0])
+		if !ok {
+			return fmt.Errorf("expected integer argument, got %v", args[0])
+		}
+		if n < 0 {
+			return fmt.Errorf("argument must be non-negative, got %d", n)
+		}
+		if n < len(ctx.Stack) {
+			start = len(ctx.Stack) - n
+		}
+	}
+
+	for i := start; i < len(ctx.Stack); i++ {
+		fmt.Fprintf(ctx.Out, "  [%d] %s\n", i, ctx.Stack[i].String())
 	}
 	return nil
+}
+
+// toInt converts a jsonic-parsed value to an int. Handles float64 (jsonic
+// default for numbers) and int.
+func toInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		if n == float64(int(n)) {
+			return int(n), true
+		}
+	case int:
+		return n, true
+	}
+	return 0, false
 }
 
 // formatHelp formats a help entry for display. Mirrors the engine's
