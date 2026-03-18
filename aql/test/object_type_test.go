@@ -225,10 +225,10 @@ func TestObjectTypeParentReference(t *testing.T) {
 	}
 }
 
-// TestObjectTypeFieldOverride verifies that a child can override parent fields.
+// TestObjectTypeFieldOverride verifies that a child can narrow parent fields.
 func TestObjectTypeFieldOverride(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Boolean}`,
+		`def Foo object {a:Number,b:Boolean}`,
 		`def Bar object {a:Integer} Foo`,
 		`Bar`,
 	})
@@ -237,13 +237,13 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	}
 	ot := result[0].AsObjectType()
 	all := ot.AllFields()
-	// a should be overridden to Integer, b inherited as Boolean
+	// a should be narrowed to Integer, b inherited as Boolean
 	if all.Len() != 2 {
 		t.Fatalf("expected 2 fields (a,b), got %d", all.Len())
 	}
 	aVal, _ := all.Get("a")
 	if !strings.Contains(aVal.String(), "Integer") {
-		t.Errorf("expected overridden field a to be Integer, got %s", aVal.String())
+		t.Errorf("expected narrowed field a to be Integer, got %s", aVal.String())
 	}
 }
 
@@ -443,7 +443,8 @@ func objFields(t *testing.T, result []engine.Value) *engine.OrderedMap {
 	if !v.IsObjectInstance() {
 		t.Fatalf("expected object instance, got %s", v.String())
 	}
-	return v.AsObjectInstance().Fields
+	oi := v.AsObjectInstance()
+	return oi.AllFields()
 }
 
 // TestMakeObjectBasic creates an object instance with type-literal fields.
@@ -849,20 +850,18 @@ func TestMakeObjectDeepInheritance(t *testing.T) {
 	}
 }
 
-// TestMakeObjectChildOverridesParentField tests that child field overrides parent.
-func TestMakeObjectChildOverridesParentField(t *testing.T) {
-	result, err := runNativeSteps(t, nil, []string{
+// TestMakeObjectChildOverridesParentConcreteRejected tests that a child cannot
+// replace one concrete value with a different concrete value (99 vs 1).
+func TestMakeObjectChildOverridesParentConcreteRejected(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
 		`def Foo object {x:1}`,
 		`def Bar object {x:99} Foo`,
-		`make Bar {}`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("expected error: child concrete 99 cannot replace parent concrete 1")
 	}
-	om := objFields(t, result)
-	x, _ := om.Get("x")
-	if x.AsInteger() != 99 {
-		t.Errorf("expected x=99 (child override), got %d", x.AsInteger())
+	if !strings.Contains(err.Error(), "cannot expand") {
+		t.Errorf("expected 'cannot expand' error, got: %s", err)
 	}
 }
 
@@ -922,6 +921,438 @@ func TestMakeObjectInstanceStringFormat(t *testing.T) {
 	}
 	if !strings.Contains(s, "x:5") {
 		t.Errorf("expected String() to contain 'x:5', got %s", s)
+	}
+}
+
+// --- prototype tests ---
+
+// TestMakeObjectPrototypeBasic creates a child instance with an explicit prototype.
+func TestMakeObjectPrototypeBasic(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"A"} foo1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	allF := oi.AllFields()
+	y, _ := allF.Get("y")
+	x, _ := allF.Get("x")
+	if y.AsString() != "A" {
+		t.Errorf("expected y='A', got %s", y.AsString())
+	}
+	if x.AsInteger() != 1 {
+		t.Errorf("expected x=1 (from prototype), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectPrototypeChainRef verifies the prototype pointer is set correctly.
+func TestMakeObjectPrototypeChainRef(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:42}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"hi"} foo1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	if oi.Prototype == nil {
+		t.Fatal("expected prototype to be set")
+	}
+	if oi.Prototype.TypeRef.Name != "Object/Foo" {
+		t.Errorf("expected prototype type Object/Foo, got %s", oi.Prototype.TypeRef.Name)
+	}
+	px, _ := oi.Prototype.Fields.Get("x")
+	if px.AsInteger() != 42 {
+		t.Errorf("expected prototype x=42, got %d", px.AsInteger())
+	}
+}
+
+// TestMakeObjectAutoPrototypeBaseValues verifies that a child without explicit
+// prototype auto-creates a parent instance with base values.
+func TestMakeObjectAutoPrototypeBaseValues(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"test"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	if oi.Prototype == nil {
+		t.Fatal("expected auto-created prototype")
+	}
+	allF := oi.AllFields()
+	x, _ := allF.Get("x")
+	if x.AsInteger() != 0 {
+		t.Errorf("expected auto-prototype x=0 (base), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectAutoPrototypeWithDefaults verifies auto-prototype uses
+// concrete defaults from the parent type definition.
+func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:10}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"test"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allF := result[0].AsObjectInstance().AllFields()
+	x, _ := allF.Get("x")
+	if x.AsInteger() != 10 {
+		t.Errorf("expected auto-prototype x=10 (default), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectPrototypeOverrideInherited overrides an inherited field via make source.
+func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:1}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"A",x:99} foo1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allF := result[0].AsObjectInstance().AllFields()
+	x, _ := allF.Get("x")
+	if x.AsInteger() != 99 {
+		t.Errorf("expected x=99 (overridden), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectPrototypeGetField tests GetField on the prototype chain.
+func TestMakeObjectPrototypeGetField(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def foo1 make Foo {x:7}`,
+		`def Bar object {y:String} Foo`,
+		`make Bar {y:"hi"} foo1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	x, ok := oi.GetField("x")
+	if !ok {
+		t.Fatal("expected GetField to find x via prototype")
+	}
+	if x.AsInteger() != 7 {
+		t.Errorf("expected x=7, got %d", x.AsInteger())
+	}
+	y, ok := oi.GetField("y")
+	if !ok {
+		t.Fatal("expected GetField to find y directly")
+	}
+	if y.AsString() != "hi" {
+		t.Errorf("expected y='hi', got %s", y.AsString())
+	}
+}
+
+// --- field narrowing tests ---
+
+// TestObjectTypeFieldNarrowingAllowed verifies a child can narrow a parent field.
+func TestObjectTypeFieldNarrowingAllowed(t *testing.T) {
+	// Integer is narrower than Number — should be allowed.
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Number}`,
+		`def Bar object {x:Integer} Foo`,
+	})
+	if err != nil {
+		t.Fatalf("narrowing Number→Integer should be allowed: %s", err)
+	}
+}
+
+// TestObjectTypeFieldNarrowingConcreteAllowed verifies concrete narrows type literal.
+func TestObjectTypeFieldNarrowingConcreteAllowed(t *testing.T) {
+	// Concrete 42 narrows Integer — should be allowed.
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def Bar object {x:42} Foo`,
+	})
+	if err != nil {
+		t.Fatalf("narrowing Integer→42 should be allowed: %s", err)
+	}
+}
+
+// TestObjectTypeFieldExpandingRejected verifies a child cannot expand a parent field type.
+func TestObjectTypeFieldExpandingRejected(t *testing.T) {
+	// String does not unify with Integer — should be rejected.
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def Bar object {x:String} Foo`,
+	})
+	if err == nil {
+		t.Fatal("expected error for expanding Integer→String")
+	}
+	if !strings.Contains(err.Error(), "cannot expand") {
+		t.Errorf("expected 'cannot expand' error, got: %s", err)
+	}
+}
+
+// TestObjectTypeFieldExpandingConcreteRejected rejects incompatible concrete override.
+func TestObjectTypeFieldExpandingConcreteRejected(t *testing.T) {
+	// "hello" (string) does not unify with Integer.
+	_, err := runNativeSteps(t, nil, []string{
+		`def Foo object {x:Integer}`,
+		`def Bar object {x:"hello"} Foo`,
+	})
+	if err == nil {
+		t.Fatal("expected error for incompatible concrete override")
+	}
+	if !strings.Contains(err.Error(), "cannot expand") {
+		t.Errorf("expected 'cannot expand' error, got: %s", err)
+	}
+}
+
+// --- deep inheritance tests (7 levels) ---
+
+// TestObjectTypeDeep7Levels tests 7-level type hierarchy definition.
+func TestObjectTypeDeep7Levels(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:Integer}`,
+		`def L2 object {b:String} L1`,
+		`def L3 object {c:Boolean} L2`,
+		`def L4 object {d:Integer} L3`,
+		`def L5 object {e:String} L4`,
+		`def L6 object {f:Boolean} L5`,
+		`def L7 object {g:Integer} L6`,
+	})
+	if err != nil {
+		t.Fatalf("7-level type hierarchy should succeed: %s", err)
+	}
+}
+
+// TestMakeObjectDeep7LevelsAllDefaults tests 7-level instance with all defaults.
+func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:1}`,
+		`def L2 object {b:"two"} L1`,
+		`def L3 object {c:true} L2`,
+		`def L4 object {d:4} L3`,
+		`def L5 object {e:"five"} L4`,
+		`def L6 object {f:false} L5`,
+		`def L7 object {g:7} L6`,
+		`make L7 {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allF := result[0].AsObjectInstance().AllFields()
+	checks := map[string]interface{}{
+		"a": int64(1), "b": "two", "c": true, "d": int64(4),
+		"e": "five", "f": false, "g": int64(7),
+	}
+	for k, expected := range checks {
+		v, ok := allF.Get(k)
+		if !ok {
+			t.Errorf("missing field %s", k)
+			continue
+		}
+		switch exp := expected.(type) {
+		case int64:
+			if v.AsInteger() != exp {
+				t.Errorf("field %s: expected %d, got %d", k, exp, v.AsInteger())
+			}
+		case string:
+			if v.AsString() != exp {
+				t.Errorf("field %s: expected %q, got %q", k, exp, v.AsString())
+			}
+		case bool:
+			if v.Data.(bool) != exp {
+				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
+			}
+		}
+	}
+}
+
+// TestMakeObjectDeep7LevelsPrototypeChain tests 7-level prototype chain.
+func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:Integer}`,
+		`def l1 make L1 {a:10}`,
+		`def L2 object {b:String} L1`,
+		`def l2 make L2 {b:"twenty"} l1`,
+		`def L3 object {c:Boolean} L2`,
+		`def l3 make L3 {c:true} l2`,
+		`def L4 object {d:Integer} L3`,
+		`def l4 make L4 {d:40} l3`,
+		`def L5 object {e:String} L4`,
+		`def l5 make L5 {e:"fifty"} l4`,
+		`def L6 object {f:Boolean} L5`,
+		`def l6 make L6 {f:false} l5`,
+		`def L7 object {g:Integer} L6`,
+		`make L7 {g:70} l6`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	allF := oi.AllFields()
+	checks := map[string]interface{}{
+		"a": int64(10), "b": "twenty", "c": true, "d": int64(40),
+		"e": "fifty", "f": false, "g": int64(70),
+	}
+	for k, expected := range checks {
+		v, ok := allF.Get(k)
+		if !ok {
+			t.Errorf("missing field %s", k)
+			continue
+		}
+		switch exp := expected.(type) {
+		case int64:
+			if v.AsInteger() != exp {
+				t.Errorf("field %s: expected %d, got %d", k, exp, v.AsInteger())
+			}
+		case string:
+			if v.AsString() != exp {
+				t.Errorf("field %s: expected %q, got %q", k, exp, v.AsString())
+			}
+		case bool:
+			if v.Data.(bool) != exp {
+				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
+			}
+		}
+	}
+}
+
+// TestMakeObjectDeep7LevelsPrototypeDepth verifies prototype chain has correct depth.
+func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:Integer}`,
+		`def l1 make L1 {a:1}`,
+		`def L2 object {b:String} L1`,
+		`def l2 make L2 {b:"x"} l1`,
+		`def L3 object {c:Boolean} L2`,
+		`def l3 make L3 {c:true} l2`,
+		`def L4 object {d:Integer} L3`,
+		`def l4 make L4 {d:4} l3`,
+		`def L5 object {e:String} L4`,
+		`def l5 make L5 {e:"y"} l4`,
+		`def L6 object {f:Boolean} L5`,
+		`def l6 make L6 {f:false} l5`,
+		`def L7 object {g:Integer} L6`,
+		`make L7 {g:7} l6`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+	depth := 0
+	for p := oi.Prototype; p != nil; p = p.Prototype {
+		depth++
+	}
+	if depth != 6 {
+		t.Errorf("expected prototype chain depth=6, got %d", depth)
+	}
+}
+
+// TestMakeObjectDeep7GrandparentFieldAccess verifies field access from grandparent+.
+func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:Integer}`,
+		`def l1 make L1 {a:100}`,
+		`def L2 object {b:String} L1`,
+		`def l2 make L2 {b:"hi"} l1`,
+		`def L3 object {c:Boolean} L2`,
+		`def l3 make L3 {c:true} l2`,
+		`def L4 object {d:Integer} L3`,
+		`make L4 {d:999} l3`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oi := result[0].AsObjectInstance()
+
+	// GetField should find a from great-grandparent (L1).
+	a, ok := oi.GetField("a")
+	if !ok {
+		t.Fatal("expected GetField to find 'a' from L1 via prototype chain")
+	}
+	if a.AsInteger() != 100 {
+		t.Errorf("expected a=100, got %d", a.AsInteger())
+	}
+
+	// GetField should find b from grandparent (L2).
+	b, ok := oi.GetField("b")
+	if !ok {
+		t.Fatal("expected GetField to find 'b' from L2 via prototype chain")
+	}
+	if b.AsString() != "hi" {
+		t.Errorf("expected b='hi', got %s", b.AsString())
+	}
+}
+
+// TestMakeObjectDeep7OverrideGrandparentField overrides grandparent field at make time.
+func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:Integer}`,
+		`def l1 make L1 {a:1}`,
+		`def L2 object {b:String} L1`,
+		`def l2 make L2 {b:"x"} l1`,
+		`def L3 object {c:Boolean} L2`,
+		// Override grandparent field a at L3 make time.
+		`make L3 {c:true,a:999} l2`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allF := result[0].AsObjectInstance().AllFields()
+	a, _ := allF.Get("a")
+	if a.AsInteger() != 999 {
+		t.Errorf("expected a=999 (overridden grandparent), got %d", a.AsInteger())
+	}
+}
+
+// TestMakeObjectDeep7NarrowingChain tests narrowing through multiple levels.
+func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
+	// L1: x:Number, L2: x:Integer (narrows Number), L3: x:42 (narrows Integer)
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {x:Number}`,
+		`def L2 object {x:Integer} L1`,
+		`def L3 object {x:42} L2`,
+		`make L3 {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allF := result[0].AsObjectInstance().AllFields()
+	x, _ := allF.Get("x")
+	if x.AsInteger() != 42 {
+		t.Errorf("expected x=42 (narrowed default), got %d", x.AsInteger())
+	}
+}
+
+// TestMakeObjectDeep7AutoPrototypeStringFormat tests String output with deep auto-prototype.
+func TestMakeObjectDeep7AutoPrototypeStringFormat(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def L1 object {a:1}`,
+		`def L2 object {b:2} L1`,
+		`def L3 object {c:3} L2`,
+		`make L3 {}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := result[0].String()
+	if !strings.Contains(s, "a:1") {
+		t.Errorf("expected String to contain 'a:1', got %s", s)
+	}
+	if !strings.Contains(s, "b:2") {
+		t.Errorf("expected String to contain 'b:2', got %s", s)
+	}
+	if !strings.Contains(s, "c:3") {
+		t.Errorf("expected String to contain 'c:3', got %s", s)
 	}
 }
 

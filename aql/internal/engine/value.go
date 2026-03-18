@@ -170,11 +170,45 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 
 // ObjectInstanceInfo holds a concrete instance of an object type.
 // TypeRef points back to the ObjectTypeInfo that created this instance.
-// Fields holds the resolved field values (including defaults).
+// Fields holds the type's own resolved field values.
+// Prototype points to the parent instance (like JavaScript prototypes):
+// field lookups fall through to the prototype chain for inherited fields.
 type ObjectInstanceInfo struct {
-	TypeRef *ObjectTypeInfo // the object type this is an instance of
-	Fields  *OrderedMap     // field name → resolved Value
+	TypeRef   *ObjectTypeInfo    // the object type this is an instance of
+	Fields    *OrderedMap        // own field name → resolved Value
+	Prototype *ObjectInstanceInfo // parent instance (nil if root type)
 }
+
+// GetField returns a field value by searching own fields first, then walking
+// the prototype chain. Returns the value and true if found, zero and false otherwise.
+func (oi ObjectInstanceInfo) GetField(name string) (Value, bool) {
+	if v, ok := oi.Fields.Get(name); ok {
+		return v, true
+	}
+	if oi.Prototype != nil {
+		return oi.Prototype.GetField(name)
+	}
+	return Value{}, false
+}
+
+// AllFields returns all fields including those from the prototype chain.
+// Prototype fields come first, own fields override.
+func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
+	result := NewOrderedMap()
+	if oi.Prototype != nil {
+		proto := oi.Prototype.AllFields()
+		for _, k := range proto.Keys() {
+			v, _ := proto.Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range oi.Fields.Keys() {
+		v, _ := oi.Fields.Get(k)
+		result.Set(k, v)
+	}
+	return result
+}
+
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -799,9 +833,10 @@ func (v Value) String() string {
 		return "[" + strings.Join(parts, ",") + "]"
 	case v.IsObjectInstance():
 		oi := v.AsObjectInstance()
-		parts := make([]string, 0, oi.Fields.Len())
-		for _, k := range oi.Fields.Keys() {
-			val, _ := oi.Fields.Get(k)
+		allFields := oi.AllFields()
+		parts := make([]string, 0, allFields.Len())
+		for _, k := range allFields.Keys() {
+			val, _ := allFields.Get(k)
 			parts = append(parts, k+":"+val.String())
 		}
 		name := oi.TypeRef.Name

@@ -128,16 +128,49 @@ func registerMake(r *Registry) {
 		return useBase, nil
 	}
 
-	// makeObject creates an object instance from an ObjectTypeInfo and a map source.
-	// Field constraints with concrete values act as defaults: missing fields
-	// use the default, and provided values must match the default's type.
-	// Type-literal constraints (Data==nil) work like record fields.
-	// Unknown fields are rejected.
-	makeObject := func(objType ObjectTypeInfo, srcVal Value) ([]Value, error) {
-		allFields := objType.AllFields()
-		fieldKeys := allFields.Keys()
-		result := NewOrderedMap()
+	// buildBasePrototype creates a prototype instance with base values for a
+	// type that has no explicit prototype. If the type has a parent, it
+	// recursively builds prototypes up the chain.
+	var buildBasePrototype func(objType ObjectTypeInfo) (*ObjectInstanceInfo, error)
+	buildBasePrototype = func(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
+		var proto *ObjectInstanceInfo
+		if objType.Parent != nil {
+			var err error
+			proto, err = buildBasePrototype(*objType.Parent)
+			if err != nil {
+				return nil, err
+			}
+		}
 
+		fields := NewOrderedMap()
+		for _, key := range objType.Fields.Keys() {
+			constraint, _ := objType.Fields.Get(key)
+			if constraint.Data != nil {
+				// Concrete default.
+				fields.Set(key, constraint)
+			} else {
+				// Type literal: use base value for that type.
+				bv, err := baseValueForConstraint(constraint)
+				if err != nil {
+					return nil, fmt.Errorf("make: field %q: %w", key, err)
+				}
+				fields.Set(key, bv)
+			}
+		}
+
+		return &ObjectInstanceInfo{
+			TypeRef:   &objType,
+			Fields:    fields,
+			Prototype: proto,
+		}, nil
+	}
+
+	// makeObject creates an object instance from an ObjectTypeInfo, a map source,
+	// and an optional prototype instance. The prototype provides inherited
+	// field values via a prototype chain (like JavaScript prototypes).
+	// If no prototype is given and the type has a parent, a base prototype
+	// is auto-created with zero/default values.
+	makeObject := func(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
 		if !srcVal.VType.Equal(TMap) {
 			return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 		}
@@ -146,6 +179,26 @@ func registerMake(r *Registry) {
 			return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
 		}
 
+		// Build prototype chain if needed.
+		if prototype == nil && objType.Parent != nil {
+			var err error
+			prototype, err = buildBasePrototype(*objType.Parent)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Validate prototype type matches parent.
+		if prototype != nil && objType.Parent != nil {
+			if prototype.TypeRef.ID != objType.Parent.ID {
+				return nil, fmt.Errorf("make: prototype type %s does not match parent type %s",
+					prototype.TypeRef.Name, objType.Parent.Name)
+			}
+		}
+
+		// Determine which fields belong to this type (own) vs prototype.
+		allFields := objType.AllFields()
+
 		// Reject unknown fields.
 		for _, key := range provided.Keys() {
 			if _, ok := allFields.Get(key); !ok {
@@ -153,8 +206,12 @@ func registerMake(r *Registry) {
 			}
 		}
 
-		for _, key := range fieldKeys {
-			constraint, _ := allFields.Get(key)
+		// Only populate the type's own fields in this instance.
+		ownFields := objType.Fields
+		result := NewOrderedMap()
+
+		for _, key := range ownFields.Keys() {
+			constraint, _ := ownFields.Get(key)
 			val, hasVal := provided.Get(key)
 
 			if !hasVal {
@@ -194,9 +251,23 @@ func registerMake(r *Registry) {
 			}
 		}
 
+		// If a provided field belongs to the prototype chain (inherited),
+		// override it in the appropriate prototype level.
+		if prototype != nil {
+			for _, key := range provided.Keys() {
+				if _, ownOk := ownFields.Get(key); !ownOk {
+					// This field comes from a parent — set it on the prototype.
+					val, _ := provided.Get(key)
+					val = resolveWordValue(val)
+					setPrototypeField(prototype, key, val)
+				}
+			}
+		}
+
 		return []Value{NewObjectInstance(ObjectInstanceInfo{
-			TypeRef: &objType,
-			Fields:  result,
+			TypeRef:   &objType,
+			Fields:    result,
+			Prototype: prototype,
 		})}, nil
 	}
 
@@ -207,7 +278,7 @@ func registerMake(r *Registry) {
 		// Object type instance creation.
 		if targetVal.IsObjectType() {
 			objType := targetVal.AsObjectType()
-			return makeObject(objType, srcVal)
+			return makeObject(objType, srcVal, nil)
 		}
 
 		// Record type instance creation.
@@ -313,6 +384,24 @@ func registerMake(r *Registry) {
 		return []Value{result}, nil
 	}
 
+	// 3-arg handler with prototype: make ObjType source prototype
+	makeWithPrototype := func(args []Value) ([]Value, error) {
+		targetVal := args[0]
+		srcVal := args[1]
+		protoVal := args[2]
+
+		if !targetVal.IsObjectType() {
+			return nil, fmt.Errorf("make: prototype can only be used with object types, got %s", targetVal.String())
+		}
+		if !protoVal.IsObjectInstance() {
+			return nil, fmt.Errorf("make: prototype must be an object instance, got %s", protoVal.String())
+		}
+
+		objType := targetVal.AsObjectType()
+		protoInfo := protoVal.AsObjectInstance()
+		return makeObject(objType, srcVal, &protoInfo)
+	}
+
 	// 3-arg handler: make RecType source {options}
 	makeWithOpts := func(args []Value) ([]Value, error) {
 		targetVal := args[0]
@@ -326,7 +415,7 @@ func registerMake(r *Registry) {
 
 		if targetVal.IsObjectType() {
 			objType := targetVal.AsObjectType()
-			return makeObject(objType, srcVal)
+			return makeObject(objType, srcVal, nil)
 		}
 
 		if targetVal.IsRecordType() {
@@ -339,6 +428,12 @@ func registerMake(r *Registry) {
 	}
 
 	r.Register("make",
+		// 3-arg: object type + source + prototype instance
+		Signature{
+			Args:    []Type{TObject, TAny, TObject},
+			Handler: makeWithPrototype,
+		},
+		// 3-arg: type + source + options map
 		Signature{
 			Args:    []Type{TAny, TAny, TMap},
 			Handler: makeWithOpts,
@@ -502,4 +597,15 @@ func resolveFieldType(r *Registry, v Value) Value {
 	}
 
 	return v
+}
+
+// setPrototypeField sets a field value on the appropriate level of a prototype
+// chain. It walks down until it finds the prototype whose type owns the field.
+func setPrototypeField(proto *ObjectInstanceInfo, key string, val Value) {
+	for p := proto; p != nil; p = p.Prototype {
+		if _, ok := p.TypeRef.Fields.Get(key); ok {
+			p.Fields.Set(key, val)
+			return
+		}
+	}
 }

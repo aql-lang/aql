@@ -58,6 +58,26 @@ func registerObject(r *Registry) {
 		parentInfo := parentVal.AsObjectType()
 
 		fields := parseObjectFields(m)
+
+		// Validate field narrowing: child fields that override parent fields
+		// must be narrower (unify with the parent constraint succeeds and
+		// the result matches the child's constraint, not the parent's).
+		parentAllFields := parentInfo.AllFields()
+		for _, key := range fields.Keys() {
+			childConstraint, _ := fields.Get(key)
+			parentConstraint, exists := parentAllFields.Get(key)
+			if !exists {
+				continue // new field, no narrowing check needed
+			}
+			// The child constraint must unify with the parent constraint.
+			// If unification fails, the child is expanding the type.
+			_, ok := Unify(parentConstraint, childConstraint)
+			if !ok {
+				return nil, fmt.Errorf("object: field %q in child type cannot expand parent type %s (child: %s, parent: %s)",
+					key, parentInfo.Name, childConstraint.String(), parentConstraint.String())
+			}
+		}
+
 		id := GenerateObjectTypeID()
 		info := ObjectTypeInfo{
 			Fields: fields,
