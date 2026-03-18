@@ -1716,10 +1716,16 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 		})
 		allPass := true
 		for _, tc := range tests {
-			result := runAQL(t, r, []Value{
+			e := NewTop(r)
+			result, err := e.Run([]Value{
 				NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 				NewInteger(tc.input), NewWord("fact"),
 			})
+			if err != nil {
+				t.Logf("FAIL body=%q: fact %d error: %v", b.name, tc.input, err)
+				allPass = false
+				break
+			}
 			if len(result) != 1 || result[0].AsInteger() != tc.expected {
 				t.Logf("FAIL body=%q: fact %d = %v, want %d", b.name, tc.input, result, tc.expected)
 				allPass = false
