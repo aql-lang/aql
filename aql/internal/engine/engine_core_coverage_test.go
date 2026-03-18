@@ -1116,6 +1116,134 @@ func TestEngineCoreParseFnParamsInvalidElem(t *testing.T) {
 }
 
 // =============================================================================
+// TestEngineCoreParseFnParams — implicit vs explicit map
+// =============================================================================
+
+func TestEngineCoreParseFnParamsImplicitMapIsNamedParam(t *testing.T) {
+	// Implicit map (from pair syntax [x:Number]) → named param
+	m := NewOrderedMap()
+	m.Set("x", NewTypeLiteral(TNumber))
+	input := NewList([]Value{NewImplicitMap(m)})
+	params, err := parseFnParams(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(params) != 1 {
+		t.Fatalf("expected 1 param, got %d", len(params))
+	}
+	if params[0].Name != "x" {
+		t.Errorf("expected named param 'x', got %q", params[0].Name)
+	}
+	if !params[0].Type.Equal(TNumber) {
+		t.Errorf("expected type Number, got %s", params[0].Type)
+	}
+}
+
+func TestEngineCoreParseFnParamsExplicitMapIsUnnamedParam(t *testing.T) {
+	// Explicit map ({a:1}) → unnamed param with pattern
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	input := NewList([]Value{NewMap(m)})
+	params, err := parseFnParams(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(params) != 1 {
+		t.Fatalf("expected 1 param, got %d", len(params))
+	}
+	if params[0].Name != "" {
+		t.Errorf("expected unnamed param, got name %q", params[0].Name)
+	}
+	if !params[0].Type.Equal(TMap) {
+		t.Errorf("expected type Map, got %s", params[0].Type)
+	}
+	if params[0].Pattern == nil {
+		t.Error("expected pattern for explicit map param")
+	}
+}
+
+func TestEngineCoreFnImplicitMapNamedParamE2E(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// def inc fn [[x:Integer] [Integer] [x add 1]] end 5 inc
+	xParam := NewOrderedMap()
+	xParam.Set("x", NewTypeLiteral(TInteger))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewImplicitMap(xParam)}),
+		NewList([]Value{NewTypeLiteral(TInteger)}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
+	})
+	result := runAQL(t, r, []Value{
+		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
+		NewInteger(5), NewWord("inc"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 6 {
+		t.Errorf("5 inc = %v, want 6", result)
+	}
+}
+
+func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// def foo fn [[{a:1}] [] ["matched"]] end
+	// {a:1} foo → should match
+	// {a:2} foo → should not match
+	patternMap := NewOrderedMap()
+	patternMap.Set("a", NewInteger(1))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(patternMap)}),
+		NewList([]Value{}),
+		NewList([]Value{NewString("matched")}),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	// {a:1} foo → match
+	argMap := NewOrderedMap()
+	argMap.Set("a", NewInteger(1))
+	result := runAQL(t, r, []Value{NewMap(argMap), NewWord("foo")})
+	found := false
+	for _, v := range result {
+		if v.VType.Matches(TString) && v.AsString() == "matched" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("{a:1} foo: expected 'matched' in result, got %v", result)
+	}
+
+	// {a:2} foo → no match
+	noMatch := NewOrderedMap()
+	noMatch.Set("a", NewInteger(2))
+	err := runAQLError(t, r, []Value{NewMap(noMatch), NewWord("foo")})
+	if err == nil {
+		t.Error("expected signature error for {a:2} foo")
+	}
+}
+
+func TestEngineCoreFnExplicitMapNotNamedParam(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// def bar fn [[{x:Integer}] [Integer] [x add 1]] end
+	// 5 bar → should FAIL because {x:Integer} is a map pattern, not a
+	// named param "x". So x is not bound and the body can't use it.
+	typeMap := NewOrderedMap()
+	typeMap.Set("x", NewTypeLiteral(TInteger))
+	fnBody := NewList([]Value{
+		NewList([]Value{NewMap(typeMap)}),
+		NewList([]Value{NewTypeLiteral(TInteger)}),
+		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("bar"), NewWord("fn"), fnBody, NewWord("end"),
+	})
+
+	// 5 bar → fails: no map on stack, or x not bound
+	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("bar")})
+	if err == nil {
+		t.Error("expected error: explicit map should not create named param")
+	}
+}
+
+// =============================================================================
 // TestEngineCoreValToAtomOrString — covers all branches
 // =============================================================================
 
