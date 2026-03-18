@@ -275,6 +275,73 @@ func TestObjectTypeVTypeMatches(t *testing.T) {
 	}
 }
 
+// TestValueIDPrefixes verifies that all value categories get the correct ID prefix.
+func TestValueIDPrefixes(t *testing.T) {
+	// Scalar values get S_ prefix
+	str := engine.NewString("hello")
+	if !strings.HasPrefix(str.ID, "S_") {
+		t.Errorf("string ID should start with S_, got %s", str.ID)
+	}
+	if len(str.ID) != 34 { // "S_" + 32 hex chars
+		t.Errorf("string ID should be 34 chars, got %d: %s", len(str.ID), str.ID)
+	}
+
+	num := engine.NewInteger(42)
+	if !strings.HasPrefix(num.ID, "S_") {
+		t.Errorf("integer ID should start with S_, got %s", num.ID)
+	}
+
+	dec := engine.NewDecimal(3.14)
+	if !strings.HasPrefix(dec.ID, "S_") {
+		t.Errorf("decimal ID should start with S_, got %s", dec.ID)
+	}
+
+	boolv := engine.NewBoolean(true)
+	if !strings.HasPrefix(boolv.ID, "S_") {
+		t.Errorf("boolean ID should start with S_, got %s", boolv.ID)
+	}
+
+	// Node values get N_ prefix
+	list := engine.NewList([]engine.Value{})
+	if !strings.HasPrefix(list.ID, "N_") {
+		t.Errorf("list ID should start with N_, got %s", list.ID)
+	}
+
+	m := engine.NewMap(engine.NewOrderedMap())
+	if !strings.HasPrefix(m.ID, "N_") {
+		t.Errorf("map ID should start with N_, got %s", m.ID)
+	}
+
+	// Word values get W_ prefix
+	word := engine.NewWord("test")
+	if !strings.HasPrefix(word.ID, "W_") {
+		t.Errorf("word ID should start with W_, got %s", word.ID)
+	}
+
+	atom := engine.NewAtom("foo")
+	if !strings.HasPrefix(atom.ID, "W_") {
+		t.Errorf("atom ID should start with W_, got %s", atom.ID)
+	}
+
+	// Type/Object values get T_ prefix
+	typeLit := engine.NewTypeLiteral(engine.TString)
+	if !strings.HasPrefix(typeLit.ID, "S_") {
+		t.Errorf("string type literal ID should start with S_ (type's own category), got %s", typeLit.ID)
+	}
+
+	noneLit := engine.NewTypeLiteral(engine.TNone)
+	if !strings.HasPrefix(noneLit.ID, "T_") {
+		t.Errorf("none type literal ID should start with T_, got %s", noneLit.ID)
+	}
+
+	// All IDs should be unique
+	ids := map[string]bool{str.ID: true, num.ID: true, dec.ID: true, boolv.ID: true,
+		list.ID: true, m.ID: true, word.ID: true, atom.ID: true}
+	if len(ids) != 8 {
+		t.Errorf("expected 8 unique IDs, got %d (some duplicates)", len(ids))
+	}
+}
+
 // TestObjectTypeNonObjectParentIgnored verifies that when the second arg
 // doesn't match TObject, object uses the 1-arg signature (map only).
 func TestObjectTypeNonObjectParentIgnored(t *testing.T) {

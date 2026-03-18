@@ -170,9 +170,7 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 // GenerateObjectTypeID creates a unique internal ID for an object type:
 // "T_" followed by 32 lowercase hex characters (16 random bytes).
 func GenerateObjectTypeID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return "T_" + hex.EncodeToString(b)
+	return GenerateID("T_")
 }
 
 // markCounter is a global counter for generating unique mark IDs.
@@ -258,17 +256,62 @@ type ForwardInfo struct {
 }
 
 // Value is a typed entry on the AQL stack.
+// Every value carries a unique ID with a prefix indicating its category:
+//   - "S_" for scalar values (String, Number, Boolean)
+//   - "N_" for node values (List, Map, Table, Record)
+//   - "W_" for word values (Word, Atom, Function, Internal/*)
+//   - "T_" for type/object values (Object/*, type literals, Any, None)
+//
+// Each ID is the prefix followed by 32 lowercase hex characters (16 random bytes).
 type Value struct {
+	ID    string
 	VType Type
 	Data  interface{}
+}
+
+// GenerateID creates a unique ID with the given prefix followed by 32
+// lowercase hex characters (16 random bytes).
+func GenerateID(prefix string) string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return prefix + hex.EncodeToString(b)
+}
+
+// IDPrefixForType returns the ID prefix for a given type:
+// "S_" for Scalar, "N_" for Node, "W_" for Word, "T_" for Object/Any/None.
+func IDPrefixForType(t Type) string {
+	if len(t.Parts) == 0 {
+		return "T_"
+	}
+	switch t.Parts[0] {
+	case "Scalar":
+		return "S_"
+	case "Node":
+		return "N_"
+	case "Word":
+		return "W_"
+	case "Object":
+		return "T_"
+	default:
+		return "T_"
+	}
+}
+
+// newValue creates a Value with an auto-generated ID based on the type category.
+func newValue(t Type, data interface{}) Value {
+	return Value{
+		ID:    GenerateID(IDPrefixForType(t)),
+		VType: t,
+		Data:  data,
+	}
 }
 
 // NewString creates a string value. Empty strings get type string/empty.
 func NewString(s string) Value {
 	if s == "" {
-		return Value{VType: TStringEmpty, Data: s}
+		return newValue(TStringEmpty, s)
 	}
-	return Value{VType: TStringProper, Data: s}
+	return newValue(TStringProper, s)
 }
 
 // NewInteger creates a number/integer value with a literal type.
@@ -278,40 +321,40 @@ func NewString(s string) Value {
 func NewInteger(n int64) Value {
 	// Format always starts with "Number/Integer/" — cannot fail.
 	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
-	return Value{VType: t, Data: n}
+	return newValue(t, n)
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.
 func NewDecimal(f float64) Value {
-	return Value{VType: TDecimal, Data: f}
+	return newValue(TDecimal, f)
 }
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	return Value{VType: TBoolean, Data: b}
+	return newValue(TBoolean, b)
 }
 
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
-	return Value{VType: TList, Data: elems}
+	return newValue(TList, elems)
 }
 
 // NewTypedList creates a typed list value with a child type constraint.
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
-	return Value{VType: TList, Data: ChildTypeInfo{Child: child}}
+	return newValue(TList, ChildTypeInfo{Child: child})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
-	return Value{VType: TMap, Data: entries}
+	return newValue(TMap, entries)
 }
 
 // NewTypedMap creates a typed map value with a child type constraint.
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
-	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
+	return newValue(TMap, ChildTypeInfo{Child: child})
 }
 
 // NewRecordType creates a record type value from a field schema.
@@ -319,56 +362,50 @@ func NewTypedMap(child Value) Value {
 // For example, record{x:number, y:number} constrains maps to have exactly
 // keys x and y with number-typed values.
 func NewRecordType(fields *OrderedMap) Value {
-	return Value{VType: TMap, Data: RecordTypeInfo{Fields: fields}}
+	return newValue(TMap, RecordTypeInfo{Fields: fields})
 }
 
 // NewTableType creates a table type value from a record type.
 // A table type constrains a list so that each element is a map conforming
 // to the given record schema.
 func NewTableType(record RecordTypeInfo) Value {
-	return Value{VType: TList, Data: TableTypeInfo{Record: record}}
+	return newValue(TList, TableTypeInfo{Record: record})
 }
 
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
-	return Value{VType: TAtom, Data: name}
+	return newValue(TAtom, name)
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
-	return Value{VType: t, Data: nil}
+	return newValue(t, nil)
 }
 
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
-	return Value{
-		VType: TWord,
-		Data:  WordInfo{Name: name, ArgCount: -1},
-	}
+	return newValue(TWord, WordInfo{Name: name, ArgCount: -1})
 }
 
 // NewWordModified creates a word value with explicit modifiers.
 func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value {
-	return Value{
-		VType: TWord,
-		Data: WordInfo{
-			Name:        name,
-			ArgCount:    argCount,
-			ForcePrefix: forcePrefix,
-			ForceSuffix: forceSuffix,
-		},
-	}
+	return newValue(TWord, WordInfo{
+		Name:        name,
+		ArgCount:    argCount,
+		ForcePrefix: forcePrefix,
+		ForceSuffix: forceSuffix,
+	})
 }
 
 // NewForward creates a forward primitive value for suffix argument tracking.
 func NewForward(info ForwardInfo) Value {
-	return Value{VType: TForward, Data: info}
+	return newValue(TForward, info)
 }
 
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
-	return Value{VType: TOpenParen, Data: nil}
+	return newValue(TOpenParen, nil)
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -377,50 +414,50 @@ func NewOpenParen() Value {
 func NewMark(id string, body ...Value) Value {
 	b := make([]Value, len(body))
 	copy(b, body)
-	return Value{VType: TMark, Data: MarkInfo{ID: id, Body: b}}
+	return newValue(TMark, MarkInfo{ID: id, Body: b})
 }
 
 // NewMove creates a move value targeting the mark with the given ID.
 // The reason string describes why this move exists (used in error messages).
 func NewMove(to string, reason string) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason})
 }
 
 // NewMoveCont creates a move value with for-loop continuation state.
 func NewMoveCont(to, reason string, cont *ForCont) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason, Cont: cont})
 }
 
 // NewMoveIf creates a move value with if-statement continuation state.
 func NewMoveIf(to, reason string, ifCont *IfCont) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, IfCont: ifCont}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason, IfCont: ifCont})
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
-	return Value{VType: TFnDef, Data: info}
+	return newValue(TFnDef, info)
 }
 
 // NewFunction creates a function reference value. The underlying data is a
 // FnDefInfo, but the type is TFunction so it can be matched by function-typed
 // parameters and passed to other functions without being called.
 func NewFunction(info FnDefInfo) Value {
-	return Value{VType: TFunction, Data: info}
+	return newValue(TFunction, info)
 }
 
 // NewFnUndef creates a function undef spec value for targeted signature removal.
 func NewFnUndef(info FnUndefInfo) Value {
-	return Value{VType: TFnUndef, Data: info}
+	return newValue(TFnUndef, info)
 }
 
 // NewReturnCheck creates a return-check marker for fn return type validation.
 func NewReturnCheck(info ReturnCheckInfo) Value {
-	return Value{VType: TReturnCheck, Data: info}
+	return newValue(TReturnCheck, info)
 }
 
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
-	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
 }
 
 // NewObjectType creates an object type value. The type path is derived from
@@ -432,12 +469,12 @@ func NewObjectType(info ObjectTypeInfo) Value {
 		name = "Object/" + info.ID
 	}
 	t, _ := NewType(name)
-	return Value{VType: t, Data: info}
+	return newValue(t, info)
 }
 
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
-	return Value{VType: TModule, Data: desc}
+	return newValue(TModule, desc)
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -712,7 +749,7 @@ func (v Value) String() string {
 			if err != nil {
 				return "query(error:" + err.Error() + ")"
 			}
-			v2 := Value{VType: TList, Data: td}
+			v2 := newValue(TList, td)
 			return v2.String()
 		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {

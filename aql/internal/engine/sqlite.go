@@ -305,7 +305,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 // AQL Value based on the expected column type.
 func sqlResultToAQLValue(raw interface{}, colType Type) Value {
 	if raw == nil {
-		return Value{VType: TNone}
+		return newValue(TNone, nil)
 	}
 
 	switch {
