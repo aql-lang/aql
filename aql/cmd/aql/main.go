@@ -84,7 +84,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	// No source provided: start the REPL.
 	fmt.Fprintf(stdout, "aql %s\n", Version)
-	repl.Start(stdin, stdout)
+	repl.Start(stdin, stdout, *registry)
 	return 0
 }
 

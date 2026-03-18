@@ -10,7 +10,10 @@ import (
 	"github.com/chzyer/readline"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
+
+	udk "voxgiguniversalsdk"
 )
 
 // PROMPT is the REPL prompt string.
@@ -32,7 +35,8 @@ type readliner interface {
 }
 
 // Start runs the REPL loop, reading from in and writing to out.
-func Start(in io.Reader, out io.Writer) {
+// If registryPath is non-empty, a UniversalManager is configured for API operations.
+func Start(in io.Reader, out io.Writer, registryPath string) {
 	rl, err := newReadline(&readline.Config{
 		Prompt:          PROMPT,
 		HistoryFile:     historyFile(),
@@ -54,6 +58,13 @@ func Start(in io.Reader, out io.Writer) {
 		return
 	}
 	registry.SetParseFunc(parser.Parse)
+	native.Register(registry)
+
+	um := udk.NewUniversalManager(map[string]any{
+		"registry": registryPath,
+	})
+	registry.Manager = um
+
 	registry.Output = out
 
 	for {

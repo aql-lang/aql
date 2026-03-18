@@ -1,1 +1,11 @@
-export solardemo {planet:{kind:"api",spec:"voxgig-solardemo",entity:"planet"},moon:{kind:"api",spec:"voxgig-solardemo",entity:"moon"}}
+def planet make Entity {kind:"api",spec:"voxgig-solardemo",entity:"planet"}
+def moon make Entity {kind:"api",spec:"voxgig-solardemo",entity:"moon"}
+
+export solardemo {
+  planet:planet
+  moon:moon
+  
+  # planet:{kind:"api",spec:"voxgig-solardemo",entity:"planet"},
+  # moon:{kind:"api",spec:"voxgig-solardemo",entity:"moon"}
+}
+
