@@ -59,9 +59,39 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 		outputSig := list[i+1]
 		body := list[i+2]
 
-		// Abbreviation: non-list input sig is treated as [inputSig].
-		if !inputSig.VType.Equal(TList) {
+		// Abbreviation: non-list, non-map input sig is treated as [inputSig].
+		// Maps are NOT wrapped — a bare {x:Integer} means "takes a map
+		// argument with that structure", not a named parameter declaration.
+		// Named parameters only come from implicit pair syntax inside lists
+		// (e.g., [x:Integer]).
+		if !inputSig.VType.Equal(TList) && !inputSig.VType.Equal(TMap) {
 			inputSig = NewList([]Value{inputSig})
+		}
+		if inputSig.VType.Equal(TMap) {
+			paramType, pattern, err := resolveSigType(inputSig)
+			if err != nil {
+				return FnDefInfo{}, fmt.Errorf("function spec: invalid map input: %w", err)
+			}
+			params := []FnParam{{Type: paramType, Pattern: pattern}}
+
+			returns, err := parseFnReturns(outputSig)
+			if err != nil {
+				return FnDefInfo{}, err
+			}
+
+			var bodyElems []Value
+			if body.VType.Equal(TList) {
+				bodyElems = body.AsList()
+			} else {
+				bodyElems = []Value{body}
+			}
+
+			sigs = append(sigs, FnSig{
+				Params:  params,
+				Returns: returns,
+				Body:    bodyElems,
+			})
+			continue
 		}
 
 		params, err := parseFnParams(inputSig)
@@ -100,8 +130,26 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 		inputSig := list[i]
 		outputSig := list[i+1]
 
-		if !inputSig.VType.Equal(TList) {
+		if !inputSig.VType.Equal(TList) && !inputSig.VType.Equal(TMap) {
 			inputSig = NewList([]Value{inputSig})
+		}
+		if inputSig.VType.Equal(TMap) {
+			paramType, pattern, err := resolveSigType(inputSig)
+			if err != nil {
+				return FnUndefInfo{}, fmt.Errorf("function spec: invalid map input: %w", err)
+			}
+			params := []FnParam{{Type: paramType, Pattern: pattern}}
+
+			returns, err := parseFnReturns(outputSig)
+			if err != nil {
+				return FnUndefInfo{}, err
+			}
+
+			sigs = append(sigs, FnSigSpec{
+				Params:  params,
+				Returns: returns,
+			})
+			continue
 		}
 
 		params, err := parseFnParams(inputSig)
