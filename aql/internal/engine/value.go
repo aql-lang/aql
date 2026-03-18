@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -129,6 +131,48 @@ type ReturnCheckInfo struct {
 // A disjunct unifies if any of its alternatives unifies with the target.
 type DisjunctInfo struct {
 	Alternatives []Value
+}
+
+// ObjectTypeInfo holds the type definition for an object type.
+// Object types form an inheritance hierarchy analogous to class inheritance.
+// For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
+// Fields are the type's own fields (not including inherited ones).
+// Parent points to the parent object type (nil for direct children of Object root).
+// ID is a unique internal identifier: "T_" followed by 32 lowercase hex characters.
+// Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
+// registered via def.
+type ObjectTypeInfo struct {
+	Fields *OrderedMap      // own fields (field name → type-constraint Value)
+	Parent *ObjectTypeInfo  // parent object type (nil if direct child of Object)
+	ID     string           // unique internal ID: "T_" + 32 hex chars
+	Name   string           // full type path (e.g. "Object/Foo/Bar")
+}
+
+// AllFields returns all fields including inherited ones. Parent fields come
+// first, followed by the type's own fields. Own fields override inherited
+// fields with the same name.
+func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+	result := NewOrderedMap()
+	if o.Parent != nil {
+		parentFields := o.Parent.AllFields()
+		for _, k := range parentFields.Keys() {
+			v, _ := parentFields.Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range o.Fields.Keys() {
+		v, _ := o.Fields.Get(k)
+		result.Set(k, v)
+	}
+	return result
+}
+
+// GenerateObjectTypeID creates a unique internal ID for an object type:
+// "T_" followed by 32 lowercase hex characters (16 random bytes).
+func GenerateObjectTypeID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return "T_" + hex.EncodeToString(b)
 }
 
 // markCounter is a global counter for generating unique mark IDs.
@@ -379,6 +423,18 @@ func NewDisjunct(alternatives []Value) Value {
 	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
 }
 
+// NewObjectType creates an object type value. The type path is derived from
+// the ObjectTypeInfo.Name field. If Name is empty, the ID is used as the
+// type path suffix under "Object/".
+func NewObjectType(info ObjectTypeInfo) Value {
+	name := info.Name
+	if name == "" {
+		name = "Object/" + info.ID
+	}
+	t, _ := NewType(name)
+	return Value{VType: t, Data: info}
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return Value{VType: TModule, Data: desc}
@@ -443,6 +499,17 @@ func (v Value) IsDisjunct() bool {
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
 func (v Value) AsDisjunct() DisjunctInfo {
 	return v.Data.(DisjunctInfo)
+}
+
+// IsObjectType reports whether this value is an object type definition.
+func (v Value) IsObjectType() bool {
+	_, ok := v.Data.(ObjectTypeInfo)
+	return ok && v.VType.Matches(TObject)
+}
+
+// AsObjectType returns the ObjectTypeInfo, panics if not an object type.
+func (v Value) AsObjectType() ObjectTypeInfo {
+	return v.Data.(ObjectTypeInfo)
 }
 
 // IsModule reports whether this value is a module descriptor.
@@ -657,6 +724,19 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsObjectType():
+		ot := v.AsObjectType()
+		allFields := ot.AllFields()
+		parts := make([]string, 0, allFields.Len())
+		for _, k := range allFields.Keys() {
+			val, _ := allFields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := ot.Name
+		if name == "" {
+			name = "Object/" + ot.ID
+		}
+		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
 	case v.IsDisjunct():
 		di := v.AsDisjunct()
 		parts := make([]string, len(di.Alternatives))

@@ -26,6 +26,7 @@ var typeNames = map[string]engine.Type{
 	"Map":       engine.TMap,
 	"Table":     engine.TTable,
 	"Record":    engine.TRecord,
+	"Object":    engine.TObject,
 }
 
 func boolPtr(b bool) *bool { return &b }

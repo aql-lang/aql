@@ -87,5 +87,9 @@ func isTypeValue(v Value) bool {
 	if v.IsTypedMap() {
 		return true
 	}
+	// Object type
+	if v.IsObjectType() {
+		return true
+	}
 	return false
 }

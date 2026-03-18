@@ -20,6 +20,7 @@ var typeRoots = map[string]bool{
 	"Scalar": true,
 	"Node":   true,
 	"Word":   true,
+	"Object": true,
 	"Any":    true,
 	"None":   true,
 }
@@ -82,6 +83,7 @@ var (
 	TInternal     = mustType("Word/Internal")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
+	TObject        = mustType("Object")
 	TFetchFunction = mustType("Word/Function/Fetch")
 	TFetchRequest  = mustType("Node/Map/Fetch/Request")
 	TFetchResponse = mustType("Node/Map/Fetch/Response")
@@ -209,8 +211,8 @@ func builtinTypeParts() map[string]bool {
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
-		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TFetchFunction,
-		TFetchRequest, TFetchResponse,
+		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
+		TFetchFunction, TFetchRequest, TFetchResponse,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {

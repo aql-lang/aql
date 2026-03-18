@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // defName extracts a word name from a Value that is either a word or a string.
 func defName(v Value) string {
@@ -129,6 +132,25 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	if body.VType.Equal(TFnUndef) {
 		undefInfo := body.Data.(FnUndefInfo)
 		uninstallFnSigs(r, name, undefInfo)
+		return
+	}
+
+	// ObjectTypeInfo body: set the proper name in the type hierarchy.
+	if body.IsObjectType() {
+		info := body.AsObjectType()
+		if info.Parent != nil {
+			// Child type: full name is Parent/Name (e.g. Object/Foo/Bar)
+			info.Name = info.Parent.Name + "/" + name
+		} else {
+			// Direct child of Object root: Object/Name
+			info.Name = "Object/" + name
+		}
+		// Register the name parts as known type parts.
+		for _, p := range strings.Split(info.Name, "/") {
+			r.KnownTypeParts[p] = true
+		}
+		body = NewObjectType(info)
+		r.DefStacks[name] = append(r.DefStacks[name], body)
 		return
 	}
 
