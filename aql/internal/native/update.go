@@ -20,6 +20,15 @@ func updateFunc() NativeFunc {
 		Name:             "update",
 		SuffixPrecedence: true,
 		Signatures: []NativeSig{
+			// Entity object signatures (highest priority).
+			{
+				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
+				Handler: updateEntityOptsHandler,
+			},
+			{
+				Args:    []engine.Type{engine.TResourceEntity},
+				Handler: updateEntityHandler,
+			},
 			{
 				Args:     []engine.Type{engine.TMap, engine.TMap},
 				Handler:  updateAPIOptsHandler,
@@ -40,6 +49,18 @@ func updateFunc() NativeFunc {
 			},
 		},
 	}
+}
+
+// updateEntityHandler handles update with an Entity object instance.
+func updateEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	apiMap := entityToAPIMap(args[0])
+	return updateAPIHandler([]engine.Value{engine.NewMap(apiMap)}, ctx, stack, r)
+}
+
+// updateEntityOptsHandler handles update with an Entity object instance and a data map.
+func updateEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "data")
+	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // updateAPIOptsHandler handles update with {kind:"api",...} and an extra data map.

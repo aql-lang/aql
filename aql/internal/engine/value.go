@@ -1,11 +1,14 @@
 package engine
 
 import (
+	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // OrderedMap is a map that preserves insertion order of keys.
@@ -131,6 +134,86 @@ type DisjunctInfo struct {
 	Alternatives []Value
 }
 
+// ObjectTypeInfo holds the type definition for an object type.
+// Object types form an inheritance hierarchy analogous to class inheritance.
+// For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
+// Fields are the type's own fields (not including inherited ones).
+// Parent points to the parent object type (nil for direct children of Object root).
+// ID is a unique internal identifier: "T_" followed by 12 lowercase hex characters.
+// Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
+// registered via def.
+type ObjectTypeInfo struct {
+	Fields *OrderedMap      // own fields (field name → type-constraint Value)
+	Parent *ObjectTypeInfo  // parent object type (nil if direct child of Object)
+	ID     string           // unique internal ID: "T_" + 12 hex chars
+	Name   string           // full type path (e.g. "Object/Foo/Bar")
+}
+
+// AllFields returns all fields including inherited ones. Parent fields come
+// first, followed by the type's own fields. Own fields override inherited
+// fields with the same name.
+func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+	result := NewOrderedMap()
+	if o.Parent != nil {
+		parentFields := o.Parent.AllFields()
+		for _, k := range parentFields.Keys() {
+			v, _ := parentFields.Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range o.Fields.Keys() {
+		v, _ := o.Fields.Get(k)
+		result.Set(k, v)
+	}
+	return result
+}
+
+// ObjectInstanceInfo holds a concrete instance of an object type.
+// TypeRef points back to the ObjectTypeInfo that created this instance.
+// Fields holds the type's own resolved field values.
+// Prototype points to the parent instance (like JavaScript prototypes):
+// field lookups fall through to the prototype chain for inherited fields.
+type ObjectInstanceInfo struct {
+	TypeRef   *ObjectTypeInfo    // the object type this is an instance of
+	Fields    *OrderedMap        // own field name → resolved Value
+	Prototype *ObjectInstanceInfo // parent instance (nil if root type)
+}
+
+// GetField returns a field value by searching own fields first, then walking
+// the prototype chain. Returns the value and true if found, zero and false otherwise.
+func (oi ObjectInstanceInfo) GetField(name string) (Value, bool) {
+	if v, ok := oi.Fields.Get(name); ok {
+		return v, true
+	}
+	if oi.Prototype != nil {
+		return oi.Prototype.GetField(name)
+	}
+	return Value{}, false
+}
+
+// AllFields returns all fields including those from the prototype chain.
+// Prototype fields come first, own fields override.
+func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
+	result := NewOrderedMap()
+	if oi.Prototype != nil {
+		proto := oi.Prototype.AllFields()
+		for _, k := range proto.Keys() {
+			v, _ := proto.Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range oi.Fields.Keys() {
+		v, _ := oi.Fields.Get(k)
+		result.Set(k, v)
+	}
+	return result
+}
+
+// "T_" followed by 12 lowercase hex characters (6 random bytes).
+func GenerateObjectTypeID() string {
+	return GenerateID("T_")
+}
+
 // markCounter is a global counter for generating unique mark IDs.
 var markCounter atomic.Int64
 
@@ -214,17 +297,69 @@ type ForwardInfo struct {
 }
 
 // Value is a typed entry on the AQL stack.
+// Every value carries a unique ID with a prefix indicating its category:
+//   - "S_" for scalar values (String, Number, Boolean)
+//   - "N_" for node values (List, Map, Table, Record)
+//   - "W_" for word values (Word, Atom, Function, Internal/*)
+//   - "T_" for type/object values (Object/*, type literals, Any, None)
+//
+// Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
+	ID    string
 	VType Type
 	Data  interface{}
+}
+
+// idRand is the package-level RNG used for ID generation.
+// Defaults to time-seeded; can be overridden via SetIDSeed.
+var idRand = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+
+// idMin is the minimum random value for generated IDs (0x100000000000).
+const idMin uint64 = 0x100000000000
+
+// idMax is the exclusive upper bound so values fit in 12 hex chars.
+const idMax uint64 = 0x1000000000000 - 0x100000000000
+
+// SetIDSeed configures the package-level RNG with the given seed.
+func SetIDSeed(seed int64) {
+	idRand = rand.New(rand.NewPCG(uint64(seed), 0))
+}
+
+// GenerateID creates a unique ID with the given prefix followed by 12
+// lowercase hex characters. The random value is >= 0x100000000000.
+func GenerateID(prefix string) string {
+	n := idMin + idRand.Uint64N(idMax)
+	var buf [6]byte
+	buf[0] = byte(n >> 40)
+	buf[1] = byte(n >> 32)
+	buf[2] = byte(n >> 24)
+	buf[3] = byte(n >> 16)
+	buf[4] = byte(n >> 8)
+	buf[5] = byte(n)
+	return prefix + hex.EncodeToString(buf[:])
+}
+
+// IDPrefixForType returns the ID prefix for a given type:
+// "S_" for Scalar, "N_" for Node, "W_" for Word, "T_" for Object/Any/None.
+func IDPrefixForType(t Type) string {
+	return IDPrefixForParts(t.Parts)
+}
+
+// newValue creates a Value with an auto-generated ID based on the type category.
+func newValue(t Type, data interface{}) Value {
+	return Value{
+		ID:    GenerateID(IDPrefixForType(t)),
+		VType: t,
+		Data:  data,
+	}
 }
 
 // NewString creates a string value. Empty strings get type string/empty.
 func NewString(s string) Value {
 	if s == "" {
-		return Value{VType: TStringEmpty, Data: s}
+		return newValue(TStringEmpty, s)
 	}
-	return Value{VType: TStringProper, Data: s}
+	return newValue(TStringProper, s)
 }
 
 // NewInteger creates a number/integer value with a literal type.
@@ -234,40 +369,40 @@ func NewString(s string) Value {
 func NewInteger(n int64) Value {
 	// Format always starts with "Number/Integer/" — cannot fail.
 	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
-	return Value{VType: t, Data: n}
+	return newValue(t, n)
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.
 func NewDecimal(f float64) Value {
-	return Value{VType: TDecimal, Data: f}
+	return newValue(TDecimal, f)
 }
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	return Value{VType: TBoolean, Data: b}
+	return newValue(TBoolean, b)
 }
 
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
-	return Value{VType: TList, Data: elems}
+	return newValue(TList, elems)
 }
 
 // NewTypedList creates a typed list value with a child type constraint.
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
-	return Value{VType: TList, Data: ChildTypeInfo{Child: child}}
+	return newValue(TList, ChildTypeInfo{Child: child})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
-	return Value{VType: TMap, Data: entries}
+	return newValue(TMap, entries)
 }
 
 // NewTypedMap creates a typed map value with a child type constraint.
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
-	return Value{VType: TMap, Data: ChildTypeInfo{Child: child}}
+	return newValue(TMap, ChildTypeInfo{Child: child})
 }
 
 // NewRecordType creates a record type value from a field schema.
@@ -275,56 +410,50 @@ func NewTypedMap(child Value) Value {
 // For example, record{x:number, y:number} constrains maps to have exactly
 // keys x and y with number-typed values.
 func NewRecordType(fields *OrderedMap) Value {
-	return Value{VType: TMap, Data: RecordTypeInfo{Fields: fields}}
+	return newValue(TMap, RecordTypeInfo{Fields: fields})
 }
 
 // NewTableType creates a table type value from a record type.
 // A table type constrains a list so that each element is a map conforming
 // to the given record schema.
 func NewTableType(record RecordTypeInfo) Value {
-	return Value{VType: TList, Data: TableTypeInfo{Record: record}}
+	return newValue(TList, TableTypeInfo{Record: record})
 }
 
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
-	return Value{VType: TAtom, Data: name}
+	return newValue(TAtom, name)
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
-	return Value{VType: t, Data: nil}
+	return newValue(t, nil)
 }
 
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
-	return Value{
-		VType: TWord,
-		Data:  WordInfo{Name: name, ArgCount: -1},
-	}
+	return newValue(TWord, WordInfo{Name: name, ArgCount: -1})
 }
 
 // NewWordModified creates a word value with explicit modifiers.
 func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value {
-	return Value{
-		VType: TWord,
-		Data: WordInfo{
-			Name:        name,
-			ArgCount:    argCount,
-			ForcePrefix: forcePrefix,
-			ForceSuffix: forceSuffix,
-		},
-	}
+	return newValue(TWord, WordInfo{
+		Name:        name,
+		ArgCount:    argCount,
+		ForcePrefix: forcePrefix,
+		ForceSuffix: forceSuffix,
+	})
 }
 
 // NewForward creates a forward primitive value for suffix argument tracking.
 func NewForward(info ForwardInfo) Value {
-	return Value{VType: TForward, Data: info}
+	return newValue(TForward, info)
 }
 
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
-	return Value{VType: TOpenParen, Data: nil}
+	return newValue(TOpenParen, nil)
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -333,55 +462,78 @@ func NewOpenParen() Value {
 func NewMark(id string, body ...Value) Value {
 	b := make([]Value, len(body))
 	copy(b, body)
-	return Value{VType: TMark, Data: MarkInfo{ID: id, Body: b}}
+	return newValue(TMark, MarkInfo{ID: id, Body: b})
 }
 
 // NewMove creates a move value targeting the mark with the given ID.
 // The reason string describes why this move exists (used in error messages).
 func NewMove(to string, reason string) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason})
 }
 
 // NewMoveCont creates a move value with for-loop continuation state.
 func NewMoveCont(to, reason string, cont *ForCont) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, Cont: cont}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason, Cont: cont})
 }
 
 // NewMoveIf creates a move value with if-statement continuation state.
 func NewMoveIf(to, reason string, ifCont *IfCont) Value {
-	return Value{VType: TMove, Data: MoveInfo{To: to, Reason: reason, IfCont: ifCont}}
+	return newValue(TMove, MoveInfo{To: to, Reason: reason, IfCont: ifCont})
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
-	return Value{VType: TFnDef, Data: info}
+	return newValue(TFnDef, info)
 }
 
 // NewFunction creates a function reference value. The underlying data is a
 // FnDefInfo, but the type is TFunction so it can be matched by function-typed
 // parameters and passed to other functions without being called.
 func NewFunction(info FnDefInfo) Value {
-	return Value{VType: TFunction, Data: info}
+	return newValue(TFunction, info)
 }
 
 // NewFnUndef creates a function undef spec value for targeted signature removal.
 func NewFnUndef(info FnUndefInfo) Value {
-	return Value{VType: TFnUndef, Data: info}
+	return newValue(TFnUndef, info)
 }
 
 // NewReturnCheck creates a return-check marker for fn return type validation.
 func NewReturnCheck(info ReturnCheckInfo) Value {
-	return Value{VType: TReturnCheck, Data: info}
+	return newValue(TReturnCheck, info)
 }
 
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
-	return Value{VType: TDisjunct, Data: DisjunctInfo{Alternatives: alternatives}}
+	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
+}
+
+// NewObjectType creates an object type value. The type path is derived from
+// the ObjectTypeInfo.Name field. If Name is empty, the ID is used as the
+// type path suffix under "Object/".
+func NewObjectType(info ObjectTypeInfo) Value {
+	name := info.Name
+	if name == "" {
+		name = "Object/" + info.ID
+	}
+	t, _ := NewType(name)
+	return newValue(t, info)
+}
+
+// NewObjectInstance creates an object instance value. The type path matches
+// the object type's Name so instances are subtypes of their type's hierarchy.
+func NewObjectInstance(info ObjectInstanceInfo) Value {
+	name := info.TypeRef.Name
+	if name == "" {
+		name = "Object/" + info.TypeRef.ID
+	}
+	t, _ := NewType(name)
+	return newValue(t, info)
 }
 
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
-	return Value{VType: TModule, Data: desc}
+	return newValue(TModule, desc)
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -443,6 +595,28 @@ func (v Value) IsDisjunct() bool {
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
 func (v Value) AsDisjunct() DisjunctInfo {
 	return v.Data.(DisjunctInfo)
+}
+
+// IsObjectType reports whether this value is an object type definition.
+func (v Value) IsObjectType() bool {
+	_, ok := v.Data.(ObjectTypeInfo)
+	return ok && v.VType.Matches(TObject)
+}
+
+// AsObjectType returns the ObjectTypeInfo, panics if not an object type.
+func (v Value) AsObjectType() ObjectTypeInfo {
+	return v.Data.(ObjectTypeInfo)
+}
+
+// IsObjectInstance reports whether this value is an object instance.
+func (v Value) IsObjectInstance() bool {
+	_, ok := v.Data.(ObjectInstanceInfo)
+	return ok && v.VType.Matches(TObject)
+}
+
+// AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
+func (v Value) AsObjectInstance() ObjectInstanceInfo {
+	return v.Data.(ObjectInstanceInfo)
 }
 
 // IsModule reports whether this value is a module descriptor.
@@ -645,7 +819,7 @@ func (v Value) String() string {
 			if err != nil {
 				return "query(error:" + err.Error() + ")"
 			}
-			v2 := Value{VType: TList, Data: td}
+			v2 := newValue(TList, td)
 			return v2.String()
 		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
@@ -657,6 +831,32 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsObjectInstance():
+		oi := v.AsObjectInstance()
+		allFields := oi.AllFields()
+		parts := make([]string, 0, allFields.Len())
+		for _, k := range allFields.Keys() {
+			val, _ := allFields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := oi.TypeRef.Name
+		if name == "" {
+			name = "Object/" + oi.TypeRef.ID
+		}
+		return name + "{" + strings.Join(parts, ",") + "}"
+	case v.IsObjectType():
+		ot := v.AsObjectType()
+		allFields := ot.AllFields()
+		parts := make([]string, 0, allFields.Len())
+		for _, k := range allFields.Keys() {
+			val, _ := allFields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := ot.Name
+		if name == "" {
+			name = "Object/" + ot.ID
+		}
+		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
 	case v.IsDisjunct():
 		di := v.AsDisjunct()
 		parts := make([]string, len(di.Alternatives))

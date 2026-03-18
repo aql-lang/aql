@@ -26,14 +26,24 @@ var typeNames = map[string]engine.Type{
 	"Map":       engine.TMap,
 	"Table":     engine.TTable,
 	"Record":    engine.TRecord,
+	"Object":    engine.TObject,
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// isWhitespace returns true if the byte is a whitespace character.
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
 
 // Parse tokenizes the AQL source string into a slice of engine.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
 // unquoted text (words).
+//
+// Custom tokens are registered for (, ), and . so that they are lexed as
+// separate tokens by jsonic. This replaces the earlier preprocessParens
+// approach and string-based dot expansion, making the parser cleaner.
 //
 // Context rules:
 //   - Top level: unquoted text → words, quoted text → strings.
@@ -41,10 +51,6 @@ func boolPtr(b bool) *bool { return &b }
 //   - Inside lists at the top level: unquoted text → words (quotation).
 //   - Inside lists inside maps: all text → scalar data.
 func Parse(src string) ([]engine.Value, error) {
-	// Ensure ( and ) are space-separated so they become distinct tokens
-	// in the top-level implicit list.
-	processed := preprocessParens(src)
-
 	j := jsonic.Make(jsonic.Options{
 		TextInfo: boolPtr(true),
 		ListRef:  boolPtr(true),
@@ -52,6 +58,47 @@ func Parse(src string) ([]engine.Value, error) {
 		List:     &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
 		Map:      &jsonic.MapOptions{Child: boolPtr(true)},
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
+	})
+
+	// Register ( ) . ; as separate fixed tokens so jsonic lexes them
+	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
+	TinOP := j.Token("#OP", "(")
+	TinCP := j.Token("#CP", ")")
+	TinDT := j.Token("#DT", ".")
+	TinSC := j.Token("#SC", ";")
+
+	// Add val rule alternates so the grammar recognizes these custom tokens
+	// and produces Text marker values that the converter layer processes.
+	//
+	// For the dot token, we use source position to distinguish adjacent dots
+	// (foo.bar → part of a dotted word) from space-separated dots
+	// (foo . bar → standalone dot operator). Adjacent dots use Quote="adj"
+	// so the converter can identify them.
+	j.Rule("val", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{TinOP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "(", Quote: ""}
+			}},
+			{S: [][]jsonic.Tin{{TinCP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: ")", Quote: ""}
+			}},
+			{S: [][]jsonic.Tin{{TinSC}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Semicolon is an alias for the "end" keyword.
+				r.Node = jsonic.Text{Str: "end", Quote: ""}
+			}},
+			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				si := r.O0.SI
+				leftAdj := si > 0 && !isWhitespace(src[si-1])
+				rightAdj := si+1 < len(src) && !isWhitespace(src[si+1])
+				if leftAdj || rightAdj {
+					// Adjacent dot: part of a dotted word (e.g. foo.bar, .bar, foo.)
+					r.Node = jsonic.Text{Str: ".", Quote: "adj"}
+				} else {
+					// Standalone dot: the dot operator with spaces around it
+					r.Node = jsonic.Text{Str: ".", Quote: ""}
+				}
+			}},
+		}, rs.Open...)
 	})
 
 	// Intercept number tokens at lex time: wrap float64 values in numberVal
@@ -62,7 +109,7 @@ func Parse(src string) ([]engine.Value, error) {
 		}
 	}, nil)
 
-	result, err := j.Parse(processed)
+	result, err := j.Parse(src)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
@@ -115,74 +162,158 @@ func Parse(src string) ([]engine.Value, error) {
 	}
 }
 
-// preprocessParens inserts spaces around ( and ) that are outside quoted
-// strings, so jsonic treats each parenthesis as a separate text token.
-func preprocessParens(src string) string {
-	// Quick check: skip allocation if no parens present.
-	if !strings.ContainsAny(src, "()") {
-		return src
-	}
-
-	var out strings.Builder
-	out.Grow(len(src) + 10)
-	inString := false
-	var quote byte
-
-	for i := 0; i < len(src); i++ {
-		c := src[i]
-
-		if inString {
-			out.WriteByte(c)
-			if c == '\\' && i+1 < len(src) {
-				i++
-				out.WriteByte(src[i])
-			} else if c == quote {
-				inString = false
-			}
-			continue
-		}
-
-		if c == '"' || c == '\'' || c == '`' {
-			inString = true
-			quote = c
-			out.WriteByte(c)
-			continue
-		}
-
-		if c == '(' || c == ')' {
-			out.WriteByte(' ')
-			out.WriteByte(c)
-			out.WriteByte(' ')
-			continue
-		}
-
-		out.WriteByte(c)
-	}
-
-	return out.String()
+// isDotMarker returns true if item is an adjacent dot marker (part of a
+// dotted word like foo.bar). Standalone dots (with spaces) have Quote=""
+// and are handled separately.
+func isDotMarker(item any) bool {
+	text, ok := item.(jsonic.Text)
+	return ok && text.Str == "." && text.Quote == "adj"
 }
 
-// convertTopLevel converts a top-level implicit list from jsonic into
-// a slice of engine.Value using word context.
-func convertTopLevel(items []any) ([]engine.Value, error) {
+// isStandaloneDot returns true if item is a standalone dot operator
+// (space-separated, e.g. "foo . bar" or just ".").
+func isStandaloneDot(item any) bool {
+	text, ok := item.(jsonic.Text)
+	return ok && text.Str == "." && text.Quote == ""
+}
+
+// isTextOrNumber returns true if item is an unquoted text token or a number,
+// i.e. something that can appear as a segment in a dotted word.
+func isTextOrNumber(item any) bool {
+	if text, ok := item.(jsonic.Text); ok {
+		return text.Quote == ""
+	}
+	switch item.(type) {
+	case float64, numberVal:
+		return true
+	}
+	return false
+}
+
+// itemToString returns the string representation of a dot segment item.
+func itemToString(item any) string {
+	switch v := item.(type) {
+	case jsonic.Text:
+		return v.Str
+	case float64:
+		if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return fmt.Sprintf("%v", v)
+	case numberVal:
+		return v.Src
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// collectDotString scans items starting at start, collecting a dot-separated
+// sequence of tokens (text/number separated by dot markers). Returns the
+// joined dotted string and the number of items consumed.
+//
+// Examples:
+//
+//	Text"foo", dot, Text"bar"             → "foo.bar", 3
+//	dot, Text"bar"                        → ".bar", 2
+//	Text"!", dot                          → "!.", 2
+//	Text"foo", dot, Number(0), dot, Text"x" → "foo.0.x", 5
+func collectDotString(items []any, start int) (string, int) {
+	var parts []string
+	i := start
+
+	// Handle leading dot.
+	if isDotMarker(items[i]) {
+		parts = append(parts, "") // empty first part → leading dot
+		i++
+	}
+
+	for i < len(items) {
+		// Expect text or number.
+		if !isTextOrNumber(items[i]) {
+			break
+		}
+		parts = append(parts, itemToString(items[i]))
+		i++
+
+		// Check for trailing dot.
+		if i < len(items) && isDotMarker(items[i]) {
+			i++ // consume dot, continue to next part
+		} else {
+			break
+		}
+	}
+
+	// Handle trailing dot (e.g. "!." → parts=["!", ""])
+	if i > start && isDotMarker(items[i-1]) {
+		parts = append(parts, "")
+	}
+
+	return strings.Join(parts, "."), i - start
+}
+
+// convertTopLevelItems converts a list of jsonic items in word context,
+// handling dot-separated sequences and parenthesis markers. This is the
+// shared implementation for both convertTopLevel and convertWordList.
+func convertTopLevelItems(items []any) ([]engine.Value, error) {
 	values := make([]engine.Value, 0, len(items))
-	for _, item := range items {
-		// Check for dot notation in unquoted text tokens.
-		if text, ok := item.(jsonic.Text); ok && text.Quote == "" && strings.Contains(text.Str, ".") {
-			expanded, err := expandDottedWord(text.Str)
-			if err != nil {
-				return nil, err
-			}
-			values = append(values, expanded...)
+	for i := 0; i < len(items); i++ {
+		// Standalone dot (space-separated) → the dot word.
+		if isStandaloneDot(items[i]) {
+			values = append(values, engine.NewWord("dot"))
 			continue
 		}
-		v, err := convertTopLevelValue(item)
+
+		// Adjacent dot marker: start of a leading-dot sequence (.bar, .bar.baz).
+		if isDotMarker(items[i]) {
+			if i+1 < len(items) && isTextOrNumber(items[i+1]) {
+				dotStr, consumed := collectDotString(items, i)
+				expanded, err := expandDottedWord(dotStr)
+				if err != nil {
+					return nil, err
+				}
+				values = append(values, expanded...)
+				i += consumed - 1
+				continue
+			}
+			// Adjacent dot with nothing after → treat as dot word.
+			values = append(values, engine.NewWord("dot"))
+			continue
+		}
+
+		// Unquoted text potentially followed by an adjacent dot.
+		if text, ok := items[i].(jsonic.Text); ok && text.Quote == "" {
+			if i+1 < len(items) && isDotMarker(items[i+1]) {
+				// "!" followed by adjacent dot with nothing useful after → dotr.
+				if text.Str == "!" && (i+2 >= len(items) || !isTextOrNumber(items[i+2])) {
+					values = append(values, engine.NewWord("dotr"))
+					i++ // skip the dot marker
+					continue
+				}
+				// Regular dotted word: foo.bar, foo.bar.baz, etc.
+				dotStr, consumed := collectDotString(items, i)
+				expanded, err := expandDottedWord(dotStr)
+				if err != nil {
+					return nil, err
+				}
+				values = append(values, expanded...)
+				i += consumed - 1
+				continue
+			}
+		}
+
+		v, err := convertTopLevelValue(items[i])
 		if err != nil {
 			return nil, err
 		}
 		values = append(values, v)
 	}
 	return values, nil
+}
+
+// convertTopLevel converts a top-level implicit list from jsonic into
+// a slice of engine.Value using word context.
+func convertTopLevel(items []any) ([]engine.Value, error) {
+	return convertTopLevelItems(items)
 }
 
 // convertTopLevelValue converts a single value in word context.
@@ -236,22 +367,9 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 // Square brackets at the top level are a quotation operator for program
 // fragments: unquoted text → words, maps use data context.
 func convertWordList(items []any) (engine.Value, error) {
-	elems := make([]engine.Value, 0, len(items))
-	for _, item := range items {
-		// Check for dot notation in unquoted text tokens.
-		if text, ok := item.(jsonic.Text); ok && text.Quote == "" && strings.Contains(text.Str, ".") {
-			expanded, err := expandDottedWord(text.Str)
-			if err != nil {
-				return engine.Value{}, err
-			}
-			elems = append(elems, expanded...)
-			continue
-		}
-		v, err := convertTopLevelValue(item)
-		if err != nil {
-			return engine.Value{}, err
-		}
-		elems = append(elems, v)
+	elems, err := convertTopLevelItems(items)
+	if err != nil {
+		return engine.Value{}, err
 	}
 	return engine.NewList(elems), nil
 }

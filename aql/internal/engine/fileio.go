@@ -348,7 +348,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 			}
 			td.SQLite = true
 			td.TableName = baseName
-			result[0] = Value{VType: TList, Data: td}
+			result[0] = newValue(TList, td)
 		}
 	}
 

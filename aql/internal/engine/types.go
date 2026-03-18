@@ -10,7 +10,13 @@ import (
 // Type represents a hierarchical AQL type such as "Scalar/String/Proper" or
 // "Scalar/Number/Integer". A child type matches a parent pattern:
 // Scalar/String/Proper matches Scalar/String matches Scalar.
+//
+// Builtin types carry a fixed ID that is stable across runs and independent
+// of creation order. The ID format is "<prefix>_" followed by 12 lowercase
+// hex characters encoding the type's assigned number. Runtime-created types
+// have an empty ID.
 type Type struct {
+	ID    string
 	Parts []string
 }
 
@@ -20,6 +26,7 @@ var typeRoots = map[string]bool{
 	"Scalar": true,
 	"Node":   true,
 	"Word":   true,
+	"Object": true,
 	"Any":    true,
 	"None":   true,
 }
@@ -35,8 +42,8 @@ var typeAncestry = map[string]string{
 	"Atom":        "Word/Atom",
 	"List":        "Node/List",
 	"Map":         "Node/Map",
-	"Table":       "Node/Table",
-	"Record":      "Node/Record",
+	"Table":       "Object/Table",
+	"Record":      "Object/Record",
 	"Mark":        "Word/Internal/Mark",
 	"Move":        "Word/Internal/Move",
 	"Forward":     "Word/Internal/Forward",
@@ -47,6 +54,8 @@ var typeAncestry = map[string]string{
 	"Returncheck": "Word/Internal/Return",
 	"Disjunct":    "Word/Internal/Disjunct",
 	"Module":      "Word/Internal/Module",
+	"Resource":    "Object/Resource",
+	"Entity":      "Object/Resource/Entity",
 }
 
 // Well-known types.
@@ -65,8 +74,8 @@ var (
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
 	TMap          = mustType("Node/Map")
-	TTable        = mustType("Node/Table")
-	TRecord       = mustType("Node/Record")
+	TTable        = mustType("Object/Table")
+	TRecord       = mustType("Object/Record")
 	TAtom         = mustType("Word/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
@@ -82,7 +91,10 @@ var (
 	TInternal     = mustType("Word/Internal")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
-	TFetchFunction = mustType("Word/Function/Fetch")
+	TObject         = mustType("Object")
+	TResource       = mustType("Object/Resource")
+	TResourceEntity = mustType("Object/Resource/Entity")
+	TFetchFunction  = mustType("Word/Function/Fetch")
 	TFetchRequest  = mustType("Node/Map/Fetch/Request")
 	TFetchResponse = mustType("Node/Map/Fetch/Response")
 
@@ -92,13 +104,88 @@ var (
 	TWordInspection = TWordInspect
 )
 
+// builtinTypeIDs maps fully-qualified builtin type paths to their fixed
+// numeric IDs. These assignments are stable: new types are appended at the
+// end, existing numbers never change.
+var builtinTypeIDs = map[string]int{
+	"Any":                      1,
+	"None":                     2,
+	"Scalar":                   3,
+	"Scalar/String":            4,
+	"Scalar/String/Proper":     5,
+	"Scalar/String/Empty":      6,
+	"Scalar/Number":            7,
+	"Scalar/Number/Integer":    8,
+	"Scalar/Number/Decimal":    9,
+	"Scalar/Boolean":           10,
+	"Node":                     11,
+	"Node/List":                12,
+	"Node/List/Args":           13,
+	"Node/Map":                 14,
+	"Object/Table":             15,
+	"Object/Record":            16,
+	"Word":                     17,
+	"Word/Atom":                18,
+	"Word/Function":            19,
+	"Word/Internal":            20,
+	"Word/Internal/Forward":    21,
+	"Word/Internal/Paren":      22,
+	"Word/Internal/Fndef":      23,
+	"Word/Internal/Fnundef":    24,
+	"Word/Internal/Return":     25,
+	"Word/Internal/Disjunct":   26,
+	"Word/Internal/Mark":       27,
+	"Word/Internal/Move":       28,
+	"Word/Internal/Module":     29,
+	"Object":                   30,
+	"Node/Map/Word/Inspect":    31,
+	"Node/Map/Type/Inspect":    32,
+	"Word/Function/Fetch":      33,
+	"Node/Map/Fetch/Request":   34,
+	"Node/Map/Fetch/Response":  35,
+	"Object/Resource":          36,
+	"Object/Resource/Entity":   37,
+}
+
+// formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
+// for the given type path, producing the same 14-character format as random
+// IDs: "<prefix>_" + 12 hex digits.
+func formatFixedTypeID(path string, num int) string {
+	prefix := IDPrefixForParts(strings.Split(path, "/"))
+	return fmt.Sprintf("%s%012x", prefix, num)
+}
+
+// IDPrefixForParts returns the ID prefix for a type given its parts.
+func IDPrefixForParts(parts []string) string {
+	if len(parts) == 0 {
+		return "T_"
+	}
+	switch parts[0] {
+	case "Scalar":
+		return "S_"
+	case "Node":
+		return "N_"
+	case "Word":
+		return "W_"
+	case "Object":
+		return "T_"
+	default:
+		return "T_"
+	}
+}
+
 // mustType is used only for well-known type constants at init time.
 // It panics on invalid paths — acceptable because these are compile-time
 // constants whose correctness is verified by tests.
+// Builtin types receive a fixed ID from the builtinTypeIDs table.
 func mustType(path string) Type {
 	t, err := NewType(path)
 	if err != nil {
 		panic(err)
+	}
+	fullPath := strings.Join(t.Parts, "/")
+	if num, ok := builtinTypeIDs[fullPath]; ok {
+		t.ID = formatFixedTypeID(fullPath, num)
 	}
 	return t
 }
@@ -209,8 +296,8 @@ func builtinTypeParts() map[string]bool {
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
-		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TFetchFunction,
-		TFetchRequest, TFetchResponse,
+		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
+		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {

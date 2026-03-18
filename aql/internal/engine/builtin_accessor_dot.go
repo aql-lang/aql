@@ -57,7 +57,29 @@ func registerDot(r *Registry) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 
+	dotObjectAtomHandler := func(args []Value) ([]Value, error) {
+		oi := args[0].AsObjectInstance()
+		key := args[1].AsAtom()
+		val, ok := oi.GetField(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	dotObjectStringHandler := func(args []Value) ([]Value, error) {
+		oi := args[0].AsObjectInstance()
+		key := args[1].AsString()
+		val, ok := oi.GetField(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
 	sigs := []Signature{
+		{Args: []Type{TObject, TAtom}, Handler: dotObjectAtomHandler},
+		{Args: []Type{TObject, TString}, Handler: dotObjectStringHandler},
 		{Args: []Type{TMap, TAtom}, Handler: dotMapAtomHandler},
 		{Args: []Type{TMap, TString}, Handler: dotMapStringHandler},
 		{Args: []Type{TList, TInteger}, Handler: dotListHandler},

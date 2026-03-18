@@ -25,6 +25,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	evalExpr := fs.String("e", "", "evaluate expression")
 	registry := fs.String("r", "", "registry path")
+	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
@@ -39,7 +40,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: aql do requires an expression\n")
 			return 1
 		}
-		if err := run(stdout, doSource, ""); err != nil {
+		if err := run(stdout, doSource, "", 0); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -74,7 +75,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if hasSource {
-		if err := run(stdout, source, *registry); err != nil {
+		if err := run(stdout, source, *registry, *seed); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -87,8 +88,8 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func run(w io.Writer, source string, registry string) error {
-	a, err := aql.New(aql.Options{Registry: registry})
+func run(w io.Writer, source string, registry string, seed int64) error {
+	a, err := aql.New(aql.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}

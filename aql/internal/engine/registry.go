@@ -260,6 +260,8 @@ func registerBuiltins(r *Registry) {
 	registerConvert(r)
 	registerRecord(r)
 	registerTable(r)
+	registerObject(r)
+	registerResource(r)
 	registerMake(r)
 	registerTypeDef(r)
 	registerTypeof(r)

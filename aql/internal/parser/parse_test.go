@@ -848,6 +848,34 @@ func TestParseEscapeInParenString(t *testing.T) {
 	}
 }
 
+// --- Semicolon token tests ---
+
+func TestParseSemicolonAsEnd(t *testing.T) {
+	// ";" should parse as the word "end"
+	assertParse(t, "1 add 2; 99", []engine.Value{
+		engine.NewInteger(1),
+		engine.NewWord("add"),
+		engine.NewInteger(2),
+		engine.NewWord("end"),
+		engine.NewInteger(99),
+	})
+}
+
+func TestParseSemicolonStandalone(t *testing.T) {
+	assertParse(t, ";", []engine.Value{
+		engine.NewWord("end"),
+	})
+}
+
+func TestParseSemicolonAdjacentToWord(t *testing.T) {
+	// "foo;bar" — semicolon is a fixed token, so it splits the text
+	assertParse(t, "foo;bar", []engine.Value{
+		engine.NewWord("foo"),
+		engine.NewWord("end"),
+		engine.NewWord("bar"),
+	})
+}
+
 // --- expandDottedWord direct tests ---
 
 func assertExpand(t *testing.T, text string, want []engine.Value) {

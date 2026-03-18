@@ -194,10 +194,10 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	}
 
 	// Return a table value: list with TableData holding both schema and rows.
-	return []Value{Value{VType: TList, Data: TableData{
+	return []Value{newValue(TList, TableData{
 		Record: recType,
 		Rows:   rows,
-	}}}, nil
+	})}, nil
 }
 
 // TableData holds a concrete table: its record schema plus the row data.

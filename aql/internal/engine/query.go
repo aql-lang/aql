@@ -379,7 +379,7 @@ func registerQuery(r *Registry) {
 		}
 
 		qb := NewQueryBuilder(r, td)
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("from",
@@ -400,7 +400,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("as: %w", err)
 		}
 		qb.Alias = alias
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("as",
@@ -496,7 +496,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("where: %w", err)
 		}
 		qb.Where = clause
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("where",
@@ -522,7 +522,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("order: %w", err)
 		}
 		qb.OrderBy = clause
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	orderAtomHandler := func(args []Value) ([]Value, error) {
@@ -534,7 +534,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("order: %w", err)
 		}
 		qb.OrderBy = quoteIdent(col.AsAtom())
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("order",
@@ -576,7 +576,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("limit: %w", err)
 		}
 		qb.Limit = int(n)
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("limit",
@@ -597,7 +597,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("offset: %w", err)
 		}
 		qb.Offset = int(n)
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("offset",
@@ -617,7 +617,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("distinct: %w", err)
 		}
 		qb.Distinct = true
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("distinct",
@@ -646,7 +646,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("group: %w", err)
 		}
 		qb.GroupBy = clause
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	groupAtomHandler := func(args []Value) ([]Value, error) {
@@ -658,7 +658,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("group: %w", err)
 		}
 		qb.GroupBy = quoteIdent(col.AsAtom())
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("group",
@@ -695,7 +695,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("having: %w", err)
 		}
 		qb.Having = clause
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("having",
@@ -733,7 +733,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("on: no preceding join")
 		}
 		qb.Joins[len(qb.Joins)-1].On = clause
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("on",
@@ -768,7 +768,7 @@ func registerQuery(r *Registry) {
 			return nil, fmt.Errorf("using: no preceding join")
 		}
 		qb.Joins[len(qb.Joins)-1].UsingCols = strings.Join(cols, ", ")
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("using",
@@ -806,7 +806,7 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 			Type:  joinType,
 			Table: tableName,
 		})
-		return []Value{Value{VType: TList, Data: qb}}, nil
+		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register(name,
@@ -837,7 +837,7 @@ func registerSetOpWord(r *Registry, name string, op string) {
 			Op:    op,
 			Right: rightQB,
 		})
-		return []Value{Value{VType: TList, Data: leftQB}}, nil
+		return []Value{newValue(TList, leftQB)}, nil
 	}
 
 	r.Register(name,
@@ -1098,7 +1098,7 @@ func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
-	return []Value{Value{VType: TList, Data: result}}, nil
+	return []Value{newValue(TList, result)}, nil
 }
 
 // comparisonOps maps AQL comparison word names to SQL operators.
