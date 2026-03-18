@@ -280,21 +280,7 @@ func GenerateID(prefix string) string {
 // IDPrefixForType returns the ID prefix for a given type:
 // "S_" for Scalar, "N_" for Node, "W_" for Word, "T_" for Object/Any/None.
 func IDPrefixForType(t Type) string {
-	if len(t.Parts) == 0 {
-		return "T_"
-	}
-	switch t.Parts[0] {
-	case "Scalar":
-		return "S_"
-	case "Node":
-		return "N_"
-	case "Word":
-		return "W_"
-	case "Object":
-		return "T_"
-	default:
-		return "T_"
-	}
+	return IDPrefixForParts(t.Parts)
 }
 
 // newValue creates a Value with an auto-generated ID based on the type category.

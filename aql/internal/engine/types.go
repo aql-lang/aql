@@ -10,7 +10,13 @@ import (
 // Type represents a hierarchical AQL type such as "Scalar/String/Proper" or
 // "Scalar/Number/Integer". A child type matches a parent pattern:
 // Scalar/String/Proper matches Scalar/String matches Scalar.
+//
+// Builtin types carry a fixed ID that is stable across runs and independent
+// of creation order. The ID format is "<prefix>_" followed by 32 lowercase
+// hex characters encoding the type's assigned number. Runtime-created types
+// have an empty ID.
 type Type struct {
+	ID    string
 	Parts []string
 }
 
@@ -94,13 +100,86 @@ var (
 	TWordInspection = TWordInspect
 )
 
+// builtinTypeIDs maps fully-qualified builtin type paths to their fixed
+// numeric IDs. These assignments are stable: new types are appended at the
+// end, existing numbers never change.
+var builtinTypeIDs = map[string]int{
+	"Any":                      1,
+	"None":                     2,
+	"Scalar":                   3,
+	"Scalar/String":            4,
+	"Scalar/String/Proper":     5,
+	"Scalar/String/Empty":      6,
+	"Scalar/Number":            7,
+	"Scalar/Number/Integer":    8,
+	"Scalar/Number/Decimal":    9,
+	"Scalar/Boolean":           10,
+	"Node":                     11,
+	"Node/List":                12,
+	"Node/List/Args":           13,
+	"Node/Map":                 14,
+	"Node/Table":               15,
+	"Node/Record":              16,
+	"Word":                     17,
+	"Word/Atom":                18,
+	"Word/Function":            19,
+	"Word/Internal":            20,
+	"Word/Internal/Forward":    21,
+	"Word/Internal/Paren":      22,
+	"Word/Internal/Fndef":      23,
+	"Word/Internal/Fnundef":    24,
+	"Word/Internal/Return":     25,
+	"Word/Internal/Disjunct":   26,
+	"Word/Internal/Mark":       27,
+	"Word/Internal/Move":       28,
+	"Word/Internal/Module":     29,
+	"Object":                   30,
+	"Node/Map/Word/Inspect":    31,
+	"Node/Map/Type/Inspect":    32,
+	"Word/Function/Fetch":      33,
+	"Node/Map/Fetch/Request":   34,
+	"Node/Map/Fetch/Response":  35,
+}
+
+// formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
+// for the given type path, producing the same 34-character format as random
+// IDs: "<prefix>_" + 32 hex digits.
+func formatFixedTypeID(path string, num int) string {
+	prefix := IDPrefixForParts(strings.Split(path, "/"))
+	return fmt.Sprintf("%s%032x", prefix, num)
+}
+
+// IDPrefixForParts returns the ID prefix for a type given its parts.
+func IDPrefixForParts(parts []string) string {
+	if len(parts) == 0 {
+		return "T_"
+	}
+	switch parts[0] {
+	case "Scalar":
+		return "S_"
+	case "Node":
+		return "N_"
+	case "Word":
+		return "W_"
+	case "Object":
+		return "T_"
+	default:
+		return "T_"
+	}
+}
+
 // mustType is used only for well-known type constants at init time.
 // It panics on invalid paths — acceptable because these are compile-time
 // constants whose correctness is verified by tests.
+// Builtin types receive a fixed ID from the builtinTypeIDs table.
 func mustType(path string) Type {
 	t, err := NewType(path)
 	if err != nil {
 		panic(err)
+	}
+	fullPath := strings.Join(t.Parts, "/")
+	if num, ok := builtinTypeIDs[fullPath]; ok {
+		t.ID = formatFixedTypeID(fullPath, num)
 	}
 	return t
 }

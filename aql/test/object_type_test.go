@@ -275,6 +275,95 @@ func TestObjectTypeVTypeMatches(t *testing.T) {
 	}
 }
 
+// TestBuiltinTypeFixedIDs verifies that builtin types have stable, fixed IDs.
+func TestBuiltinTypeFixedIDs(t *testing.T) {
+	// Builtin types must have non-empty fixed IDs
+	if engine.TAny.ID == "" {
+		t.Error("TAny should have a fixed ID")
+	}
+	if engine.TString.ID == "" {
+		t.Error("TString should have a fixed ID")
+	}
+	if engine.TList.ID == "" {
+		t.Error("TList should have a fixed ID")
+	}
+	if engine.TWord.ID == "" {
+		t.Error("TWord should have a fixed ID")
+	}
+	if engine.TObject.ID == "" {
+		t.Error("TObject should have a fixed ID")
+	}
+
+	// Fixed IDs must be 34 chars (prefix + 32 hex)
+	if len(engine.TAny.ID) != 34 {
+		t.Errorf("TAny ID should be 34 chars, got %d: %s", len(engine.TAny.ID), engine.TAny.ID)
+	}
+
+	// Correct prefixes
+	if !strings.HasPrefix(engine.TAny.ID, "T_") {
+		t.Errorf("TAny ID should start with T_, got %s", engine.TAny.ID)
+	}
+	if !strings.HasPrefix(engine.TString.ID, "S_") {
+		t.Errorf("TString ID should start with S_, got %s", engine.TString.ID)
+	}
+	if !strings.HasPrefix(engine.TList.ID, "N_") {
+		t.Errorf("TList ID should start with N_, got %s", engine.TList.ID)
+	}
+	if !strings.HasPrefix(engine.TWord.ID, "W_") {
+		t.Errorf("TWord ID should start with W_, got %s", engine.TWord.ID)
+	}
+	if !strings.HasPrefix(engine.TObject.ID, "T_") {
+		t.Errorf("TObject ID should start with T_, got %s", engine.TObject.ID)
+	}
+
+	// Specific known values: TAny=1, TNone=2, TScalar=3, TString=4
+	expectedAny := "T_00000000000000000000000000000001"
+	if engine.TAny.ID != expectedAny {
+		t.Errorf("TAny ID should be %s, got %s", expectedAny, engine.TAny.ID)
+	}
+	expectedNone := "T_00000000000000000000000000000002"
+	if engine.TNone.ID != expectedNone {
+		t.Errorf("TNone ID should be %s, got %s", expectedNone, engine.TNone.ID)
+	}
+	expectedString := "S_00000000000000000000000000000004"
+	if engine.TString.ID != expectedString {
+		t.Errorf("TString ID should be %s, got %s", expectedString, engine.TString.ID)
+	}
+
+	// IDs are stable across multiple accesses (no regeneration)
+	id1 := engine.TAny.ID
+	id2 := engine.TAny.ID
+	if id1 != id2 {
+		t.Errorf("TAny ID should be stable, got %s then %s", id1, id2)
+	}
+
+	// All builtin IDs are unique
+	ids := map[string]string{}
+	builtins := map[string]engine.Type{
+		"TAny": engine.TAny, "TNone": engine.TNone, "TScalar": engine.TScalar,
+		"TString": engine.TString, "TStringProper": engine.TStringProper,
+		"TStringEmpty": engine.TStringEmpty, "TNumber": engine.TNumber,
+		"TInteger": engine.TInteger, "TDecimal": engine.TDecimal,
+		"TBoolean": engine.TBoolean, "TNode": engine.TNode,
+		"TList": engine.TList, "TListArgs": engine.TListArgs,
+		"TMap": engine.TMap, "TTable": engine.TTable, "TRecord": engine.TRecord,
+		"TAtom": engine.TAtom, "TWord": engine.TWord, "TFunction": engine.TFunction,
+		"TObject": engine.TObject,
+	}
+	for name, typ := range builtins {
+		if prev, exists := ids[typ.ID]; exists {
+			t.Errorf("duplicate ID: %s and %s both have %s", prev, name, typ.ID)
+		}
+		ids[typ.ID] = name
+	}
+
+	// Runtime-created types should NOT have fixed IDs
+	rt, _ := engine.NewType("Scalar/String/Custom")
+	if rt.ID != "" {
+		t.Errorf("runtime type should have empty ID, got %s", rt.ID)
+	}
+}
+
 // TestValueIDPrefixes verifies that all value categories get the correct ID prefix.
 func TestValueIDPrefixes(t *testing.T) {
 	// Scalar values get S_ prefix
