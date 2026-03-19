@@ -52,13 +52,22 @@ func NewRegistry() (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}
+	ops := fileops.NewDefault()
+	formats := DefaultFormats()
+
+	// Wire the multisource resolver into the jsonic format so that
+	// @"path" references in .jsonic files are resolved via FileOps.
+	if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
+		jf.Resolver = MakeFileOpsResolver(ops)
+	}
+
 	r := &Registry{
 		funcs:          make(map[string]*Function),
 		Store:          make(map[string]Value),
 		DefStacks:      make(map[string][]Value),
 		Types:          make(map[string]TypeDef),
-		FileOps:        fileops.NewDefault(),
-		Formats:        DefaultFormats(),
+		FileOps:        ops,
+		Formats:        formats,
 		Output:         os.Stdout,
 		ErrOutput:      os.Stderr,
 		Input:          os.Stdin,
@@ -76,9 +85,13 @@ func (r *Registry) NextModuleID() string {
 	return fmt.Sprintf("mod_%d", r.moduleSeq)
 }
 
-// SetFileOps replaces the file operations implementation.
+// SetFileOps replaces the file operations implementation and updates the
+// jsonic format's multisource resolver to use the new ops.
 func (r *Registry) SetFileOps(ops fileops.FileOps) {
 	r.FileOps = ops
+	if jf, ok := r.Formats["jsonic"].(*JsonicFormat); ok {
+		jf.Resolver = MakeFileOpsResolver(ops)
+	}
 }
 
 // SetParseFunc sets the parser callback used by file-based import.
