@@ -13,8 +13,9 @@ import (
 
 // OrderedMap is a map that preserves insertion order of keys.
 type OrderedMap struct {
-	keys []string
-	vals map[string]Value
+	keys     []string
+	vals     map[string]Value
+	Implicit bool // true when created from implicit pair syntax (e.g., [x:Integer])
 }
 
 // NewOrderedMap creates an empty OrderedMap.
@@ -399,6 +400,14 @@ func NewMap(entries *OrderedMap) Value {
 	return newValue(TMap, entries)
 }
 
+// NewImplicitMap creates a map value marked as implicit (from pair syntax).
+// In fn signatures, implicit maps are treated as named parameter declarations
+// (e.g., [x:Integer]), while explicit maps are structural patterns.
+func NewImplicitMap(entries *OrderedMap) Value {
+	entries.Implicit = true
+	return newValue(TMap, entries)
+}
+
 // NewTypedMap creates a typed map value with a child type constraint.
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
@@ -534,6 +543,26 @@ func NewObjectInstance(info ObjectInstanceInfo) Value {
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
+}
+
+// ErrorInfo holds the details of an AQL error value.
+type ErrorInfo struct {
+	Message string // the error description
+}
+
+// NewError creates an error value from a Go error.
+func NewError(err error) Value {
+	return newValue(TError, ErrorInfo{Message: err.Error()})
+}
+
+// IsError reports whether this value is an error.
+func (v Value) IsError() bool {
+	return v.VType.Equal(TError)
+}
+
+// AsError returns the ErrorInfo for an error value.
+func (v Value) AsError() ErrorInfo {
+	return v.Data.(ErrorInfo)
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -777,6 +806,8 @@ func (v Value) String() string {
 	case v.IsModule():
 		md := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)
+	case v.IsError():
+		return fmt.Sprintf("error(%s)", v.AsError().Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()

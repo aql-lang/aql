@@ -1706,3 +1706,78 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		}
 	}
 }
+
+// =============================================================================
+// MapRef.Implicit — implicit pair syntax vs explicit maps
+// =============================================================================
+
+func TestParseImplicitMapInList(t *testing.T) {
+	// [x:Integer] — pair syntax inside list produces an implicit map
+	vals, err := Parse("[x:Integer]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	list := vals[0]
+	if !list.VType.Equal(engine.TList) {
+		t.Fatalf("expected list, got %s", list.VType)
+	}
+	elems := list.AsList()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element in list, got %d", len(elems))
+	}
+	if !elems[0].VType.Equal(engine.TMap) {
+		t.Fatalf("expected map element, got %s", elems[0].VType)
+	}
+	m := elems[0].AsMap()
+	if !m.Implicit {
+		t.Error("expected Implicit=true for pair syntax [x:Integer]")
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+}
+
+func TestParseExplicitMapInList(t *testing.T) {
+	// [{x:Integer}] — explicit map inside list is NOT implicit
+	vals, err := Parse("[{x:Integer}]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	list := vals[0]
+	elems := list.AsList()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element in list, got %d", len(elems))
+	}
+	if !elems[0].VType.Equal(engine.TMap) {
+		t.Fatalf("expected map element, got %s", elems[0].VType)
+	}
+	m := elems[0].AsMap()
+	if m.Implicit {
+		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
+	}
+}
+
+func TestParseExplicitMapTopLevel(t *testing.T) {
+	// {a:1} — explicit map at top level is NOT implicit
+	vals, err := Parse("{a:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	if !vals[0].VType.Equal(engine.TMap) {
+		t.Fatalf("expected map, got %s", vals[0].VType)
+	}
+	m := vals[0].AsMap()
+	if m.Implicit {
+		t.Error("expected Implicit=false for explicit map {a:1}")
+	}
+}

@@ -122,6 +122,37 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	// FnDefInfo body (from fn word): install typed signatures.
 	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
 		fnDef := body.Data.(FnDefInfo)
+
+		// Remove any previous DefStack entries whose signatures overlap
+		// with the new definition. Without this, redefining a fn-based
+		// word with the same signature leaves stale handlers that win
+		// matching over the new ones (equal scores, first match wins).
+		if stack := r.DefStacks[name]; len(stack) > 0 {
+			filtered := stack[:0:0]
+			changed := false
+			for _, entry := range stack {
+				oldFn, ok := entry.Data.(FnDefInfo)
+				if ok && fnDefsOverlap(oldFn, fnDef) {
+					changed = true
+					continue
+				}
+				filtered = append(filtered, entry)
+			}
+			if changed {
+				r.DefStacks[name] = filtered
+				// Rebuild typed signatures from remaining DefStack entries.
+				fn := r.funcs[name]
+				if fn != nil && len(fn.Signatures) > 0 {
+					fn.Signatures = fn.Signatures[:1] // keep generic fallback
+				}
+				for _, entry := range filtered {
+					if fd, ok := entry.Data.(FnDefInfo); ok {
+						installFnDef(r, name, fd, isPrefixOnly)
+					}
+				}
+			}
+		}
+
 		installFnDef(r, name, fnDef, isPrefixOnly)
 		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
 		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
@@ -155,6 +186,29 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 	}
 
 	r.DefStacks[name] = append(r.DefStacks[name], body)
+}
+
+// fnDefsOverlap returns true if any signature in a has the same parameter
+// types as any signature in b (ignoring param names, return types, and body).
+func fnDefsOverlap(a, b FnDefInfo) bool {
+	for _, sa := range a.Sigs {
+		for _, sb := range b.Sigs {
+			if len(sa.Params) != len(sb.Params) {
+				continue
+			}
+			match := true
+			for i := range sa.Params {
+				if !sa.Params[i].Type.Equal(sb.Params[i].Type) {
+					match = false
+					break
+				}
+			}
+			if match {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // uninstallDef removes the most recent def for a word. If no definitions

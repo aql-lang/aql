@@ -67,6 +67,9 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 
 	registry.Output = out
 
+	meta := NewMetaRegistry()
+	var lastStack []engine.Value
+
 	for {
 		line, err := rl.Readline()
 		if err != nil { // EOF or interrupt
@@ -74,6 +77,19 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 		}
 
 		if line == "" {
+			continue
+		}
+
+		// Check for meta commands (/help, /stack, etc.).
+		handled, metaErr := meta.ParseAndRun(line, &MetaContext{
+			Out:      out,
+			Registry: registry,
+			Stack:    lastStack,
+		})
+		if handled {
+			if metaErr != nil {
+				fmt.Fprintf(out, "  error: %s\n", metaErr)
+			}
 			continue
 		}
 
@@ -89,6 +105,8 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 			fmt.Fprintf(out, "  error: %s\n", err)
 			continue
 		}
+
+		lastStack = result
 
 		if len(result) > 0 {
 			parts := make([]string, len(result))

@@ -164,19 +164,28 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 	for _, elem := range elems {
 		switch {
 		case elem.VType.Equal(TMap):
-			// Named parameter from pair syntax: {name: type}
 			m := elem.AsMap()
-			keys := m.Keys()
-			if len(keys) != 1 {
-				return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+			if m.Implicit {
+				// Named parameter from implicit pair syntax: [x:Integer]
+				keys := m.Keys()
+				if len(keys) != 1 {
+					return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+				}
+				name := keys[0]
+				typeVal, _ := m.Get(name)
+				paramType, pattern, err := resolveSigType(typeVal)
+				if err != nil {
+					return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+				}
+				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
+			} else {
+				// Explicit map: unnamed parameter with structural pattern
+				paramType, pattern, err := resolveSigType(elem)
+				if err != nil {
+					return nil, fmt.Errorf("function spec: invalid map param: %w", err)
+				}
+				params = append(params, FnParam{Type: paramType, Pattern: pattern})
 			}
-			name := keys[0]
-			typeVal, _ := m.Get(name)
-			paramType, pattern, err := resolveSigType(typeVal)
-			if err != nil {
-				return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
-			}
-			params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
