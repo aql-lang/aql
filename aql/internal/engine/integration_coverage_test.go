@@ -403,12 +403,12 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	}
 }
 
-func TestIntegModuleExportWithWordName(t *testing.T) {
+func TestIntegModuleExportWithAtomName(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// export with word name (not atom)
+	// export with atom name (word signature removed; unknown words become atoms)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(7), NewString("end"),
-		NewString("export"), NewWord("wrdexp"),
+		NewString("export"), NewAtom("wrdexp"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
@@ -442,6 +442,71 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	result := runAQL(t, r, []Value{NewWord("wordRenamed")})
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("wordRenamed should be a map, got %v", result)
+	}
+}
+
+func TestIntegImportSingleRenameWord(t *testing.T) {
+	r, _ := DefaultRegistry()
+	moduleBody := NewList([]Value{
+		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
+		NewString("export"), NewAtom("Orig"),
+		NewMap(singleMap("val", NewString("x"))),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("mymod"),
+		NewWord("module"), moduleBody,
+		NewWord("end"),
+	})
+
+	// import NewName mymod — renames single export Orig to NewName
+	// (unknown word NewName becomes atom at runtime)
+	runAQL(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
+
+	result := runAQL(t, r, []Value{NewWord("NewName")})
+	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+		t.Fatalf("NewName should be a map, got %v", result)
+	}
+}
+
+func TestIntegImportSingleRenameAtom(t *testing.T) {
+	r, _ := DefaultRegistry()
+	moduleBody := NewList([]Value{
+		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
+		NewString("export"), NewAtom("Orig"),
+		NewMap(singleMap("val", NewString("x"))),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("mymod"),
+		NewWord("module"), moduleBody,
+		NewWord("end"),
+	})
+
+	// import Renamed mymod — renames single export Orig to Renamed (atom)
+	runAQL(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
+
+	result := runAQL(t, r, []Value{NewWord("Renamed")})
+	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+		t.Fatalf("Renamed should be a map, got %v", result)
+	}
+}
+
+func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
+	r, _ := DefaultRegistry()
+	m := NewOrderedMap()
+	m.Set("a", NewInteger(1))
+	moduleBody := NewList([]Value{
+		NewString("export"), NewAtom("X"), NewMap(singleMap("v", NewInteger(1))),
+		NewString("export"), NewAtom("Y"), NewMap(singleMap("v", NewInteger(2))),
+	})
+	runAQL(t, r, []Value{
+		NewWord("def"), NewWord("mm"),
+		NewWord("module"), moduleBody,
+		NewWord("end"),
+	})
+
+	_, err := New(r).Run([]Value{NewWord("import"), NewWord("Only"), NewWord("mm")})
+	if err == nil {
+		t.Fatal("expected error when renaming module with multiple exports")
 	}
 }
 

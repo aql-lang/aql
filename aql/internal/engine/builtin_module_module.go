@@ -20,6 +20,7 @@ import (
 //   - [module-desc]                    — use export names as-is
 //   - [[atom atom] module-desc]        — rename single export (from to)
 //   - [[:pairs...] module-desc]        — rename multiple exports
+//   - [atom module-desc]               — rename single export to new name
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.Register("module", Signature{
@@ -40,10 +41,16 @@ func registerModule(r *Registry) {
 		return nil, nil
 	}
 
-	// import: [list module-desc] -> [] — rename imports
+	// import: [list module-desc] -> [] — rename imports via list
 	importRenameHandler := func(args []Value) ([]Value, error) {
 		desc := args[1].AsModule()
 		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	// import: [word/atom module-desc] -> [] — rename single export
+	importSingleRenameHandler := func(newName string, args []Value) ([]Value, error) {
+		desc := args[1].AsModule()
+		return nil, installSingleRename(r, desc, newName)
 	}
 
 	// import: [string] -> [] or [value] — import from a file path.
@@ -92,6 +99,12 @@ func registerModule(r *Registry) {
 			Handler: importRenameHandler,
 		},
 		Signature{
+			Args: []Type{TAtom, TModule},
+			Handler: func(args []Value) ([]Value, error) {
+				return importSingleRenameHandler(args[0].AsAtom(), args)
+			},
+		},
+		Signature{
 			Args:    []Type{TString},
 			Handler: importFileHandler,
 		},
@@ -137,12 +150,6 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 
 	modReg.Register("export", Signature{
-		Args: []Type{TWord, TMap},
-		Handler: func(eargs []Value) ([]Value, error) {
-			exportHandler(defName(eargs[0]), eargs[1].AsMap())
-			return nil, nil
-		},
-	}, Signature{
 		Args: []Type{TAtom, TMap},
 		Handler: func(eargs []Value) ([]Value, error) {
 			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
@@ -288,6 +295,21 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
 		installDef(r, toName, NewMap(exportMap))
+	}
+	return nil
+}
+
+// installSingleRename renames the single export in a module to newName.
+// If the module has zero or more than one export, an error is returned.
+func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
+	if len(desc.Exports) == 0 {
+		return fmt.Errorf("import: module has no exports to rename")
+	}
+	if len(desc.Exports) != 1 {
+		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
+	}
+	for _, exportMap := range desc.Exports {
+		installDef(r, newName, NewMap(exportMap))
 	}
 	return nil
 }
