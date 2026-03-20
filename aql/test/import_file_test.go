@@ -1000,6 +1000,22 @@ export Math {pi:pi,e:e}`,
 	assertResult(t, result, "3")
 }
 
+func TestBareModuleImportsJsonReExportsAsMap(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/planets/data.json": `{"earth":{"diameter":12756},"mars":{"diameter":6792}}`,
+		"/project/.aql/planets/index.aql": `import "/project/.aql/planets/data.json" def data end
+export Planets {catalog:data}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "planets"`,
+		`Planets catalog . earth . diameter .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "12756")
+}
+
 func TestBareModuleInternalDefsDoNotLeak(t *testing.T) {
 	files := map[string]string{
 		"/project/.aql/secret/index.aql": `
