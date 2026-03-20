@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	aql "github.com/metsitaba/voxgig-exp/aql"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
 
@@ -29,7 +31,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -45,6 +47,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	}
+
+	// Handle "help" subcommand: aql help [word]
+	if len(args) > 0 && args[0] == "help" {
+		return runHelp(args[1:], stdout)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -85,6 +92,32 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// No source provided: start the REPL.
 	fmt.Fprintf(stdout, "aql %s\n", Version)
 	repl.Start(stdin, stdout, *registry)
+	return 0
+}
+
+// runHelp handles `aql help` and `aql help <word>`.
+func runHelp(args []string, w io.Writer) int {
+	if len(args) == 0 {
+		// No word specified: list all available words sorted.
+		words := help.Words()
+		sort.Strings(words)
+
+		fmt.Fprintln(w, "Available words:")
+		for _, word := range words {
+			entry := help.Lookup(word)
+			fmt.Fprintf(w, "  %-16s %s\n", word, entry.Summary)
+		}
+		fmt.Fprintln(w, "\nUse 'aql help <word>' for detailed help on a specific word.")
+		return 0
+	}
+
+	name := args[0]
+	entry := help.Lookup(name)
+	if entry == nil {
+		fmt.Fprintf(w, "help: no help available for %q\n", name)
+		return 1
+	}
+	fmt.Fprint(w, help.Format(entry))
 	return 0
 }
 

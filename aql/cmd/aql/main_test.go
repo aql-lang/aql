@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
 
 func TestExecuteVersion(t *testing.T) {
@@ -184,5 +186,74 @@ func TestRunEngineError(t *testing.T) {
 	err := run(&buf, "10 div 0", "", 0)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// --- help subcommand ---
+
+func TestExecuteHelpListsWords(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Available words:") {
+		t.Errorf("expected 'Available words:' header, got %q", out)
+	}
+	// Spot-check a few well-known words appear in the listing.
+	for _, word := range []string{"add", "concat", "help", "import"} {
+		if !strings.Contains(out, word) {
+			t.Errorf("expected word %q in help listing", word)
+		}
+	}
+}
+
+func TestExecuteHelpSpecificWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help", "add"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	// Should contain the word name and signature section — same as in-language help.
+	if !strings.Contains(out, "add") {
+		t.Errorf("expected 'add' in output, got %q", out)
+	}
+	if !strings.Contains(out, "Signatures:") {
+		t.Errorf("expected 'Signatures:' section, got %q", out)
+	}
+	if !strings.Contains(out, "Description:") {
+		t.Errorf("expected 'Description:' section, got %q", out)
+	}
+}
+
+func TestExecuteHelpUnknownWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help", "nonexistent_word"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout.String(), "no help available") {
+		t.Errorf("expected 'no help available' message, got %q", stdout.String())
+	}
+}
+
+func TestExecuteHelpMatchesHelpFormat(t *testing.T) {
+	// The CLI "aql help add" should produce the same output as help.Format
+	// — the same function the in-language "add help" word uses.
+	var cliOut bytes.Buffer
+	code := execute([]string{"help", "add"}, nil, &cliOut, &bytes.Buffer{})
+	if code != 0 {
+		t.Fatalf("CLI help exit code = %d, want 0", code)
+	}
+
+	entry := help.Lookup("add")
+	if entry == nil {
+		t.Fatal("expected help entry for 'add'")
+	}
+	expected := help.Format(entry)
+	if cliOut.String() != expected {
+		t.Errorf("CLI output differs from help.Format:\nCLI:\n%s\nExpected:\n%s", cliOut.String(), expected)
 	}
 }

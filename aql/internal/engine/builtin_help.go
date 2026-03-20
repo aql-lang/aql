@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
@@ -27,7 +26,7 @@ func registerHelp(r *Registry) {
 			fmt.Fprintf(r.Output, "help: no help available for %q\n", name)
 			return nil, nil
 		}
-		fmt.Fprint(r.Output, formatHelp(entry))
+		fmt.Fprint(r.Output, help.Format(entry))
 		return nil, nil
 	}
 
@@ -39,7 +38,7 @@ func registerHelp(r *Registry) {
 			fmt.Fprintf(r.Output, "help: no help available for %q\n", name)
 			return nil, nil
 		}
-		fmt.Fprint(r.Output, formatHelp(entry))
+		fmt.Fprint(r.Output, help.Format(entry))
 		return nil, nil
 	}
 
@@ -51,47 +50,3 @@ func registerHelp(r *Registry) {
 	)
 }
 
-func formatHelp(e *help.Entry) string {
-	var b strings.Builder
-
-	// Word name and summary
-	b.WriteString(e.Word)
-	b.WriteString(" — ")
-	b.WriteString(e.Summary)
-	b.WriteByte('\n')
-
-	// Signatures
-	b.WriteString("\nSignatures:\n")
-	for _, sig := range e.Signatures {
-		b.WriteString("  ")
-		b.WriteString(sig)
-		b.WriteByte('\n')
-	}
-
-	// Description
-	b.WriteString("\nDescription:\n  ")
-	b.WriteString(e.Description)
-	b.WriteByte('\n')
-
-	// Examples
-	if len(e.Examples) > 0 {
-		b.WriteString("\nExamples:\n")
-		for _, ex := range e.Examples {
-			b.WriteString("  ")
-			b.WriteString(ex)
-			b.WriteByte('\n')
-		}
-	}
-
-	// Notes
-	if len(e.Notes) > 0 {
-		b.WriteString("\nNotes:\n")
-		for _, n := range e.Notes {
-			b.WriteString("  - ")
-			b.WriteString(n)
-			b.WriteByte('\n')
-		}
-	}
-
-	return b.String()
-}
