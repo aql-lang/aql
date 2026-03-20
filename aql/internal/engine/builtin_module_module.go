@@ -150,6 +150,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Input = parent.Input
 	modReg.FileOps = parent.FileOps
 	modReg.ParseFunc = parent.ParseFunc
+	modReg.BaseDir = parent.BaseDir
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
@@ -231,6 +232,17 @@ func isDataFile(path string) bool {
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
 }
 
+// resolveImportPath resolves a file import path. If the registry has a BaseDir
+// set (i.e. we are inside a module loaded from a file), relative paths are
+// resolved against that directory. Otherwise the path is returned as-is
+// (FileOps.ReadFile will resolve it against the process CWD).
+func resolveImportPath(r *Registry, path string) string {
+	if r.BaseDir != "" && !filepath.IsAbs(path) {
+		return filepath.Join(r.BaseDir, path)
+	}
+	return path
+}
+
 // resolveBareModule resolves a bare module name (e.g. "foo") by searching for
 // .aql/foo/index.aql starting from the current working directory and walking
 // up parent directories, following the CommonJS node_modules resolution pattern.
@@ -263,7 +275,8 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	if format == "" {
 		return nil, fmt.Errorf("import: unknown format for %s", path)
 	}
-	result, err := doRead(parent, path, "utf8", format, "lf")
+	resolved := resolveImportPath(parent, path)
+	result, err := doRead(parent, resolved, "utf8", format, "lf")
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
@@ -271,24 +284,33 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 }
 
 // loadFileModule reads a file, parses it as AQL, and runs it as a module.
+// The child module's BaseDir is set to the directory of the loaded file so
+// that relative imports inside it resolve correctly.
 func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	if parent.ParseFunc == nil {
 		return ModuleDesc{}, fmt.Errorf("import: parser not configured for file import")
 	}
 
-	data, err := parent.FileOps.ReadFile(path)
+	resolved := resolveImportPath(parent, path)
+
+	data, err := parent.FileOps.ReadFile(resolved)
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %w", err)
 	}
 
 	parsed, err := parent.ParseFunc(string(data))
 	if err != nil {
-		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", path, err)
+		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", resolved, err)
 	}
 
+	// Temporarily set parent BaseDir so the child module inherits the
+	// loaded file's directory (runModuleBody copies BaseDir).
+	saved := parent.BaseDir
+	parent.BaseDir = filepath.Dir(resolved)
 	desc, err := runModuleBody(parent, parsed)
+	parent.BaseDir = saved
 	if err != nil {
-		return ModuleDesc{}, fmt.Errorf("import: %s: %w", path, err)
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}
 	return desc, nil
 }

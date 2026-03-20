@@ -1003,7 +1003,7 @@ export Math {pi:pi,e:e}`,
 func TestBareModuleImportsJsonReExportsAsMap(t *testing.T) {
 	files := map[string]string{
 		"/project/.aql/planets/data.json": `{"earth":{"diameter":12756},"mars":{"diameter":6792}}`,
-		"/project/.aql/planets/index.aql": `import "/project/.aql/planets/data.json" def data end
+		"/project/.aql/planets/index.aql": `import "./data.json" def data end
 export Planets {catalog:data}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
