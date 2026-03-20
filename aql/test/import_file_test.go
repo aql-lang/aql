@@ -568,3 +568,449 @@ export B {y:2}`,
 	}
 	assertResult(t, result, "2")
 }
+
+// runModuleStepsWithCwd creates a registry with a simulated working directory,
+// in-memory files, and ParseFunc set, then executes AQL steps.
+func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]engine.Value, error) {
+	t.Helper()
+	mem := fileops.NewMem()
+	mem.Cwd = cwd
+	for path, content := range files {
+		mem.Files[path] = []byte(content)
+	}
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetFileOps(mem)
+	reg.SetParseFunc(parser.Parse)
+
+	eng := engine.New(reg)
+	var result []engine.Value
+	for _, step := range steps {
+		vals, err := parser.Parse(step)
+		if err != nil {
+			return nil, err
+		}
+		result, err = eng.Run(vals)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+// --- Bare module: parent directory walk (1–7 levels) ---
+
+func TestBareModuleResolveLevel1(t *testing.T) {
+	// Module at CWD level: /project/.aql/foo/index.aql
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:1}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestBareModuleResolveLevel2(t *testing.T) {
+	// Module one level up: /project/.aql/foo/index.aql, CWD = /project/src
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:2}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "2")
+}
+
+func TestBareModuleResolveLevel3(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:3}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src/sub", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "3")
+}
+
+func TestBareModuleResolveLevel4(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:4}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/a/b/c", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "4")
+}
+
+func TestBareModuleResolveLevel5(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:5}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "5")
+}
+
+func TestBareModuleResolveLevel6(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:6}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "6")
+}
+
+func TestBareModuleResolveLevel7(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/foo/index.aql": `export Foo {level:7}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e/f", files, []string{
+		`import "foo"`, `Foo level .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "7")
+}
+
+func TestBareModuleResolveAtRoot(t *testing.T) {
+	// Module at filesystem root: /.aql/foo/index.aql
+	files := map[string]string{
+		"/.aql/rootmod/index.aql": `export Root {found:true}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
+		`import "rootmod"`, `Root found .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "true")
+}
+
+// --- Bare module: closest wins (shadowing) ---
+
+func TestBareModuleClosestWins(t *testing.T) {
+	// Module exists at both CWD and parent — CWD version wins.
+	files := map[string]string{
+		"/project/src/.aql/foo/index.aql": `export Foo {loc:"child"}`,
+		"/project/.aql/foo/index.aql":     `export Foo {loc:"parent"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "foo"`, `Foo loc .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'child'")
+}
+
+func TestBareModuleClosestWinsDeep(t *testing.T) {
+	// Module at level 2 and level 5 — level 2 (closer) wins.
+	files := map[string]string{
+		"/a/b/.aql/mod/index.aql":     `export Mod {loc:"level2"}`,
+		"/a/b/c/d/.aql/mod/index.aql": `export Mod {loc:"level4"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/a/b/c/d/e", files, []string{
+		`import "mod"`, `Mod loc .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'level4'")
+}
+
+func TestBareModuleFallsThroughToParent(t *testing.T) {
+	// Module only at parent, not at CWD.
+	files := map[string]string{
+		"/project/.aql/util/index.aql": `export Util {val:99}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "util"`, `Util val .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "99")
+}
+
+// --- Bare module: siblings (different modules at same level) ---
+
+func TestBareModuleSiblings(t *testing.T) {
+	// Two different modules in the same .aql/ directory.
+	files := map[string]string{
+		"/project/.aql/alpha/index.aql": `export Alpha {id:"a"}`,
+		"/project/.aql/beta/index.aql":  `export Beta {id:"b"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "alpha"`,
+		`import "beta"`,
+		`Beta id .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'b'")
+}
+
+func TestBareModuleSiblingsAccessBoth(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/alpha/index.aql": `export Alpha {id:"a"}`,
+		"/project/.aql/beta/index.aql":  `export Beta {id:"b"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "alpha"`,
+		`import "beta"`,
+		`Alpha id .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'a'")
+}
+
+func TestBareModuleSiblingsAtDifferentLevels(t *testing.T) {
+	// alpha at CWD level, beta at parent level.
+	files := map[string]string{
+		"/project/src/.aql/alpha/index.aql": `export Alpha {id:"child-a"}`,
+		"/project/.aql/beta/index.aql":      `export Beta {id:"parent-b"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "alpha"`,
+		`import "beta"`,
+		`Alpha id .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'child-a'")
+}
+
+func TestBareModuleSiblingsAtDifferentLevelsSecond(t *testing.T) {
+	files := map[string]string{
+		"/project/src/.aql/alpha/index.aql": `export Alpha {id:"child-a"}`,
+		"/project/.aql/beta/index.aql":      `export Beta {id:"parent-b"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "alpha"`,
+		`import "beta"`,
+		`Beta id .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'parent-b'")
+}
+
+// --- Bare module: same name, different parents, different functionality ---
+
+func TestBareModuleSameNameDifferentParents(t *testing.T) {
+	// "utils" exists at two different directory levels with different content.
+	// The closest one (child) should win.
+	files := map[string]string{
+		"/project/src/.aql/utils/index.aql": `export Utils {scope:"local",ver:2}`,
+		"/project/.aql/utils/index.aql":     `export Utils {scope:"global",ver:1}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "utils"`, `Utils scope .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'local'")
+}
+
+func TestBareModuleSameNameDifferentParentsVersion(t *testing.T) {
+	files := map[string]string{
+		"/project/src/.aql/utils/index.aql": `export Utils {scope:"local",ver:2}`,
+		"/project/.aql/utils/index.aql":     `export Utils {scope:"global",ver:1}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "utils"`, `Utils ver .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "2")
+}
+
+func TestBareModuleSameNameParentWinsWhenChildAbsent(t *testing.T) {
+	// "utils" only at the parent level — should be found via upward walk.
+	files := map[string]string{
+		"/project/.aql/utils/index.aql": `export Utils {scope:"global",ver:1}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
+		`import "utils"`, `Utils scope .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'global'")
+}
+
+func TestBareModuleSameNameThreeLevels(t *testing.T) {
+	// "config" at three levels; the closest should win.
+	files := map[string]string{
+		"/a/b/c/.aql/config/index.aql": `export Config {env:"dev"}`,
+		"/a/b/.aql/config/index.aql":   `export Config {env:"staging"}`,
+		"/a/.aql/config/index.aql":     `export Config {env:"prod"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
+		`import "config"`, `Config env .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'dev'")
+}
+
+func TestBareModuleSameNameThreeLevelsMidWins(t *testing.T) {
+	// "config" at root and mid but NOT at CWD. Mid level wins.
+	files := map[string]string{
+		"/a/b/.aql/config/index.aql": `export Config {env:"staging"}`,
+		"/a/.aql/config/index.aql":   `export Config {env:"prod"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
+		`import "config"`, `Config env .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'staging'")
+}
+
+// --- Bare module: error cases ---
+
+func TestBareModuleNotFoundDeep(t *testing.T) {
+	// No .aql/ directory anywhere in the hierarchy.
+	_, err := runModuleStepsWithCwd(t, "/a/b/c/d/e/f/g", map[string]string{}, []string{
+		`import "nonexistent"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for missing module")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected not found error, got: %v", err)
+	}
+}
+
+func TestBareModuleWrongNameNotFound(t *testing.T) {
+	// "bar" exists but we ask for "baz".
+	files := map[string]string{
+		"/project/.aql/bar/index.aql": `export Bar {x:1}`,
+	}
+	_, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "baz"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for wrong module name")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected not found error, got: %v", err)
+	}
+}
+
+// --- Bare module: mixed with file path imports ---
+
+func TestBareModuleAndFilePathImportCoexist(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/bare/index.aql": `export Bare {src:"bare"}`,
+		"/project/local.aql":           `export Local {src:"file"}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "bare"`,
+		`import "./local.aql"`,
+		`Bare src .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'bare'")
+}
+
+// --- Bare module: rename variants ---
+
+func TestBareModuleWithMultiRename(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/lib/index.aql": `export A {x:1}
+export B {y:2}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import [[A X][B Y]] "lib"`,
+		`X x .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestBareModuleWithMultiRenameSecond(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/lib/index.aql": `export A {x:1}
+export B {y:2}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import [[A X][B Y]] "lib"`,
+		`Y y .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "2")
+}
+
+// --- Bare module: complex module content ---
+
+func TestBareModuleWithDefs(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/math/index.aql": `
+def pi 3
+def e 2
+export Math {pi:pi,e:e}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "math"`, `Math pi .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "3")
+}
+
+func TestBareModuleInternalDefsDoNotLeak(t *testing.T) {
+	files := map[string]string{
+		"/project/.aql/secret/index.aql": `
+def internal 42
+export Public {val:internal}`,
+	}
+	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
+		`import "secret"`, `Public val .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "42")
+}

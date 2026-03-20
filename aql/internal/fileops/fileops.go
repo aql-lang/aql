@@ -72,6 +72,7 @@ func NewDefault() FileOps {
 // MemFileOps is an in-memory implementation for testing.
 type MemFileOps struct {
 	Files map[string][]byte
+	Cwd   string // simulated working directory; defaults to "." if empty
 }
 
 func NewMem() *MemFileOps {
@@ -101,5 +102,12 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 }
 
 func (m *MemFileOps) ResolvePath(path string) (string, error) {
-	return filepath.Clean(path), nil
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	base := m.Cwd
+	if base == "" {
+		base = "."
+	}
+	return filepath.Clean(filepath.Join(base, path)), nil
 }
