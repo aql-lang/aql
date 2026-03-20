@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 )
 
 // registerModule registers the "module", "export", and "import" words.
@@ -46,10 +47,14 @@ func registerModule(r *Registry) {
 	}
 
 	// import: [string] -> [] or [value] — import from a file path.
-	// For .json/.jsonic files, parses the file and pushes the data value.
+	// The path must start with "/", "./" or "../".
+	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
+		if !isFilePath(path) {
+			return nil, fmt.Errorf("import: file path must start with /, ./ or ../ (got %q)", path)
+		}
 		if isDataFile(path) {
 			return loadDataFile(r, path)
 		}
@@ -64,6 +69,9 @@ func registerModule(r *Registry) {
 	// import: [list string] -> [] — import from file with renaming.
 	importFileRenameHandler := func(args []Value) ([]Value, error) {
 		path := args[1].AsString()
+		if !isFilePath(path) {
+			return nil, fmt.Errorf("import: file path must start with /, ./ or ../ (got %q)", path)
+		}
 		if isDataFile(path) {
 			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
 		}
@@ -178,31 +186,33 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	return desc, nil
 }
 
-// isDataFile returns true if the path has a .json or .jsonic extension.
-func isDataFile(path string) bool {
-	f := formatFromExt(path)
-	return f == "json" || f == "jsonic"
+// isFilePath returns true if the string looks like a file path
+// (starts with "/", "./", or "../").
+func isFilePath(path string) bool {
+	return strings.HasPrefix(path, "/") ||
+		strings.HasPrefix(path, "./") ||
+		strings.HasPrefix(path, "../")
 }
 
-// loadDataFile reads a .json or .jsonic file, parses it with jsonic,
-// and returns the result as an AQL data value on the stack.
+// isDataFile returns true if the path has a data file extension
+// (.json, .jsonic, .csv, .tsv).
+func isDataFile(path string) bool {
+	f := formatFromExt(path)
+	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
+}
+
+// loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns
+// the result as an AQL value on the stack. Uses doRead so CSV/TSV files
+// get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
-	data, err := parent.FileOps.ReadFile(path)
+	format := formatFromExt(path)
+	if format == "" {
+		return nil, fmt.Errorf("import: unknown format for %s", path)
+	}
+	result, err := doRead(parent, path, "utf8", format, "lf")
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
-
-	format := formatFromExt(path)
-	f, ok := parent.Formats[format]
-	if !ok {
-		return nil, fmt.Errorf("import: unknown format: %s", format)
-	}
-
-	result, err := f.Decode(string(data))
-	if err != nil {
-		return nil, fmt.Errorf("import: %s: %w", path, err)
-	}
-
 	return result, nil
 }
 

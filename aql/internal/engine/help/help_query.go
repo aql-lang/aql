@@ -179,18 +179,23 @@ func init() {
 
 	register(&Entry{
 		Word:    "import",
-		Summary: "Import a module from a file.",
+		Summary: "Import a module or data file.",
 		Signatures: []string{
 			"[string] -> []",
 			"[list string] -> []",
 		},
-		Description: "Loads and executes a .aql file as a module, making exported words available. " +
-			"Use a list argument to rename imports.",
+		Description: "Loads a file as a module or data. File paths must start with /, ./ or ../. " +
+			"For .aql files, executes as an isolated module and installs exports. " +
+			"For .json/.jsonic files, pushes parsed data onto the stack. " +
+			"For .csv/.tsv files, loads data as a table. " +
+			"Use a list argument to rename imports (not supported for data files).",
 		Examples: []string{
-			`"utils.aql" import`,
-			`"helpers.aql" import`,
-			`[Orig Renamed] "utils.aql" import`,
-			`[[A AA] [B BB]] "data.aql" import`,
+			`"./utils.aql" import`,
+			`"./helpers.aql" import`,
+			`[Orig Renamed] "./utils.aql" import`,
+			`[[A AA] [B BB]] "./data.aql" import`,
+			`"./data.csv" import`,
+			`"./config.json" import`,
 		},
 	})
 }

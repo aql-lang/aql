@@ -22,15 +22,15 @@ import (
 func TestChainImportMultipleFiles(t *testing.T) {
 	// Import two leaf modules and combine their exports at the top level.
 	files := map[string]string{
-		"math.aql":    `def pi 3
+		"math.aql": `def pi 3
 export Math {pi:pi}`,
 		"strings.aql": `def hello "world"
 export Strings {hello:hello}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
-		`import "strings.aql"`,
+		`import "./math.aql"`,
+		`import "./strings.aql"`,
 		`Math pi .`,
 	})
 	if err != nil {
@@ -41,15 +41,15 @@ export Strings {hello:hello}`,
 
 func TestChainImportMultipleFilesSecond(t *testing.T) {
 	files := map[string]string{
-		"math.aql":    `def pi 3
+		"math.aql": `def pi 3
 export Math {pi:pi}`,
 		"strings.aql": `def hello "world"
 export Strings {hello:hello}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
-		`import "strings.aql"`,
+		`import "./math.aql"`,
+		`import "./strings.aql"`,
 		`Strings hello .`,
 	})
 	if err != nil {
@@ -66,9 +66,9 @@ func TestChainThreeFileImports(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "a.aql"`,
-		`import "b.aql"`,
-		`import "c.aql"`,
+		`import "./a.aql"`,
+		`import "./b.aql"`,
+		`import "./c.aql"`,
 		`C z .`,
 	})
 	if err != nil {
@@ -86,8 +86,8 @@ export A {x:1}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "a.aql"`,
-		`import "b.aql"`,
+		`import "./a.aql"`,
+		`import "./b.aql"`,
 		`B y .`,
 	})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestChainIsolationFromParent(t *testing.T) {
 
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`M val .`,
 	})
 	if err != nil {
@@ -126,7 +126,7 @@ export M {x:1}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`internal`,
 	})
 	if err != nil {
@@ -145,13 +145,13 @@ func TestBarrelFileLiteralReExport(t *testing.T) {
 	files := map[string]string{
 		"a.aql": `export A {x:1}`,
 		"b.aql": `export B {y:2}`,
-		"barrel.aql": `import "a.aql"
-import "b.aql"
+		"barrel.aql": `import "./a.aql"
+import "./b.aql"
 export Barrel {label:"combined",count:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "barrel.aql"`,
+		`import "./barrel.aql"`,
 		`Barrel label .`,
 	})
 	if err != nil {
@@ -164,13 +164,13 @@ func TestBarrelFileCount(t *testing.T) {
 	files := map[string]string{
 		"a.aql": `export A {x:1}`,
 		"b.aql": `export B {y:2}`,
-		"barrel.aql": `import "a.aql"
-import "b.aql"
+		"barrel.aql": `import "./a.aql"
+import "./b.aql"
 export Barrel {label:"combined",count:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "barrel.aql"`,
+		`import "./barrel.aql"`,
 		`Barrel count .`,
 	})
 	if err != nil {
@@ -189,8 +189,8 @@ export IO {mode:mode}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
-		`import "io.aql"`,
+		`import "./math.aql"`,
+		`import "./io.aql"`,
 		`Math`,
 	})
 	if err != nil {
@@ -208,8 +208,8 @@ export IO {mode:mode}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
-		`import "io.aql"`,
+		`import "./math.aql"`,
+		`import "./io.aql"`,
 		`IO mode .`,
 	})
 	if err != nil {
@@ -224,7 +224,7 @@ func TestBarrelRenameOnImport(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [Impl Public] "impl.aql"`,
+		`import [Impl Public] "./impl.aql"`,
 		`Public x .`,
 	})
 	if err != nil {
@@ -240,7 +240,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A Alpha] [B Beta]] "multi.aql"`,
+		`import [[A Alpha] [B Beta]] "./multi.aql"`,
 		`Alpha x .`,
 	})
 	if err != nil {
@@ -256,7 +256,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A Alpha] [B Beta]] "multi.aql"`,
+		`import [[A Alpha] [B Beta]] "./multi.aql"`,
 		`Beta y .`,
 	})
 	if err != nil {
@@ -277,7 +277,7 @@ export Public {visible:1}`,
 
 	// Only import Public, rename it.
 	result, err := runModuleSteps(t, files, []string{
-		`import [Public API] "api.aql"`,
+		`import [Public API] "./api.aql"`,
 		`API visible .`,
 	})
 	if err != nil {
@@ -294,14 +294,14 @@ func TestDiamondTopLevel(t *testing.T) {
 	// A and B both export, top level imports both.
 	files := map[string]string{
 		"shared.aql": `export Shared {val:7}`,
-		"a.aql":      `export A {x:1}`,
-		"b.aql":      `export B {y:2}`,
+		"a.aql": `export A {x:1}`,
+		"b.aql": `export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "shared.aql"`,
-		`import "a.aql"`,
-		`import "b.aql"`,
+		`import "./shared.aql"`,
+		`import "./a.aql"`,
+		`import "./b.aql"`,
 		`Shared val .`,
 	})
 	if err != nil {
@@ -318,8 +318,8 @@ func TestDiamondTopLevelAllAccessible(t *testing.T) {
 
 	// Both exports accessible after importing both files.
 	result, err := runModuleSteps(t, files, []string{
-		`import "a.aql"`,
-		`import "b.aql"`,
+		`import "./a.aql"`,
+		`import "./b.aql"`,
 		`A x .`,
 	})
 	if err != nil {
@@ -339,7 +339,7 @@ func TestInlineModuleThenFileImport(t *testing.T) {
 
 	result, err := runModuleSteps(t, files, []string{
 		`import module [export Inline {x:1}]`,
-		`import "ext.aql"`,
+		`import "./ext.aql"`,
 		`Inline x .`,
 	})
 	if err != nil {
@@ -354,7 +354,7 @@ func TestFileImportThenInlineModule(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "ext.aql"`,
+		`import "./ext.aql"`,
 		`import module [export Inline {x:1}]`,
 		`Ext val .`,
 	})
@@ -371,7 +371,7 @@ func TestMixedInlineAndFileBothAccessible(t *testing.T) {
 
 	result, err := runModuleSteps(t, files, []string{
 		`import module [export Inline {x:1}]`,
-		`import "ext.aql"`,
+		`import "./ext.aql"`,
 		`Ext val .`,
 	})
 	if err != nil {
@@ -390,7 +390,7 @@ func TestFileExportWithStringName(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`MyExport x .`,
 	})
 	if err != nil {
@@ -416,7 +416,7 @@ func TestInlineModuleExportAtomName(t *testing.T) {
 
 func TestImportFileNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
-	mem.Files["mod.aql"] = []byte(`export M {x:1}`)
+	mem.Files["./mod.aql"] = []byte(`export M {x:1}`)
 
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
@@ -425,7 +425,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	reg.SetFileOps(mem)
 	// No ParseFunc.
 
-	vals, _ := parser.Parse(`import "mod.aql"`)
+	vals, _ := parser.Parse(`import "./mod.aql"`)
 	eng := engine.New(reg)
 	_, runErr := eng.Run(vals)
 	if runErr == nil {
@@ -438,7 +438,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 
 func TestImportFileRenameNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
-	mem.Files["mod.aql"] = []byte(`export M {x:1}`)
+	mem.Files["./mod.aql"] = []byte(`export M {x:1}`)
 
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
@@ -446,7 +446,7 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	}
 	reg.SetFileOps(mem)
 
-	vals, _ := parser.Parse(`import [M R] "mod.aql"`)
+	vals, _ := parser.Parse(`import [M R] "./mod.aql"`)
 	eng := engine.New(reg)
 	_, runErr := eng.Run(vals)
 	if runErr == nil {
@@ -462,7 +462,7 @@ func TestImportFileRuntimeError(t *testing.T) {
 		"bad.aql": `1 2 3 div 0`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import "bad.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import "./bad.aql"`})
 	if err == nil {
 		t.Fatal("expected runtime error")
 	}
@@ -473,14 +473,14 @@ func TestImportFileRenameRuntimeError(t *testing.T) {
 		"bad.aql": `1 div 0`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import [X Y] "bad.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import [X Y] "./bad.aql"`})
 	if err == nil {
 		t.Fatal("expected runtime error")
 	}
 }
 
 func TestImportFileRenameMissingFile(t *testing.T) {
-	_, err := runModuleSteps(t, map[string]string{}, []string{`import [X Y] "missing.aql"`})
+	_, err := runModuleSteps(t, map[string]string{}, []string{`import [X Y] "./missing.aql"`})
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -491,7 +491,7 @@ func TestImportFileRenameParseError(t *testing.T) {
 		"bad.aql": `((( oops`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import [X Y] "bad.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import [X Y] "./bad.aql"`})
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -502,7 +502,7 @@ func TestImportFileMultiRenameNotFound(t *testing.T) {
 		"mod.aql": `export A {x:1}`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import [[Missing Alias]] "mod.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import [[Missing Alias]] "./mod.aql"`})
 	if err == nil {
 		t.Fatal("expected 'not found' error")
 	}
@@ -577,12 +577,12 @@ func TestImportInlineMultiRenameBadPairLength(t *testing.T) {
 
 func TestChainErrorInInnerFile(t *testing.T) {
 	files := map[string]string{
-		"bad.aql":    `1 div 0`,
-		"middle.aql": `import "bad.aql"
+		"bad.aql": `1 div 0`,
+		"middle.aql": `import "./bad.aql"
 export M {x:1}`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import "middle.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import "./middle.aql"`})
 	if err == nil {
 		t.Fatal("expected error from inner file")
 	}
@@ -590,11 +590,11 @@ export M {x:1}`,
 
 func TestChainMissingInnerFile(t *testing.T) {
 	files := map[string]string{
-		"outer.aql": `import "nonexistent.aql"
+		"outer.aql": `import "./nonexistent.aql"
 export M {x:1}`,
 	}
 
-	_, err := runModuleSteps(t, files, []string{`import "outer.aql"`})
+	_, err := runModuleSteps(t, files, []string{`import "./outer.aql"`})
 	if err == nil {
 		t.Fatal("expected error for missing inner file")
 	}
@@ -610,7 +610,7 @@ func TestExportWithBooleanValue(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "lit.aql"`,
+		`import "./lit.aql"`,
 		`Lit b .`,
 	})
 	if err != nil {
@@ -625,7 +625,7 @@ func TestExportWithListValue(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "lit.aql"`,
+		`import "./lit.aql"`,
 		`Lit items .`,
 	})
 	if err != nil {
@@ -642,7 +642,7 @@ func TestExportWithNestedMap(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`M nested .`,
 	})
 	if err != nil {
@@ -661,8 +661,8 @@ func TestImportFileTwice(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "mod.aql"`,
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
+		`import "./mod.aql"`,
 		`M x .`,
 	})
 	if err != nil {
@@ -681,7 +681,7 @@ func TestImportFileWithPath(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "lib/math.aql"`,
+		`import "./lib/math.aql"`,
 		`Math pi .`,
 	})
 	if err != nil {
@@ -700,7 +700,7 @@ func TestImportFileNoExports(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "empty.aql"`,
+		`import "./empty.aql"`,
 		`x`,
 	})
 	if err != nil {
@@ -859,11 +859,11 @@ func TestLargeBarrel(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "m1.aql"`,
-		`import "m2.aql"`,
-		`import "m3.aql"`,
-		`import "m4.aql"`,
-		`import "m5.aql"`,
+		`import "./m1.aql"`,
+		`import "./m2.aql"`,
+		`import "./m3.aql"`,
+		`import "./m4.aql"`,
+		`import "./m5.aql"`,
 		`M3 v .`,
 	})
 	if err != nil {
@@ -882,11 +882,11 @@ func TestLargeBarrelLastModule(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "m1.aql"`,
-		`import "m2.aql"`,
-		`import "m3.aql"`,
-		`import "m4.aql"`,
-		`import "m5.aql"`,
+		`import "./m1.aql"`,
+		`import "./m2.aql"`,
+		`import "./m3.aql"`,
+		`import "./m4.aql"`,
+		`import "./m5.aql"`,
 		`M5 v .`,
 	})
 	if err != nil {
@@ -905,7 +905,7 @@ func TestFileOnlyScalarExports(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "consts.aql"`,
+		`import "./consts.aql"`,
 		`Consts phi .`,
 	})
 	if err != nil {

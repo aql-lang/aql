@@ -48,7 +48,7 @@ func TestImportFileBasic(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "config.aql"`,
+		`import "./config.aql"`,
 		`Config version .`,
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func TestImportFileStringValue(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "config.aql"`,
+		`import "./config.aql"`,
 		`Config name .`,
 	})
 	if err != nil {
@@ -81,7 +81,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "data.aql"`,
+		`import "./data.aql"`,
 		`A x .`,
 	})
 	if err != nil {
@@ -97,7 +97,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "data.aql"`,
+		`import "./data.aql"`,
 		`B y .`,
 	})
 	if err != nil {
@@ -114,7 +114,7 @@ func TestImportFileRename(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [Orig Renamed] "data.aql"`,
+		`import [Orig Renamed] "./data.aql"`,
 		`Renamed x .`,
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A AA] [B BB]] "data.aql"`,
+		`import [[A AA] [B BB]] "./data.aql"`,
 		`AA x .`,
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ export B {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A AA] [B BB]] "data.aql"`,
+		`import [[A AA] [B BB]] "./data.aql"`,
 		`BB y .`,
 	})
 	if err != nil {
@@ -165,7 +165,7 @@ export M {x:1}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`secret`,
 	})
 	if err != nil {
@@ -183,7 +183,7 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
-		`import "mod.aql"`,
+		`import "./mod.aql"`,
 		`M val .`,
 	})
 	if err != nil {
@@ -205,7 +205,7 @@ export Lib {myval:myval}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "lib.aql"`,
+		`import "./lib.aql"`,
 		`Lib myval .`,
 	})
 	if err != nil {
@@ -222,7 +222,7 @@ func TestImportFileMapExport(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "comp.aql"`,
+		`import "./comp.aql"`,
 		`Vals`,
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func TestImportFileNoModuleWord(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "simple.aql"`,
+		`import "./simple.aql"`,
 		`Simple c .`,
 	})
 	if err != nil {
@@ -257,7 +257,7 @@ export Fns {inc:inc}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "fns.aql"`,
+		`import "./fns.aql"`,
 		`Fns inc .`,
 	})
 	if err != nil {
@@ -273,7 +273,7 @@ export Fns {inc:inc}`,
 
 func TestImportFileMissing(t *testing.T) {
 	_, err := runModuleSteps(t, map[string]string{}, []string{
-		`import "missing.aql"`,
+		`import "./missing.aql"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for missing file")
@@ -288,7 +288,7 @@ func TestImportFileParseError(t *testing.T) {
 		"bad.aql": `((( invalid`,
 	}
 	_, err := runModuleSteps(t, files, []string{
-		`import "bad.aql"`,
+		`import "./bad.aql"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for parse failure")
@@ -300,7 +300,7 @@ func TestImportFileRenameNotFound(t *testing.T) {
 		"mod.aql": `export A {x:1}`,
 	}
 	_, err := runModuleSteps(t, files, []string{
-		`import [NoSuch Renamed] "mod.aql"`,
+		`import [NoSuch Renamed] "./mod.aql"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for missing export in rename")
@@ -320,7 +320,7 @@ export Math {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
+		`import "./math.aql"`,
 		`Math pi .`,
 	})
 	if err != nil {
@@ -337,7 +337,7 @@ export Math {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "math.aql"`,
+		`import "./math.aql"`,
 		`Math e .`,
 	})
 	if err != nil {
@@ -354,7 +354,7 @@ func TestImportJSONFile(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "data.json"`,
+		`import "./data.json"`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestImportJSONFileAccess(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "data.json" name .`,
+		`import "./data.json" name .`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -385,7 +385,7 @@ func TestImportJSONFileList(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "items.json"`,
+		`import "./items.json"`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestImportJsonicFile(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "config.jsonic" name .`,
+		`import "./config.jsonic" name .`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -416,7 +416,7 @@ func TestImportJSONFileNested(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "nested.json" planet . name .`,
+		`import "./nested.json" planet . name .`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -430,9 +430,82 @@ func TestImportJSONFileRenameError(t *testing.T) {
 	}
 
 	_, err := runModuleSteps(t, files, []string{
-		`import [A B] "data.json"`,
+		`import [A B] "./data.json"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for rename on data file")
+	}
+}
+
+// --- CSV / TSV data file import ---
+
+func TestImportCSVFile(t *testing.T) {
+	files := map[string]string{
+		"people.csv": "name,age\nAlice,30\nBob,25\n",
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "./people.csv"`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestImportTSVFile(t *testing.T) {
+	files := map[string]string{
+		"data.tsv": "x\ty\n1\t2\n3\t4\n",
+	}
+
+	result, err := runModuleSteps(t, files, []string{
+		`import "./data.tsv"`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestImportCSVFileRenameError(t *testing.T) {
+	files := map[string]string{
+		"data.csv": "x,y\n1,2\n",
+	}
+
+	_, err := runModuleSteps(t, files, []string{
+		`import [A B] "./data.csv"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for rename on data file")
+	}
+}
+
+// --- Path validation ---
+
+func TestImportBarePathError(t *testing.T) {
+	_, err := runModuleSteps(t, map[string]string{}, []string{
+		`import "config.aql"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for bare file path")
+	}
+	if !strings.Contains(err.Error(), "must start with") {
+		t.Errorf("expected path validation error, got: %v", err)
+	}
+}
+
+func TestImportBarePathRenameError(t *testing.T) {
+	_, err := runModuleSteps(t, map[string]string{}, []string{
+		`import [A B] "config.aql"`,
+	})
+	if err == nil {
+		t.Fatal("expected error for bare file path")
+	}
+	if !strings.Contains(err.Error(), "must start with") {
+		t.Errorf("expected path validation error, got: %v", err)
 	}
 }

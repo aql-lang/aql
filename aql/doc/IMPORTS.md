@@ -37,31 +37,42 @@ Installs only the listed exports, mapping each `from` name to a `to` name.
 ### 3. Import from a file
 
 ```
-"utils.aql" import
+"./utils.aql" import
 ```
 
-Reads the file, parses it as AQL, and runs it in an **isolated module
-engine**. All `export`ed names become available as `def`s.
+File paths must start with `/`, `./`, or `../`. Bare filenames like
+`"utils.aql"` are rejected.
 
-For `.json` and `.jsonic` files the behavior is different: the file is parsed
-as data and the resulting value (map or list) is pushed directly onto the
-stack.
+For `.aql` files, reads the file, parses it as AQL, and runs it in an
+**isolated module engine**. All `export`ed names become available as `def`s.
+
+For data files, the content is parsed and pushed directly onto the stack:
+
+| Extension | Behavior |
+|---|---|
+| `.json` | Parsed as JSON, pushes map or list |
+| `.jsonic` | Parsed as jsonic, pushes map or list |
+| `.csv` | Loaded as a table (same as `read`) |
+| `.tsv` | Loaded as a table (same as `read`) |
 
 ```aql
-"config.aql" import       # installs exports as defs
-"data.json" import         # pushes a map/list onto the stack
-"config.jsonic" import     # same — pushes data value
+"./config.aql" import       # installs exports as defs
+"./data.json" import         # pushes a map/list onto the stack
+"./config.jsonic" import     # same — pushes data value
+"./people.csv" import        # loads CSV as a table
+"./data.tsv" import          # loads TSV as a table
 ```
 
 ### 4. Import from a file with renaming
 
 ```
-[Orig Renamed] "utils.aql" import
-[[A AA] [B BB]] "data.aql" import
+[Orig Renamed] "./utils.aql" import
+[[A AA] [B BB]] "./data.aql" import
 ```
 
 Same as file import, but only the listed exports are installed and each is
-renamed. Renaming is **not supported** for data files (`.json`/`.jsonic`).
+renamed. Renaming is **not supported** for data files
+(`.json`/`.jsonic`/`.csv`/`.tsv`).
 
 ## Isolation
 
@@ -77,7 +88,7 @@ def secret 42
 export Lib {x:1}
 
 # main session
-"lib.aql" import
+"./lib.aql" import
 Lib x .       # → 1
 secret        # → atom 'secret', not 42
 ```
@@ -95,22 +106,24 @@ def e 2
 export Math {pi:pi, e:e}
 
 # usage
-"math.aql" import
+"./math.aql" import
 Math pi .     # → 3
 Math e .      # → 2
 ```
 
 ## Data File Import
 
-`.json` and `.jsonic` files are treated as pure data — no module execution:
+Data files are treated as pure data — no module execution:
 
 ```aql
-"data.json" import          # pushes parsed map/list
-name .                       # access a field
+"./data.json" import          # pushes parsed map/list
+name .                         # access a field
 
-"nested.json" import
-planet . name .              # drill into nested structure
+"./people.csv" import         # loads as table
 ```
+
+CSV/TSV imports use the same `doRead` path as the `read` word, so tables are
+stored in SQLite when available.
 
 ## Implementation
 
@@ -120,8 +133,10 @@ The implementation lives in `builtin_module_module.go`:
 |---|---|
 | `registerModule()` | Registers `module`, `export`, and `import` words |
 | `runModuleBody()` | Creates isolated engine, runs module body, collects exports |
+| `isFilePath()` | Validates file path starts with `/`, `./`, or `../` |
+| `isDataFile()` | Checks extension for data files (json, jsonic, csv, tsv) |
 | `installExports()` | Installs exports as defs (with optional name filter) |
 | `installRenamedExports()` | Handles rename lists (single pair or list of pairs) |
 | `loadFileModule()` | Reads file, parses as AQL, runs as module |
-| `loadDataFile()` | Reads `.json`/`.jsonic` file, decodes to stack value |
+| `loadDataFile()` | Reads data file via `doRead` (same path as `read` word) |
 | `resolveModuleExport()` | Resolves export values through module def stacks |
