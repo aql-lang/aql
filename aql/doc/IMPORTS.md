@@ -1,127 +1,127 @@
-# AQL Import Structure
+# The `import` Word
 
-This document explains how Go imports are organized across the AQL codebase.
+The `import` word brings external definitions into the current AQL engine.
+It is registered in `internal/engine/builtin_module_module.go` alongside the
+related `module` and `export` words.
 
-## Module Identity
+## Signatures
 
-The Go module is `github.com/metsitaba/voxgig-exp/aql` (defined in `go.mod`).
-All internal packages live under `aql/internal/` and are only visible within
-the module.
+### 1. Import all exports from a module descriptor
 
-## External Dependencies
+```
+module-desc import
+```
 
-| Dependency | Purpose |
+Takes a module descriptor (produced by the `module` word) and installs every
+export as a `def` in the current scope.
+
+```aql
+def helpers [
+  def greet ["hello"]
+  export Greet {greet:greet}
+] module
+
+helpers import
+Greet greet .       # → 'hello'
+```
+
+### 2. Import with renaming from a module descriptor
+
+```
+[from to] module-desc import            # single rename
+[[from1 to1] [from2 to2]] module-desc import  # multiple renames
+```
+
+Installs only the listed exports, mapping each `from` name to a `to` name.
+
+### 3. Import from a file
+
+```
+"utils.aql" import
+```
+
+Reads the file, parses it as AQL, and runs it in an **isolated module
+engine**. All `export`ed names become available as `def`s.
+
+For `.json` and `.jsonic` files the behavior is different: the file is parsed
+as data and the resulting value (map or list) is pushed directly onto the
+stack.
+
+```aql
+"config.aql" import       # installs exports as defs
+"data.json" import         # pushes a map/list onto the stack
+"config.jsonic" import     # same — pushes data value
+```
+
+### 4. Import from a file with renaming
+
+```
+[Orig Renamed] "utils.aql" import
+[[A AA] [B BB]] "data.aql" import
+```
+
+Same as file import, but only the listed exports are installed and each is
+renamed. Renaming is **not supported** for data files (`.json`/`.jsonic`).
+
+## Isolation
+
+File imports run in a completely fresh engine:
+
+- Internal `def`s inside the imported file do **not** leak into the parent.
+- Parent `def`s are **not** visible inside the file's module.
+- Only names declared with `export` are accessible after import.
+
+```aql
+# lib.aql
+def secret 42
+export Lib {x:1}
+
+# main session
+"lib.aql" import
+Lib x .       # → 1
+secret        # → atom 'secret', not 42
+```
+
+## Export Resolution
+
+When a module runs `export Foo {val:mydef}`, each value in the export map is
+resolved through the module's def stacks **at export time**. So if `mydef`
+was defined as `42`, the export map stores the value `42`, not the name.
+
+```aql
+# math.aql
+def pi 3
+def e 2
+export Math {pi:pi, e:e}
+
+# usage
+"math.aql" import
+Math pi .     # → 3
+Math e .      # → 2
+```
+
+## Data File Import
+
+`.json` and `.jsonic` files are treated as pure data — no module execution:
+
+```aql
+"data.json" import          # pushes parsed map/list
+name .                       # access a field
+
+"nested.json" import
+planet . name .              # drill into nested structure
+```
+
+## Implementation
+
+The implementation lives in `builtin_module_module.go`:
+
+| Function | Role |
 |---|---|
-| `github.com/jsonicjs/jsonic/go` | Tokenization and structural parsing (the real lexer) |
-| `github.com/jsonicjs/csv/go` | CSV format support |
-| `github.com/chzyer/readline` | Interactive REPL line editing |
-| `modernc.org/sqlite` | SQLite database access (pure Go) |
-| `voxgiguniversalsdk` | Voxgig Universal SDK for API operations |
-| `github.com/voxgig/struct` | Deep cloning and structural utilities |
-| `golang.org/x/text` | Unicode/text processing |
-
-### Replace Directives
-
-Two `replace` directives in `go.mod` remap import paths:
-
-```
-replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
-replace voxgiguniversalsdk v0.1.1 => github.com/voxgig/udk/go v0.1.1
-```
-
-These exist because the upstream repos publish Go modules in a `/go`
-subdirectory. The replace directives let the code import the shorter path
-while Go fetches from the actual submodule location.
-
-## Internal Package Graph
-
-```
-cmd/aql/main.go
-├── aql (public API)
-│   ├── internal/engine
-│   ├── internal/parser
-│   ├── internal/native
-│   └── internal/fileops
-└── internal/repl
-
-internal/repl
-├── internal/engine
-├── internal/engine/help
-├── internal/parser
-└── internal/native
-
-internal/parser
-├── internal/engine        (converts tokens → engine.Value)
-├── internal/ast           (stub, legacy)
-├── internal/lexer         (stub, legacy)
-└── internal/token         (stub, legacy)
-
-internal/native
-└── internal/engine        (only dependency — defines all builtin words)
-
-internal/engine
-└── internal/fileops       (file system abstraction)
-
-internal/fileops           (leaf — no internal imports)
-internal/object            (leaf — legacy, unused in main flow)
-internal/evaluator         (legacy tree-walker, imports ast + object)
-```
-
-## Package Roles
-
-### Active packages (used in the main execution path)
-
-**`aql` (root package, `aql.go`)** — Public API surface. Re-exports types
-(`Type`, `Value`, `Signature`, `Format`, `FileOps`) from internal packages so
-consumers don't need to reach into `internal/`. Provides `New()`, `Run()`,
-`Register()`, and `RegisterPrefixOnly()`.
-
-**`internal/engine`** — Core stack machine: the registry of words, type
-system, value representation, signature matching, and execution loop. This is
-the hub that most other packages depend on. Contains ~70 builtin words
-organized in subdirectory files (math, string, boolean, control flow, etc.)
-and a `help/` subdirectory for documentation text.
-
-**`internal/parser`** — Converts AQL source text into `[]engine.Value` using
-the jsonic library. Handles two semantic contexts: *word context* (top level,
-unquoted text = callable words) and *data context* (inside maps/lists,
-unquoted text = strings). See `parse.go` for the main logic.
-
-**`internal/native`** — Registers additional builtin words that need external
-dependencies (HTTP fetch, deep clone via voxgig/struct, jsonic operations).
-Every file in this package imports only `internal/engine`.
-
-**`internal/repl`** — Interactive shell. Orchestrates engine, parser, and
-native packages. Uses `readline` for line editing and `engine/help` for the
-help system.
-
-**`internal/fileops`** — Minimal interface (`FileOps`) abstracting file
-read/write. Has zero internal dependencies. The engine uses this so tests can
-inject an in-memory filesystem (`MemFileOps`).
-
-### Legacy/stub packages (not in the active execution path)
-
-**`internal/lexer`**, **`internal/token`**, **`internal/ast`** — Stubs from an
-earlier hand-written lexer/parser. The real parsing uses jsonic. The parser
-still imports these for compatibility but they are not doing meaningful work.
-
-**`internal/evaluator`**, **`internal/object`** — A classical tree-walking
-interpreter pattern. Not integrated into the stack machine engine. These are
-unused in the actual AQL execution flow.
-
-## Key Import Patterns
-
-1. **Hub-and-spoke**: `engine` is the central hub. Almost every active package
-   imports it. Nothing imports `native` or `repl` except the entry points.
-
-2. **No circular imports**: The dependency graph is a DAG. `engine` never
-   imports `parser` or `native` — instead, the top-level wiring in `aql.go`
-   calls `parser.Parse` and `native.Register` to connect them.
-
-3. **Public API re-exports**: `aql.go` uses Go type aliases (`type Type =
-   engine.Type`) and package-level `var` assignments (`var NewType =
-   engine.NewType`) to expose internal types without breaking encapsulation.
-
-4. **Replace directives for submodules**: External Voxgig dependencies use
-   `replace` in `go.mod` to map short import paths to their actual `/go`
-   submodule locations.
+| `registerModule()` | Registers `module`, `export`, and `import` words |
+| `runModuleBody()` | Creates isolated engine, runs module body, collects exports |
+| `installExports()` | Installs exports as defs (with optional name filter) |
+| `installRenamedExports()` | Handles rename lists (single pair or list of pairs) |
+| `loadFileModule()` | Reads file, parses as AQL, runs as module |
+| `loadDataFile()` | Reads `.json`/`.jsonic` file, decodes to stack value |
+| `resolveModuleExport()` | Resolves export values through module def stacks |
