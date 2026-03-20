@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,6 +22,10 @@ import (
 //   - [[atom atom] module-desc]        — rename single export (from to)
 //   - [[:pairs...] module-desc]        — rename multiple exports
 //   - [atom module-desc]               — rename single export to new name
+//
+// Bare module names (strings without /, ./, ../ prefix) are resolved by
+// searching for .aql/<name>/index.aql starting from the working directory
+// and walking up parent directories (CommonJS-style resolution).
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.Register("module", Signature{
@@ -53,14 +58,24 @@ func registerModule(r *Registry) {
 		return nil, installSingleRename(r, desc, newName)
 	}
 
-	// import: [string] -> [] or [value] — import from a file path.
-	// The path must start with "/", "./" or "../".
+	// import: [string] -> [] or [value] — import from a file path or bare module name.
+	// File paths start with "/", "./" or "../".
+	// Bare names (e.g. "foo") resolve via .aql/foo/index.aql walking up directories.
 	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
 		if !isFilePath(path) {
-			return nil, fmt.Errorf("import: file path must start with /, ./ or ../ (got %q)", path)
+			resolved, err := resolveBareModule(r, path)
+			if err != nil {
+				return nil, err
+			}
+			desc, err := loadFileModule(r, resolved)
+			if err != nil {
+				return nil, err
+			}
+			installExports(r, desc, nil)
+			return nil, nil
 		}
 		if isDataFile(path) {
 			return loadDataFile(r, path)
@@ -73,11 +88,19 @@ func registerModule(r *Registry) {
 		return nil, nil
 	}
 
-	// import: [list string] -> [] — import from file with renaming.
+	// import: [list string] -> [] — import from file or bare module with renaming.
 	importFileRenameHandler := func(args []Value) ([]Value, error) {
 		path := args[1].AsString()
 		if !isFilePath(path) {
-			return nil, fmt.Errorf("import: file path must start with /, ./ or ../ (got %q)", path)
+			resolved, err := resolveBareModule(r, path)
+			if err != nil {
+				return nil, err
+			}
+			desc, err := loadFileModule(r, resolved)
+			if err != nil {
+				return nil, err
+			}
+			return nil, installRenamedExports(r, desc, args[0].AsList())
 		}
 		if isDataFile(path) {
 			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
@@ -206,6 +229,30 @@ func isFilePath(path string) bool {
 func isDataFile(path string) bool {
 	f := formatFromExt(path)
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
+}
+
+// resolveBareModule resolves a bare module name (e.g. "foo") by searching for
+// .aql/foo/index.aql starting from the current working directory and walking
+// up parent directories, following the CommonJS node_modules resolution pattern.
+func resolveBareModule(r *Registry, name string) (string, error) {
+	startDir, err := r.FileOps.ResolvePath(".")
+	if err != nil {
+		return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
+	}
+
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, ".aql", name, "index.aql")
+		if _, err := r.FileOps.ReadFile(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("import: module %q not found (searched .aql/%s/index.aql from %s to /)", name, name, startDir)
 }
 
 // loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns

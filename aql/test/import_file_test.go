@@ -486,26 +486,85 @@ func TestImportCSVFileRenameError(t *testing.T) {
 
 // --- Path validation ---
 
-func TestImportBarePathError(t *testing.T) {
+func TestImportBareModuleNotFoundError(t *testing.T) {
 	_, err := runModuleSteps(t, map[string]string{}, []string{
-		`import "config.aql"`,
+		`import "config"`,
 	})
 	if err == nil {
-		t.Fatal("expected error for bare file path")
+		t.Fatal("expected error for missing bare module")
 	}
-	if !strings.Contains(err.Error(), "must start with") {
-		t.Errorf("expected path validation error, got: %v", err)
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected module not found error, got: %v", err)
 	}
 }
 
-func TestImportBarePathRenameError(t *testing.T) {
+func TestImportBareModuleRenameNotFoundError(t *testing.T) {
 	_, err := runModuleSteps(t, map[string]string{}, []string{
-		`import [A B] "config.aql"`,
+		`import [A B] "config"`,
 	})
 	if err == nil {
-		t.Fatal("expected error for bare file path")
+		t.Fatal("expected error for missing bare module")
 	}
-	if !strings.Contains(err.Error(), "must start with") {
-		t.Errorf("expected path validation error, got: %v", err)
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected module not found error, got: %v", err)
 	}
+}
+
+// --- Bare module import (CommonJS-style .aql/ resolution) ---
+
+func TestImportBareModuleBasic(t *testing.T) {
+	files := map[string]string{
+		".aql/mylib/index.aql": `export Lib {version:1,name:"mylib"}`,
+	}
+	result, err := runModuleSteps(t, files, []string{
+		`import "mylib"`,
+		`Lib version .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestImportBareModuleStringField(t *testing.T) {
+	files := map[string]string{
+		".aql/mylib/index.aql": `export Lib {version:1,name:"mylib"}`,
+	}
+	result, err := runModuleSteps(t, files, []string{
+		`import "mylib"`,
+		`Lib name .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'mylib'")
+}
+
+func TestImportBareModuleWithRename(t *testing.T) {
+	files := map[string]string{
+		".aql/mylib/index.aql": `export Orig {val:42}`,
+	}
+	result, err := runModuleSteps(t, files, []string{
+		`import [Orig Renamed] "mylib"`,
+		`Renamed val .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "42")
+}
+
+func TestImportBareModuleMultipleExports(t *testing.T) {
+	files := map[string]string{
+		".aql/stuff/index.aql": `export A {x:1}
+export B {y:2}`,
+	}
+	result, err := runModuleSteps(t, files, []string{
+		`import "stuff"`,
+		`B y .`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "2")
 }
