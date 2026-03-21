@@ -317,16 +317,31 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
+// Any FnDef values inside export maps are additionally installed as
+// standalone callable words under their map key name.
 func installExports(r *Registry, desc ModuleDesc, names []string) {
 	if names == nil {
 		for name, exportMap := range desc.Exports {
 			installDef(r, name, NewMap(exportMap))
+			installFnDefsFromMap(r, exportMap)
 		}
 		return
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
 			installDef(r, name, NewMap(exportMap))
+			installFnDefsFromMap(r, exportMap)
+		}
+	}
+}
+
+// installFnDefsFromMap iterates an export map and installs any FnDef
+// values as standalone callable defs keyed by their map entry name.
+func installFnDefsFromMap(r *Registry, m *OrderedMap) {
+	for _, key := range m.Keys() {
+		val, _ := m.Get(key)
+		if val.VType.Equal(TFnDef) || val.VType.Equal(TFunction) {
+			installDef(r, key, val)
 		}
 	}
 }
@@ -351,6 +366,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
 			installDef(r, toName, NewMap(exportMap))
+			installFnDefsFromMap(r, exportMap)
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -364,6 +380,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
 		installDef(r, toName, NewMap(exportMap))
+		installFnDefsFromMap(r, exportMap)
 	}
 	return nil
 }
@@ -379,6 +396,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 	}
 	for _, exportMap := range desc.Exports {
 		installDef(r, newName, NewMap(exportMap))
+		installFnDefsFromMap(r, exportMap)
 	}
 	return nil
 }

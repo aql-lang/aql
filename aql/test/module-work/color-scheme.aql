@@ -1,0 +1,52 @@
+(import "./color.aql")
+
+"#E63946" make-color def accent1 ;
+"#F1FAEE" make-color def light1 ;
+"#A8DADC" make-color def mid1 ;
+"#457B9D" make-color def dark1 ;
+"#1D3557" make-color def deep1 ;
+
+"#264653" make-color def earth1 ;
+"#2A9D8F" make-color def earth2 ;
+"#E9C46A" make-color def earth3 ;
+"#F4A261" make-color def earth4 ;
+"#E76F51" make-color def earth5 ;
+
+"#FF006E" make-color def neon1 ;
+"#FB5607" make-color def neon2 ;
+"#FFBE0B" make-color def neon3 ;
+"#8338EC" make-color def neon4 ;
+"#3A86FF" make-color def neon5 ;
+
+do {
+  name: ["sunset"]
+  primary: [accent1]
+  secondary: [light1]
+  accent: [mid1]
+  dark: [dark1]
+  background: [deep1]
+} def sunset ;
+
+do {
+  name: ["ocean"]
+  primary: [earth1]
+  secondary: [earth2]
+  accent: [earth3]
+  dark: [earth4]
+  background: [earth5]
+} def ocean ;
+
+do {
+  name: ["neon"]
+  primary: [neon1]
+  secondary: [neon2]
+  accent: [neon3]
+  dark: [neon4]
+  background: [neon5]
+} def neon ;
+
+export Schemes {
+  sunset: sunset
+  ocean: ocean
+  neon: neon
+}

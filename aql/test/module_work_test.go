@@ -14,13 +14,13 @@ func moduleWorkDir(t *testing.T) string {
 	return abs
 }
 
-// --- Colour module: hex to RGB conversion ---
+// --- Color module: exported conversion functions ---
 
-func TestColourModuleRedRGB(t *testing.T) {
+func TestColorHex2rgbRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour red dot r dot`,
+		`(import "./color.aql")`,
+		`"#FF0000" hex2rgb r dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -28,35 +28,107 @@ func TestColourModuleRedRGB(t *testing.T) {
 	assertResult(t, result, "255")
 }
 
-func TestColourModuleRedHex(t *testing.T) {
+func TestColorHex2rgbComponents(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour red dot hex dot`,
+		`(import "./color.aql")`,
+		`"#FF8800" hex2rgb`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "'#FF0000'")
+	m := result[0].AsMap()
+	rv, _ := m.Get("r")
+	gv, _ := m.Get("g")
+	bv, _ := m.Get("b")
+	if rv.AsInteger() != 255 {
+		t.Errorf("r = %d, want 255", rv.AsInteger())
+	}
+	if gv.AsInteger() != 136 {
+		t.Errorf("g = %d, want 136", gv.AsInteger())
+	}
+	if bv.AsInteger() != 0 {
+		t.Errorf("b = %d, want 0", bv.AsInteger())
+	}
 }
 
-func TestColourModuleOrangeGreen(t *testing.T) {
+func TestColorRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour orange dot g dot`,
+		`(import "./color.aql")`,
+		`do {r:[255] g:[136] b:[0]} rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "128")
+	assertResult(t, result, "'#FF8800'")
 }
 
-func TestColourModuleBlueComponents(t *testing.T) {
+func TestColorHex2int(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour blue dot r dot`,
+		`(import "./color.aql")`,
+		`"FF" hex2int`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "255")
+}
+
+func TestColorInt2hex(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color.aql")`,
+		`255 int2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'FF'")
+}
+
+func TestColorMakeColor(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color.aql")`,
+		`"#FF8800" make-color hex dot`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#FF8800'")
+}
+
+func TestColorRoundTrip(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color.aql")`,
+		`"#A0B0C0" hex2rgb rgb2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#A0B0C0'")
+}
+
+func TestColorClamp(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color.aql")`,
+		`300 clamp`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "255")
+}
+
+func TestColorClampNegative(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color.aql")`,
+		`-10 clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -64,72 +136,12 @@ func TestColourModuleBlueComponents(t *testing.T) {
 	assertResult(t, result, "0")
 }
 
-func TestColourModuleBlueBlueChannel(t *testing.T) {
+// --- Color-scheme module: uses color.aql's exported functions ---
+
+func TestColorSchemeSunsetName(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour blue dot b dot`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "255")
-}
-
-func TestColourModuleBlackAllZero(t *testing.T) {
-	dir := moduleWorkDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour black dot r dot`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "0")
-}
-
-func TestColourModuleWhiteAllMax(t *testing.T) {
-	dir := moduleWorkDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour white dot r dot`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "255")
-}
-
-func TestColourModuleGreyMidpoint(t *testing.T) {
-	dir := moduleWorkDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour grey dot r dot`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "128")
-}
-
-func TestColourModulePurpleHex(t *testing.T) {
-	dir := moduleWorkDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour"`,
-		`Colour purple dot hex dot`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'#800080'")
-}
-
-// --- Colour-scheme module: generates schemes with hex and RGB ---
-
-func TestColourSchemeSunsetName(t *testing.T) {
-	dir := moduleWorkDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes sunset dot name dot`,
 	})
 	if err != nil {
@@ -138,10 +150,10 @@ func TestColourSchemeSunsetName(t *testing.T) {
 	assertResult(t, result, "'sunset'")
 }
 
-func TestColourSchemeSunsetPrimaryHex(t *testing.T) {
+func TestColorSchemeSunsetPrimaryHex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes sunset dot primary dot hex dot`,
 	})
 	if err != nil {
@@ -150,10 +162,10 @@ func TestColourSchemeSunsetPrimaryHex(t *testing.T) {
 	assertResult(t, result, "'#E63946'")
 }
 
-func TestColourSchemeSunsetPrimaryRed(t *testing.T) {
+func TestColorSchemeSunsetPrimaryRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes sunset dot primary dot r dot`,
 	})
 	if err != nil {
@@ -162,10 +174,10 @@ func TestColourSchemeSunsetPrimaryRed(t *testing.T) {
 	assertResult(t, result, "230")
 }
 
-func TestColourSchemeOceanPrimaryHex(t *testing.T) {
+func TestColorSchemeOceanPrimaryHex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes ocean dot primary dot hex dot`,
 	})
 	if err != nil {
@@ -174,10 +186,10 @@ func TestColourSchemeOceanPrimaryHex(t *testing.T) {
 	assertResult(t, result, "'#264653'")
 }
 
-func TestColourSchemeOceanAccentGreen(t *testing.T) {
+func TestColorSchemeOceanAccentGreen(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes ocean dot accent dot g dot`,
 	})
 	if err != nil {
@@ -186,10 +198,10 @@ func TestColourSchemeOceanAccentGreen(t *testing.T) {
 	assertResult(t, result, "196")
 }
 
-func TestColourSchemeNeonPrimaryHex(t *testing.T) {
+func TestColorSchemeNeonPrimaryHex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes neon dot primary dot hex dot`,
 	})
 	if err != nil {
@@ -198,10 +210,10 @@ func TestColourSchemeNeonPrimaryHex(t *testing.T) {
 	assertResult(t, result, "'#FF006E'")
 }
 
-func TestColourSchemeNeonDarkBlue(t *testing.T) {
+func TestColorSchemeNeonDarkBlue(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "colour-scheme"`,
+		`(import "./color-scheme.aql")`,
 		`Schemes neon dot dark dot b dot`,
 	})
 	if err != nil {
@@ -210,13 +222,11 @@ func TestColourSchemeNeonDarkBlue(t *testing.T) {
 	assertResult(t, result, "236")
 }
 
-func TestColourSchemeHasBothHexAndRGB(t *testing.T) {
-	// Verify that each colour in a scheme has both hex and RGB values.
+func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 	dir := moduleWorkDir(t)
 	for _, field := range []string{"primary", "secondary", "accent", "dark", "background"} {
-		// Check hex field exists (is a string starting with #)
 		result, err := runRealFileSteps(t, dir, []string{
-			`import "colour-scheme"`,
+			`(import "./color-scheme.aql")`,
 			`Schemes sunset dot ` + field + ` dot hex dot`,
 		})
 		if err != nil {
@@ -227,9 +237,8 @@ func TestColourSchemeHasBothHexAndRGB(t *testing.T) {
 			t.Errorf("sunset.%s.hex = %q, want #XXXXXX format", field, s)
 		}
 
-		// Check r field exists (is an integer 0-255)
 		result, err = runRealFileSteps(t, dir, []string{
-			`import "colour-scheme"`,
+			`(import "./color-scheme.aql")`,
 			`Schemes sunset dot ` + field + ` dot r dot`,
 		})
 		if err != nil {
