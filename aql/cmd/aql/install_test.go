@@ -214,3 +214,48 @@ func TestInstallNoArgs(t *testing.T) {
 		t.Errorf("expected usage error, got %q", stderr.String())
 	}
 }
+
+func TestInstallIdempotent(t *testing.T) {
+	_, srvURL, cleanup := setupInstallTest(t)
+	defer cleanup()
+
+	// First install.
+	var stdout, stderr bytes.Buffer
+	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("first install failed: %s", stderr.String())
+	}
+
+	// Snapshot files after first install.
+	firstAqlJsonic, _ := os.ReadFile("aql.jsonic")
+	firstAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
+	firstColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
+	firstColorJsonic, _ := os.ReadFile(filepath.Join(".aql", "color", "aql.jsonic"))
+
+	// Second install of the same module.
+	stdout.Reset()
+	stderr.Reset()
+	code = runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("second install failed: %s", stderr.String())
+	}
+
+	// Verify all files are identical.
+	secondAqlJsonic, _ := os.ReadFile("aql.jsonic")
+	secondAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
+	secondColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
+	secondColorJsonic, _ := os.ReadFile(filepath.Join(".aql", "color", "aql.jsonic"))
+
+	if string(firstAqlJsonic) != string(secondAqlJsonic) {
+		t.Errorf("aql.jsonic changed:\n  first:  %s\n  second: %s", firstAqlJsonic, secondAqlJsonic)
+	}
+	if string(firstAqlJSON) != string(secondAqlJSON) {
+		t.Errorf(".aql/aql.json changed")
+	}
+	if string(firstColorAql) != string(secondColorAql) {
+		t.Errorf(".aql/color/color.aql changed")
+	}
+	if string(firstColorJsonic) != string(secondColorJsonic) {
+		t.Errorf(".aql/color/aql.jsonic changed")
+	}
+}
