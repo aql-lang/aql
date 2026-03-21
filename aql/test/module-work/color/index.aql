@@ -14,7 +14,7 @@ def hex2rgb fn [[hex:String] [Map] [
 ]]
 
 def rgb2hex fn [[rgb:Map] [String] [
-  "#" add (rgb r dot int2hex) add (rgb g dot int2hex) add (rgb b dot int2hex)
+  "#" add (int2hex rgb.r) add (int2hex rgb.g) add (int2hex rgb.b)
 ]]
 
 def clamp fn [[n:Integer] [Integer] [
@@ -22,7 +22,7 @@ def clamp fn [[n:Integer] [Integer] [
 ]]
 
 def clamp-rgb fn [[rgb:Map] [Map] [
-  do {r:[rgb r dot clamp] g:[rgb g dot clamp] b:[rgb b dot clamp]}
+  do {r:[clamp rgb.r] g:[clamp rgb.g] b:[clamp rgb.b]}
 ]]
 
 def make-color fn [[hex:String] [Map] [
