@@ -1,0 +1,10 @@
+{
+  "files": [
+    "joiner.aql"
+  ],
+  "main": "joiner.aql",
+  "major": 0,
+  "minor": 4,
+  "name": "joiner",
+  "patch": 2
+}

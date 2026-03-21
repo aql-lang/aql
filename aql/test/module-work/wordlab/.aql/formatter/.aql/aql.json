@@ -1,0 +1,14 @@
+{
+  "deps": {
+    "bracket": "1.3.0",
+    "caser": "0.2.4"
+  },
+  "files": [
+    "formatter.aql"
+  ],
+  "main": "formatter.aql",
+  "major": 2,
+  "minor": 1,
+  "name": "formatter",
+  "patch": 1
+}

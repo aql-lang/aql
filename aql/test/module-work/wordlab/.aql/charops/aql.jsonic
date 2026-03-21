@@ -1,0 +1,6 @@
+name: charops
+main: charops.aql
+major: 2
+minor: 3
+patch: 1
+files: [charops.aql]

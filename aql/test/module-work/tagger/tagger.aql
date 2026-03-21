@@ -1,0 +1,5 @@
+(import "joiner")
+
+def tag fn [[s:String] [String] ["[" add (s Joiner.add-dot) add "]"]]
+
+export Tagger {tag: tag}

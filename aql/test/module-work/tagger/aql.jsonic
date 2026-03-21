@@ -1,0 +1,7 @@
+name: tagger
+main: tagger.aql
+major: 3
+minor: 0
+patch: 2
+files: [tagger.aql]
+deps: {joiner: 0.4.2}

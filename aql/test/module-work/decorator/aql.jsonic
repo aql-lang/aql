@@ -1,0 +1,7 @@
+name: decorator
+main: decorator.aql
+major: 0
+minor: 5
+patch: 3
+files: [decorator.aql]
+deps: {formatter: 2.1.1}

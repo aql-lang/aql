@@ -1,0 +1,7 @@
+name: styler
+main: styler.aql
+major: 1
+minor: 0
+patch: 7
+files: [styler.aql]
+deps: {decorator: 0.5.3}

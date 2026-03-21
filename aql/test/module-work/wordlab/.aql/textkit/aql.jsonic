@@ -1,0 +1,7 @@
+name: textkit
+main: textkit.aql
+major: 3
+minor: 2
+patch: 0
+files: [textkit.aql]
+deps: {styler: 1.0.7}

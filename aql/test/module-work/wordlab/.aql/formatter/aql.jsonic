@@ -1,0 +1,7 @@
+name: formatter
+main: formatter.aql
+major: 2
+minor: 1
+patch: 1
+files: [formatter.aql]
+deps: {caser: 0.2.4 bracket: 1.3.0}

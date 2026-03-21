@@ -1,0 +1,7 @@
+name: wrapper
+main: wrapper.aql
+major: 1
+minor: 1
+patch: 0
+files: [wrapper.aql]
+deps: {charops: 2.3.1}

@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "decorator": "0.5.3"
+  },
+  "files": [
+    "styler.aql"
+  ],
+  "main": "styler.aql",
+  "major": 1,
+  "minor": 0,
+  "name": "styler",
+  "patch": 7
+}

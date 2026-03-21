@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "styler": "1.0.7"
+  },
+  "files": [
+    "textkit.aql"
+  ],
+  "main": "textkit.aql",
+  "major": 3,
+  "minor": 2,
+  "name": "textkit",
+  "patch": 0
+}

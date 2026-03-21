@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "formatter": "2.1.1"
+  },
+  "files": [
+    "decorator.aql"
+  ],
+  "main": "decorator.aql",
+  "major": 0,
+  "minor": 5,
+  "name": "decorator",
+  "patch": 3
+}

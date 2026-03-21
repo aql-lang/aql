@@ -1,0 +1,21 @@
+{
+  "deps": {
+    "bracket": "1.3.0",
+    "caser": "0.2.4",
+    "charops": "2.3.1",
+    "decorator": "0.5.3",
+    "formatter": "2.1.1",
+    "joiner": "0.4.2",
+    "styler": "1.0.7",
+    "tagger": "3.0.2",
+    "textkit": "3.2.0",
+    "wrapper": "1.1.0"
+  },
+  "files": [
+    "index.aql"
+  ],
+  "major": 0,
+  "minor": 1,
+  "name": "wordlab",
+  "patch": 0
+}

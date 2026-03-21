@@ -259,3 +259,72 @@ func TestInstallIdempotent(t *testing.T) {
 		t.Errorf(".aql/color/aql.jsonic changed")
 	}
 }
+
+func TestInstallDeepChain(t *testing.T) {
+	// Install all 10 modules of the deep dependency chain into a fresh project.
+	regDir, _ := filepath.Abs(filepath.Join("../../test/regsrv/registry"))
+	srv := httptest.NewServer(registryHandler(regDir))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte("name: deeptest\nmajor: 0\nminor: 1\npatch: 0\nfiles: [index.aql]\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "index.aql"), []byte(`1`), 0644)
+	os.MkdirAll(filepath.Join(dir, ".aql"), 0755)
+
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	var stdout, stderr bytes.Buffer
+	code := runPrep(nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("prep failed: %s", stderr.String())
+	}
+
+	// Install all modules in dependency order (leaves first).
+	modules := []string{
+		"charops-2.3.1",
+		"joiner-0.4.2",
+		"wrapper-1.1.0",
+		"tagger-3.0.2",
+		"caser-0.2.4",
+		"bracket-1.3.0",
+		"formatter-2.1.1",
+		"decorator-0.5.3",
+		"styler-1.0.7",
+		"textkit-3.2.0",
+	}
+
+	for _, mod := range modules {
+		stdout.Reset()
+		stderr.Reset()
+		code = runInstall([]string{"-r", srv.URL, mod}, &stdout, &stderr)
+		if code != 0 {
+			t.Fatalf("install %s failed: %s", mod, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "installed") {
+			t.Errorf("install %s: unexpected output %q", mod, stdout.String())
+		}
+	}
+
+	// Verify all 10 modules are installed.
+	for _, mod := range modules {
+		name := mod[:strings.LastIndex(mod, "-")]
+		modDir := filepath.Join(".aql", name)
+		if _, err := os.Stat(modDir); err != nil {
+			t.Errorf("expected %s directory: %s", modDir, err)
+		}
+	}
+
+	// Verify deps in aql.jsonic.
+	data, err := os.ReadFile("aql.jsonic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, dep := range []string{"textkit: 3.2.0", "charops: 2.3.1", "joiner: 0.4.2"} {
+		if !strings.Contains(content, dep) {
+			t.Errorf("aql.jsonic missing %s", dep)
+		}
+	}
+}

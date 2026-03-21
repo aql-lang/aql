@@ -1,0 +1,6 @@
+name: wordlab
+major: 0
+minor: 1
+patch: 0
+files: [index.aql]
+deps: {textkit: 3.2.0 styler: 1.0.7 decorator: 0.5.3 formatter: 2.1.1 caser: 0.2.4 bracket: 1.3.0 wrapper: 1.1.0 tagger: 3.0.2 charops: 2.3.1 joiner: 0.4.2}
