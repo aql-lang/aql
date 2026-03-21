@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -354,5 +355,112 @@ func TestExecutePrepInvalidJsonic(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "jsonic") {
 		t.Errorf("expected jsonic error, got %q", stderr.String())
+	}
+}
+
+// --- pack subcommand ---
+
+func TestExecutePackBasic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+name: mymod
+major: 1
+minor: 2
+patch: 3
+files: [main.aql helpers.aql]
+`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.aql"), []byte("1 add 2"), 0644)
+	os.WriteFile(filepath.Join(dir, "helpers.aql"), []byte("def x 1"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	zipPath := filepath.Join(dir, ".aql", "mymod-1.2.3.zip")
+	if !strings.Contains(stdout.String(), "mymod-1.2.3.zip") {
+		t.Errorf("expected zip path in output, got %q", stdout.String())
+	}
+
+	// Verify aql.json was also created (prep ran).
+	if _, err := os.Stat(filepath.Join(dir, ".aql", "aql.json")); err != nil {
+		t.Errorf("expected .aql/aql.json to exist: %s", err)
+	}
+
+	// Verify zip contents.
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("failed to open zip: %s", err)
+	}
+	defer zr.Close()
+
+	names := make(map[string]bool)
+	for _, f := range zr.File {
+		names[f.Name] = true
+	}
+
+	for _, want := range []string{"aql.jsonic", "main.aql", "helpers.aql"} {
+		if !names[want] {
+			t.Errorf("zip missing %q, has %v", want, names)
+		}
+	}
+	if len(zr.File) != 3 {
+		t.Errorf("expected 3 files in zip, got %d", len(zr.File))
+	}
+}
+
+func TestExecutePackOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 1 files: [a.aql]`), 0644)
+	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("old"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("first pack failed: %s", stderr.String())
+	}
+
+	// Update file and re-pack.
+	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("new content here"), 0644)
+	stdout.Reset()
+	stderr.Reset()
+	code = execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("second pack failed: %s", stderr.String())
+	}
+
+	// Verify the zip contains the updated content.
+	zipPath := filepath.Join(dir, ".aql", "x-0.0.1.zip")
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("failed to open zip: %s", err)
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.Name == "a.aql" {
+			rc, _ := f.Open()
+			var buf bytes.Buffer
+			buf.ReadFrom(rc)
+			rc.Close()
+			if buf.String() != "new content here" {
+				t.Errorf("expected updated content, got %q", buf.String())
+			}
+		}
+	}
+}
+
+func TestExecutePackMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 0 files: [missing.aql]`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "error") {
+		t.Errorf("expected error in stderr, got %q", stderr.String())
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -34,7 +35,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -60,6 +61,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "prep" subcommand: aql prep [dir]
 	if len(args) > 0 && args[0] == "prep" {
 		return runPrep(args[1:], stdout, stderr)
+	}
+
+	// Handle "pack" subcommand: aql pack [dir]
+	if len(args) > 0 && args[0] == "pack" {
+		return runPack(args[1:], stdout, stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -129,6 +135,42 @@ func runHelp(args []string, w io.Writer) int {
 	return 0
 }
 
+// doPrep parses aql.jsonic and writes .aql/aql.json. Returns the parsed map.
+func doPrep(dir string) (map[string]any, error) {
+	src := filepath.Join(dir, "aql.jsonic")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return nil, err
+	}
+
+	j := jsonic.Make()
+	parsed, err := j.Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("invalid jsonic: %w", err)
+	}
+
+	m, ok := parsed.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("aql.jsonic must be a map")
+	}
+
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	dst := filepath.Join(dir, ".aql", "aql.json")
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return nil, err
+	}
+
+	if err := os.WriteFile(dst, append(out, '\n'), 0644); err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
 // runPrep handles `aql prep [dir]`: parse aql.jsonic and write .aql/aql.json.
 func runPrep(args []string, stdout, stderr io.Writer) int {
 	dir := "."
@@ -136,38 +178,84 @@ func runPrep(args []string, stdout, stderr io.Writer) int {
 		dir = args[0]
 	}
 
-	src := filepath.Join(dir, "aql.jsonic")
-	data, err := os.ReadFile(src)
+	if _, err := doPrep(dir); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "%s\n", filepath.Join(dir, ".aql", "aql.json"))
+	return 0
+}
+
+// runPack handles `aql pack [dir]`: prep then zip listed files + aql.jsonic.
+func runPack(args []string, stdout, stderr io.Writer) int {
+	dir := "."
+	if len(args) > 0 {
+		dir = args[0]
+	}
+
+	m, err := doPrep(dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
-	j := jsonic.Make()
-	parsed, err := j.Parse(string(data))
+	name, _ := m["name"].(string)
+	if name == "" {
+		fmt.Fprintf(stderr, "error: aql.jsonic missing name\n")
+		return 1
+	}
+
+	major, _ := m["major"].(float64)
+	minor, _ := m["minor"].(float64)
+	patch, _ := m["patch"].(float64)
+	version := fmt.Sprintf("%d.%d.%d", int(major), int(minor), int(patch))
+
+	rawFiles, ok := m["files"].([]any)
+	if !ok {
+		fmt.Fprintf(stderr, "error: aql.jsonic missing files list\n")
+		return 1
+	}
+
+	// Collect files: explicit list + implicit aql.jsonic.
+	files := []string{"aql.jsonic"}
+	for _, f := range rawFiles {
+		if s, ok := f.(string); ok {
+			files = append(files, s)
+		}
+	}
+
+	zipName := fmt.Sprintf("%s-%s.zip", name, version)
+	zipPath := filepath.Join(dir, ".aql", zipName)
+
+	zf, err := os.Create(zipPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "error: invalid jsonic: %s\n", err)
-		return 1
-	}
-
-	out, err := json.MarshalIndent(parsed, "", "  ")
-	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	defer zf.Close()
 
-	dst := filepath.Join(dir, ".aql", "aql.json")
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+	zw := zip.NewWriter(zf)
+	defer zw.Close()
+
+	for _, f := range files {
+		data, err := os.ReadFile(filepath.Join(dir, f))
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		w, err := zw.Create(f)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if _, err := w.Write(data); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
 	}
 
-	if err := os.WriteFile(dst, append(out, '\n'), 0644); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-
-	fmt.Fprintf(stdout, "%s\n", dst)
+	fmt.Fprintf(stdout, "%s\n", zipPath)
 	return 0
 }
 
