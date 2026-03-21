@@ -35,7 +35,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -76,6 +76,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "install" subcommand: aql install <name>-x.y.z [-r <url>]
 	if len(args) > 0 && args[0] == "install" {
 		return runInstall(args[1:], stdout, stderr)
+	}
+
+	// Handle "clean" subcommand: aql clean [dir]
+	if len(args) > 0 && args[0] == "clean" {
+		return runClean(args[1:], stdout, stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -236,7 +241,12 @@ func runPack(args []string, stdout, stderr io.Writer) int {
 	}
 
 	zipName := fmt.Sprintf("%s-%s.zip", name, version)
-	zipPath := filepath.Join(dir, ".aql", zipName)
+	packDir := filepath.Join(dir, ".aql", "_pack")
+	if err := os.MkdirAll(packDir, 0755); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	zipPath := filepath.Join(packDir, zipName)
 
 	zf, err := os.Create(zipPath)
 	if err != nil {
@@ -288,4 +298,33 @@ func run(w io.Writer, source string, registry string, seed int64) error {
 		fmt.Fprintln(w, strings.Join(parts, " "))
 	}
 	return nil
+}
+
+// runClean handles `aql clean [dir]`: delete everything in .aql/ except dotfiles.
+func runClean(args []string, stdout, stderr io.Writer) int {
+	dir := "."
+	if len(args) > 0 {
+		dir = args[0]
+	}
+
+	aqlDir := filepath.Join(dir, ".aql")
+	entries, err := os.ReadDir(aqlDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		path := filepath.Join(aqlDir, e.Name())
+		if err := os.RemoveAll(path); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+	}
+
+	fmt.Fprintf(stdout, "cleaned %s\n", aqlDir)
+	return 0
 }

@@ -378,7 +378,7 @@ files: [main.aql helpers.aql]
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	zipPath := filepath.Join(dir, ".aql", "mymod-1.2.3.zip")
+	zipPath := filepath.Join(dir, ".aql", "_pack", "mymod-1.2.3.zip")
 	if !strings.Contains(stdout.String(), "mymod-1.2.3.zip") {
 		t.Errorf("expected zip path in output, got %q", stdout.String())
 	}
@@ -431,7 +431,7 @@ func TestExecutePackOverwrites(t *testing.T) {
 	}
 
 	// Verify the zip contains the updated content.
-	zipPath := filepath.Join(dir, ".aql", "x-0.0.1.zip")
+	zipPath := filepath.Join(dir, ".aql", "_pack", "x-0.0.1.zip")
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		t.Fatalf("failed to open zip: %s", err)
@@ -462,5 +462,72 @@ func TestExecutePackMissingFile(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "error") {
 		t.Errorf("expected error in stderr, got %q", stderr.String())
+	}
+}
+
+// --- clean subcommand ---
+
+func TestExecuteCleanBasic(t *testing.T) {
+	dir := t.TempDir()
+	aqlDir := filepath.Join(dir, ".aql")
+	os.MkdirAll(aqlDir, 0755)
+
+	// Create files and dirs that should be removed.
+	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
+	os.MkdirAll(filepath.Join(aqlDir, "_pack"), 0755)
+	os.WriteFile(filepath.Join(aqlDir, "_pack", "x.zip"), []byte("zip"), 0644)
+	os.MkdirAll(filepath.Join(aqlDir, "color"), 0755)
+	os.WriteFile(filepath.Join(aqlDir, "color", "color.aql"), []byte("1"), 0644)
+
+	// Create a dotfile that should survive.
+	os.WriteFile(filepath.Join(aqlDir, ".gitkeep"), []byte(""), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	// Dotfile should still exist.
+	if _, err := os.Stat(filepath.Join(aqlDir, ".gitkeep")); err != nil {
+		t.Errorf("expected .gitkeep to survive: %s", err)
+	}
+
+	// Everything else should be gone.
+	for _, name := range []string{"aql.json", "_pack", "color"} {
+		if _, err := os.Stat(filepath.Join(aqlDir, name)); err == nil {
+			t.Errorf("expected %s to be removed", name)
+		}
+	}
+}
+
+func TestExecuteCleanNoAqlDir(t *testing.T) {
+	dir := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+}
+
+func TestExecuteCleanDefaultDir(t *testing.T) {
+	dir := t.TempDir()
+	aqlDir := filepath.Join(dir, ".aql")
+	os.MkdirAll(aqlDir, 0755)
+	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
+
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(aqlDir, "aql.json")); err == nil {
+		t.Error("expected aql.json to be removed")
 	}
 }
