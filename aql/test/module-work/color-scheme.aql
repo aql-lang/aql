@@ -1,49 +1,49 @@
 (import "./color.aql")
 
-"#E63946" Color make-color dot def accent1 ;
-"#F1FAEE" Color make-color dot def light1 ;
-"#A8DADC" Color make-color dot def mid1 ;
-"#457B9D" Color make-color dot def dark1 ;
-"#1D3557" Color make-color dot def deep1 ;
+def accent1 ("#E63946" Color make-color dot)
+def light1 ("#F1FAEE" Color make-color dot)
+def mid1 ("#A8DADC" Color make-color dot)
+def dark1 ("#457B9D" Color make-color dot)
+def deep1 ("#1D3557" Color make-color dot)
 
-"#264653" Color make-color dot def earth1 ;
-"#2A9D8F" Color make-color dot def earth2 ;
-"#E9C46A" Color make-color dot def earth3 ;
-"#F4A261" Color make-color dot def earth4 ;
-"#E76F51" Color make-color dot def earth5 ;
+def earth1 ("#264653" Color make-color dot)
+def earth2 ("#2A9D8F" Color make-color dot)
+def earth3 ("#E9C46A" Color make-color dot)
+def earth4 ("#F4A261" Color make-color dot)
+def earth5 ("#E76F51" Color make-color dot)
 
-"#FF006E" Color make-color dot def neon1 ;
-"#FB5607" Color make-color dot def neon2 ;
-"#FFBE0B" Color make-color dot def neon3 ;
-"#8338EC" Color make-color dot def neon4 ;
-"#3A86FF" Color make-color dot def neon5 ;
+def neon1 ("#FF006E" Color make-color dot)
+def neon2 ("#FB5607" Color make-color dot)
+def neon3 ("#FFBE0B" Color make-color dot)
+def neon4 ("#8338EC" Color make-color dot)
+def neon5 ("#3A86FF" Color make-color dot)
 
-do {
+def sunset do {
   name: ["sunset"]
   primary: [accent1]
   secondary: [light1]
   accent: [mid1]
   dark: [dark1]
   background: [deep1]
-} def sunset ;
+}
 
-do {
+def ocean do {
   name: ["ocean"]
   primary: [earth1]
   secondary: [earth2]
   accent: [earth3]
   dark: [earth4]
   background: [earth5]
-} def ocean ;
+}
 
-do {
+def neon do {
   name: ["neon"]
   primary: [neon1]
   secondary: [neon2]
   accent: [neon3]
   dark: [neon4]
   background: [neon5]
-} def neon ;
+}
 
 export Schemes {
   sunset: sunset
