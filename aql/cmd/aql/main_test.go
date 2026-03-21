@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -255,5 +256,103 @@ func TestExecuteHelpMatchesHelpFormat(t *testing.T) {
 	expected := help.Format(entry)
 	if cliOut.String() != expected {
 		t.Errorf("CLI output differs from help.Format:\nCLI:\n%s\nExpected:\n%s", cliOut.String(), expected)
+	}
+}
+
+// --- prep subcommand ---
+
+func TestExecutePrepBasic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+name: foo
+major: 1
+minor: 2
+patch: 3
+files: [a.aql b.aql]
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	out := filepath.Join(dir, ".aql", "aql.json")
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("failed to read output: %s", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+
+	if m["name"] != "foo" {
+		t.Errorf("name = %v, want foo", m["name"])
+	}
+	if m["major"] != float64(1) {
+		t.Errorf("major = %v, want 1", m["major"])
+	}
+	files, ok := m["files"].([]any)
+	if !ok || len(files) != 2 {
+		t.Fatalf("files = %v, want [a.aql b.aql]", m["files"])
+	}
+	if files[0] != "a.aql" || files[1] != "b.aql" {
+		t.Errorf("files = %v, want [a.aql b.aql]", files)
+	}
+}
+
+func TestExecutePrepDefaultDir(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: bar major: 0 minor: 0 patch: 1 files: [index.aql]`), 0644)
+
+	// Change to temp dir so default "." works.
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	if err != nil {
+		t.Fatalf("failed to read output: %s", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+	if m["name"] != "bar" {
+		t.Errorf("name = %v, want bar", m["name"])
+	}
+}
+
+func TestExecutePrepMissingFile(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", "/nonexistent/dir"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "error") {
+		t.Errorf("expected error in stderr, got %q", stderr.String())
+	}
+}
+
+func TestExecutePrepInvalidJsonic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`{{{`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "jsonic") {
+		t.Errorf("expected jsonic error, got %q", stderr.String())
 	}
 }

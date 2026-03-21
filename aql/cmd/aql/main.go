@@ -1,14 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	aql "github.com/metsitaba/voxgig-exp/aql"
+	jsonic "github.com/jsonicjs/jsonic/go"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
@@ -31,7 +34,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -52,6 +55,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "help" subcommand: aql help [word]
 	if len(args) > 0 && args[0] == "help" {
 		return runHelp(args[1:], stdout)
+	}
+
+	// Handle "prep" subcommand: aql prep [dir]
+	if len(args) > 0 && args[0] == "prep" {
+		return runPrep(args[1:], stdout, stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -118,6 +126,48 @@ func runHelp(args []string, w io.Writer) int {
 		return 1
 	}
 	fmt.Fprint(w, help.Format(entry))
+	return 0
+}
+
+// runPrep handles `aql prep [dir]`: parse aql.jsonic and write .aql/aql.json.
+func runPrep(args []string, stdout, stderr io.Writer) int {
+	dir := "."
+	if len(args) > 0 {
+		dir = args[0]
+	}
+
+	src := filepath.Join(dir, "aql.jsonic")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	j := jsonic.Make()
+	parsed, err := j.Parse(string(data))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: invalid jsonic: %s\n", err)
+		return 1
+	}
+
+	out, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	dst := filepath.Join(dir, ".aql", "aql.json")
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	if err := os.WriteFile(dst, append(out, '\n'), 0644); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	fmt.Fprintf(stdout, "%s\n", dst)
 	return 0
 }
 
