@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -232,26 +233,46 @@ func isDataFile(path string) bool {
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
 }
 
+// resolveModuleMain checks for .aql/aql.json in the given directory and
+// returns the main file specified there. If the file doesn't exist or has
+// no main property, returns "index.aql".
+func resolveModuleMain(r *Registry, dir string) string {
+	data, err := r.FileOps.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	if err != nil {
+		return "index.aql"
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return "index.aql"
+	}
+	if main, ok := m["main"].(string); ok && main != "" {
+		return main
+	}
+	return "index.aql"
+}
+
 // resolveImportPath resolves a file import path. If the registry has a BaseDir
 // set (i.e. we are inside a module loaded from a file), relative paths are
 // resolved against that directory. Otherwise the path is returned as-is
 // (FileOps.ReadFile will resolve it against the process CWD).
-// If the resolved path has no file extension, index.aql is appended
-// (so import "./color" resolves to ./color/index.aql).
+// If the resolved path has no file extension, checks .aql/aql.json for a main
+// property, falling back to index.aql.
 func resolveImportPath(r *Registry, path string) string {
 	resolved := path
 	if r.BaseDir != "" && !filepath.IsAbs(path) {
 		resolved = filepath.Join(r.BaseDir, path)
 	}
 	if filepath.Ext(resolved) == "" {
-		resolved = filepath.Join(resolved, "index.aql")
+		main := resolveModuleMain(r, resolved)
+		resolved = filepath.Join(resolved, main)
 	}
 	return resolved
 }
 
 // resolveBareModule resolves a bare module name (e.g. "foo") by searching for
-// .aql/foo/index.aql starting from the current working directory and walking
-// up parent directories, following the CommonJS node_modules resolution pattern.
+// .aql/foo/ starting from the current working directory and walking up parent
+// directories, following the CommonJS node_modules resolution pattern.
+// Checks .aql/aql.json for a main property, falling back to index.aql.
 func resolveBareModule(r *Registry, name string) (string, error) {
 	startDir, err := r.FileOps.ResolvePath(".")
 	if err != nil {
@@ -260,7 +281,9 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 
 	dir := startDir
 	for {
-		candidate := filepath.Join(dir, ".aql", name, "index.aql")
+		modDir := filepath.Join(dir, ".aql", name)
+		main := resolveModuleMain(r, modDir)
+		candidate := filepath.Join(modDir, main)
 		if _, err := r.FileOps.ReadFile(candidate); err == nil {
 			return candidate, nil
 		}
@@ -270,7 +293,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf("import: module %q not found (searched .aql/%s/index.aql from %s to /)", name, name, startDir)
+	return "", fmt.Errorf("import: module %q not found (searched .aql/%s/ from %s to /)", name, name, startDir)
 }
 
 // loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns

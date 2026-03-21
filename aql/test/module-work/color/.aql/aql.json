@@ -1,7 +1,8 @@
 {
   "files": [
-    "index.aql"
+    "color.aql"
   ],
+  "main": "color.aql",
   "major": 0,
   "minor": 1,
   "name": "color",
