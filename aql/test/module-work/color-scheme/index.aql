@@ -1,4 +1,4 @@
-(import "./color.aql")
+(import "../color")
 
 def accent1 ("#E63946" Color make-color dot)
 def light1 ("#F1FAEE" Color make-color dot)

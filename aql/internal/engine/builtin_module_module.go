@@ -236,11 +236,17 @@ func isDataFile(path string) bool {
 // set (i.e. we are inside a module loaded from a file), relative paths are
 // resolved against that directory. Otherwise the path is returned as-is
 // (FileOps.ReadFile will resolve it against the process CWD).
+// If the resolved path has no file extension, index.aql is appended
+// (so import "./color" resolves to ./color/index.aql).
 func resolveImportPath(r *Registry, path string) string {
+	resolved := path
 	if r.BaseDir != "" && !filepath.IsAbs(path) {
-		return filepath.Join(r.BaseDir, path)
+		resolved = filepath.Join(r.BaseDir, path)
 	}
-	return path
+	if filepath.Ext(resolved) == "" {
+		resolved = filepath.Join(resolved, "index.aql")
+	}
+	return resolved
 }
 
 // resolveBareModule resolves a bare module name (e.g. "foo") by searching for
