@@ -250,3 +250,18 @@ func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 		}
 	}
 }
+
+// --- Project module: bare import of installed module ---
+
+func TestProjectImportInstalledColor(t *testing.T) {
+	dir := moduleWorkDir(t)
+	projDir := filepath.Join(dir, "project")
+	result, err := runRealFileSteps(t, projDir, []string{
+		`(import "color")`,
+		`("#00FF00" Color.hex2rgb) .g`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "255")
+}

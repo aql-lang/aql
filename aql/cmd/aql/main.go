@@ -35,7 +35,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql registry -r <folder> -p <port>\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -71,6 +71,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "registry" subcommand: aql registry -r <folder> -p <port>
 	if len(args) > 0 && args[0] == "registry" {
 		return runRegistry(args[1:], stdout, stderr)
+	}
+
+	// Handle "install" subcommand: aql install <name>-x.y.z [-r <url>]
+	if len(args) > 0 && args[0] == "install" {
+		return runInstall(args[1:], stdout, stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {

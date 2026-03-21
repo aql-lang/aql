@@ -1,0 +1,6 @@
+name: project
+major: 0
+minor: 1
+patch: 0
+files: [index.aql]
+deps: {color: 0.1.0}
