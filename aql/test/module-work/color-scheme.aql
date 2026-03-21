@@ -1,22 +1,22 @@
 (import "./color.aql")
 
-"#E63946" make-color def accent1 ;
-"#F1FAEE" make-color def light1 ;
-"#A8DADC" make-color def mid1 ;
-"#457B9D" make-color def dark1 ;
-"#1D3557" make-color def deep1 ;
+"#E63946" Color make-color dot def accent1 ;
+"#F1FAEE" Color make-color dot def light1 ;
+"#A8DADC" Color make-color dot def mid1 ;
+"#457B9D" Color make-color dot def dark1 ;
+"#1D3557" Color make-color dot def deep1 ;
 
-"#264653" make-color def earth1 ;
-"#2A9D8F" make-color def earth2 ;
-"#E9C46A" make-color def earth3 ;
-"#F4A261" make-color def earth4 ;
-"#E76F51" make-color def earth5 ;
+"#264653" Color make-color dot def earth1 ;
+"#2A9D8F" Color make-color dot def earth2 ;
+"#E9C46A" Color make-color dot def earth3 ;
+"#F4A261" Color make-color dot def earth4 ;
+"#E76F51" Color make-color dot def earth5 ;
 
-"#FF006E" make-color def neon1 ;
-"#FB5607" make-color def neon2 ;
-"#FFBE0B" make-color def neon3 ;
-"#8338EC" make-color def neon4 ;
-"#3A86FF" make-color def neon5 ;
+"#FF006E" Color make-color dot def neon1 ;
+"#FB5607" Color make-color dot def neon2 ;
+"#FFBE0B" Color make-color dot def neon3 ;
+"#8338EC" Color make-color dot def neon4 ;
+"#3A86FF" Color make-color dot def neon5 ;
 
 do {
   name: ["sunset"]

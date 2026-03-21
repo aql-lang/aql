@@ -545,6 +545,18 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
+		// If the value is a FnDef/TFunction with a captured module registry
+		// (closure), execute it using preceding stack values as arguments.
+		// Only module-exported functions auto-execute; anonymous fn values
+		// (no captured registry) are treated as data so they can be passed
+		// as arguments to higher-order words like walk, map, filter, etc.
+		val := e.stack[valIdx]
+		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
+			val.Data != nil {
+			if fnDef, ok := val.Data.(FnDefInfo); ok && fnDef.Registry != nil {
+				return e.execFnDefLiteral(valIdx)
+			}
+		}
 		e.pointer++
 		return nil
 	}
@@ -666,6 +678,177 @@ func (e *Engine) stepLiteral() error {
 	} else {
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
+	}
+
+	return nil
+}
+
+// execFnDefLiteral handles a FnDef or TFunction value that has landed on the
+// stack without a pending forward. It tries to match the function's signatures
+// against preceding resolved stack values and, if a match is found, executes
+// the function. If the FnDef carries a captured Registry (closure from a
+// module), execution happens in a sub-engine using that registry so that
+// module-internal words are available. Otherwise, body tokens are spliced
+// into the current engine's stack.
+func (e *Engine) execFnDefLiteral(valIdx int) error {
+	val := e.stack[valIdx]
+	fnDef, ok := val.Data.(FnDefInfo)
+	if !ok {
+		e.pointer++
+		return nil
+	}
+
+	// Collect resolved values before the pointer for signature matching.
+	resolved := e.effectiveResolved()
+
+	// Try each signature to find one that matches the available prefix args.
+	for _, sig := range fnDef.Sigs {
+		nArgs := len(sig.Params)
+		if nArgs == 0 {
+			return e.execFnDefSig(valIdx, &sig, nil, fnDef.Registry)
+		}
+		if len(resolved) < nArgs {
+			continue
+		}
+		// Check if the last nArgs resolved values match the signature types.
+		candidate := resolved[len(resolved)-nArgs:]
+		match := true
+		for i, p := range sig.Params {
+			if !candidate[i].VType.Matches(p.Type) {
+				match = false
+				break
+			}
+			if p.Pattern != nil {
+				pat := *p.Pattern
+				if pat.VType.Equal(TMap) && candidate[i].VType.Equal(TMap) &&
+					pat.Data != nil && candidate[i].Data != nil {
+					if !openUnifyMap(pat, candidate[i]) {
+						match = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(candidate[i], pat); !uOk {
+						match = false
+						break
+					}
+				}
+			}
+		}
+		if match {
+			return e.execFnDefSig(valIdx, &sig, candidate, fnDef.Registry)
+		}
+	}
+
+	// No matching signature — just advance (treat as data).
+	e.pointer++
+	return nil
+}
+
+// execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
+// (module closure), execution uses CallAQL on that registry. Otherwise, body
+// tokens are spliced into the current engine's stack.
+func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
+	nArgs := len(sig.Params)
+	indices := e.resolvedIndicesBefore(nArgs)
+
+	if capturedReg != nil {
+		// Execute in the captured module's registry via CallAQL.
+		fnVal := e.stack[valIdx]
+		result, err := capturedReg.CallAQL(fnVal, args)
+		if err != nil {
+			return err
+		}
+		// Splice: remove consumed args + FnDef, insert results.
+		if len(indices) == nArgs && nArgs > 0 {
+			firstArgIdx := indices[0]
+			skipSet := make(map[int]bool, nArgs+1)
+			for _, idx := range indices {
+				skipSet[idx] = true
+			}
+			skipSet[valIdx] = true
+			dst := firstArgIdx
+			for i := firstArgIdx; i <= valIdx; i++ {
+				if !skipSet[i] {
+					e.stack[dst] = e.stack[i]
+					dst++
+				}
+			}
+			e.stackSplice(dst, valIdx+1-dst, result...)
+			e.pointer = firstArgIdx
+		} else if nArgs == 0 {
+			e.stackSplice(valIdx, 1, result...)
+		} else {
+			argStart := valIdx - nArgs
+			if argStart < 0 {
+				argStart = 0
+			}
+			e.stackSplice(argStart, valIdx+1-argStart, result...)
+			e.pointer = argStart
+		}
+		return nil
+	}
+
+	// No captured registry — splice body tokens into the current stack.
+	var tokens []Value
+	tokens = append(tokens, NewOpenParen())
+
+	argsCopy := make([]Value, len(args))
+	copy(argsCopy, args)
+	e.registry.argsStack = append(e.registry.argsStack, NewList(argsCopy))
+
+	var names []string
+	for i, p := range sig.Params {
+		if p.Name != "" {
+			installDef(e.registry, p.Name, args[i])
+			names = append(names, p.Name)
+		} else {
+			tokens = append(tokens, args[i])
+		}
+	}
+	body := make([]Value, len(sig.Body))
+	copy(body, sig.Body)
+	tokens = append(tokens, body...)
+
+	tokens = append(tokens, NewWord("__pop-args"))
+	for i := len(names) - 1; i >= 0; i-- {
+		tokens = append(tokens,
+			NewWordModified("undef", -1, false, true),
+			NewWord(names[i]),
+		)
+	}
+	if len(sig.Returns) > 0 {
+		tokens = append(tokens, NewReturnCheck(ReturnCheckInfo{
+			FuncName: "<fn>",
+			Returns:  sig.Returns,
+		}))
+	}
+	tokens = append(tokens, NewWord(")"))
+
+	if len(indices) == nArgs && nArgs > 0 {
+		firstArgIdx := indices[0]
+		skipSet := make(map[int]bool, nArgs+1)
+		for _, idx := range indices {
+			skipSet[idx] = true
+		}
+		skipSet[valIdx] = true
+		dst := firstArgIdx
+		for i := firstArgIdx; i <= valIdx; i++ {
+			if !skipSet[i] {
+				e.stack[dst] = e.stack[i]
+				dst++
+			}
+		}
+		e.stackSplice(dst, valIdx+1-dst, tokens...)
+		e.pointer = firstArgIdx
+	} else if nArgs == 0 {
+		e.stackSplice(valIdx, 1, tokens...)
+	} else {
+		argStart := valIdx - nArgs
+		if argStart < 0 {
+			argStart = 0
+		}
+		e.stackSplice(argStart, valIdx+1-argStart, tokens...)
+		e.pointer = argStart
 	}
 
 	return nil

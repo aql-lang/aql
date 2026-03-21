@@ -14,13 +14,13 @@ func moduleWorkDir(t *testing.T) string {
 	return abs
 }
 
-// --- Color module: exported conversion functions ---
+// --- Color module: exported conversion functions via map dot-access ---
 
 func TestColorHex2rgbRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`"#FF0000" hex2rgb r dot`,
+		`"#FF0000" Color hex2rgb dot r dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestColorHex2rgbComponents(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`"#FF8800" hex2rgb`,
+		`"#FF8800" Color hex2rgb dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestColorRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`do {r:[255] g:[136] b:[0]} rgb2hex`,
+		`do {r:[255] g:[136] b:[0]} Color rgb2hex dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestColorHex2int(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`"FF" hex2int`,
+		`"FF" Color hex2int dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestColorInt2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`255 int2hex`,
+		`255 Color int2hex dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestColorMakeColor(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`"#FF8800" make-color hex dot`,
+		`"#FF8800" Color make-color dot hex dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestColorRoundTrip(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`"#A0B0C0" hex2rgb rgb2hex`,
+		`"#A0B0C0" Color hex2rgb dot Color rgb2hex dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestColorClamp(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`300 clamp`,
+		`300 Color clamp dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestColorClampNegative(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color.aql")`,
-		`-10 clamp`,
+		`-10 Color clamp dot`,
 	})
 	if err != nil {
 		t.Fatal(err)
