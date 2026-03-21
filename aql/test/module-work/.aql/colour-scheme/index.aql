@@ -1,0 +1,67 @@
+import "colour"
+
+def hex2int fn [[s:String] [Integer] [
+  s Integer {base:"hex"} convert
+]] end
+
+def int2hex fn [[n:Integer] [String] [
+  n convert String {base:"hex"} 2 {side:"left" fill:"0"} pad upper
+]] end
+
+def make-colour fn [[hex:String] [Map] [
+  hex 1 3 slice hex2int def rv end
+  hex 3 5 slice hex2int def gv end
+  hex 5 7 slice hex2int def bv end
+  do {hex:[hex] r:[rv] g:[gv] b:[bv]}
+]] end
+
+"#E63946" make-colour def accent1 end
+"#F1FAEE" make-colour def light1 end
+"#A8DADC" make-colour def mid1 end
+"#457B9D" make-colour def dark1 end
+"#1D3557" make-colour def deep1 end
+
+"#264653" make-colour def earth1 end
+"#2A9D8F" make-colour def earth2 end
+"#E9C46A" make-colour def earth3 end
+"#F4A261" make-colour def earth4 end
+"#E76F51" make-colour def earth5 end
+
+"#FF006E" make-colour def neon1 end
+"#FB5607" make-colour def neon2 end
+"#FFBE0B" make-colour def neon3 end
+"#8338EC" make-colour def neon4 end
+"#3A86FF" make-colour def neon5 end
+
+do {
+  name: ["sunset"]
+  primary: [accent1]
+  secondary: [light1]
+  accent: [mid1]
+  dark: [dark1]
+  background: [deep1]
+} def sunset end
+
+do {
+  name: ["ocean"]
+  primary: [earth1]
+  secondary: [earth2]
+  accent: [earth3]
+  dark: [earth4]
+  background: [earth5]
+} def ocean end
+
+do {
+  name: ["neon"]
+  primary: [neon1]
+  secondary: [neon2]
+  accent: [neon3]
+  dark: [neon4]
+  background: [neon5]
+} def neon end
+
+export Schemes {
+  sunset: sunset
+  ocean: ocean
+  neon: neon
+}
