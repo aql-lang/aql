@@ -19,30 +19,30 @@ def neon4 ("#8338EC" Color.make-color)
 def neon5 ("#3A86FF" Color.make-color)
 
 def sunset do {
-  name: ["sunset"]
-  primary: [accent1]
-  secondary: [light1]
-  accent: [mid1]
-  dark: [dark1]
-  background: [deep1]
+  name: "sunset"
+  primary: accent1
+  secondary: light1
+  accent: mid1
+  dark: dark1
+  background: deep1
 }
 
 def ocean do {
-  name: ["ocean"]
-  primary: [earth1]
-  secondary: [earth2]
-  accent: [earth3]
-  dark: [earth4]
-  background: [earth5]
+  name: "ocean"
+  primary: earth1
+  secondary: earth2
+  accent: earth3
+  dark: earth4
+  background: earth5
 }
 
 def neon do {
-  name: ["neon"]
-  primary: [neon1]
-  secondary: [neon2]
-  accent: [neon3]
-  dark: [neon4]
-  background: [neon5]
+  name: "neon"
+  primary: neon1
+  secondary: neon2
+  accent: neon3
+  dark: neon4
+  background: neon5
 }
 
 export Schemes {

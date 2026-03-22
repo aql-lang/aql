@@ -56,7 +56,7 @@ func TestColorRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`do {r:[255] g:[136] b:[0]} Color.rgb2hex`,
+		`do {r:255 g:136 b:0} Color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -264,4 +264,258 @@ func TestProjectImportInstalledColor(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertResult(t, result, "255")
+}
+
+// --- Map quotation: word values resolve without list wrappers ---
+
+func TestDoMapWordValuesResolve(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`def r 100 def g 200 def b 50`,
+		`do {r:r g:g b:b}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	rv, _ := m.Get("r")
+	gv, _ := m.Get("g")
+	bv, _ := m.Get("b")
+	if rv.AsInteger() != 100 {
+		t.Errorf("r = %d, want 100", rv.AsInteger())
+	}
+	if gv.AsInteger() != 200 {
+		t.Errorf("g = %d, want 200", gv.AsInteger())
+	}
+	if bv.AsInteger() != 50 {
+		t.Errorf("b = %d, want 50", bv.AsInteger())
+	}
+}
+
+func TestDoMapLiteralValues(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`do {x:1 y:"hello" z:true}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	xv, _ := m.Get("x")
+	yv, _ := m.Get("y")
+	zv, _ := m.Get("z")
+	if xv.AsInteger() != 1 {
+		t.Errorf("x = %v, want 1", xv)
+	}
+	if yv.AsString() != "hello" {
+		t.Errorf("y = %v, want hello", yv)
+	}
+	if !zv.AsBoolean() {
+		t.Errorf("z = %v, want true", zv)
+	}
+}
+
+func TestDoMapListValuesStillWork(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`do {x:[3 add 4] y:[upper "a"]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	xv, _ := m.Get("x")
+	yv, _ := m.Get("y")
+	if xv.AsInteger() != 7 {
+		t.Errorf("x = %v, want 7", xv)
+	}
+	if yv.AsString() != "A" {
+		t.Errorf("y = %v, want A", yv)
+	}
+}
+
+// --- Module export: word values in export maps resolve to defs ---
+
+func TestExportMapWordValues(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"AA" Color.hex2int`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "170")
+}
+
+// --- Color module: function chaining across multiple calls ---
+
+func TestColorChainHex2rgbThenRgb2hex(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#123456" Color.hex2rgb Color.rgb2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#123456'")
+}
+
+func TestColorChainMakeColorThenAccessRGB(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`("#AABB00" Color.make-color) .g`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "187")
+}
+
+// --- Color module: hex edge cases ---
+
+func TestColorHex2rgbBlack(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#000000" Color.hex2rgb`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	rv, _ := m.Get("r")
+	gv, _ := m.Get("g")
+	bv, _ := m.Get("b")
+	if rv.AsInteger() != 0 || gv.AsInteger() != 0 || bv.AsInteger() != 0 {
+		t.Errorf("want {r:0 g:0 b:0}, got {r:%d g:%d b:%d}", rv.AsInteger(), gv.AsInteger(), bv.AsInteger())
+	}
+}
+
+func TestColorHex2rgbWhite(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#FFFFFF" Color.hex2rgb`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	rv, _ := m.Get("r")
+	gv, _ := m.Get("g")
+	bv, _ := m.Get("b")
+	if rv.AsInteger() != 255 || gv.AsInteger() != 255 || bv.AsInteger() != 255 {
+		t.Errorf("want {r:255 g:255 b:255}, got {r:%d g:%d b:%d}", rv.AsInteger(), gv.AsInteger(), bv.AsInteger())
+	}
+}
+
+// --- Color module: clamp boundary values ---
+
+func TestColorClampZero(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`0 Color.clamp`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "0")
+}
+
+func TestColorClampMax(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`255 Color.clamp`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "255")
+}
+
+func TestColorClampMiddle(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`128 Color.clamp`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "128")
+}
+
+// --- Color-scheme module: all three schemes have consistent structure ---
+
+func TestColorSchemeAllSchemesHaveExpectedFields(t *testing.T) {
+	dir := moduleWorkDir(t)
+	schemes := []string{"sunset", "ocean", "neon"}
+	fields := []string{"name", "primary", "secondary", "accent", "dark", "background"}
+	for _, scheme := range schemes {
+		for _, field := range fields {
+			_, err := runRealFileSteps(t, dir, []string{
+				`(import "./color-scheme")`,
+				`Schemes.` + scheme + `.` + field,
+			})
+			if err != nil {
+				t.Errorf("Schemes.%s.%s: %v", scheme, field, err)
+			}
+		}
+	}
+}
+
+// --- Cross-module: color-scheme uses color module functions ---
+
+func TestColorSchemeOceanSecondaryRoundTrip(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color-scheme")`,
+		`(import "./color")`,
+		`Schemes.ocean.secondary.hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hex := result[0].AsString()
+
+	result, err = runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"` + hex + `" Color.hex2rgb Color.rgb2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'"+hex+"'")
+}
+
+// --- Map quotation with do: mixed word and list values ---
+
+func TestDoMapMixedWordAndListValues(t *testing.T) {
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`def n 10`,
+		`do {a:n b:[n add 5] c:"literal"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	av, _ := m.Get("a")
+	bv, _ := m.Get("b")
+	cv, _ := m.Get("c")
+	if av.AsInteger() != 10 {
+		t.Errorf("a = %d, want 10", av.AsInteger())
+	}
+	if bv.AsInteger() != 15 {
+		t.Errorf("b = %d, want 15", bv.AsInteger())
+	}
+	if cv.AsString() != "literal" {
+		t.Errorf("c = %v, want literal", cv)
+	}
 }

@@ -154,8 +154,11 @@ type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a
 # Do - evaluate list contents
 do [1 add 2]	3
 
-# Do - evaluate map list values
+# Do - evaluate map list values (multi-word expressions need lists)
 do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# Do - evaluate map word values (single words resolve directly)
+do {x:1,y:2}	{x:1,y:2}
 
 # Disjunct - union types via or
 String or None	Scalar/String|None

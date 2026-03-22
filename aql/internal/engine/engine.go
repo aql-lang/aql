@@ -755,11 +755,11 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 }
 
 // autoEvalMap evaluates each value in a plain map using a sub-engine.
-// All values (words, lists, nested maps) are evaluated:
+// Word values resolve directly; lists auto-evaluate via autoEvalStack:
 //
-//	{r:rv}        → {r:10}      (word evaluated)
-//	{x:[1 add 2]} → {x:3}       (list evaluated, single result unwrapped)
-//	{a:[1,2]}     → {a:[1,2]}   (list evaluated, multiple results stay as list)
+//	{r:rv}        → {r:10}      (word evaluated to its def'd value)
+//	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
+//	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	m := val.AsMap()
