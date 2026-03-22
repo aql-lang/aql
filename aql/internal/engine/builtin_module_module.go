@@ -341,14 +341,63 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 
 	// Temporarily set parent BaseDir so the child module inherits the
 	// loaded file's directory (runModuleBody copies BaseDir).
+	modDir := filepath.Dir(resolved)
 	saved := parent.BaseDir
-	parent.BaseDir = filepath.Dir(resolved)
+	parent.BaseDir = modDir
 	desc, err := runModuleBody(parent, parsed)
 	parent.BaseDir = saved
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}
+
+	// If the module's aql.json declares resources, load them as a
+	// "resource" export so they are available as Module.resource.key.
+	if err := loadModuleResources(parent, modDir, &desc); err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
+	}
+
 	return desc, nil
+}
+
+// loadModuleResources checks the module's .aql/aql.json for a "resource"
+// property (map of key→filename). For each entry it loads the data file
+// from the module directory and adds a "resource" export to the descriptor.
+func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
+	data, err := r.FileOps.ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	if err != nil {
+		return nil // no aql.json — nothing to do
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	resMap, ok := m["resource"].(map[string]any)
+	if !ok || len(resMap) == 0 {
+		return nil
+	}
+
+	resources := NewOrderedMap()
+	for key, v := range resMap {
+		filename, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("resource %q: value must be a string filename", key)
+		}
+		format := formatFromExt(filename)
+		if format == "" {
+			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
+		}
+		filePath := filepath.Join(modDir, filename)
+		vals, err := doRead(r, filePath, "utf8", format, "lf")
+		if err != nil {
+			return fmt.Errorf("resource %q: %w", key, err)
+		}
+		if len(vals) > 0 {
+			resources.Set(key, vals[0])
+		}
+	}
+
+	desc.Exports["resource"] = resources
+	return nil
 }
 
 // installExports installs all exports from a module descriptor as defs.

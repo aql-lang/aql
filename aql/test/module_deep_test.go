@@ -323,6 +323,73 @@ func TestDeepWordlabNestedFileTree(t *testing.T) {
 	}
 }
 
+// --- Resource exports ---
+
+func TestDeepResourceTextkitConfig(t *testing.T) {
+	dir := wordlabDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`resource.config`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{mode:'standard',version:'3.2.0'}")
+}
+
+func TestDeepResourceTextkitConfigKey(t *testing.T) {
+	dir := wordlabDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`resource.config.version`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'3.2.0'")
+}
+
+func TestDeepResourceCharopsLetters(t *testing.T) {
+	dir := wordlabDir(t)
+	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	result, err := runRealFileSteps(t, wrapperDir, []string{
+		`(import "charops")`,
+		`resource.letters.alpha`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'a'")
+}
+
+func TestDeepResourceCharopsLettersAll(t *testing.T) {
+	dir := wordlabDir(t)
+	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	result, err := runRealFileSteps(t, wrapperDir, []string{
+		`(import "charops")`,
+		`resource.letters`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{alpha:'a',beta:'b',gamma:'c'}")
+}
+
+func TestDeepResourceNoConflictWithExports(t *testing.T) {
+	// Importing textkit should still work - resource doesn't break regular exports.
+	dir := wordlabDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`"test" Textkit.process`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'~ >> *TEST!* ~'")
+}
+
 // --- Registry zips verification ---
 
 func TestDeepRegistryZipsExist(t *testing.T) {

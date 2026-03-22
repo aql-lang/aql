@@ -3,11 +3,15 @@
     "styler": "1.0.7"
   },
   "files": [
-    "textkit.aql"
+    "textkit.aql",
+    "config.json"
   ],
   "main": "textkit.aql",
   "major": 3,
   "minor": 2,
   "name": "textkit",
-  "patch": 0
+  "patch": 0,
+  "resource": {
+    "config": "config.json"
+  }
 }
