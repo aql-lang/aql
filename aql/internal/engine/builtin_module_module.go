@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 )
 
 // registerModule registers the "module", "export", and "import" words.
@@ -19,6 +22,11 @@ import (
 //   - [module-desc]                    — use export names as-is
 //   - [[atom atom] module-desc]        — rename single export (from to)
 //   - [[:pairs...] module-desc]        — rename multiple exports
+//   - [atom module-desc]               — rename single export to new name
+//
+// Bare module names (strings without /, ./, ../ prefix) are resolved by
+// searching for .aql/<name>/index.aql starting from the working directory
+// and walking up parent directories (CommonJS-style resolution).
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.Register("module", Signature{
@@ -39,17 +47,37 @@ func registerModule(r *Registry) {
 		return nil, nil
 	}
 
-	// import: [list module-desc] -> [] — rename imports
+	// import: [list module-desc] -> [] — rename imports via list
 	importRenameHandler := func(args []Value) ([]Value, error) {
 		desc := args[1].AsModule()
 		return nil, installRenamedExports(r, desc, args[0].AsList())
 	}
 
-	// import: [string] -> [] or [value] — import from a file path.
-	// For .json/.jsonic files, parses the file and pushes the data value.
+	// import: [word/atom module-desc] -> [] — rename single export
+	importSingleRenameHandler := func(newName string, args []Value) ([]Value, error) {
+		desc := args[1].AsModule()
+		return nil, installSingleRename(r, desc, newName)
+	}
+
+	// import: [string] -> [] or [value] — import from a file path or bare module name.
+	// File paths start with "/", "./" or "../".
+	// Bare names (e.g. "foo") resolve via .aql/foo/index.aql walking up directories.
+	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value) ([]Value, error) {
 		path := args[0].AsString()
+		if !isFilePath(path) {
+			resolved, err := resolveBareModule(r, path)
+			if err != nil {
+				return nil, err
+			}
+			desc, err := loadFileModule(r, resolved)
+			if err != nil {
+				return nil, err
+			}
+			installExports(r, desc, nil)
+			return nil, nil
+		}
 		if isDataFile(path) {
 			return loadDataFile(r, path)
 		}
@@ -61,9 +89,20 @@ func registerModule(r *Registry) {
 		return nil, nil
 	}
 
-	// import: [list string] -> [] — import from file with renaming.
+	// import: [list string] -> [] — import from file or bare module with renaming.
 	importFileRenameHandler := func(args []Value) ([]Value, error) {
 		path := args[1].AsString()
+		if !isFilePath(path) {
+			resolved, err := resolveBareModule(r, path)
+			if err != nil {
+				return nil, err
+			}
+			desc, err := loadFileModule(r, resolved)
+			if err != nil {
+				return nil, err
+			}
+			return nil, installRenamedExports(r, desc, args[0].AsList())
+		}
 		if isDataFile(path) {
 			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
 		}
@@ -82,6 +121,12 @@ func registerModule(r *Registry) {
 		Signature{
 			Args:    []Type{TList, TModule},
 			Handler: importRenameHandler,
+		},
+		Signature{
+			Args: []Type{TAtom, TModule},
+			Handler: func(args []Value) ([]Value, error) {
+				return importSingleRenameHandler(args[0].AsAtom(), args)
+			},
 		},
 		Signature{
 			Args:    []Type{TString},
@@ -106,6 +151,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Input = parent.Input
 	modReg.FileOps = parent.FileOps
 	modReg.ParseFunc = parent.ParseFunc
+	modReg.BaseDir = parent.BaseDir
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
@@ -129,12 +175,6 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 
 	modReg.Register("export", Signature{
-		Args: []Type{TWord, TMap},
-		Handler: func(eargs []Value) ([]Value, error) {
-			exportHandler(defName(eargs[0]), eargs[1].AsMap())
-			return nil, nil
-		},
-	}, Signature{
 		Args: []Type{TAtom, TMap},
 		Handler: func(eargs []Value) ([]Value, error) {
 			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
@@ -178,55 +218,186 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	return desc, nil
 }
 
-// isDataFile returns true if the path has a .json or .jsonic extension.
-func isDataFile(path string) bool {
-	f := formatFromExt(path)
-	return f == "json" || f == "jsonic"
+// isFilePath returns true if the string looks like a file path
+// (starts with "/", "./", or "../").
+func isFilePath(path string) bool {
+	return strings.HasPrefix(path, "/") ||
+		strings.HasPrefix(path, "./") ||
+		strings.HasPrefix(path, "../")
 }
 
-// loadDataFile reads a .json or .jsonic file, parses it with jsonic,
-// and returns the result as an AQL data value on the stack.
+// isDataFile returns true if the path has a data file extension
+// (.json, .jsonic, .csv, .tsv).
+func isDataFile(path string) bool {
+	f := formatFromExt(path)
+	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
+}
+
+// resolveModuleMain checks for .aql/aql.json in the given directory and
+// returns the main file specified there. If the file doesn't exist or has
+// no main property, returns "index.aql".
+func resolveModuleMain(r *Registry, dir string) string {
+	data, err := r.FileOps.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	if err != nil {
+		return "index.aql"
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return "index.aql"
+	}
+	if main, ok := m["main"].(string); ok && main != "" {
+		return main
+	}
+	return "index.aql"
+}
+
+// resolveImportPath resolves a file import path. If the registry has a BaseDir
+// set (i.e. we are inside a module loaded from a file), relative paths are
+// resolved against that directory. Otherwise the path is returned as-is
+// (FileOps.ReadFile will resolve it against the process CWD).
+// If the resolved path has no file extension, checks .aql/aql.json for a main
+// property, falling back to index.aql.
+func resolveImportPath(r *Registry, path string) string {
+	resolved := path
+	if r.BaseDir != "" && !filepath.IsAbs(path) {
+		resolved = filepath.Join(r.BaseDir, path)
+	}
+	if filepath.Ext(resolved) == "" {
+		main := resolveModuleMain(r, resolved)
+		resolved = filepath.Join(resolved, main)
+	}
+	return resolved
+}
+
+// resolveBareModule resolves a bare module name (e.g. "foo") by searching for
+// .aql/foo/ starting from the importing module's directory (BaseDir) or the
+// current working directory, and walking up parent directories, following the
+// CommonJS node_modules resolution pattern.
+// Checks .aql/aql.json for a main property, falling back to index.aql.
+func resolveBareModule(r *Registry, name string) (string, error) {
+	var startDir string
+	if r.BaseDir != "" {
+		startDir = r.BaseDir
+	} else {
+		var err error
+		startDir, err = r.FileOps.ResolvePath(".")
+		if err != nil {
+			return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
+		}
+	}
+
+	dir := startDir
+	for {
+		modDir := filepath.Join(dir, ".aql", name)
+		main := resolveModuleMain(r, modDir)
+		candidate := filepath.Join(modDir, main)
+		if _, err := r.FileOps.ReadFile(candidate); err == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("import: module %q not found (searched .aql/%s/ from %s to /)", name, name, startDir)
+}
+
+// loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns
+// the result as an AQL value on the stack. Uses doRead so CSV/TSV files
+// get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
-	data, err := parent.FileOps.ReadFile(path)
+	format := formatFromExt(path)
+	if format == "" {
+		return nil, fmt.Errorf("import: unknown format for %s", path)
+	}
+	resolved := resolveImportPath(parent, path)
+	result, err := doRead(parent, resolved, "utf8", format, "lf")
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
-
-	format := formatFromExt(path)
-	f, ok := parent.Formats[format]
-	if !ok {
-		return nil, fmt.Errorf("import: unknown format: %s", format)
-	}
-
-	result, err := f.Decode(string(data))
-	if err != nil {
-		return nil, fmt.Errorf("import: %s: %w", path, err)
-	}
-
 	return result, nil
 }
 
 // loadFileModule reads a file, parses it as AQL, and runs it as a module.
+// The child module's BaseDir is set to the directory of the loaded file so
+// that relative imports inside it resolve correctly.
 func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	if parent.ParseFunc == nil {
 		return ModuleDesc{}, fmt.Errorf("import: parser not configured for file import")
 	}
 
-	data, err := parent.FileOps.ReadFile(path)
+	resolved := resolveImportPath(parent, path)
+
+	data, err := parent.FileOps.ReadFile(resolved)
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %w", err)
 	}
 
 	parsed, err := parent.ParseFunc(string(data))
 	if err != nil {
-		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", path, err)
+		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", resolved, err)
 	}
 
+	// Temporarily set parent BaseDir so the child module inherits the
+	// loaded file's directory (runModuleBody copies BaseDir).
+	modDir := filepath.Dir(resolved)
+	saved := parent.BaseDir
+	parent.BaseDir = modDir
 	desc, err := runModuleBody(parent, parsed)
+	parent.BaseDir = saved
 	if err != nil {
-		return ModuleDesc{}, fmt.Errorf("import: %s: %w", path, err)
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}
+
+	// If the module's aql.json declares resources, load them as a
+	// "resource" export so they are available as Module.resource.key.
+	if err := loadModuleResources(parent, modDir, &desc); err != nil {
+		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
+	}
+
 	return desc, nil
+}
+
+// loadModuleResources checks the module's .aql/aql.json for a "resource"
+// property (map of key→filename). For each entry it loads the data file
+// from the module directory and adds a "resource" export to the descriptor.
+func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
+	data, err := r.FileOps.ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	if err != nil {
+		return nil // no aql.json — nothing to do
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	resMap, ok := m["resource"].(map[string]any)
+	if !ok || len(resMap) == 0 {
+		return nil
+	}
+
+	resources := NewOrderedMap()
+	for key, v := range resMap {
+		filename, ok := v.(string)
+		if !ok {
+			return fmt.Errorf("resource %q: value must be a string filename", key)
+		}
+		format := formatFromExt(filename)
+		if format == "" {
+			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
+		}
+		filePath := filepath.Join(modDir, filename)
+		vals, err := doRead(r, filePath, "utf8", format, "lf")
+		if err != nil {
+			return fmt.Errorf("resource %q: %w", key, err)
+		}
+		if len(vals) > 0 {
+			resources.Set(key, vals[0])
+		}
+	}
+
+	desc.Exports["resource"] = resources
+	return nil
 }
 
 // installExports installs all exports from a module descriptor as defs.
@@ -282,6 +453,21 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	return nil
 }
 
+// installSingleRename renames the single export in a module to newName.
+// If the module has zero or more than one export, an error is returned.
+func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
+	if len(desc.Exports) == 0 {
+		return fmt.Errorf("import: module has no exports to rename")
+	}
+	if len(desc.Exports) != 1 {
+		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
+	}
+	for _, exportMap := range desc.Exports {
+		installDef(r, newName, NewMap(exportMap))
+	}
+	return nil
+}
+
 // resolveModuleExport resolves an export map value through the module's
 // def stacks. If the value is a string, atom, or word that names a def'd word,
 // the def body is returned. Otherwise the value is returned as-is.
@@ -298,7 +484,19 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	}
 	stack := modReg.DefStacks[name]
 	if len(stack) > 0 {
-		return stack[len(stack)-1]
+		val := stack[len(stack)-1]
+		// Tag FnDef values with the module's registry so they can
+		// execute in the correct context (closure semantics).
+		if fnDef, ok := val.Data.(FnDefInfo); ok {
+			if fnDef.Registry == nil {
+				fnDef.Registry = modReg
+				if val.VType.Equal(TFnDef) {
+					return NewFnDef(fnDef)
+				}
+				return NewFunction(fnDef)
+			}
+		}
+		return val
 	}
 	return v
 }

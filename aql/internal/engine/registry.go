@@ -44,6 +44,7 @@ type Registry struct {
 	KnownTypeParts map[string]bool    // set of all type path parts (for uniqueness enforcement)
 	Manager        any                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache       map[string]any     // cached SDK instances keyed by spec name
+	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
 }
 
 // NewRegistry creates an empty registry.

@@ -1,0 +1,7 @@
+(import "caser")
+(import "bracket")
+
+def format fn [[s:String] [String] [(s Caser.emphasize)]]
+def mark fn [[s:String] [String] [(s Bracket.label)]]
+
+export Formatter {format: format mark: mark}

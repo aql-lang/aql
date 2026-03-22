@@ -1,0 +1,12 @@
+{
+  "deps": {
+    "textkit": "3.2.0"
+  },
+  "files": [
+    "index.aql"
+  ],
+  "major": 0,
+  "minor": 1,
+  "name": "wordlab",
+  "patch": 0
+}

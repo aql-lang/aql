@@ -541,7 +541,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	}
 
 	result := runAQL(t, r, []Value{
-		NewWord("import"), NewString("mod.aql"),
+		NewWord("import"), NewString("./mod.aql"),
 	})
 	_ = result
 
@@ -570,7 +570,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("import"),
 		NewList([]Value{NewAtom("foo"), NewAtom("bar")}),
-		NewString("mod2.aql"),
+		NewString("./mod2.aql"),
 	})
 	_ = result
 

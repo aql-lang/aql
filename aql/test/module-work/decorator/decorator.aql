@@ -1,0 +1,6 @@
+(import "formatter")
+
+def decorate fn [[s:String] [String] [">> " add (s Formatter.format)]]
+def label-it fn [[s:String] [String] [">> " add (s Formatter.mark)]]
+
+export Decorator {decorate: decorate label-it: label-it}

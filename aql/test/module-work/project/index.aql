@@ -1,0 +1,3 @@
+(import "color")
+
+"#FF0000" Color.hex2rgb .r

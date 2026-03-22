@@ -168,7 +168,7 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 			fmt.Fprintf(ctx.Out, "help: no help available for %q\n", name)
 			return nil
 		}
-		fmt.Fprint(ctx.Out, formatHelp(entry))
+		fmt.Fprint(ctx.Out, help.Format(entry))
 		return nil
 	}
 }
@@ -215,44 +215,3 @@ func toInt(v any) (int, bool) {
 	return 0, false
 }
 
-// formatHelp formats a help entry for display. Mirrors the engine's
-// formatHelp to keep output consistent.
-func formatHelp(e *help.Entry) string {
-	var b strings.Builder
-
-	b.WriteString(e.Word)
-	b.WriteString(" — ")
-	b.WriteString(e.Summary)
-	b.WriteByte('\n')
-
-	b.WriteString("\nSignatures:\n")
-	for _, sig := range e.Signatures {
-		b.WriteString("  ")
-		b.WriteString(sig)
-		b.WriteByte('\n')
-	}
-
-	b.WriteString("\nDescription:\n  ")
-	b.WriteString(e.Description)
-	b.WriteByte('\n')
-
-	if len(e.Examples) > 0 {
-		b.WriteString("\nExamples:\n")
-		for _, ex := range e.Examples {
-			b.WriteString("  ")
-			b.WriteString(ex)
-			b.WriteByte('\n')
-		}
-	}
-
-	if len(e.Notes) > 0 {
-		b.WriteString("\nNotes:\n")
-		for _, n := range e.Notes {
-			b.WriteString("  - ")
-			b.WriteString(n)
-			b.WriteByte('\n')
-		}
-	}
-
-	return b.String()
-}

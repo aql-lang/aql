@@ -1,11 +1,15 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
 
 func TestExecuteVersion(t *testing.T) {
@@ -184,5 +188,346 @@ func TestRunEngineError(t *testing.T) {
 	err := run(&buf, "10 div 0", "", 0)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// --- help subcommand ---
+
+func TestExecuteHelpListsWords(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Available words:") {
+		t.Errorf("expected 'Available words:' header, got %q", out)
+	}
+	// Spot-check a few well-known words appear in the listing.
+	for _, word := range []string{"add", "concat", "help", "import"} {
+		if !strings.Contains(out, word) {
+			t.Errorf("expected word %q in help listing", word)
+		}
+	}
+}
+
+func TestExecuteHelpSpecificWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help", "add"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	// Should contain the word name and signature section — same as in-language help.
+	if !strings.Contains(out, "add") {
+		t.Errorf("expected 'add' in output, got %q", out)
+	}
+	if !strings.Contains(out, "Signatures:") {
+		t.Errorf("expected 'Signatures:' section, got %q", out)
+	}
+	if !strings.Contains(out, "Description:") {
+		t.Errorf("expected 'Description:' section, got %q", out)
+	}
+}
+
+func TestExecuteHelpUnknownWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help", "nonexistent_word"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout.String(), "no help available") {
+		t.Errorf("expected 'no help available' message, got %q", stdout.String())
+	}
+}
+
+func TestExecuteHelpMatchesHelpFormat(t *testing.T) {
+	// The CLI "aql help add" should produce the same output as help.Format
+	// — the same function the in-language "add help" word uses.
+	var cliOut bytes.Buffer
+	code := execute([]string{"help", "add"}, nil, &cliOut, &bytes.Buffer{})
+	if code != 0 {
+		t.Fatalf("CLI help exit code = %d, want 0", code)
+	}
+
+	entry := help.Lookup("add")
+	if entry == nil {
+		t.Fatal("expected help entry for 'add'")
+	}
+	expected := help.Format(entry)
+	if cliOut.String() != expected {
+		t.Errorf("CLI output differs from help.Format:\nCLI:\n%s\nExpected:\n%s", cliOut.String(), expected)
+	}
+}
+
+// --- prep subcommand ---
+
+func TestExecutePrepBasic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+name: foo
+major: 1
+minor: 2
+patch: 3
+files: [a.aql b.aql]
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	out := filepath.Join(dir, ".aql", "aql.json")
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("failed to read output: %s", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+
+	if m["name"] != "foo" {
+		t.Errorf("name = %v, want foo", m["name"])
+	}
+	if m["major"] != float64(1) {
+		t.Errorf("major = %v, want 1", m["major"])
+	}
+	files, ok := m["files"].([]any)
+	if !ok || len(files) != 2 {
+		t.Fatalf("files = %v, want [a.aql b.aql]", m["files"])
+	}
+	if files[0] != "a.aql" || files[1] != "b.aql" {
+		t.Errorf("files = %v, want [a.aql b.aql]", files)
+	}
+}
+
+func TestExecutePrepDefaultDir(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: bar major: 0 minor: 0 patch: 1 files: [index.aql]`), 0644)
+
+	// Change to temp dir so default "." works.
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	if err != nil {
+		t.Fatalf("failed to read output: %s", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("invalid json: %s", err)
+	}
+	if m["name"] != "bar" {
+		t.Errorf("name = %v, want bar", m["name"])
+	}
+}
+
+func TestExecutePrepMissingFile(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", "/nonexistent/dir"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "error") {
+		t.Errorf("expected error in stderr, got %q", stderr.String())
+	}
+}
+
+func TestExecutePrepInvalidJsonic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`{{{`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"prep", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "jsonic") {
+		t.Errorf("expected jsonic error, got %q", stderr.String())
+	}
+}
+
+// --- pack subcommand ---
+
+func TestExecutePackBasic(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+name: mymod
+major: 1
+minor: 2
+patch: 3
+files: [main.aql helpers.aql]
+`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.aql"), []byte("1 add 2"), 0644)
+	os.WriteFile(filepath.Join(dir, "helpers.aql"), []byte("def x 1"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	zipPath := filepath.Join(dir, ".aql", "_pack", "mymod-1.2.3.zip")
+	if !strings.Contains(stdout.String(), "mymod-1.2.3.zip") {
+		t.Errorf("expected zip path in output, got %q", stdout.String())
+	}
+
+	// Verify aql.json was also created (prep ran).
+	if _, err := os.Stat(filepath.Join(dir, ".aql", "aql.json")); err != nil {
+		t.Errorf("expected .aql/aql.json to exist: %s", err)
+	}
+
+	// Verify zip contents.
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("failed to open zip: %s", err)
+	}
+	defer zr.Close()
+
+	names := make(map[string]bool)
+	for _, f := range zr.File {
+		names[f.Name] = true
+	}
+
+	for _, want := range []string{"aql.jsonic", "main.aql", "helpers.aql"} {
+		if !names[want] {
+			t.Errorf("zip missing %q, has %v", want, names)
+		}
+	}
+	if len(zr.File) != 3 {
+		t.Errorf("expected 3 files in zip, got %d", len(zr.File))
+	}
+}
+
+func TestExecutePackOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 1 files: [a.aql]`), 0644)
+	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("old"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("first pack failed: %s", stderr.String())
+	}
+
+	// Update file and re-pack.
+	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("new content here"), 0644)
+	stdout.Reset()
+	stderr.Reset()
+	code = execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("second pack failed: %s", stderr.String())
+	}
+
+	// Verify the zip contains the updated content.
+	zipPath := filepath.Join(dir, ".aql", "_pack", "x-0.0.1.zip")
+	zr, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("failed to open zip: %s", err)
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.Name == "a.aql" {
+			rc, _ := f.Open()
+			var buf bytes.Buffer
+			buf.ReadFrom(rc)
+			rc.Close()
+			if buf.String() != "new content here" {
+				t.Errorf("expected updated content, got %q", buf.String())
+			}
+		}
+	}
+}
+
+func TestExecutePackMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 0 files: [missing.aql]`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "error") {
+		t.Errorf("expected error in stderr, got %q", stderr.String())
+	}
+}
+
+// --- clean subcommand ---
+
+func TestExecuteCleanBasic(t *testing.T) {
+	dir := t.TempDir()
+	aqlDir := filepath.Join(dir, ".aql")
+	os.MkdirAll(aqlDir, 0755)
+
+	// Create files and dirs that should be removed.
+	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
+	os.MkdirAll(filepath.Join(aqlDir, "_pack"), 0755)
+	os.WriteFile(filepath.Join(aqlDir, "_pack", "x.zip"), []byte("zip"), 0644)
+	os.MkdirAll(filepath.Join(aqlDir, "color"), 0755)
+	os.WriteFile(filepath.Join(aqlDir, "color", "color.aql"), []byte("1"), 0644)
+
+	// Create a dotfile that should survive.
+	os.WriteFile(filepath.Join(aqlDir, ".gitkeep"), []byte(""), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean", dir}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	// Dotfile should still exist.
+	if _, err := os.Stat(filepath.Join(aqlDir, ".gitkeep")); err != nil {
+		t.Errorf("expected .gitkeep to survive: %s", err)
+	}
+
+	// Everything else should be gone.
+	for _, name := range []string{"aql.json", "_pack", "color"} {
+		if _, err := os.Stat(filepath.Join(aqlDir, name)); err == nil {
+			t.Errorf("expected %s to be removed", name)
+		}
+	}
+}
+
+func TestExecuteCleanNoAqlDir(t *testing.T) {
+	dir := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean", dir}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+}
+
+func TestExecuteCleanDefaultDir(t *testing.T) {
+	dir := t.TempDir()
+	aqlDir := filepath.Join(dir, ".aql")
+	os.MkdirAll(aqlDir, 0755)
+	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
+
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"clean"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(aqlDir, "aql.json")); err == nil {
+		t.Error("expected aql.json to be removed")
 	}
 }

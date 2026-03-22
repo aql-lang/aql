@@ -1,0 +1,6 @@
+name: wordlab
+major: 0
+minor: 1
+patch: 0
+files: [index.aql]
+deps: {textkit: 3.2.0}

@@ -1,0 +1,2 @@
+def magicnum 42
+export Helpers {magicnum:magicnum}

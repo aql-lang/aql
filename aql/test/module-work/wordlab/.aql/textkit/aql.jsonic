@@ -1,0 +1,8 @@
+name: textkit
+main: textkit.aql
+major: 3
+minor: 2
+patch: 0
+files: [textkit.aql, config.json]
+deps: {styler: 1.0.7}
+resource: {config: "config.json"}

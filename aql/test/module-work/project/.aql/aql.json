@@ -1,0 +1,12 @@
+{
+  "deps": {
+    "color": "0.1.0"
+  },
+  "files": [
+    "index.aql"
+  ],
+  "major": 0,
+  "minor": 1,
+  "name": "project",
+  "patch": 0
+}

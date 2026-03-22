@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "wrapper": "1.1.0"
+  },
+  "files": [
+    "caser.aql"
+  ],
+  "main": "caser.aql",
+  "major": 0,
+  "minor": 2,
+  "name": "caser",
+  "patch": 4
+}

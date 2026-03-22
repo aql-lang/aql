@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "joiner": "0.4.2"
+  },
+  "files": [
+    "tagger.aql"
+  ],
+  "main": "tagger.aql",
+  "major": 3,
+  "minor": 0,
+  "name": "tagger",
+  "patch": 2
+}

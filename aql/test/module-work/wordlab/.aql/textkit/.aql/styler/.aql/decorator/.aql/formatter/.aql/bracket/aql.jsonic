@@ -1,0 +1,7 @@
+name: bracket
+main: bracket.aql
+major: 1
+minor: 3
+patch: 0
+files: [bracket.aql]
+deps: {tagger: 3.0.2}

@@ -1,0 +1,14 @@
+{
+  "files": [
+    "charops.aql",
+    "letters.jsonic"
+  ],
+  "main": "charops.aql",
+  "major": 2,
+  "minor": 3,
+  "name": "charops",
+  "patch": 1,
+  "resource": {
+    "letters": "letters.jsonic"
+  }
+}
