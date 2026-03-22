@@ -56,7 +56,7 @@ func TestColorRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`do {r:255 g:136 b:0} Color.rgb2hex`,
+		`{r:255 g:136 b:0} Color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -18,7 +18,7 @@ def neon3 ("#FFBE0B" Color.make-color)
 def neon4 ("#8338EC" Color.make-color)
 def neon5 ("#3A86FF" Color.make-color)
 
-def sunset do {
+def sunset {
   name: "sunset"
   primary: accent1
   secondary: light1
@@ -27,7 +27,7 @@ def sunset do {
   background: deep1
 }
 
-def ocean do {
+def ocean {
   name: "ocean"
   primary: earth1
   secondary: earth2
@@ -36,7 +36,7 @@ def ocean do {
   background: earth5
 }
 
-def neon do {
+def neon {
   name: "neon"
   primary: neon1
   secondary: neon2
