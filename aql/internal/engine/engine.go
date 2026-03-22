@@ -208,6 +208,14 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// Remove any leftover marks and moves from the stack.
 	e.cleanMarks()
 
+	// Auto-evaluate unquoted lists and maps on the final stack.
+	// Lists are evaluated as sub-programs: [1 add 2] → [3].
+	// Maps have their values evaluated recursively.
+	// Values marked Quoted (by the quote word) are left as-is.
+	if err := e.autoEvalStack(); err != nil {
+		return nil, err
+	}
+
 	return e.stack, nil
 }
 
@@ -408,6 +416,14 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	// Find the indices of the n resolved values before the pointer.
 	indices := e.resolvedIndicesBefore(n)
+
+	// Strip Eval flag from consumed arguments so that lists stored
+	// by word handlers (def bodies, map values, etc.) are not
+	// auto-evaluated at end of Run. Only unconsumed parser-created
+	// lists on the final stack should be auto-evaluated.
+	for i := range match.Args {
+		match.Args[i].Eval = false
+	}
 
 	var results []Value
 	var err error
@@ -686,6 +702,87 @@ func (e *Engine) stepLiteral() error {
 // execFnDefLiteral handles a FnDef or TFunction value that has landed on the
 // stack without a pending forward. It tries to match the function's signatures
 // against preceding resolved stack values and, if a match is found, executes
+// autoEvalStack walks the final stack and auto-evaluates lists that
+// were created by the parser (Eval=true) and not explicitly quoted.
+// Runtime-created lists (from word handlers, def bodies, etc.) are
+// not auto-evaluated. This is called at the end of Run().
+func (e *Engine) autoEvalStack() error {
+	for i := 0; i < len(e.stack); i++ {
+		val := e.stack[i]
+		if !val.Eval || val.Quoted {
+			continue
+		}
+		if val.VType.Equal(TList) && val.Data != nil && !val.IsTypedList() && !val.IsTableType() {
+			result, err := e.autoEvalList(val)
+			if err != nil {
+				return err
+			}
+			e.stack[i] = result
+		}
+	}
+	return nil
+}
+
+// autoEvalList evaluates the contents of a plain list in a sub-engine,
+// returning a new list containing the results. For example, [1 add 2] → [3].
+func (e *Engine) autoEvalList(val Value) (Value, error) {
+	elems := val.AsList()
+	if len(elems) == 0 {
+		return val, nil
+	}
+	sub := New(e.registry)
+	input := make([]Value, len(elems))
+	copy(input, elems)
+	result, err := sub.Run(input)
+	if err != nil {
+		return Value{}, err
+	}
+	return NewList(result), nil
+}
+
+// autoEvalMap evaluates each value expression in a plain map using a
+// sub-engine. For example, {x: 1 add 2} → {x: 3}.
+func (e *Engine) autoEvalMap(val Value) (Value, error) {
+	m := val.AsMap()
+	out := NewOrderedMap()
+	if m.Implicit {
+		out.Implicit = true
+	}
+	for _, key := range m.Keys() {
+		v, _ := m.Get(key)
+		// Evaluate list values as expressions.
+		if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+			elems := v.AsList()
+			if len(elems) > 0 {
+				sub := New(e.registry)
+				input := make([]Value, len(elems))
+				copy(input, elems)
+				result, err := sub.Run(input)
+				if err != nil {
+					return Value{}, err
+				}
+				if len(result) == 1 {
+					out.Set(key, result[0])
+				} else {
+					out.Set(key, NewList(result))
+				}
+				continue
+			}
+		}
+		// Evaluate nested maps recursively.
+		if v.VType.Equal(TMap) && !v.IsTypedMap() && !v.IsRecordType() {
+			evaluated, err := e.autoEvalMap(v)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(key, evaluated)
+			continue
+		}
+		out.Set(key, v)
+	}
+	return NewMap(out), nil
+}
+
 // the function. If the FnDef carries a captured Registry (closure from a
 // module), execution happens in a sub-engine using that registry so that
 // module-internal words are available. Otherwise, body tokens are spliced

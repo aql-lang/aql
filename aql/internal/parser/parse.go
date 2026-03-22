@@ -364,14 +364,14 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 }
 
 // convertWordList converts a list in word context (top-level list).
-// Square brackets at the top level are a quotation operator for program
-// fragments: unquoted text → words, maps use data context.
+// The resulting list is marked for auto-evaluation: its contents will
+// be executed at the end of Run unless quoted or consumed by a word.
 func convertWordList(items []any) (engine.Value, error) {
 	elems, err := convertTopLevelItems(items)
 	if err != nil {
 		return engine.Value{}, err
 	}
-	return engine.NewList(elems), nil
+	return engine.NewEvalList(elems), nil
 }
 
 // convertMapData converts a map in data context. All text values are
@@ -393,12 +393,15 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 	return engine.NewMap(om), nil
 }
 
-// convertDataValue converts a value in data context (inside maps and
-// lists that are inside maps). All text → resolved scalar values
-// (type names, booleans, or plain strings).
+// convertDataValue converts a value in data context (inside maps).
+// Quoted text → strings, unquoted text → type literals, booleans, or atoms.
 func convertDataValue(v any) (engine.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
+		if val.Quote != "" {
+			// Quoted text (e.g. "hello") → string
+			return engine.NewString(val.Str), nil
+		}
 		return resolveTextValue(val.Str), nil
 
 	case numberVal:
@@ -464,21 +467,18 @@ func convertTypedMap(m map[string]any) (engine.Value, error) {
 }
 
 // convertDataList converts a list in data context (inside maps).
-// All text → scalar data.
+// Lists use word context and are marked for auto-evaluation.
 func convertDataList(items []any) (engine.Value, error) {
-	elems := make([]engine.Value, len(items))
-	for i, item := range items {
-		v, err := convertDataValue(item)
-		if err != nil {
-			return engine.Value{}, err
-		}
-		elems[i] = v
+	elems, err := convertTopLevelItems(items)
+	if err != nil {
+		return engine.Value{}, err
 	}
-	return engine.NewList(elems), nil
+	return engine.NewEvalList(elems), nil
 }
 
 // resolveTextValue converts a bare text string into the appropriate
-// AQL value — type literal, boolean, or plain string.
+// AQL value — type literal, boolean, or atom.
+// Unquoted text is never a string; only quoted text produces strings.
 func resolveTextValue(text string) engine.Value {
 	if text == "true" {
 		return engine.NewBoolean(true)
@@ -489,7 +489,7 @@ func resolveTextValue(text string) engine.Value {
 	if t, ok := typeNames[text]; ok {
 		return engine.NewTypeLiteral(t)
 	}
-	return engine.NewString(text)
+	return engine.NewAtom(text)
 }
 
 // sortedKeys returns the keys of a map in sorted order for deterministic output.

@@ -277,6 +277,7 @@ func registerBuiltins(r *Registry) {
 	registerIf(r)
 	registerFor(r)
 	registerError(r)
+	registerQuote(r)
 
 	// Accessors
 	registerDot(r)

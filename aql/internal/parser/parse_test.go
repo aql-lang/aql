@@ -1063,15 +1063,16 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
-	if !elems[0].VType.Matches(engine.TBoolean) || !elems[0].AsBoolean() {
-		t.Errorf("expected true, got %s", elems[0])
+	// With word context in lists, true/false become words (resolved at runtime),
+	// and null becomes a word (resolved to atom at runtime).
+	if !elems[0].IsWord() || elems[0].AsWord().Name != "true" {
+		t.Errorf("expected word(true), got %s", elems[0])
 	}
-	if !elems[1].VType.Matches(engine.TBoolean) || elems[1].AsBoolean() {
-		t.Errorf("expected false, got %s", elems[1])
+	if !elems[1].IsWord() || elems[1].AsWord().Name != "false" {
+		t.Errorf("expected word(false), got %s", elems[1])
 	}
-	// null in jsonic data context becomes Text("null") → resolveTextValue → string "null"
-	if !elems[2].VType.Matches(engine.TString) {
-		t.Errorf("expected string, got %s", elems[2])
+	if !elems[2].IsWord() || elems[2].AsWord().Name != "null" {
+		t.Errorf("expected word(null), got %s", elems[2])
 	}
 }
 
@@ -1555,7 +1556,7 @@ func TestResolveTextValueTypes(t *testing.T) {
 		{"false", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && !v.AsBoolean() }},
 		{"Number", func(v engine.Value) bool { return v.VType.Equal(engine.TNumber) }},
 		{"String", func(v engine.Value) bool { return v.VType.Equal(engine.TString) }},
-		{"hello", func(v engine.Value) bool { return v.VType.Matches(engine.TString) && v.AsString() == "hello" }},
+		{"hello", func(v engine.Value) bool { return v.VType.Matches(engine.TAtom) && v.AsString() == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)

@@ -236,6 +236,11 @@ func resolveSigType(v Value) (Type, *Value, error) {
 		t, err := resolveTypeName(v.AsString())
 		return t, nil, err
 	}
+	// Atoms (unquoted text in data context) may be type names.
+	if v.VType.Matches(TAtom) {
+		t, err := resolveTypeName(v.AsString())
+		return t, nil, err
+	}
 	// Literal values (integers, booleans) carry their literal type.
 	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
 		return v.VType, nil, nil

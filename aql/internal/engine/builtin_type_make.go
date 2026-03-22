@@ -558,8 +558,8 @@ func resolveWordValue(v Value) Value {
 //	record [x:number y:OptStr]              => record{x:number,y:string|none}
 //	record [x:number y:[string or none]]    => record{x:number,y:string|none}
 func resolveFieldType(r *Registry, v Value) Value {
-	// Strategy 1: string matching a defined type name.
-	if v.Data != nil && v.VType.Matches(TString) {
+	// Strategy 1: string or atom matching a defined type name.
+	if v.Data != nil && (v.VType.Matches(TString) || v.VType.Matches(TAtom)) {
 		name := v.AsString()
 		stack := r.DefStacks[name]
 		if len(stack) > 0 {

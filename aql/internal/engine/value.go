@@ -309,9 +309,11 @@ type ForwardInfo struct {
 //
 // Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
-	ID    string
-	VType Type
-	Data  interface{}
+	ID      string
+	VType   Type
+	Data    interface{}
+	Quoted  bool // true when value was produced by the quote word; prevents auto-evaluation
+	Eval    bool // true for parser-created lists that should auto-evaluate at end of Run
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -390,6 +392,14 @@ func NewBoolean(b bool) Value {
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
 	return newValue(TList, elems)
+}
+
+// NewEvalList creates a list value that is marked for auto-evaluation
+// at the end of execution. Used by the parser for source-code lists.
+func NewEvalList(elems []Value) Value {
+	v := newValue(TList, elems)
+	v.Eval = true
+	return v
 }
 
 // NewTypedList creates a typed list value with a child type constraint.
