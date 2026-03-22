@@ -34,12 +34,18 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value,
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
 
+	absDir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetFileOps(fileops.NewDefault())
 	reg.SetParseFunc(parser.Parse)
+	reg.BaseDir = absDir
 
 	eng := engine.New(reg)
 	var result []engine.Value
