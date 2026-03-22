@@ -13,7 +13,7 @@ def hex2rgb fn [[hex:String] [Map] [
   {r:rv g:gv b:bv}
 ]]
 
-def rgb2hex fn [[rgb:Map] [String] [
+def rgb2hex fn [[rgb:{r:Integer g:Integer b:Integer}] [String] [
   "#" add (int2hex rgb.r) add (int2hex rgb.g) add (int2hex rgb.b)
 ]]
 
@@ -21,7 +21,7 @@ def clamp fn [[n:Integer] [Integer] [
   (n lt 0) [0] [(n gt 255) [255] [n] if] if
 ]]
 
-def clamp-rgb fn [[rgb:Map] [Map] [
+def clamp-rgb fn [[rgb:{r:Integer g:Integer b:Integer}] [Map] [
   {r:(rgb.r clamp) g:(rgb.g clamp) b:(rgb.b clamp)}
 ]]
 

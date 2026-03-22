@@ -10,10 +10,10 @@ def hex2rgb fn [[hex:String] [Map] [
   def rv (hex slice 1 3 hex2int)
   def gv (hex slice 3 5 hex2int)
   def bv (hex slice 5 7 hex2int)
-  do {r:[rv] g:[gv] b:[bv]}
+  {r:rv g:gv b:bv}
 ]]
 
-def rgb2hex fn [[rgb:Map] [String] [
+def rgb2hex fn [[rgb:{r:Integer g:Integer b:Integer}] [String] [
   "#" add (int2hex rgb.r) add (int2hex rgb.g) add (int2hex rgb.b)
 ]]
 
@@ -21,15 +21,15 @@ def clamp fn [[n:Integer] [Integer] [
   (n lt 0) [0] [(n gt 255) [255] [n] if] if
 ]]
 
-def clamp-rgb fn [[rgb:Map] [Map] [
-  do {r:[clamp rgb.r] g:[clamp rgb.g] b:[clamp rgb.b]}
+def clamp-rgb fn [[rgb:{r:Integer g:Integer b:Integer}] [Map] [
+  {r:(rgb.r clamp) g:(rgb.g clamp) b:(rgb.b clamp)}
 ]]
 
 def make-color fn [[hex:String] [Map] [
   def rv (hex slice 1 3 hex2int)
   def gv (hex slice 3 5 hex2int)
   def bv (hex slice 5 7 hex2int)
-  do {hex:[hex] r:[rv] g:[gv] b:[bv]}
+  {hex:hex r:rv g:gv b:bv}
 ]]
 
 export Color {
