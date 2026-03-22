@@ -323,6 +323,7 @@ None	{:Number}	false
 [:{:Number}]	[{a:"x"}]	false
 
 # Mixed: typed map of typed lists
-{:[:Number]}	{a:[1,2],b:[3]}	true	{a:[1,2],b:[3]}
-{:[:String]}	{x:["a"],y:["b","c"]}	true	{x:['a'],y:['b','c']}
-{:[:Number]}	{a:["x"]}	false
+# Single-element lists unwrap during map auto-eval, so use multi-element lists.
+{:[:Number]}	{a:[1,2],b:[3,4]}	true	{a:[1,2],b:[3,4]}
+{:[:String]}	{x:["a","b"],y:["c","d"]}	true	{x:['a','b'],y:['c','d']}
+{:[:Number]}	{a:[1,2],b:["x","y"]}	false

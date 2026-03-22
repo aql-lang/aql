@@ -413,6 +413,14 @@ func NewMap(entries *OrderedMap) Value {
 	return newValue(TMap, entries)
 }
 
+// NewEvalMap creates a map value marked for auto-evaluation at end of
+// execution. Used by the parser for source-code maps.
+func NewEvalMap(entries *OrderedMap) Value {
+	v := newValue(TMap, entries)
+	v.Eval = true
+	return v
+}
+
 // NewImplicitMap creates a map value marked as implicit (from pair syntax).
 // In fn signatures, implicit maps are treated as named parameter declarations
 // (e.g., [x:Integer]), while explicit maps are structural patterns.

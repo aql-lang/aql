@@ -702,9 +702,9 @@ func (e *Engine) stepLiteral() error {
 // execFnDefLiteral handles a FnDef or TFunction value that has landed on the
 // stack without a pending forward. It tries to match the function's signatures
 // against preceding resolved stack values and, if a match is found, executes
-// autoEvalStack walks the final stack and auto-evaluates lists that
-// were created by the parser (Eval=true) and not explicitly quoted.
-// Runtime-created lists (from word handlers, def bodies, etc.) are
+// autoEvalStack walks the final stack and auto-evaluates lists and maps
+// that were created by the parser (Eval=true) and not explicitly quoted.
+// Runtime-created values (from word handlers, def bodies, etc.) are
 // not auto-evaluated. This is called at the end of Run().
 func (e *Engine) autoEvalStack() error {
 	for i := 0; i < len(e.stack); i++ {
@@ -714,6 +714,12 @@ func (e *Engine) autoEvalStack() error {
 		}
 		if val.VType.Equal(TList) && val.Data != nil && !val.IsTypedList() && !val.IsTableType() {
 			result, err := e.autoEvalList(val)
+			if err != nil {
+				return err
+			}
+			e.stack[i] = result
+		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() {
+			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
 			}
@@ -750,8 +756,10 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	}
 	for _, key := range m.Keys() {
 		v, _ := m.Get(key)
-		// Evaluate list values as expressions.
-		if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+		// Evaluate list values as expressions, unwrapping single results.
+		// {r:[rv]} → {r:10} when rv evaluates to 10.
+		// {a:[1,2]} → {a:[1,2]} when multiple results.
+		if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
 			elems := v.AsList()
 			if len(elems) > 0 {
 				sub := New(e.registry)
@@ -770,7 +778,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			}
 		}
 		// Evaluate nested maps recursively.
-		if v.VType.Equal(TMap) && !v.IsTypedMap() && !v.IsRecordType() {
+		if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() {
 			evaluated, err := e.autoEvalMap(v)
 			if err != nil {
 				return Value{}, err

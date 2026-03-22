@@ -378,9 +378,11 @@ func convertWordList(items []any) (engine.Value, error) {
 // scalar data regardless of quoting. When implicit is true the
 // resulting OrderedMap is marked as coming from pair syntax (e.g.,
 // [x:Integer] rather than {x:Integer}).
+// Explicit maps are marked for auto-evaluation (Eval=true).
 func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 	om := engine.NewOrderedMap()
-	if len(implicit) > 0 && implicit[0] {
+	isImplicit := len(implicit) > 0 && implicit[0]
+	if isImplicit {
 		om.Implicit = true
 	}
 	for _, key := range sortedKeys(m) {
@@ -389,6 +391,11 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 			return engine.Value{}, err
 		}
 		om.Set(key, child)
+	}
+	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
+	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
+	if !isImplicit {
+		return engine.NewEvalMap(om), nil
 	}
 	return engine.NewMap(om), nil
 }
