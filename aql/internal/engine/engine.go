@@ -417,11 +417,19 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Find the indices of the n resolved values before the pointer.
 	indices := e.resolvedIndicesBefore(n)
 
-	// Strip Eval flag from consumed arguments so that lists stored
-	// by word handlers (def bodies, map values, etc.) are not
-	// auto-evaluated at end of Run. Only unconsumed parser-created
-	// lists on the final stack should be auto-evaluated.
+	// Process consumed arguments:
+	// - Maps with Eval=true: auto-evaluate their values now, so word
+	//   handlers receive resolved data (e.g. {base:hex} → {base:atom(hex)}).
+	// - Lists: strip Eval so they're not auto-evaluated later (they may
+	//   be code blocks like def bodies).
 	for i := range match.Args {
+		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
+			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() {
+			evaluated, err := e.autoEvalMap(match.Args[i])
+			if err == nil {
+				match.Args[i] = evaluated
+			}
+		}
 		match.Args[i].Eval = false
 	}
 
@@ -746,8 +754,13 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 	return NewList(result), nil
 }
 
-// autoEvalMap evaluates each value expression in a plain map using a
-// sub-engine. For example, {x: 1 add 2} → {x: 3}.
+// autoEvalMap evaluates each value in a plain map using a sub-engine.
+// All values (words, lists, nested maps) are evaluated:
+//
+//	{r:rv}        → {r:10}      (word evaluated)
+//	{x:[1 add 2]} → {x:3}       (list evaluated, single result unwrapped)
+//	{a:[1,2]}     → {a:[1,2]}   (list evaluated, multiple results stay as list)
+//	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	m := val.AsMap()
 	out := NewOrderedMap()
@@ -756,37 +769,17 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	}
 	for _, key := range m.Keys() {
 		v, _ := m.Get(key)
-		// Evaluate list values as expressions, unwrapping single results.
-		// {r:[rv]} → {r:10} when rv evaluates to 10.
-		// {a:[1,2]} → {a:[1,2]} when multiple results.
-		if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-			elems := v.AsList()
-			if len(elems) > 0 {
-				sub := New(e.registry)
-				input := make([]Value, len(elems))
-				copy(input, elems)
-				result, err := sub.Run(input)
-				if err != nil {
-					return Value{}, err
-				}
-				if len(result) == 1 {
-					out.Set(key, result[0])
-				} else {
-					out.Set(key, NewList(result))
-				}
-				continue
-			}
+		// Evaluate each value in a sub-engine.
+		sub := New(e.registry)
+		result, err := sub.Run([]Value{v})
+		if err != nil {
+			return Value{}, err
 		}
-		// Evaluate nested maps recursively.
-		if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() {
-			evaluated, err := e.autoEvalMap(v)
-			if err != nil {
-				return Value{}, err
-			}
-			out.Set(key, evaluated)
-			continue
+		if len(result) == 1 {
+			out.Set(key, result[0])
+		} else if len(result) > 1 {
+			out.Set(key, NewList(result))
 		}
-		out.Set(key, v)
 	}
 	return NewMap(out), nil
 }

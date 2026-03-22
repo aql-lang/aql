@@ -752,7 +752,7 @@ func TestParseMapWithList(t *testing.T) {
 }
 
 func TestParseMapWithBooleans(t *testing.T) {
-	// {a:true,b:false} → map with boolean values (data context)
+	// {a:true,b:false} → map with word values (word context)
 	got, err := Parse(`{a:true,b:false}`)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -762,12 +762,12 @@ func TestParseMapWithBooleans(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	aVal, _ := m.Get("a")
-	if !aVal.VType.Matches(engine.TBoolean) || !aVal.AsBoolean() {
-		t.Errorf("expected true, got %s", aVal)
+	if !aVal.IsWord() || aVal.AsWord().Name != "true" {
+		t.Errorf("expected word(true), got %s", aVal)
 	}
 	bVal, _ := m.Get("b")
-	if !bVal.VType.Matches(engine.TBoolean) || bVal.AsBoolean() {
-		t.Errorf("expected false, got %s", bVal)
+	if !bVal.IsWord() || bVal.AsWord().Name != "false" {
+		t.Errorf("expected word(false), got %s", bVal)
 	}
 }
 
@@ -998,15 +998,15 @@ func TestParseDataMapWithNil(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	m := got[0].AsMap()
-	// b should be boolean true
+	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
-	if !bVal.VType.Matches(engine.TBoolean) || !bVal.AsBoolean() {
-		t.Errorf("expected true, got %s", bVal)
+	if !bVal.IsWord() || bVal.AsWord().Name != "true" {
+		t.Errorf("expected word(true), got %s", bVal)
 	}
-	// c should be boolean false
+	// c should be word "false" (word context)
 	cVal, _ := m.Get("c")
-	if !cVal.VType.Matches(engine.TBoolean) || cVal.AsBoolean() {
-		t.Errorf("expected false, got %s", cVal)
+	if !cVal.IsWord() || cVal.AsWord().Name != "false" {
+		t.Errorf("expected word(false), got %s", cVal)
 	}
 }
 

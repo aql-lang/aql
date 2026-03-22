@@ -401,7 +401,7 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 }
 
 // convertDataValue converts a value in data context (inside maps).
-// Quoted text → strings, unquoted text → type literals, booleans, or atoms.
+// Quoted text → strings, unquoted text → words (executable).
 func convertDataValue(v any) (engine.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
@@ -409,7 +409,9 @@ func convertDataValue(v any) (engine.Value, error) {
 			// Quoted text (e.g. "hello") → string
 			return engine.NewString(val.Str), nil
 		}
-		return resolveTextValue(val.Str), nil
+		// Unquoted text → word (same as top-level word context).
+		// This allows map values like {r:rv} to evaluate rv.
+		return parseWord(val.Str)
 
 	case numberVal:
 		return numberValToValue(val), nil
