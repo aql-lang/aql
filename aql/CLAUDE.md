@@ -54,9 +54,12 @@ The real parser lives in `internal/parser/parse.go`. Key jsonic integration:
 - **Custom tokens**: `(`, `)`, `.`, `;` are registered via `j.Token()` so
   jsonic lexes them as separate fixed tokens even when adjacent to text.
 - **Grammar rule**: The `"val"` rule is extended with `j.Rule()` to handle
-  parens, semicolons (aliased to "end"), and dot operators. Adjacent dots
-  (`foo.bar`) use source position analysis to distinguish from standalone
-  dots (`foo . bar`).
+  parens, semicolons (aliased to "end"), and dot operators. Parens push to
+  a custom "paren"/"pelem" rule pair that collects items into a `parenGroup`.
+  At the top level, paren groups expand to engine markers `( ... )`. In data
+  context (map values), they become `ParenExpr` values for inline evaluation
+  by `autoEvalMap`. Adjacent dots (`foo.bar`) use source position analysis
+  to distinguish from standalone dots (`foo . bar`).
 - **Number wrapping**: A `j.Sub()` callback wraps floats containing `.` in a
   `numberVal` struct to distinguish integers from decimals at parse time.
 
@@ -67,8 +70,9 @@ The parser converts jsonic output to engine values through two semantic contexts
 - **Word context** (top level, lists): unquoted text → words (callable),
   quoted → strings. Lists created in word context are marked `Eval=true`
   for auto-evaluation at end of execution.
-- **Data context** (inside maps): unquoted text → atoms (not strings),
-  quoted text → strings, `true`/`false` → booleans, type names → type literals.
+- **Data context** (inside maps): unquoted text → words (executable),
+  quoted text → strings, `true`/`false` → booleans, type names → type literals,
+  paren groups → `ParenExpr` (inline evaluation).
 
 Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context

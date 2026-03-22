@@ -160,6 +160,9 @@ do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
 # Do - evaluate map word values (single words resolve directly)
 do {x:1,y:2}	{x:1,y:2}
 
+# Map with paren expressions (inline evaluation)
+{x:(3 add 4),y:(upper "a")}	{x:7,y:'A'}
+
 # Disjunct - union types via or
 String or None	Scalar/String|None
 (String or None) unify "a"	'a' true

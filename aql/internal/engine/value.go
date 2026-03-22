@@ -486,6 +486,14 @@ func NewOpenParen() Value {
 	return newValue(TOpenParen, nil)
 }
 
+// NewParenExpr creates a paren expression value containing items to evaluate.
+// Used by the parser for paren groups in map/list value positions.
+// autoEvalMap evaluates these by running the items in a sub-engine with
+// paren markers, producing a single result value.
+func NewParenExpr(items []Value) Value {
+	return newValue(TParenExpr, items)
+}
+
 // NewMark creates a mark value with the given unique ID and the body to
 // replay when the corresponding move fires. The body should contain
 // the original values between the mark and its paired move.
@@ -604,6 +612,19 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsParenExpr reports whether this value is a paren expression.
+func (v Value) IsParenExpr() bool {
+	return v.VType.Equal(TParenExpr)
+}
+
+// AsParenExpr returns the items in a paren expression value.
+func (v Value) AsParenExpr() []Value {
+	if items, ok := v.Data.([]Value); ok {
+		return items
+	}
+	return nil
 }
 
 // IsMark reports whether this value is a mark.
@@ -816,6 +837,8 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsParenExpr():
+		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
 	case v.IsMark():
 		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
 	case v.IsMove():

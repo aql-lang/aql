@@ -22,7 +22,7 @@ def clamp fn [[n:Integer] [Integer] [
 ]]
 
 def clamp-rgb fn [[rgb:Map] [Map] [
-  do {r:[rgb.r clamp] g:[rgb.g clamp] b:[rgb.b clamp]}
+  {r:(rgb.r clamp) g:(rgb.g clamp) b:(rgb.b clamp)}
 ]]
 
 def make-color fn [[hex:String] [Map] [

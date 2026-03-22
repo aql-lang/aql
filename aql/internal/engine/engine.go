@@ -173,6 +173,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsOpenParen():
 			e.pointer++
 
+		case val.IsParenExpr():
+			// ParenExpr values are only used inside maps (created by
+			// the parser for paren groups in data context). They should
+			// not appear on the main stack; skip if encountered.
+			e.pointer++
+
 		case val.IsMark():
 			e.stepMark(val)
 
@@ -769,6 +775,28 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	}
 	for _, key := range m.Keys() {
 		v, _ := m.Get(key)
+
+		// Paren expression: evaluate items with paren markers so the
+		// engine's stepCloseParen collapses to a single result.
+		if v.IsParenExpr() {
+			items := v.AsParenExpr()
+			sub := New(e.registry)
+			input := make([]Value, 0, len(items)+2)
+			input = append(input, NewOpenParen())
+			input = append(input, items...)
+			input = append(input, NewWord(")"))
+			result, err := sub.Run(input)
+			if err != nil {
+				return Value{}, err
+			}
+			if len(result) == 1 {
+				out.Set(key, result[0])
+			} else if len(result) > 1 {
+				out.Set(key, NewList(result))
+			}
+			continue
+		}
+
 		// Evaluate each value in a sub-engine.
 		sub := New(e.registry)
 		result, err := sub.Run([]Value{v})

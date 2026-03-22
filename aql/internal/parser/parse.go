@@ -36,6 +36,15 @@ func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
+// parenGroup represents items collected between ( and ) by the jsonic grammar.
+// At the top level, these are expanded to engine paren markers. In data context
+// (map values), they become ParenExpr values for inline evaluation.
+type parenGroup []any
+
+// unclosedParen wraps a parenGroup that was auto-closed at EOF (no matching `)`).
+// The converter produces an error for these.
+type unclosedParen struct{ items []any }
+
 // Parse tokenizes the AQL source string into a slice of engine.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
@@ -70,15 +79,18 @@ func Parse(src string) ([]engine.Value, error) {
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
 	//
+	// Parens push to the "paren" rule which collects items into a parenGroup.
+	// The close paren `)` is handled by the paren/pelem rules, not val.
+	//
 	// For the dot token, we use source position to distinguish adjacent dots
 	// (foo.bar → part of a dotted word) from space-separated dots
 	// (foo . bar → standalone dot operator). Adjacent dots use Quote="adj"
 	// so the converter can identify them.
 	j.Rule("val", func(rs *jsonic.RuleSpec) {
 		rs.Open = append([]*jsonic.AltSpec{
-			{S: [][]jsonic.Tin{{TinOP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: "(", Quote: ""}
-			}},
+			{S: [][]jsonic.Tin{{TinOP}}, P: "paren"},
+			// Bare ) outside a paren group: produce a marker so the engine
+			// can report "unmatched closing parenthesis" at runtime.
 			{S: [][]jsonic.Tin{{TinCP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: ")", Quote: ""}
 			}},
@@ -99,6 +111,87 @@ func Parse(src string) ([]engine.Value, error) {
 				}
 			}},
 		}, rs.Open...)
+	})
+
+	// Paren rule: collects values between ( and ) into a parenGroup.
+	// Works like a simplified list rule but closes on ) instead of ].
+	j.Rule("paren", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = make([]any, 0)
+			},
+			// Increment dlist and dmap so val.Close won't create
+			// implicit lists or maps inside paren groups.
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if v, ok := r.N["dlist"]; ok {
+					r.N["dlist"] = v + 1
+				} else {
+					r.N["dlist"] = 1
+				}
+				if v, ok := r.N["dmap"]; ok {
+					r.N["dmap"] = v + 1
+				} else {
+					r.N["dmap"] = 1
+				}
+			},
+		}
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if arr, ok := r.Node.([]any); ok {
+					r.Node = parenGroup(arr)
+				}
+			},
+		}
+		rs.AC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if r.U["closed"] != true {
+					if pg, ok := r.Node.(parenGroup); ok {
+						r.Node = unclosedParen{items: []any(pg)}
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Empty parens: ()
+			{S: [][]jsonic.Tin{{TinCP}}, U: map[string]any{"closed": true}},
+			// First element
+			{P: "pelem"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{TinCP}}, U: map[string]any{"closed": true}},
+			// End of source: auto-close (unclosed paren)
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+		}
+	})
+
+	// Pelem (paren element): each item inside a paren group.
+	// Pushes to val for each value, appends to parent paren's list.
+	j.Rule("pelem", func(rs *jsonic.RuleSpec) {
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if !jsonic.IsUndefined(r.Child.Node) {
+					if arr, ok := r.Node.([]any); ok {
+						r.Node = append(arr, r.Child.Node)
+						if r.Parent != nil && r.Parent != jsonic.NoRule {
+							r.Parent.Node = r.Node
+						}
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			{P: "val"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// ) ends the paren group (backtrack so paren.Close consumes it)
+			{S: [][]jsonic.Tin{{TinCP}}, B: 1},
+			// End of source inside paren: auto-close (unclosed paren)
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+			// Comma: next element
+			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "pelem"},
+			// Space-separated: next element (backtrack to re-read token)
+			{R: "pelem", B: 1},
+		}
 	})
 
 	// Intercept number tokens at lex time: wrap float64 values in numberVal
@@ -153,6 +246,13 @@ func Parse(src string) ([]engine.Value, error) {
 			return nil, err
 		}
 		return []engine.Value{mv}, nil
+	case unclosedParen:
+		return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+
+	case parenGroup:
+		// Single paren group at top level: expand to paren markers.
+		return convertTopLevelItems([]any{val})
+
 	default:
 		v, err := convertTopLevelValue(val)
 		if err != nil {
@@ -301,6 +401,24 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 			}
 		}
 
+		// Unclosed paren: error at parse time.
+		if up, ok := items[i].(unclosedParen); ok {
+			_ = up
+			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		}
+
+		// Paren group: expand to engine paren markers at top level.
+		if pg, ok := items[i].(parenGroup); ok {
+			values = append(values, engine.NewWord("("))
+			inner, err := convertTopLevelItems([]any(pg))
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, inner...)
+			values = append(values, engine.NewWord(")"))
+			continue
+		}
+
 		v, err := convertTopLevelValue(items[i])
 		if err != nil {
 			return nil, err
@@ -436,6 +554,18 @@ func convertDataValue(v any) (engine.Value, error) {
 			return convertTypedList(val)
 		}
 		return convertDataList(val.Val)
+
+	case unclosedParen:
+		return engine.Value{}, fmt.Errorf("syntax error: unmatched opening parenthesis")
+
+	case parenGroup:
+		// Paren group in data context: convert items in word context
+		// and wrap as a ParenExpr for inline evaluation by autoEvalMap.
+		items, err := convertTopLevelItems([]any(val))
+		if err != nil {
+			return engine.Value{}, err
+		}
+		return engine.NewParenExpr(items), nil
 
 	case bool:
 		return engine.NewBoolean(val), nil
