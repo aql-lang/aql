@@ -25,7 +25,7 @@ func registerFn(r *Registry) {
 		}
 		// Triples (def mode) take precedence when divisible by 3.
 		if len(elems)%3 == 0 {
-			fnDef, err := parseFnDef(elems)
+			fnDef, err := parseFnDef(r, elems)
 			if err != nil {
 				return nil, err
 			}
@@ -33,7 +33,7 @@ func registerFn(r *Registry) {
 		}
 		// Pairs (undef mode) when divisible by 2.
 		if len(elems)%2 == 0 {
-			undefInfo, err := parseFnUndefSpec(elems)
+			undefInfo, err := parseFnUndefSpec(r, elems)
 			if err != nil {
 				return nil, err
 			}
@@ -52,7 +52,7 @@ func registerFn(r *Registry) {
 // The list contains signature triples: [input-sig, output-sig, body] ...
 // Each element of a triple may be abbreviated: a non-list value is treated
 // as a single-element list (e.g., `string` is equivalent to `[string]`).
-func parseFnDef(list []Value) (FnDefInfo, error) {
+func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 	var sigs []FnSig
 	for i := 0; i < len(list); i += 3 {
 		inputSig := list[i]
@@ -64,7 +64,7 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
-		params, err := parseFnParams(inputSig)
+		params, err := parseFnParams(r, inputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
@@ -94,7 +94,7 @@ func parseFnDef(list []Value) (FnDefInfo, error) {
 // parseFnUndefSpec parses a list of signature pairs (input+output, no body)
 // into a FnUndefInfo for targeted undef. Used when fn receives a list whose
 // length is divisible by 2 but not 3.
-func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
+func parseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 	var sigs []FnSigSpec
 	for i := 0; i < len(list); i += 2 {
 		inputSig := list[i]
@@ -104,7 +104,7 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
-		params, err := parseFnParams(inputSig)
+		params, err := parseFnParams(r, inputSig)
 		if err != nil {
 			return FnUndefInfo{}, err
 		}
@@ -128,7 +128,7 @@ func parseFnUndefSpec(list []Value) (FnUndefInfo, error) {
 func parseFnReturns(outputSig Value) ([]Type, error) {
 	if !outputSig.VType.Equal(TList) {
 		// Abbreviation: single value treated as [value].
-		t, _, err := resolveSigType(outputSig)
+		t, _, err := resolveSigType(nil, outputSig)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 	types := make([]Type, len(elems))
 	for i, e := range elems {
 		var err error
-		types[i], _, err = resolveSigType(e)
+		types[i], _, err = resolveSigType(nil, e)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +154,7 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 //   - A map with one key (named param from pair syntax): {x: type}
 //   - A word (unnamed param): type name
 //   - A type literal (Data==nil): already resolved type
-func parseFnParams(inputSig Value) ([]FnParam, error) {
+func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 	if !inputSig.VType.Equal(TList) {
 		return nil, fmt.Errorf("function spec: input signature must be a list")
 	}
@@ -173,14 +173,14 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 				}
 				name := keys[0]
 				typeVal, _ := m.Get(name)
-				paramType, pattern, err := resolveSigType(typeVal)
+				paramType, pattern, err := resolveSigType(r, typeVal)
 				if err != nil {
 					return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
 				}
 				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
 			} else {
 				// Explicit map: unnamed parameter with structural pattern
-				paramType, pattern, err := resolveSigType(elem)
+				paramType, pattern, err := resolveSigType(r, elem)
 				if err != nil {
 					return nil, fmt.Errorf("function spec: invalid map param: %w", err)
 				}
@@ -223,22 +223,35 @@ func parseFnParams(inputSig Value) ([]FnParam, error) {
 // resolveSigType converts a Value (from a pair's value side) to a Type.
 // The second return value is a non-nil pattern when the value is a map or list
 // literal that requires structural matching beyond basic type checking.
-func resolveSigType(v Value) (Type, *Value, error) {
+// When r is non-nil, def'd types (e.g. record types) are resolved from the registry.
+func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 	if v.Data == nil {
 		// Type literal (e.g., number, string) — already resolved by parser
 		return v.VType, nil, nil
 	}
 	if v.IsWord() {
-		t, err := resolveTypeName(v.AsWord().Name)
+		name := v.AsWord().Name
+		if defVal := lookupDefType(r, name); defVal != nil {
+			return resolveDefType(*defVal)
+		}
+		t, err := resolveTypeName(name)
 		return t, nil, err
 	}
 	if v.VType.Matches(TString) {
-		t, err := resolveTypeName(v.AsString())
+		name := v.AsString()
+		if defVal := lookupDefType(r, name); defVal != nil {
+			return resolveDefType(*defVal)
+		}
+		t, err := resolveTypeName(name)
 		return t, nil, err
 	}
 	// Atoms (unquoted text in data context) may be type names.
 	if v.VType.Matches(TAtom) {
-		t, err := resolveTypeName(v.AsString())
+		name := v.AsString()
+		if defVal := lookupDefType(r, name); defVal != nil {
+			return resolveDefType(*defVal)
+		}
+		t, err := resolveTypeName(name)
 		return t, nil, err
 	}
 	// Literal values (integers, booleans) carry their literal type.
@@ -251,6 +264,40 @@ func resolveSigType(v Value) (Type, *Value, error) {
 	}
 	if v.VType.Equal(TList) {
 		return TList, &v, nil
+	}
+	return TAny, nil, nil
+}
+
+// lookupDefType checks if a name is def'd as a type value in the registry.
+// Returns nil if the registry is nil, the name is not def'd, or the value
+// is not a type (record, disjunct, etc.).
+func lookupDefType(r *Registry, name string) *Value {
+	if r == nil {
+		return nil
+	}
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return nil
+	}
+	val := stack[len(stack)-1]
+	if !isTypeValue(val) {
+		return nil
+	}
+	return &val
+}
+
+// resolveDefType converts a def'd type value into a signature type + pattern.
+// Record types become TMap with a structural map pattern so that plain maps
+// with matching fields satisfy the signature.
+func resolveDefType(v Value) (Type, *Value, error) {
+	if v.IsRecordType() {
+		rt := v.AsRecordType()
+		pat := NewMap(rt.Fields)
+		return TMap, &pat, nil
+	}
+	// Other type values (disjuncts, type literals, etc.) use their type directly.
+	if v.Data == nil {
+		return v.VType, nil, nil
 	}
 	return TAny, nil, nil
 }

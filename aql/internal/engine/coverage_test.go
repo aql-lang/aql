@@ -1395,7 +1395,7 @@ func TestResolveWordValueNonWord(t *testing.T) {
 // ========================
 
 func TestResolveSigTypeTypeLiteral(t *testing.T) {
-	tp, _, err := resolveSigType(NewTypeLiteral(TNumber))
+	tp, _, err := resolveSigType(nil, NewTypeLiteral(TNumber))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1405,7 +1405,7 @@ func TestResolveSigTypeTypeLiteral(t *testing.T) {
 }
 
 func TestResolveSigTypeWord(t *testing.T) {
-	tp, _, err := resolveSigType(NewWord("String"))
+	tp, _, err := resolveSigType(nil, NewWord("String"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1415,7 +1415,7 @@ func TestResolveSigTypeWord(t *testing.T) {
 }
 
 func TestResolveSigTypeString(t *testing.T) {
-	tp, _, err := resolveSigType(NewString("Boolean"))
+	tp, _, err := resolveSigType(nil, NewString("Boolean"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1426,7 +1426,7 @@ func TestResolveSigTypeString(t *testing.T) {
 
 func TestResolveSigTypeInteger(t *testing.T) {
 	v := NewInteger(42)
-	tp, _, err := resolveSigType(v)
+	tp, _, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1437,7 +1437,7 @@ func TestResolveSigTypeInteger(t *testing.T) {
 
 func TestResolveSigTypeBoolean(t *testing.T) {
 	v := NewBoolean(true)
-	tp, _, err := resolveSigType(v)
+	tp, _, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1450,7 +1450,7 @@ func TestResolveSigTypeMap(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
-	tp, pattern, err := resolveSigType(mapVal)
+	tp, pattern, err := resolveSigType(nil, mapVal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4170,7 +4170,7 @@ func TestSetParseFunc(t *testing.T) {
 
 func TestResolveSigTypeList(t *testing.T) {
 	listVal := NewList([]Value{NewInteger(1), NewInteger(2)})
-	tp, pattern, err := resolveSigType(listVal)
+	tp, pattern, err := resolveSigType(nil, listVal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4189,7 +4189,7 @@ func TestResolveSigTypeDecimalDefault(t *testing.T) {
 	// Decimal is not integer or boolean, and has Data != nil, so falls through
 	// to the map/list checks and then to TAny.
 	v := NewDecimal(3.14)
-	tp, pattern, err := resolveSigType(v)
+	tp, pattern, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
