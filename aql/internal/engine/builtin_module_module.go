@@ -270,13 +270,20 @@ func resolveImportPath(r *Registry, path string) string {
 }
 
 // resolveBareModule resolves a bare module name (e.g. "foo") by searching for
-// .aql/foo/ starting from the current working directory and walking up parent
-// directories, following the CommonJS node_modules resolution pattern.
+// .aql/foo/ starting from the importing module's directory (BaseDir) or the
+// current working directory, and walking up parent directories, following the
+// CommonJS node_modules resolution pattern.
 // Checks .aql/aql.json for a main property, falling back to index.aql.
 func resolveBareModule(r *Registry, name string) (string, error) {
-	startDir, err := r.FileOps.ResolvePath(".")
-	if err != nil {
-		return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
+	var startDir string
+	if r.BaseDir != "" {
+		startDir = r.BaseDir
+	} else {
+		var err error
+		startDir, err = r.FileOps.ResolvePath(".")
+		if err != nil {
+			return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
+		}
 	}
 
 	dir := startDir

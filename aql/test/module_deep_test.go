@@ -7,7 +7,7 @@ import (
 )
 
 // =====================================================================
-// Deep dependency chain: 7 layers of module dependencies.
+// Deep dependency chain: 7 layers of nested module dependencies.
 //
 // Layer 7 (leaves): charops (v2.3.1), joiner (v0.4.2)
 // Layer 6: wrapper (v1.1.0) → charops, tagger (v3.0.2) → joiner
@@ -16,7 +16,13 @@ import (
 // Layer 3: decorator (v0.5.3) → formatter
 // Layer 2: styler (v1.0.7) → decorator
 // Layer 1: textkit (v3.2.0) → styler
-// Project: wordlab → all 10 modules
+// Project: wordlab → textkit
+//
+// Each module is nested inside its parent's .aql/ directory, forming
+// a 7-level deep tree mirroring CommonJS node_modules resolution.
+//
+// Main branch:  textkit → styler → decorator → formatter → caser → wrapper → charops
+// Other branch: formatter → bracket → tagger → joiner
 // =====================================================================
 
 func wordlabDir(t *testing.T) string {
@@ -28,11 +34,96 @@ func wordlabDir(t *testing.T) string {
 	return abs
 }
 
-// --- Layer 7: leaf modules ---
+// --- Full 7-layer chain through main branch ---
 
-func TestDeepCharopsToUp(t *testing.T) {
+func TestDeepTextkitProcess(t *testing.T) {
+	dir := wordlabDir(t)
+	// "hello" → charops.to-up → "HELLO" → wrapper.shout → "HELLO!"
+	// → caser.emphasize → "*HELLO!*" → formatter.format → "*HELLO!*"
+	// → decorator.decorate → ">> *HELLO!*" → styler.style → "~ >> *HELLO!* ~"
+	// → textkit.process → "~ >> *HELLO!* ~"
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`"hello" Textkit.process`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'~ >> *HELLO!* ~'")
+}
+
+func TestDeepTextkitProcessDifferentInput(t *testing.T) {
 	dir := wordlabDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`"world" Textkit.process`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'~ >> *WORLD!* ~'")
+}
+
+// --- Full pipeline via project code ---
+
+func TestDeepWordlabProjectCode(t *testing.T) {
+	dir := wordlabDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "textkit")`,
+		`"hello" Textkit.process`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'~ >> *HELLO!* ~'")
+}
+
+// --- Second branch: formatter.mark through bracket → tagger → joiner ---
+
+func TestDeepFormatterMarkBranch(t *testing.T) {
+	// Test the bracket → tagger → joiner branch.
+	// Access formatter from inside its parent (decorator),
+	// which is inside styler, which is inside textkit.
+	// We can access it by importing textkit and using its chain.
+	// But formatter.mark is not re-exported by the chain.
+	//
+	// Instead, test from decorator's directory context where formatter is a child dep.
+	dir := wordlabDir(t)
+	decDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql", "decorator")
+	result, err := runRealFileSteps(t, decDir, []string{
+		`(import "formatter")`,
+		`"tag" Formatter.mark`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// joiner.add-dot("tag") = "tag."
+	// tagger.tag("tag") = "[tag.]"
+	// bracket.label("tag") = "<[tag.]>"
+	// formatter.mark("tag") = "<[tag.]>"
+	assertResult(t, result, "'<[tag.]>'")
+}
+
+func TestDeepFormatterFormatBranch(t *testing.T) {
+	dir := wordlabDir(t)
+	decDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql", "decorator")
+	result, err := runRealFileSteps(t, decDir, []string{
+		`(import "formatter")`,
+		`"word" Formatter.format`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'*WORD!*'")
+}
+
+// --- Individual layers tested from their parent's context ---
+
+func TestDeepCharopsFromWrapper(t *testing.T) {
+	dir := wordlabDir(t)
+	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`"hello" Charops.to-up`,
 	})
@@ -44,7 +135,9 @@ func TestDeepCharopsToUp(t *testing.T) {
 
 func TestDeepCharopsToDown(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`"WORLD" Charops.to-down`,
 	})
@@ -54,9 +147,11 @@ func TestDeepCharopsToDown(t *testing.T) {
 	assertResult(t, result, "'world'")
 }
 
-func TestDeepJoinerAddDot(t *testing.T) {
+func TestDeepJoinerFromTagger(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	taggerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "bracket", ".aql", "tagger")
+	result, err := runRealFileSteps(t, taggerDir, []string{
 		`(import "joiner")`,
 		`"hello" Joiner.add-dot`,
 	})
@@ -66,23 +161,11 @@ func TestDeepJoinerAddDot(t *testing.T) {
 	assertResult(t, result, "'hello.'")
 }
 
-func TestDeepJoinerAddBang(t *testing.T) {
+func TestDeepWrapperFromCaser(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "joiner")`,
-		`"hello" Joiner.add-bang`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'hello!'")
-}
-
-// --- Layer 6: wrapper, tagger ---
-
-func TestDeepWrapperShout(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	caserDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "caser")
+	result, err := runRealFileSteps(t, caserDir, []string{
 		`(import "wrapper")`,
 		`"hello" Wrapper.shout`,
 	})
@@ -92,21 +175,11 @@ func TestDeepWrapperShout(t *testing.T) {
 	assertResult(t, result, "'HELLO!'")
 }
 
-func TestDeepWrapperWhisper(t *testing.T) {
+func TestDeepTaggerFromBracket(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "wrapper")`,
-		`"HELLO" Wrapper.whisper`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'hello...'")
-}
-
-func TestDeepTaggerTag(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	bracketDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter", ".aql", "bracket")
+	result, err := runRealFileSteps(t, bracketDir, []string{
 		`(import "tagger")`,
 		`"test" Tagger.tag`,
 	})
@@ -116,11 +189,11 @@ func TestDeepTaggerTag(t *testing.T) {
 	assertResult(t, result, "'[test.]'")
 }
 
-// --- Layer 5: caser, bracket ---
-
-func TestDeepCaserEmphasize(t *testing.T) {
+func TestDeepCaserFromFormatter(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	fmtDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter")
+	result, err := runRealFileSteps(t, fmtDir, []string{
 		`(import "caser")`,
 		`"hello" Caser.emphasize`,
 	})
@@ -130,9 +203,11 @@ func TestDeepCaserEmphasize(t *testing.T) {
 	assertResult(t, result, "'*HELLO!*'")
 }
 
-func TestDeepBracketLabel(t *testing.T) {
+func TestDeepBracketFromFormatter(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	fmtDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
+		"decorator", ".aql", "formatter")
+	result, err := runRealFileSteps(t, fmtDir, []string{
 		`(import "bracket")`,
 		`"test" Bracket.label`,
 	})
@@ -142,37 +217,10 @@ func TestDeepBracketLabel(t *testing.T) {
 	assertResult(t, result, "'<[test.]>'")
 }
 
-// --- Layer 4: formatter (two branches merge) ---
-
-func TestDeepFormatterFormat(t *testing.T) {
+func TestDeepDecoratorFromStyler(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "formatter")`,
-		`"hello" Formatter.format`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'*HELLO!*'")
-}
-
-func TestDeepFormatterMark(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "formatter")`,
-		`"test" Formatter.mark`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'<[test.]>'")
-}
-
-// --- Layer 3: decorator ---
-
-func TestDeepDecoratorDecorate(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	stylerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler")
+	result, err := runRealFileSteps(t, stylerDir, []string{
 		`(import "decorator")`,
 		`"hello" Decorator.decorate`,
 	})
@@ -182,9 +230,10 @@ func TestDeepDecoratorDecorate(t *testing.T) {
 	assertResult(t, result, "'>> *HELLO!*'")
 }
 
-func TestDeepDecoratorLabelIt(t *testing.T) {
+func TestDeepDecoratorLabelItFromStyler(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	stylerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler")
+	result, err := runRealFileSteps(t, stylerDir, []string{
 		`(import "decorator")`,
 		`"test" Decorator.label-it`,
 	})
@@ -194,11 +243,10 @@ func TestDeepDecoratorLabelIt(t *testing.T) {
 	assertResult(t, result, "'>> <[test.]>'")
 }
 
-// --- Layer 2: styler ---
-
-func TestDeepStylerStyle(t *testing.T) {
+func TestDeepStylerFromTextkit(t *testing.T) {
 	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
+	tkDir := filepath.Join(dir, ".aql", "textkit")
+	result, err := runRealFileSteps(t, tkDir, []string{
 		`(import "styler")`,
 		`"hello" Styler.style`,
 	})
@@ -208,118 +256,70 @@ func TestDeepStylerStyle(t *testing.T) {
 	assertResult(t, result, "'~ >> *HELLO!* ~'")
 }
 
-// --- Layer 1: textkit (full 7-layer chain) ---
+// --- Nested file tree verification ---
 
-func TestDeepTextkitProcess(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "textkit")`,
-		`"hello" Textkit.process`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'~ >> *HELLO!* ~'")
-}
-
-// --- Full pipeline via project code ---
-
-func TestDeepWordlabProjectCode(t *testing.T) {
-	dir := wordlabDir(t)
-	// Run the same code as index.aql directly.
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "textkit")`,
-		`"hello" Textkit.process`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'~ >> *HELLO!* ~'")
-}
-
-// --- Cross-branch: format through both branches from project ---
-
-func TestDeepWordlabBothBranches(t *testing.T) {
-	dir := wordlabDir(t)
-	result, err := runRealFileSteps(t, dir, []string{
-		`(import "formatter")`,
-		`"word" Formatter.format`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'*WORD!*'")
-
-	result, err = runRealFileSteps(t, dir, []string{
-		`(import "formatter")`,
-		`"tag" Formatter.mark`,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertResult(t, result, "'<[tag.]>'")
-}
-
-// --- File tree verification ---
-
-func TestDeepWordlabFileTree(t *testing.T) {
+func TestDeepWordlabNestedFileTree(t *testing.T) {
 	dir := wordlabDir(t)
 
-	// All 10 modules should be installed under .aql/
-	modules := []struct {
-		name    string
+	// Project-level files.
+	for _, f := range []string{"aql.jsonic", "index.aql", ".aql/aql.json"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("expected wordlab/%s: %s", f, err)
+		}
+	}
+
+	// Verify the 7-level nested dependency tree.
+	// Main branch: textkit → styler → decorator → formatter → caser → wrapper → charops
+	type modEntry struct {
+		relPath string // relative to wordlab/
 		main    string
-		version string
-	}{
-		{"charops", "charops.aql", "2.3.1"},
-		{"joiner", "joiner.aql", "0.4.2"},
-		{"wrapper", "wrapper.aql", "1.1.0"},
-		{"tagger", "tagger.aql", "3.0.2"},
-		{"caser", "caser.aql", "0.2.4"},
-		{"bracket", "bracket.aql", "1.3.0"},
-		{"formatter", "formatter.aql", "2.1.1"},
-		{"decorator", "decorator.aql", "0.5.3"},
-		{"styler", "styler.aql", "1.0.7"},
-		{"textkit", "textkit.aql", "3.2.0"},
 	}
 
-	for _, m := range modules {
-		modDir := filepath.Join(dir, ".aql", m.name)
+	tree := []modEntry{
+		// Layer 1
+		{".aql/textkit", "textkit.aql"},
+		// Layer 2
+		{".aql/textkit/.aql/styler", "styler.aql"},
+		// Layer 3
+		{".aql/textkit/.aql/styler/.aql/decorator", "decorator.aql"},
+		// Layer 4
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter", "formatter.aql"},
+		// Layer 5 (main branch)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser", "caser.aql"},
+		// Layer 5 (second branch)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket", "bracket.aql"},
+		// Layer 6 (main branch)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser/.aql/wrapper", "wrapper.aql"},
+		// Layer 6 (second branch)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket/.aql/tagger", "tagger.aql"},
+		// Layer 7 (main branch leaf)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser/.aql/wrapper/.aql/charops", "charops.aql"},
+		// Layer 7 (second branch leaf)
+		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket/.aql/tagger/.aql/joiner", "joiner.aql"},
+	}
 
-		// Module directory exists.
+	for _, m := range tree {
+		modDir := filepath.Join(dir, m.relPath)
+
 		if fi, err := os.Stat(modDir); err != nil || !fi.IsDir() {
-			t.Errorf("expected .aql/%s/ directory", m.name)
+			t.Errorf("expected directory %s", m.relPath)
 			continue
 		}
 
-		// Main file exists.
-		mainPath := filepath.Join(modDir, m.main)
-		if _, err := os.Stat(mainPath); err != nil {
-			t.Errorf("expected .aql/%s/%s: %s", m.name, m.main, err)
+		// Main AQL file exists.
+		if _, err := os.Stat(filepath.Join(modDir, m.main)); err != nil {
+			t.Errorf("expected %s/%s: %s", m.relPath, m.main, err)
 		}
 
 		// aql.jsonic exists.
-		jsonicPath := filepath.Join(modDir, "aql.jsonic")
-		if _, err := os.Stat(jsonicPath); err != nil {
-			t.Errorf("expected .aql/%s/aql.jsonic: %s", m.name, err)
+		if _, err := os.Stat(filepath.Join(modDir, "aql.jsonic")); err != nil {
+			t.Errorf("expected %s/aql.jsonic: %s", m.relPath, err)
 		}
 
 		// .aql/aql.json exists (prep was run).
-		aqlJSON := filepath.Join(modDir, ".aql", "aql.json")
-		if _, err := os.Stat(aqlJSON); err != nil {
-			t.Errorf("expected .aql/%s/.aql/aql.json: %s", m.name, err)
+		if _, err := os.Stat(filepath.Join(modDir, ".aql", "aql.json")); err != nil {
+			t.Errorf("expected %s/.aql/aql.json: %s", m.relPath, err)
 		}
-	}
-
-	// Project-level files.
-	if _, err := os.Stat(filepath.Join(dir, "aql.jsonic")); err != nil {
-		t.Errorf("expected wordlab/aql.jsonic: %s", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "index.aql")); err != nil {
-		t.Errorf("expected wordlab/index.aql: %s", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "aql.json")); err != nil {
-		t.Errorf("expected wordlab/.aql/aql.json: %s", err)
 	}
 }
 
