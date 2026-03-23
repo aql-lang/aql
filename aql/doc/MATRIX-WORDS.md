@@ -403,7 +403,60 @@ Example:
 
 ---
 
-### 5. Transpose & Reshape (6 words)
+### 5. Element-wise Math — Existing Words Extended (22 overloads)
+
+All existing unary and binary math builtins gain automatic `[matrix] -> [matrix]` or `[matrix matrix] -> [matrix]` overloads. Each applies the scalar operation element-wise to every element of the matrix. No new word names are introduced — these are additional signatures on existing words.
+
+**Implementation:** Extend `registerUnaryNumOp` and `registerBinaryNumOp` in `registry.go` to add a `[TMatrix]` or `[TMatrix, TMatrix]` signature alongside the existing Integer/Decimal ones. This gives all registered unary/binary math ops matrix support with zero changes to individual `builtin_math_*.go` files.
+
+#### Unary ops: `[matrix] -> [matrix]` (14 overloads)
+
+| Word | Element-wise operation | Example |
+|---|---|---|
+| `abs` | Absolute value of each element | `m abs` |
+| `negate` | Negate each element | `m negate` |
+| `ceil` | Ceiling of each element | `m ceil` |
+| `floor` | Floor of each element | `m floor` |
+| `round` | Round each element | `m round` |
+| `trunc` | Truncate each element | `m trunc` |
+| `sqrt` | Square root of each element | `m sqrt` |
+| `cbrt` | Cube root of each element | `m cbrt` |
+| `exp` | e^x for each element | `m exp` |
+| `log` | Natural log of each element | `m log` |
+| `log2` | Base-2 log of each element | `m log2` |
+| `log10` | Base-10 log of each element | `m log10` |
+| `sin` | Sine of each element | `m sin` |
+| `cos` | Cosine of each element | `m cos` |
+| `tan` | Tangent of each element | `m tan` |
+| `asin` | Arcsine of each element | `m asin` |
+| `acos` | Arccosine of each element | `m acos` |
+| `atan` | Arctangent of each element | `m atan` |
+
+**Note:** `sign` is excluded — it returns Integer, not Decimal, so element-wise application would lose the matrix type. Use `mat-apply [sign]` instead.
+
+#### Binary ops: `[matrix matrix] -> [matrix]` (4 overloads)
+
+| Word | Element-wise operation | Example |
+|---|---|---|
+| `mod` | Modulo of corresponding elements | `a b mod` |
+| `min` | Min of corresponding elements | `a b min` |
+| `max` | Max of corresponding elements | `a b max` |
+| `pow` | Power of corresponding elements | `a b pow` |
+
+These also get `[matrix number] -> [matrix]` scalar broadcast overloads:
+
+| Word | Scalar broadcast | Example |
+|---|---|---|
+| `mod` | Modulo each element by scalar | `m 3 mod` |
+| `min` | Clamp each element to at most N | `m 100 min` |
+| `max` | Clamp each element to at least N | `m 0 max` |
+| `pow` | Raise each element to scalar power | `m 2 pow` |
+
+`mat-apply` (section 11) remains available as the escape hatch for arbitrary quoted functions that aren't registered as builtins.
+
+---
+
+### 7. Transpose & Reshape (6 words)
 
 #### `mat-t` (NEW)
 Transpose.
@@ -467,7 +520,7 @@ Example:
 
 ---
 
-### 6. Linear Algebra (7 words)
+### 8. Linear Algebra (7 words)
 
 #### `mat-det` (NEW)
 Determinant (square matrices only).
@@ -533,7 +586,7 @@ Example:
 
 ---
 
-### 7. Decompositions (6 words)
+### 9. Decompositions (6 words)
 
 Each decomposition pushes results onto the stack.
 
@@ -599,7 +652,7 @@ Example:
 
 ---
 
-### 8. Solving (3 words)
+### 10. Solving (3 words)
 
 #### `mat-solve` (NEW)
 Solve Ax=B for x (A is square, B is matrix or column vector).
@@ -633,7 +686,7 @@ Example:
 
 ---
 
-### 9. Aggregation (10 words)
+### 11. Aggregation (10 words)
 
 #### `mat-sum` (NEW)
 Sum of all elements.
@@ -737,7 +790,7 @@ Example:
 
 ---
 
-### 10. Comparison & Logic (6 words)
+### 12. Comparison & Logic (6 words)
 
 #### `mat-eq?` (NEW)
 Element-wise equality within tolerance (all elements match).
@@ -801,7 +854,7 @@ Example:
 
 ---
 
-### 11. Advanced (8 words)
+### 13. Advanced (8 words)
 
 #### `mat-dot` (NEW)
 Dot product of two lists (vectors).
@@ -893,6 +946,7 @@ Example:
 | Shape & Info | 6 | 6 | 0 |
 | Element Access | 8 | 8 | 0 |
 | Arithmetic | 10 | 2 | 4 (add, sub, mul, div) |
+| Element-wise Math | 22 overloads | 0 | 22 (18 unary + 4 binary, via registry helpers) |
 | Transpose & Reshape | 6 | 6 | 0 |
 | Linear Algebra | 7 | 7 | 0 |
 | Decompositions | 6 | 6 | 0 |
@@ -900,7 +954,7 @@ Example:
 | Aggregation | 10 | 10 | 0 |
 | Comparison & Logic | 6 | 6 | 0 |
 | Advanced | 8 | 8 | 0 |
-| **Total** | **83** | **75 new** | **4 extended** |
+| **Total** | **83 words + 22 overloads** | **75 new** | **26 extended** |
 
 ---
 
@@ -944,7 +998,17 @@ cov mat-eigen
 # eigenvalues and eigenvectors now on stack
 ```
 
-### Element-wise function application
+### Element-wise math (existing words, no mat-apply needed)
+```aql
+set m ([[1 4 9] [16 25 36]] matrix)
+m sqrt                          # [[1 2 3] [4 5 6]]
+m log                           # element-wise natural log
+m 2 pow                         # square each element
+m abs                           # absolute value of each element
+m 0 max                         # clamp negatives to zero (ReLU)
+```
+
+### Element-wise function application (for arbitrary quoted code)
 ```aql
 set m ([[1 4 9] [16 25 36]] matrix)
 m mat-apply [sqrt]
@@ -974,7 +1038,8 @@ set means (data mat-col-mean)
 | `mat-t`, `mat-reshape`, `mat-flatten` | 3 |
 | `mat-sum`, `mat-mean`, `mat-min`, `mat-max` | 4 |
 | `mat-dot` | 1 |
-| **Phase 1 Total** | **27 words** |
+| Element-wise math overloads via `registerUnaryNumOp`/`registerBinaryNumOp` (abs, negate, sqrt, sin, cos, etc.) | 22 overloads |
+| **Phase 1 Total** | **27 words + 22 overloads** |
 
 ### Phase 2 — Linear Algebra (decompositions and solving)
 
@@ -1029,7 +1094,7 @@ Following the existing `builtin_*.go` one-file-per-category pattern:
 
 - `aql/internal/engine/types.go` — add `"Scalar/Number/Matrix": 38` to `builtinTypeIDs`, add `TMatrix` well-known constant, add `"Matrix": "Scalar/Number/Matrix"` to `typeAncestry`
 - `aql/internal/engine/value.go` — add `MatrixData` struct, `NewMatrix()` constructor, `AsMatrix()` accessor, matrix display in `String()` method
-- `aql/internal/engine/registry.go` — add `registerMatrix*` calls in `registerBuiltins()`
+- `aql/internal/engine/registry.go` — add `registerMatrix*` calls in `registerBuiltins()`; extend `registerUnaryNumOp` to add `[TMatrix] -> [TMatrix]` overload; extend `registerBinaryNumOp` to add `[TMatrix, TMatrix] -> [TMatrix]` and `[TMatrix, TNumber] -> [TMatrix]` overloads
 - `aql/internal/engine/builtin_math_add.go` — extend with `[TMatrix, TMatrix]` and `[TMatrix, TNumber]` signatures
 - `aql/internal/engine/builtin_math_sub.go` — same pattern
 - `aql/internal/engine/builtin_math_mul.go` — extend with matrix multiply `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
