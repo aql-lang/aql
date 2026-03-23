@@ -7,6 +7,9 @@ import (
 
 	csvpkg "github.com/jsonicjs/csv/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
+	multisource "github.com/jsonicjs/multisource/go"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
 // Format handles encoding and decoding file content for a specific format.
@@ -49,10 +52,21 @@ func (f *JSONFormat) Encode(v Value) (string, error) {
 }
 
 // JsonicFormat handles relaxed JSON (unquoted keys, trailing commas, etc.).
-type JsonicFormat struct{}
+// When a Resolver is set, the multisource plugin is enabled so that
+// @"path" references in .jsonic files are resolved and merged.
+type JsonicFormat struct {
+	Resolver multisource.Resolver
+}
 
 func (f *JsonicFormat) Decode(content string) ([]Value, error) {
-	j := jsonic.Make()
+	var j *jsonic.Jsonic
+	if f.Resolver != nil {
+		j = multisource.MakeJsonic(multisource.MultiSourceOptions{
+			Resolver: f.Resolver,
+		})
+	} else {
+		j = jsonic.Make()
+	}
 	result, err := j.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("invalid jsonic: %w", err)
@@ -65,6 +79,49 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 		return nil, err
 	}
 	return []Value{v}, nil
+}
+
+// MakeFileOpsResolver creates a multisource.Resolver backed by a FileOps
+// implementation. This bridges the AQL file abstraction to multisource's
+// path resolution so that @"path" references in .jsonic files work.
+func MakeFileOpsResolver(ops fileops.FileOps) multisource.Resolver {
+	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions) multisource.Resolution {
+		res := multisource.Resolution{
+			PathSpec: spec,
+		}
+
+		// Build candidate paths with implicit extensions.
+		candidates := []string{spec.Full}
+		if spec.Kind == "" && opts != nil {
+			for _, ext := range opts.ImplicitExt {
+				candidates = append(candidates, spec.Full+"."+ext)
+			}
+		}
+
+		for _, path := range candidates {
+			data, err := ops.ReadFile(path)
+			if err == nil {
+				res.Src = string(data)
+				res.Found = true
+				res.Full = path
+
+				// Determine kind from extension if not set.
+				if res.Kind == "" {
+					ext := ""
+					for i := len(path) - 1; i >= 0; i-- {
+						if path[i] == '.' {
+							ext = path[i+1:]
+							break
+						}
+					}
+					res.Kind = ext
+				}
+				return res
+			}
+			res.Search = append(res.Search, path)
+		}
+		return res
+	}
 }
 
 func (f *JsonicFormat) Encode(v Value) (string, error) {

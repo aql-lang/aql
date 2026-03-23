@@ -3,6 +3,10 @@ package engine
 import (
 	"strings"
 	"testing"
+
+	multisource "github.com/jsonicjs/multisource/go"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
 func TestTextFormatDecode(t *testing.T) {
@@ -377,5 +381,234 @@ func TestTSVFormatEncode(t *testing.T) {
 	}
 	if !strings.Contains(s, "x\ty") {
 		t.Errorf("expected tab-separated data in: %q", s)
+	}
+}
+
+// --- Multisource integration tests ---
+
+func TestJsonicFormatMultisourceResolves(t *testing.T) {
+	// Set up in-memory files for the resolver.
+	mem := fileops.NewMem()
+	mem.Files["part.jsonic"] = []byte(`{x:1}`)
+
+	f := &JsonicFormat{
+		Resolver: MakeFileOpsResolver(mem),
+	}
+
+	// The @"part.jsonic" reference should be resolved and merged.
+	result, err := f.Decode(`{@"part.jsonic", y:2}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(result))
+	}
+	m := result[0].AsMap()
+	xVal, ok := m.Get("x")
+	if !ok {
+		t.Fatal("expected key 'x' from resolved file")
+	}
+	if xVal.AsInteger() != 1 {
+		t.Errorf("x = %v, want 1", xVal)
+	}
+	yVal, ok := m.Get("y")
+	if !ok {
+		t.Fatal("expected key 'y'")
+	}
+	if yVal.AsInteger() != 2 {
+		t.Errorf("y = %v, want 2", yVal)
+	}
+}
+
+func TestJsonicFormatMultisourceNested(t *testing.T) {
+	// Test nested multisource: a.jsonic references b.jsonic.
+	mem := fileops.NewMem()
+	mem.Files["b.jsonic"] = []byte(`{nested: true}`)
+	mem.Files["a.jsonic"] = []byte(`{@"b.jsonic", top: 1}`)
+
+	f := &JsonicFormat{
+		Resolver: MakeFileOpsResolver(mem),
+	}
+
+	result, err := f.Decode(`{@"a.jsonic", outer: 99}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m := result[0].AsMap()
+
+	outerVal, ok := m.Get("outer")
+	if !ok {
+		t.Fatal("expected key 'outer'")
+	}
+	if outerVal.AsInteger() != 99 {
+		t.Errorf("outer = %v, want 99", outerVal)
+	}
+
+	topVal, ok := m.Get("top")
+	if !ok {
+		t.Fatal("expected key 'top' from a.jsonic")
+	}
+	if topVal.AsInteger() != 1 {
+		t.Errorf("top = %v, want 1", topVal)
+	}
+
+	nestedVal, ok := m.Get("nested")
+	if !ok {
+		t.Fatal("expected key 'nested' from b.jsonic")
+	}
+	if !nestedVal.AsBoolean() {
+		t.Errorf("nested = %v, want true", nestedVal)
+	}
+}
+
+func TestJsonicFormatWithoutResolverNoMultisource(t *testing.T) {
+	// Without a resolver, the jsonic format should work as before
+	// (no multisource, just plain jsonic parsing).
+	f := &JsonicFormat{}
+	result, err := f.Decode(`{a:1, b:2}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+		t.Errorf("expected map, got %v", result)
+	}
+}
+
+func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
+	// JSONFormat must NOT use multisource — it's strict JSON only.
+	f := &JSONFormat{}
+	// This is valid JSON with an @ in a key — should parse as-is.
+	result, err := f.Decode(`{"@ref": "value"}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m := result[0].AsMap()
+	v, ok := m.Get("@ref")
+	if !ok {
+		t.Fatal("expected key '@ref' in JSON output")
+	}
+	if v.AsString() != "value" {
+		t.Errorf("got %q, want %q", v.AsString(), "value")
+	}
+}
+
+func TestJsonicFormatMultisourceNotUsedForText(t *testing.T) {
+	// TextFormat must NOT use multisource.
+	f := &TextFormat{}
+	result, err := f.Decode(`@"somefile.jsonic"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Text format returns raw string, no resolution.
+	if result[0].AsString() != `@"somefile.jsonic"` {
+		t.Errorf("text format should return raw content, got %q", result[0].AsString())
+	}
+}
+
+func TestMakeFileOpsResolverFindsFile(t *testing.T) {
+	mem := fileops.NewMem()
+	mem.Files["data.jsonic"] = []byte(`{found:true}`)
+
+	resolver := MakeFileOpsResolver(mem)
+	spec := multisource.PathSpec{
+		Full: "data.jsonic",
+		Kind: "jsonic",
+	}
+	res := resolver(spec, nil)
+	if !res.Found {
+		t.Fatal("expected resolver to find data.jsonic")
+	}
+	if res.Src != `{found:true}` {
+		t.Errorf("got src %q, want {found:true}", res.Src)
+	}
+}
+
+func TestMakeFileOpsResolverNotFound(t *testing.T) {
+	mem := fileops.NewMem()
+	resolver := MakeFileOpsResolver(mem)
+	spec := multisource.PathSpec{
+		Full: "missing.jsonic",
+		Kind: "jsonic",
+	}
+	res := resolver(spec, nil)
+	if res.Found {
+		t.Fatal("expected resolver to NOT find missing.jsonic")
+	}
+}
+
+func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
+	mem := fileops.NewMem()
+	mem.Files["config.jsonic"] = []byte(`{ok:true}`)
+
+	resolver := MakeFileOpsResolver(mem)
+	spec := multisource.PathSpec{
+		Full: "config",
+		Kind: "", // no extension → try implicit
+	}
+	opts := &multisource.MultiSourceOptions{
+		ImplicitExt: []string{"jsonic", "json"},
+	}
+	res := resolver(spec, opts)
+	if !res.Found {
+		t.Fatal("expected resolver to find config via implicit .jsonic ext")
+	}
+	if res.Kind != "jsonic" {
+		t.Errorf("got kind %q, want %q", res.Kind, "jsonic")
+	}
+}
+
+func TestRegistryJsonicFormatHasResolver(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jf, ok := r.Formats["jsonic"].(*JsonicFormat)
+	if !ok {
+		t.Fatal("jsonic format should be *JsonicFormat")
+	}
+	if jf.Resolver == nil {
+		t.Error("jsonic format in registry should have a resolver set")
+	}
+}
+
+func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// JSON format should remain unchanged — no multisource.
+	_, ok := r.Formats["json"].(*JSONFormat)
+	if !ok {
+		t.Fatal("json format should be *JSONFormat, not modified")
+	}
+}
+
+func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mem := fileops.NewMem()
+	mem.Files["test.jsonic"] = []byte(`{val:42}`)
+	r.SetFileOps(mem)
+
+	jf := r.Formats["jsonic"].(*JsonicFormat)
+	if jf.Resolver == nil {
+		t.Fatal("expected resolver to be updated after SetFileOps")
+	}
+
+	// Verify the resolver uses the new FileOps.
+	result, err := jf.Decode(`{@"test.jsonic"}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m := result[0].AsMap()
+	v, ok := m.Get("val")
+	if !ok {
+		t.Fatal("expected key 'val' from resolved test.jsonic")
+	}
+	if v.AsInteger() != 42 {
+		t.Errorf("val = %v, want 42", v)
 	}
 }
