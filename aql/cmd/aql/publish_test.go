@@ -30,25 +30,65 @@ func makeModuleZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func setupPublishServer(t *testing.T) (srvURL string, regDir string) {
+// registerAndLogin creates a test user and returns an auth token.
+func registerAndLogin(t *testing.T, srvURL string) string {
+	t.Helper()
+	regBody := `{"email":"test@test.com","username":"testuser","password":"testpass"}`
+	resp, err := http.Post(srvURL+"/api/register", "application/json", strings.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("register: status = %d, want 201", resp.StatusCode)
+	}
+
+	loginBody := `{"username":"testuser","password":"testpass"}`
+	resp, err = http.Post(srvURL+"/api/login", "application/json", strings.NewReader(loginBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login: status = %d, want 200", resp.StatusCode)
+	}
+
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result["token"]
+}
+
+// authPublish sends a POST to /api/publish with an Authorization header.
+func authPublish(srvURL string, token string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, srvURL+"/api/publish", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("Authorization", "Bearer "+token)
+	return http.DefaultClient.Do(req)
+}
+
+func setupPublishServer(t *testing.T) (srvURL string, regDir string, token string) {
 	t.Helper()
 	regDir = t.TempDir()
 	srv := httptest.NewServer(registryHandler(regDir))
 	t.Cleanup(srv.Close)
-	return srv.URL, regDir
+	tok := registerAndLogin(t, srv.URL)
+	return srv.URL, regDir, tok
 }
 
 // --- Happy path ---
 
 func TestPublishValid(t *testing.T) {
-	srvURL, regDir := setupPublishServer(t)
+	srvURL, regDir, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: hello\nmain: hello.aql\nmajor: 1\nminor: 0\npatch: 0\nfiles: [hello.aql]\n",
 		"hello.aql":  `export Hello {greet: "hi"}`,
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +117,7 @@ func TestPublishValid(t *testing.T) {
 // --- Immutability ---
 
 func TestPublishRejectsOverwrite(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: mymod\nmajor: 0\nminor: 1\npatch: 0\nfiles: [mymod.aql]\n",
@@ -85,7 +125,7 @@ func TestPublishRejectsOverwrite(t *testing.T) {
 	})
 
 	// First publish succeeds.
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +135,7 @@ func TestPublishRejectsOverwrite(t *testing.T) {
 	}
 
 	// Second publish of same version fails with 409 Conflict.
-	resp, err = http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err = authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +153,7 @@ func TestPublishRejectsOverwrite(t *testing.T) {
 // --- Version increments ---
 
 func TestPublishMultipleVersions(t *testing.T) {
-	srvURL, regDir := setupPublishServer(t)
+	srvURL, regDir, token := setupPublishServer(t)
 
 	versions := []struct {
 		major, minor, patch int
@@ -134,7 +174,7 @@ func TestPublishMultipleVersions(t *testing.T) {
 			"vmod.aql":   `export Vmod {v: 1}`,
 		})
 
-		resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zd))
+		resp, err := authPublish(srvURL, token, zd)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,9 +193,9 @@ func TestPublishMultipleVersions(t *testing.T) {
 // --- Validation errors ---
 
 func TestPublishRejectsEmptyBody(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(nil))
+	resp, err := authPublish(srvURL, token, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,9 +206,9 @@ func TestPublishRejectsEmptyBody(t *testing.T) {
 }
 
 func TestPublishRejectsInvalidZip(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader([]byte("not a zip")))
+	resp, err := authPublish(srvURL, token, []byte("not a zip"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,13 +220,13 @@ func TestPublishRejectsInvalidZip(t *testing.T) {
 }
 
 func TestPublishRejectsMissingAqlJsonic(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"hello.aql": `export Hello {greet: "hi"}`,
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,14 +241,14 @@ func TestPublishRejectsMissingAqlJsonic(t *testing.T) {
 }
 
 func TestPublishRejectsMissingName(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "major: 1\nminor: 0\npatch: 0\nfiles: [x.aql]\n",
 		"x.aql":      "1",
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,14 +263,14 @@ func TestPublishRejectsMissingName(t *testing.T) {
 }
 
 func TestPublishRejectsMissingVersion(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: noversion\nfiles: [x.aql]\n",
 		"x.aql":      "1",
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,13 +285,13 @@ func TestPublishRejectsMissingVersion(t *testing.T) {
 }
 
 func TestPublishRejectsMissingFiles(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: nofiles\nmajor: 1\nminor: 0\npatch: 0\n",
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,14 +306,14 @@ func TestPublishRejectsMissingFiles(t *testing.T) {
 }
 
 func TestPublishRejectsMissingDeclaredFile(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	// files declares "missing.aql" but zip doesn't contain it.
 	zipData := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: broken\nmajor: 1\nminor: 0\npatch: 0\nfiles: [missing.aql]\n",
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +328,7 @@ func TestPublishRejectsMissingDeclaredFile(t *testing.T) {
 }
 
 func TestPublishRejectsGetMethod(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, _ := setupPublishServer(t)
 
 	resp, err := http.Get(srvURL + "/api/publish")
 	if err != nil {
@@ -303,7 +343,7 @@ func TestPublishRejectsGetMethod(t *testing.T) {
 // --- Publish then install roundtrip ---
 
 func TestPublishThenInstall(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	// Publish a module.
 	zipData := makeModuleZip(t, map[string]string{
@@ -314,7 +354,7 @@ export Greeter {greet: greet}
 `,
 	})
 
-	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
+	resp, err := authPublish(srvURL, token, zipData)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,14 +407,17 @@ export Greeter {greet: greet}
 // --- Publish new version after existing ---
 
 func TestPublishVersionIncrement(t *testing.T) {
-	srvURL, _ := setupPublishServer(t)
+	srvURL, _, token := setupPublishServer(t)
 
 	// Publish v1.0.0.
 	zip1 := makeModuleZip(t, map[string]string{
 		"aql.jsonic": "name: incr\nmajor: 1\nminor: 0\npatch: 0\nfiles: [incr.aql]\n",
 		"incr.aql":   `export Incr {v: 1}`,
 	})
-	resp, _ := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zip1))
+	resp, err := authPublish(srvURL, token, zip1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("v1.0.0: status = %d", resp.StatusCode)
@@ -385,7 +428,10 @@ func TestPublishVersionIncrement(t *testing.T) {
 		"aql.jsonic": "name: incr\nmajor: 1\nminor: 0\npatch: 1\nfiles: [incr.aql]\n",
 		"incr.aql":   `export Incr {v: 2}`,
 	})
-	resp, _ = http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zip2))
+	resp, err = authPublish(srvURL, token, zip2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("v1.0.1: status = %d", resp.StatusCode)
@@ -429,7 +475,10 @@ func TestPublishVersionIncrement(t *testing.T) {
 	}
 
 	// Re-attempting to publish v1.0.0 still fails.
-	resp, _ = http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zip1))
+	resp, err = authPublish(srvURL, token, zip1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
