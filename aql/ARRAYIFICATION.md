@@ -119,16 +119,17 @@ transpose [[1,2,3],[4,5,6]]      => [[1,4],[2,5],[3,6]]
 
 Signature: `[list] -> [list]`
 
-### take / drop
+### take / shed
 
 Select or remove leading/trailing elements along the outermost
-dimension. Negative counts operate from the end.
+dimension. Negative counts operate from the end. The name `shed`
+avoids collision with the existing stack word `drop`.
 
 ```
 take 2 [10,20,30,40]             => [10,20]
 take -2 [10,20,30,40]            => [30,40]
-drop 1 [10,20,30,40]             => [20,30,40]
-drop -1 [10,20,30,40]            => [10,20,30]
+shed 1 [10,20,30,40]             => [20,30,40]
+shed -1 [10,20,30,40]            => [10,20,30]
 ```
 
 Signatures: `[integer, list] -> [list]`
@@ -583,7 +584,7 @@ inner:     [list, list, list, list] -> [list]
 reshape:   [list, list] -> [list]
 transpose: [list] -> [list]
 take:      [integer, list] -> [list]
-drop:      [integer, list] -> [list]
+shed:      [integer, list] -> [list]
 shape:     [list] -> [list]
 rank:      [list] -> [integer]
 iota:      [integer] -> [list]
@@ -614,7 +615,7 @@ Core structural words that everything else builds on:
 - `iota` — array construction
 - `shape`, `rank`, `length` — inspection
 - `reshape`, `flatten`, `transpose` — structure transforms
-- `take`, `drop`, `reverse` — basic selection
+- `take`, `shed`, `reverse` — basic selection
 
 ### Phase 2 — Iteration
 
