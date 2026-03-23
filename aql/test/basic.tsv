@@ -154,8 +154,14 @@ type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a
 # Do - evaluate list contents
 do [1 add 2]	3
 
-# Do - evaluate map list values
+# Do - evaluate map list values (multi-word expressions need lists)
 do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# Do - evaluate map word values (single words resolve directly)
+do {x:1,y:2}	{x:1,y:2}
+
+# Map with paren expressions (inline evaluation)
+{x:(3 add 4),y:(upper "a")}	{x:7,y:'A'}
 
 # Disjunct - union types via or
 String or None	Scalar/String|None
@@ -577,3 +583,33 @@ convert 255 String {base:HEX,size:1}	'F'
 
 # Convert to string - default size (222) truncates long strings
 convert "abcdefghij" String {size:5}	'abcde'
+
+# === Quote word ===
+
+# quote prevents list auto-evaluation
+quote [1 add 2]	[1,word(add),2]
+
+# quote converts known words to atoms
+quote add	add
+
+# quote on scalars is identity
+quote 99	99
+quote "hello"	'hello'
+
+# === List auto-evaluation ===
+
+# Lists are evaluated immediately (not quoted)
+[1 add 2]	[3]
+[2 mul 3]	[6]
+[1,2,3]	[1,2,3]
+["a","b"]	['a','b']
+
+# Nested lists are auto-evaluated recursively
+[[1 add 2],[3 add 4]]	[[3],[7]]
+
+# Empty list
+[]	[]
+
+# def body is implicitly quoted (not auto-evaluated)
+def double [dup add] 5 double	10
+def triple [dup dup add add] 3 triple	9

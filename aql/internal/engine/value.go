@@ -309,9 +309,11 @@ type ForwardInfo struct {
 //
 // Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
-	ID    string
-	VType Type
-	Data  interface{}
+	ID      string
+	VType   Type
+	Data    interface{}
+	Quoted  bool // true when value was produced by the quote word; prevents auto-evaluation
+	Eval    bool // true for parser-created lists that should auto-evaluate at end of Run
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -392,6 +394,14 @@ func NewList(elems []Value) Value {
 	return newValue(TList, elems)
 }
 
+// NewEvalList creates a list value that is marked for auto-evaluation
+// at the end of execution. Used by the parser for source-code lists.
+func NewEvalList(elems []Value) Value {
+	v := newValue(TList, elems)
+	v.Eval = true
+	return v
+}
+
 // NewTypedList creates a typed list value with a child type constraint.
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
@@ -401,6 +411,14 @@ func NewTypedList(child Value) Value {
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
 	return newValue(TMap, entries)
+}
+
+// NewEvalMap creates a map value marked for auto-evaluation at end of
+// execution. Used by the parser for source-code maps.
+func NewEvalMap(entries *OrderedMap) Value {
+	v := newValue(TMap, entries)
+	v.Eval = true
+	return v
 }
 
 // NewImplicitMap creates a map value marked as implicit (from pair syntax).
@@ -466,6 +484,14 @@ func NewForward(info ForwardInfo) Value {
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
 	return newValue(TOpenParen, nil)
+}
+
+// NewParenExpr creates a paren expression value containing items to evaluate.
+// Used by the parser for paren groups in map/list value positions.
+// autoEvalMap evaluates these by running the items in a sub-engine with
+// paren markers, producing a single result value.
+func NewParenExpr(items []Value) Value {
+	return newValue(TParenExpr, items)
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -586,6 +612,19 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsParenExpr reports whether this value is a paren expression.
+func (v Value) IsParenExpr() bool {
+	return v.VType.Equal(TParenExpr)
+}
+
+// AsParenExpr returns the items in a paren expression value.
+func (v Value) AsParenExpr() []Value {
+	if items, ok := v.Data.([]Value); ok {
+		return items
+	}
+	return nil
 }
 
 // IsMark reports whether this value is a mark.
@@ -798,6 +837,8 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsParenExpr():
+		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
 	case v.IsMark():
 		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
 	case v.IsMove():

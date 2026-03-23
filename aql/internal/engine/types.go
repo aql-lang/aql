@@ -81,6 +81,7 @@ var (
 	TFunction     = mustType("Word/Function")
 	TForward      = mustType("Word/Internal/Forward")
 	TOpenParen    = mustType("Word/Internal/Paren")
+	TParenExpr    = mustType("Word/Internal/ParenExpr")
 	TFnDef        = mustType("Word/Internal/Fndef")
 	TFnUndef      = mustType("Word/Internal/Fnundef")
 	TReturnCheck  = mustType("Word/Internal/Return")
@@ -296,7 +297,7 @@ func builtinTypeParts() map[string]bool {
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
-		TOpenParen, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
+		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 	}

@@ -1048,14 +1048,14 @@ func TestEngineCoreParseFnParamsMapBadKeyCount(t *testing.T) {
 	m.Set("x", NewTypeLiteral(TNumber))
 	m.Set("y", NewTypeLiteral(TString))
 	input := NewList([]Value{NewImplicitMap(m)})
-	_, err := parseFnParams(input)
+	_, err := parseFnParams(nil, input)
 	if err == nil {
 		t.Error("expected error for map with 2 keys")
 	}
 }
 
 func TestEngineCoreParseFnParamsNonList(t *testing.T) {
-	_, err := parseFnParams(NewInteger(42))
+	_, err := parseFnParams(nil, NewInteger(42))
 	if err == nil {
 		t.Error("expected error for non-list input")
 	}
@@ -1064,7 +1064,7 @@ func TestEngineCoreParseFnParamsNonList(t *testing.T) {
 func TestEngineCoreParseFnParamsTypeLiteral(t *testing.T) {
 	// Type literal (Data==nil) should work
 	input := NewList([]Value{NewTypeLiteral(TString)})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("parseFnParams type literal: %v", err)
 	}
@@ -1075,7 +1075,7 @@ func TestEngineCoreParseFnParamsTypeLiteral(t *testing.T) {
 
 func TestEngineCoreParseFnParamsIntegerLiteral(t *testing.T) {
 	input := NewList([]Value{NewInteger(0)})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("parseFnParams integer: %v", err)
 	}
@@ -1086,7 +1086,7 @@ func TestEngineCoreParseFnParamsIntegerLiteral(t *testing.T) {
 
 func TestEngineCoreParseFnParamsBooleanLiteral(t *testing.T) {
 	input := NewList([]Value{NewBoolean(true)})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("parseFnParams boolean: %v", err)
 	}
@@ -1097,7 +1097,7 @@ func TestEngineCoreParseFnParamsBooleanLiteral(t *testing.T) {
 
 func TestEngineCoreParseFnParamsStringLiteral(t *testing.T) {
 	input := NewList([]Value{NewString("hello")})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("parseFnParams string: %v", err)
 	}
@@ -1109,7 +1109,7 @@ func TestEngineCoreParseFnParamsStringLiteral(t *testing.T) {
 func TestEngineCoreParseFnParamsInvalidElem(t *testing.T) {
 	// A list as a param element is invalid
 	input := NewList([]Value{NewList([]Value{NewInteger(1)})})
-	_, err := parseFnParams(input)
+	_, err := parseFnParams(nil, input)
 	if err == nil {
 		t.Error("expected error for list element in params")
 	}
@@ -1124,7 +1124,7 @@ func TestEngineCoreParseFnParamsImplicitMapIsNamedParam(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewTypeLiteral(TNumber))
 	input := NewList([]Value{NewImplicitMap(m)})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1144,7 +1144,7 @@ func TestEngineCoreParseFnParamsExplicitMapIsUnnamedParam(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("a", NewInteger(1))
 	input := NewList([]Value{NewMap(m)})
-	params, err := parseFnParams(input)
+	params, err := parseFnParams(nil, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

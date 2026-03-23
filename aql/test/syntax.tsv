@@ -254,12 +254,12 @@ unify Number String end	'~unify-fail' false
 [1,2,3]	[1,2,3]
 ["a","b"]	['a','b']
 []	[]
-[true,false]	[word(true),word(false)]
-[1,"a",true]	[1,'a',word(true)]
+[true,false]	[true,false]
+[1,"a",true]	[1,'a',true]
 [Number,String]	[Scalar/Number,Scalar/String]
 [Integer,Decimal,Boolean]	[Scalar/Number/Integer,Scalar/Number/Decimal,Scalar/Boolean]
 [Any,None]	[Any,None]
-[String,foo]	[Scalar/String,word(foo)]
+[String,foo]	[Scalar/String,foo]
 
 # === Map literals ===
 {x:1}	{x:1}

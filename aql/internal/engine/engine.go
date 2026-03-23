@@ -173,6 +173,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsOpenParen():
 			e.pointer++
 
+		case val.IsParenExpr():
+			// ParenExpr values are only used inside maps (created by
+			// the parser for paren groups in data context). They should
+			// not appear on the main stack; skip if encountered.
+			e.pointer++
+
 		case val.IsMark():
 			e.stepMark(val)
 
@@ -207,6 +213,14 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 	// Remove any leftover marks and moves from the stack.
 	e.cleanMarks()
+
+	// Auto-evaluate unquoted lists and maps on the final stack.
+	// Lists are evaluated as sub-programs: [1 add 2] → [3].
+	// Maps have their values evaluated recursively.
+	// Values marked Quoted (by the quote word) are left as-is.
+	if err := e.autoEvalStack(); err != nil {
+		return nil, err
+	}
 
 	return e.stack, nil
 }
@@ -408,6 +422,22 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	// Find the indices of the n resolved values before the pointer.
 	indices := e.resolvedIndicesBefore(n)
+
+	// Process consumed arguments:
+	// - Maps with Eval=true: auto-evaluate their values now, so word
+	//   handlers receive resolved data (e.g. {base:hex} → {base:atom(hex)}).
+	// - Lists: strip Eval so they're not auto-evaluated later (they may
+	//   be code blocks like def bodies).
+	for i := range match.Args {
+		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
+			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() {
+			evaluated, err := e.autoEvalMap(match.Args[i])
+			if err == nil {
+				match.Args[i] = evaluated
+			}
+		}
+		match.Args[i].Eval = false
+	}
 
 	var results []Value
 	var err error
@@ -686,6 +716,102 @@ func (e *Engine) stepLiteral() error {
 // execFnDefLiteral handles a FnDef or TFunction value that has landed on the
 // stack without a pending forward. It tries to match the function's signatures
 // against preceding resolved stack values and, if a match is found, executes
+// autoEvalStack walks the final stack and auto-evaluates lists and maps
+// that were created by the parser (Eval=true) and not explicitly quoted.
+// Runtime-created values (from word handlers, def bodies, etc.) are
+// not auto-evaluated. This is called at the end of Run().
+func (e *Engine) autoEvalStack() error {
+	for i := 0; i < len(e.stack); i++ {
+		val := e.stack[i]
+		if !val.Eval || val.Quoted {
+			continue
+		}
+		if val.VType.Equal(TList) && val.Data != nil && !val.IsTypedList() && !val.IsTableType() {
+			result, err := e.autoEvalList(val)
+			if err != nil {
+				return err
+			}
+			e.stack[i] = result
+		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() {
+			result, err := e.autoEvalMap(val)
+			if err != nil {
+				return err
+			}
+			e.stack[i] = result
+		}
+	}
+	return nil
+}
+
+// autoEvalList evaluates the contents of a plain list in a sub-engine,
+// returning a new list containing the results. For example, [1 add 2] → [3].
+func (e *Engine) autoEvalList(val Value) (Value, error) {
+	elems := val.AsList()
+	if len(elems) == 0 {
+		return val, nil
+	}
+	sub := New(e.registry)
+	input := make([]Value, len(elems))
+	copy(input, elems)
+	result, err := sub.Run(input)
+	if err != nil {
+		return Value{}, err
+	}
+	return NewList(result), nil
+}
+
+// autoEvalMap evaluates each value in a plain map using a sub-engine.
+// Word values resolve directly; lists auto-evaluate via autoEvalStack:
+//
+//	{r:rv}        → {r:10}      (word evaluated to its def'd value)
+//	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
+//	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
+//	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
+func (e *Engine) autoEvalMap(val Value) (Value, error) {
+	m := val.AsMap()
+	out := NewOrderedMap()
+	if m.Implicit {
+		out.Implicit = true
+	}
+	for _, key := range m.Keys() {
+		v, _ := m.Get(key)
+
+		// Paren expression: evaluate items with paren markers so the
+		// engine's stepCloseParen collapses to a single result.
+		if v.IsParenExpr() {
+			items := v.AsParenExpr()
+			sub := New(e.registry)
+			input := make([]Value, 0, len(items)+2)
+			input = append(input, NewOpenParen())
+			input = append(input, items...)
+			input = append(input, NewWord(")"))
+			result, err := sub.Run(input)
+			if err != nil {
+				return Value{}, err
+			}
+			if len(result) == 1 {
+				out.Set(key, result[0])
+			} else if len(result) > 1 {
+				out.Set(key, NewList(result))
+			}
+			continue
+		}
+
+		// Evaluate each value in a sub-engine.
+		sub := New(e.registry)
+		result, err := sub.Run([]Value{v})
+		if err != nil {
+			return Value{}, err
+		}
+		if len(result) == 1 {
+			out.Set(key, result[0])
+		} else if len(result) > 1 {
+			out.Set(key, NewList(result))
+		}
+	}
+	return NewMap(out), nil
+}
+
 // the function. If the FnDef carries a captured Registry (closure from a
 // module), execution happens in a sub-engine using that registry so that
 // module-internal words are available. Otherwise, body tokens are spliced

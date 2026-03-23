@@ -6,15 +6,18 @@ package engine
 //
 //	do [1 add 2]  →  3
 //
-// For maps, do evaluates any list values (depth-first), leaving non-list
-// values unchanged:
+// For maps, word values are already resolved by autoEvalMap (called by
+// execMatch before the handler runs). The handler additionally evaluates
+// any remaining list values (depth-first), unwrapping single results:
 //
-//	do {x: [3 add 4], y: [upper a]}  →  {x:7, y:"A"}
+//	do {r:rv}                  →  {r:10}    (word resolved by autoEvalMap)
+//	do {x:[3 add 4]}          →  {x:7}     (list evaluated, single result unwrapped)
+//	do {r:255, g:136, b:0}    →  {r:255, g:136, b:0}  (literals pass through)
 func registerDo(r *Registry) {
-	// promoteToWord converts a string value to a word if the string
-	// names a registered function. This is needed because list elements
-	// inside maps are parsed in data context (bare text → string),
-	// but do needs to evaluate them as code (bare text → word).
+	// promoteToWord converts a string or atom value to a word if it
+	// names a registered function. With the current parser, list elements
+	// inside maps are already words (word context), so this mainly
+	// handles edge cases and backward compatibility.
 	promoteToWord := func(v Value) Value {
 		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
 			name := v.AsString()
