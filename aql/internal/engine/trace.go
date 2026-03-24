@@ -51,7 +51,11 @@ func traceColorize(v Value) string {
 		}
 		return cCyan + "false" + cReset
 	case v.VType.Equal(TAtom):
-		return cRed + v.Data.(string) + cReset
+		s, ok := v.Data.(string)
+		if !ok {
+			return cRed + fmt.Sprintf("%v", v.Data) + cReset
+		}
+		return cRed + s + cReset
 	case v.VType.Equal(TList):
 		elems := v.AsList()
 		parts := make([]string, len(elems))
@@ -102,6 +106,9 @@ func registerTrace(r *Registry) {
 	r.Register("trace", Signature{
 		Args: []Type{TList},
 		Handler: func(args []Value) ([]Value, error) {
+			if args[0].Data == nil {
+				return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
+			}
 			elems := args[0].AsList()
 			return runTrace(r, elems, r.Output)
 		},

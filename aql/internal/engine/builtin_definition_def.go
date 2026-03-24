@@ -121,7 +121,10 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
-		fnDef := body.Data.(FnDefInfo)
+		fnDef, ok := body.Data.(FnDefInfo)
+		if !ok {
+			return
+		}
 
 		// Remove any previous DefStack entries whose signatures overlap
 		// with the new definition. Without this, redefining a fn-based
@@ -161,7 +164,10 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 
 	// FnUndefInfo body (from fn word in pair mode): remove targeted signatures.
 	if body.VType.Equal(TFnUndef) {
-		undefInfo := body.Data.(FnUndefInfo)
+		undefInfo, ok := body.Data.(FnUndefInfo)
+		if !ok {
+			return
+		}
 		uninstallFnSigs(r, name, undefInfo)
 		return
 	}

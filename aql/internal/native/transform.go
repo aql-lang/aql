@@ -40,6 +40,11 @@ func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []
 
 // valueToAny converts an engine.Value to a Go any for use with voxgig struct.
 func valueToAny(v engine.Value) any {
+	// Type literals (e.g. bare Map, List, Integer) have Data==nil.
+	// Return nil rather than panicking on accessor calls.
+	if v.Data == nil {
+		return nil
+	}
 	switch {
 	case v.VType.Matches(engine.TInteger):
 		return float64(v.AsInteger())
@@ -114,6 +119,9 @@ func anyToValue(v any) (engine.Value, error) {
 // valueToMap converts a map-typed Value to map[string]any for use with SDK calls.
 func valueToMap(v engine.Value) map[string]any {
 	m := v.AsMap()
+	if m == nil {
+		return nil
+	}
 	out := make(map[string]any, m.Len())
 	for _, key := range m.Keys() {
 		val, _ := m.Get(key)

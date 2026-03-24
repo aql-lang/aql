@@ -52,6 +52,9 @@ func fetchStringHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // The URL is merged into the options map as the "url" field.
 func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	opts := args[1].AsMap()
+	if opts == nil {
+		return nil, fmt.Errorf("fetch: expected map for options, got nil")
+	}
 	reqOM := engine.NewOrderedMap()
 	reqOM.Set("url", args[0])
 	// Copy options into request map (url from first arg takes precedence).
@@ -68,7 +71,11 @@ func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // fetchMapHandler handles fetch with a full request map.
 // The map must contain a "url" field.
 func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	return doFetch(args[0].AsMap())
+	m := args[0].AsMap()
+	if m == nil {
+		return nil, fmt.Errorf("fetch: expected map argument, got nil")
+	}
+	return doFetch(m)
 }
 
 // doFetch performs a synchronous HTTP request from the given request map

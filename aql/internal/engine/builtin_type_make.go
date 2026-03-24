@@ -64,6 +64,9 @@ func registerMake(r *Registry) {
 		if !srcVal.VType.Equal(TList) {
 			return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
 		}
+		if srcVal.Data == nil {
+			return nil, fmt.Errorf("make: record values must be a concrete list, got type literal")
+		}
 		elems := srcVal.AsList()
 
 		// Check if named or positional.
@@ -121,7 +124,7 @@ func registerMake(r *Registry) {
 		}
 		if v, ok := m.Get("base"); ok {
 			v = resolveWordValue(v)
-			if v.VType.Matches(TBoolean) && v.Data.(bool) {
+			if b, bOk := v.Data.(bool); bOk && b {
 				useBase = true
 			}
 		}
@@ -295,6 +298,9 @@ func registerMake(r *Registry) {
 			if !srcVal.VType.Equal(TList) {
 				return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
 			}
+			if srcVal.Data == nil {
+				return nil, fmt.Errorf("make: table values must be a concrete list, got type literal")
+			}
 			rows := srcVal.AsList()
 			fieldKeys := recType.Fields.Keys()
 			resultRows := make([]Value, 0, len(rows))
@@ -302,6 +308,9 @@ func registerMake(r *Registry) {
 			for rowIdx, rowVal := range rows {
 				if !rowVal.VType.Equal(TList) {
 					return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
+				}
+				if rowVal.Data == nil {
+					return nil, fmt.Errorf("make: table row %d must be a concrete list, got type literal", rowIdx)
 				}
 				rowElems := rowVal.AsList()
 

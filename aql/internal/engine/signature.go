@@ -146,6 +146,10 @@ func positionalMatch(values []Value, types []Type) bool {
 		if !values[i].VType.Matches(t) {
 			return false
 		}
+		// Reject type literals (Data==nil) for concrete Map/List signatures.
+		if values[i].Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
+			return false
+		}
 	}
 	return true
 }

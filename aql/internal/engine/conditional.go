@@ -42,7 +42,7 @@ func isTruthy(v Value) bool {
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
 func spliceArg(v Value) []Value {
-	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList()
 		result := make([]Value, 0, len(elems)+2)
 		result = append(result, NewOpenParen())
@@ -62,7 +62,7 @@ func registerIf(r *Registry) {
 		elseBranch := spliceArg(args[2])
 
 		// If condition is a list, use mark/move to evaluate it in-place.
-		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
+		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
 			condElems := cond.AsList()
 			id := NextMarkID()
 			tokens := make([]Value, 0, len(condElems)+2)
@@ -89,7 +89,7 @@ func registerIf(r *Registry) {
 		thenBranch := spliceArg(args[1])
 
 		// If condition is a list, use mark/move to evaluate it in-place.
-		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
+		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
 			condElems := cond.AsList()
 			id := NextMarkID()
 			tokens := make([]Value, 0, len(condElems)+2)

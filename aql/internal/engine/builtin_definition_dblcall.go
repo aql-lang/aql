@@ -19,6 +19,9 @@ func registerDblcall(r *Registry) {
 			n := args[0].AsInteger()
 			body := args[1]
 
+			if body.Data == nil {
+				return nil, fmt.Errorf("dblcall: callback must be a concrete list, got type literal")
+			}
 			if body.IsTypedList() || body.IsTableType() {
 				return nil, fmt.Errorf("dblcall: callback must be a plain list")
 			}

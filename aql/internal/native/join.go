@@ -1,6 +1,8 @@
 package native
 
 import (
+	"fmt"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
@@ -29,7 +31,10 @@ func joinFunc() NativeFunc {
 // joinDefaultHandler calls voxgigstruct.Join with default separator (comma).
 func joinDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	arr := data.([]any)
+	arr, ok := data.([]any)
+	if !ok {
+		return nil, fmt.Errorf("join: expected list, got %T", data)
+	}
 	result := voxgigstruct.Join(arr)
 	return []engine.Value{engine.NewString(result)}, nil
 }
@@ -37,7 +42,10 @@ func joinDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // joinSepHandler calls voxgigstruct.Join with a specified separator.
 func joinSepHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	arr := data.([]any)
+	arr, ok := data.([]any)
+	if !ok {
+		return nil, fmt.Errorf("join: expected list, got %T", data)
+	}
 	sep := args[1].AsString()
 	result := voxgigstruct.Join(arr, sep)
 	return []engine.Value{engine.NewString(result)}, nil

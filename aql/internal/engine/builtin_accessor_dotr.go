@@ -17,6 +17,9 @@ import (
 //	[10,20] 5 dotr    => ERROR (index out of bounds)
 func registerDotr(r *Registry) {
 	dotrMapAtomHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dotr: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := args[1].AsAtom()
 		val, ok := m.Get(key)
@@ -27,6 +30,9 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrMapStringHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dotr: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := args[1].AsString()
 		val, ok := m.Get(key)
@@ -37,6 +43,9 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrListHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dotr: cannot index type literal")
+		}
 		list := args[0].AsList()
 		idx := int(args[1].AsInteger())
 		if idx < 0 || idx >= len(list) {
@@ -46,6 +55,9 @@ func registerDotr(r *Registry) {
 	}
 
 	dotrMapIntegerHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dotr: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := strconv.FormatInt(args[1].AsInteger(), 10)
 		val, ok := m.Get(key)

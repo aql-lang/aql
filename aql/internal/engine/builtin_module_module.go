@@ -32,6 +32,9 @@ func registerModule(r *Registry) {
 	r.Register("module", Signature{
 		Args: []Type{TList},
 		Handler: func(args []Value) ([]Value, error) {
+			if args[0].Data == nil {
+				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
+			}
 			desc, err := runModuleBody(r, args[0].AsList())
 			if err != nil {
 				return nil, fmt.Errorf("module: %w", err)
@@ -50,6 +53,9 @@ func registerModule(r *Registry) {
 	// import: [list module-desc] -> [] — rename imports via list
 	importRenameHandler := func(args []Value) ([]Value, error) {
 		desc := args[1].AsModule()
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
+		}
 		return nil, installRenamedExports(r, desc, args[0].AsList())
 	}
 
@@ -177,12 +183,18 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Register("export", Signature{
 		Args: []Type{TAtom, TMap},
 		Handler: func(eargs []Value) ([]Value, error) {
+			if eargs[1].Data == nil {
+				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+			}
 			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
 			return nil, nil
 		},
 	}, Signature{
 		Args: []Type{TString, TMap},
 		Handler: func(eargs []Value) ([]Value, error) {
+			if eargs[1].Data == nil {
+				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+			}
 			exportHandler(eargs[0].AsString(), eargs[1].AsMap())
 			return nil, nil
 		},

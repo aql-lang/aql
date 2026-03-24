@@ -12,7 +12,10 @@ import (
 // getSDK extracts the spec and entity name from an API map ({kind:"api", spec:..., entity:...}),
 // looks up or creates the SDK instance, and returns the SDK and entity name.
 func getSDK(apiMap *engine.OrderedMap, opName string, r *engine.Registry) (*udk.UniversalSDK, string, error) {
-	specVal, _ := apiMap.Get("spec")
+	specVal, ok := apiMap.Get("spec")
+	if !ok {
+		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
+	}
 
 	spec := specVal.AsString()
 
@@ -44,8 +47,11 @@ func getSDK(apiMap *engine.OrderedMap, opName string, r *engine.Registry) (*udk.
 // entityToAPIMap converts an Object/Resource/Entity instance into the
 // OrderedMap that getSDK expects ({kind:..., spec:..., entity:...}).
 func entityToAPIMap(v engine.Value) *engine.OrderedMap {
-	inst := v.AsObjectInstance()
 	m := engine.NewOrderedMap()
+	if v.Data == nil {
+		return m
+	}
+	inst := v.AsObjectInstance()
 	if kind, ok := inst.GetField("kind"); ok {
 		m.Set("kind", kind)
 	}
@@ -123,10 +129,11 @@ func mergeAPIOptions(base *engine.OrderedMap, opts *engine.OrderedMap, field str
 	// Get existing field map or create a new one.
 	existing := engine.NewOrderedMap()
 	if v, ok := merged.Get(field); ok && v.VType.Matches(engine.TMap) {
-		src := v.AsMap()
-		for _, k := range src.Keys() {
-			val, _ := src.Get(k)
-			existing.Set(k, val)
+		if src := v.AsMap(); src != nil {
+			for _, k := range src.Keys() {
+				val, _ := src.Get(k)
+				existing.Set(k, val)
+			}
 		}
 	}
 

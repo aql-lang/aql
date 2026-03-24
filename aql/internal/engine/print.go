@@ -44,6 +44,14 @@ func registerPrint(r *Registry) {
 
 // formatForPrint returns the print representation of a value.
 func formatForPrint(v Value) string {
+	// Type literals (Data==nil) — print the type name; None prints "null".
+	if v.Data == nil {
+		if v.VType.Equal(TNone) {
+			return "null"
+		}
+		return v.VType.String()
+	}
+
 	// Table: formatted with headers and aligned columns.
 	if v.IsTableType() {
 		if td, ok := v.Data.(TableData); ok {
@@ -69,7 +77,7 @@ func formatForPrint(v Value) string {
 	}
 
 	// List: JSON-like output.
-	if v.VType.Equal(TList) {
+	if v.VType.Equal(TList) && v.Data != nil {
 		return formatListJSON(v)
 	}
 
@@ -103,6 +111,12 @@ func formatListJSON(v Value) string {
 
 // formatValueJSON formats any value for JSON-like output.
 func formatValueJSON(v Value) string {
+	if v.Data == nil {
+		if v.VType.Equal(TNone) {
+			return "null"
+		}
+		return v.VType.String()
+	}
 	switch {
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("%q", v.AsString())

@@ -20,6 +20,9 @@ func registerVar(r *Registry) {
 		if !list.VType.Equal(TList) {
 			return nil, fmt.Errorf("var: argument must be a list")
 		}
+		if list.Data == nil {
+			return nil, fmt.Errorf("var: argument must be a concrete list, got type literal")
+		}
 		elems := list.AsList()
 		if len(elems) == 0 {
 			return nil, fmt.Errorf("var: empty list")
@@ -27,7 +30,7 @@ func registerVar(r *Registry) {
 
 		// First element must be a list of variable declarations.
 		declVal := elems[0]
-		if !declVal.VType.Equal(TList) {
+		if !declVal.VType.Equal(TList) || declVal.Data == nil {
 			return nil, fmt.Errorf("var: first element must be a list of variable declarations")
 		}
 		decls := declVal.AsList()
@@ -44,7 +47,7 @@ func registerVar(r *Registry) {
 				varNames = append(varNames, name)
 				result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
 
-			case decl.VType.Equal(TList):
+			case decl.VType.Equal(TList) && decl.Data != nil:
 				// List [name value...]: define with given value.
 				declElems := decl.AsList()
 				if len(declElems) < 2 {

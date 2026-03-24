@@ -391,6 +391,9 @@ func registerBinaryBoolOp(r *Registry, name string, prec int, op func(a, b bool)
 
 // valToString converts any scalar Value to its string representation.
 func valToString(v Value) string {
+	if v.Data == nil && !v.VType.Equal(TNone) {
+		return v.VType.String()
+	}
 	switch {
 	case v.VType.Matches(TString):
 		return v.AsString()
@@ -412,6 +415,9 @@ func valToString(v Value) string {
 
 // storeKey converts a Value to a string key for the store.
 func storeKey(v Value) string {
+	if v.Data == nil {
+		return v.VType.String()
+	}
 	if v.IsWord() {
 		return v.AsWord().Name
 	}

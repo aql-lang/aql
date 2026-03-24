@@ -619,6 +619,21 @@ def sq fn [[x:Number] [Number] [x mul x]] sq 6	36
 # Multiple calls to function def
 def inc fn [[x:Number] [Number] [x add 1]] 1 inc inc inc	4
 
+# Unnamed Map parameter (type literal, not a map value)
+def mid fn [[Map] [] []] end {a:2} mid	{a:2}
+
+# Unnamed List parameter
+def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
+
+# Unnamed Boolean parameter
+def notb fn [[Boolean] [] [not]] end true notb	false
+
+# Unnamed String parameter
+def greet fn [[String] [] ["hello " swap add]] end "world" greet	'hello world'
+
+# Multiple unnamed Map parameters
+def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{b:2} {a:1}
+
 # Function def shadows regular def
 (def foo 42) (def foo fn [[Number] [Number] [dup mul]]) (3 foo) (undef foo) foo	9 42
 

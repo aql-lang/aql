@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func registerConcat(r *Registry) {
 	// concat: [list] -> [string]
@@ -21,6 +24,9 @@ func registerConcat(r *Registry) {
 }
 
 func doConcat(listVal Value, o strOpts) ([]Value, error) {
+	if listVal.Data == nil {
+		return nil, fmt.Errorf("concat: argument must be a concrete list, got type literal")
+	}
 	elems := listVal.AsList()
 	var parts []string
 	for _, e := range elems {

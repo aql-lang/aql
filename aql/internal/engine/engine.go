@@ -442,17 +442,26 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	var results []Value
 	var err error
 	if match.Sig.FullStackHandler != nil {
-		// Collect the full resolved stack before the pointer,
+		// Find the nearest open-paren barrier so that FullStackHandler
+		// only replaces within the current paren scope, not below it.
+		base := 0
+		for i := e.pointer - 1; i >= 0; i-- {
+			if e.stack[i].IsOpenParen() {
+				base = i + 1
+				break
+			}
+		}
+		// Collect the full resolved stack before the pointer (from base),
 		// excluding the matched args and forwards.
-		fullStack := e.resolvedStackBefore(indices)
+		fullStack := e.resolvedStackBeforeFrom(base, indices)
 		results, err = match.Sig.FullStackHandler(match.Args, fullStack)
 		if err != nil {
 			return err
 		}
 		// FullStackHandler returns the complete replacement for
-		// everything from start through the pointer (inclusive).
-		e.stackSplice(0, e.pointer+1, results...)
-		e.pointer = 0
+		// everything from base through the pointer (inclusive).
+		e.stackSplice(base, e.pointer+1-base, results...)
+		e.pointer = base
 		return nil
 	}
 
@@ -522,12 +531,19 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 // resolvedStackBefore returns all resolved values before the pointer,
 // excluding forwards, open-parens, and the matched arg indices.
 func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
+	return e.resolvedStackBeforeFrom(0, excludeIndices)
+}
+
+// resolvedStackBeforeFrom returns all resolved values from position 'from'
+// up to the pointer, excluding forwards, open-parens, marks, moves,
+// and the matched arg indices.
+func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value {
 	exclude := make(map[int]bool, len(excludeIndices))
 	for _, idx := range excludeIndices {
 		exclude[idx] = true
 	}
 	var stack []Value
-	for i := 0; i < e.pointer; i++ {
+	for i := from; i < e.pointer; i++ {
 		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() || e.stack[i].IsMark() || e.stack[i].IsMove() {
 			continue
 		}

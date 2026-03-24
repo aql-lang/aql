@@ -19,6 +19,9 @@ func registerFn(r *Registry) {
 		if !list.VType.Equal(TList) {
 			return nil, fmt.Errorf("fn: argument must be a list")
 		}
+		if list.Data == nil {
+			return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
+		}
 		elems := list.AsList()
 		if len(elems) == 0 {
 			return nil, fmt.Errorf("fn: list must not be empty")
@@ -76,7 +79,7 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 
 		// Abbreviation: non-list body is treated as [body].
 		var bodyElems []Value
-		if body.VType.Equal(TList) {
+		if body.VType.Equal(TList) && body.Data != nil {
 			bodyElems = body.AsList()
 		} else {
 			bodyElems = []Value{body}
@@ -126,7 +129,7 @@ func parseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 // A non-list value is treated as a single-element list.
 // An empty list means no return type checking.
 func parseFnReturns(outputSig Value) ([]Type, error) {
-	if !outputSig.VType.Equal(TList) {
+	if !outputSig.VType.Equal(TList) || outputSig.Data == nil {
 		// Abbreviation: single value treated as [value].
 		t, _, err := resolveSigType(nil, outputSig)
 		if err != nil {
@@ -158,12 +161,15 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 	if !inputSig.VType.Equal(TList) {
 		return nil, fmt.Errorf("function spec: input signature must be a list")
 	}
+	if inputSig.Data == nil {
+		return nil, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
+	}
 	elems := inputSig.AsList()
 	var params []FnParam
 
 	for _, elem := range elems {
 		switch {
-		case elem.VType.Equal(TMap):
+		case elem.VType.Equal(TMap) && elem.Data != nil:
 			m := elem.AsMap()
 			if m.Implicit {
 				// Named parameter from implicit pair syntax: [x:Integer]

@@ -705,8 +705,11 @@ func (v Value) IsAtom() bool {
 	return v.VType.Equal(TAtom)
 }
 
-// AsAtom returns the string payload, panics if not an atom.
+// AsAtom returns the string payload. Returns "" if Data is nil.
 func (v Value) AsAtom() string {
+	if v.Data == nil {
+		return ""
+	}
 	return v.Data.(string)
 }
 
@@ -775,18 +778,27 @@ func (v Value) AsForward() ForwardInfo {
 	return v.Data.(ForwardInfo)
 }
 
-// AsString returns the string payload, panics if not a string type.
+// AsString returns the string payload. Returns "" if Data is nil (type literal).
 func (v Value) AsString() string {
+	if v.Data == nil {
+		return ""
+	}
 	return v.Data.(string)
 }
 
-// AsInteger returns the int64 payload, panics if not an integer type.
+// AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
 func (v Value) AsInteger() int64 {
+	if v.Data == nil {
+		return 0
+	}
 	return v.Data.(int64)
 }
 
-// AsDecimal returns the float64 payload, panics if not a decimal type.
+// AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
 func (v Value) AsDecimal() float64 {
+	if v.Data == nil {
+		return 0.0
+	}
 	return v.Data.(float64)
 }
 
@@ -799,8 +811,11 @@ func (v Value) AsNumber() float64 {
 	return float64(v.AsInteger())
 }
 
-// AsBoolean returns the bool payload, panics if not a boolean type.
+// AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
 func (v Value) AsBoolean() bool {
+	if v.Data == nil {
+		return false
+	}
 	return v.Data.(bool)
 }
 
@@ -808,6 +823,9 @@ func (v Value) AsBoolean() bool {
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
 func (v Value) AsList() []Value {
+	if v.Data == nil {
+		return nil
+	}
 	if td, ok := v.Data.(TableData); ok {
 		return td.Rows
 	}
@@ -823,6 +841,9 @@ func (v Value) AsList() []Value {
 
 // AsMap returns the OrderedMap payload, panics if not a map type.
 func (v Value) AsMap() *OrderedMap {
+	if v.Data == nil {
+		return nil
+	}
 	return v.Data.(*OrderedMap)
 }
 

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -15,6 +16,9 @@ import (
 //	set foo a:b:1 foo.a.b  => 1
 func registerDot(r *Registry) {
 	dotMapAtomHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := args[1].AsAtom()
 		val, ok := m.Get(key)
@@ -25,6 +29,9 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapStringHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := args[1].AsString()
 		val, ok := m.Get(key)
@@ -35,6 +42,9 @@ func registerDot(r *Registry) {
 	}
 
 	dotListHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot index type literal")
+		}
 		list := args[0].AsList()
 		idx := int(args[1].AsInteger())
 		if idx < 0 || idx >= len(list) {
@@ -44,6 +54,9 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
 		m := args[0].AsMap()
 		key := strconv.FormatInt(args[1].AsInteger(), 10)
 		val, ok := m.Get(key)

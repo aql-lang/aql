@@ -104,3 +104,35 @@ auto-evaluates lists with `Eval=true && !Quoted`.
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate
 `convert*` function.
+
+## Panic Prevention (CRITICAL)
+
+**Panics must never occur in this codebase.** All code must be defensive
+against unexpected input. Return errors instead of panicking. This is a
+hard rule — no exceptions.
+
+Key patterns to follow:
+
+- **Always nil-check before dereferencing.** `Value.AsMap()` and
+  `Value.AsList()` return `nil` when `Data` is nil (type literals like
+  bare `Map` or `List`). Never call `.Len()`, `.Keys()`, `.Get()` etc.
+  on a potentially nil result without checking first.
+- **Type literals have nil Data.** `NewTypeLiteral(TMap)` creates a Value
+  with `VType=TMap, Data=nil`. Any code that receives a Value matching
+  `TMap`/`TList`/`TAny` must handle the `Data==nil` case. This includes
+  signature-matched arguments — `TAny` matches type literals.
+- **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
+  `internal/native/transform.go` have nil-Data guards. If you add new
+  conversion helpers, include the same guard.
+- **Native function safety.** `makeFullStackHandler()` in
+  `internal/native/native.go` rejects type literals centrally before any
+  native handler runs. If you bypass this wrapper, add your own guard.
+- **Engine builtin handlers.** Check `args[N].Data == nil` before calling
+  `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
+  signatures. See `builtin_accessor_dot.go` for the canonical pattern.
+- **Prefer `val, ok := v.Data.(Type)` over `v.Data.(Type)`.** The
+  two-value form never panics; the single-value form panics on mismatch.
+- **Write tests that use `recover()`.** For any new word or native
+  function, add a test case in `TestTypeLiteralNoPanic` or
+  `TestTypeLiteralNoPanicNative` that passes type literals and asserts
+  no panic occurs.

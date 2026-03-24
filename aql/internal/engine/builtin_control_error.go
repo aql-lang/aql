@@ -27,6 +27,9 @@ func registerError(r *Registry) {
 	listHandler := func(args []Value) ([]Value, error) {
 		info := args[0].AsError()
 		fmt.Fprintf(r.Output, "  error: %s\n", info.Message)
+		if args[1].Data == nil {
+			return nil, fmt.Errorf("error: handler must be a concrete list, got type literal")
+		}
 		sub := New(r)
 		body := make([]Value, len(args[1].AsList()))
 		copy(body, args[1].AsList())

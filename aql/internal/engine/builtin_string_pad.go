@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func registerPad(r *Registry) {
 	// pad: [string, integer] -> [string]
@@ -10,6 +13,9 @@ func registerPad(r *Registry) {
 
 	// pad: [string, integer, map] -> [string]
 	padOptsHandler := func(args []Value) ([]Value, error) {
+		if args[2].Data == nil {
+			return nil, fmt.Errorf("pad: options must be a concrete map, got type literal")
+		}
 		opts := parseStrOpts(args[2])
 		if opts.fill == "" {
 			opts.fill = " "

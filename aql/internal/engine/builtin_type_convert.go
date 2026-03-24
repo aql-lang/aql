@@ -135,7 +135,7 @@ func registerConvert(r *Registry) {
 		}
 		base := ""
 		size := defaultSize
-		if args[2].VType.Equal(TMap) {
+		if args[2].VType.Equal(TMap) && args[2].Data != nil {
 			m := args[2].AsMap()
 			if v, ok := m.Get("base"); ok {
 				base = valToString(v)

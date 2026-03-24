@@ -1,6 +1,8 @@
 package native
 
 import (
+	"fmt"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
@@ -52,6 +54,13 @@ func Register(r *engine.Registry) {
 // so that FullStackHandler semantics are satisfied (it replaces 0..pointer).
 func makeFullStackHandler(r *engine.Registry, h NativeHandler) func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
 	return func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
+		// Reject type literals (Data==nil) that passed signature matching
+		// but would cause nil pointer dereferences in native handlers.
+		for _, arg := range args {
+			if arg.Data == nil && !arg.VType.Equal(engine.TNone) {
+				return nil, fmt.Errorf("expected a concrete value, got type literal %s", arg.VType)
+			}
+		}
 		ctx := r.Context()
 		results, err := h(args, ctx, stack, r)
 		if err != nil {

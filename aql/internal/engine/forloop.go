@@ -32,6 +32,9 @@ func registerFor(r *Registry) {
 
 	// for [list, list] — range spec [end] or [start,end] or [start,end,step]
 	forRangeHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
+		}
 		rangeSpec := args[0].AsList()
 		body := args[1]
 		start, end, step, err := parseRange(rangeSpec)
@@ -97,6 +100,9 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 		return nil, nil
 	}
 
+	if body.Data == nil {
+		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
+	}
 	bodyElems := body.AsList()
 
 	// Install the iterator variable for the first iteration.

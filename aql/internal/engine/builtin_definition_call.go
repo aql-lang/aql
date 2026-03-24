@@ -14,6 +14,9 @@ func registerCall(r *Registry) {
 		Handler: func(args []Value) ([]Value, error) {
 			body := args[0]
 
+			if body.Data == nil {
+				return nil, fmt.Errorf("call: argument must be a concrete list, got type literal")
+			}
 			if body.IsTypedList() || body.IsTableType() {
 				return nil, fmt.Errorf("call: argument must be a plain list")
 			}
