@@ -402,16 +402,19 @@ func resolveTypeName(name string) (Type, error) {
 // expandOptionalSigs expands signatures with optional parameters into
 // additional signatures for each combination of omitted optional params.
 // Each generated sig's body calls the function with base values for the
-// omitted params. For example:
+// omitted params. Present params are referenced by name (if named) or
+// via args.N (if unnamed), avoiding synthetic param names.
+//
+// For example:
 //
 //	def foo fn [[Map? Integer] [Integer] [body]]
 //
 // expands to add:
 //
-//	[n:Integer] [Integer] [foo {} n]
+//	[Integer] [Integer] [foo {} args.0]
 //
-// where {} is the base value for Map, and n is an auto-generated name
-// for the required Integer param.
+// where {} is the base value for Map, and args.0 references the first
+// argument of the reduced signature.
 func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
 	var expanded []FnSig
 	for _, sig := range sigs {
@@ -442,46 +445,47 @@ func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
 			}
 
 			// Build reduced params (only non-omitted).
+			// Named params keep their names; unnamed params stay unnamed.
 			var reducedParams []FnParam
 			for i, p := range sig.Params {
 				if !omitted[i] {
-					// Copy param without Optional flag (it's now required
-					// in this reduced signature).
-					rp := FnParam{
+					reducedParams = append(reducedParams, FnParam{
 						Name:    p.Name,
 						Type:    p.Type,
 						Pattern: p.Pattern,
-					}
-					// Auto-generate name for unnamed params so the body
-					// can reference them in the recursive call.
-					if rp.Name == "" {
-						rp.Name = fmt.Sprintf("__p%d", i)
-					}
-					reducedParams = append(reducedParams, rp)
+					})
 				}
 			}
 
-			// Build body: call the function with all params, inserting
-			// base values for omitted ones.
+			// Build body: call the function with all original params,
+			// inserting base values for omitted ones. Present params
+			// are referenced by name or via args.N positional access.
 			var body []Value
 			body = append(body, NewWord(name))
+			presentIdx := 0
 			for i, p := range sig.Params {
 				if omitted[i] {
 					// Insert base value for the omitted param's type.
 					bv, err := baseValue(p.Type)
 					if err != nil {
-						// If we can't determine a base value, skip this
-						// expansion (the param type is unsupported).
 						continue
 					}
 					body = append(body, bv)
 				} else {
-					// Reference the param by name (original or generated).
-					paramName := p.Name
-					if paramName == "" {
-						paramName = fmt.Sprintf("__p%d", i)
+					if p.Name != "" {
+						// Named param: reference by name.
+						body = append(body, NewWord(p.Name))
+					} else {
+						// Unnamed param: use args.N (paren-wrapped dot access).
+						body = append(body,
+							NewOpenParen(),
+							NewWord("args"),
+							NewAtom(fmt.Sprintf("%d", presentIdx)),
+							NewWord("dot"),
+							NewWord(")"),
+						)
 					}
-					body = append(body, NewWord(paramName))
+					presentIdx++
 				}
 			}
 
