@@ -99,6 +99,10 @@ func Parse(src string) ([]engine.Value, error) {
 				// Semicolon is an alias for the "end" keyword.
 				r.Node = jsonic.Text{Str: "end", Quote: ""}
 			}},
+			// Question mark produces a "?" marker for optional param syntax.
+			{S: [][]jsonic.Tin{{TinQM}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "?", Quote: ""}
+			}},
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				si := r.O0.SI
 				leftAdj := si > 0 && !isWhitespace(src[si-1])

@@ -189,6 +189,14 @@ def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
 def A {x:Integer y?:String} A unify {x:1}	{x:1,y:None} true
 def A {x:Integer y?:String} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 
+# Optional function arguments — named optional param
+def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 5	5
+def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 10 5	15
+
+# Optional function arguments — unnamed optional param
+def inc fn [[Integer? Integer] [Integer] [add]] inc 5	5
+def inc fn [[Integer? Integer] [Integer] [add]] inc 3 5	8
+
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 

@@ -1,6 +1,9 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // registerFn registers the "fn" word, which parses a list of signature
 // triples into a function value (lambda). Used standalone as a lambda:
@@ -157,6 +160,10 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 //   - A map with one key (named param from pair syntax): {x: type}
 //   - A word (unnamed param): type name
 //   - A type literal (Data==nil): already resolved type
+//
+// Optional params are detected via:
+//   - Named: key ending with "?" (from pair ? syntax): [x?:Integer]
+//   - Unnamed: "?" word following a type: [Integer?]
 func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 	if !inputSig.VType.Equal(TList) {
 		return nil, fmt.Errorf("function spec: input signature must be a list")
@@ -167,23 +174,74 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 	elems := inputSig.AsList()
 	var params []FnParam
 
-	for _, elem := range elems {
+	for i := 0; i < len(elems); i++ {
+		elem := elems[i]
+
+		// Check if this element is a "?" marker — skip it but mark
+		// the previous param as optional.
+		if elem.IsWord() && elem.AsWord().Name == "?" {
+			if len(params) > 0 {
+				params[len(params)-1].Optional = true
+			}
+			continue
+		}
+
 		switch {
 		case elem.VType.Equal(TMap) && elem.Data != nil:
 			m := elem.AsMap()
-			if m.Implicit {
+			if m != nil && m.Implicit {
 				// Named parameter from implicit pair syntax: [x:Integer]
 				keys := m.Keys()
 				if len(keys) != 1 {
 					return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
 				}
 				name := keys[0]
-				typeVal, _ := m.Get(name)
+				optional := false
+				// Detect optional named param: key ends with "?"
+				if strings.HasSuffix(name, "?") {
+					name = strings.TrimSuffix(name, "?")
+					optional = true
+				}
+				typeVal, _ := m.Get(keys[0])
+				// Evaluate ParenExpr values (e.g., (Integer or None))
+				// that haven't been auto-evaluated yet.
+				if typeVal.IsParenExpr() && r != nil {
+					items := typeVal.AsParenExpr()
+					sub := New(r)
+					input := make([]Value, 0, len(items)+2)
+					input = append(input, NewOpenParen())
+					input = append(input, items...)
+					input = append(input, NewWord(")"))
+					result, err := sub.Run(input)
+					if err == nil && len(result) == 1 {
+						typeVal = result[0]
+					}
+				}
+				// Detect optional from disjunct containing None:
+				// either from ? syntax (key?) or explicit (Integer or None).
+				if typeVal.IsDisjunct() {
+					alts := typeVal.AsDisjunct().Alternatives
+					for _, alt := range alts {
+						if alt.VType.Equal(TNone) {
+							optional = true
+							break
+						}
+					}
+					// Extract the base type (non-None alternative).
+					if optional {
+						for _, alt := range alts {
+							if !alt.VType.Equal(TNone) {
+								typeVal = alt
+								break
+							}
+						}
+					}
+				}
 				paramType, pattern, err := resolveSigType(r, typeVal)
 				if err != nil {
 					return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
 				}
-				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern})
+				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern, Optional: optional})
 			} else {
 				// Explicit map: unnamed parameter with structural pattern
 				paramType, pattern, err := resolveSigType(r, elem)
@@ -341,6 +399,102 @@ func resolveTypeName(name string) (Type, error) {
 	}
 }
 
+// expandOptionalSigs expands signatures with optional parameters into
+// additional signatures for each combination of omitted optional params.
+// Each generated sig's body calls the function with base values for the
+// omitted params. For example:
+//
+//	def foo fn [[Map? Integer] [Integer] [body]]
+//
+// expands to add:
+//
+//	[n:Integer] [Integer] [foo {} n]
+//
+// where {} is the base value for Map, and n is an auto-generated name
+// for the required Integer param.
+func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
+	var expanded []FnSig
+	for _, sig := range sigs {
+		expanded = append(expanded, sig)
+
+		// Find optional param indices.
+		var optIndices []int
+		for i, p := range sig.Params {
+			if p.Optional {
+				optIndices = append(optIndices, i)
+			}
+		}
+		if len(optIndices) == 0 {
+			continue
+		}
+
+		// Generate combinations: each subset of optional params to omit.
+		// We iterate from 1 to 2^N-1 (skip 0 = no omissions, which is
+		// the original sig). Bit i set means optional param i is omitted.
+		numOpt := len(optIndices)
+		for mask := 1; mask < (1 << numOpt); mask++ {
+			// Build omitted set.
+			omitted := make(map[int]bool)
+			for bit := 0; bit < numOpt; bit++ {
+				if mask&(1<<bit) != 0 {
+					omitted[optIndices[bit]] = true
+				}
+			}
+
+			// Build reduced params (only non-omitted).
+			var reducedParams []FnParam
+			for i, p := range sig.Params {
+				if !omitted[i] {
+					// Copy param without Optional flag (it's now required
+					// in this reduced signature).
+					rp := FnParam{
+						Name:    p.Name,
+						Type:    p.Type,
+						Pattern: p.Pattern,
+					}
+					// Auto-generate name for unnamed params so the body
+					// can reference them in the recursive call.
+					if rp.Name == "" {
+						rp.Name = fmt.Sprintf("__p%d", i)
+					}
+					reducedParams = append(reducedParams, rp)
+				}
+			}
+
+			// Build body: call the function with all params, inserting
+			// base values for omitted ones.
+			var body []Value
+			body = append(body, NewWord(name))
+			for i, p := range sig.Params {
+				if omitted[i] {
+					// Insert base value for the omitted param's type.
+					bv, err := baseValue(p.Type)
+					if err != nil {
+						// If we can't determine a base value, skip this
+						// expansion (the param type is unsupported).
+						continue
+					}
+					body = append(body, bv)
+				} else {
+					// Reference the param by name (original or generated).
+					paramName := p.Name
+					if paramName == "" {
+						paramName = fmt.Sprintf("__p%d", i)
+					}
+					body = append(body, NewWord(paramName))
+				}
+			}
+
+			expanded = append(expanded, FnSig{
+				Params:  reducedParams,
+				Returns: sig.Returns,
+				Body:    body,
+			})
+		}
+	}
+	return expanded
+}
+
 // installFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via installDef, returns body tokens, and appends undef cleanup.
@@ -350,6 +504,8 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 	if isPrefixOnly {
 		registerFn = r.RegisterPrefixOnly
 	}
+	// Expand optional parameters into additional signatures.
+	fnDef.Sigs = expandOptionalSigs(name, fnDef.Sigs)
 	for _, sig := range fnDef.Sigs {
 		argTypes := make([]Type, len(sig.Params))
 		var patterns map[int]Value
