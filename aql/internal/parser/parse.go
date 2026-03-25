@@ -160,7 +160,7 @@ func Parse(src string) ([]engine.Value, error) {
 		}, rs.Open...)
 	})
 
-	// Record optional keys in the map node via pair.BC callback.
+	// Record optional keys in MapRef.Meta via pair.BC callback.
 	j.Rule("pair", func(rs *jsonic.RuleSpec) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if _, ok := r.K["aql_qm"]; !ok {
@@ -170,14 +170,15 @@ func Parse(src string) ([]engine.Value, error) {
 			if key == "" {
 				return
 			}
-			// Store optional key in ~qm metadata on the map node.
-			if m, ok := r.Node.(map[string]any); ok {
-				qmSet, _ := m["~qm"].(map[string]bool)
+			// Store optional key in MapRef.Meta["qm"].
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				qmSet, _ := mr.Meta["qm"].(map[string]bool)
 				if qmSet == nil {
 					qmSet = make(map[string]bool)
-					m["~qm"] = qmSet
 				}
 				qmSet[key] = true
+				mr.Meta["qm"] = qmSet
+				r.Node = mr // MapRef is a value type, reassign
 			}
 		})
 	})
@@ -360,7 +361,7 @@ func Parse(src string) ([]engine.Value, error) {
 			}
 			return []engine.Value{tv}, nil
 		}
-		mv, err := convertMapData(val.Val, val.Implicit)
+		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
 		if err != nil {
 			return nil, err
 		}
@@ -573,7 +574,7 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit)
+		return convertMapData(val.Val, val.Implicit, val.Meta)
 
 	case map[string]any:
 		// Raw map from list.pair syntax (e.g., [x:number] produces
@@ -616,25 +617,24 @@ func convertWordList(items []any) (engine.Value, error) {
 // resulting OrderedMap is marked as coming from pair syntax (e.g.,
 // [x:Integer] rather than {x:Integer}).
 // Explicit maps are marked for auto-evaluation (Eval=true).
-func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
+// The optional meta parameter receives MapRef.Meta for optional field detection.
+func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (engine.Value, error) {
 	om := engine.NewOrderedMap()
-	isImplicit := len(implicit) > 0 && implicit[0]
-	if isImplicit {
+	if implicit {
 		om.Implicit = true
 	}
-	// Extract optional key metadata set by the pair.BC callback (~qm),
-	// or detect "?" suffix on key names (from elem/list context).
-	qmSet, _ := m["~qm"].(map[string]bool)
+	// Extract optional key metadata from MapRef.Meta["qm"] (map/pair context)
+	// or detect "?" suffix on key names (list/elem context).
+	var qmSet map[string]bool
+	if len(meta) > 0 && meta[0] != nil {
+		qmSet, _ = meta[0]["qm"].(map[string]bool)
+	}
 	for _, key := range sortedKeys(m) {
-		if key == "~qm" {
-			continue // skip metadata key
-		}
 		child, err := convertDataValue(m[key])
 		if err != nil {
 			return engine.Value{}, err
 		}
 		// Optional field: wrap value as (value or None).
-		// Detected via ~qm metadata (map/pair) or ? suffix (list/elem).
 		optional := qmSet[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
@@ -651,7 +651,7 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 	}
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
 	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
-	if !isImplicit {
+	if !implicit {
 		return engine.NewEvalMap(om), nil
 	}
 	return engine.NewMap(om), nil
@@ -680,7 +680,7 @@ func convertDataValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit)
+		return convertMapData(val.Val, val.Implicit, val.Meta)
 
 	case map[string]any:
 		if hasMapChild(val) {
