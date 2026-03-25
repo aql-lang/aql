@@ -95,9 +95,9 @@ var (
 	TObject         = mustType("Object")
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
-	TFetchFunction  = mustType("Word/Function/Fetch")
-	TFetchRequest  = mustType("Node/Map/Fetch/Request")
-	TFetchResponse = mustType("Node/Map/Fetch/Response")
+	TFetchFunction  = mustType("Object/Fetch")
+	TFetchRequest  = mustType("Object/Fetch/Request")
+	TFetchResponse = mustType("Object/Fetch/Response")
 	TError         = mustType("Node/Error")
 
 	// Deprecated aliases — kept temporarily for migration.
@@ -142,9 +142,9 @@ var builtinTypeIDs = map[string]int{
 	"Object":                   30,
 	"Node/Map/Word/Inspect":    31,
 	"Node/Map/Type/Inspect":    32,
-	"Word/Function/Fetch":      33,
-	"Node/Map/Fetch/Request":   34,
-	"Node/Map/Fetch/Response":  35,
+	"Object/Fetch":             33,
+	"Object/Fetch/Request":     34,
+	"Object/Fetch/Response":    35,
 	"Object/Resource":          36,
 	"Object/Resource/Entity":   37,
 }
@@ -195,7 +195,7 @@ func mustType(path string) Type {
 // NewType creates a Type from a slash-separated path, e.g. "String/Proper".
 // Short names are auto-expanded to their full hierarchy path: "String/Proper"
 // becomes "Scalar/String/Proper", "Map/Fetch/Request" becomes
-// "Node/Map/Fetch/Request", etc.
+// "Object/Fetch/Request", etc.
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
 func NewType(path string) (Type, error) {
@@ -253,7 +253,7 @@ func (t Type) String() string {
 }
 
 // Leaf returns the last part of the type path.
-// For example, "Node/Map/Fetch/Request" returns "Request".
+// For example, "Object/Fetch/Request" returns "Request".
 func (t Type) Leaf() string {
 	if len(t.Parts) == 0 {
 		return ""

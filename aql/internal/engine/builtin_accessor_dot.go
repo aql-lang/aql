@@ -71,6 +71,15 @@ func registerDot(r *Registry) {
 	}
 
 	dotObjectAtomHandler := func(args []Value) ([]Value, error) {
+		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
+		if m, ok := args[0].Data.(*OrderedMap); ok {
+			key := args[1].AsAtom()
+			val, found := m.Get(key)
+			if !found {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
 		oi := args[0].AsObjectInstance()
 		key := args[1].AsAtom()
 		val, ok := oi.GetField(key)
@@ -81,6 +90,15 @@ func registerDot(r *Registry) {
 	}
 
 	dotObjectStringHandler := func(args []Value) ([]Value, error) {
+		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
+		if m, ok := args[0].Data.(*OrderedMap); ok {
+			key := args[1].AsString()
+			val, found := m.Get(key)
+			if !found {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
 		oi := args[0].AsObjectInstance()
 		key := args[1].AsString()
 		val, ok := oi.GetField(key)
