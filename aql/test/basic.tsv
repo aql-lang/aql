@@ -178,24 +178,6 @@ def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
 # Options - all defaults
 (make Options {x:1,y:2}) unify {}	{x:1,y:2} true
 
-# Optional field syntax ? — sugar for (type or None)
-{x?:Integer}	{x:Scalar/Number/Integer|None}
-
-# Optional field in record definition
-record [x:Number y?:String]	record{x:Scalar/Number,y:Scalar/String|None}
-
-# Optional field with make record
-type foo record [x:Number y?:String] make foo {x:1}	{x:1,y:None}
-type foo record [x:Number y?:String] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
-
-# Optional field with Options
-(make Options {x:1,y?:String}) unify {x:2}	{x:2,y:None} true
-(make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
-
-# Optional field in def map
-def A {x:Integer y?:String} A unify {x:1}	{x:1,y:None} true
-def A {x:Integer y?:String} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
-
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 

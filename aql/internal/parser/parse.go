@@ -508,14 +508,6 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 		if err != nil {
 			return engine.Value{}, err
 		}
-		// Optional field syntax: "key?" → wrap value as (value or None).
-		if strings.HasSuffix(key, "?") {
-			key = strings.TrimSuffix(key, "?")
-			child = engine.NewDisjunct([]engine.Value{
-				child,
-				engine.NewTypeLiteral(engine.TNone),
-			})
-		}
 		om.Set(key, child)
 	}
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
