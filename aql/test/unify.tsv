@@ -110,10 +110,19 @@ List	[]	true	[]
 {x:Number,y:String}	{x:1,y:"a"}	true	{x:1,y:'a'}
 {a:Number}	{a:42}	true	{a:42}
 
-# Map key mismatch - closed (fail)
+# Map key mismatch - closed (fail when missing value cannot unify with None)
 {x:1}	{y:1}	false
 {x:1}	{x:1,y:2}	false
 {x:1,y:2}	{x:1}	false
+
+# None unifies with absence (missing key treated as None)
+{x:1,y:None}	{x:1}	true	{x:1,y:None}
+{x:1}	{x:1,y:None}	true	{x:1,y:None}
+{x:(String or None)}	{x:1}	false
+{x:Number,y:(String or None)}	{x:1}	true	{x:1,y:None}
+{x:1}	{x:Number,y:(String or None)}	true	{x:1,y:None}
+{x:Number,y:(String or None)}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
+{x:Number,y:String}	{x:1}	false
 
 # Map value mismatch (fail)
 {x:1}	{x:2}	false

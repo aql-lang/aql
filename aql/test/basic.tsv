@@ -127,6 +127,11 @@ type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 "h
 # Make record with optional field - none value
 type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 None]	{x:42,y:None}
 
+# Def map with optional field - absence unifies as None
+def A {x:Integer y:(String or None)} A unify {x:1}	{x:1,y:None} true
+def A {x:Integer y:(String or None)} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+def A {x:Integer y:(String or None)} A unify {x:1,y:None}	{x:1,y:None} true
+
 # Make record from map - all fields provided
 type foo record [x:Number y:String] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 

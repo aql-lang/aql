@@ -267,23 +267,37 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 	aMap := a.AsMap()
 	bMap := b.AsMap()
 
-	// Key sets must be identical (closed maps).
-	if aMap.Len() != bMap.Len() {
-		return Value{}, false
-	}
-
+	noneVal := NewTypeLiteral(TNone)
 	result := NewOrderedMap()
 
-	// Walk keys of a in order, check each exists in b.
+	// Walk keys of a in order; missing keys in b unify against None.
 	for _, key := range aMap.Keys() {
 		aVal, _ := aMap.Get(key)
 		bVal, ok := bMap.Get(key)
 		if !ok {
-			// Key in a but not in b — fail.
-			return Value{}, false
+			// Key in a but not in b — try unifying a's value with None.
+			unified, uOk := Unify(aVal, noneVal)
+			if !uOk {
+				return Value{}, false
+			}
+			result.Set(key, unified)
+			continue
 		}
 
 		unified, uOk := Unify(aVal, bVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+
+	// Keys in b but not in a — try unifying b's value with None.
+	for _, key := range bMap.Keys() {
+		if _, ok := aMap.Get(key); ok {
+			continue // already handled above
+		}
+		bVal, _ := bMap.Get(key)
+		unified, uOk := Unify(bVal, noneVal)
 		if !uOk {
 			return Value{}, false
 		}
