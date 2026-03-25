@@ -47,9 +47,9 @@ var typeAncestry = map[string]string{
 	"Mark":        "Word/__MK",
 	"Move":        "Word/__MV",
 	"Forward":     "Word/__FW",
-	"Paren":       "Word/__PN",
-	"Fndef":       "Word/__FD",
-	"Fnundef":     "Word/__FU",
+	"Paren":       "Word/__OP",
+	"Fndef":       "Word/__FN",
+	"Fnundef":     "Word/__UF",
 	"Function":    "Word/Function",
 	"Returncheck": "Word/__RC",
 	"Disjunct":    "Word/__DJ",
@@ -80,16 +80,16 @@ var (
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
 	TForward      = mustType("Word/__FW")
-	TOpenParen    = mustType("Word/__PN")
+	TOpenParen    = mustType("Word/__OP")
 	TParenExpr    = mustType("Word/__PE")
-	TFnDef        = mustType("Word/__FD")
-	TFnUndef      = mustType("Word/__FU")
+	TFnDef        = mustType("Word/__FN")
+	TFnUndef      = mustType("Word/__UF")
 	TReturnCheck  = mustType("Word/__RC")
 	TDisjunct     = mustType("Word/__DJ")
 	TMark         = mustType("Word/__MK")
 	TMove         = mustType("Word/__MV")
 	TModule       = mustType("Word/__MD")
-	TInternal     = mustType("Word/__")
+	TInternal     = mustType("Word/__IN")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
 	TObject         = mustType("Object")
@@ -129,11 +129,11 @@ var builtinTypeIDs = map[string]int{
 	"Word":                     17,
 	"Word/Atom":                18,
 	"Word/Function":            19,
-	"Word/__":                  20,
+	"Word/__IN":                20,
 	"Word/__FW":                21,
-	"Word/__PN":                22,
-	"Word/__FD":                23,
-	"Word/__FU":                24,
+	"Word/__OP":                22,
+	"Word/__FN":                23,
+	"Word/__UF":                24,
 	"Word/__RC":                25,
 	"Word/__DJ":                26,
 	"Word/__MK":                27,
