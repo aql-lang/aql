@@ -15,7 +15,8 @@ import (
 type OrderedMap struct {
 	keys     []string
 	vals     map[string]Value
-	Implicit bool // true when created from implicit pair syntax (e.g., [x:Integer])
+	Implicit bool              // true when created from implicit pair syntax (e.g., [x:Integer])
+	Meta     map[string]any    // optional metadata for parser/engine communication
 }
 
 // NewOrderedMap creates an empty OrderedMap.

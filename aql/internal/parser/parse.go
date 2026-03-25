@@ -188,6 +188,8 @@ func Parse(src string) ([]engine.Value, error) {
 	//   [OS]       — matches "[", sets K["aql_ck"]=true, pushes to pair.
 	//   [KEY, CS]  — matches "key ]" when aql_ck, saves key, pushes to pair.
 	//   [CL]       — matches ":" when aql_ck, copies key, pushes to val.
+	// A pair.BC callback records the computed key in MapRef.Meta["ck"]
+	// so autoEvalMap can evaluate the key expression at runtime.
 	j.Rule("pair", func(rs *jsonic.RuleSpec) {
 		rs.Open = append([]*jsonic.AltSpec{
 			// Step 1: match [ — set computed key flag, push to pair.
@@ -216,6 +218,29 @@ func Parse(src string) ([]engine.Value, error) {
 					r.U["key"] = r.K["key"]
 				}},
 		}, rs.Open...)
+	})
+
+	// Record computed keys in MapRef.Meta via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_ck"]; !ok {
+				return
+			}
+			key, _ := r.U["key"].(string)
+			if key == "" {
+				return
+			}
+			// Store computed key in MapRef.Meta["ck"].
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				ckSet, _ := mr.Meta["ck"].(map[string]bool)
+				if ckSet == nil {
+					ckSet = make(map[string]bool)
+				}
+				ckSet[key] = true
+				mr.Meta["ck"] = ckSet
+				r.Node = mr
+			}
+		})
 	})
 
 	// Optional field syntax in list context: [x?:Integer]
@@ -658,11 +683,12 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 	if implicit {
 		om.Implicit = true
 	}
-	// Extract optional key metadata from MapRef.Meta["qm"] (map/pair context)
-	// or detect "?" suffix on key names (list/elem context).
-	var qmSet map[string]bool
+	// Extract metadata from MapRef.Meta.
+	var qmSet map[string]bool // optional keys (? syntax)
+	var ckSet map[string]bool // computed keys ([key] syntax)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
+		ckSet, _ = meta[0]["ck"].(map[string]bool)
 	}
 	for _, key := range sortedKeys(m) {
 		child, err := convertDataValue(m[key])
@@ -683,6 +709,13 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 			})
 		}
 		om.Set(realKey, child)
+	}
+	// Propagate computed keys to OrderedMap.Meta for autoEvalMap.
+	if len(ckSet) > 0 {
+		if om.Meta == nil {
+			om.Meta = make(map[string]any)
+		}
+		om.Meta["ck"] = ckSet
 	}
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
 	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
