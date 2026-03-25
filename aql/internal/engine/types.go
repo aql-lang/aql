@@ -44,16 +44,16 @@ var typeAncestry = map[string]string{
 	"Map":         "Node/Map",
 	"Table":       "Object/Table",
 	"Record":      "Object/Record",
-	"Mark":        "Word/Internal/Mark",
-	"Move":        "Word/Internal/Move",
-	"Forward":     "Word/Internal/Forward",
-	"Paren":       "Word/Internal/Paren",
-	"Fndef":       "Word/Internal/Fndef",
-	"Fnundef":     "Word/Internal/Fnundef",
+	"Mark":        "Word/__MK",
+	"Move":        "Word/__MV",
+	"Forward":     "Word/__FW",
+	"Paren":       "Word/__PN",
+	"Fndef":       "Word/__FD",
+	"Fnundef":     "Word/__FU",
 	"Function":    "Word/Function",
-	"Returncheck": "Word/Internal/Return",
-	"Disjunct":    "Word/Internal/Disjunct",
-	"Module":      "Word/Internal/Module",
+	"Returncheck": "Word/__RC",
+	"Disjunct":    "Word/__DJ",
+	"Module":      "Word/__MD",
 	"Resource":    "Object/Resource",
 	"Entity":      "Object/Resource/Entity",
 }
@@ -79,17 +79,17 @@ var (
 	TAtom         = mustType("Word/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
-	TForward      = mustType("Word/Internal/Forward")
-	TOpenParen    = mustType("Word/Internal/Paren")
-	TParenExpr    = mustType("Word/Internal/ParenExpr")
-	TFnDef        = mustType("Word/Internal/Fndef")
-	TFnUndef      = mustType("Word/Internal/Fnundef")
-	TReturnCheck  = mustType("Word/Internal/Return")
-	TDisjunct     = mustType("Word/Internal/Disjunct")
-	TMark         = mustType("Word/Internal/Mark")
-	TMove         = mustType("Word/Internal/Move")
-	TModule       = mustType("Word/Internal/Module")
-	TInternal     = mustType("Word/Internal")
+	TForward      = mustType("Word/__FW")
+	TOpenParen    = mustType("Word/__PN")
+	TParenExpr    = mustType("Word/__PE")
+	TFnDef        = mustType("Word/__FD")
+	TFnUndef      = mustType("Word/__FU")
+	TReturnCheck  = mustType("Word/__RC")
+	TDisjunct     = mustType("Word/__DJ")
+	TMark         = mustType("Word/__MK")
+	TMove         = mustType("Word/__MV")
+	TModule       = mustType("Word/__MD")
+	TInternal     = mustType("Word/__")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
 	TObject         = mustType("Object")
@@ -129,16 +129,16 @@ var builtinTypeIDs = map[string]int{
 	"Word":                     17,
 	"Word/Atom":                18,
 	"Word/Function":            19,
-	"Word/Internal":            20,
-	"Word/Internal/Forward":    21,
-	"Word/Internal/Paren":      22,
-	"Word/Internal/Fndef":      23,
-	"Word/Internal/Fnundef":    24,
-	"Word/Internal/Return":     25,
-	"Word/Internal/Disjunct":   26,
-	"Word/Internal/Mark":       27,
-	"Word/Internal/Move":       28,
-	"Word/Internal/Module":     29,
+	"Word/__":                  20,
+	"Word/__FW":                21,
+	"Word/__PN":                22,
+	"Word/__FD":                23,
+	"Word/__FU":                24,
+	"Word/__RC":                25,
+	"Word/__DJ":                26,
+	"Word/__MK":                27,
+	"Word/__MV":                28,
+	"Word/__MD":                29,
 	"Object":                   30,
 	"Node/Map/Word/Inspect":    31,
 	"Node/Map/Type/Inspect":    32,
