@@ -117,11 +117,11 @@ func Parse(src string) ([]engine.Value, error) {
 	// Optional field syntax: key?:value in pair context.
 	// Two alternates on pair.Open:
 	//   [KEY, QM] — matches "a ?", saves key via pairkey action,
-	//               sets K["qm"]=true (propagated to child), pushes to pair.
-	//   [CL]      — matches ":" when K["qm"]=true, sets U["pair"]=true,
+	//               sets K["aql_qm"]=true (propagated to child), pushes to pair.
+	//   [CL]      — matches ":" when K["aql_qm"]=true, sets U["pair"]=true,
 	//               pushes to val for the value.
-	// The result is the same as [KEY, CL] — the key:value pair is created
-	// normally. The qm flag will be used later to wrap the value as optional.
+	// A pair.BC callback records optional keys in a "~qm" metadata entry
+	// on the map node so convertMapData can wrap them in (value or None).
 	pairkey := func(r *jsonic.Rule, ctx *jsonic.Context) {
 		keyToken := r.O0
 		var key string
@@ -137,16 +137,16 @@ func Parse(src string) ([]engine.Value, error) {
 		rs.Open = append([]*jsonic.AltSpec{
 			// Match KEY ? — save key via K (propagated), push to pair.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {TinQM}},
-				P: "pair", K: map[string]any{"qm": true},
+				P: "pair", K: map[string]any{"aql_qm": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
 					// Propagate key to inner pair via K.
 					r.K["key"] = r.U["key"]
 				}},
-			// Match : when qm flag is set — copy key from K, proceed as pair value.
+			// Match : when aql_qm flag is set — copy key from K, proceed as pair value.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, ok := r.K["qm"]
+					_, ok := r.K["aql_qm"]
 					return ok
 				},
 				P: "val", U: map[string]any{"pair": true},
@@ -154,6 +154,28 @@ func Parse(src string) ([]engine.Value, error) {
 					r.U["key"] = r.K["key"]
 				}},
 		}, rs.Open...)
+	})
+
+	// Record optional keys in the map node via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_qm"]; !ok {
+				return
+			}
+			key, _ := r.U["key"].(string)
+			if key == "" {
+				return
+			}
+			// Store optional key in ~qm metadata on the map node.
+			if m, ok := r.Node.(map[string]any); ok {
+				qmSet, _ := m["~qm"].(map[string]bool)
+				if qmSet == nil {
+					qmSet = make(map[string]bool)
+					m["~qm"] = qmSet
+				}
+				qmSet[key] = true
+			}
+		})
 	})
 
 	// Paren rule: collects values between ( and ) into a parenGroup.
@@ -546,12 +568,32 @@ func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
 	if isImplicit {
 		om.Implicit = true
 	}
+	// Extract optional key metadata set by the pair.BC callback (~qm),
+	// or detect "?" suffix on key names (from elem/list context).
+	qmSet, _ := m["~qm"].(map[string]bool)
 	for _, key := range sortedKeys(m) {
+		if key == "~qm" {
+			continue // skip metadata key
+		}
 		child, err := convertDataValue(m[key])
 		if err != nil {
 			return engine.Value{}, err
 		}
-		om.Set(key, child)
+		// Optional field: wrap value as (value or None).
+		// Detected via ~qm metadata (map/pair) or ? suffix (list/elem).
+		optional := qmSet[key]
+		realKey := key
+		if strings.HasSuffix(key, "?") {
+			realKey = strings.TrimSuffix(key, "?")
+			optional = true
+		}
+		if optional {
+			child = engine.NewDisjunct([]engine.Value{
+				child,
+				engine.NewTypeLiteral(engine.TNone),
+			})
+		}
+		om.Set(realKey, child)
 	}
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
 	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.

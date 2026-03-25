@@ -1783,41 +1783,53 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	}
 }
 
-func TestParseOptionalFieldSameAsPlain(t *testing.T) {
-	// {a?:1} should parse the same map structure as {a:1}
-	// (key "a" with value 1 — the qm flag is for later use)
-	plain, err := Parse("{a:1}")
+func TestParseOptionalFieldDisjunct(t *testing.T) {
+	// {a?:Integer} → key "a" with value (Integer or None)
+	vals, err := Parse("{a?:Integer}")
 	if err != nil {
-		t.Fatalf("Parse {a:1} error: %v", err)
+		t.Fatalf("Parse error: %v", err)
 	}
-	opt, err := Parse("{a?:1}")
-	if err != nil {
-		t.Fatalf("Parse {a?:1} error: %v", err)
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	if len(plain) != 1 || len(opt) != 1 {
-		t.Fatalf("expected 1 value each, got %d and %d", len(plain), len(opt))
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
 	}
-	pm := plain[0].AsMap()
-	om := opt[0].AsMap()
-	if pm == nil {
-		t.Fatal("{a:1} AsMap() returned nil")
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "a" {
+		t.Errorf("expected key 'a', got %v", keys)
 	}
-	if om == nil {
-		t.Fatalf("{a?:1} AsMap() returned nil, value: %s (data: %T)", opt[0].String(), opt[0].Data)
+	val, _ := m.Get("a")
+	if !val.IsDisjunct() {
+		t.Fatalf("expected disjunct for optional field, got %s", val.String())
 	}
-	// Same key
-	pKeys := pm.Keys()
-	oKeys := om.Keys()
-	if len(pKeys) != 1 || len(oKeys) != 1 {
-		t.Fatalf("key counts: plain=%v opt=%v", pKeys, oKeys)
+	alts := val.AsDisjunct().Alternatives
+	if len(alts) != 2 {
+		t.Fatalf("expected 2 alternatives, got %d", len(alts))
 	}
-	if pKeys[0] != oKeys[0] {
-		t.Errorf("keys differ: plain=%q opt=%q", pKeys[0], oKeys[0])
-	}
-	// Same value
-	pv, _ := pm.Get("a")
-	ov, _ := om.Get("a")
-	if pv.String() != ov.String() {
-		t.Errorf("values differ: plain=%s opt=%s", pv.String(), ov.String())
+	if !alts[1].VType.Equal(engine.TNone) {
+		t.Errorf("expected second alternative to be None, got %s", alts[1].VType)
 	}
 }
+
+func TestParseOptionalFieldMixed(t *testing.T) {
+	// {a:Integer, b?:String} → "a" is plain, "b" is disjunct
+	vals, err := Parse("{a:Integer, b?:String}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	aVal, _ := m.Get("a")
+	if aVal.IsDisjunct() {
+		t.Errorf("expected 'a' to NOT be a disjunct, got %s", aVal.String())
+	}
+	bVal, _ := m.Get("b")
+	if !bVal.IsDisjunct() {
+		t.Errorf("expected 'b' to be a disjunct, got %s", bVal.String())
+	}
+}
+
