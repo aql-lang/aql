@@ -182,6 +182,56 @@ func Parse(src string) ([]engine.Value, error) {
 		})
 	})
 
+	// Optional field syntax in list context: [x?:Integer]
+	// Same two-step approach as pair rule:
+	//   [KEY, QM] — matches "x ?", saves key via K, pushes to elem.
+	//   [CL]      — matches ":" when K["aql_qm"], proceeds as list pair.
+	// The inner elem's BC handles the pair creation normally.
+	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Step 1: match KEY ? — save key, push to elem.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {TinQM}},
+				P: "elem", K: map[string]any{"aql_qm": true},
+				U: map[string]any{"done": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					r.K["key"] = r.U["key"]
+				}},
+			// Step 2: match : when aql_qm is set — proceed as list pair.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_qm"]
+					return ok
+				},
+				P: "val",
+				N: map[string]int{"pk": 1, "dmap": 1},
+				U: map[string]any{"done": true, "pair": true, "list": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"].(string) + "?"
+				}},
+		}, rs.Open...)
+	})
+
+	// Propagate the outer elem's updated Node to grandparent (list rule).
+	// The inner elem's BC[1] already updated the outer elem's Node via
+	// r.Parent.Node, but the outer elem's BC[0] is skipped (done=true),
+	// so we need explicit propagation to the list rule.
+	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_qm"]; !ok {
+				return
+			}
+			// Only propagate from the OUTER elem (which has done=true).
+			done, _ := r.U["done"].(bool)
+			if !done {
+				return
+			}
+			if r.Parent != nil && r.Parent != jsonic.NoRule {
+				r.Parent.Node = r.Node
+			}
+		})
+	})
+
 	// Paren rule: collects values between ( and ) into a parenGroup.
 	// Works like a simplified list rule but closes on ) instead of ].
 	j.Rule("paren", func(rs *jsonic.RuleSpec) {

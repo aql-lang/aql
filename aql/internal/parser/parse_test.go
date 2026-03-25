@@ -1833,3 +1833,31 @@ func TestParseOptionalFieldMixed(t *testing.T) {
 	}
 }
 
+func TestParseOptionalFieldInList(t *testing.T) {
+	// [x?:Integer] → implicit map with key "x" and disjunct value
+	vals, err := Parse("[x?:Integer]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	list := vals[0]
+	elems := list.AsList()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
+	}
+	m := elems[0].AsMap()
+	if m == nil {
+		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+	val, _ := m.Get("x")
+	if !val.IsDisjunct() {
+		t.Errorf("expected disjunct for x, got %s", val.String())
+	}
+}
+
