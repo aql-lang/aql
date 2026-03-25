@@ -201,6 +201,15 @@ def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 10 5	15
 def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 7	7
 def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 3 7	10
 
+# Multiple optional args — 2 optional, 1 required (2^2=4 sigs)
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 1	1
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 1	11
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 20 1	31
+
+# Multiple optional args — all optional (same types), 1 or 2 args
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5	5
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5 3	8
+
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
