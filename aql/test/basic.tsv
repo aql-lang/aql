@@ -181,6 +181,10 @@ def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
 # Optional field syntax ? — sugar for (type or None)
 {x?:Integer}	{x:Scalar/Number/Integer|None}
 
+# Computed key syntax {[key]:value}
+{[a]:1}	{a:1}
+{[a]:1,[b]:2}	{a:1,b:2}
+
 # Optional field with Options
 (make Options {x:1,y?:String}) unify {x:2}	{x:2,y:None} true
 (make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true

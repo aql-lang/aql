@@ -183,6 +183,41 @@ func Parse(src string) ([]engine.Value, error) {
 		})
 	})
 
+	// Computed key syntax: {[key]:value} in pair context.
+	// Three-step approach:
+	//   [OS]       — matches "[", sets K["aql_ck"]=true, pushes to pair.
+	//   [KEY, CS]  — matches "key ]" when aql_ck, saves key, pushes to pair.
+	//   [CL]       — matches ":" when aql_ck, copies key, pushes to val.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Step 1: match [ — set computed key flag, push to pair.
+			{S: [][]jsonic.Tin{{jsonic.TinOS}},
+				P: "pair", K: map[string]any{"aql_ck": true}},
+			// Step 2: match KEY ] when aql_ck — save key, push to pair.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {jsonic.TinCS}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_ck"]
+					return ok
+				},
+				P: "pair",
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					r.K["key"] = r.U["key"]
+				}},
+			// Step 3: match : when aql_ck and key is set — proceed as pair value.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, hasCK := r.K["aql_ck"]
+					_, hasKey := r.K["key"]
+					return hasCK && hasKey
+				},
+				P: "val", U: map[string]any{"pair": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"]
+				}},
+		}, rs.Open...)
+	})
+
 	// Optional field syntax in list context: [x?:Integer]
 	// Same two-step approach as pair rule:
 	//   [KEY, QM] — matches "x ?", saves key via K, pushes to elem.

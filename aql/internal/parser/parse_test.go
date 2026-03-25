@@ -1861,3 +1861,38 @@ func TestParseOptionalFieldInList(t *testing.T) {
 	}
 }
 
+func TestParseComputedKey(t *testing.T) {
+	// {[x]:1} → key "x" with value 1
+	vals, err := Parse("{[x]:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+}
+
+func TestParseComputedKeyMultiple(t *testing.T) {
+	// {[a]:1, [b]:2} → keys "a" and "b"
+	vals, err := Parse("{[a]:1, [b]:2}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	keys := m.Keys()
+	if len(keys) != 2 {
+		t.Errorf("expected 2 keys, got %v", keys)
+	}
+}
+
