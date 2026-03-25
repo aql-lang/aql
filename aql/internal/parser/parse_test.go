@@ -1782,3 +1782,42 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
 }
+
+func TestParseOptionalFieldSameAsPlain(t *testing.T) {
+	// {a?:1} should parse the same map structure as {a:1}
+	// (key "a" with value 1 — the qm flag is for later use)
+	plain, err := Parse("{a:1}")
+	if err != nil {
+		t.Fatalf("Parse {a:1} error: %v", err)
+	}
+	opt, err := Parse("{a?:1}")
+	if err != nil {
+		t.Fatalf("Parse {a?:1} error: %v", err)
+	}
+	if len(plain) != 1 || len(opt) != 1 {
+		t.Fatalf("expected 1 value each, got %d and %d", len(plain), len(opt))
+	}
+	pm := plain[0].AsMap()
+	om := opt[0].AsMap()
+	if pm == nil {
+		t.Fatal("{a:1} AsMap() returned nil")
+	}
+	if om == nil {
+		t.Fatalf("{a?:1} AsMap() returned nil, value: %s (data: %T)", opt[0].String(), opt[0].Data)
+	}
+	// Same key
+	pKeys := pm.Keys()
+	oKeys := om.Keys()
+	if len(pKeys) != 1 || len(oKeys) != 1 {
+		t.Fatalf("key counts: plain=%v opt=%v", pKeys, oKeys)
+	}
+	if pKeys[0] != oKeys[0] {
+		t.Errorf("keys differ: plain=%q opt=%q", pKeys[0], oKeys[0])
+	}
+	// Same value
+	pv, _ := pm.Get("a")
+	ov, _ := om.Get("a")
+	if pv.String() != ov.String() {
+		t.Errorf("values differ: plain=%s opt=%s", pv.String(), ov.String())
+	}
+}

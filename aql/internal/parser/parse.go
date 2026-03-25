@@ -69,12 +69,13 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . ; as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; ? as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
 	TinSC := j.Token("#SC", ";")
+	TinQM := j.Token("#QM", "?")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -110,6 +111,48 @@ func Parse(src string) ([]engine.Value, error) {
 					r.Node = jsonic.Text{Str: ".", Quote: ""}
 				}
 			}},
+		}, rs.Open...)
+	})
+
+	// Optional field syntax: key?:value in pair context.
+	// Two alternates on pair.Open:
+	//   [KEY, QM] — matches "a ?", saves key via pairkey action,
+	//               sets K["qm"]=true (propagated to child), pushes to pair.
+	//   [CL]      — matches ":" when K["qm"]=true, sets U["pair"]=true,
+	//               pushes to val for the value.
+	// The result is the same as [KEY, CL] — the key:value pair is created
+	// normally. The qm flag will be used later to wrap the value as optional.
+	pairkey := func(r *jsonic.Rule, ctx *jsonic.Context) {
+		keyToken := r.O0
+		var key string
+		if keyToken.Tin == jsonic.TinST || keyToken.Tin == jsonic.TinTX {
+			key, _ = keyToken.Val.(string)
+		} else {
+			key = keyToken.Src
+		}
+		r.U["key"] = key
+	}
+
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Match KEY ? — save key via K (propagated), push to pair.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {TinQM}},
+				P: "pair", K: map[string]any{"qm": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					// Propagate key to inner pair via K.
+					r.K["key"] = r.U["key"]
+				}},
+			// Match : when qm flag is set — copy key from K, proceed as pair value.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["qm"]
+					return ok
+				},
+				P: "val", U: map[string]any{"pair": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"]
+				}},
 		}, rs.Open...)
 	})
 
