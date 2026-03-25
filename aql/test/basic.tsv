@@ -210,8 +210,21 @@ def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 20
 def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5	5
 def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5 3	8
 
-# 0-arg function call (all params optional)
+# 0-arg function call — all params optional
 def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero	0
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5	5
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5 3	8
+
+# 0-arg function call — no optional params (non-optional 0-arg fn)
+def pi fn [[] [Integer] [3]] pi	3
+
+# 0-arg function call — mixed optional and required
+def greet fn [[name?:String] [String] ["Hello " add name]] greet	'Hello '
+def greet fn [[name?:String] [String] ["Hello " add name]] greet "Bob"	'Hello Bob'
+
+# 0-arg call — single optional with different types
+def flag fn [[v?:Boolean] [Boolean] [v]] flag	false
+def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
 
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
