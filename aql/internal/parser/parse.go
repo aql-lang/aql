@@ -124,8 +124,8 @@ func Parse(src string) ([]engine.Value, error) {
 	//               sets K["aql_qm"]=true (propagated to child), pushes to pair.
 	//   [CL]      — matches ":" when K["aql_qm"]=true, sets U["pair"]=true,
 	//               pushes to val for the value.
-	// A pair.BC callback records optional keys in a "~qm" metadata entry
-	// on the map node so convertMapData can wrap them in (value or None).
+	// A pair.BC callback records optional keys in MapRef.Meta["qm"]
+	// so convertMapData can wrap them in (value or None).
 	pairkey := func(r *jsonic.Rule, ctx *jsonic.Context) {
 		keyToken := r.O0
 		var key string
