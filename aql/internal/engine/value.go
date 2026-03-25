@@ -843,7 +843,7 @@ func (v Value) AsBoolean() bool {
 	return v.Data.(bool)
 }
 
-// AsList returns the []Value payload, panics if not a list type.
+// AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
 func (v Value) AsList() []Value {
@@ -860,15 +860,23 @@ func (v Value) AsList() []Value {
 		}
 		return td.Rows
 	}
-	return v.Data.([]Value)
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return nil
+	}
+	return elems
 }
 
-// AsMap returns the OrderedMap payload, panics if not a map type.
+// AsMap returns the OrderedMap payload, or nil if the data is not an *OrderedMap.
 func (v Value) AsMap() *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}
-	return v.Data.(*OrderedMap)
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
 }
 
 // String returns a human-readable representation.

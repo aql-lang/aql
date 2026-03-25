@@ -56,9 +56,14 @@ func makeFullStackHandler(r *engine.Registry, h NativeHandler) func(args []engin
 	return func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
 		// Reject type literals (Data==nil) that passed signature matching
 		// but would cause nil pointer dereferences in native handlers.
+		// Also reject Options types which carry OptionsTypeInfo, not
+		// *OrderedMap, so AsMap() returns nil.
 		for _, arg := range args {
 			if arg.Data == nil && !arg.VType.Equal(engine.TNone) {
 				return nil, fmt.Errorf("expected a concrete value, got type literal %s", arg.VType)
+			}
+			if arg.IsOptionsType() {
+				return nil, fmt.Errorf("expected a concrete map, got options type %s", arg.String())
 			}
 		}
 		ctx := r.Context()
