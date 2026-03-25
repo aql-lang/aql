@@ -210,6 +210,9 @@ def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 20
 def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5	5
 def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5 3	8
 
+# 0-arg function call (all params optional)
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero	0
+
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
