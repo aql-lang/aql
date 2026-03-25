@@ -75,11 +75,6 @@ func Parse(src string) ([]engine.Value, error) {
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
 	TinSC := j.Token("#SC", ";")
-	// Register ? as a named token type (for future standalone use) but
-	// do NOT register it as a fixed token — in pair syntax "key?:value",
-	// the "?" must remain part of the key text so jsonic's KEY:value
-	// pair matching works unchanged. convertMapData detects "?" suffix.
-	_ = j.Token("#QM", "")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -117,12 +112,6 @@ func Parse(src string) ([]engine.Value, error) {
 			}},
 		}, rs.Open...)
 	})
-
-	// Optional field syntax: key?:value is handled by convertMapData.
-	// Since ? is not a fixed token, jsonic sees "key?" as a single text
-	// token followed by ":" — standard KEY:value pair matching works.
-	// convertMapData detects the "?" suffix on key names and wraps the
-	// value in a (value or None) disjunct.
 
 	// Paren rule: collects values between ( and ) into a parenGroup.
 	// Works like a simplified list rule but closes on ) instead of ].

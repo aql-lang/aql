@@ -1796,9 +1796,6 @@ func TestParseOptionalFieldSyntax(t *testing.T) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
 	m := vals[0].AsMap()
-	if m == nil {
-		t.Fatalf("AsMap() returned nil, value is: %s (data type: %T)", vals[0].String(), vals[0].Data)
-	}
 	keys := m.Keys()
 	if len(keys) != 1 || keys[0] != "a" {
 		t.Errorf("expected key 'a', got %v", keys)
