@@ -22,6 +22,7 @@ var typeNames = map[string]Type{
 	"Map":       TMap,
 	"Table":     TTable,
 	"Record":    TRecord,
+	"Options":   TOptions,
 	"Object":    TObject,
 	"Resource":  TResource,
 	"Entity":    TResourceEntity,
@@ -430,7 +431,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	//   be code blocks like def bodies).
 	for i := range match.Args {
 		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
-			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() {
+			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
 			evaluated, err := e.autoEvalMap(match.Args[i])
 			if err == nil {
 				match.Args[i] = evaluated
@@ -748,7 +749,7 @@ func (e *Engine) autoEvalStack() error {
 				return err
 			}
 			e.stack[i] = result
-		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() {
+		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() && !val.IsOptionsType() {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err

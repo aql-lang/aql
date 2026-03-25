@@ -74,6 +74,7 @@ var (
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
 	TMap          = mustType("Node/Map")
+	TOptions      = mustType("Node/Map/Options")
 	TTable        = mustType("Object/Table")
 	TRecord       = mustType("Object/Record")
 	TAtom         = mustType("Word/Atom")
@@ -139,6 +140,7 @@ var builtinTypeIDs = map[string]int{
 	"Word/__MK":                27,
 	"Word/__MV":                28,
 	"Word/__MD":                29,
+	"Node/Map/Options":         38,
 	"Object":                   30,
 	"Node/Map/Word/Inspect":    31,
 	"Node/Map/Type/Inspect":    32,
@@ -296,7 +298,7 @@ func builtinTypeParts() map[string]bool {
 	builtins := []Type{
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
-		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
+		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,

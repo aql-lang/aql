@@ -284,6 +284,18 @@ func registerMake(r *Registry) {
 			return makeObject(objType, srcVal, nil)
 		}
 
+		// Options type creation: make Options {x:1, y:String}
+		if targetVal.VType.Equal(TOptions) && targetVal.Data == nil {
+			if !srcVal.VType.Equal(TMap) || srcVal.Data == nil {
+				return nil, fmt.Errorf("make: Options requires a concrete map")
+			}
+			src, ok := srcVal.Data.(*OrderedMap)
+			if !ok {
+				return nil, fmt.Errorf("make: Options requires a concrete map")
+			}
+			return []Value{NewOptionsType(src)}, nil
+		}
+
 		// Record type instance creation.
 		if targetVal.IsRecordType() {
 			recType := targetVal.AsRecordType()

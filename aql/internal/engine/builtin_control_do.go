@@ -65,7 +65,7 @@ func registerDo(r *Registry) {
 			}
 			return NewList(results), nil
 		}
-		if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() {
+		if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() && !v.IsOptionsType() {
 			m := v.AsMap()
 			out := NewOrderedMap()
 			for _, key := range m.Keys() {

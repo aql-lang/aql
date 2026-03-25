@@ -150,6 +150,34 @@ type foo record [x:Number y:String] make foo {x:1}	ERROR:make: missing field "y"
 # Make record from map - unknown field is an error
 type foo record [x:Number y:String] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
 
+# Options type creation
+make Options {x:1,y:2}	options{x:1,y:2}
+
+# Options unify - concrete defaults fill in
+(make Options {x:1,y:2,z:String}) unify {y:3,z:"Z"}	{x:1,y:3,z:'Z'} true
+
+# Options with type-only field - missing fails
+(make Options {x:Integer}) unify {}	'~unify-fail' false
+
+# Options with type field - provided value succeeds
+(make Options {x:Integer}) unify {x:1}	{x:1} true
+
+# Options with disjunct
+def d (make Options {y:(Integer or String)}) d unify {y:1}	{y:1} true
+def d (make Options {y:(Integer or String)}) d unify {y:"Y"}	{y:'Y'} true
+
+# Options with None in disjunct - absence defaults to None
+def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
+
+# Options - extra keys fail
+(make Options {x:1}) unify {x:2,y:3}	'~unify-fail' false
+
+# Options - concrete default overridden
+(make Options {x:1}) unify {x:99}	{x:99} true
+
+# Options - all defaults
+(make Options {x:1,y:2}) unify {}	{x:1,y:2} true
+
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 

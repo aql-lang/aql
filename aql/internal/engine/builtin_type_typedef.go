@@ -71,6 +71,10 @@ func isTypeValue(v Value) bool {
 	if v.IsRecordType() {
 		return true
 	}
+	// Options type
+	if v.IsOptionsType() {
+		return true
+	}
 	// Table type
 	if v.IsTableType() {
 		return true

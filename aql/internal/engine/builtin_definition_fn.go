@@ -301,6 +301,11 @@ func resolveDefType(v Value) (Type, *Value, error) {
 		pat := NewMap(rt.Fields)
 		return TMap, &pat, nil
 	}
+	if v.IsOptionsType() {
+		ot := v.AsOptionsType()
+		pat := NewMap(ot.Fields)
+		return TMap, &pat, nil
+	}
 	// Other type values (disjuncts, type literals, etc.) use their type directly.
 	if v.Data == nil {
 		return v.VType, nil, nil
