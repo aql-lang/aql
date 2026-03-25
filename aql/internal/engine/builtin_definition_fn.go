@@ -390,7 +390,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			copy(body, s.Body)
 			result = append(result, body...)
 			// Pop the args stack to restore the previous args (for nesting).
-			result = append(result, NewWord("__pop-args"))
+			result = append(result, NewWord("__pa"))
 			for i := len(names) - 1; i >= 0; i-- {
 				// Force suffix so undef takes the name word that follows,
 				// not a same-typed value from the prefix stack (e.g. a

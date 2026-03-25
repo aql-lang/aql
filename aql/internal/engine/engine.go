@@ -951,7 +951,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	copy(body, sig.Body)
 	tokens = append(tokens, body...)
 
-	tokens = append(tokens, NewWord("__pop-args"))
+	tokens = append(tokens, NewWord("__pa"))
 	for i := len(names) - 1; i >= 0; i-- {
 		tokens = append(tokens,
 			NewWordModified("undef", -1, false, true),
