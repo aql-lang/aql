@@ -108,25 +108,36 @@ rule with `j.Rule()`, and add conversion logic in the appropriate
 ## Panic Prevention (CRITICAL)
 
 **Panics must never occur in this codebase.** All code must be defensive
-against unexpected input. Return errors instead of panicking. This is a
-hard rule — no exceptions.
+against unexpected input. Return errors instead of panicking — user
+errors must be reported as error return values that are printed to the
+user, never as panics. This is a hard rule — no exceptions (the only
+permitted panic is `mustType()` in `types.go` which runs at init time
+on hardcoded type paths).
 
 Key patterns to follow:
 
 - **Always nil-check before dereferencing.** `Value.AsMap()` and
   `Value.AsList()` return `nil` when `Data` is nil (type literals like
-  bare `Map` or `List`). Never call `.Len()`, `.Keys()`, `.Get()` etc.
-  on a potentially nil result without checking first.
+  bare `Map` or `List`) **or when `Data` is a non-concrete subtype**
+  (e.g. `RecordTypeInfo`, `OptionsTypeInfo`, `ChildTypeInfo`). Never
+  call `.Len()`, `.Keys()`, `.Get()` etc. on a potentially nil result
+  without checking first.
 - **Type literals have nil Data.** `NewTypeLiteral(TMap)` creates a Value
   with `VType=TMap, Data=nil`. Any code that receives a Value matching
   `TMap`/`TList`/`TAny` must handle the `Data==nil` case. This includes
   signature-matched arguments — `TAny` matches type literals.
+- **Map subtypes share VType=TMap.** RecordTypeInfo, OptionsTypeInfo,
+  ChildTypeInfo, and *OrderedMap all have `VType=TMap`. Code that checks
+  `VType.Equal(TMap)` matches all of them. Use `IsRecordType()`,
+  `IsOptionsType()`, `IsTypedMap()` to discriminate, and guard
+  `AsMap()` calls — it returns nil for non-OrderedMap data.
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
   `internal/native/transform.go` have nil-Data guards. If you add new
   conversion helpers, include the same guard.
 - **Native function safety.** `makeFullStackHandler()` in
-  `internal/native/native.go` rejects type literals centrally before any
-  native handler runs. If you bypass this wrapper, add your own guard.
+  `internal/native/native.go` rejects type literals and Options types
+  centrally before any native handler runs. If you bypass this wrapper,
+  add your own guard.
 - **Engine builtin handlers.** Check `args[N].Data == nil` before calling
   `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
   signatures. See `builtin_accessor_dot.go` for the canonical pattern.
