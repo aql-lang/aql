@@ -106,5 +106,9 @@ func All() []NativeFunc {
 		filterFunc(),
 		joinFunc(),
 		jsonifyFunc(),
+		pushFunc(),
+		popFunc(),
+		unshiftFunc(),
+		shiftFunc(),
 	}
 }
