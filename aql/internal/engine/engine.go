@@ -22,6 +22,7 @@ var typeNames = map[string]Type{
 	"Map":       TMap,
 	"Table":     TTable,
 	"Record":    TRecord,
+	"Options":   TOptions,
 	"Object":    TObject,
 	"Resource":  TResource,
 	"Entity":    TResourceEntity,
@@ -430,7 +431,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	//   be code blocks like def bodies).
 	for i := range match.Args {
 		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
-			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() {
+			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
 			evaluated, err := e.autoEvalMap(match.Args[i])
 			if err == nil {
 				match.Args[i] = evaluated
@@ -748,7 +749,7 @@ func (e *Engine) autoEvalStack() error {
 				return err
 			}
 			e.stack[i] = result
-		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() {
+		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() && !val.IsOptionsType() {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
@@ -789,8 +790,35 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	if m.Implicit {
 		out.Implicit = true
 	}
+
+	// Computed keys: evaluate key expressions at runtime.
+	var ckSet map[string]bool
+	if m.Meta != nil {
+		ckSet, _ = m.Meta["ck"].(map[string]bool)
+	}
+
 	for _, key := range m.Keys() {
 		v, _ := m.Get(key)
+		resolvedKey := key
+
+		// Computed key: evaluate the key text as AQL code to get
+		// the actual string key. E.g., {[a]:1} with def a 'x' → {x:1}
+		if ckSet[key] {
+			sub := New(e.registry)
+			keyResult, err := sub.Run([]Value{NewWord(key)})
+			if err != nil {
+				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
+			}
+			if len(keyResult) == 1 {
+				if keyResult[0].VType.Matches(TString) {
+					resolvedKey = keyResult[0].AsString()
+				} else if keyResult[0].IsAtom() {
+					resolvedKey = keyResult[0].AsAtom()
+				} else {
+					resolvedKey = valToString(keyResult[0])
+				}
+			}
+		}
 
 		// Paren expression: evaluate items with paren markers so the
 		// engine's stepCloseParen collapses to a single result.
@@ -806,9 +834,9 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				return Value{}, err
 			}
 			if len(result) == 1 {
-				out.Set(key, result[0])
+				out.Set(resolvedKey, result[0])
 			} else if len(result) > 1 {
-				out.Set(key, NewList(result))
+				out.Set(resolvedKey, NewList(result))
 			}
 			continue
 		}
@@ -820,9 +848,9 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			return Value{}, err
 		}
 		if len(result) == 1 {
-			out.Set(key, result[0])
+			out.Set(resolvedKey, result[0])
 		} else if len(result) > 1 {
-			out.Set(key, NewList(result))
+			out.Set(resolvedKey, NewList(result))
 		}
 	}
 	return NewMap(out), nil
@@ -951,7 +979,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	copy(body, sig.Body)
 	tokens = append(tokens, body...)
 
-	tokens = append(tokens, NewWord("__pop-args"))
+	tokens = append(tokens, NewWord("__pa"))
 	for i := len(names) - 1; i >= 0; i-- {
 		tokens = append(tokens,
 			NewWordModified("undef", -1, false, true),

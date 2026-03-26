@@ -71,6 +71,11 @@ func formatForPrint(v Value) string {
 		return v.AsString()
 	}
 
+	// Options type: use String() representation.
+	if v.IsOptionsType() {
+		return v.String()
+	}
+
 	// Map: JSON-like output.
 	if v.VType.Equal(TMap) {
 		return formatMapJSON(v)

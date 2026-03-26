@@ -16,10 +16,12 @@ github.com/jsonicjs/csv/go v0.1.1 h1:TbyPaQzf0qCm0N9sGDfSGm3c8+aqRpscd7uvEJm7mTQ
 github.com/jsonicjs/csv/go v0.1.1/go.mod h1:f7C3TZo3j3In/dB//TfGBGR0dwO3jIfomyYXHZKX7jU=
 github.com/jsonicjs/directive/go v0.1.0 h1:ajPq4SJ/iShncaO+rMVSpNEMKbQhZxMGUxRkf42epyY=
 github.com/jsonicjs/directive/go v0.1.0/go.mod h1:QSlUJcNs1/hhJzjKdRu/iz+QQp2YRJtzFRcD6/0llGY=
-github.com/jsonicjs/jsonic/go v0.1.4 h1:V1KEzmg/jIwk25+JYj8ig1+B7190rHmH8WqZbT7XlgA=
-github.com/jsonicjs/jsonic/go v0.1.4/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
+github.com/jsonicjs/jsonic/go v0.1.5 h1:FAKIdOs58uoHCugacHajblsnhB2knrAiqK1agKFIhLM=
+github.com/jsonicjs/jsonic/go v0.1.5/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
 github.com/jsonicjs/multisource/go v0.1.1 h1:Ot1mJ0KJAtY9qj0ijy0cx6gg3vWiHR1LGFrqVMv1Xow=
 github.com/jsonicjs/multisource/go v0.1.1/go.mod h1:pM9xsqJgvdI2nJET7nUCndNzdIBCKHuW9Y1nUtXU0tI=
+github.com/jsonicjs/path/go v0.1.0 h1:rByeAJ/Zd/1q9WzI3VOQjW3axIvHr+o4lUEodUYhKx4=
+github.com/jsonicjs/path/go v0.1.0/go.mod h1:/LLj1pxpn/e0Xu3Oo91YzGL5owcPasKfICNDGHY8GEM=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=

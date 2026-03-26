@@ -343,12 +343,12 @@ func TestFetchResponseType(t *testing.T) {
 	}
 
 	resp := result[0]
-	// Map/Fetch/Response should match Map.
-	if !resp.VType.Matches(engine.TMap) {
-		t.Errorf("expected response to match Map, got %s", resp.VType)
+	// Object/Fetch/Response should match Object.
+	if !resp.VType.Matches(engine.TObject) {
+		t.Errorf("expected response to match Object, got %s", resp.VType)
 	}
 	if !resp.VType.Equal(engine.TFetchResponse) {
-		t.Errorf("expected type Map/Fetch/Response, got %s", resp.VType)
+		t.Errorf("expected type Object/Fetch/Response, got %s", resp.VType)
 	}
 }
 

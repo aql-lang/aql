@@ -44,16 +44,16 @@ var typeAncestry = map[string]string{
 	"Map":         "Node/Map",
 	"Table":       "Object/Table",
 	"Record":      "Object/Record",
-	"Mark":        "Word/Internal/Mark",
-	"Move":        "Word/Internal/Move",
-	"Forward":     "Word/Internal/Forward",
-	"Paren":       "Word/Internal/Paren",
-	"Fndef":       "Word/Internal/Fndef",
-	"Fnundef":     "Word/Internal/Fnundef",
+	"Mark":        "Word/__MK",
+	"Move":        "Word/__MV",
+	"Forward":     "Word/__FW",
+	"Paren":       "Word/__OP",
+	"Fndef":       "Word/__FN",
+	"Fnundef":     "Word/__UF",
 	"Function":    "Word/Function",
-	"Returncheck": "Word/Internal/Return",
-	"Disjunct":    "Word/Internal/Disjunct",
-	"Module":      "Word/Internal/Module",
+	"Returncheck": "Word/__RC",
+	"Disjunct":    "Word/__DJ",
+	"Module":      "Word/__MD",
 	"Resource":    "Object/Resource",
 	"Entity":      "Object/Resource/Entity",
 }
@@ -74,30 +74,31 @@ var (
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
 	TMap          = mustType("Node/Map")
+	TOptions      = mustType("Node/Map/Options")
 	TTable        = mustType("Object/Table")
 	TRecord       = mustType("Object/Record")
 	TAtom         = mustType("Word/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
-	TForward      = mustType("Word/Internal/Forward")
-	TOpenParen    = mustType("Word/Internal/Paren")
-	TParenExpr    = mustType("Word/Internal/ParenExpr")
-	TFnDef        = mustType("Word/Internal/Fndef")
-	TFnUndef      = mustType("Word/Internal/Fnundef")
-	TReturnCheck  = mustType("Word/Internal/Return")
-	TDisjunct     = mustType("Word/Internal/Disjunct")
-	TMark         = mustType("Word/Internal/Mark")
-	TMove         = mustType("Word/Internal/Move")
-	TModule       = mustType("Word/Internal/Module")
-	TInternal     = mustType("Word/Internal")
+	TForward      = mustType("Word/__FW")
+	TOpenParen    = mustType("Word/__OP")
+	TParenExpr    = mustType("Word/__PE")
+	TFnDef        = mustType("Word/__FN")
+	TFnUndef      = mustType("Word/__UF")
+	TReturnCheck  = mustType("Word/__RC")
+	TDisjunct     = mustType("Word/__DJ")
+	TMark         = mustType("Word/__MK")
+	TMove         = mustType("Word/__MV")
+	TModule       = mustType("Word/__MD")
+	TInternal     = mustType("Word/__IN")
 	TWordInspect  = mustType("Node/Map/Word/Inspect")
 	TTypeInspect  = mustType("Node/Map/Type/Inspect")
 	TObject         = mustType("Object")
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
-	TFetchFunction  = mustType("Word/Function/Fetch")
-	TFetchRequest  = mustType("Node/Map/Fetch/Request")
-	TFetchResponse = mustType("Node/Map/Fetch/Response")
+	TFetchFunction  = mustType("Object/Fetch")
+	TFetchRequest  = mustType("Object/Fetch/Request")
+	TFetchResponse = mustType("Object/Fetch/Response")
 	TError         = mustType("Node/Error")
 
 	// Deprecated aliases — kept temporarily for migration.
@@ -129,22 +130,23 @@ var builtinTypeIDs = map[string]int{
 	"Word":                     17,
 	"Word/Atom":                18,
 	"Word/Function":            19,
-	"Word/Internal":            20,
-	"Word/Internal/Forward":    21,
-	"Word/Internal/Paren":      22,
-	"Word/Internal/Fndef":      23,
-	"Word/Internal/Fnundef":    24,
-	"Word/Internal/Return":     25,
-	"Word/Internal/Disjunct":   26,
-	"Word/Internal/Mark":       27,
-	"Word/Internal/Move":       28,
-	"Word/Internal/Module":     29,
+	"Word/__IN":                20,
+	"Word/__FW":                21,
+	"Word/__OP":                22,
+	"Word/__FN":                23,
+	"Word/__UF":                24,
+	"Word/__RC":                25,
+	"Word/__DJ":                26,
+	"Word/__MK":                27,
+	"Word/__MV":                28,
+	"Word/__MD":                29,
+	"Node/Map/Options":         38,
 	"Object":                   30,
 	"Node/Map/Word/Inspect":    31,
 	"Node/Map/Type/Inspect":    32,
-	"Word/Function/Fetch":      33,
-	"Node/Map/Fetch/Request":   34,
-	"Node/Map/Fetch/Response":  35,
+	"Object/Fetch":             33,
+	"Object/Fetch/Request":     34,
+	"Object/Fetch/Response":    35,
 	"Object/Resource":          36,
 	"Object/Resource/Entity":   37,
 }
@@ -195,7 +197,7 @@ func mustType(path string) Type {
 // NewType creates a Type from a slash-separated path, e.g. "String/Proper".
 // Short names are auto-expanded to their full hierarchy path: "String/Proper"
 // becomes "Scalar/String/Proper", "Map/Fetch/Request" becomes
-// "Node/Map/Fetch/Request", etc.
+// "Object/Fetch/Request", etc.
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
 func NewType(path string) (Type, error) {
@@ -253,7 +255,7 @@ func (t Type) String() string {
 }
 
 // Leaf returns the last part of the type path.
-// For example, "Node/Map/Fetch/Request" returns "Request".
+// For example, "Object/Fetch/Request" returns "Request".
 func (t Type) Leaf() string {
 	if len(t.Parts) == 0 {
 		return ""
@@ -296,7 +298,7 @@ func builtinTypeParts() map[string]bool {
 	builtins := []Type{
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
-		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
+		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,

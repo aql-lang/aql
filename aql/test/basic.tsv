@@ -127,6 +127,11 @@ type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 "h
 # Make record with optional field - none value
 type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 None]	{x:42,y:None}
 
+# Def map with optional field - absence unifies as None
+def A {x:Integer y:(String or None)} A unify {x:1}	{x:1,y:None} true
+def A {x:Integer y:(String or None)} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+def A {x:Integer y:(String or None)} A unify {x:1,y:None}	{x:1,y:None} true
+
 # Make record from map - all fields provided
 type foo record [x:Number y:String] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
@@ -144,6 +149,90 @@ type foo record [x:Number y:String] make foo {x:1}	ERROR:make: missing field "y"
 
 # Make record from map - unknown field is an error
 type foo record [x:Number y:String] make foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+
+# Options type creation
+make Options {x:1,y:2}	options{x:1,y:2}
+
+# Options unify - concrete defaults fill in
+(make Options {x:1,y:2,z:String}) unify {y:3,z:"Z"}	{x:1,y:3,z:'Z'} true
+
+# Options with type-only field - missing fails
+(make Options {x:Integer}) unify {}	'~unify-fail' false
+
+# Options with type field - provided value succeeds
+(make Options {x:Integer}) unify {x:1}	{x:1} true
+
+# Options with disjunct
+def d (make Options {y:(Integer or String)}) d unify {y:1}	{y:1} true
+def d (make Options {y:(Integer or String)}) d unify {y:"Y"}	{y:'Y'} true
+
+# Options with None in disjunct - absence defaults to None
+def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
+
+# Options - extra keys fail
+(make Options {x:1}) unify {x:2,y:3}	'~unify-fail' false
+
+# Options - concrete default overridden
+(make Options {x:1}) unify {x:99}	{x:99} true
+
+# Options - all defaults
+(make Options {x:1,y:2}) unify {}	{x:1,y:2} true
+
+# Optional field syntax ? — sugar for (type or None)
+{x?:Integer}	{x:Scalar/Number/Integer|None}
+
+# Computed key syntax {[key]:value} — literal key
+{[a]:1}	{a:1}
+{[a]:1,[b]:2}	{a:1,b:2}
+
+# Computed key syntax — evaluated key expression
+def a "x" {[a]:1}	{x:1}
+def a "x" def b "y" {[a]:1,[b]:2}	{x:1,y:2}
+
+# Optional field with Options
+(make Options {x:1,y?:String}) unify {x:2}	{x:2,y:None} true
+(make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
+
+# Optional field in def map
+def A {x:Integer y?:String} A unify {x:1}	{x:1,y:None} true
+def A {x:Integer y?:String} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+
+# Optional function arguments — named optional param
+def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 5	5
+def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 10 5	15
+
+# Optional function arguments — named with ? list pair syntax
+def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 5	5
+def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 10 5	15
+
+# Optional function arguments — unnamed optional param
+def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 7	7
+def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 3 7	10
+
+# Multiple optional args — 2 optional, 1 required (2^2=4 sigs)
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 1	1
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 1	11
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 20 1	31
+
+# Multiple optional args — all optional (same types), 1 or 2 args
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5	5
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5 3	8
+
+# 0-arg function call — all params optional
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero	0
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5	5
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5 3	8
+
+# 0-arg function call — no optional params (non-optional 0-arg fn)
+def pi fn [[] [Integer] [3]] pi	3
+
+# 0-arg function call — mixed optional and required
+def greet fn [[name?:String] [String] ["Hello " add name]] greet	'Hello '
+def greet fn [[name?:String] [String] ["Hello " add name]] greet "Bob"	'Hello Bob'
+
+# 0-arg call — single optional with different types
+def flag fn [[v?:Boolean] [Boolean] [v]] flag	false
+def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
 
 # Table with optional field - mixed string and none values
 type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]

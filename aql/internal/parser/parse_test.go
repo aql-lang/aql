@@ -1782,3 +1782,117 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
 }
+
+func TestParseOptionalFieldDisjunct(t *testing.T) {
+	// {a?:Integer} → key "a" with value (Integer or None)
+	vals, err := Parse("{a?:Integer}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "a" {
+		t.Errorf("expected key 'a', got %v", keys)
+	}
+	val, _ := m.Get("a")
+	if !val.IsDisjunct() {
+		t.Fatalf("expected disjunct for optional field, got %s", val.String())
+	}
+	alts := val.AsDisjunct().Alternatives
+	if len(alts) != 2 {
+		t.Fatalf("expected 2 alternatives, got %d", len(alts))
+	}
+	if !alts[1].VType.Equal(engine.TNone) {
+		t.Errorf("expected second alternative to be None, got %s", alts[1].VType)
+	}
+}
+
+func TestParseOptionalFieldMixed(t *testing.T) {
+	// {a:Integer, b?:String} → "a" is plain, "b" is disjunct
+	vals, err := Parse("{a:Integer, b?:String}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	aVal, _ := m.Get("a")
+	if aVal.IsDisjunct() {
+		t.Errorf("expected 'a' to NOT be a disjunct, got %s", aVal.String())
+	}
+	bVal, _ := m.Get("b")
+	if !bVal.IsDisjunct() {
+		t.Errorf("expected 'b' to be a disjunct, got %s", bVal.String())
+	}
+}
+
+func TestParseOptionalFieldInList(t *testing.T) {
+	// [x?:Integer] → implicit map with key "x" and disjunct value
+	vals, err := Parse("[x?:Integer]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	list := vals[0]
+	elems := list.AsList()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
+	}
+	m := elems[0].AsMap()
+	if m == nil {
+		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+	val, _ := m.Get("x")
+	if !val.IsDisjunct() {
+		t.Errorf("expected disjunct for x, got %s", val.String())
+	}
+}
+
+func TestParseComputedKey(t *testing.T) {
+	// {[x]:1} → key "x" with value 1
+	vals, err := Parse("{[x]:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+}
+
+func TestParseComputedKeyMultiple(t *testing.T) {
+	// {[a]:1, [b]:2} → keys "a" and "b"
+	vals, err := Parse("{[a]:1, [b]:2}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	keys := m.Keys()
+	if len(keys) != 2 {
+		t.Errorf("expected 2 keys, got %v", keys)
+	}
+}
+

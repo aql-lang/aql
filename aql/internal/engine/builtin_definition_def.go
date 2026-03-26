@@ -102,7 +102,21 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				top := stack[len(stack)-1]
 				// Guard: function definitions have typed signatures;
 				// the generic handler should not expand them as literals.
+				// However, if a 0-arg typed signature exists (e.g. from
+				// optional param expansion), execute it instead of erroring.
 				if _, ok := top.Data.(FnDefInfo); ok {
+					if fn := r.Lookup(name); fn != nil {
+						for i := range fn.Signatures {
+							sig := &fn.Signatures[i]
+							if len(sig.Args) == 0 && sig.Handler != nil && i > 0 {
+								result, err := sig.Handler(nil)
+								if err != nil {
+									return nil, err
+								}
+								return result, nil
+							}
+						}
+					}
 					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
 				}
 				if top.VType.Equal(TFunction) {

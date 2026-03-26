@@ -15,7 +15,8 @@ import (
 type OrderedMap struct {
 	keys     []string
 	vals     map[string]Value
-	Implicit bool // true when created from implicit pair syntax (e.g., [x:Integer])
+	Implicit bool              // true when created from implicit pair syntax (e.g., [x:Integer])
+	Meta     map[string]any    // optional metadata for parser/engine communication
 }
 
 // NewOrderedMap creates an empty OrderedMap.
@@ -85,6 +86,14 @@ type RecordTypeInfo struct {
 	Fields *OrderedMap // field name → type-constraint Value
 }
 
+// OptionsTypeInfo holds the field schema for an options type.
+// Each field maps a name to a default value or type constraint.
+// Concrete values serve as defaults when the key is absent during unification;
+// type literals require the caller to provide a value.
+type OptionsTypeInfo struct {
+	Fields *OrderedMap // field name → default value or type constraint
+}
+
 // TableTypeInfo holds the record schema for a table type.
 // A table represents a list of record instances that all conform to the
 // same record type.
@@ -94,9 +103,10 @@ type TableTypeInfo struct {
 
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
-	Name    string // empty for unnamed positional parameters
-	Type    Type
-	Pattern *Value // optional: map/list pattern for structural matching
+	Name     string // empty for unnamed positional parameters
+	Type     Type
+	Pattern  *Value // optional: map/list pattern for structural matching
+	Optional bool   // true if this param was marked optional via ?
 }
 
 // FnSig describes one overload of a function definition.
@@ -443,6 +453,11 @@ func NewRecordType(fields *OrderedMap) Value {
 	return newValue(TMap, RecordTypeInfo{Fields: fields})
 }
 
+// NewOptionsType creates an options type value from a field schema map.
+func NewOptionsType(fields *OrderedMap) Value {
+	return newValue(TMap, OptionsTypeInfo{Fields: fields})
+}
+
 // NewTableType creates a table type value from a record type.
 // A table type constrains a list so that each element is a map conforming
 // to the given record schema.
@@ -736,6 +751,17 @@ func (v Value) AsRecordType() RecordTypeInfo {
 	return v.Data.(RecordTypeInfo)
 }
 
+// IsOptionsType reports whether this value is an options type (map with defaults/constraints).
+func (v Value) IsOptionsType() bool {
+	_, ok := v.Data.(OptionsTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
+func (v Value) AsOptionsType() OptionsTypeInfo {
+	return v.Data.(OptionsTypeInfo)
+}
+
 // IsTableType reports whether this value is a table type (list with record schema).
 func (v Value) IsTableType() bool {
 	if v.VType.Equal(TList) {
@@ -819,7 +845,7 @@ func (v Value) AsBoolean() bool {
 	return v.Data.(bool)
 }
 
-// AsList returns the []Value payload, panics if not a list type.
+// AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
 func (v Value) AsList() []Value {
@@ -836,15 +862,23 @@ func (v Value) AsList() []Value {
 		}
 		return td.Rows
 	}
-	return v.Data.([]Value)
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return nil
+	}
+	return elems
 }
 
-// AsMap returns the OrderedMap payload, panics if not a map type.
+// AsMap returns the OrderedMap payload, or nil if the data is not an *OrderedMap.
 func (v Value) AsMap() *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}
-	return v.Data.(*OrderedMap)
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
 }
 
 // String returns a human-readable representation.
@@ -971,6 +1005,14 @@ func (v Value) String() string {
 				parts = append(parts, k+":"+val.String())
 			}
 			return "record{" + strings.Join(parts, ",") + "}"
+		}
+		if ot, ok := v.Data.(OptionsTypeInfo); ok {
+			parts := make([]string, 0, ot.Fields.Len())
+			for _, k := range ot.Fields.Keys() {
+				val, _ := ot.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "options{" + strings.Join(parts, ",") + "}"
 		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())

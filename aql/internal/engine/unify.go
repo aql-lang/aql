@@ -238,6 +238,13 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 		return Value{}, false
 	}
 
+	// Check for options types.
+	aOptions := a.IsOptionsType()
+	bOptions := b.IsOptionsType()
+	if aOptions || bOptions {
+		return unifyOptions(a, aOptions, b, bOptions)
+	}
+
 	// Check for typed maps (child type constraints).
 	aTyped := a.IsTypedMap()
 	bTyped := b.IsTypedMap()
@@ -267,23 +274,37 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 	aMap := a.AsMap()
 	bMap := b.AsMap()
 
-	// Key sets must be identical (closed maps).
-	if aMap.Len() != bMap.Len() {
-		return Value{}, false
-	}
-
+	noneVal := NewTypeLiteral(TNone)
 	result := NewOrderedMap()
 
-	// Walk keys of a in order, check each exists in b.
+	// Walk keys of a in order; missing keys in b unify against None.
 	for _, key := range aMap.Keys() {
 		aVal, _ := aMap.Get(key)
 		bVal, ok := bMap.Get(key)
 		if !ok {
-			// Key in a but not in b — fail.
-			return Value{}, false
+			// Key in a but not in b — try unifying a's value with None.
+			unified, uOk := Unify(aVal, noneVal)
+			if !uOk {
+				return Value{}, false
+			}
+			result.Set(key, unified)
+			continue
 		}
 
 		unified, uOk := Unify(aVal, bVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+
+	// Keys in b but not in a — try unifying b's value with None.
+	for _, key := range bMap.Keys() {
+		if _, ok := aMap.Get(key); ok {
+			continue // already handled above
+		}
+		bVal, _ := bMap.Get(key)
+		unified, uOk := Unify(bVal, noneVal)
 		if !uOk {
 			return Value{}, false
 		}
@@ -340,6 +361,177 @@ func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
 	return NewRecordType(result), true
 }
 
+// unifyOptions handles unification when at least one side is an options type.
+func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bool) {
+	if aIsOptions && bIsOptions {
+		return unifyOptionsPair(a.AsOptionsType(), b.AsOptionsType())
+	}
+
+	// Normalize: opts is the Options side, concrete is the other.
+	var opts OptionsTypeInfo
+	var concrete Value
+	if aIsOptions {
+		opts = a.AsOptionsType()
+		concrete = b
+	} else {
+		opts = b.AsOptionsType()
+		concrete = a
+	}
+
+	// Bare Map type literal unifies with Options.
+	if concrete.Data == nil {
+		return NewOptionsType(opts.Fields), true
+	}
+
+	// Other side must be a plain concrete map.
+	if concrete.IsRecordType() || concrete.IsTypedMap() || concrete.IsOptionsType() {
+		return Value{}, false
+	}
+
+	cMap := concrete.AsMap()
+
+	// Extra keys in concrete not in Options → fail.
+	for _, key := range cMap.Keys() {
+		if _, ok := opts.Fields.Get(key); !ok {
+			return Value{}, false
+		}
+	}
+
+	result := NewOrderedMap()
+
+	for _, key := range opts.Fields.Keys() {
+		optVal, _ := opts.Fields.Get(key)
+		cVal, present := cMap.Get(key)
+
+		if !present {
+			// Key absent: use default or fail.
+			defVal, ok := optionsDefault(optVal)
+			if !ok {
+				return Value{}, false
+			}
+			result.Set(key, defVal)
+		} else {
+			// Key present: apply Options field rules.
+			unified, ok := unifyOptionsField(optVal, cVal)
+			if !ok {
+				return Value{}, false
+			}
+			result.Set(key, unified)
+		}
+	}
+
+	return NewMap(result), true
+}
+
+// optionsDefault determines the default value for an Options field when
+// the key is absent from the concrete map.
+// - Concrete value → use as default
+// - None → use None
+// - Type literal (Data==nil) → fail (requires a value)
+// - Disjunct → None if present, else first concrete alternative, else fail
+func optionsDefault(v Value) (Value, bool) {
+	if v.IsDisjunct() {
+		alts := v.AsDisjunct().Alternatives
+		// Check for None first.
+		for _, alt := range alts {
+			if alt.VType.Equal(TNone) {
+				return NewTypeLiteral(TNone), true
+			}
+		}
+		// Check for a concrete alternative.
+		for _, alt := range alts {
+			if alt.Data != nil && !alt.IsDisjunct() {
+				return alt, true
+			}
+		}
+		return Value{}, false
+	}
+
+	if v.VType.Equal(TNone) {
+		return v, true
+	}
+
+	// Concrete value (Data != nil) → use as default.
+	if v.Data != nil {
+		return v, true
+	}
+
+	// Type literal (Data == nil) → no default available.
+	return Value{}, false
+}
+
+// unifyOptionsField applies Options unification rules for a single field
+// when the key IS present in the concrete map.
+// - Concrete Options value: accept cVal if same parent type (cVal wins)
+// - Type literal: standard Unify (type narrowing)
+// - Disjunct: apply rules to each term
+func unifyOptionsField(optVal, cVal Value) (Value, bool) {
+	if optVal.IsDisjunct() {
+		for _, alt := range optVal.AsDisjunct().Alternatives {
+			if unified, ok := unifyOptionsField(alt, cVal); ok {
+				return unified, true
+			}
+		}
+		return Value{}, false
+	}
+
+	// Concrete default: accept cVal if compatible type.
+	if optVal.Data != nil {
+		baseType := optionsBaseType(optVal)
+		if cVal.VType.Matches(baseType) {
+			return cVal, true
+		}
+		return Value{}, false
+	}
+
+	// Type literal: standard unification.
+	return Unify(optVal, cVal)
+}
+
+// optionsBaseType returns the base (non-literal) type for a concrete value.
+// For example, integer 42 (Scalar/Number/Integer/42) returns TInteger.
+func optionsBaseType(v Value) Type {
+	switch {
+	case v.VType.Matches(TInteger):
+		return TInteger
+	case v.VType.Matches(TDecimal):
+		return TDecimal
+	case v.VType.Matches(TString):
+		return TString
+	case v.VType.Matches(TBoolean):
+		return TBoolean
+	case v.VType.Equal(TMap):
+		return TMap
+	case v.VType.Equal(TList):
+		return TList
+	case v.VType.Equal(TNone):
+		return TNone
+	default:
+		return v.VType
+	}
+}
+
+// unifyOptionsPair unifies two options types by unifying their field schemas.
+func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
+	if a.Fields.Len() != b.Fields.Len() {
+		return Value{}, false
+	}
+	result := NewOrderedMap()
+	for _, key := range a.Fields.Keys() {
+		aVal, _ := a.Fields.Get(key)
+		bVal, ok := b.Fields.Get(key)
+		if !ok {
+			return Value{}, false
+		}
+		unified, uOk := Unify(aVal, bVal)
+		if !uOk {
+			return Value{}, false
+		}
+		result.Set(key, unified)
+	}
+	return NewOptionsType(result), true
+}
+
 // valuesEqual compares the data payloads of two values with the same type.
 func valuesEqual(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
@@ -382,6 +574,14 @@ func valuesEqual(a, b Value) bool {
 			return mapsEqual(aRT.Fields, bRT.Fields)
 		}
 		if aRec != bRec {
+			return false
+		}
+		aOT, aOpt := a.Data.(OptionsTypeInfo)
+		bOT, bOpt := b.Data.(OptionsTypeInfo)
+		if aOpt && bOpt {
+			return mapsEqual(aOT.Fields, bOT.Fields)
+		}
+		if aOpt != bOpt {
 			return false
 		}
 		aCT, aOk := a.Data.(ChildTypeInfo)
@@ -444,7 +644,8 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 		// use open (subset) matching.
 		if alt.VType.Equal(TMap) && val.VType.Equal(TMap) &&
 			!alt.IsRecordType() && !val.IsRecordType() &&
-			!alt.IsTypedMap() && !val.IsTypedMap() {
+			!alt.IsTypedMap() && !val.IsTypedMap() &&
+			!alt.IsOptionsType() && !val.IsOptionsType() {
 			if alt.Data != nil && val.Data != nil {
 				if openUnifyMap(alt, val) {
 					return val, true
@@ -496,7 +697,7 @@ func resolveWordsDeep(v Value) Value {
 		}
 		return NewList(resolved)
 	}
-	if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() {
+	if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() && !v.IsOptionsType() {
 		m := v.AsMap()
 		result := NewOrderedMap()
 		for _, key := range m.Keys() {

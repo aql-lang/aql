@@ -69,12 +69,13 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . ; as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; ? as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
 	TinSC := j.Token("#SC", ";")
+	TinQM := j.Token("#QM", "?")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -98,6 +99,10 @@ func Parse(src string) ([]engine.Value, error) {
 				// Semicolon is an alias for the "end" keyword.
 				r.Node = jsonic.Text{Str: "end", Quote: ""}
 			}},
+			// Question mark produces a "?" marker for optional param syntax.
+			{S: [][]jsonic.Tin{{TinQM}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "?", Quote: ""}
+			}},
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				si := r.O0.SI
 				leftAdj := si > 0 && !isWhitespace(src[si-1])
@@ -111,6 +116,181 @@ func Parse(src string) ([]engine.Value, error) {
 				}
 			}},
 		}, rs.Open...)
+	})
+
+	// Optional field syntax: key?:value in pair context.
+	// Two alternates on pair.Open:
+	//   [KEY, QM] — matches "a ?", saves key via pairkey action,
+	//               sets K["aql_qm"]=true (propagated to child), pushes to pair.
+	//   [CL]      — matches ":" when K["aql_qm"]=true, sets U["pair"]=true,
+	//               pushes to val for the value.
+	// A pair.BC callback records optional keys in MapRef.Meta["qm"]
+	// so convertMapData can wrap them in (value or None).
+	pairkey := func(r *jsonic.Rule, ctx *jsonic.Context) {
+		keyToken := r.O0
+		var key string
+		if keyToken.Tin == jsonic.TinST || keyToken.Tin == jsonic.TinTX {
+			key, _ = keyToken.Val.(string)
+		} else {
+			key = keyToken.Src
+		}
+		r.U["key"] = key
+	}
+
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Match KEY ? — save key via K (propagated), push to pair.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {TinQM}},
+				P: "pair", K: map[string]any{"aql_qm": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					// Propagate key to inner pair via K.
+					r.K["key"] = r.U["key"]
+				}},
+			// Match : when aql_qm flag is set — copy key from K, proceed as pair value.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_qm"]
+					return ok
+				},
+				P: "val", U: map[string]any{"pair": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"]
+				}},
+		}, rs.Open...)
+	})
+
+	// Record optional keys in MapRef.Meta via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_qm"]; !ok {
+				return
+			}
+			key, _ := r.U["key"].(string)
+			if key == "" {
+				return
+			}
+			// Store optional key in MapRef.Meta["qm"].
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				qmSet, _ := mr.Meta["qm"].(map[string]bool)
+				if qmSet == nil {
+					qmSet = make(map[string]bool)
+				}
+				qmSet[key] = true
+				mr.Meta["qm"] = qmSet
+				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
+	// Computed key syntax: {[key]:value} in pair context.
+	// Three-step approach:
+	//   [OS]       — matches "[", sets K["aql_ck"]=true, pushes to pair.
+	//   [KEY, CS]  — matches "key ]" when aql_ck, saves key, pushes to pair.
+	//   [CL]       — matches ":" when aql_ck, copies key, pushes to val.
+	// A pair.BC callback records the computed key in MapRef.Meta["ck"]
+	// so autoEvalMap can evaluate the key expression at runtime.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Step 1: match [ — set computed key flag, push to pair.
+			{S: [][]jsonic.Tin{{jsonic.TinOS}},
+				P: "pair", K: map[string]any{"aql_ck": true}},
+			// Step 2: match KEY ] when aql_ck — save key, push to pair.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {jsonic.TinCS}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_ck"]
+					return ok
+				},
+				P: "pair",
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					r.K["key"] = r.U["key"]
+				}},
+			// Step 3: match : when aql_ck and key is set — proceed as pair value.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, hasCK := r.K["aql_ck"]
+					_, hasKey := r.K["key"]
+					return hasCK && hasKey
+				},
+				P: "val", U: map[string]any{"pair": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"]
+				}},
+		}, rs.Open...)
+	})
+
+	// Record computed keys in MapRef.Meta via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_ck"]; !ok {
+				return
+			}
+			key, _ := r.U["key"].(string)
+			if key == "" {
+				return
+			}
+			// Store computed key in MapRef.Meta["ck"].
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				ckSet, _ := mr.Meta["ck"].(map[string]bool)
+				if ckSet == nil {
+					ckSet = make(map[string]bool)
+				}
+				ckSet[key] = true
+				mr.Meta["ck"] = ckSet
+				r.Node = mr
+			}
+		})
+	})
+
+	// Optional field syntax in list context: [x?:Integer]
+	// Same two-step approach as pair rule:
+	//   [KEY, QM] — matches "x ?", saves key via K, pushes to elem.
+	//   [CL]      — matches ":" when K["aql_qm"], proceeds as list pair.
+	// The inner elem's BC handles the pair creation normally.
+	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+		rs.Open = append([]*jsonic.AltSpec{
+			// Step 1: match KEY ? — save key, push to elem.
+			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {TinQM}},
+				P: "elem", K: map[string]any{"aql_qm": true},
+				U: map[string]any{"done": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					pairkey(r, ctx)
+					r.K["key"] = r.U["key"]
+				}},
+			// Step 2: match : when aql_qm is set — proceed as list pair.
+			{S: [][]jsonic.Tin{{jsonic.TinCL}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_qm"]
+					return ok
+				},
+				P: "val",
+				N: map[string]int{"pk": 1, "dmap": 1},
+				U: map[string]any{"done": true, "pair": true, "list": true},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					r.U["key"] = r.K["key"].(string) + "?"
+				}},
+		}, rs.Open...)
+	})
+
+	// Propagate the outer elem's updated Node to grandparent (list rule).
+	// The inner elem's BC[1] already updated the outer elem's Node via
+	// r.Parent.Node, but the outer elem's BC[0] is skipped (done=true),
+	// so we need explicit propagation to the list rule.
+	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if _, ok := r.K["aql_qm"]; !ok {
+				return
+			}
+			// Only propagate from the OUTER elem (which has done=true).
+			done, _ := r.U["done"].(bool)
+			if !done {
+				return
+			}
+			if r.Parent != nil && r.Parent != jsonic.NoRule {
+				r.Parent.Node = r.Node
+			}
+		})
 	})
 
 	// Paren rule: collects values between ( and ) into a parenGroup.
@@ -241,7 +421,7 @@ func Parse(src string) ([]engine.Value, error) {
 			}
 			return []engine.Value{tv}, nil
 		}
-		mv, err := convertMapData(val.Val, val.Implicit)
+		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
 		if err != nil {
 			return nil, err
 		}
@@ -454,7 +634,7 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit)
+		return convertMapData(val.Val, val.Implicit, val.Meta)
 
 	case map[string]any:
 		// Raw map from list.pair syntax (e.g., [x:number] produces
@@ -497,22 +677,49 @@ func convertWordList(items []any) (engine.Value, error) {
 // resulting OrderedMap is marked as coming from pair syntax (e.g.,
 // [x:Integer] rather than {x:Integer}).
 // Explicit maps are marked for auto-evaluation (Eval=true).
-func convertMapData(m map[string]any, implicit ...bool) (engine.Value, error) {
+// The optional meta parameter receives MapRef.Meta for optional field detection.
+func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (engine.Value, error) {
 	om := engine.NewOrderedMap()
-	isImplicit := len(implicit) > 0 && implicit[0]
-	if isImplicit {
+	if implicit {
 		om.Implicit = true
+	}
+	// Extract metadata from MapRef.Meta.
+	var qmSet map[string]bool // optional keys (? syntax)
+	var ckSet map[string]bool // computed keys ([key] syntax)
+	if len(meta) > 0 && meta[0] != nil {
+		qmSet, _ = meta[0]["qm"].(map[string]bool)
+		ckSet, _ = meta[0]["ck"].(map[string]bool)
 	}
 	for _, key := range sortedKeys(m) {
 		child, err := convertDataValue(m[key])
 		if err != nil {
 			return engine.Value{}, err
 		}
-		om.Set(key, child)
+		// Optional field: wrap value as (value or None).
+		optional := qmSet[key]
+		realKey := key
+		if strings.HasSuffix(key, "?") {
+			realKey = strings.TrimSuffix(key, "?")
+			optional = true
+		}
+		if optional {
+			child = engine.NewDisjunct([]engine.Value{
+				child,
+				engine.NewTypeLiteral(engine.TNone),
+			})
+		}
+		om.Set(realKey, child)
+	}
+	// Propagate computed keys to OrderedMap.Meta for autoEvalMap.
+	if len(ckSet) > 0 {
+		if om.Meta == nil {
+			om.Meta = make(map[string]any)
+		}
+		om.Meta["ck"] = ckSet
 	}
 	// Explicit maps (from {...} syntax) are marked for auto-evaluation.
 	// Implicit maps (from pair syntax [x:Integer]) are structural and not evaluated.
-	if !isImplicit {
+	if !implicit {
 		return engine.NewEvalMap(om), nil
 	}
 	return engine.NewMap(om), nil
@@ -541,7 +748,7 @@ func convertDataValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit)
+		return convertMapData(val.Val, val.Implicit, val.Meta)
 
 	case map[string]any:
 		if hasMapChild(val) {
