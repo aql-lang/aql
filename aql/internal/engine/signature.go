@@ -42,14 +42,10 @@ type MatchResult struct {
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
 // modifiers control filtering (forcePrefix, forceSuffix, argCount).
 //
-// Positional matches (values in stack order) are preferred over reordered
-// matches at the same arity via a small score penalty for reordering.
-//
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
 	var best *MatchResult
 	var bestScore int
-	var bestPositional bool
 
 	for i := range sigs {
 		sig := &sigs[i]
@@ -67,18 +63,10 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		base := len(stack) - n
 		top := stack[base:]
 
-		// Try positional match first, then flexible.
-		var ordered []Value
-		isPositional := false
-		if positionalMatch(top, sig.Args) {
-			ordered = top
-			isPositional = true
-		} else {
-			var ok bool
-			ordered, ok = flexibleMatch(top, sig.Args)
-			if !ok {
-				continue
-			}
+		// Try flexible match.
+		ordered, ok := flexibleMatch(top, sig.Args)
+		if !ok {
+			continue
 		}
 
 		// Check structural patterns (e.g. map literals in fn signatures).
@@ -120,46 +108,26 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			if ordered[j].VType.Equal(sig.Args[j]) {
 				score += 50 // exact type match
 			} else {
-				score += 30 // prefix (inexact) match — high enough to
-				// reward specific constraints over TAny even when
-				// a competing sig has one exact TMap match.
+				score += 10 // prefix (inexact) match
 			}
 		}
 
-		// Penalty for reordered (non-positional) matches: positional
-		// argument order should be preferred when scores are close.
-		if !isPositional {
-			score -= 40
-		}
-
-		// At equal scores, prefer the first match (earlier registration).
-		// Exception: a positional match beats a reordered one.
-		if best != nil {
-			if score < bestScore {
-				continue
-			}
-			if score == bestScore {
-				if bestPositional || !isPositional {
-					continue
-				}
-			}
+		if best != nil && score <= bestScore {
+			continue
 		}
 
 		args := make([]Value, n)
 		copy(args, ordered)
 		best = &MatchResult{Sig: sig, Args: args}
 		bestScore = score
-		bestPositional = isPositional
 	}
 
 	return best
 }
 
-// flexibleMatch checks whether values match the given types. It first tries
-// positional matching (values[i] matches types[i]). If that fails, it tries
-// type-based reordering: assigning each value to a type slot it matches using
-// backtracking. Same-type slots preserve the original positional order of
-// values because candidates are tried in order.
+// flexibleMatch checks whether values match the given types positionally.
+// Arguments are never permuted — values[i] must match types[i].
+// Returns the values slice unchanged if matched, or false.
 func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
 	n := len(types)
 	if len(values) < n {
@@ -170,98 +138,7 @@ func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
 		return values, true
 	}
 
-	// Try type-based reordering.
-	result := make([]Value, n)
-	used := make([]bool, n)
-	if flexibleAssign(values[:n], types, result, used, 0) {
-		return result, true
-	}
-
 	return nil, false
-}
-
-// flexibleAssign tries to assign values to type slots using backtracking.
-// For each slot, it tries values in their original order, so same-type
-// slots preserve positional ordering. N is small (typically ≤7) so the
-// worst-case N! search is bounded at 5040.
-func flexibleAssign(values []Value, types []Type, result []Value, used []bool, slot int) bool {
-	if slot == len(types) {
-		return true
-	}
-	t := types[slot]
-	for i := 0; i < len(values); i++ {
-		if used[i] {
-			continue
-		}
-		if !values[i].VType.Matches(t) {
-			continue
-		}
-		// Reject type literals for concrete Map/List signatures.
-		if values[i].Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
-			continue
-		}
-		used[i] = true
-		result[slot] = values[i]
-		if flexibleAssign(values, types, result, used, slot+1) {
-			return true
-		}
-		used[i] = false
-	}
-	return false
-}
-
-// flexibleAssignAny assigns N values to any N slots in the FULL sigArgs array
-// (not necessarily the first N). filled[i] tracks which sig slots are used.
-// Used by plannerPrefixCoverage to allow prefix values to fill later sig slots.
-func flexibleAssignAny(values []Value, sigArgs []Type, filled []bool, usedVals []bool, idx int) bool {
-	if idx == len(values) {
-		return true
-	}
-	for i := range sigArgs {
-		if filled[i] {
-			continue
-		}
-		if !values[idx].VType.Matches(sigArgs[i]) {
-			continue
-		}
-		if values[idx].Data == nil && (sigArgs[i].Equal(TMap) || sigArgs[i].Equal(TList)) {
-			continue
-		}
-		filled[i] = true
-		usedVals[idx] = true
-		if flexibleAssignAny(values, sigArgs, filled, usedVals, idx+1) {
-			return true
-		}
-		filled[i] = false
-		usedVals[idx] = false
-	}
-	return false
-}
-
-// flexTypeAssign does the same backtracking assignment as flexibleAssign but
-// at the type level (no values involved). It determines which sigArgs slots
-// can be filled by the given collected types. filled[i]=true means sigArgs[i]
-// is assigned. used[j]=true means collected[j] is consumed.
-func flexTypeAssign(collected []Type, sigArgs []Type, filled []bool, used []bool, idx int) bool {
-	if idx == len(collected) {
-		return true
-	}
-	for i := range sigArgs {
-		if filled[i] {
-			continue
-		}
-		if !collected[idx].Matches(sigArgs[i]) {
-			continue
-		}
-		filled[i] = true
-		used[idx] = true
-		if flexTypeAssign(collected, sigArgs, filled, used, idx+1) {
-			return true
-		}
-		filled[i] = false
-		used[idx] = false
-	}
-	return false
 }
 
 // positionalMatch checks whether values match types in order.

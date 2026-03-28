@@ -871,64 +871,42 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Collect resolved values before the pointer for signature matching.
 	resolved := e.effectiveResolved()
 
-	// Try each signature — two passes: positional first, then flexible.
-	for _, allowReorder := range []bool{false, true} {
-		for si := range fnDef.Sigs {
-			sig := &fnDef.Sigs[si]
-			nArgs := len(sig.Params)
-			if nArgs == 0 {
-				if !allowReorder {
-					return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
-				}
-				continue
+	// Try each signature to find one that matches the available prefix args.
+	for _, sig := range fnDef.Sigs {
+		nArgs := len(sig.Params)
+		if nArgs == 0 {
+			return e.execFnDefSig(valIdx, &sig, nil, fnDef.Registry)
+		}
+		if len(resolved) < nArgs {
+			continue
+		}
+		// Check if the last nArgs resolved values match the signature types.
+		candidate := resolved[len(resolved)-nArgs:]
+		match := true
+		for i, p := range sig.Params {
+			if !candidate[i].VType.Matches(p.Type) {
+				match = false
+				break
 			}
-			if len(resolved) < nArgs {
-				continue
-			}
-			candidate := resolved[len(resolved)-nArgs:]
-
-			types := make([]Type, nArgs)
-			for i, p := range sig.Params {
-				types[i] = p.Type
-			}
-
-			var ordered []Value
-			if allowReorder {
-				var flexOk bool
-				ordered, flexOk = flexibleMatch(candidate, types)
-				if !flexOk {
-					continue
-				}
-			} else {
-				if !positionalMatch(candidate, types) {
-					continue
-				}
-				ordered = candidate
-			}
-
-			// Check patterns against the ordered values.
-			match := true
-			for i, p := range sig.Params {
-				if p.Pattern != nil {
-					pat := *p.Pattern
-					if pat.VType.Equal(TMap) && ordered[i].VType.Equal(TMap) &&
-						pat.Data != nil && ordered[i].Data != nil &&
-						!pat.IsOptionsType() {
-						if !openUnifyMap(pat, ordered[i]) {
-							match = false
-							break
-						}
-					} else {
-						if _, uOk := Unify(ordered[i], pat); !uOk {
-							match = false
-							break
-						}
+			if p.Pattern != nil {
+				pat := *p.Pattern
+				if pat.VType.Equal(TMap) && candidate[i].VType.Equal(TMap) &&
+					pat.Data != nil && candidate[i].Data != nil &&
+					!pat.IsOptionsType() {
+					if !openUnifyMap(pat, candidate[i]) {
+						match = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(candidate[i], pat); !uOk {
+						match = false
+						break
 					}
 				}
 			}
-			if match {
-				return e.execFnDefSig(valIdx, sig, ordered, fnDef.Registry)
-			}
+		}
+		if match {
+			return e.execFnDefSig(valIdx, &sig, candidate, fnDef.Registry)
 		}
 	}
 
@@ -1074,10 +1052,15 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 		if len(sig.Args) != fwd.CollectedArgs {
 			continue
 		}
-		// Use flexible type assignment to check if collected types match.
-		tmpFilled := make([]bool, len(sig.Args))
-		tmpUsed := make([]bool, fwd.CollectedArgs)
-		if flexTypeAssign(collectedTypes, sig.Args, tmpFilled, tmpUsed, 0) {
+		// Positional match: collectedTypes[i] must match sig.Args[i].
+		allMatch := true
+		for i := range sig.Args {
+			if !collectedTypes[i].Matches(sig.Args[i]) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
 			hasShorterMatch = true
 			break
 		}
@@ -1086,31 +1069,15 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 		return false
 	}
 
-	// A shorter sig is satisfied. Check whether the next token could still
-	// fill an argument slot of the longer sig (either positionally or flexibly).
+	// A shorter sig is satisfied. Check whether the next token on the
+	// stack could produce the type needed for the longer sig's next slot.
+	nextArgType := fwd.Sig.Args[fwd.PrefixArgs+fwd.CollectedArgs]
 	peekIdx := fwdIdx + 1
 	if peekIdx >= len(e.stack) {
 		return true // no more tokens → resolve with shorter sig
 	}
 
-	// Positional check: the next slot in sequential order.
-	nextSlot := fwd.PrefixArgs + fwd.CollectedArgs
-	if nextSlot < len(fwd.Sig.Args) {
-		if e.couldProduceType(e.stack[peekIdx], fwd.Sig.Args[nextSlot]) {
-			return false
-		}
-	}
-
-	// Flexible check: any slot not yet filled by collected args.
-	filled := make([]bool, len(fwd.Sig.Args))
-	usedC := make([]bool, fwd.CollectedArgs)
-	flexTypeAssign(collectedTypes, fwd.Sig.Args, filled, usedC, 0)
-	for i := range fwd.Sig.Args {
-		if !filled[i] && e.couldProduceType(e.stack[peekIdx], fwd.Sig.Args[i]) {
-			return false // next token could fill a remaining unfilled slot
-		}
-	}
-	return true
+	return !e.couldProduceType(e.stack[peekIdx], nextArgType)
 }
 
 // couldProduceType predicts whether a stack value, when evaluated, could
