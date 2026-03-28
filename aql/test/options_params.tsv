@@ -126,3 +126,140 @@ def Opts (make Options {x:Scalar}) def f fn [[m:Opts] [Map] [m]] f {x:99}	{x:99}
 
 # Integer field rejects string
 def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
+
+# =====================================================================
+# Optional Options parameters
+# =====================================================================
+
+# --- Solo optional Options parameter ---
+
+# Optional Options (all defaults) — provided
+def Opts (make Options {x:1 y:2}) def f fn [[m?:Opts] [Map] [m]] f {x:10 y:20}	{x:10,y:20}
+
+# Optional Options (all defaults) — omitted (0-arg call, body gets base value {})
+def Opts (make Options {x:1 y:2}) def f fn [[m?:Opts] [Map] [m]] f	{}
+
+# Optional Options with disjunct-None fields — omitted
+def Opts (make Options {x:(Integer or None)}) def f fn [[m?:Opts] [Map] [m]] f	{}
+
+# Optional Options with type-only fields (no defaults) — omitted triggers error
+def Opts (make Options {x:Integer}) def f fn [[m?:Opts] [Map] [m]] f	ERROR:
+
+# --- Optional Options parameter — first position ---
+
+# [Opts? Integer] — both provided
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f {x:10} 5	5
+
+# [Opts? Integer] — opts omitted
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f 5	5
+
+# [Opts? Integer String] — all provided
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer s:String] [String] [s]] f {x:10} 5 "hi"	'hi'
+
+# [Opts? Integer String] — opts omitted
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer s:String] [String] [s]] f 5 "hi"	'hi'
+
+# --- Optional Options parameter — middle position ---
+
+# [Integer Opts? String] — all provided
+def Opts (make Options {x:1}) def f fn [[n:Integer m?:Opts s:String] [String] [s]] f 5 {x:10} "hi"	'hi'
+
+# [Integer Opts? String] — opts omitted
+def Opts (make Options {x:1}) def f fn [[n:Integer m?:Opts s:String] [String] [s]] f 5 "hi"	'hi'
+
+# [String Opts? Integer] — all provided, body accesses opts
+def Opts (make Options {x:1}) def f fn [[s:String m?:Opts n:Integer] [Integer] [(m . x) add n]] f "hi" {x:10} 5	15
+
+# --- Optional Options parameter — last position ---
+
+# [Integer Opts?] — both provided
+def Opts (make Options {x:1}) def f fn [[n:Integer m?:Opts] [Integer] [n]] f 5 {x:10}	5
+
+# [Integer Opts?] — opts omitted
+def Opts (make Options {x:1}) def f fn [[n:Integer m?:Opts] [Integer] [n]] f 5	5
+
+# [Integer String Opts?] — all provided
+def Opts (make Options {x:1}) def f fn [[n:Integer s:String m?:Opts] [String] [s]] f 5 "hi" {x:10}	'hi'
+
+# [Integer String Opts?] — opts omitted
+def Opts (make Options {x:1}) def f fn [[n:Integer s:String m?:Opts] [String] [s]] f 5 "hi"	'hi'
+
+# --- Optional Options between two required scalars ---
+
+# [Integer Opts? String] — opts provided, body accesses all params
+def Opts (make Options {x:1}) def f fn [[a:Integer m?:Opts b:String] [String] [b]] f 5 {x:10} "hi"	'hi'
+
+# [Integer Opts? String] — opts omitted
+def Opts (make Options {x:1}) def f fn [[a:Integer m?:Opts b:String] [String] [b]] f 5 "hi"	'hi'
+
+# =====================================================================
+# Multiple optional Options parameters
+# =====================================================================
+
+# Two optional Opts + required scalar — all provided
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B n:Integer] [Integer] [(a . x) add (b . y) add n]] f {x:10} {y:20} 5	35
+
+# Two optional Opts + required — first opts omitted
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B n:Integer] [Integer] [(b . y) add n]] f {y:20} 5	25
+
+# Two optional Opts + required — both opts omitted
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B n:Integer] [Integer] [n]] f 5	5
+
+# Two optional Opts, no required — both provided
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B] [Map] [a]] f {x:10} {y:20}	{x:10}
+
+# Two optional Opts, no required — one provided
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B] [Map] [b]] f {y:20}	{y:20}
+
+# Two optional Opts, no required — both omitted
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[a?:A b?:B] [Map] [a]] f	{}
+
+# =====================================================================
+# Options parameter positions — all stack configurations
+# =====================================================================
+
+# --- Required Options in different positions ---
+
+# [Opts] — single param
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Integer] [m . x]] f {x:42}	42
+
+# [Opts Integer] — opts first
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:10} 5	15
+
+# [Integer Opts] — opts last
+def Opts (make Options {x:Integer}) def f fn [[n:Integer m:Opts] [Integer] [n add (m . x)]] f 5 {x:10}	15
+
+# [Opts Integer String] — opts first of three
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer s:String] [String] [s]] f {x:1} 5 "hi"	'hi'
+
+# [Integer Opts String] — opts middle of three
+def Opts (make Options {x:Integer}) def f fn [[n:Integer m:Opts s:String] [Integer] [n add (m . x)]] f 5 {x:3} "hi"	8
+
+# [Integer String Opts] — opts last of three
+def Opts (make Options {x:Integer}) def f fn [[n:Integer s:String m:Opts] [Integer] [m . x]] f 5 "hi" {x:42}	42
+
+# [Boolean Opts Integer String] — opts second of four
+def Opts (make Options {x:1}) def f fn [[b:Boolean m:Opts n:Integer s:String] [Integer] [(m . x) add n]] f true {x:10} 5 "hi"	15
+
+# [Opts Integer Opts String] — two required Opts in same signature
+def A (make Options {x:Integer}) def B (make Options {y:String}) def f fn [[a:A n:Integer b:B s:String] [Integer] [(a . x) add n]] f {x:10} 5 {y:"hi"} "bye"	15
+
+# --- Five-parameter deep stack ---
+def A (make Options {x:1}) def B (make Options {y:2}) def f fn [[n:Integer a:A b:Boolean bopt:B s:String] [Integer] [(a . x) add (bopt . y) add n]] f 5 {x:10} true {y:20} "hi"	35
+
+# =====================================================================
+# Overloaded signatures — Options vs scalar dispatch
+# =====================================================================
+
+# Overload: one sig takes Opts, other takes Integer — map arg dispatches to Opts sig
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m] [n:Integer] [Integer] [n add 1]] f {x:42}	{x:42}
+
+# Same overload — integer arg dispatches to Integer sig
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m] [n:Integer] [Integer] [n add 1]] f 5	6
+
+# =====================================================================
+# Stack context — extra values on stack before fn call
+# =====================================================================
+
+# Extra values on stack are not consumed by fn
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Integer] [m . x]] 99 "extra" f {x:42}	99 'extra' 42
