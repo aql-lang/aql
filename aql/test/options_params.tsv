@@ -1,5 +1,6 @@
 # Options instances as function parameters — tests that Options-typed
-# fn parameters correctly match (or reject) concrete Map arguments.
+# fn parameters correctly match (or reject) concrete Map arguments
+# using Options unification rules.
 # Format: expression<TAB>expected result
 
 # --- Basic Options parameter matching ---
@@ -7,22 +8,31 @@
 # Options with type constraints — map with all fields present
 def Opts (make Options {x:Integer y:String}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:"hi"}	{x:1,y:'hi'}
 
-# Options with type constraints — missing required field rejects
+# Options with type constraints — missing required type field rejects
 def Opts (make Options {x:Integer y:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	ERROR:signature error
 
 # Options with type constraints — wrong type for field rejects
 def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
 
-# Options with type constraints — extra keys allowed (open/subset matching)
-def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	{x:1,y:2}
+# Options with type constraints — extra keys rejected (closed matching)
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature error
 
 # --- Options with concrete default values ---
 
 # Concrete defaults — exact same values match
 def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	{x:1,y:2}
 
-# Concrete defaults — different values do not match
-def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:10 y:20}	ERROR:signature error
+# Concrete defaults — different values of same type match (Options semantics)
+def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:10 y:20}	{x:10,y:20}
+
+# Concrete defaults — wrong type rejects
+def Opts (make Options {x:1}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
+
+# Concrete defaults — absent field uses default (match succeeds)
+def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:10}	{x:10}
+
+# Concrete defaults — all absent uses all defaults (match succeeds)
+def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {}	{}
 
 # --- Options with disjunct fields ---
 
@@ -41,21 +51,24 @@ def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {x
 # Disjunct with None — None value matches
 def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {x:None}	{x:None}
 
+# Disjunct with None — absent field defaults to None
+def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {}	{}
+
 # --- Options with optional (?) fields ---
 
 # Optional field present — matches
 def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:"hi"}	{x:1,y:'hi'}
 
-# Optional field absent — pattern still requires key, so rejects
-def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	ERROR:signature error
+# Optional field absent — matches (? means or None, absence defaults to None)
+def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
 
 # --- Empty Options ---
 
-# Empty Options — any map matches
-def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	{x:1,y:2}
-
 # Empty Options — empty map matches
 def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {}	{}
+
+# Empty Options — extra keys rejected
+def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature error
 
 # --- Accessing fields from Options-matched parameter in fn body ---
 
@@ -86,11 +99,14 @@ def Opts (make Options {a:Integer b:Integer c:Integer}) def f fn [[m:Opts] [Inte
 
 # --- Options parameter with mixed type and concrete fields ---
 
-# Mix of type constraint and concrete default
+# Mix of type constraint and concrete default — both present
 def Opts (make Options {x:Integer y:42}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:42}	{x:1,y:42}
 
-# Mix — type field matches, concrete field wrong
-def Opts (make Options {x:Integer y:42}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:99}	ERROR:signature error
+# Mix — concrete default field accepts any value of same type
+def Opts (make Options {x:Integer y:42}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:99}	{x:1,y:99}
+
+# Mix — concrete default field absent uses default (match succeeds)
+def Opts (make Options {x:Integer y:42}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
 
 # --- Nested Options scenarios ---
 

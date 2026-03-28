@@ -360,8 +360,7 @@ func resolveDefType(v Value) (Type, *Value, error) {
 		return TMap, &pat, nil
 	}
 	if v.IsOptionsType() {
-		ot := v.AsOptionsType()
-		pat := NewMap(ot.Fields)
+		pat := NewOptionsType(v.AsOptionsType().Fields)
 		return TMap, &pat, nil
 	}
 	// Other type values (disjuncts, type literals, etc.) use their type directly.

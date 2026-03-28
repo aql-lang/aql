@@ -891,7 +891,8 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			if p.Pattern != nil {
 				pat := *p.Pattern
 				if pat.VType.Equal(TMap) && candidate[i].VType.Equal(TMap) &&
-					pat.Data != nil && candidate[i].Data != nil {
+					pat.Data != nil && candidate[i].Data != nil &&
+					!pat.IsOptionsType() {
 					if !openUnifyMap(pat, candidate[i]) {
 						match = false
 						break
