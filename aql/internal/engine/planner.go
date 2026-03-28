@@ -27,26 +27,26 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 		// Prefer signatures that can consume already-resolved prefix values.
 		score += prefixCount * 25
 
-		// Prefer signatures whose first currently-unmatched argument can be
-		// satisfied by the immediate suffix candidate.
+		// Prefer signatures where the immediate suffix candidate can satisfy
+		// any currently-unmatched argument (flexible matching allows
+		// reordering, so the peek value need not match the first slot).
 		if peekVal != nil && prefixCount < len(sig.Args) {
-			firstUnmatched := -1
+			bestBonus := 0
 			for ai := range sig.Args {
-				if !usedArgs[ai] {
-					firstUnmatched = ai
-					break
+				if usedArgs[ai] {
+					continue
+				}
+				if e.couldProduceType(*peekVal, sig.Args[ai]) {
+					bonus := 50
+					if sig.Args[ai].Equal(TAny) {
+						bonus = 25
+					}
+					if bonus > bestBonus {
+						bestBonus = bonus
+					}
 				}
 			}
-			if firstUnmatched >= 0 && e.couldProduceType(*peekVal, sig.Args[firstUnmatched]) {
-				// Specific type matches get a stronger bonus than catch-all
-				// TAny matches. This ensures e.g. [TWord, TAny] is preferred
-				// over [TAny, TString] when the peek value is a word.
-				if sig.Args[firstUnmatched].Equal(TAny) {
-					score += 25
-				} else {
-					score += 50
-				}
-			}
+			score += bestBonus
 		}
 
 		if best == nil || score > bestScore {
@@ -60,8 +60,10 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 }
 
 // plannerPrefixCoverage returns how many values from the top of the resolved
-// stack can be positionally matched to the first N signature arguments, and
-// the arg-slot usage bitmap for that assignment. Arguments are never permuted.
+// stack can be matched to signature arguments, and the arg-slot usage bitmap.
+// With flexible matching, prefix values can fill ANY sig slot (not just the
+// first N), so a prefix Integer can fill a later Integer slot even if the
+// first slot expects Map.
 func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 	usedArgs := make([]bool, len(sigArgs))
 	maxTry := len(sigArgs)
@@ -72,6 +74,7 @@ func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 	prefixCount := 0
 	for tryN := maxTry; tryN >= 1; tryN-- {
 		top := resolved[len(resolved)-tryN:]
+		// Try positional match against first N slots first.
 		ok := true
 		for i := 0; i < tryN; i++ {
 			if !top[i].VType.Matches(sigArgs[i]) {
@@ -84,6 +87,14 @@ func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 			for i := 0; i < tryN; i++ {
 				usedArgs[i] = true
 			}
+			break
+		}
+		// Try flexible assignment against ALL sig slots.
+		filled := make([]bool, len(sigArgs))
+		usedV := make([]bool, tryN)
+		if flexibleAssignAny(top, sigArgs, filled, usedV, 0) {
+			prefixCount = tryN
+			copy(usedArgs, filled)
 			break
 		}
 	}

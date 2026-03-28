@@ -17,12 +17,20 @@ func TestFlexibleMatchPositional(t *testing.T) {
 	}
 }
 
-func TestFlexibleMatchNoPermutation(t *testing.T) {
-	// Values in wrong positional order should NOT match — no permutation.
-	vals := []Value{NewList(nil), NewAtom("x")}
-	_, ok := flexibleMatch(vals, []Type{TAtom, TList})
-	if ok {
-		t.Fatal("expected no match — arguments must not be permuted")
+func TestFlexibleMatchReordersDistinctTypes(t *testing.T) {
+	// Values in wrong positional order should match via type-based reordering
+	// when the types are distinct.
+	concreteList := NewList([]Value{NewInteger(1)})
+	vals := []Value{concreteList, NewAtom("x")}
+	ordered, ok := flexibleMatch(vals, []Type{TAtom, TList})
+	if !ok {
+		t.Fatal("expected match via type-based reordering")
+	}
+	if ordered[0].AsAtom() != "x" {
+		t.Errorf("expected atom x at [0], got %v", ordered[0])
+	}
+	if ordered[1].AsList() == nil {
+		t.Error("expected list at [1]")
 	}
 }
 
