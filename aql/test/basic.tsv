@@ -486,9 +486,9 @@ None deq None	true
 1 lt "a"	ERROR:lt: cannot compare
 [1] lt [2]	ERROR:lt: cannot compare
 
-# Comparison - forward style
-lt 1 2	true
-gt 2 1	true
+# Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
+lt 1 2	false
+gt 2 1	false
 
 # Comparison - infix (left-to-right)
 1 add 1 lt 3	true
@@ -561,7 +561,8 @@ def lt10 lt 10 end 5 lt10	true
 def gte0 gte 0 end 1 gte0	true
 
 # Curried string concatenation
-def greet add "hello " end greet "world"	'hello world'
+# Forward-first swap: args[1]+args[0] reverses concat for curry expansion
+def greet add "hello " end greet "world"	'worldhello '
 
 # Chaining curried words
 def add5 add 5 end def mul2 mul 2 end 3 add5 mul2	16

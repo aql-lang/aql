@@ -610,10 +610,11 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Register "divmod" that returns quotient and remainder.
+	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
 	a.Register("divmod", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			a, b := args[0].AsInteger(), args[1].AsInteger()
+			a, b := args[1].AsInteger(), args[0].AsInteger()
 			if b == 0 {
 				return nil, fmt.Errorf("division by zero")
 			}

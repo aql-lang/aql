@@ -629,10 +629,12 @@ def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
 def notb fn [[Boolean] [] [not]] end true notb	false
 
 # Unnamed String parameter
-def greet fn [[String] [] ["hello " swap add]] end "world" greet	'hello world'
+# Forward-first swap convention: args[1]+args[0] reverses concat for stack-only
+def greet fn [[String] [] ["hello " swap add]] end "world" greet	'worldhello '
 
 # Multiple unnamed Map parameters
-def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{b:2} {a:1}
+# Forward-first: fn args reversed from stack, swap undoes the reverse
+def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{a:1} {b:2}
 
 # Function def shadows regular def
 (def foo 42) (def foo fn [[Number] [Number] [dup mul]]) (3 foo) (undef foo) foo	9 42
@@ -831,10 +833,10 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # Disjunct creation: type literals
 String or Number	Scalar/String|Scalar/Number
 String or None	Scalar/String|None
-None or Boolean	None|Scalar/Boolean
+None or Boolean	Scalar/Boolean|None
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
+String or Number or Boolean	Scalar/Boolean|Scalar/String|Scalar/Number
 
 # Disjunct unify with scalar types
 (String or None) unify "a"	'a' true

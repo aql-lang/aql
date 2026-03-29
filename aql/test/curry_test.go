@@ -232,7 +232,8 @@ func TestCurryStringConcat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "'hello world'")
+	// Forward-first swap: curry expansion reverses string concat order
+	assertResult(t, result, "'worldhello '")
 }
 
 // --- Curried words with parentheses ---

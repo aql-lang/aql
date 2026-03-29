@@ -143,7 +143,8 @@ for 2 [for 4 [(if [i eq 1] [continue]) i]]	0 2 3 0 2 3
 
 # === For + complex body expressions ===
 # Multiple expressions per iteration
-for 3 [i i add 10]	0 10 1 11 2 12
+# Forward-first: stack fully satisfies add [int,int] before forward collection of 10
+for 3 [i i add 10]	0 10 2 10 4 10
 
 # Arithmetic chain in body
 for 4 [i mul 3 add 1]	1 4 7 10

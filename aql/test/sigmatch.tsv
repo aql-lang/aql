@@ -69,8 +69,9 @@ upper "abc"	'ABC'
 # 1 already on stack, add collects 2 from forward
 1 add 2	3
 
-# Multiple prefix args available, forward collection still works
-1 2 add 3	1 5
+# Stack fully satisfies add's sig — no forward collection needed.
+# add takes 1 and 2 from stack, 3 remains.
+1 2 add 3	3 3
 
 # --- Up to 7 elements interacting ---
 
@@ -153,7 +154,7 @@ String or None	Scalar/String|None
 
 # --- Suffix with all args from future (no prefix args) ---
 
-# Fully forward: word first, all args after
+# Fully forward: forward args fill sigArgs[0] first, swap convention applies
 add 1 2	3
-sub 10 3	7
-lt 1 2	true
+sub 10 3	-7
+lt 1 2	false

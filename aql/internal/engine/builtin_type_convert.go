@@ -113,12 +113,19 @@ func registerConvert(r *Registry) {
 	}
 
 	// 2-arg: convert value type
+	// With forward-first matching, args are reversed: args[0]=type, args[1]=value.
+	// `value convert Type` → args[0]=Type(forward), args[1]=value(stack)
 	convert2Handler := func(args []Value) ([]Value, error) {
-		src := args[0]
-		if args[1].Data != nil {
-			return nil, fmt.Errorf("convert: second argument must be a type literal")
+		src, targetType := args[1], args[0]
+		if targetType.Data != nil {
+			// Try reversed order (pure prefix: convert Type value)
+			if args[1].Data == nil {
+				src, targetType = args[0], args[1]
+			} else {
+				return nil, fmt.Errorf("convert: one argument must be a type literal")
+			}
 		}
-		result, err := convertTo(src, args[1].VType, "", defaultSize)
+		result, err := convertTo(src, targetType.VType, "", defaultSize)
 		if err != nil {
 			return nil, err
 		}
@@ -126,27 +133,66 @@ func registerConvert(r *Registry) {
 	}
 
 	// 3-arg: convert value type <base-or-settings>
-	// The third argument is either a string base shorthand (e.g. "hex")
-	// or a settings map (e.g. {base:hex, size:3}).
+	// Position-agnostic: finds the type literal (Data==nil) among the 3 args.
 	convert3Handler := func(args []Value) ([]Value, error) {
-		src := args[0]
-		if args[1].Data != nil {
-			return nil, fmt.Errorf("convert: second argument must be a type literal")
+		typeIdx := -1
+		for i := range args {
+			if args[i].Data == nil {
+				typeIdx = i
+				break
+			}
 		}
+		if typeIdx < 0 {
+			return nil, fmt.Errorf("convert: one argument must be a type literal")
+		}
+		// Collect the two remaining (non-type) arg indices.
+		var others [2]int
+		oi := 0
+		for i := range args {
+			if i != typeIdx {
+				others[oi] = i
+				oi++
+			}
+		}
+		a, b := args[others[0]], args[others[1]]
+
+		var src Value
 		base := ""
 		size := defaultSize
-		if args[2].VType.Equal(TMap) && args[2].Data != nil {
-			m := args[2].AsMap()
-			if v, ok := m.Get("base"); ok {
+
+		applySettings := func(v Value) {
+			if v.VType.Equal(TMap) && v.Data != nil {
+				m := v.AsMap()
+				if bv, ok := m.Get("base"); ok {
+					base = valToString(bv)
+				}
+				if sv, ok := m.Get("size"); ok && sv.VType.Matches(TInteger) {
+					size = int(sv.AsInteger())
+				}
+			} else {
 				base = valToString(v)
 			}
-			if v, ok := m.Get("size"); ok && v.VType.Matches(TInteger) {
-				size = int(v.AsInteger())
-			}
-		} else {
-			base = valToString(args[2])
 		}
-		result, err := convertTo(src, args[1].VType, base, size)
+
+		switch {
+		case a.VType.Equal(TMap) && a.Data != nil:
+			applySettings(a)
+			src = b
+		case b.VType.Equal(TMap) && b.Data != nil:
+			applySettings(b)
+			src = a
+		case a.VType.Matches(TString) && !b.VType.Matches(TString):
+			base = valToString(a)
+			src = b
+		case b.VType.Matches(TString) && !a.VType.Matches(TString):
+			base = valToString(b)
+			src = a
+		default:
+			src = a
+			base = valToString(b)
+		}
+
+		result, err := convertTo(src, args[typeIdx].VType, base, size)
 		if err != nil {
 			return nil, err
 		}
