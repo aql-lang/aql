@@ -22,6 +22,10 @@ type Signature struct {
 	// When set, the argument must unify with the pattern in addition to
 	// matching the type.
 	Patterns map[int]Value
+
+	// Fallback marks the generic 0-arg handler installed by def as the
+	// fallback entry. SortSignatures always places fallbacks last.
+	Fallback bool
 }
 
 // TotalArgs returns the number of arguments.
@@ -167,6 +171,40 @@ func signatureScore(sig *Signature) int {
 // SignatureScore exports signatureScore for testing.
 func SignatureScore(sig *Signature) int {
 	return signatureScore(sig)
+}
+
+// SortSignatures sorts a slice of signatures in-place by priority:
+// longest first, then most specific types. Fallback signatures always
+// sort last. Stable sort preserves registration order for equal scores.
+func SortSignatures(sigs []Signature) {
+	for i := 1; i < len(sigs); i++ {
+		for j := i; j > 0; j-- {
+			// Fallbacks always sink to the end.
+			if sigs[j-1].Fallback && !sigs[j].Fallback {
+				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
+				continue
+			}
+			if sigs[j].Fallback {
+				break
+			}
+			if signatureScore(&sigs[j]) > signatureScore(&sigs[j-1]) {
+				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
+			} else {
+				break
+			}
+		}
+	}
+}
+
+// KeepFallback returns a slice containing only the fallback signature.
+// If no fallback is found, returns nil.
+func KeepFallback(sigs []Signature) []Signature {
+	for i := range sigs {
+		if sigs[i].Fallback {
+			return []Signature{sigs[i]}
+		}
+	}
+	return nil
 }
 
 // RankSignatures returns the indices of sigs sorted by priority (best first).

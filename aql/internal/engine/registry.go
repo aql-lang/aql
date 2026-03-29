@@ -133,6 +133,7 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 		r.funcs[name] = fn
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
+	SortSignatures(fn.Signatures)
 }
 
 // RegisterStackOnly adds signatures to a named function without forward precedence.
@@ -143,6 +144,7 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 		r.funcs[name] = fn
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
+	SortSignatures(fn.Signatures)
 }
 
 // Lookup returns the Function for a name, or nil.

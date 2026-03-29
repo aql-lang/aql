@@ -123,10 +123,10 @@ func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		return
 	}
 
-	// Rebuild: keep the generic fallback (index 0), remove all typed sigs,
+	// Rebuild: keep the generic fallback, remove all typed sigs,
 	// then re-register from remaining DefStack entries.
 	if len(fn.Signatures) > 0 {
-		fn.Signatures = fn.Signatures[:1] // keep generic fallback
+		fn.Signatures = KeepFallback(fn.Signatures)
 	}
 	for _, entry := range stack {
 		if fnDef, ok := entry.Data.(FnDefInfo); ok {

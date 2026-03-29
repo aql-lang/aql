@@ -94,6 +94,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// First definition: register one generic fallback handler
 		// that reads the top of the definition stack.
 		registerFn(name, Signature{
+			Fallback: true,
 			Handler: func(_ []Value) ([]Value, error) {
 				stack := r.DefStacks[name]
 				if len(stack) == 0 {
@@ -108,7 +109,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 					if fn := r.Lookup(name); fn != nil {
 						for i := range fn.Signatures {
 							sig := &fn.Signatures[i]
-							if len(sig.Args) == 0 && sig.Handler != nil && i > 0 {
+							if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
 								result, err := sig.Handler(nil)
 								if err != nil {
 									return nil, err
@@ -160,7 +161,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 				// Rebuild typed signatures from remaining DefStack entries.
 				fn := r.funcs[name]
 				if fn != nil && len(fn.Signatures) > 0 {
-					fn.Signatures = fn.Signatures[:1] // keep generic fallback
+					fn.Signatures = KeepFallback(fn.Signatures)
 				}
 				for _, entry := range filtered {
 					if fd, ok := entry.Data.(FnDefInfo); ok {
@@ -254,19 +255,20 @@ func uninstallDef(r *Registry, name string) {
 		return
 	}
 
-	// Remove typed signatures from the end.
-	if sigsToRemove > 0 && len(fn.Signatures) >= sigsToRemove {
-		fn.Signatures = fn.Signatures[:len(fn.Signatures)-sigsToRemove]
+	// If DefStacks is now empty, remove the function entirely.
+	if len(r.DefStacks[name]) == 0 {
+		delete(r.funcs, name)
+		delete(r.DefStacks, name)
+		return
 	}
 
-	// If DefStacks is now empty, also remove the generic fallback handler.
-	if len(r.DefStacks[name]) == 0 {
-		if len(fn.Signatures) > 0 {
-			fn.Signatures = fn.Signatures[:len(fn.Signatures)-1]
+	// Rebuild: keep fallback, re-register from remaining DefStack entries.
+	if sigsToRemove > 0 {
+		fn.Signatures = KeepFallback(fn.Signatures)
+		for _, entry := range r.DefStacks[name] {
+			if fd, ok := entry.Data.(FnDefInfo); ok {
+				installFnDef(r, name, fd)
+			}
 		}
-		if len(fn.Signatures) == 0 {
-			delete(r.funcs, name)
-		}
-		delete(r.DefStacks, name)
 	}
 }
