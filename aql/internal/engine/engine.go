@@ -377,31 +377,44 @@ func (e *Engine) stepWord(val Value) error {
 	if fn.ForwardPrecedence {
 		resolved := e.effectiveResolved()
 
+		// Check if we're inside an outer forward's scope. If so, this
+		// function must collect all args from forward tokens only (no
+		// stack args) — it acts like a sub-expression.
+		insideForward := e.isInsidePendingForward()
+
 		// Forward precedence: match forward tokens first (from sigArgs[0]),
 		// then fill remaining args from the stack in reverse order (top →
 		// first remaining sig arg).
 		if e.hasForwardValues(fn) {
 			bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
+			if insideForward {
+				stackCount = 0
+			}
 			if bestSig != nil {
 				forwardNeeded := len(bestSig.Args) - stackCount
 				if forwardNeeded <= 0 {
 					forwardNeeded = 1 // at least take 1 from forward
+				}
+				if insideForward {
+					forwardNeeded = len(bestSig.Args)
 				}
 				e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
 				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 			}
 		}
 
-		// No forward tokens or no forward match — try reversed stack match
-		// (top of stack → sigArgs[0]).
-		match := MatchSignatureReversed(fn.Signatures, resolved, w)
-		if match != nil && len(match.Sig.Args) > 0 {
-			// Physically reverse the top N values so execMatch sees them
-			// in signature order.
-			n := len(match.Sig.Args)
-			e.rearrangeForForward(n, 0)
-			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
-			return e.execMatch(match)
+		if !insideForward {
+			// No forward tokens or no forward match — try reversed stack match
+			// (top of stack → sigArgs[0]).
+			match := MatchSignatureReversed(fn.Signatures, resolved, w)
+			if match != nil && len(match.Sig.Args) > 0 {
+				// Physically reverse the top N values so execMatch sees them
+				// in signature order.
+				n := len(match.Sig.Args)
+				e.rearrangeForForward(n, 0)
+				e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
+				return e.execMatch(match)
+			}
 		}
 
 		// Fall back to 0-arg match (generic def handler).
@@ -1170,13 +1183,8 @@ func (e *Engine) couldProduceType(v Value, expected Type) bool {
 			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
 				return w.Name == "fn"
 			}
-			// A function with forward precedence will start its own
-			// argument collection, so it won't directly produce a
-			// value that feeds back as a forward arg for the current
-			// forward. Resolve the current forward early.
-			if fn.ForwardPrecedence {
-				return false
-			}
+			// A forward-precedence function will start its own argument
+			// collection and produce a result, like a sub-expression.
 			return true
 		}
 		// Unknown word → becomes atom.
@@ -1702,6 +1710,21 @@ func (e *Engine) effectiveResolved() []Value {
 	return resolved
 }
 
+// isInsidePendingForward returns true if the current pointer is within the
+// collection scope of a pending forward (i.e., another function is waiting
+// to collect this function's result as a forward arg).
+func (e *Engine) isInsidePendingForward() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			return false
+		}
+		if e.stack[i].IsForward() {
+			return true
+		}
+	}
+	return false
+}
+
 // hasForwardValues checks whether there are collectible value tokens after the
 // current pointer. Literals and unknown words are collectible. Known function
 // words are not directly collectible (they execute via stepWord), so they
@@ -1732,8 +1755,14 @@ func (e *Engine) hasForwardValues(fn *Function) bool {
 				}
 			}
 		}
-		if e.registry.Lookup(nw.Name) != nil {
-			// Known function — only collectible if fn expects TWord or TFunction args.
+		if knownFn := e.registry.Lookup(nw.Name); knownFn != nil {
+			// Forward-precedence functions act like sub-expressions:
+			// they will execute, collect their own forward args, and
+			// produce a result value for the outer forward.
+			if knownFn.ForwardPrecedence {
+				return true
+			}
+			// Stack-only functions: only collectible if fn expects TWord or TFunction args.
 			for si := range fn.Signatures {
 				for _, argType := range fn.Signatures[si].Args {
 					if argType.Equal(TWord) || argType.Equal(TFunction) {
