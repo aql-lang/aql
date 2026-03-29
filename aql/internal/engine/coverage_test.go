@@ -1171,7 +1171,7 @@ func TestTraceColorize(t *testing.T) {
 		want string
 	}{
 		{NewWord("add"), "add"},
-		{NewWordModified("x", -1, true, false), "x/p"},
+		{NewWordModified("x", -1, true, false), "x/s"},
 		{NewWordModified("x", -1, false, true), "x/f"},
 		{NewString("hi"), `"hi"`},
 		{NewInteger(42), "42"},

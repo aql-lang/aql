@@ -8,7 +8,7 @@ import (
 )
 
 // cloneFunc returns the "clone" native function definition.
-// clone is prefix-only and has one signature:
+// clone is stack-only and has one signature:
 //   - [any] — deep-clones the value
 func cloneFunc() NativeFunc {
 	return NativeFunc{

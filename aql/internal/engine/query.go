@@ -356,7 +356,7 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 // except, cast, and aggregate words.
 func registerQuery(r *Registry) {
 	// star: [] -> [atom("*")]
-	r.RegisterPrefixOnly("star", Signature{
+	r.RegisterStackOnly("star", Signature{
 		Handler: func(_ []Value) ([]Value, error) {
 			return []Value{NewAtom("*")}, nil
 		},

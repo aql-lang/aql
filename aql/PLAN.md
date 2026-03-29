@@ -94,7 +94,7 @@ type Value struct {
 func NewString(s string) Value       // VType: string/proper (or string/empty if "")
 func NewInteger(n int64) Value       // VType: number/integer
 func NewWord(name string) Value      // VType: word — a function reference
-func NewWordModified(name string, argCount int, forcePrefix, forceForward bool) Value // e.g. lower/1f, lower/p
+func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value // e.g. lower/1f, lower/s
 func NewForward(info ForwardInfo) Value  // VType: forward
 ```
 
@@ -104,7 +104,7 @@ func NewForward(info ForwardInfo) Value  // VType: forward
 type WordInfo struct {
     Name        string
     ArgCount    int   // -1 = unspecified
-    ForcePrefix bool  // lower/p
+    ForceStack bool  // lower/s
     ForceForward bool  // lower/f
 }
 ```
@@ -148,10 +148,10 @@ type Signature struct {
 ```
 
 **Matching algorithm** — given a function name, the resolved stack, and
-optional modifiers (forcePrefix via /p, forceForward via /f, argCount via /N):
+optional modifiers (forceStack via /s, forceForward via /f, argCount via /N):
 
 1. Collect all signatures for the function.
-2. Filter by modifiers: if `forcePrefix` (word/p), discard signatures with forward args;
+2. Filter by modifiers: if `forceStack` (word/s), discard signatures with forward args;
    if `forceForward` (word/f), discard signatures with only prefix args;
    if `argCount >= 0` (word/N), discard signatures where total args != argCount.
 3. For each remaining signature, check if the prefix portion matches the top
@@ -159,7 +159,7 @@ optional modifiers (forcePrefix via /p, forceForward via /f, argCount via /N):
 4. Suffix signatures are **always candidates** — they don't require the future
    values to exist yet (those will be collected by the forward mechanism).
 5. Rank matches by **specificity**: total arg count (longer wins), then sum of
-   type specificities (narrower wins). Prefix-only wins over forward on ties.
+   type specificities (narrower wins). Stack-only wins over forward on ties.
 6. Return the best match, or nil if none.
 
 ---
@@ -350,7 +350,7 @@ All tests use typed Values directly — no lexing or parsing.
 ```go
 {name: "lower/1 D", input: []Value{NewWordModified("lower",1,false,true), NewString("D")}, want: []Value{NewString("d")}}
 {name: "lower/f E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
-{name: "F lower/p",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
+{name: "F lower/s",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
 ```
 
 **Forth primitive tests:**

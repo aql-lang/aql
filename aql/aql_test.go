@@ -441,7 +441,7 @@ func TestRunDefaultBranch(t *testing.T) {
 	}
 }
 
-// --- Register / RegisterPrefixOnly ---
+// --- Register / RegisterStackOnly ---
 
 func TestRegisterForwardWord(t *testing.T) {
 	a, err := aql.New()
@@ -489,13 +489,13 @@ func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyWord(t *testing.T) {
+func TestRegisterStackOnlyWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "neg" as prefix-only: 5 neg => -5
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	// Register "neg" as stack-only: 5 neg => -5
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			n := args[0].AsInteger()
@@ -512,12 +512,12 @@ func TestRegisterPrefixOnlyWord(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyDoesNotCollectForward(t *testing.T) {
+func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			n := args[0].AsInteger()
@@ -525,11 +525,11 @@ func TestRegisterPrefixOnlyDoesNotCollectForward(t *testing.T) {
 		},
 	})
 
-	// "neg 5" — neg is prefix-only so it should not consume 5 from forward.
+	// "neg 5" — neg is stack-only so it should not consume 5 from forward.
 	// Without a value on the stack, it should error.
 	_, err = a.Run("neg 5")
 	if err == nil {
-		t.Fatal("expected error: neg is prefix-only and has no prefix args")
+		t.Fatal("expected error: neg is stack-only and has no prefix args")
 	}
 }
 

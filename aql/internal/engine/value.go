@@ -294,7 +294,7 @@ type ModuleDesc struct {
 type WordInfo struct {
 	Name        string
 	ArgCount    int  // -1 = unspecified
-	ForcePrefix bool // lower/p
+	ForceStack bool // lower/s
 	ForceForward bool // lower/f
 }
 
@@ -482,11 +482,11 @@ func NewWord(name string) Value {
 }
 
 // NewWordModified creates a word value with explicit modifiers.
-func NewWordModified(name string, argCount int, forcePrefix, forceForward bool) Value {
+func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
 		Name:        name,
 		ArgCount:    argCount,
-		ForcePrefix: forcePrefix,
+		ForceStack: forceStack,
 		ForceForward: forceForward,
 	})
 }

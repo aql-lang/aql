@@ -1494,8 +1494,8 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def doubler/p fn [[x:integer] [integer] [x x add]] end
-	// doubler/p registers as prefix-only: takes args from the stack only,
+	// def doubler/s fn [[x:integer] [integer] [x x add]] end
+	// doubler/s registers as stack-only: takes args from the stack only,
 	// never collects forward args via forward.
 	fnBody := NewList([]Value{
 		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
@@ -1517,8 +1517,8 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def doubler/p fn [[x:integer] [integer] [x x add]] end
-	// doubler 5 — prefix-only word should NOT collect 5 as forward arg.
+	// def doubler/s fn [[x:integer] [integer] [x x add]] end
+	// doubler 5 — stack-only word should NOT collect 5 as forward arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
 		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),

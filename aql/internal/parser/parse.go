@@ -853,12 +853,12 @@ func sortedKeys(m map[string]any) []string {
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling
-// modifier syntax: name/f (forceForward), name/p (forcePrefix), name/N (argCount),
-// and combinations like name/1f or name/2p.
+// modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
+// and combinations like name/1f or name/2s.
 func parseWord(text string) (engine.Value, error) {
 	name := text
 	argCount := -1
-	forcePrefix := false
+	forceStack := false
 	forceForward := false
 
 	// Check for /... modifier suffix.
@@ -866,7 +866,7 @@ func parseWord(text string) (engine.Value, error) {
 		mod := name[idx+1:]
 		name = name[:idx]
 
-		// Parse optional digits followed by optional 'f' or 'p'.
+		// Parse optional digits followed by optional 'f' or 's'.
 		digits := ""
 		rest := mod
 		for i, c := range rest {
@@ -891,8 +891,8 @@ func parseWord(text string) (engine.Value, error) {
 		switch rest {
 		case "f":
 			forceForward = true
-		case "p":
-			forcePrefix = true
+		case "s":
+			forceStack = true
 		case "":
 			// digits only, no mode flag
 			if digits == "" {
@@ -909,8 +909,8 @@ func parseWord(text string) (engine.Value, error) {
 		return engine.Value{}, fmt.Errorf("empty word")
 	}
 
-	if forcePrefix || forceForward || argCount >= 0 {
-		return engine.NewWordModified(name, argCount, forcePrefix, forceForward), nil
+	if forceStack || forceForward || argCount >= 0 {
+		return engine.NewWordModified(name, argCount, forceStack, forceForward), nil
 	}
 
 	// Type names resolve to type literals even in word context, so that

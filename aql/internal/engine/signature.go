@@ -40,7 +40,7 @@ type MatchResult struct {
 // resolved stack and optional word modifiers.
 //
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
-// modifiers control filtering (forcePrefix, forceForward, argCount).
+// modifiers control filtering (forceStack, forceForward, argCount).
 //
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {

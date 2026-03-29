@@ -425,7 +425,7 @@ func init() {
 		Word:    "math-pi",
 		Summary: "Push the constant pi onto the stack.",
 		Signatures: []string{"[] -> [decimal]"},
-		Description: "Pushes the mathematical constant pi (3.14159...). Prefix-only.",
+		Description: "Pushes the mathematical constant pi (3.14159...). Stack-only.",
 		Examples: []string{
 			`math-pi              => 3.141592653589793`,
 			`math-pi 2 mul        => 6.283185307179586`,
@@ -438,7 +438,7 @@ func init() {
 		Word:    "math-e",
 		Summary: "Push Euler's number e onto the stack.",
 		Signatures: []string{"[] -> [decimal]"},
-		Description: "Pushes the mathematical constant e (2.71828...). Prefix-only.",
+		Description: "Pushes the mathematical constant e (2.71828...). Stack-only.",
 		Examples: []string{
 			`math-e               => 2.718281828459045`,
 			`math-e 2.0 div       => 1.3591409142295225`,

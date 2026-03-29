@@ -42,7 +42,7 @@ func Register(r *engine.Registry) {
 			if fn.ForwardPrecedence {
 				r.Register(fn.Name, s)
 			} else {
-				r.RegisterPrefixOnly(fn.Name, s)
+				r.RegisterStackOnly(fn.Name, s)
 			}
 		}
 	}

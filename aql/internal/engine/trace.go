@@ -26,8 +26,8 @@ func traceColorize(v Value) string {
 	switch {
 	case v.IsWord():
 		w := v.AsWord()
-		if w.ForcePrefix {
-			return cYellow + w.Name + "/p" + cReset
+		if w.ForceStack {
+			return cYellow + w.Name + "/s" + cReset
 		}
 		if w.ForceForward {
 			return cYellow + w.Name + "/f" + cReset

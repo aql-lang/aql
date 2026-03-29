@@ -21,8 +21,8 @@ Some words can use future tokens as if they were on the stack
 already. This is called forward precedence.
 
 All words should use forward precedence unless explicitly defined to
-have prefix only args. The traditional forth words such as dup, swap,
-drop, etc always have prefix only args. Everything else has forward
+have stack only args. The traditional forth words such as dup, swap,
+drop, etc always have stack only args. Everything else has forward
 precedence. For forward precedence, the engine signature matching
 should attempt to find the longest and most specific match against
 future tokens. Partial matches are then completed by looking prefix
@@ -68,9 +68,9 @@ __lower__:
 > `99 lower` -> _[99 lower]_ SIGNATURE ERROR
 > `lower/1 D` -> _['d']_ - disambiguate expected arg count
 > `lower/f E` -> _['e']_ - force forward args
-> `F lower/p` -> _['f']_ - force prefix args
+> `F lower/s` -> _['f']_ - force stack args
 > `lower/1f E` -> _['e']_ - force forward args, fix args
-> `F lower/1p` -> _['f']_ - force prefix args, fix args
+> `F lower/1s` -> _['f']_ - force stack args, fix args
 
 
 
@@ -121,8 +121,8 @@ lists in reverse stack order.
 By default all words have forward precedence. This means they are
 eligible to collect arguments from future tokens. When prefix arguments
 are available on the stack, prefix matching is tried first; forward
-matching acts as a fallback. When invoked, to force prefix only, append
-/p to the word name. To force forward only, use /f.
+matching acts as a fallback. When invoked, to force stack only, append
+/s to the word name. To force forward only, use /f.
 
 This can also be used when defining the word, to indicate default behaviour. But this can
 always be overridden in situ.
@@ -202,14 +202,14 @@ word can then proceed normally, as if the values had been prefix values all alon
 
 
 
-The default argument precedence can be specified using a /p or /f modifier in the definition:
+The default argument precedence can be specified using a /s or /f modifier in the definition:
 
-* `def foo/p ...` - only use prefix args.
+* `def foo/s ...` - only use prefix args.
 
 
 ## Traditional Forth-style Builtins
 
-Words such as dup, swap, drop, etc, taken directly from forth, are considered defined with /p, and only operate on the stack by default. 
+Words such as dup, swap, drop, etc, taken directly from forth, are considered defined with /s, and only operate on the stack by default. 
 
 * [1|] -> `dup` -> [1 1|]
 * [2 3|] -> `swap` -> [3 2|]

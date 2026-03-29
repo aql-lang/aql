@@ -120,7 +120,7 @@ lower "XYZ"	'xyz'
 
 # === Modifiers ===
 lower/f "E"	'e'
-"F" lower/p	'f'
+"F" lower/s	'f'
 lower/1 "G"	'g'
 lower/1f "H"	'h'
 

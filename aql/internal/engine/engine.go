@@ -334,13 +334,13 @@ func (e *Engine) stepWord(val Value) error {
 		return nil
 	}
 
-	if w.ForcePrefix {
+	if w.ForceStack {
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
 		if match == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
-		e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
+		e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
 		return e.execMatch(match)
 	}
 
@@ -407,7 +407,7 @@ func (e *Engine) stepWord(val Value) error {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
 
-	// Prefix-only function (dup, swap, drop).
+	// Stack-only function (dup, swap, drop).
 	resolved := e.effectiveResolved()
 	match := MatchSignature(fn.Signatures, resolved, w)
 	if match == nil {
@@ -1803,7 +1803,7 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 			resolved = append(resolved, v)
 		}
 
-		testW := WordInfo{Name: w.Name, ArgCount: -1, ForcePrefix: true}
+		testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
 		match := MatchSignature(fn.Signatures, resolved, testW)
 		if match != nil {
 			// Prefix match works - proceed normally.

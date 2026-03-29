@@ -64,7 +64,7 @@ lower B	'b'
 
 # Modifiers
 lower/f "E"	'e'
-"F" lower/p	'f'
+"F" lower/s	'f'
 
 # Set/Get
 set foo 99 end get foo	99

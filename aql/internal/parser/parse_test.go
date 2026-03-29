@@ -16,7 +16,7 @@ func valuesEqual(a, b engine.Value) bool {
 		aw, bw := a.AsWord(), b.AsWord()
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
-			aw.ForcePrefix == bw.ForcePrefix &&
+			aw.ForceStack == bw.ForceStack &&
 			aw.ForceForward == bw.ForceForward
 	case a.IsOpenParen():
 		return true
@@ -262,9 +262,9 @@ func TestParseForceForwardModifier(t *testing.T) {
 	})
 }
 
-func TestParseForcePrefixModifier(t *testing.T) {
-	// lower/p
-	assertParse(t, "lower/p", []engine.Value{
+func TestParseForceStackModifier(t *testing.T) {
+	// lower/s
+	assertParse(t, "lower/s", []engine.Value{
 		engine.NewWordModified("lower", -1, true, false),
 	})
 }
@@ -276,9 +276,9 @@ func TestParseArgCountAndForwardModifier(t *testing.T) {
 	})
 }
 
-func TestParseArgCountAndPrefixModifier(t *testing.T) {
-	// lower/1p
-	assertParse(t, "lower/1p", []engine.Value{
+func TestParseArgCountAndStackModifier(t *testing.T) {
+	// lower/1s
+	assertParse(t, "lower/1s", []engine.Value{
 		engine.NewWordModified("lower", 1, true, false),
 	})
 }
@@ -964,7 +964,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 }
 
 func TestExpandDottedLeadingSingle(t *testing.T) {
-	// ".x" → leading dot, just x dot/p
+	// ".x" → leading dot, just x dot/s
 	assertExpand(t, ".x", []engine.Value{
 		engine.NewWord("x"),
 		engine.NewWordModified("dot", -1, true, false),
@@ -1171,9 +1171,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList()
-	// ( foo bar dot/p ) = 5 elements
+	// ( foo bar dot/s ) = 5 elements
 	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements (( foo bar dot/p )), got %d", len(elems))
+		t.Fatalf("expected 5 elements (( foo bar dot/s )), got %d", len(elems))
 	}
 }
 
@@ -1286,7 +1286,7 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	}
 	// 1 ( foo bar dot ) = 6 values
 	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo bar dot/p )), got %d", len(got))
+		t.Fatalf("expected 6 values (1 ( foo bar dot/s )), got %d", len(got))
 	}
 }
 
@@ -1690,7 +1690,7 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		ok    bool
 	}{
 		{"hello", "hello", true},
-		{"foo/2p", "foo", true},
+		{"foo/2s", "foo", true},
 		{"foo/0", "foo", true},
 		{"foo/bad", "foo/bad", true},   // unrecognized modifier
 		{"foo/", "foo/", true},         // slash at end not processed

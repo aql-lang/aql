@@ -1436,10 +1436,10 @@ func TestEngineCoreImportFileNoParser(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCoreForcePrefix — force prefix via WordInfo
+// TestEngineCoreForceStack — force prefix via WordInfo
 // =============================================================================
 
-func TestEngineCoreForcePrefix(t *testing.T) {
+func TestEngineCoreForceStack(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Force prefix on add: both args must be before the word
 	result := runAQL(t, r, []Value{
@@ -1451,7 +1451,7 @@ func TestEngineCoreForcePrefix(t *testing.T) {
 	}
 }
 
-func TestEngineCoreForcePrefixNoMatchError(t *testing.T) {
+func TestEngineCoreForceStackNoMatchError(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Force prefix with no matching args
 	err := runAQLError(t, r, []Value{

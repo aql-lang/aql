@@ -160,21 +160,21 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
-// RegisterPrefixOnly adds a named word with one or more signatures that
+// RegisterStackOnly adds a named word with one or more signatures that
 // only match prefix arguments (values already on the stack before the word).
 // No forward argument collection is attempted.
 //
-// Example — register a prefix-only word "neg" that negates an integer:
+// Example — register a stack-only word "neg" that negates an integer:
 //
-//	a.RegisterPrefixOnly("neg", aql.Signature{
+//	a.RegisterStackOnly("neg", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
 //	    Handler: func(args []aql.Value) ([]aql.Value, error) {
 //	        n := args[0].AsInteger()
 //	        return []aql.Value{aql.NewInteger(-n)}, nil
 //	    },
 //	})
-func (a *AQL) RegisterPrefixOnly(name string, sigs ...Signature) {
-	a.registry.RegisterPrefixOnly(name, sigs...)
+func (a *AQL) RegisterStackOnly(name string, sigs ...Signature) {
+	a.registry.RegisterStackOnly(name, sigs...)
 }
 
 // SetSDK injects an SDK instance for the given spec name.

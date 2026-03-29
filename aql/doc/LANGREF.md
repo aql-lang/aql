@@ -296,7 +296,7 @@ lower "ABC"     => 'abc'
 
 By default most words have *forward precedence*: when prefix arguments
 are available they are tried first; forward collection is the fallback.
-Stack-manipulation words (`dup`, `swap`, `drop`) are prefix-only by
+Stack-manipulation words (`dup`, `swap`, `drop`) are stack-only by
 default.
 
 
@@ -306,15 +306,15 @@ Append a modifier to a word name to override argument behaviour.
 
 | Modifier | Meaning                              |
 |----------|--------------------------------------|
-| `/p`     | Force prefix-only arguments          |
+| `/s`     | Force stack-only arguments          |
 | `/f`     | Force forward-only arguments          |
 | `/N`     | Expect exactly N arguments           |
 | `/Nf`    | Expect N arguments, forward only      |
-| `/Np`    | Expect N arguments, prefix only      |
+| `/Ns`    | Expect N arguments, stack only      |
 
 ```
 lower/f "E"     => 'e'
-"F" lower/p     => 'f'
+"F" lower/s     => 'f'
 lower/1 "G"     => 'g'
 lower/1f "H"    => 'h'
 ```
@@ -1006,7 +1006,7 @@ Compute the hypotenuse length: `sqrt(x*x + y*y)` without overflow.
 
 #### `math-pi`
 
-Push the constant *π* (3.14159...). Prefix-only.
+Push the constant *π* (3.14159...). Stack-only.
 
 *Signature:* `[] -> [decimal]`
 
@@ -1017,7 +1017,7 @@ math-pi 2 mul       => 6.283185307179586
 
 #### `math-e`
 
-Push Euler's number *e* (2.71828...). Prefix-only.
+Push Euler's number *e* (2.71828...). Stack-only.
 
 *Signature:* `[] -> [decimal]`
 
@@ -1300,7 +1300,7 @@ convert 255 string {base:hex, size:1}     => 'f'
 
 ### Stack Words
 
-Stack words are prefix-only by default.
+Stack words are stack-only by default.
 
 #### `dup`
 
@@ -1845,7 +1845,7 @@ designed for invoking callback lists in higher-order patterns.
 #### `args`
 
 Push the current function's argument list onto the stack. Only
-available inside a `fn`-defined function. Prefix-only.
+available inside a `fn`-defined function. Stack-only.
 
 *Signature:* `[] -> [list]`
 
@@ -2367,7 +2367,7 @@ The range is exclusive of the end value (like Go's `for i := start; i < end; i +
 
 #### `break`
 
-Exit the current `for` loop immediately. Prefix-only.
+Exit the current `for` loop immediately. Stack-only.
 
 *Signature:* `[] -> []`
 
@@ -2378,7 +2378,7 @@ for 5 [if [i eq 3] [break] i]  => 0 1 2
 #### `continue`
 
 Skip the rest of the current iteration and advance to the next.
-Prefix-only.
+Stack-only.
 
 *Signature:* `[] -> []`
 
@@ -2798,7 +2798,7 @@ select [[cast age integer]] from people
 
 #### `star`
 
-Push the wildcard column selector (`*`). Prefix-only.
+Push the wildcard column selector (`*`). Stack-only.
 
 *Signature:* `[] -> [atom]`
 

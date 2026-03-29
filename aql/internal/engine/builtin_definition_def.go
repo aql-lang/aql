@@ -13,11 +13,11 @@ func defName(v Value) string {
 	return v.AsString()
 }
 
-// defPrefixOnly returns true if the name word carries the /p modifier,
-// indicating the defined word should be prefix-only (not forward precedence).
-func defPrefixOnly(v Value) bool {
+// defStackOnly returns true if the name word carries the /s modifier,
+// indicating the defined word should be stack-only (not forward precedence).
+func defStackOnly(v Value) bool {
 	if v.IsWord() {
-		return v.AsWord().ForcePrefix
+		return v.AsWord().ForceStack
 	}
 	return false
 }
@@ -40,9 +40,9 @@ func registerDef(r *Registry) {
 	// All-forward handler: "def foo 42 end" → args=[foo(name), 42(body)]
 	defForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
-		prefixOnly := defPrefixOnly(args[0])
+		stackOnly := defStackOnly(args[0])
 		body := args[1]
-		installDef(r, name, body, prefixOnly)
+		installDef(r, name, body, stackOnly)
 		return nil, nil
 	}
 
@@ -50,8 +50,8 @@ func registerDef(r *Registry) {
 	defInfixHandler := func(args []Value) ([]Value, error) {
 		body := args[0]
 		name := defName(args[1])
-		prefixOnly := defPrefixOnly(args[1])
-		installDef(r, name, body, prefixOnly)
+		stackOnly := defStackOnly(args[1])
+		installDef(r, name, body, stackOnly)
 		return nil, nil
 	}
 
@@ -84,11 +84,11 @@ func registerDef(r *Registry) {
 // When body is a FnDefInfo value (produced by the fn word), installDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
-func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
-	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
+	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	registerFn := r.Register
-	if isPrefixOnly {
-		registerFn = r.RegisterPrefixOnly
+	if isStackOnly {
+		registerFn = r.RegisterStackOnly
 	}
 	if len(r.DefStacks[name]) == 0 {
 		// First definition: register one generic fallback handler
@@ -164,13 +164,13 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				}
 				for _, entry := range filtered {
 					if fd, ok := entry.Data.(FnDefInfo); ok {
-						installFnDef(r, name, fd, isPrefixOnly)
+						installFnDef(r, name, fd, isStackOnly)
 					}
 				}
 			}
 		}
 
-		installFnDef(r, name, fnDef, isPrefixOnly)
+		installFnDef(r, name, fnDef, isStackOnly)
 		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
 		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
 		return

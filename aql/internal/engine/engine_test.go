@@ -280,7 +280,7 @@ func TestSwapForward(t *testing.T) {
 }
 
 func TestSwapInfix(t *testing.T) {
-	// 1 swap 2 → error (swap is prefix-only in the new model)
+	// 1 swap 2 → error (swap is stack-only in the new model)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -290,7 +290,7 @@ func TestSwapInfix(t *testing.T) {
 		NewInteger(1), NewWord("swap"), NewInteger(2),
 	})
 	if err == nil {
-		t.Fatal("expected error for swap infix (swap is prefix-only), got nil")
+		t.Fatal("expected error for swap infix (swap is stack-only), got nil")
 	}
 }
 
@@ -648,8 +648,8 @@ func TestForceForward(t *testing.T) {
 	}
 }
 
-func TestForcePrefix(t *testing.T) {
-	// F lower/p -> 'f' (force prefix, no forward considered)
+func TestForceStack(t *testing.T) {
+	// F lower/s -> 'f' (force stack, no forward considered)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2163,8 +2163,8 @@ func TestEdgePrefixChain(t *testing.T) {
 
 // --- Edge: modifiers ---
 
-func TestEdgeForcePrefixOnForwardOnlyLower(t *testing.T) {
-	// lower/p with no prefix arg → error (force prefix but no string on stack)
+func TestEdgeForceStackOnForwardOnlyLower(t *testing.T) {
+	// lower/s with no stack arg → error (force stack but no string on stack)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2221,8 +2221,8 @@ func TestEdgeArgCountMismatch(t *testing.T) {
 	}
 }
 
-func TestEdgeForcePrefixAdd(t *testing.T) {
-	// 1 2 add/p → 3 (force prefix on add)
+func TestEdgeForceStackAdd(t *testing.T) {
+	// 1 2 add/s → 3 (force stack on add)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)

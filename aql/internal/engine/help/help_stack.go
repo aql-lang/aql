@@ -5,7 +5,7 @@ func init() {
 		Word:    "dup",
 		Summary: "Duplicate the top stack value.",
 		Signatures: []string{"[a] -> [a a]"},
-		Description: "Copies the top value, pushing the copy onto the stack. Prefix-only.",
+		Description: "Copies the top value, pushing the copy onto the stack. Stack-only.",
 		Examples: []string{
 			`5 dup                => 5 5`,
 			`"hi" dup             => 'hi' 'hi'`,
@@ -18,7 +18,7 @@ func init() {
 		Word:    "swap",
 		Summary: "Swap the top two stack values.",
 		Signatures: []string{"[a b] -> [b a]"},
-		Description: "Exchanges the positions of the top two values. Prefix-only.",
+		Description: "Exchanges the positions of the top two values. Stack-only.",
 		Examples: []string{
 			`1 2 swap             => 2 1`,
 			`"a" "b" swap         => 'b' 'a'`,
@@ -31,7 +31,7 @@ func init() {
 		Word:    "drop",
 		Summary: "Remove the top stack value.",
 		Signatures: []string{"[a] -> []"},
-		Description: "Discards the top value from the stack. Prefix-only.",
+		Description: "Discards the top value from the stack. Stack-only.",
 		Examples: []string{
 			`1 2 drop             => 1`,
 			`1 2 3 drop           => 1 2`,
@@ -44,7 +44,7 @@ func init() {
 		Word:    "over",
 		Summary: "Copy the second value to the top.",
 		Signatures: []string{"[a b] -> [a b a]"},
-		Description: "Copies the value below the top and pushes it on top. Prefix-only.",
+		Description: "Copies the value below the top and pushes it on top. Stack-only.",
 		Examples: []string{
 			`1 2 over             => 1 2 1`,
 			`3 5 over             => 3 5 3`,
@@ -57,7 +57,7 @@ func init() {
 		Word:    "rot",
 		Summary: "Rotate the top three values.",
 		Signatures: []string{"[a b c] -> [b c a]"},
-		Description: "Moves the third value to the top: a b c rot becomes b c a. Prefix-only.",
+		Description: "Moves the third value to the top: a b c rot becomes b c a. Stack-only.",
 		Examples: []string{
 			`1 2 3 rot            => 2 3 1`,
 			`"a" "b" "c" rot      => 'b' 'c' 'a'`,
@@ -70,7 +70,7 @@ func init() {
 		Word:    "nip",
 		Summary: "Remove the second stack value.",
 		Signatures: []string{"[a b] -> [b]"},
-		Description: "Discards the value below the top. Equivalent to swap drop. Prefix-only.",
+		Description: "Discards the value below the top. Equivalent to swap drop. Stack-only.",
 		Examples: []string{
 			`1 2 nip              => 2`,
 			`"a" "b" nip          => 'b'`,
@@ -83,7 +83,7 @@ func init() {
 		Word:    "tuck",
 		Summary: "Copy the top value below the second value.",
 		Signatures: []string{"[a b] -> [b a b]"},
-		Description: "Copies the top value and inserts it below the second. Equivalent to swap over. Prefix-only.",
+		Description: "Copies the top value and inserts it below the second. Equivalent to swap over. Stack-only.",
 		Examples: []string{
 			`1 2 tuck             => 2 1 2`,
 			`"a" "b" tuck         => 'b' 'a' 'b'`,
@@ -96,7 +96,7 @@ func init() {
 		Word:    "2dup",
 		Summary: "Duplicate the top two stack values.",
 		Signatures: []string{"[a b] -> [a b a b]"},
-		Description: "Copies the top two values as a pair. Prefix-only.",
+		Description: "Copies the top two values as a pair. Stack-only.",
 		Examples: []string{
 			`1 2 2dup             => 1 2 1 2`,
 			`3 4 2dup add         => 3 4 7`,
@@ -109,7 +109,7 @@ func init() {
 		Word:    "2swap",
 		Summary: "Swap the top two pairs of values.",
 		Signatures: []string{"[a b c d] -> [c d a b]"},
-		Description: "Exchanges the top pair with the pair below. Prefix-only.",
+		Description: "Exchanges the top pair with the pair below. Stack-only.",
 		Examples: []string{
 			`1 2 3 4 2swap        => 3 4 1 2`,
 			`"a" "b" "c" "d" 2swap => 'c' 'd' 'a' 'b'`,
@@ -122,7 +122,7 @@ func init() {
 		Word:    "2drop",
 		Summary: "Remove the top two stack values.",
 		Signatures: []string{"[a b] -> []"},
-		Description: "Discards the top two values. Prefix-only.",
+		Description: "Discards the top two values. Stack-only.",
 		Examples: []string{
 			`1 2 3 2drop          => 1`,
 			`1 2 3 4 2drop        => 1 2`,
@@ -135,7 +135,7 @@ func init() {
 		Word:    "2over",
 		Summary: "Copy the second pair to the top.",
 		Signatures: []string{"[a b c d] -> [a b c d a b]"},
-		Description: "Copies the pair below the top pair and pushes them on top. Prefix-only.",
+		Description: "Copies the pair below the top pair and pushes them on top. Stack-only.",
 		Examples: []string{
 			`1 2 3 4 2over        => 1 2 3 4 1 2`,
 			`10 20 30 40 2over    => 10 20 30 40 10 20`,
@@ -148,7 +148,7 @@ func init() {
 		Word:    "depth",
 		Summary: "Push the current stack depth.",
 		Signatures: []string{"[] -> [integer]"},
-		Description: "Pushes the number of values currently on the stack. Prefix-only.",
+		Description: "Pushes the number of values currently on the stack. Stack-only.",
 		Examples: []string{
 			`depth                => 0`,
 			`1 depth              => 1 1`,
@@ -162,7 +162,7 @@ func init() {
 		Summary: "Copy the nth value from the top.",
 		Signatures: []string{"[integer] -> [value]"},
 		Description: "Copies the value at depth n (0 = top) onto the top. " +
-			"0 pick is equivalent to dup. Prefix-only.",
+			"0 pick is equivalent to dup. Stack-only.",
 		Examples: []string{
 			`1 2 3 0 pick         => 1 2 3 3`,
 			`1 2 3 1 pick         => 1 2 3 2`,
@@ -177,7 +177,7 @@ func init() {
 		Summary: "Move the nth value to the top.",
 		Signatures: []string{"[integer] -> [value]"},
 		Description: "Removes the value at depth n and places it on top. " +
-			"1 roll is equivalent to swap; 2 roll is equivalent to rot. Prefix-only.",
+			"1 roll is equivalent to swap; 2 roll is equivalent to rot. Stack-only.",
 		Examples: []string{
 			`1 2 3 1 roll         => 1 3 2`,
 			`1 2 3 2 roll         => 2 3 1`,

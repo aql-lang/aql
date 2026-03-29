@@ -92,7 +92,7 @@ func init() {
 		Word:    "stdin",
 		Summary: "Push the stdin path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stdin>\" for use with read. Prefix-only.",
+		Description: "Pushes the special path \"<stdin>\" for use with read. Stack-only.",
 		Examples: []string{
 			`stdin read                     => (reads all of standard input)`,
 			`stdin                          => '<stdin>'`,
@@ -105,7 +105,7 @@ func init() {
 		Word:    "stdout",
 		Summary: "Push the stdout path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stdout>\" for use with write. Prefix-only.",
+		Description: "Pushes the special path \"<stdout>\" for use with write. Stack-only.",
 		Examples: []string{
 			`stdout "hello" write           (writes hello to stdout)`,
 			`stdout                         => '<stdout>'`,
@@ -118,7 +118,7 @@ func init() {
 		Word:    "stderr",
 		Summary: "Push the stderr path string.",
 		Signatures: []string{"[] -> [string]"},
-		Description: "Pushes the special path \"<stderr>\" for use with write. Prefix-only.",
+		Description: "Pushes the special path \"<stderr>\" for use with write. Stack-only.",
 		Examples: []string{
 			`stderr "error!" write          (writes to stderr)`,
 			`stderr                         => '<stderr>'`,

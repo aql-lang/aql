@@ -13,7 +13,7 @@ import (
 type Function struct {
 	Name             string
 	Signatures       []Signature
-	ForwardPrecedence bool // true = engine tries forward-first; false = prefix-only
+	ForwardPrecedence bool // true = engine tries forward-first; false = stack-only
 }
 
 // TypeDef describes a named complex type in the type registry.
@@ -135,8 +135,8 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	fn.Signatures = append(fn.Signatures, sigs...)
 }
 
-// RegisterPrefixOnly adds signatures to a named function without forward precedence.
-func (r *Registry) RegisterPrefixOnly(name string, sigs ...Signature) {
+// RegisterStackOnly adds signatures to a named function without forward precedence.
+func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 	fn, ok := r.funcs[name]
 	if !ok {
 		fn = &Function{Name: name, ForwardPrecedence: false}
