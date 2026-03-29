@@ -6,8 +6,9 @@ func registerAdd(r *Registry) {
 	// String concatenation for add: [TScalar, TScalar] converts both
 	// args to strings and concatenates. More specific signatures
 	// (e.g. [TInteger, TInteger]) win due to higher specificity.
+	// Swap: `a add b` means a+b, so concat args[1]+args[0].
 	concatHandler := func(args []Value) ([]Value, error) {
-		return []Value{NewString(valToString(args[0]) + valToString(args[1]))}, nil
+		return []Value{NewString(valToString(args[1]) + valToString(args[0]))}, nil
 	}
 	r.Register("add", Signature{
 		Args:       []Type{TScalar, TScalar},

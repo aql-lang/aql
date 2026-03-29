@@ -4,10 +4,11 @@ func registerIs(r *Registry) {
 	// is: [any, any] -> [boolean]
 	// Returns true if a unifies with b and the result equals a.
 	// This is a type/value check: "42 is Number" → true, "42 is String" → false.
+	// Swap: `a is Type` means check a against Type, so a=args[1], b=args[0].
 	r.Register("is", Signature{
 		Args:       []Type{TAny, TAny},
 		Handler: func(args []Value) ([]Value, error) {
-			a, b := args[0], args[1]
+			a, b := args[1], args[0]
 			unified, ok := Unify(a, b)
 			if !ok {
 				return []Value{NewBoolean(false)}, nil
