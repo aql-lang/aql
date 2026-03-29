@@ -20,9 +20,9 @@ func TestEngineCoreStepEndMultipleEnds(t *testing.T) {
 	}
 }
 
-func TestEngineCoreStepEndTerminatesSuffixAdd(t *testing.T) {
+func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// "end" should terminate a suffix expression: 10 add 20 end 99
+	// "end" should terminate a forward expression: 10 add 20 end 99
 	// The add consumes 10 and 20 via end, leaving 30 and 99
 	result := runAQL(t, r, []Value{
 		NewInteger(10), NewWord("add"), NewInteger(20), NewWord("end"), NewInteger(99),
@@ -818,12 +818,12 @@ func TestEngineCoreBaseValueForConstraintConcreteError(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCorePeekSuffixValue — peek at suffix value resolution
+// TestEngineCorePeekForwardValue — peek at forward value resolution
 // =============================================================================
 
-func TestEngineCorePeekSuffixBoolTrue(t *testing.T) {
+func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// "true" as suffix should resolve to boolean
+	// "true" as forward should resolve to boolean
 	// Test indirectly: def myval true end myval => true
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("trueVal"), NewWord("true"), NewWord("end"),
@@ -834,7 +834,7 @@ func TestEngineCorePeekSuffixBoolTrue(t *testing.T) {
 	}
 }
 
-func TestEngineCorePeekSuffixBoolFalse(t *testing.T) {
+func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("falseVal"), NewWord("false"), NewWord("end"),
@@ -845,9 +845,9 @@ func TestEngineCorePeekSuffixBoolFalse(t *testing.T) {
 	}
 }
 
-func TestEngineCorePeekSuffixAtom(t *testing.T) {
+func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// An unknown word in suffix position should resolve to atom
+	// An unknown word in forward position should resolve to atom
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("atomVal"), NewWord("myatom"), NewWord("end"),
 		NewWord("atomVal"),
@@ -858,10 +858,10 @@ func TestEngineCorePeekSuffixAtom(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCoreSuffix — suffix operations, precedence
+// TestEngineCoreForward — forward operations, precedence
 // =============================================================================
 
-func TestEngineCoreSuffixPrecedence(t *testing.T) {
+func TestEngineCoreForwardPrecedence(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// mul has higher precedence than add: 2 add 3 mul 4 => 2 + (3 * 4) = 14
 	result := runAQL(t, r, []Value{
@@ -872,7 +872,7 @@ func TestEngineCoreSuffixPrecedence(t *testing.T) {
 	}
 }
 
-func TestEngineCoreSuffixPrecedenceReverse(t *testing.T) {
+func TestEngineCoreForwardPrecedenceReverse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// 2 mul 3 add 4 => (2 * 3) + 4 = 10
 	result := runAQL(t, r, []Value{
@@ -884,12 +884,12 @@ func TestEngineCoreSuffixPrecedenceReverse(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCoreForceSuffix — force suffix via WordInfo
+// TestEngineCoreForceForward — force forward via WordInfo
 // =============================================================================
 
-func TestEngineCoreForceSuffix(t *testing.T) {
+func TestEngineCoreForceForward(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Force suffix on add: uses ForceSuffix flag
+	// Force forward on add: uses ForceForward flag
 	result := runAQL(t, r, []Value{
 		NewInteger(10),
 		NewWordModified("add", -1, false, true),

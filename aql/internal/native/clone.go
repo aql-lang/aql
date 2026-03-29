@@ -13,7 +13,7 @@ import (
 func cloneFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "clone",
-		SuffixPrecedence: false,
+		ForwardPrecedence: false,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},

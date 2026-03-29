@@ -18,7 +18,7 @@ func TestMarkMoveBasic(t *testing.T) {
 	r.Output = &buf
 
 	id := NextMarkID()
-	// printstr is suffix-precedence: it collects arg from after the word.
+	// printstr is forward-precedence: it collects arg from after the word.
 	// The body between mark and move is what gets replayed.
 	body := []Value{
 		NewInteger(22),

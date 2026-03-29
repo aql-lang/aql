@@ -22,7 +22,7 @@ const defaultFetchTimeout = 30 * time.Second
 func fetchFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "fetch",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TString, engine.TMap},

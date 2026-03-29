@@ -1,7 +1,7 @@
 package engine
 
 func registerMin(r *Registry) {
-	// min: [int, int] -> [int] (suffix precedence)
+	// min: [int, int] -> [int] (forward precedence)
 	registerBinaryIntOp(r, "min", 1, func(a, b int64) (int64, error) {
 		if a < b {
 			return a, nil

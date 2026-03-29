@@ -10,8 +10,8 @@ import "fmt"
 //	context get "key"         — retrieve value (returns none if key not found)
 //	context get foo           — retrieve with word key
 func registerContext(r *Registry) {
-	// All-suffix handler: "context-set key value" → args=[key, value]
-	ctxSetSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward handler: "context-set key value" → args=[key, value]
+	ctxSetForwardHandler := func(args []Value) ([]Value, error) {
 		ctx := r.Context()
 		if ctx == nil {
 			return nil, fmt.Errorf("context: no active context")
@@ -47,14 +47,14 @@ func registerContext(r *Registry) {
 
 	// Register "context-set" and "context-get" as the implementation words.
 	r.Register("context-set",
-		// All-suffix: key first, value second
-		Signature{Args: []Type{TString, TAny}, Handler: ctxSetSuffixHandler},
-		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetSuffixHandler},
-		// Infix: value first (prefix), key second (suffix)
+		// All-forward: key first, value second
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetForwardHandler},
+		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetForwardHandler},
+		// Infix: value first (prefix), key second (forward)
 		Signature{Args: []Type{TAny, TString}, Handler: ctxSetInfixHandler},
 		Signature{Args: []Type{TAny, TWord}, Handler: ctxSetInfixHandler},
 		// Fallback
-		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetSuffixHandler},
+		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetForwardHandler},
 	)
 
 	r.Register("context-get",

@@ -19,7 +19,7 @@ import (
 func walkFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "walk",
-		SuffixPrecedence: false,
+		ForwardPrecedence: false,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TFunction, engine.TFunction},

@@ -39,7 +39,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	return result, nil
 }
 
-// def foo [read "data.csv"]  list foo — lists all rows via suffix
+// def foo [read "data.csv"]  list foo — lists all rows via forward
 func TestDefListAll(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{

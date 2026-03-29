@@ -13,7 +13,7 @@ import (
 type Function struct {
 	Name             string
 	Signatures       []Signature
-	SuffixPrecedence bool // true = engine tries suffix-first; false = prefix-only
+	ForwardPrecedence bool // true = engine tries forward-first; false = prefix-only
 }
 
 // TypeDef describes a named complex type in the type registry.
@@ -125,21 +125,21 @@ func (r *Registry) Context() map[string]Value {
 	return r.ctxStack[len(r.ctxStack)-1]
 }
 
-// Register adds one or more signatures to a named function with suffix precedence.
+// Register adds one or more signatures to a named function with forward precedence.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	fn, ok := r.funcs[name]
 	if !ok {
-		fn = &Function{Name: name, SuffixPrecedence: true}
+		fn = &Function{Name: name, ForwardPrecedence: true}
 		r.funcs[name] = fn
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
 }
 
-// RegisterPrefixOnly adds signatures to a named function without suffix precedence.
+// RegisterPrefixOnly adds signatures to a named function without forward precedence.
 func (r *Registry) RegisterPrefixOnly(name string, sigs ...Signature) {
 	fn, ok := r.funcs[name]
 	if !ok {
-		fn = &Function{Name: name, SuffixPrecedence: false}
+		fn = &Function{Name: name, ForwardPrecedence: false}
 		r.funcs[name] = fn
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
@@ -317,7 +317,7 @@ func registerBuiltins(r *Registry) {
 // --- Shared helpers used by multiple builtin files ---
 
 // registerBinaryIntOp registers a binary integer operation with a single
-// signature Args:[int, int] and suffix precedence.
+// signature Args:[int, int] and forward precedence.
 func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value) ([]Value, error) {
 		result, err := op(args[0].AsInteger(), args[1].AsInteger())
@@ -377,7 +377,7 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 }
 
 // registerBinaryBoolOp registers a binary boolean operation with a single
-// signature Args:[boolean, boolean] and suffix precedence.
+// signature Args:[boolean, boolean] and forward precedence.
 func registerBinaryBoolOp(r *Registry, name string, prec int, op func(a, b bool) bool) {
 	handler := func(args []Value) ([]Value, error) {
 		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil

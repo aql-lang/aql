@@ -212,8 +212,8 @@ func TestWriteBasic(t *testing.T) {
 	}
 }
 
-func TestWriteSuffix(t *testing.T) {
-	// write path content — both suffix
+func TestWriteForward(t *testing.T) {
+	// write path content — both forward
 	mem, got, err := runWithMem(t, nil, `write "out.txt" "hello"`)
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	}
 	reg.SetFileOps(mem)
 
-	// Write with all suffix args to be explicit
+	// Write with all forward args to be explicit
 	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
 	if err != nil {
 		t.Fatal(err)

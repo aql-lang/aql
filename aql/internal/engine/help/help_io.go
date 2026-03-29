@@ -79,7 +79,7 @@ func init() {
 		Signatures: []string{"[list] -> [any...]"},
 		Description: "Evaluates a list as code (like do) and prints a color-coded trace showing " +
 			"the stack state at each step. Shows resolved vs pending values, pointer position, " +
-			"and annotations for dispatch decisions (suffix/prefix, precedence, collection).",
+			"and annotations for dispatch decisions (forward/prefix, precedence, collection).",
 		Examples: []string{
 			`trace [1 add 2]                => 3 (prints step-by-step stack trace)`,
 			`trace [3 4 mul]                => 12 (traces multiplication)`,

@@ -853,20 +853,20 @@ func sortedKeys(m map[string]any) []string {
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling
-// modifier syntax: name/s (forceSuffix), name/p (forcePrefix), name/N (argCount),
-// and combinations like name/1s or name/2p.
+// modifier syntax: name/f (forceForward), name/p (forcePrefix), name/N (argCount),
+// and combinations like name/1f or name/2p.
 func parseWord(text string) (engine.Value, error) {
 	name := text
 	argCount := -1
 	forcePrefix := false
-	forceSuffix := false
+	forceForward := false
 
 	// Check for /... modifier suffix.
 	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
 		mod := name[idx+1:]
 		name = name[:idx]
 
-		// Parse optional digits followed by optional 's' or 'p'.
+		// Parse optional digits followed by optional 'f' or 'p'.
 		digits := ""
 		rest := mod
 		for i, c := range rest {
@@ -889,8 +889,8 @@ func parseWord(text string) (engine.Value, error) {
 		}
 
 		switch rest {
-		case "s":
-			forceSuffix = true
+		case "f":
+			forceForward = true
 		case "p":
 			forcePrefix = true
 		case "":
@@ -909,8 +909,8 @@ func parseWord(text string) (engine.Value, error) {
 		return engine.Value{}, fmt.Errorf("empty word")
 	}
 
-	if forcePrefix || forceSuffix || argCount >= 0 {
-		return engine.NewWordModified(name, argCount, forcePrefix, forceSuffix), nil
+	if forcePrefix || forceForward || argCount >= 0 {
+		return engine.NewWordModified(name, argCount, forcePrefix, forceForward), nil
 	}
 
 	// Type names resolve to type literals even in word context, so that
@@ -932,7 +932,7 @@ func parseWord(text string) (engine.Value, error) {
 //
 // The entire multi-token expansion is wrapped in parentheses so that it
 // evaluates as a single sub-expression. This gives dot very high binding,
-// letting suffix-precedence words like "list" consume the result:
+// letting forward-precedence words like "list" consume the result:
 // list foo.a → list ( foo a dot ).
 func expandDottedWord(text string) ([]engine.Value, error) {
 	// Standalone "." → just the dot word.

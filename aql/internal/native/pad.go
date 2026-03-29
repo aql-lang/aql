@@ -6,13 +6,13 @@ import (
 )
 
 // padFunc returns the "pad" native function definition.
-// pad has suffix precedence and two signatures:
+// pad has forward precedence and two signatures:
 //   - [any, integer] — pads the string representation to the given width
 //   - [any]          — pads the string representation to the default width
 func padFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "pad",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TInteger},

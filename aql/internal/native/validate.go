@@ -8,12 +8,12 @@ import (
 )
 
 // validateFunc returns the "validate" native function definition.
-// validate has suffix precedence and one signature:
+// validate has forward precedence and one signature:
 //   - [any, map] — validates data against a spec using voxgig struct Validate
 func validateFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "validate",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TMap},

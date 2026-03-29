@@ -8,12 +8,12 @@ import (
 )
 
 // filterFunc returns the "filter" native function definition.
-// filter has suffix precedence and one signature:
+// filter has forward precedence and one signature:
 //   - [any, function] — filters the value using the callback as predicate
 func filterFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "filter",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TFunction},

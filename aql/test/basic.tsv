@@ -29,7 +29,7 @@ abc	abc
 "WORLD" lower	'world'
 a upper	'A'
 
-# String functions - suffix
+# String functions - forward
 lower "ABC"	'abc'
 lower B	'b'
 
@@ -63,7 +63,7 @@ lower B	'b'
 1 2 add 3 add	6
 
 # Modifiers
-lower/s "E"	'e'
+lower/f "E"	'e'
 "F" lower/p	'f'
 
 # Set/Get
@@ -486,7 +486,7 @@ None deq None	true
 1 lt "a"	ERROR:lt: cannot compare
 [1] lt [2]	ERROR:lt: cannot compare
 
-# Comparison - suffix style
+# Comparison - forward style
 lt 1 2	true
 gt 2 1	true
 
@@ -533,7 +533,7 @@ if 42 10 20	10
 if true (if false 1 2) 3	2
 if false 1 (if true 2 3)	2
 
-# if - suffix style
+# if - forward style
 if true "yes" "no"	'yes'
 if false "yes" "no"	'no'
 
@@ -577,7 +577,7 @@ def add5 add 5 end def add5_twice [add5 add5] 10 add5_twice	20
 {a:1} a dot	1
 {a:1,b:2} b dot	2
 
-# Dot - key extraction from maps (suffix form)
+# Dot - key extraction from maps (forward form)
 {a:1} dot a	1
 {a:1,b:2} dot b	2
 

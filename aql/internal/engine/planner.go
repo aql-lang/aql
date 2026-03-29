@@ -1,16 +1,16 @@
 package engine
 
 // plannerBestSigForForward computes the best signature and prefix arg count for
-// setting up suffix collection. It centralizes scoring for:
+// setting up forward collection. It centralizes scoring for:
 //   - signature intrinsic rank (arity + specificity)
 //   - consumed prefix values
-//   - first suffix lookahead compatibility
+//   - first forward lookahead compatibility
 func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
 	var best *Signature
 	var bestScore int
 	var bestPrefixCount int
 
-	peekVal := e.peekPlannableSuffixValue()
+	peekVal := e.peekPlannableForwardValue()
 
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
@@ -28,7 +28,7 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 		score += prefixCount * 25
 
 		// Prefer signatures whose first currently-unmatched argument can be
-		// satisfied by the immediate suffix candidate.
+		// satisfied by the immediate forward candidate.
 		if peekVal != nil && prefixCount < len(sig.Args) {
 			firstUnmatched := -1
 			for ai := range sig.Args {
@@ -91,9 +91,9 @@ func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 	return prefixCount, usedArgs
 }
 
-// peekPlannableSuffixValue returns the next non-structural candidate suffix
+// peekPlannableForwardValue returns the next non-structural candidate forward
 // token, if one exists.
-func (e *Engine) peekPlannableSuffixValue() *Value {
+func (e *Engine) peekPlannableForwardValue() *Value {
 	peekIdx := e.pointer + 1
 	if peekIdx >= len(e.stack) {
 		return nil

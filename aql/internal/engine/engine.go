@@ -344,58 +344,58 @@ func (e *Engine) stepWord(val Value) error {
 		return e.execMatch(match)
 	}
 
-	if w.ForceSuffix {
-		// Force suffix: skip prefix attempt, collect all args from suffix.
+	if w.ForceForward {
+		// Force forward: skip prefix attempt, collect all args from forward.
 		resolved := e.effectiveResolved()
 		bestSig, _ := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
-		e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
+		e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
 		return e.insertForward(w, bestSig, len(bestSig.Args))
 	}
 
-	if fn.SuffixPrecedence {
+	if fn.ForwardPrecedence {
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
 
 		// When prefix has a full match (typed signature), check if
-		// suffix tokens should take priority. Suffix precedence means
+		// forward tokens should take priority. Forward precedence means
 		// we prefer to consume tokens after the word when available.
 		if match != nil && len(match.Sig.Args) > 0 {
-			if e.hasSuffixValues(fn) {
-				// Suffix tokens exist. Verify that collecting from
-				// suffix would still produce a valid signature match
+			if e.hasForwardValues(fn) {
+				// Forward tokens exist. Verify that collecting from
+				// forward would still produce a valid signature match
 				// before switching away from the working prefix match.
-				suffixVal := e.peekSuffixValue()
-				extended := append(resolved, suffixVal)
+				forwardVal := e.peekForwardValue()
+				extended := append(resolved, forwardVal)
 				if MatchSignature(fn.Signatures, extended, w) != nil {
 					bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
 					if bestSig != nil {
-						suffixNeeded := len(bestSig.Args) - prefixCount
-						if suffixNeeded <= 0 {
-							suffixNeeded = 1
+						forwardNeeded := len(bestSig.Args) - prefixCount
+						if forwardNeeded <= 0 {
+							forwardNeeded = 1
 						}
-						e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
-						return e.insertForward(w, bestSig, suffixNeeded, prefixCount)
+						e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
+						return e.insertForward(w, bestSig, forwardNeeded, prefixCount)
 					}
 				}
 			}
-			// No viable suffix — use prefix match.
+			// No viable forward — use prefix match.
 			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
-		// No full prefix match — try suffix (create forward to collect
+		// No full prefix match — try forward (create forward to collect
 		// remaining args), preserving original behavior.
 		bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig != nil {
-			suffixNeeded := len(bestSig.Args) - prefixCount
-			if suffixNeeded <= 0 {
-				suffixNeeded = len(bestSig.Args)
+			forwardNeeded := len(bestSig.Args) - prefixCount
+			if forwardNeeded <= 0 {
+				forwardNeeded = len(bestSig.Args)
 			}
-			e.traceNote = "suffix→ " + traceSigStr(w.Name, bestSig)
-			return e.insertForward(w, bestSig, suffixNeeded, prefixCount)
+			e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
+			return e.insertForward(w, bestSig, forwardNeeded, prefixCount)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
@@ -553,16 +553,16 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 	return stack
 }
 
-// insertForward handles a suffix-precedence word by placing a forward
+// insertForward handles a forward-precedence word by placing a forward
 // primitive after the word on the stack.
-func (e *Engine) insertForward(w WordInfo, sig *Signature, suffixNeeded int, prefixArgs ...int) error {
+func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, prefixArgs ...int) error {
 	pArgs := 0
 	if len(prefixArgs) > 0 {
 		pArgs = prefixArgs[0]
 	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
-		ExpectedArgs: suffixNeeded,
+		ExpectedArgs: forwardNeeded,
 		PrefixArgs:   pArgs,
 		FuncIndex:    e.pointer,
 		Precedence:   sig.Precedence,
@@ -680,7 +680,7 @@ func (e *Engine) stepLiteral() error {
 		fwdIdx--
 	}
 
-	// Insert the suffix value right before the function word. Suffix values
+	// Insert the forward value right before the function word. Suffix values
 	// are appended in collection order (first collected = deepest).
 	// After collection the stack is:
 	// [..., prefix_args..., suffix0, suffix1, ..., func_word]
@@ -698,7 +698,7 @@ func (e *Engine) stepLiteral() error {
 		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
-		// All suffix args collected. Remove forward, force prefix, retry.
+		// All forward args collected. Remove forward, force prefix, retry.
 		e.stackRemove(fwdIdx)
 		// fwdIdx is after funcIdx, so funcIdx is unaffected.
 
@@ -1039,7 +1039,7 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 	}
 
 	// Check if any shorter sig with exactly CollectedArgs args can
-	// accept the types of the already-collected suffix values.
+	// accept the types of the already-collected forward values.
 	funcIdx := fwd.FuncIndex
 	collectedTypes := make([]Type, fwd.CollectedArgs)
 	for i := 0; i < fwd.CollectedArgs; i++ {
@@ -1129,11 +1129,11 @@ func (e *Engine) couldProduceType(v Value, expected Type) bool {
 			if expected.Equal(TFnUndef) || expected.Equal(TFnDef) {
 				return w.Name == "fn"
 			}
-			// A function with suffix precedence will start its own
+			// A function with forward precedence will start its own
 			// argument collection, so it won't directly produce a
-			// value that feeds back as a suffix arg for the current
+			// value that feeds back as a forward arg for the current
 			// forward. Resolve the current forward early.
-			if fn.SuffixPrecedence {
+			if fn.ForwardPrecedence {
 				return false
 			}
 			return true
@@ -1559,7 +1559,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d suffix args)",
+			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d forward args)",
 				fwd.FuncName, fwd.ExpectedArgs)
 		}
 	}
@@ -1617,7 +1617,7 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 }
 
 // effectiveResolved returns the resolved portion of the stack visible for
-// prefix matching. Function words and their collected suffix args that are
+// prefix matching. Function words and their collected forward args that are
 // tracked by active forwards are excluded — they belong to the outer
 // forward's context and should not be consumed by inner prefix matching.
 func (e *Engine) effectiveResolved() []Value {
@@ -1632,14 +1632,14 @@ func (e *Engine) effectiveResolved() []Value {
 			fwd := e.stack[i].AsForward()
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
-			// Exclude collected suffix args (positioned before function word).
+			// Exclude collected forward args (positioned before function word).
 			for j := 0; j < fwd.CollectedArgs; j++ {
 				idx := fwd.FuncIndex - 1 - j
 				if idx >= 0 {
 					excludeIndices[idx] = true
 				}
 			}
-			// Exclude claimed prefix args (positioned before collected suffix args).
+			// Exclude claimed prefix args (positioned before collected forward args).
 			prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
 			for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
 				if j >= 0 {
@@ -1659,12 +1659,12 @@ func (e *Engine) effectiveResolved() []Value {
 	return resolved
 }
 
-// hasSuffixValues checks whether there are collectible value tokens after the
+// hasForwardValues checks whether there are collectible value tokens after the
 // current pointer. Literals and unknown words are collectible. Known function
 // words are not directly collectible (they execute via stepWord), so they
 // don't count — unless the function has signatures expecting TWord arguments
 // (e.g., def needs to collect word names).
-func (e *Engine) hasSuffixValues(fn *Function) bool {
+func (e *Engine) hasForwardValues(fn *Function) bool {
 	if e.pointer+1 >= len(e.stack) {
 		return false
 	}
@@ -1692,10 +1692,10 @@ func (e *Engine) hasSuffixValues(fn *Function) bool {
 	return true
 }
 
-// peekSuffixValue returns a value representing what the next stack element
+// peekForwardValue returns a value representing what the next stack element
 // would resolve to, for use in speculative signature matching. Unknown words
 // become atoms; true/false become booleans; literals are returned as-is.
-func (e *Engine) peekSuffixValue() Value {
+func (e *Engine) peekForwardValue() Value {
 	if e.pointer+1 >= len(e.stack) {
 		return Value{}
 	}
@@ -1733,7 +1733,7 @@ func (e *Engine) peekPrecedence(idx int) int {
 	}
 	w := v.AsWord()
 	fn := e.registry.Lookup(w.Name)
-	if fn == nil || !fn.SuffixPrecedence {
+	if fn == nil || !fn.ForwardPrecedence {
 		return 0
 	}
 	var maxPrec int
@@ -1749,7 +1749,7 @@ func (e *Engine) peekPrecedence(idx int) int {
 // curryOrPrefix handles a terminated forward. If the word at funcIdx can
 // match a prefix signature with the available resolved values, it forces
 // prefix mode for normal execution. Otherwise, it packages the word and
-// its collectedCount suffix args into a list value (partial application).
+// its collectedCount forward args into a list value (partial application).
 // When the list is later expanded (e.g., via def body substitution), the
 // word and args are spliced back onto the stack for completion.
 func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
@@ -1764,7 +1764,7 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 	// Check if prefix match exists with current resolved values.
 	if fn != nil {
 		// Build resolved slice up to funcIdx, excluding function words
-		// and their collected suffix args that are tracked by active
+		// and their collected forward args that are tracked by active
 		// forwards. This prevents prefix matching from consuming values
 		// that belong to an outer forward's context.
 		start := 0
@@ -1778,7 +1778,7 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 				fwd := e.stack[i].AsForward()
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
-				// Exclude collected suffix args (before function word).
+				// Exclude collected forward args (before function word).
 				for j := 0; j < fwd.CollectedArgs; j++ {
 					idx := fwd.FuncIndex - 1 - j
 					if idx >= 0 {

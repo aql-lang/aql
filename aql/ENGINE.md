@@ -18,12 +18,12 @@ The usual forth style primitives are provided by the system: dup, swap, etc.
 
 
 Some words can use future tokens as if they were on the stack
-already. This is called suffix precedence.
+already. This is called forward precedence.
 
-All words should use suffix precedence unless explicitly defined to
+All words should use forward precedence unless explicitly defined to
 have prefix only args. The traditional forth words such as dup, swap,
-drop, etc always have prefix only args. Everything else has suffix
-precedence. For suffix precedence, the engine signature matching
+drop, etc always have prefix only args. Everything else has forward
+precedence. For forward precedence, the engine signature matching
 should attempt to find the longest and most specific match against
 future tokens. Partial matches are then completed by looking prefix
 values, that is, the stack. Precedence levels can be used to give some
@@ -67,9 +67,9 @@ __lower__:
 > `C lower` -> _['c']_
 > `99 lower` -> _[99 lower]_ SIGNATURE ERROR
 > `lower/1 D` -> _['d']_ - disambiguate expected arg count
-> `lower/s E` -> _['e']_ - force suffix args
+> `lower/f E` -> _['e']_ - force forward args
 > `F lower/p` -> _['f']_ - force prefix args
-> `lower/1s E` -> _['e']_ - force suffix args, fix args
+> `lower/1f E` -> _['e']_ - force forward args, fix args
 > `F lower/1p` -> _['f']_ - force prefix args, fix args
 
 
@@ -113,16 +113,16 @@ __lower__:
 ## Word Signatures and Arguments
 
 All words can accept arguments from the stack. These are called prefix arguments.
-Tokens from the future stack are called suffix arguments.
+Tokens from the future stack are called forward arguments.
 
 A word can accept one or more type signatures. These are specified as
 lists in reverse stack order.
 
-By default all words have suffix precedence. This means they are
+By default all words have forward precedence. This means they are
 eligible to collect arguments from future tokens. When prefix arguments
-are available on the stack, prefix matching is tried first; suffix
+are available on the stack, prefix matching is tried first; forward
 matching acts as a fallback. When invoked, to force prefix only, append
-/p to the word name. To force suffix only, use /s.
+/p to the word name. To force forward only, use /f.
 
 This can also be used when defining the word, to indicate default behaviour. But this can
 always be overridden in situ.
@@ -172,7 +172,7 @@ def bar [[] [] [2 mul]]
 def bar [[ 2 mul ]]
 ```
 
-If a word has suffix precedence (the default), the arguments to match
+If a word has forward precedence (the default), the arguments to match
 against the signature can be constructed using the stack and future
 tokens as follows: match each type in the signature in order against
 future tokens, until a mismatch, then continue matching against the
@@ -184,7 +184,7 @@ For example:
 `def square [ [integer] [integer] [dup mul swap drop] ]`
 
 Define word with name "square" accepting one integer type argument from the top of the stack, 
-and replacing the top of the stack with another integer. However it can also accept suffix
+and replacing the top of the stack with another integer. However it can also accept forward
 arguments.
 Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
 
@@ -196,13 +196,13 @@ Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
 * [|] -> `1.5 2 area` -> [3|]
 
 
-Implementation: words themselves should never deal with suffix precedence. Instead the 
+Implementation: words themselves should never deal with forward precedence. Instead the 
 interpreter should move any matched values from the future stack onto the main stack, and the
 word can then proceed normally, as if the values had been prefix values all along.
 
 
 
-The default argument precedence can be specified using a /p or /s suffix in the definition:
+The default argument precedence can be specified using a /p or /f modifier in the definition:
 
 * `def foo/p ...` - only use prefix args.
 
@@ -215,6 +215,6 @@ Words such as dup, swap, drop, etc, taken directly from forth, are considered de
 * [2 3|] -> `swap` -> [3 2|]
 * [4|] -> `drop` -> [|]
 
-But they can be forced to use suffix args with /s:
+But they can be forced to use forward args with /f:
 
-* [|] -> `dup/s 1` -> [1 1|]  # engine translates to [1|] -> `dup` -> [1 1|]
+* [|] -> `dup/f 1` -> [1 1|]  # engine translates to [1|] -> `dup` -> [1 1|]

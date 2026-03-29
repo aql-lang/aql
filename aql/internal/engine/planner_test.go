@@ -29,7 +29,7 @@ func TestUnifiedPlannerFlag_BasicInfix(t *testing.T) {
 	}
 }
 
-func TestPeekPlannableSuffixValue(t *testing.T) {
+func TestPeekPlannableForwardValue(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -38,13 +38,13 @@ func TestPeekPlannableSuffixValue(t *testing.T) {
 	e.stack = []Value{NewWord("add"), NewInteger(2)}
 	e.pointer = 0
 
-	v := e.peekPlannableSuffixValue()
+	v := e.peekPlannableForwardValue()
 	if v == nil || v.AsInteger() != 2 {
-		t.Fatalf("expected suffix integer 2, got %#v", v)
+		t.Fatalf("expected forward integer 2, got %#v", v)
 	}
 }
 
-func TestPeekPlannableSuffixValue_StructuralWordsSkipped(t *testing.T) {
+func TestPeekPlannableForwardValue_StructuralWordsSkipped(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -52,8 +52,8 @@ func TestPeekPlannableSuffixValue_StructuralWordsSkipped(t *testing.T) {
 	e := New(r)
 	e.stack = []Value{NewWord("add"), NewWord("end")}
 	e.pointer = 0
-	if v := e.peekPlannableSuffixValue(); v != nil {
-		t.Fatalf("expected nil for structural suffix token, got %#v", v)
+	if v := e.peekPlannableForwardValue(); v != nil {
+		t.Fatalf("expected nil for structural forward token, got %#v", v)
 	}
 }
 

@@ -8,12 +8,12 @@ import (
 )
 
 // getpathFunc returns the "getpath" native function definition.
-// getpath has suffix precedence and one signature:
+// getpath has forward precedence and one signature:
 //   - [any, string] — retrieves a value at a dot-separated path from the data
 func getpathFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "getpath",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TString},

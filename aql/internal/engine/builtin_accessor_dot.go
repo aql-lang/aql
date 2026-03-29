@@ -7,7 +7,7 @@ import (
 
 // registerDot registers "dot" and its "." alias for property/index access.
 //
-// Usage (suffix):
+// Usage (forward):
 //
 //	{a:1} dot a       => 1
 //

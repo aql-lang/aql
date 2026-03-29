@@ -1,7 +1,7 @@
 # Signature matching tests
 # Format: expression<TAB>expected result
 # Tests that longer and narrower type signatures match first.
-# Tests prefix-only and suffix-precedence functions.
+# Tests prefix-only and forward-precedence functions.
 # Tests arguments split over the stack and future tokens.
 
 # --- Basic prefix matching (args from stack) ---
@@ -20,12 +20,12 @@ if false 1 2	2
 
 # --- Suffix matching (args from future tokens) ---
 
-# 2-arg suffix: left from stack, right collected from suffix
+# 2-arg forward: left from stack, right collected from forward
 1 add 2	3
 10 sub 3	7
 4 mul 5	20
 
-# 1-arg suffix: word before value
+# 1-arg forward: word before value
 lower "ABC"	'abc'
 upper "abc"	'ABC'
 
@@ -42,7 +42,7 @@ upper "abc"	'ABC'
 # Mixed: integer + string → scalar sig (string concat)
 "count:" add " 5"	'count: 5'
 
-# --- Operator precedence (suffix collection deferral) ---
+# --- Operator precedence (forward collection deferral) ---
 
 # mul (prec=2) binds tighter than add (prec=1)
 2 add 3 mul 4	14
@@ -64,12 +64,12 @@ upper "abc"	'ABC'
 ((1 add 2) mul 3) add 1	10
 1 add ((2 add 3) mul 4)	21
 
-# --- Stack split: some args from stack, some from suffix ---
+# --- Stack split: some args from stack, some from forward ---
 
-# 1 already on stack, add collects 2 from suffix
+# 1 already on stack, add collects 2 from forward
 1 add 2	3
 
-# Multiple prefix args available, suffix collection still works
+# Multiple prefix args available, forward collection still works
 1 2 add 3	1 5
 
 # --- Up to 7 elements interacting ---
@@ -102,14 +102,14 @@ if false [1 add 2] [3 add 4]	7
 
 # --- Suffix precedence with varying arg counts ---
 
-# lower/upper take 1 arg (suffix precedence)
+# lower/upper take 1 arg (forward precedence)
 "ABC" lower	'abc'
 lower "ABC"	'abc'
 
-# add takes 2 args (suffix precedence), 1 from stack + 1 suffix
+# add takes 2 args (forward precedence), 1 from stack + 1 forward
 1 add 2	3
 
-# Comparison takes 2 args (suffix precedence)
+# Comparison takes 2 args (forward precedence)
 1 lt 2	true
 2 gt 1	true
 1 lte 1	true
@@ -126,7 +126,7 @@ lower "ABC"	'abc'
 
 # --- Curried/defined words with signature matching ---
 
-# def creates a suffix-precedence word
+# def creates a forward-precedence word
 def add5 add 5 end 10 add5	15
 def mul2 mul 2 end 3 mul2	6
 
@@ -153,7 +153,7 @@ String or None	Scalar/String|None
 
 # --- Suffix with all args from future (no prefix args) ---
 
-# Fully suffix: word first, all args after
+# Fully forward: word first, all args after
 add 1 2	3
 sub 10 3	7
 lt 1 2	true

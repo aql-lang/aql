@@ -8,14 +8,14 @@ import (
 )
 
 // sliceFunc returns the "slice" native function definition.
-// slice has suffix precedence and three signatures:
+// slice has forward precedence and three signatures:
 //   - [any, integer, integer] — slices the value from start to end
 //   - [any, integer]          — slices the value from start
 //   - [any]                   — returns the value unchanged
 func sliceFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "slice",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TInteger, engine.TInteger},

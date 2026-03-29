@@ -7,7 +7,7 @@ import (
 )
 
 // removeFunc returns the "remove" native function definition.
-// remove has suffix precedence and three signatures:
+// remove has forward precedence and three signatures:
 //   - [map(kind:"api")] — removes an entity via the SDK
 //   - [table, map]      — removes the record whose "id" matches the map's "id" field
 //   - [map, map]        — record type + filter: returns empty table
@@ -18,7 +18,7 @@ func removeFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "remove",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{

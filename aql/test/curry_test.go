@@ -290,7 +290,7 @@ func TestCurryNoOuterForwardErrors(t *testing.T) {
 	}
 	_, err = eng.Run(vals)
 	if err == nil {
-		t.Fatal("expected error for add with only 1 suffix arg and no outer forward")
+		t.Fatal("expected error for add with only 1 forward arg and no outer forward")
 	}
 	if !strings.Contains(err.Error(), "signature") {
 		t.Errorf("expected signature error, got: %v", err)

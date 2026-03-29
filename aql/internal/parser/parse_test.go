@@ -17,7 +17,7 @@ func valuesEqual(a, b engine.Value) bool {
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
 			aw.ForcePrefix == bw.ForcePrefix &&
-			aw.ForceSuffix == bw.ForceSuffix
+			aw.ForceForward == bw.ForceForward
 	case a.IsOpenParen():
 		return true
 	case a.VType.Matches(engine.TString):
@@ -132,7 +132,7 @@ func TestParsePrefixExpression(t *testing.T) {
 	})
 }
 
-func TestParseSuffixExpression(t *testing.T) {
+func TestParseForwardExpression(t *testing.T) {
 	// lower B → two words
 	assertParse(t, "lower B", []engine.Value{
 		engine.NewWord("lower"),
@@ -255,9 +255,9 @@ func TestParseArgCountModifier(t *testing.T) {
 	})
 }
 
-func TestParseForceSuffixModifier(t *testing.T) {
-	// lower/s
-	assertParse(t, "lower/s", []engine.Value{
+func TestParseForceForwardModifier(t *testing.T) {
+	// lower/f
+	assertParse(t, "lower/f", []engine.Value{
 		engine.NewWordModified("lower", -1, false, true),
 	})
 }
@@ -269,9 +269,9 @@ func TestParseForcePrefixModifier(t *testing.T) {
 	})
 }
 
-func TestParseArgCountAndSuffixModifier(t *testing.T) {
-	// lower/1s
-	assertParse(t, "lower/1s", []engine.Value{
+func TestParseArgCountAndForwardModifier(t *testing.T) {
+	// lower/1f
+	assertParse(t, "lower/1f", []engine.Value{
 		engine.NewWordModified("lower", 1, false, true),
 	})
 }
@@ -298,8 +298,8 @@ func TestParseArgCountTwo(t *testing.T) {
 }
 
 func TestParseModifierInExpression(t *testing.T) {
-	// B lower/s → word then modified word
-	assertParse(t, "B lower/s", []engine.Value{
+	// B lower/f → word then modified word
+	assertParse(t, "B lower/f", []engine.Value{
 		engine.NewWord("B"),
 		engine.NewWordModified("lower", -1, false, true),
 	})
@@ -1494,13 +1494,13 @@ func TestParseEscapeInStringWithParens(t *testing.T) {
 // --- parseWord edge cases ---
 
 func TestParseEmptyNameAfterModifier(t *testing.T) {
-	// /1s → modifier on empty name, should error
-	assertParseError(t, "/1s")
+	// /1f → modifier on empty name, should error
+	assertParseError(t, "/1f")
 }
 
-func TestParseSlashSModifier(t *testing.T) {
-	// /s → empty name with suffix modifier, should error
-	assertParseError(t, "/s")
+func TestParseSlashFModifier(t *testing.T) {
+	// /f → empty name with forward modifier, should error
+	assertParseError(t, "/f")
 }
 
 // --- convertTopLevelValue / convertDataValue unreachable cases ---

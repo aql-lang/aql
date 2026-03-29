@@ -26,7 +26,7 @@ type Value = engine.Value
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for prefix matching).
 //
-// Precedence controls binding strength for suffix-precedence words;
+// Precedence controls binding strength for forward-precedence words;
 // higher values bind tighter (0 = default).
 //
 // Handler receives the matched args and returns replacement values for the stack.
@@ -141,7 +141,7 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 }
 
 // Register adds a named word with one or more signatures.
-// Registered words use suffix precedence: the engine tries to collect
+// Registered words use forward precedence: the engine tries to collect
 // arguments from after the word before falling back to prefix matching.
 //
 // Example — register a word "double" that doubles an integer:
@@ -155,14 +155,14 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 //	})
 //
 // Use the Precedence field on Signature to control binding strength
-// for suffix argument collection (higher binds tighter, 0 = default).
+// for forward argument collection (higher binds tighter, 0 = default).
 func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
 // RegisterPrefixOnly adds a named word with one or more signatures that
 // only match prefix arguments (values already on the stack before the word).
-// No suffix argument collection is attempted.
+// No forward argument collection is attempted.
 //
 // Example — register a prefix-only word "neg" that negates an integer:
 //

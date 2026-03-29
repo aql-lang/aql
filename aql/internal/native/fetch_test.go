@@ -16,8 +16,8 @@ func TestFetchFunc(t *testing.T) {
 	if fn.Name != "fetch" {
 		t.Errorf("expected name 'fetch', got %q", fn.Name)
 	}
-	if !fn.SuffixPrecedence {
-		t.Error("expected SuffixPrecedence to be true")
+	if !fn.ForwardPrecedence {
+		t.Error("expected ForwardPrecedence to be true")
 	}
 	if len(fn.Signatures) != 3 {
 		t.Errorf("expected 3 signatures, got %d", len(fn.Signatures))

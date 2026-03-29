@@ -94,7 +94,7 @@ type Value struct {
 func NewString(s string) Value       // VType: string/proper (or string/empty if "")
 func NewInteger(n int64) Value       // VType: number/integer
 func NewWord(name string) Value      // VType: word — a function reference
-func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value // e.g. lower/1s, lower/p
+func NewWordModified(name string, argCount int, forcePrefix, forceForward bool) Value // e.g. lower/1f, lower/p
 func NewForward(info ForwardInfo) Value  // VType: forward
 ```
 
@@ -105,16 +105,16 @@ type WordInfo struct {
     Name        string
     ArgCount    int   // -1 = unspecified
     ForcePrefix bool  // lower/p
-    ForceSuffix bool  // lower/s
+    ForceForward bool  // lower/f
 }
 ```
 
-**Forward payload** (for suffix argument tracking):
+**Forward payload** (for forward argument tracking):
 
 ```go
 type ForwardInfo struct {
     FuncName     string  // the deferred function
-    ExpectedArgs int     // how many suffix args needed
+    ExpectedArgs int     // how many forward args needed
     CollectedArgs int    // how many collected so far
 }
 ```
@@ -136,7 +136,7 @@ input := []Value{NewInteger(99), NewWord("lower")}
 ### Step 3: Function Signatures and Matching (`signature.go`)
 
 A function has a name and one or more **signatures**. Each signature specifies
-the types it consumes from prefix (already on the stack) and/or suffix (future
+the types it consumes from prefix (already on the stack) and/or forward (future
 values) positions.
 
 ```go
@@ -148,18 +148,18 @@ type Signature struct {
 ```
 
 **Matching algorithm** — given a function name, the resolved stack, and
-optional modifiers (forcePrefix via /p, forceSuffix via /s, argCount via /N):
+optional modifiers (forcePrefix via /p, forceForward via /f, argCount via /N):
 
 1. Collect all signatures for the function.
-2. Filter by modifiers: if `forcePrefix` (word/p), discard signatures with suffix args;
-   if `forceSuffix` (word/s), discard signatures with only prefix args;
+2. Filter by modifiers: if `forcePrefix` (word/p), discard signatures with forward args;
+   if `forceForward` (word/f), discard signatures with only prefix args;
    if `argCount >= 0` (word/N), discard signatures where total args != argCount.
 3. For each remaining signature, check if the prefix portion matches the top
    of the resolved stack (type matching from Step 1).
 4. Suffix signatures are **always candidates** — they don't require the future
    values to exist yet (those will be collected by the forward mechanism).
 5. Rank matches by **specificity**: total arg count (longer wins), then sum of
-   type specificities (narrower wins). Prefix-only wins over suffix on ties.
+   type specificities (narrower wins). Prefix-only wins over forward on ties.
 6. Return the best match, or nil if none.
 
 ---
@@ -258,7 +258,7 @@ Run(input):
                 pointer = pointer - len(match.Prefix) + len(results)
                 continue
 
-            if match has suffix args:
+            if match has forward args:
                 // Insert forward primitive after the word
                 fwd = NewForward(ForwardInfo{
                     FuncName:     name,
@@ -279,7 +279,7 @@ Run(input):
             When a non-word value at position pointer has been advanced past,
             scan backwards for the nearest Forward value.
             If found:
-                // A suffix arg has been resolved.
+                // A forward arg has been resolved.
                 fwd.CollectedArgs++
                 // Move this value to before the function word
                 // (the word is just before the forward in the stack)
@@ -306,7 +306,7 @@ Run(input):
 
 ```
 1. [| ^lower 'B']           pointer=0, val=lower(word), no prefix match (stack empty)
-                             suffix match [|string]→[string]
+                             forward match [|string]→[string]
 2. [lower fwd{1,0} | ^'B']  insert forward, pointer=2
 3. val='B'(string), advance  pointer=3, but check for pending forward
 4. fwd found. CollectedArgs=1 == ExpectedArgs=1.
@@ -349,7 +349,7 @@ All tests use typed Values directly — no lexing or parsing.
 **Modifier tests:**
 ```go
 {name: "lower/1 D", input: []Value{NewWordModified("lower",1,false,true), NewString("D")}, want: []Value{NewString("d")}}
-{name: "lower/s E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
+{name: "lower/f E",  input: []Value{NewWordModified("lower",-1,false,true), NewString("E")}, want: []Value{NewString("e")}}
 {name: "F lower/p",  input: []Value{NewWordModified("lower",-1,true,false), NewString("F")}, ... } // needs thought on input ordering
 ```
 

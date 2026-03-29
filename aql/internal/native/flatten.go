@@ -8,13 +8,13 @@ import (
 )
 
 // flattenFunc returns the "flatten" native function definition.
-// flatten has suffix precedence and two signatures:
+// flatten has forward precedence and two signatures:
 //   - [list, integer] — flattens the list to the given depth
 //   - [list]          — flattens the list by one level
 func flattenFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "flatten",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TInteger},

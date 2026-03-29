@@ -1172,7 +1172,7 @@ func TestTraceColorize(t *testing.T) {
 	}{
 		{NewWord("add"), "add"},
 		{NewWordModified("x", -1, true, false), "x/p"},
-		{NewWordModified("x", -1, false, true), "x/s"},
+		{NewWordModified("x", -1, false, true), "x/f"},
 		{NewString("hi"), `"hi"`},
 		{NewInteger(42), "42"},
 		{NewBoolean(true), "true"},
@@ -1296,7 +1296,7 @@ func TestTraceWrapEmpty(t *testing.T) {
 }
 
 // ========================
-// Engine edge cases: stepEnd, curryOrPrefix, peekSuffixValue
+// Engine edge cases: stepEnd, curryOrPrefix, peekForwardValue
 // ========================
 
 func TestStepEndNoForward(t *testing.T) {
@@ -1312,7 +1312,7 @@ func TestStepEndNoForward(t *testing.T) {
 }
 
 func TestDefEndExplicit(t *testing.T) {
-	// "def foo 42 end foo" — end terminates def's suffix collection
+	// "def foo 42 end foo" — end terminates def's forward collection
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3503,16 +3503,16 @@ func TestQueryWhereCollate(t *testing.T) {
 }
 
 // ========================
-// Additional engine coverage: peekSuffixValue
+// Additional engine coverage: peekForwardValue
 // ========================
 
-func TestPeekSuffixValueInContext(t *testing.T) {
+func TestPeekForwardValueInContext(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Exercise curryOrPrefix and peekSuffixValue through a word that uses suffix precedence
-	// e.g., "add" with suffix: 1 add 2
+	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward precedence
+	// e.g., "add" with forward: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	if len(result) != 1 || result[0].AsInteger() != 3 {
 		t.Errorf("expected [3], got %v", result)

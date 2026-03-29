@@ -29,8 +29,8 @@ func traceColorize(v Value) string {
 		if w.ForcePrefix {
 			return cYellow + w.Name + "/p" + cReset
 		}
-		if w.ForceSuffix {
-			return cYellow + w.Name + "/s" + cReset
+		if w.ForceForward {
+			return cYellow + w.Name + "/f" + cReset
 		}
 		return cYellow + w.Name + cReset
 	case v.IsForward():

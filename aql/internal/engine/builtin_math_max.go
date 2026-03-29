@@ -1,7 +1,7 @@
 package engine
 
 func registerMax(r *Registry) {
-	// max: [int, int] -> [int] (suffix precedence)
+	// max: [int, int] -> [int] (forward precedence)
 	registerBinaryIntOp(r, "max", 1, func(a, b int64) (int64, error) {
 		if a > b {
 			return a, nil

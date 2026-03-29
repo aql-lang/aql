@@ -55,10 +55,10 @@ a upper	'A'
 "abc" upper	'ABC'
 "MiXeD" lower	'mixed'
 
-# === String functions - suffix ===
+# === String functions - forward ===
 lower "ABC"	'abc'
 lower B	'b'
-# upper now has suffix precedence (unified model)
+# upper now has forward precedence (unified model)
 upper "abc"	'ABC'
 lower "XYZ"	'xyz'
 
@@ -119,10 +119,10 @@ lower "XYZ"	'xyz'
 "a" dup	'a' 'a'
 
 # === Modifiers ===
-lower/s "E"	'e'
+lower/f "E"	'e'
 "F" lower/p	'f'
 lower/1 "G"	'g'
-lower/1s "H"	'h'
+lower/1f "H"	'h'
 
 # === Set/Get ===
 set foo 99 end get foo	99
@@ -216,7 +216,7 @@ None None unify	None true
 None unify None	None true
 unify None None end	None true
 
-# === Unify - prefix/infix/suffix arg forms ===
+# === Unify - prefix/infix/forward arg forms ===
 
 # Prefix form: left right unify
 1 Number unify	1 true
@@ -526,7 +526,7 @@ lower B	'b'
 # Nested unmatched opening parenthesis
 ((1)		syntax_error
 
-# Missing suffix argument for add
+# Missing forward argument for add
 1 add		signature_error
 
 # Missing all arguments for add

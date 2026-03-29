@@ -8,12 +8,12 @@ import (
 )
 
 // setpathFunc returns the "setpath" native function definition.
-// setpath has suffix precedence and one signature:
+// setpath has forward precedence and one signature:
 //   - [any, string, any] — sets a value at a dot-separated path in the data
 func setpathFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "setpath",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TString, engine.TAny},

@@ -443,12 +443,12 @@ func TestRunDefaultBranch(t *testing.T) {
 
 // --- Register / RegisterPrefixOnly ---
 
-func TestRegisterSuffixWord(t *testing.T) {
+func TestRegisterForwardWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" as a suffix-precedence word: 5 double => 10
+	// Register "double" as a forward-precedence word: 5 double => 10
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -466,12 +466,12 @@ func TestRegisterSuffixWord(t *testing.T) {
 	}
 }
 
-func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
+func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" with suffix precedence — can collect arg after the word.
+	// Register "double" with forward precedence — can collect arg after the word.
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -512,7 +512,7 @@ func TestRegisterPrefixOnlyWord(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
+func TestRegisterPrefixOnlyDoesNotCollectForward(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
@@ -525,7 +525,7 @@ func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
 		},
 	})
 
-	// "neg 5" — neg is prefix-only so it should not consume 5 from suffix.
+	// "neg 5" — neg is prefix-only so it should not consume 5 from forward.
 	// Without a value on the stack, it should error.
 	_, err = a.Run("neg 5")
 	if err == nil {

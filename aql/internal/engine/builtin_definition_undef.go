@@ -22,8 +22,8 @@ func registerUndef(r *Registry) {
 	)
 
 	// Targeted undef: undef foo fn [[number] [number]]
-	// All-suffix: args=[foo(name), fnUndefInfo]
-	undefFnSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward: args=[foo(name), fnUndefInfo]
+	undefFnForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		undefInfo := args[1].Data.(FnUndefInfo)
 		uninstallFnSigs(r, name, undefInfo)
@@ -39,11 +39,11 @@ func registerUndef(r *Registry) {
 	r.Register("undef",
 		Signature{
 			Args:    []Type{TWord, TFnUndef},
-			Handler: undefFnSuffixHandler,
+			Handler: undefFnForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TFnUndef},
-			Handler: undefFnSuffixHandler,
+			Handler: undefFnForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TFnUndef, TWord},

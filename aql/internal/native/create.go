@@ -7,7 +7,7 @@ import (
 )
 
 // createFunc returns the "create" native function definition.
-// create has suffix precedence and three signatures:
+// create has forward precedence and three signatures:
 //   - [map(kind:"api")] — creates an entity via the SDK
 //   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
 //   - [map, map]        — record type + record: returns empty table
@@ -18,7 +18,7 @@ func createFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "create",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{

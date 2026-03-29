@@ -389,7 +389,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// as: [table/query(prefix), atom(suffix)] -> [query-builder with alias]
+	// as: [table/query(prefix), atom(forward)] -> [query-builder with alias]
 	// Usage: from people as p
 	asHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
@@ -426,7 +426,7 @@ func registerQuery(r *Registry) {
 	}
 
 	// Suffix star handler: "select star from products" → args=[star, table]
-	selectStarSuffixHandler := func(args []Value) ([]Value, error) {
+	selectStarForwardHandler := func(args []Value) ([]Value, error) {
 		colSpec := args[0]
 		table := args[1]
 
@@ -460,7 +460,7 @@ func registerQuery(r *Registry) {
 		Signature{
 			Args:       []Type{TAtom, TList},
 			Precedence: 1,
-			Handler:    selectStarSuffixHandler,
+			Handler:    selectStarForwardHandler,
 		},
 		// Infix: "from ... select star" → [TList, TAtom]
 		Signature{
@@ -475,7 +475,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// where: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// where: [condition(forward), table/query(prefix)] -> [query-builder]
 	whereHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
@@ -507,7 +507,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// order: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// order: [columns(forward), table/query(prefix)] -> [query-builder]
 	orderListHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
@@ -566,7 +566,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// limit: [table/query(prefix), integer(suffix)] -> [query-builder]
+	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
 	limitHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		n := args[1].AsInteger()
@@ -587,7 +587,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// offset: [table/query(prefix), integer(suffix)] -> [query-builder]
+	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
 	offsetHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
 		n := args[1].AsInteger()
@@ -628,7 +628,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// group: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// group: [columns(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from sales group by [region]
 	//        from sales group by [region product]
 	//        from sales group [region]
@@ -674,7 +674,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// having: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// having: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from sales groupby [region] having [count gt 5]
 	havingHandler := func(args []Value) ([]Value, error) {
 		table := args[0]
@@ -706,14 +706,14 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// join: [atom(suffix), table/query(prefix)] -> [query-builder]
+	// join: [atom(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products on [...]
 	registerJoinWord(r, "join", "JOIN")
 	registerJoinWord(r, "innerjoin", "JOIN")
 	registerJoinWord(r, "leftjoin", "LEFT JOIN")
 	registerJoinWord(r, "crossjoin", "CROSS JOIN")
 
-	// on: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// on: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Sets the ON condition for the most recent join.
 	// Usage: from orders join products on [orders.product_id eq products.id]
 	onHandler := func(args []Value) ([]Value, error) {
@@ -744,7 +744,7 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// using: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// using: [columns(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products using [id]
 	usingHandler := func(args []Value) ([]Value, error) {
 		table := args[0]

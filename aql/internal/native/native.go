@@ -13,10 +13,10 @@ import (
 type NativeHandler func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error)
 
 // NativeFunc describes a built-in native function with its name, signatures,
-// and whether it uses suffix precedence.
+// and whether it uses forward precedence.
 type NativeFunc struct {
 	Name             string
-	SuffixPrecedence bool
+	ForwardPrecedence bool
 	Signatures       []NativeSig
 }
 
@@ -39,7 +39,7 @@ func Register(r *engine.Registry) {
 				FullStackHandler: handler,
 				Patterns:         sig.Patterns,
 			}
-			if fn.SuffixPrecedence {
+			if fn.ForwardPrecedence {
 				r.Register(fn.Name, s)
 			} else {
 				r.RegisterPrefixOnly(fn.Name, s)

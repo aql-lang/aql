@@ -1,12 +1,12 @@
 # Argument ordering tests
-# Verifies that arguments can be split between prefix (stack) and suffix
+# Verifies that arguments can be split between prefix (stack) and forward
 # (future tokens) at any point around the function word.
 #
 # For signature f a b c d, valid call forms are:
-#   f a b c d     — all suffix
-#   d f a b c     — 1 prefix, 3 suffix
-#   d c f a b     — 2 prefix, 2 suffix
-#   d c b f a     — 3 prefix, 1 suffix
+#   f a b c d     — all forward
+#   d f a b c     — 1 prefix, 3 forward
+#   d c f a b     — 2 prefix, 2 forward
+#   d c b f a     — 3 prefix, 1 forward
 #   d c b a f     — all prefix
 #
 # Prefix args fill sig slots from deepest on stack (Args[0]).
@@ -17,10 +17,10 @@
 # 2-param: [Opts Integer] — distinct types
 # =====================================================================
 
-# All suffix: {x:4}→Opts, 3→Integer
+# All forward: {x:4}→Opts, 3→Integer
 def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
 
-# 1 prefix + 1 suffix: {x:4}→Opts (prefix), 3→Integer (suffix)
+# 1 prefix + 1 forward: {x:4}→Opts (prefix), 3→Integer (forward)
 def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] {x:4} f 3	7
 
 # All prefix: stack=[{x:4}, 3]. {x:4}→Opts, 3→Integer
@@ -30,10 +30,10 @@ def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m .
 # 2-param: [Integer String] — distinct scalar types
 # =====================================================================
 
-# All suffix
+# All forward
 def g fn [[n:Integer s:String] [String] [s add n]] g 5 "val:"	'val:5'
 
-# 1 prefix + 1 suffix: 5→Integer (prefix), "val:"→String (suffix)
+# 1 prefix + 1 forward: 5→Integer (prefix), "val:"→String (forward)
 def g fn [[n:Integer s:String] [String] [s add n]] 5 g "val:"	'val:5'
 
 # All prefix: stack=[5, "val:"]. 5→Integer, "val:"→String
@@ -52,13 +52,13 @@ sub 10 3	7
 # 3-param: [Opts Integer String] — three distinct types
 # =====================================================================
 
-# All suffix
+# All forward
 def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
 
-# 1 prefix + 2 suffix
+# 1 prefix + 2 forward
 def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} h 5 "!"	'15!'
 
-# 2 prefix + 1 suffix
+# 2 prefix + 1 forward
 def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} 5 h "!"	'15!'
 
 # All prefix
@@ -71,7 +71,7 @@ def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [Strin
 # Suffix: opts then int
 def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] f {x:10} 5	15
 
-# 1 prefix (opts) + 1 suffix (int)
+# 1 prefix (opts) + 1 forward (int)
 def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} f 5	15
 
 # All prefix
@@ -91,10 +91,10 @@ def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m .
 # Boolean + Integer — distinct scalar subtypes
 # =====================================================================
 
-# All suffix
+# All forward
 def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] p true 5	5
 
-# 1 prefix + 1 suffix
+# 1 prefix + 1 forward
 def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] true p 5	5
 
 # All prefix

@@ -8,13 +8,13 @@ import (
 )
 
 // jsonifyFunc returns the "jsonify" native function definition.
-// jsonify has suffix precedence and two signatures:
+// jsonify has forward precedence and two signatures:
 //   - [any, map] — converts the value to a JSON string with flags (indent, offset)
 //   - [any]      — converts the value to a JSON string with defaults
 func jsonifyFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "jsonify",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TMap},

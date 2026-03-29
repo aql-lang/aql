@@ -144,9 +144,9 @@ func TestPrefixLower(t *testing.T) {
 	}
 }
 
-// --- Engine tests: suffix (forward) functions ---
+// --- Engine tests: forward functions ---
 
-func TestSuffixLower(t *testing.T) {
+func TestForwardLower(t *testing.T) {
 	// lower B -> 'b'
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -233,10 +233,10 @@ func TestDrop(t *testing.T) {
 	}
 }
 
-// --- Engine tests: suffix Forth primitives ---
+// --- Engine tests: forward Forth primitives ---
 
-func TestDupSuffix(t *testing.T) {
-	// dup/s 1 → [1, 1]
+func TestDupForward(t *testing.T) {
+	// dup/f 1 → [1, 1]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -257,8 +257,8 @@ func TestDupSuffix(t *testing.T) {
 	}
 }
 
-func TestSwapSuffix(t *testing.T) {
-	// swap/s 1 2 → [2, 1]
+func TestSwapForward(t *testing.T) {
+	// swap/f 1 2 → [2, 1]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -294,8 +294,8 @@ func TestSwapInfix(t *testing.T) {
 	}
 }
 
-func TestDropSuffix(t *testing.T) {
-	// drop/s 1 → []
+func TestDropForward(t *testing.T) {
+	// drop/f 1 → []
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -626,8 +626,8 @@ func TestMax(t *testing.T) {
 
 // --- Engine tests: modifier forcing ---
 
-func TestForceSuffix(t *testing.T) {
-	// lower/s E -> 'e' (force suffix even though prefix exists)
+func TestForceForward(t *testing.T) {
+	// lower/f E -> 'e' (force forward even though prefix exists)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -649,7 +649,7 @@ func TestForceSuffix(t *testing.T) {
 }
 
 func TestForcePrefix(t *testing.T) {
-	// F lower/p -> 'f' (force prefix, no suffix considered)
+	// F lower/p -> 'f' (force prefix, no forward considered)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -670,8 +670,8 @@ func TestForcePrefix(t *testing.T) {
 	}
 }
 
-func TestArgCountSuffix(t *testing.T) {
-	// lower/1 D -> 'd' (arg count 1 picks the suffix signature)
+func TestArgCountForward(t *testing.T) {
+	// lower/1 D -> 'd' (arg count 1 picks the forward signature)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -983,7 +983,7 @@ func TestPrecedencePrefixUnaffected(t *testing.T) {
 
 // --- Engine tests: storage (set/get) ---
 
-func TestSetGetSuffix(t *testing.T) {
+func TestSetGetForward(t *testing.T) {
 	// set foo 99 end get foo → [99]
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -1789,7 +1789,7 @@ func TestEdgeLowerAlreadyLower(t *testing.T) {
 	}
 }
 
-func TestEdgeLowerSuffixOnInteger(t *testing.T) {
+func TestEdgeLowerForwardOnInteger(t *testing.T) {
 	// lower 42 → signature error (forward can't collect integer for string param)
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -2060,7 +2060,7 @@ func TestEdgeArithmeticNoArgs(t *testing.T) {
 }
 
 func TestEdgeArithmeticOneArg(t *testing.T) {
-	// 1 add → should use suffix signature and wait for arg
+	// 1 add → should use forward signature and wait for arg
 	// Since there's no next arg, it should be an orphaned forward error
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -2069,7 +2069,7 @@ func TestEdgeArithmeticOneArg(t *testing.T) {
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(1), NewWord("add")})
 	if err == nil {
-		t.Fatal("expected error for add with one arg and no suffix arg, got nil")
+		t.Fatal("expected error for add with one arg and no forward arg, got nil")
 	}
 }
 
@@ -2138,7 +2138,7 @@ func TestEdgeLongMixedPrecedence(t *testing.T) {
 }
 
 func TestEdgePrefixChain(t *testing.T) {
-	// 1 2 add 3 4 add mul → add takes 3 from suffix: (2+3)=5,
+	// 1 2 add 3 4 add mul → add takes 3 from forward: (2+3)=5,
 	// then (5+4)=9, then 1*9=9
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -2163,7 +2163,7 @@ func TestEdgePrefixChain(t *testing.T) {
 
 // --- Edge: modifiers ---
 
-func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
+func TestEdgeForcePrefixOnForwardOnlyLower(t *testing.T) {
 	// lower/p with no prefix arg → error (force prefix but no string on stack)
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -2179,8 +2179,8 @@ func TestEdgeForcePrefixOnSuffixOnlyLower(t *testing.T) {
 	}
 }
 
-func TestEdgeForceSuffixWithPrefixAvailable(t *testing.T) {
-	// "A" lower/s "B" → should use suffix, returning 'b', with 'a' remaining
+func TestEdgeForceForwardWithPrefixAvailable(t *testing.T) {
+	// "A" lower/f "B" → should use forward, returning 'b', with 'a' remaining
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2296,7 +2296,7 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error on get: %v", err)
 	}
-	// get collects 1 suffix arg, then end should be no-op since forward is done
+	// get collects 1 forward arg, then end should be no-op since forward is done
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -2989,7 +2989,7 @@ func TestEdgeChainUpperLower(t *testing.T) {
 	}
 }
 
-func TestEdgeSuffixUpperThenLower(t *testing.T) {
+func TestEdgeForwardUpperThenLower(t *testing.T) {
 	// lower (upper abc) → lower 'ABC' → 'abc'
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -3050,7 +3050,7 @@ func TestEdgePrefixMatchSpecificity(t *testing.T) {
 func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
 	// 1 ( 2 add ) → error: inside paren, add sees only [2] as prefix, needs 2 ints
 	// Actually 2 add: prefix [int,int] needs 2 ints, but only 1 inside paren.
-	// So it falls through to suffix (infix) match: [int|int], but then needs suffix arg.
+	// So it falls through to forward (infix) match: [int|int], but then needs forward arg.
 	// ')' closes paren, orphaned forward error.
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -3282,7 +3282,7 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 // --- Edge: signature edge cases ---
 
 func TestEdgeSignatureNoPrefix(t *testing.T) {
-	// A function with only suffix should work when called with no prefix stack
+	// A function with only forward should work when called with no prefix stack
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3301,8 +3301,8 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 	}
 }
 
-func TestEdgeSignatureMultipleSuffix(t *testing.T) {
-	// A function that takes 2 suffix args
+func TestEdgeSignatureMultipleForward(t *testing.T) {
+	// A function that takes 2 forward args
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3819,8 +3819,8 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 
 func TestDefForthSumOfSquares(t *testing.T) {
 	// : square dup mul ;
-	// 3 square 4 square add → with suffix precedence, mul in
-	// square body grabs 4 from suffix: 3 dup mul 4 → mul(3,4)=12,
+	// 3 square 4 square add → with forward precedence, mul in
+	// square body grabs 4 from forward: 3 dup mul 4 → mul(3,4)=12,
 	// then square(12)=144, add(3,144)=147
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -4112,7 +4112,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 }
 
 func TestDefForthDefWithEnd(t *testing.T) {
-	// Using end to terminate def's suffix collection early,
+	// Using end to terminate def's forward collection early,
 	// with the body coming from the prefix stack.
 	// [dup add] def double end 5 double → 10
 	reg, err := DefaultRegistry()

@@ -9,14 +9,14 @@ import (
 )
 
 // mergeFunc returns the "merge" native function definition.
-// merge has suffix precedence and multiple signatures:
+// merge has forward precedence and multiple signatures:
 //   - [list, map] — create new list with map's integer keys replacing elements
 //   - [map, list] — create new list from list, appending map's in-range integer-keyed values
 //   - [any, any]  — deep-merges the second value into the first using voxgig struct Merge
 func mergeFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "merge",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TMap},

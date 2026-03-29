@@ -295,10 +295,10 @@ type WordInfo struct {
 	Name        string
 	ArgCount    int  // -1 = unspecified
 	ForcePrefix bool // lower/p
-	ForceSuffix bool // lower/s
+	ForceForward bool // lower/f
 }
 
-// ForwardInfo tracks suffix argument collection for a deferred function call.
+// ForwardInfo tracks forward argument collection for a deferred function call.
 type ForwardInfo struct {
 	FuncName      string
 	ExpectedArgs  int
@@ -482,16 +482,16 @@ func NewWord(name string) Value {
 }
 
 // NewWordModified creates a word value with explicit modifiers.
-func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value {
+func NewWordModified(name string, argCount int, forcePrefix, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
 		Name:        name,
 		ArgCount:    argCount,
 		ForcePrefix: forcePrefix,
-		ForceSuffix: forceSuffix,
+		ForceForward: forceForward,
 	})
 }
 
-// NewForward creates a forward primitive value for suffix argument tracking.
+// NewForward creates a forward primitive value for forward argument tracking.
 func NewForward(info ForwardInfo) Value {
 	return newValue(TForward, info)
 }

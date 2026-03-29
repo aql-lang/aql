@@ -4,7 +4,7 @@ package engine
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for prefix matching).
 //
-// For suffix-precedence words the engine collects future values into Args[0],
+// For forward-precedence words the engine collects future values into Args[0],
 // Args[1], ... in order, then pushes them onto the stack and retries as prefix.
 type Signature struct {
 	Args       []Type
@@ -40,7 +40,7 @@ type MatchResult struct {
 // resolved stack and optional word modifiers.
 //
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
-// modifiers control filtering (forcePrefix, forceSuffix, argCount).
+// modifiers control filtering (forcePrefix, forceForward, argCount).
 //
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {

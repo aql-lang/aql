@@ -1,7 +1,7 @@
 package engine
 
 func registerNegate(r *Registry) {
-	// negate: [int] -> [int] (suffix precedence)
+	// negate: [int] -> [int] (forward precedence)
 	r.Register("negate", Signature{
 		Args: []Type{TInteger},
 		Handler: func(args []Value) ([]Value, error) {

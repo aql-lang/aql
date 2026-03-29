@@ -14,7 +14,7 @@ func defName(v Value) string {
 }
 
 // defPrefixOnly returns true if the name word carries the /p modifier,
-// indicating the defined word should be prefix-only (not suffix precedence).
+// indicating the defined word should be prefix-only (not forward precedence).
 func defPrefixOnly(v Value) bool {
 	if v.IsWord() {
 		return v.AsWord().ForcePrefix
@@ -33,12 +33,12 @@ func defPrefixOnly(v Value) bool {
 //	Args:[TWord, TAny]   – def name body  or  body def name
 //	Args:[TString, TAny] – def "name" body  or  body def "name"
 //
-// Flexible matching handles reordering: in "body def name", suffix collects
+// Flexible matching handles reordering: in "body def name", forward collects
 // name(TWord), pushes it, then prefix sees [body, name] and flexible match
 // reorders to [name, body] matching [TWord, TAny].
 func registerDef(r *Registry) {
-	// All-suffix handler: "def foo 42 end" → args=[foo(name), 42(body)]
-	defSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward handler: "def foo 42 end" → args=[foo(name), 42(body)]
+	defForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		prefixOnly := defPrefixOnly(args[0])
 		body := args[1]
@@ -56,16 +56,16 @@ func registerDef(r *Registry) {
 	}
 
 	r.Register("def",
-		// All-suffix: name first, body second
+		// All-forward: name first, body second
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: defSuffixHandler,
+			Handler: defForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: defSuffixHandler,
+			Handler: defForwardHandler,
 		},
-		// Infix: body first (prefix), name second (suffix)
+		// Infix: body first (prefix), name second (forward)
 		Signature{
 			Args:    []Type{TAny, TWord},
 			Handler: defInfixHandler,
