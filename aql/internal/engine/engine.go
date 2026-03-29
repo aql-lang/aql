@@ -1698,6 +1698,18 @@ func (e *Engine) hasForwardValues(fn *Function) bool {
 		if nw.Name == ")" || nw.Name == "end" {
 			return false
 		}
+		// Def'd parameters resolve to concrete values (Integer, String, etc.)
+		// and should be forward-collectible if they type-match.
+		if ds := e.registry.DefStacks[nw.Name]; len(ds) > 0 {
+			resolved := ds[len(ds)-1]
+			for si := range fn.Signatures {
+				for _, argType := range fn.Signatures[si].Args {
+					if resolved.VType.Matches(argType) {
+						return true
+					}
+				}
+			}
+		}
 		if e.registry.Lookup(nw.Name) != nil {
 			// Known function — only collectible if fn expects TWord or TFunction args.
 			for si := range fn.Signatures {
