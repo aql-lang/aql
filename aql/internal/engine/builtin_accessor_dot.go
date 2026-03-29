@@ -15,9 +15,8 @@ import (
 //
 //	set foo a:b:1 foo.a.b  => 1
 func registerDot(r *Registry) {
-	// All dot handlers swap args: `a dot b` means access b on a,
-	// so container=args[1], key=args[0].
-	dotMapAtomHandler := func(args []Value) ([]Value, error) {
+	// Forward handlers: args[0]=key, args[1]=container (reversed convention).
+	fwdMapAtomHandler := func(args []Value) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -30,7 +29,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotMapStringHandler := func(args []Value) ([]Value, error) {
+	fwdMapStringHandler := func(args []Value) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -43,7 +42,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotListHandler := func(args []Value) ([]Value, error) {
+	fwdListHandler := func(args []Value) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot index type literal")
 		}
@@ -55,7 +54,7 @@ func registerDot(r *Registry) {
 		return []Value{list[idx]}, nil
 	}
 
-	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
+	fwdMapIntegerHandler := func(args []Value) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -68,12 +67,11 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotNoneHandler := func(args []Value) ([]Value, error) {
+	fwdNoneHandler := func(args []Value) ([]Value, error) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 
-	dotObjectAtomHandler := func(args []Value) ([]Value, error) {
-		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
+	fwdObjectAtomHandler := func(args []Value) ([]Value, error) {
 		if m, ok := args[1].Data.(*OrderedMap); ok {
 			key := args[0].AsAtom()
 			val, found := m.Get(key)
@@ -91,8 +89,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotObjectStringHandler := func(args []Value) ([]Value, error) {
-		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
+	fwdObjectStringHandler := func(args []Value) ([]Value, error) {
 		if m, ok := args[1].Data.(*OrderedMap); ok {
 			key := args[0].AsString()
 			val, found := m.Get(key)
@@ -110,17 +107,136 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	// Signature arg order is reversed: args[0]=key, args[1]=container.
-	sigs := []Signature{
-		{Args: []Type{TAtom, TObject}, Handler: dotObjectAtomHandler},
-		{Args: []Type{TString, TObject}, Handler: dotObjectStringHandler},
-		{Args: []Type{TAtom, TMap}, Handler: dotMapAtomHandler},
-		{Args: []Type{TString, TMap}, Handler: dotMapStringHandler},
-		{Args: []Type{TInteger, TList}, Handler: dotListHandler},
-		{Args: []Type{TInteger, TMap}, Handler: dotMapIntegerHandler},
-		{Args: []Type{TAny, TNone}, Handler: dotNoneHandler},
+	// Stack-only handlers: args[0]=container, args[1]=key (natural order).
+	// Used by parser dot notation (bar.x → bar x dot~) with ForceStack.
+	stackMapAtomHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
+		m := args[0].AsMap()
+		key := args[1].AsAtom()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
 	}
 
-	r.Register("dot", sigs...)
-	r.Register(".", sigs...)
+	stackMapStringHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
+		m := args[0].AsMap()
+		key := args[1].AsString()
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	stackListHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot index type literal")
+		}
+		list := args[0].AsList()
+		idx := int(args[1].AsInteger())
+		if idx < 0 || idx >= len(list) {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{list[idx]}, nil
+	}
+
+	stackMapIntegerHandler := func(args []Value) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("dot: cannot access property on type literal")
+		}
+		m := args[0].AsMap()
+		key := strconv.FormatInt(args[1].AsInteger(), 10)
+		val, ok := m.Get(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	stackNoneHandler := func(args []Value) ([]Value, error) {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+
+	stackObjectAtomHandler := func(args []Value) ([]Value, error) {
+		if m, ok := args[0].Data.(*OrderedMap); ok {
+			key := args[1].AsAtom()
+			val, found := m.Get(key)
+			if !found {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
+		oi := args[0].AsObjectInstance()
+		key := args[1].AsAtom()
+		val, ok := oi.GetField(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	stackObjectStringHandler := func(args []Value) ([]Value, error) {
+		if m, ok := args[0].Data.(*OrderedMap); ok {
+			key := args[1].AsString()
+			val, found := m.Get(key)
+			if !found {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
+		oi := args[0].AsObjectInstance()
+		key := args[1].AsString()
+		val, ok := oi.GetField(key)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
+	// Forward-precedence sigs with reversed arg order for forward/infix use.
+	r.Register("dot",
+		Signature{Args: []Type{TAtom, TObject}, Handler: fwdObjectAtomHandler},
+		Signature{Args: []Type{TString, TObject}, Handler: fwdObjectStringHandler},
+		Signature{Args: []Type{TAtom, TMap}, Handler: fwdMapAtomHandler},
+		Signature{Args: []Type{TString, TMap}, Handler: fwdMapStringHandler},
+		Signature{Args: []Type{TInteger, TList}, Handler: fwdListHandler},
+		Signature{Args: []Type{TInteger, TMap}, Handler: fwdMapIntegerHandler},
+		Signature{Args: []Type{TAny, TNone}, Handler: fwdNoneHandler},
+	)
+	r.Register(".",
+		Signature{Args: []Type{TAtom, TObject}, Handler: fwdObjectAtomHandler},
+		Signature{Args: []Type{TString, TObject}, Handler: fwdObjectStringHandler},
+		Signature{Args: []Type{TAtom, TMap}, Handler: fwdMapAtomHandler},
+		Signature{Args: []Type{TString, TMap}, Handler: fwdMapStringHandler},
+		Signature{Args: []Type{TInteger, TList}, Handler: fwdListHandler},
+		Signature{Args: []Type{TInteger, TMap}, Handler: fwdMapIntegerHandler},
+		Signature{Args: []Type{TAny, TNone}, Handler: fwdNoneHandler},
+	)
+
+	// Stack-only sigs with natural arg order for ForceStack (parser dot notation).
+	r.RegisterStackOnly("dot",
+		Signature{Args: []Type{TObject, TAtom}, Handler: stackObjectAtomHandler},
+		Signature{Args: []Type{TObject, TString}, Handler: stackObjectStringHandler},
+		Signature{Args: []Type{TMap, TAtom}, Handler: stackMapAtomHandler},
+		Signature{Args: []Type{TMap, TString}, Handler: stackMapStringHandler},
+		Signature{Args: []Type{TList, TInteger}, Handler: stackListHandler},
+		Signature{Args: []Type{TMap, TInteger}, Handler: stackMapIntegerHandler},
+		Signature{Args: []Type{TNone, TAny}, Handler: stackNoneHandler},
+	)
+	r.RegisterStackOnly(".",
+		Signature{Args: []Type{TObject, TAtom}, Handler: stackObjectAtomHandler},
+		Signature{Args: []Type{TObject, TString}, Handler: stackObjectStringHandler},
+		Signature{Args: []Type{TMap, TAtom}, Handler: stackMapAtomHandler},
+		Signature{Args: []Type{TMap, TString}, Handler: stackMapStringHandler},
+		Signature{Args: []Type{TList, TInteger}, Handler: stackListHandler},
+		Signature{Args: []Type{TMap, TInteger}, Handler: stackMapIntegerHandler},
+		Signature{Args: []Type{TNone, TAny}, Handler: stackNoneHandler},
+	)
 }
