@@ -312,6 +312,28 @@ func (e *Engine) stepWord(val Value) error {
 		// Not a def fn — fall through to normal execution.
 	}
 
+	// Simple value def: substitute the word with its value directly,
+	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
+	// entries are not simple values — they go through normal Lookup.
+	if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
+		top := ds[len(ds)-1]
+		switch top.Data.(type) {
+		case FnDefInfo, *ObjectTypeInfo:
+			// Not a simple value — fall through to Lookup.
+		default:
+			// For list bodies, expand onto the stack like the fallback handler does.
+			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
+				elems := top.AsList()
+				expanded := make([]Value, len(elems))
+				copy(expanded, elems)
+				e.stackSplice(e.pointer, 1, expanded...)
+				return nil
+			}
+			e.stack[e.pointer] = top
+			return e.stepLiteral()
+		}
+	}
+
 	fn := e.registry.Lookup(w.Name)
 
 	if fn == nil {
