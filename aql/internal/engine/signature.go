@@ -2,10 +2,10 @@ package engine
 
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
-// on the stack, Args[last] = top of the stack for prefix matching).
+// on the stack, Args[last] = top of the stack for stack matching).
 //
 // For forward-precedence words the engine collects future values into Args[0],
-// Args[1], ... in order, then pushes them onto the stack and retries as prefix.
+// Args[1], ... in order, then pushes them onto the stack and retries as a stack match.
 type Signature struct {
 	Args    []Type
 	Handler func(args []Value) ([]Value, error)
@@ -111,7 +111,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			if ordered[j].VType.Equal(sig.Args[j]) {
 				score += 50 // exact type match
 			} else {
-				score += 10 // prefix (inexact) match
+				score += 10 // subtype (inexact) match
 			}
 		}
 

@@ -246,8 +246,8 @@ func (e *Engine) resolveOrphanedForwards() error {
 			funcIdx--
 		}
 
-		// Try prefix match or create curry list.
-		e.curryOrPrefix(funcIdx, collectedCount)
+		// Try stack match or create curry list.
+		e.curryOrStack(funcIdx, collectedCount)
 
 		// Retry from the current pointer position.
 		for step := 0; step < 100; step++ {
@@ -341,7 +341,7 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	if w.ForceForward {
-		// Force forward: skip prefix attempt, collect all args from forward.
+		// Force forward: skip stack match attempt, collect all args from forward.
 		resolved := e.effectiveResolved()
 		bestSig, _ := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig == nil {
@@ -355,48 +355,48 @@ func (e *Engine) stepWord(val Value) error {
 		resolved := e.effectiveResolved()
 		match := MatchSignature(fn.Signatures, resolved, w)
 
-		// When prefix has a full match (typed signature), check if
+		// When stack has a full match (typed signature), check if
 		// forward tokens should take priority. Forward precedence means
 		// we prefer to consume tokens after the word when available.
 		if match != nil && len(match.Sig.Args) > 0 {
 			if e.hasForwardValues(fn) {
 				// Forward tokens exist. Verify that collecting from
 				// forward would still produce a valid signature match
-				// before switching away from the working prefix match.
+				// before switching away from the working stack match.
 				forwardVal := e.peekForwardValue()
 				extended := append(resolved, forwardVal)
 				if MatchSignature(fn.Signatures, extended, w) != nil {
-					bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
+					bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
 					if bestSig != nil {
-						forwardNeeded := len(bestSig.Args) - prefixCount
+						forwardNeeded := len(bestSig.Args) - stackCount
 						if forwardNeeded <= 0 {
 							forwardNeeded = 1
 						}
 						e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-						return e.insertForward(w, bestSig, forwardNeeded, prefixCount)
+						return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 					}
 				}
 			}
-			// No viable forward — use prefix match.
-			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
+			// No viable forward — use stack match.
+			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
-		// No full prefix match — try forward (create forward to collect
+		// No full stack match — try forward (create forward to collect
 		// remaining args), preserving original behavior.
-		bestSig, prefixCount := e.plannerBestSigForForward(fn, w, resolved)
+		bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
 		if bestSig != nil {
-			forwardNeeded := len(bestSig.Args) - prefixCount
+			forwardNeeded := len(bestSig.Args) - stackCount
 			if forwardNeeded <= 0 {
 				forwardNeeded = len(bestSig.Args)
 			}
 			e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-			return e.insertForward(w, bestSig, forwardNeeded, prefixCount)
+			return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
 		if match != nil {
-			e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
+			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
 			return e.execMatch(match)
 		}
 
@@ -409,7 +409,7 @@ func (e *Engine) stepWord(val Value) error {
 	if match == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
-	e.traceNote = "prefix " + traceSigStr(w.Name, match.Sig)
+	e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
 	return e.execMatch(match)
 }
 
@@ -551,15 +551,15 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 
 // insertForward handles a forward-precedence word by placing a forward
 // primitive after the word on the stack.
-func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, prefixArgs ...int) error {
+func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, stackArgs ...int) error {
 	pArgs := 0
-	if len(prefixArgs) > 0 {
-		pArgs = prefixArgs[0]
+	if len(stackArgs) > 0 {
+		pArgs = stackArgs[0]
 	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
 		ExpectedArgs: forwardNeeded,
-		PrefixArgs:   pArgs,
+		StackArgs:   pArgs,
 		FuncIndex:    e.pointer,
 		Sig:          sig,
 	})
@@ -608,7 +608,7 @@ func (e *Engine) stepLiteral() error {
 
 	// Check if the value matches ANY remaining (uncollected) arg type.
 	// Suffix collection is flexible: the value can satisfy any arg slot,
-	// with final ordering handled by flexibleMatch during prefix retry.
+	// with final ordering handled by flexibleMatch during stack retry.
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
 		matchesAny := false
@@ -663,7 +663,7 @@ func (e *Engine) stepLiteral() error {
 	// Insert the forward value right before the function word. Suffix values
 	// are appended in collection order (first collected = deepest).
 	// After collection the stack is:
-	// [..., prefix_args..., suffix0, suffix1, ..., func_word]
+	// [..., stack_args..., suffix0, suffix1, ..., func_word]
 	insertIdx := funcIdx
 
 	e.stackInsert(insertIdx, val)
@@ -678,7 +678,7 @@ func (e *Engine) stepLiteral() error {
 		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
-		// All forward args collected. Remove forward, force prefix, retry.
+		// All forward args collected. Remove forward, force stack, retry.
 		e.stackRemove(fwdIdx)
 		// fwdIdx is after funcIdx, so funcIdx is unaffected.
 
@@ -851,7 +851,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Collect resolved values before the pointer for signature matching.
 	resolved := e.effectiveResolved()
 
-	// Try each signature to find one that matches the available prefix args.
+	// Try each signature to find one that matches the available stack args.
 	for _, sig := range fnDef.Sigs {
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
@@ -1051,7 +1051,7 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 
 	// A shorter sig is satisfied. Check whether the next token on the
 	// stack could produce the type needed for the longer sig's next slot.
-	nextArgType := fwd.Sig.Args[fwd.PrefixArgs+fwd.CollectedArgs]
+	nextArgType := fwd.Sig.Args[fwd.StackArgs+fwd.CollectedArgs]
 	peekIdx := fwdIdx + 1
 	if peekIdx >= len(e.stack) {
 		return true // no more tokens → resolve with shorter sig
@@ -1137,7 +1137,7 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 		funcIdx--
 	}
 
-	e.curryOrPrefix(funcIdx, collectedCount)
+	e.curryOrStack(funcIdx, collectedCount)
 	return nil
 }
 
@@ -1189,7 +1189,7 @@ func (e *Engine) stepEnd() error {
 		}
 	}
 
-	e.curryOrPrefix(funcIdx, fwd.CollectedArgs)
+	e.curryOrStack(funcIdx, fwd.CollectedArgs)
 	return nil
 }
 
@@ -1489,8 +1489,8 @@ func (e *Engine) stepCloseParen() error {
 					funcIdx--
 				}
 
-				// Try prefix match or create curry list.
-				e.curryOrPrefix(funcIdx, collectedCount)
+				// Try stack match or create curry list.
+				e.curryOrStack(funcIdx, collectedCount)
 
 				// Recalculate closeIdx after potential stack changes.
 				closeIdx = e.findCloseParenAfter(openIdx)
@@ -1597,9 +1597,9 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 }
 
 // effectiveResolved returns the resolved portion of the stack visible for
-// prefix matching. Function words and their collected forward args that are
+// stack matching. Function words and their collected forward args that are
 // tracked by active forwards are excluded — they belong to the outer
-// forward's context and should not be consumed by inner prefix matching.
+// forward's context and should not be consumed by inner stack matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
 	excludeIndices := make(map[int]bool)
@@ -1619,9 +1619,9 @@ func (e *Engine) effectiveResolved() []Value {
 					excludeIndices[idx] = true
 				}
 			}
-			// Exclude claimed prefix args (positioned before collected forward args).
-			prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
-			for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+			// Exclude claimed stack args (positioned before collected forward args).
+			stackStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.StackArgs
+			for j := stackStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
 				if j >= 0 {
 					excludeIndices[j] = true
 				}
@@ -1702,13 +1702,13 @@ func (e *Engine) peekForwardValue() Value {
 	return next
 }
 
-// curryOrPrefix handles a terminated forward. If the word at funcIdx can
-// match a prefix signature with the available resolved values, it forces
-// prefix mode for normal execution. Otherwise, it packages the word and
+// curryOrStack handles a terminated forward. If the word at funcIdx can
+// match a stack signature with the available resolved values, it forces
+// stack mode for normal execution. Otherwise, it packages the word and
 // its collectedCount forward args into a list value (partial application).
 // When the list is later expanded (e.g., via def body substitution), the
 // word and args are spliced back onto the stack for completion.
-func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
+func (e *Engine) curryOrStack(funcIdx int, collectedCount int) {
 	if funcIdx >= len(e.stack) || !e.stack[funcIdx].IsWord() {
 		e.pointer = funcIdx
 		return
@@ -1717,11 +1717,11 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 	w := e.stack[funcIdx].AsWord()
 	fn := e.registry.Lookup(w.Name)
 
-	// Check if prefix match exists with current resolved values.
+	// Check if stack match exists with current resolved values.
 	if fn != nil {
 		// Build resolved slice up to funcIdx, excluding function words
 		// and their collected forward args that are tracked by active
-		// forwards. This prevents prefix matching from consuming values
+		// forwards. This prevents stack matching from consuming values
 		// that belong to an outer forward's context.
 		start := 0
 		excludeIndices := make(map[int]bool)
@@ -1741,9 +1741,9 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 						excludeIndices[idx] = true
 					}
 				}
-				// Exclude claimed prefix args.
-				prefixStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.PrefixArgs
-				for j := prefixStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
+				// Exclude claimed stack args.
+				stackStart := fwd.FuncIndex - fwd.CollectedArgs - fwd.StackArgs
+				for j := stackStart; j < fwd.FuncIndex-fwd.CollectedArgs; j++ {
 					if j >= 0 {
 						excludeIndices[j] = true
 					}
@@ -1771,7 +1771,7 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 
 	// Check if there's a pending outer forward that would collect the result.
 	// Only create a curry list when an outer context is waiting for a value;
-	// otherwise, fall through to normal prefix retry (which may error).
+	// otherwise, fall through to normal stack retry (which may error).
 	hasOuterForward := false
 	checkStart := funcIdx - collectedCount
 	if checkStart < 0 {
@@ -1807,7 +1807,7 @@ func (e *Engine) curryOrPrefix(funcIdx int, collectedCount int) {
 		return
 	}
 
-	// No outer forward - force prefix (may result in error on next step).
+	// No outer forward - force stack (may result in error on next step).
 	e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 	e.pointer = funcIdx
 }
@@ -1821,8 +1821,8 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			// Suffix args start after prefix-consumed slots in the sig.
-			nextIdx := fwd.PrefixArgs + fwd.CollectedArgs
+			// Suffix args start after stack-consumed slots in the sig.
+			nextIdx := fwd.StackArgs + fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TWord)
 			}
@@ -1841,7 +1841,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			nextIdx := fwd.PrefixArgs + fwd.CollectedArgs
+			nextIdx := fwd.StackArgs + fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TFunction)
 			}

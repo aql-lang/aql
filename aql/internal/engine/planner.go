@@ -1,14 +1,14 @@
 package engine
 
-// plannerBestSigForForward computes the best signature and prefix arg count for
+// plannerBestSigForForward computes the best signature and stack arg count for
 // setting up forward collection. It centralizes scoring for:
 //   - signature intrinsic rank (arity + specificity)
-//   - consumed prefix values
+//   - consumed stack values
 //   - first forward lookahead compatibility
 func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
 	var best *Signature
 	var bestScore int
-	var bestPrefixCount int
+	var bestStackCount int
 
 	peekVal := e.peekPlannableForwardValue()
 
@@ -21,15 +21,15 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 			continue
 		}
 
-		prefixCount, usedArgs := plannerPrefixCoverage(sig.Args, resolved)
+		stackCount, usedArgs := plannerStackCoverage(sig.Args, resolved)
 		score := signatureScore(sig)
 
-		// Prefer signatures that can consume already-resolved prefix values.
-		score += prefixCount * 25
+		// Prefer signatures that can consume already-resolved stack values.
+		score += stackCount * 25
 
 		// Prefer signatures whose first currently-unmatched argument can be
 		// satisfied by the immediate forward candidate.
-		if peekVal != nil && prefixCount < len(sig.Args) {
+		if peekVal != nil && stackCount < len(sig.Args) {
 			firstUnmatched := -1
 			for ai := range sig.Args {
 				if !usedArgs[ai] {
@@ -52,24 +52,24 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 		if best == nil || score > bestScore {
 			best = sig
 			bestScore = score
-			bestPrefixCount = prefixCount
+			bestStackCount = stackCount
 		}
 	}
 
-	return best, bestPrefixCount
+	return best, bestStackCount
 }
 
-// plannerPrefixCoverage returns how many values from the top of the resolved
+// plannerStackCoverage returns how many values from the top of the resolved
 // stack can be positionally matched to the first N signature arguments, and
 // the arg-slot usage bitmap for that assignment. Arguments are never permuted.
-func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
+func plannerStackCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 	usedArgs := make([]bool, len(sigArgs))
 	maxTry := len(sigArgs)
 	if maxTry > len(resolved) {
 		maxTry = len(resolved)
 	}
 
-	prefixCount := 0
+	stackCount := 0
 	for tryN := maxTry; tryN >= 1; tryN-- {
 		top := resolved[len(resolved)-tryN:]
 		ok := true
@@ -80,7 +80,7 @@ func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 			}
 		}
 		if ok {
-			prefixCount = tryN
+			stackCount = tryN
 			for i := 0; i < tryN; i++ {
 				usedArgs[i] = true
 			}
@@ -88,7 +88,7 @@ func plannerPrefixCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 		}
 	}
 
-	return prefixCount, usedArgs
+	return stackCount, usedArgs
 }
 
 // peekPlannableForwardValue returns the next non-structural candidate forward
