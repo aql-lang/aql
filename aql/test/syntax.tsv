@@ -92,14 +92,14 @@ lower "XYZ"	'xyz'
 1 add 2	3
 10 add -3	7
 
-# === Operator precedence ===
-2 add 3 mul 4	14
+# === Operator evaluation (left-to-right) ===
+2 add 3 mul 4	20
 2 mul 3 add 4	10
-1 add 2 mul 3 add 4	11
+1 add 2 mul 3 add 4	13
 10 sub 3 sub 1	6
 1 add 1 add 1	3
 2 mul 2 mul 2	8
-1 add 2 mul 3	7
+1 add 2 mul 3	9
 
 # === Parentheses ===
 (1 add 2)	3
@@ -582,7 +582,7 @@ var [[[x 2]] x mul x]	4
 7 var [[n] n mul n add n]	56
 
 # var with single inline value in body
-var [[[a 3] [b 4]] a mul a add b mul b]	25
+var [[[a 3] [b 4]] a mul a add b mul b]	52
 
 # var preserves existing definitions
 def foo 99 5 var [[x] x add foo] foo	104 99
@@ -675,8 +675,8 @@ true implies false	false
 false implies true	true
 false implies false	true
 
-# Boolean precedence: and binds tighter than or
-true or false and false	true
+# Boolean operators (left-to-right)
+true or false and false	false
 false and true or true	true
 
 # not with binary operators

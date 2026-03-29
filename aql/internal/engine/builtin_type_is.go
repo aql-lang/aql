@@ -6,7 +6,6 @@ func registerIs(r *Registry) {
 	// This is a type/value check: "42 is Number" → true, "42 is String" → false.
 	r.Register("is", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
 			a, b := args[0], args[1]
 			unified, ok := Unify(a, b)

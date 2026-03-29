@@ -858,23 +858,23 @@ func TestEngineCorePeekForwardAtom(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCoreForward — forward operations, precedence
+// TestEngineCoreForward — forward operations, left-to-right evaluation
 // =============================================================================
 
-func TestEngineCoreForwardPrecedence(t *testing.T) {
+func TestEngineCoreForwardLeftToRight(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// mul has higher precedence than add: 2 add 3 mul 4 => 2 + (3 * 4) = 14
+	// left-to-right: 2 add 3 mul 4 => (2 + 3) * 4 = 20
 	result := runAQL(t, r, []Value{
 		NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
 	})
-	if len(result) != 1 || result[0].AsNumber() != 14 {
-		t.Errorf("2 add 3 mul 4 = %v, want 14", result)
+	if len(result) != 1 || result[0].AsNumber() != 20 {
+		t.Errorf("2 add 3 mul 4 = %v, want 20", result)
 	}
 }
 
-func TestEngineCoreForwardPrecedenceReverse(t *testing.T) {
+func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 2 mul 3 add 4 => (2 * 3) + 4 = 10
+	// left-to-right: 2 mul 3 add 4 => (2 * 3) + 4 = 10
 	result := runAQL(t, r, []Value{
 		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("add"), NewInteger(4),
 	})

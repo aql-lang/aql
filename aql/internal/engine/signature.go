@@ -7,9 +7,8 @@ package engine
 // For forward-precedence words the engine collects future values into Args[0],
 // Args[1], ... in order, then pushes them onto the stack and retries as prefix.
 type Signature struct {
-	Args       []Type
-	Precedence int // higher binds tighter; 0 = default (no precedence)
-	Handler    func(args []Value) ([]Value, error)
+	Args    []Type
+	Handler func(args []Value) ([]Value, error)
 
 	// FullStackHandler, when non-nil, is called instead of Handler.
 	// It receives the matched args AND the full resolved stack before
@@ -17,6 +16,14 @@ type Signature struct {
 	// Use this for words like depth, pick, roll that need to inspect
 	// or manipulate the entire stack.
 	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
+
+	// Precedence controls evaluation ordering for forward-collecting words.
+	// When a forward-collecting word is about to collect a literal, and the
+	// next word has a higher Precedence, collection is deferred so the
+	// higher-precedence word can execute first. Used by query words
+	// (select, group, where, etc.) to ensure correct clause ordering.
+	// Arithmetic operators leave this at 0 for strict left-to-right evaluation.
+	Precedence int
 
 	// Patterns holds optional structural patterns for arguments (e.g. map
 	// literals in fn signatures). Key is arg index, value is the pattern.

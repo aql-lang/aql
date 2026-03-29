@@ -26,8 +26,7 @@ drop, etc always have stack only args. Everything else has forward
 precedence. For forward precedence, the engine signature matching
 should attempt to find the longest and most specific match against
 future tokens. Partial matches are then completed by looking prefix
-values, that is, the stack. Precedence levels can be used to give some
-words higher precedence than others.
+values, that is, the stack. Evaluation is strictly left-to-right.
 
 NOTE: once a signature match has been found, the engine should move
 the matched future tokens to stack, in reverse order. Thus the
@@ -202,7 +201,7 @@ word can then proceed normally, as if the values had been prefix values all alon
 
 
 
-The default argument precedence can be specified using a /s or /f modifier in the definition:
+The default argument mode can be specified using a /s or /f modifier in the definition:
 
 * `def foo/s ...` - only use prefix args.
 

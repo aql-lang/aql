@@ -2125,17 +2125,12 @@ func TestEngineInspectBuiltin(t *testing.T) {
 		t.Error("expected at least one signature for add")
 	}
 
-	// Check first signature has args and precedence.
+	// Check first signature has args.
 	sig0 := sigList[0].AsMap()
 	args, _ := sig0.Get("args")
 	argList := args.AsList()
 	if len(argList) != 2 {
 		t.Errorf("expected 2 args for add, got %d", len(argList))
-	}
-
-	prec, _ := sig0.Get("precedence")
-	if prec.AsInteger() == 0 {
-		t.Error("expected non-zero precedence for add")
 	}
 }
 

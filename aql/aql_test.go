@@ -575,35 +575,32 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	}
 }
 
-func TestRegisterWithPrecedence(t *testing.T) {
+func TestRegisterLeftToRight(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Register "myadd" with low precedence and "mymul" with high precedence.
 	a.Register("myadd", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 1,
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			return []aql.Value{aql.NewInteger(args[0].AsInteger() + args[1].AsInteger())}, nil
 		},
 	})
 	a.Register("mymul", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 2,
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			return []aql.Value{aql.NewInteger(args[0].AsInteger() * args[1].AsInteger())}, nil
 		},
 	})
 
-	// 2 myadd 3 mymul 4 => mymul binds tighter, so 3*4=12 first, then 2+12=14
+	// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
 	result, err := a.Run("2 myadd 3 mymul 4")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || result[0] != int64(14) {
-		t.Errorf("got %v, want [14]", result)
+	if len(result) != 1 || result[0] != int64(20) {
+		t.Errorf("got %v, want [20]", result)
 	}
 }
 

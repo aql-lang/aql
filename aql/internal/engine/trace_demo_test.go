@@ -23,8 +23,8 @@ func TestTraceDemo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 7 {
-		t.Errorf("got %v, want [7]", result)
+	if len(result) != 1 || result[0].AsInteger() != 9 {
+		t.Errorf("got %v, want [9]", result)
 	}
 }
 

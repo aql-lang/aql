@@ -318,7 +318,7 @@ func registerBuiltins(r *Registry) {
 
 // registerBinaryIntOp registers a binary integer operation with a single
 // signature Args:[int, int] and forward precedence.
-func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64) (int64, error)) {
+func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value) ([]Value, error) {
 		result, err := op(args[0].AsInteger(), args[1].AsInteger())
 		if err != nil {
@@ -327,15 +327,14 @@ func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64)
 		return []Value{NewInteger(result)}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TInteger, TInteger},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TInteger, TInteger},
+		Handler: handler,
 	})
 }
 
 // registerBinaryNumOp registers a binary numeric operation with three
 // overloads: [decimal, decimal], [number, decimal], and [decimal, number].
-func registerBinaryNumOp(r *Registry, name string, prec int, op func(a, b float64) (float64, error)) {
+func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
 	handler := func(args []Value) ([]Value, error) {
 		result, err := op(args[0].AsNumber(), args[1].AsNumber())
 		if err != nil {
@@ -344,19 +343,16 @@ func registerBinaryNumOp(r *Registry, name string, prec int, op func(a, b float6
 		return []Value{NewDecimal(result)}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TDecimal, TDecimal},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TDecimal, TDecimal},
+		Handler: handler,
 	})
 	r.Register(name, Signature{
-		Args:       []Type{TNumber, TDecimal},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TNumber, TDecimal},
+		Handler: handler,
 	})
 	r.Register(name, Signature{
-		Args:       []Type{TDecimal, TNumber},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TDecimal, TNumber},
+		Handler: handler,
 	})
 }
 
@@ -378,14 +374,13 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 
 // registerBinaryBoolOp registers a binary boolean operation with a single
 // signature Args:[boolean, boolean] and forward precedence.
-func registerBinaryBoolOp(r *Registry, name string, prec int, op func(a, b bool) bool) {
+func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	handler := func(args []Value) ([]Value, error) {
 		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TBoolean, TBoolean},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TBoolean, TBoolean},
+		Handler: handler,
 	})
 }
 

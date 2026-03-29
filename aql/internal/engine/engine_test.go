@@ -875,9 +875,9 @@ func TestArithmeticChaining(t *testing.T) {
 	}
 }
 
-// --- Engine tests: operator precedence ---
+// --- Engine tests: left-to-right operator evaluation ---
 
-func TestPrecedenceMulBeforeAdd(t *testing.T) {
+func TestLeftToRightMulAndAdd(t *testing.T) {
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -888,24 +888,24 @@ func TestPrecedenceMulBeforeAdd(t *testing.T) {
 		input []Value
 		want  int64
 	}{
-		// 2 add 3 mul 4 → 2+(3*4) = 14
+		// 2 add 3 mul 4 → left-to-right: (2+3)*4 = 20
 		{"add then mul", []Value{
 			NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
-		}, 14},
-		// 2 mul 3 add 4 → (2*3)+4 = 10
+		}, 20},
+		// 2 mul 3 add 4 → left-to-right: (2*3)+4 = 10
 		{"mul then add", []Value{
 			NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("add"), NewInteger(4),
 		}, 10},
-		// 1 add 2 mul 3 add 4 → 1+(2*3)+4 = 11
+		// 1 add 2 mul 3 add 4 → left-to-right: ((1+2)*3)+4 = 13
 		{"add mul add", []Value{
 			NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
 			NewWord("add"), NewInteger(4),
-		}, 11},
-		// 2 add 3 mul 4 mul 5 → 2+(3*4*5) = 62
+		}, 13},
+		// 2 add 3 mul 4 mul 5 → left-to-right: ((2+3)*4)*5 = 100
 		{"add mul mul", []Value{
 			NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
 			NewWord("mul"), NewInteger(5),
-		}, 62},
+		}, 100},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -923,7 +923,7 @@ func TestPrecedenceMulBeforeAdd(t *testing.T) {
 	}
 }
 
-func TestPrecedenceSameLevel(t *testing.T) {
+func TestLeftToRightSameLevel(t *testing.T) {
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -959,7 +959,7 @@ func TestPrecedenceSameLevel(t *testing.T) {
 	}
 }
 
-func TestPrecedencePrefixUnaffected(t *testing.T) {
+func TestLeftToRightPrefixUnaffected(t *testing.T) {
 	// Prefix (Forth-style) should still work: 2 3 mul 4 add → 10
 	reg, err := DefaultRegistry()
 	if err != nil {
@@ -1423,7 +1423,7 @@ func TestParenUnmatchedClose(t *testing.T) {
 	}
 }
 
-func TestParenWithPrecedence(t *testing.T) {
+func TestParenWithLeftToRight(t *testing.T) {
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1434,13 +1434,13 @@ func TestParenWithPrecedence(t *testing.T) {
 		input []Value
 		want  int64
 	}{
-		// (1 add 2) mul 3 → 3*3 = 9 (parens override precedence)
-		{"paren overrides precedence", []Value{
+		// (1 add 2) mul 3 → left-to-right with parens: 3*3 = 9
+		{"paren groups evaluate first", []Value{
 			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 			NewWord("mul"), NewInteger(3),
 		}, 9},
-		// 3 mul (1 add 2) → 3*3 = 9
-		{"mul paren overrides", []Value{
+		// 3 mul (1 add 2) → left-to-right: 3*3 = 9
+		{"mul paren group", []Value{
 			NewInteger(3), NewWord("mul"),
 			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 		}, 9},
@@ -2115,8 +2115,8 @@ func TestEdgeLongInfixChain(t *testing.T) {
 	}
 }
 
-func TestEdgeLongMixedPrecedence(t *testing.T) {
-	// 1 add 2 mul 3 add 4 mul 5 → 1+(2*3)+(4*5) = 1+6+20 = 27
+func TestEdgeLongMixedLeftToRight(t *testing.T) {
+	// 1 add 2 mul 3 add 4 mul 5 → left-to-right: ((((1+2)*3)+4)*5) = 65
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2132,8 +2132,8 @@ func TestEdgeLongMixedPrecedence(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 27 {
-		t.Errorf("got %d, want 27", result[0].AsInteger())
+	if result[0].AsInteger() != 65 {
+		t.Errorf("got %d, want 65", result[0].AsInteger())
 	}
 }
 
@@ -2461,10 +2461,10 @@ func TestEdgeSetComputedValue(t *testing.T) {
 	}
 }
 
-// --- Edge: precedence interactions ---
+// --- Edge: left-to-right operator interactions ---
 
-func TestEdgePrecedenceSubMul(t *testing.T) {
-	// 10 sub 2 mul 3 → 10-(2*3) = 4
+func TestEdgeLeftToRightSubMul(t *testing.T) {
+	// 10 sub 2 mul 3 → left-to-right: (10-2)*3 = 24
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2476,13 +2476,13 @@ func TestEdgePrecedenceSubMul(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].AsInteger() != 4 {
-		t.Errorf("got %d, want 4", result[0].AsInteger())
+	if result[0].AsInteger() != 24 {
+		t.Errorf("got %d, want 24", result[0].AsInteger())
 	}
 }
 
-func TestEdgePrecedenceMulSub(t *testing.T) {
-	// 2 mul 3 sub 1 → (2*3)-1 = 5
+func TestEdgeLeftToRightMulSub(t *testing.T) {
+	// 2 mul 3 sub 1 → left-to-right: (2*3)-1 = 5
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2499,8 +2499,8 @@ func TestEdgePrecedenceMulSub(t *testing.T) {
 	}
 }
 
-func TestEdgePrecedenceDivAdd(t *testing.T) {
-	// 1 add 10 div 2 → 1+(10/2) = 6
+func TestEdgeLeftToRightDivAdd(t *testing.T) {
+	// 1 add 10 div 2 → left-to-right: (1+10)/2 = 5
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2512,13 +2512,13 @@ func TestEdgePrecedenceDivAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].AsInteger() != 6 {
-		t.Errorf("got %d, want 6", result[0].AsInteger())
+	if result[0].AsInteger() != 5 {
+		t.Errorf("got %d, want 5", result[0].AsInteger())
 	}
 }
 
-func TestEdgePrecedenceModAdd(t *testing.T) {
-	// 1 add 10 mod 3 → 1+(10%3) = 1+1 = 2
+func TestEdgeLeftToRightModAdd(t *testing.T) {
+	// 1 add 10 mod 3 → left-to-right: (1+10)%3 = 11%3 = 2
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2535,8 +2535,8 @@ func TestEdgePrecedenceModAdd(t *testing.T) {
 	}
 }
 
-func TestEdgePrecedenceAllOps(t *testing.T) {
-	// 1 add 2 mul 3 sub 4 div 2 → 1+(2*3)-(4/2) = 1+6-2 = 5
+func TestEdgeLeftToRightAllOps(t *testing.T) {
+	// 1 add 2 mul 3 sub 4 div 2 → left-to-right: ((((1+2)*3)-4)/2) = ((9-4)/2) = (5/2) = 2
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2549,8 +2549,8 @@ func TestEdgePrecedenceAllOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].AsInteger() != 5 {
-		t.Errorf("got %d, want 5", result[0].AsInteger())
+	if result[0].AsInteger() != 2 {
+		t.Errorf("got %d, want 2", result[0].AsInteger())
 	}
 }
 
@@ -2817,8 +2817,7 @@ func TestEdgeParenWithEndNoOp(t *testing.T) {
 }
 
 func TestEdgeParenComplexExpression(t *testing.T) {
-	// 2 mul (3 add 4 mul 5) → 2*(3+(4*5)) = 2*(3+20) = 2*23 = 46
-	// Inside parens: precedence still applies: 3 add 4 mul 5 → 3+(4*5) = 23
+	// 2 mul (3 add 4 mul 5) → left-to-right inside parens: 3 add 4 = 7, 7 mul 5 = 35, then 2*35 = 70
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2831,8 +2830,8 @@ func TestEdgeParenComplexExpression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 46 {
-		t.Errorf("got %v, want [46]", result)
+	if len(result) != 1 || result[0].AsInteger() != 70 {
+		t.Errorf("got %v, want [70]", result)
 	}
 }
 
@@ -3258,7 +3257,6 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 		ExpectedArgs:  3,
 		CollectedArgs: 1,
 		FuncIndex:     5,
-		Precedence:    2,
 	}
 	v := NewForward(info)
 	got := v.AsForward()
@@ -3273,9 +3271,6 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 	}
 	if got.FuncIndex != 5 {
 		t.Errorf("FuncIndex = %d, want 5", got.FuncIndex)
-	}
-	if got.Precedence != 2 {
-		t.Errorf("Precedence = %d, want 2", got.Precedence)
 	}
 }
 

@@ -42,16 +42,16 @@ upper "abc"	'ABC'
 # Mixed: integer + string → scalar sig (string concat)
 "count:" add " 5"	'count: 5'
 
-# --- Operator precedence (forward collection deferral) ---
+# --- Operator evaluation (left-to-right) ---
 
-# mul (prec=2) binds tighter than add (prec=1)
-2 add 3 mul 4	14
+# Operations evaluate strictly left-to-right
+2 add 3 mul 4	20
 2 mul 3 add 4	10
-1 add 2 mul 3 add 4	11
+1 add 2 mul 3 add 4	13
 
-# sub with precedence chain
+# sub chain (left-to-right)
 10 sub 3 sub 1	6
-10 sub 2 mul 3	4
+10 sub 2 mul 3	24
 
 # --- Parentheses scope prefix matching ---
 
@@ -77,14 +77,14 @@ upper "abc"	'ABC'
 # 4-element arithmetic chain
 1 add 2 add 3 add 4	10
 
-# 5-element chain
-1 add 2 mul 3 add 4 mul 5	27
+# 5-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5	65
 
-# 6-element chain
-1 add 2 mul 3 add 4 mul 5 add 6	33
+# 6-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5 add 6	71
 
-# 7-element chain with mixed precedence
-1 add 2 mul 3 add 4 mul 5 sub 6 add 7	28
+# 7-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5 sub 6 add 7	66
 
 # --- Prefix-only functions ---
 
@@ -100,7 +100,7 @@ if [2 lt 1] 10 20	20
 if true [1 add 2] [3 add 4]	3
 if false [1 add 2] [3 add 4]	7
 
-# --- Suffix precedence with varying arg counts ---
+# --- Forward precedence with varying arg counts ---
 
 # lower/upper take 1 arg (forward precedence)
 "ABC" lower	'abc'
@@ -117,9 +117,9 @@ lower "ABC"	'abc'
 1 eq 1	true
 1 neq 2	true
 
-# --- Comparison with arithmetic precedence ---
+# --- Comparison with arithmetic (left-to-right) ---
 
-# Arithmetic has lower precedence than comparison collectors
+# Arithmetic evaluates left-to-right before comparison
 1 add 1 lt 3	true
 2 mul 3 gte 6	true
 10 sub 5 gt 3	true

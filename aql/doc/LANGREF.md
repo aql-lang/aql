@@ -203,28 +203,22 @@ upper "hello" 42
 Result: `'HELLO' 42`. The `42` was never consumed because `upper`
 was satisfied after one argument.
 
-### Competing words and precedence
+### Left-to-right evaluation
 
-When two words are both waiting for forward arguments, *operator
-precedence* determines who gets the value. A higher-precedence word
-captures the value before a lower-precedence word, even if the
-lower-precedence word started waiting first.
-
-```
-2 add 3 mul 4           => 14
-```
-
-`add` (precedence 1) is waiting for its second argument. It sees `3`,
-but `mul` (precedence 2) appears next — and `mul` binds tighter. So
-`mul` captures `3` and `4`, producing 12. That result becomes the
-second argument to `add`: 2 + 12 = 14.
+When two words are both waiting for forward arguments, evaluation
+proceeds strictly left-to-right. Each word collects its arguments
+before the next word executes.
 
 ```
-2 mul 3 add 4           => 10
+2 add 3 mul 4           => 20
 ```
 
-Here `mul` (higher precedence) captures `3` immediately. It executes:
-2 * 3 = 6. Then `add` gets 6 from the stack and captures `4`: 6 + 4 = 10.
+`add` collects `3` as its second argument: 2 + 3 = 5. Then `mul`
+collects `4`: 5 * 4 = 20. Use parentheses to control evaluation order:
+
+```
+2 add (3 mul 4)         => 14
+```
 
 ### The `end` keyword
 
@@ -320,20 +314,16 @@ lower/1f "H"    => 'h'
 ```
 
 
-## Operator Precedence
+## Evaluation Order
 
-Arithmetic words carry a precedence level. Higher precedence binds
-tighter when words compete for forward arguments.
-
-| Precedence | Words                                          |
-|------------|------------------------------------------------|
-| 2 (high)   | `mul`, `div`, `mod`, `and`, `nand`             |
-| 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `min`, `max`, `lt`, `gt`, `lte`, `gte`, `eq`, `neq`, `deq` |
+All operations evaluate strictly left-to-right. Use parentheses to
+control evaluation order when needed.
 
 ```
-2 add 3 mul 4               => 14      # 2+(3*4), mul binds tighter
+2 add 3 mul 4               => 20      # (2+3)*4, left-to-right
 2 mul 3 add 4               => 10      # (2*3)+4
-1 add 2 mul 3 add 4         => 11
+1 add 2 mul 3 add 4         => 13      # ((1+2)*3)+4
+2 add (3 mul 4)             => 14      # parens force mul first
 ```
 
 
@@ -627,7 +617,7 @@ result is a decimal.
 #### `add`
 
 Addition for numbers; string concatenation when at least one argument
-is a non-numeric scalar. Precedence 1.
+is a non-numeric scalar.
 
 *Signatures:*
 - `[integer, integer] -> [integer]`
@@ -644,7 +634,7 @@ is a non-numeric scalar. Precedence 1.
 
 #### `sub`
 
-Subtraction. Precedence 1. The first argument is the minuend, the
+Subtraction. The first argument is the minuend, the
 second is the subtrahend.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
@@ -657,7 +647,7 @@ second is the subtrahend.
 
 #### `mul`
 
-Multiplication. Precedence 2.
+Multiplication.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -669,7 +659,7 @@ Multiplication. Precedence 2.
 
 #### `div`
 
-Division. Precedence 2. Integer division truncates toward zero.
+Division. Integer division truncates toward zero.
 Division by zero is an error.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
@@ -683,7 +673,7 @@ Division by zero is an error.
 
 #### `mod`
 
-Modulo. Precedence 2. Modulo by zero is an error.
+Modulo. Modulo by zero is an error.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -721,7 +711,7 @@ negate 7            => -7
 
 #### `min`
 
-Return the smaller of two numbers. Precedence 1.
+Return the smaller of two numbers.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -732,7 +722,7 @@ Return the smaller of two numbers. Precedence 1.
 
 #### `max`
 
-Return the larger of two numbers. Precedence 1.
+Return the larger of two numbers.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -743,7 +733,7 @@ Return the larger of two numbers. Precedence 1.
 
 #### `pow`
 
-Raise a number to a power. Precedence 2.
+Raise a number to a power.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -981,7 +971,7 @@ Compute the two-argument arc tangent. Handles quadrant correctly:
 `y x atan2`.
 
 *Signature:* `[number, number] -> [decimal]`
-*Precedence:* 1
+
 
 ```
 1 1 atan2           => 0.7853981633974483
@@ -994,7 +984,7 @@ Compute the two-argument arc tangent. Handles quadrant correctly:
 Compute the hypotenuse length: `sqrt(x*x + y*y)` without overflow.
 
 *Signature:* `[number, number] -> [decimal]`
-*Precedence:* 1
+
 
 ```
 3 4 hypot           => 5
@@ -1031,7 +1021,7 @@ math-e log          => 1
 #### `or`
 
 Logical OR for booleans; disjunction (type union) for non-boolean
-values. Precedence 1.
+values.
 
 *Signatures:*
 - `[boolean, boolean] -> [boolean]` — logical OR
@@ -1052,7 +1042,7 @@ number or string or boolean     => number|string|boolean
 
 #### `and`
 
-Logical AND. Precedence 2 (binds tighter than `or`).
+Logical AND.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1075,7 +1065,7 @@ not false               => true
 
 #### `xor`
 
-Exclusive OR. Precedence 1.
+Exclusive OR.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1086,7 +1076,7 @@ true xor true           => false
 
 #### `nand`
 
-Logical NAND (NOT AND). Precedence 2.
+Logical NAND (NOT AND).
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1098,7 +1088,7 @@ true nand false         => true
 #### `implies`
 
 Logical implication (a → b). False only when the first argument is
-true and the second is false. Precedence 1.
+true and the second is false.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1109,8 +1099,8 @@ false implies true      => true
 
 ### Comparison Words
 
-Comparison words take two arguments with forward precedence at
-precedence level 1. They use natural type comparisons: integers
+Comparison words take two arguments with forward precedence.
+They use natural type comparisons: integers
 compare numerically, strings compare lexicographically, booleans
 compare as `false < true`, atoms compare lexicographically on
 their name.
@@ -1128,7 +1118,7 @@ on non-scalars.
 Less than.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 lt 2                  => true
@@ -1143,7 +1133,7 @@ false lt true           => true
 Greater than.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 2 gt 1                  => true
@@ -1156,7 +1146,7 @@ Greater than.
 Less than or equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 lte 2                 => true
@@ -1169,7 +1159,7 @@ Less than or equal.
 Greater than or equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 2 gte 1                 => true
@@ -1184,7 +1174,7 @@ compares by value. For non-scalars (list, map), compares by identity
 (same in-memory object).
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 eq 1                  => true
@@ -1200,7 +1190,7 @@ Not equal. The negation of `eq`. Returns `true` when the two values
 are not exactly equal, `false` when they are.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 neq 2                 => true
@@ -1217,7 +1207,7 @@ and each element is deeply equal. Two maps are deeply equal if they
 have the same keys and each value is deeply equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 deq 1                 => true
@@ -2393,7 +2383,7 @@ for 5 [if [i eq 2] [continue] i]   => 0 1 3 4
 Evaluate a list as code (like `do`) with step-by-step tracing output.
 Shows the stack state at each step of evaluation, including
 resolved vs pending values, pointer position, and annotations for
-dispatch decisions (forward/prefix matching, precedence deferral,
+dispatch decisions (forward/prefix matching,
 argument collection). Output is color-coded for terminals.
 
 *Signature:* `[list] -> [any...]`
@@ -2566,7 +2556,7 @@ or a list of column names. Column aliases use nested lists.
 - `[atom("*"), table] -> [table]` — select all columns
 - `[list, table] -> [table]` — select named columns
 
-*Precedence:* 1
+
 
 ```
 select * from people                          # all columns
@@ -2596,7 +2586,7 @@ Supported operators: `eq` (=), `neq` (!=), `lt` (<), `gt` (>),
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people where [age gt "25"]
@@ -2614,7 +2604,7 @@ with optional `asc`/`desc` direction.
 - `[atom, table] -> [table]` — order by single column
 - `[list, table] -> [table]` — order by column list
 
-*Precedence:* 2
+
 
 ```
 from people order name
@@ -2644,7 +2634,7 @@ Restrict the number of rows returned.
 
 *Signature:* `[integer, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people limit 2
@@ -2657,7 +2647,7 @@ Skip a number of rows from the result.
 
 *Signature:* `[integer, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people offset 5
@@ -2670,7 +2660,7 @@ Remove duplicate rows from the result.
 
 *Signature:* `[table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 select * (distinct (from people))
@@ -2682,7 +2672,7 @@ Add a table alias to a query (useful for joins and subqueries).
 
 *Signature:* `[atom, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people as p
@@ -2697,7 +2687,7 @@ a list of columns.
 - `[atom, table] -> [table]` — group by single column
 - `[list, table] -> [table]` — group by column list
 
-*Precedence:* 2
+
 
 ```
 from sales group by [region]
@@ -2711,7 +2701,7 @@ Filter groups after `group by`. Uses the same condition syntax as
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from sales group by [region] having [count gt 5]
@@ -2725,7 +2715,7 @@ Join two tables. `join` and `innerjoin` produce an inner join,
 
 *Signature:* `[atom, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products on [orders.product_id eq products.id]
@@ -2739,7 +2729,7 @@ Set the ON condition for the most recent join.
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products on [orders.pid eq products.id]
@@ -2752,7 +2742,7 @@ the same name in both tables).
 
 *Signature:* `[column-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products using [id]
@@ -2766,7 +2756,7 @@ rows in both, `except` returns rows in the left but not the right.
 
 *Signature:* `[table, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 (from employees) union (from contractors)

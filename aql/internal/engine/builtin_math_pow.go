@@ -7,7 +7,7 @@ import (
 
 func registerPow(r *Registry) {
 	// pow: integer exponentiation [int, int] -> [int]
-	registerBinaryIntOp(r, "pow", 2, func(a, b int64) (int64, error) {
+	registerBinaryIntOp(r, "pow", func(a, b int64) (int64, error) {
 		if b < 0 {
 			return 0, fmt.Errorf("pow: negative exponent %d", b)
 		}
@@ -24,7 +24,7 @@ func registerPow(r *Registry) {
 		return result, nil
 	})
 	// pow: decimal exponentiation
-	registerBinaryNumOp(r, "pow", 2, func(a, b float64) (float64, error) {
+	registerBinaryNumOp(r, "pow", func(a, b float64) (float64, error) {
 		return math.Pow(a, b), nil
 	})
 }
