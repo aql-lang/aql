@@ -6,16 +6,18 @@ import (
 )
 
 func registerMod(r *Registry) {
+	// With forward-first matching, args are reversed relative to natural order.
+	// Swap operands so `a b mod` = a % b and `mod b a` = a % b.
 	registerBinaryIntOp(r, "mod", func(a, b int64) (int64, error) {
-		if b == 0 {
+		if a == 0 {
 			return 0, fmt.Errorf("modulo by zero")
 		}
-		return a % b, nil
+		return b % a, nil
 	})
 	registerBinaryNumOp(r, "mod", func(a, b float64) (float64, error) {
-		if b == 0 {
+		if a == 0 {
 			return 0, fmt.Errorf("modulo by zero")
 		}
-		return math.Mod(a, b), nil
+		return math.Mod(b, a), nil
 	})
 }
