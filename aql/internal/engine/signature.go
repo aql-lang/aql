@@ -128,6 +128,88 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	return best
 }
 
+// MatchSignatureReversed is like MatchSignature but reads the stack in reverse
+// order: the top of the stack maps to sigArgs[0], the next deeper value maps
+// to sigArgs[1], etc. This is used for forward-precedence functions when all
+// arguments come from the stack (zero forward tokens).
+func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
+	var best *MatchResult
+	var bestScore int
+
+	for i := range sigs {
+		sig := &sigs[i]
+
+		if modifiers.ArgCount >= 0 && sig.TotalArgs() != modifiers.ArgCount {
+			continue
+		}
+
+		n := len(sig.Args)
+		if len(stack) < n {
+			continue
+		}
+
+		// Extract top n values from the stack in reversed order.
+		reversed := make([]Value, n)
+		for j := 0; j < n; j++ {
+			reversed[j] = stack[len(stack)-1-j]
+		}
+
+		// Try positional match on the reversed values.
+		ordered, ok := flexibleMatch(reversed, sig.Args)
+		if !ok {
+			continue
+		}
+
+		// Check structural patterns.
+		if sig.Patterns != nil {
+			patternOk := true
+			for idx, pattern := range sig.Patterns {
+				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+					pattern.Data != nil && ordered[idx].Data != nil &&
+					!pattern.IsOptionsType() &&
+					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
+					if !openUnifyMap(pattern, ordered[idx]) {
+						patternOk = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(ordered[idx], pattern); !uOk {
+						patternOk = false
+						break
+					}
+				}
+			}
+			if !patternOk {
+				continue
+			}
+		}
+
+		score := signatureScore(sig)
+
+		for j := 0; j < n; j++ {
+			if sig.Args[j].Equal(TAny) {
+				continue
+			}
+			if ordered[j].VType.Equal(sig.Args[j]) {
+				score += 50
+			} else {
+				score += 10
+			}
+		}
+
+		if best != nil && score <= bestScore {
+			continue
+		}
+
+		args := make([]Value, n)
+		copy(args, ordered)
+		best = &MatchResult{Sig: sig, Args: args}
+		bestScore = score
+	}
+
+	return best
+}
+
 // flexibleMatch checks whether values match the given types positionally.
 // Arguments are never permuted — values[i] must match types[i].
 // Returns the values slice unchanged if matched, or false.

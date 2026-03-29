@@ -405,7 +405,7 @@ func valToString(v Value) string {
 			return "true"
 		}
 		return "false"
-	case v.VType.Matches(TWord):
+	case v.IsWord():
 		return v.AsWord().Name
 	default:
 		return v.String()

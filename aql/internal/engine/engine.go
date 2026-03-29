@@ -239,6 +239,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 		fwd := e.stack[fwdIdx].AsForward()
 		funcIdx := fwd.FuncIndex
 		collectedCount := fwd.CollectedArgs
+		stackArgCount := fwd.StackArgs
 
 		// Remove the forward marker.
 		e.stackRemove(fwdIdx)
@@ -247,7 +248,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 		}
 
 		// Try stack match or create curry list.
-		e.curryOrStack(funcIdx, collectedCount)
+		e.curryOrStack(funcIdx, collectedCount, stackArgCount)
 
 		// Retry from the current pointer position.
 		for step := 0; step < 100; step++ {
@@ -353,51 +354,39 @@ func (e *Engine) stepWord(val Value) error {
 
 	if fn.ForwardPrecedence {
 		resolved := e.effectiveResolved()
-		match := MatchSignature(fn.Signatures, resolved, w)
 
-		// When stack has a full match (typed signature), check if
-		// forward tokens should take priority. Forward precedence means
-		// we prefer to consume tokens after the word when available.
-		if match != nil && len(match.Sig.Args) > 0 {
-			if e.hasForwardValues(fn) {
-				// Forward tokens exist. Verify that collecting from
-				// forward would still produce a valid signature match
-				// before switching away from the working stack match.
-				forwardVal := e.peekForwardValue()
-				extended := append(resolved, forwardVal)
-				if MatchSignature(fn.Signatures, extended, w) != nil {
-					bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
-					if bestSig != nil {
-						forwardNeeded := len(bestSig.Args) - stackCount
-						if forwardNeeded <= 0 {
-							forwardNeeded = 1
-						}
-						e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-						return e.insertForward(w, bestSig, forwardNeeded, stackCount)
-					}
+		// Forward precedence: match forward tokens first (from sigArgs[0]),
+		// then fill remaining args from the stack in reverse order (top →
+		// first remaining sig arg).
+		if e.hasForwardValues(fn) {
+			bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
+			if bestSig != nil {
+				forwardNeeded := len(bestSig.Args) - stackCount
+				if forwardNeeded <= 0 {
+					forwardNeeded = 1 // at least take 1 from forward
 				}
+				e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
+				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 			}
-			// No viable forward — use stack match.
-			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
-			return e.execMatch(match)
 		}
 
-		// No full stack match — try forward (create forward to collect
-		// remaining args), preserving original behavior.
-		bestSig, stackCount := e.plannerBestSigForForward(fn, w, resolved)
-		if bestSig != nil {
-			forwardNeeded := len(bestSig.Args) - stackCount
-			if forwardNeeded <= 0 {
-				forwardNeeded = len(bestSig.Args)
-			}
-			e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-			return e.insertForward(w, bestSig, forwardNeeded, stackCount)
+		// No forward tokens or no forward match — try reversed stack match
+		// (top of stack → sigArgs[0]).
+		match := MatchSignatureReversed(fn.Signatures, resolved, w)
+		if match != nil && len(match.Sig.Args) > 0 {
+			// Physically reverse the top N values so execMatch sees them
+			// in signature order.
+			n := len(match.Sig.Args)
+			e.rearrangeForForward(n, 0)
+			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
+			return e.execMatch(match)
 		}
 
 		// Fall back to 0-arg match (generic def handler).
-		if match != nil {
-			e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
-			return e.execMatch(match)
+		match0 := MatchSignature(fn.Signatures, resolved, w)
+		if match0 != nil {
+			e.traceNote = "stack " + traceSigStr(w.Name, match0.Sig)
+			return e.execMatch(match0)
 		}
 
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
@@ -503,6 +492,45 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	}
 
 	return nil
+}
+
+// rearrangeForForward reorders the N = stackArgs + forwardArgs resolved values
+// before the current pointer so that forward-collected args come first (mapped
+// to the beginning of the signature) and stack args follow in reverse order
+// (top of stack → first remaining sig arg).
+//
+// Before: [..., stack_0, stack_1, ..., stack_{S-1}, fwd_0, fwd_1, ..., fwd_{F-1}, WORD]
+// After:  [..., fwd_0, fwd_1, ..., fwd_{F-1}, stack_{S-1}, ..., stack_1, stack_0, WORD]
+func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
+	total := stackArgs + forwardArgs
+	if total == 0 {
+		return
+	}
+
+	indices := e.resolvedIndicesBefore(total)
+	if len(indices) < total {
+		return
+	}
+
+	// Extract values in current order.
+	values := make([]Value, total)
+	for i, idx := range indices {
+		values[i] = e.stack[idx]
+	}
+
+	// Reorder: forward args first, then stack args reversed.
+	reordered := make([]Value, total)
+	for i := 0; i < forwardArgs; i++ {
+		reordered[i] = values[stackArgs+i]
+	}
+	for i := 0; i < stackArgs; i++ {
+		reordered[forwardArgs+i] = values[stackArgs-1-i]
+	}
+
+	// Write back.
+	for i, idx := range indices {
+		e.stack[idx] = reordered[i]
+	}
 }
 
 // resolvedIndicesBefore returns the indices of the last n resolved values
@@ -660,10 +688,12 @@ func (e *Engine) stepLiteral() error {
 		fwdIdx--
 	}
 
-	// Insert the forward value right before the function word. Suffix values
+	// Insert the forward value right before the function word. Forward values
 	// are appended in collection order (first collected = deepest).
 	// After collection the stack is:
-	// [..., stack_args..., suffix0, suffix1, ..., func_word]
+	// [..., stack_args..., fwd0, fwd1, ..., func_word]
+	// The rearrangeForForward call at completion time reorders to:
+	// [..., fwd0, fwd1, ..., stack_reversed..., func_word]
 	insertIdx := funcIdx
 
 	e.stackInsert(insertIdx, val)
@@ -680,14 +710,20 @@ func (e *Engine) stepLiteral() error {
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All forward args collected. Remove forward, force stack, retry.
 		e.stackRemove(fwdIdx)
-		// fwdIdx is after funcIdx, so funcIdx is unaffected.
+		// Adjust funcIdx if forward was before it (shouldn't normally happen).
+		if fwdIdx < funcIdx {
+			funcIdx--
+		}
 
-		if e.stack[funcIdx].IsWord() {
+		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
 			w := e.stack[funcIdx].AsWord()
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
+		// Rearrange values for forward-first matching: forward args at
+		// the deep end (sigArgs[0..F-1]), stack args reversed after them.
 		e.pointer = funcIdx
+		e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
 	} else if e.shouldResolveForwardEarly(fwd, fwdIdx) {
 		// A shorter sig is fully satisfied and the next token can't
 		// produce the longer sig's next expected type. Resolve now
@@ -701,7 +737,9 @@ func (e *Engine) stepLiteral() error {
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
+		// Rearrange for forward-first matching with early-resolved args.
 		e.pointer = funcIdx
+		e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
 	} else {
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
@@ -1051,7 +1089,8 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 
 	// A shorter sig is satisfied. Check whether the next token on the
 	// stack could produce the type needed for the longer sig's next slot.
-	nextArgType := fwd.Sig.Args[fwd.StackArgs+fwd.CollectedArgs]
+	// Forward args fill from sigArgs[0], so next forward slot = CollectedArgs.
+	nextArgType := fwd.Sig.Args[fwd.CollectedArgs]
 	peekIdx := fwdIdx + 1
 	if peekIdx >= len(e.stack) {
 		return true // no more tokens → resolve with shorter sig
@@ -1131,13 +1170,14 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 	collectedCount := fwd.CollectedArgs
+	stackArgCount := fwd.StackArgs
 
 	e.stackRemove(fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
 
-	e.curryOrStack(funcIdx, collectedCount)
+	e.curryOrStack(funcIdx, collectedCount, stackArgCount)
 	return nil
 }
 
@@ -1189,7 +1229,7 @@ func (e *Engine) stepEnd() error {
 		}
 	}
 
-	e.curryOrStack(funcIdx, fwd.CollectedArgs)
+	e.curryOrStack(funcIdx, fwd.CollectedArgs, fwd.StackArgs)
 	return nil
 }
 
@@ -1481,6 +1521,7 @@ func (e *Engine) stepCloseParen() error {
 				fwd := e.stack[i].AsForward()
 				funcIdx := fwd.FuncIndex
 				collectedCount := fwd.CollectedArgs
+				stackArgCount := fwd.StackArgs
 
 				// Remove the forward.
 				e.stackRemove(i)
@@ -1490,7 +1531,7 @@ func (e *Engine) stepCloseParen() error {
 				}
 
 				// Try stack match or create curry list.
-				e.curryOrStack(funcIdx, collectedCount)
+				e.curryOrStack(funcIdx, collectedCount, stackArgCount)
 
 				// Recalculate closeIdx after potential stack changes.
 				closeIdx = e.findCloseParenAfter(openIdx)
@@ -1708,7 +1749,12 @@ func (e *Engine) peekForwardValue() Value {
 // its collectedCount forward args into a list value (partial application).
 // When the list is later expanded (e.g., via def body substitution), the
 // word and args are spliced back onto the stack for completion.
-func (e *Engine) curryOrStack(funcIdx int, collectedCount int) {
+func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...int) {
+	sac := 0
+	if len(stackArgCount) > 0 {
+		sac = stackArgCount[0]
+	}
+
 	if funcIdx >= len(e.stack) || !e.stack[funcIdx].IsWord() {
 		e.pointer = funcIdx
 		return
@@ -1760,9 +1806,16 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int) {
 		}
 
 		testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
+
+		// For forward-precedence functions, rearrange values so forward
+		// args are first and stack args are reversed before matching.
+		if fn.ForwardPrecedence && sac > 0 {
+			e.pointer = funcIdx
+			e.rearrangeForForward(sac, collectedCount)
+		}
+
 		match := MatchSignature(fn.Signatures, resolved, testW)
 		if match != nil {
-			// Prefix match works - proceed normally.
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 			e.pointer = funcIdx
 			return
@@ -1821,8 +1874,9 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			// Suffix args start after stack-consumed slots in the sig.
-			nextIdx := fwd.StackArgs + fwd.CollectedArgs
+			// Forward args fill from sigArgs[0]; the next forward slot
+			// is at index CollectedArgs.
+			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TWord)
 			}
@@ -1841,7 +1895,8 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 		}
 		if e.stack[i].IsForward() {
 			fwd := e.stack[i].AsForward()
-			nextIdx := fwd.StackArgs + fwd.CollectedArgs
+			// Forward args fill from sigArgs[0].
+			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
 				return fwd.Sig.Args[nextIdx].Equal(TFunction)
 			}

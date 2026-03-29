@@ -918,3 +918,28 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
+
+# === Forward argument distribution (forward-first, then stack reversed) ===
+
+# 1-arg forward function: all calling patterns
+def fa1 fn [[a:Integer] Integer [a]] fa1 1	1
+def fa1 fn [[a:Integer] Integer [a]] 1 fa1	1
+
+# 2-arg forward function: all calling patterns
+# body: a b add (postfix, commutative — order doesn't matter)
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] fa2 10 3	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 fa2 10	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 10 fa2	13
+
+# 3-arg forward function: all calling patterns
+# body: a b add c add (commutative)
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] fa3 100 10 1	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 fa3 100 10	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 fa3 100	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 100 fa3	111
+
+# Verify arg order with mixed types (forward fills sigArgs[0]=a first)
+# Body returns a (Integer) to confirm correct assignment
+def fa2m fn [[a:Integer b:String] Integer [a]] fa2m 42 "hello"	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" fa2m 42	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" 42 fa2m	42

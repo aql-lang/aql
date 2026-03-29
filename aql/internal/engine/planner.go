@@ -21,7 +21,7 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 			continue
 		}
 
-		stackCount, usedArgs := plannerStackCoverage(sig.Args, resolved)
+		stackCount, usedArgs := plannerForwardStackCoverage(sig.Args, resolved)
 		score := signatureScore(sig)
 
 		// Prefer signatures that can consume already-resolved stack values.
@@ -89,6 +89,44 @@ func plannerStackCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
 	}
 
 	return stackCount, usedArgs
+}
+
+// plannerForwardStackCoverage returns how many values from the top of the
+// resolved stack can fill the LAST N positions of a signature, reading the
+// stack in reverse order (top → first remaining sig arg). This supports
+// forward-first matching: forward tokens fill sigArgs from the beginning,
+// and stack values fill the remainder from the end.
+//
+// For example, with sigArgs=[Integer, String, Boolean] and stack=[true, "a"]:
+//   - tryN=2: sigStart=1, stack top="a" → String ✓, next=true → Boolean ✓
+//   - Returns stackCount=2, usedArgs=[false, true, true]
+func plannerForwardStackCoverage(sigArgs []Type, resolved []Value) (int, []bool) {
+	usedArgs := make([]bool, len(sigArgs))
+	maxTry := len(sigArgs)
+	if maxTry > len(resolved) {
+		maxTry = len(resolved)
+	}
+
+	for tryN := maxTry; tryN >= 1; tryN-- {
+		sigStart := len(sigArgs) - tryN
+		ok := true
+		for j := 0; j < tryN; j++ {
+			// Stack top (resolved[len-1]) → sigArgs[sigStart]
+			// Stack deeper (resolved[len-2]) → sigArgs[sigStart+1], etc.
+			stackVal := resolved[len(resolved)-1-j]
+			if !stackVal.VType.Matches(sigArgs[sigStart+j]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			for j := sigStart; j < len(sigArgs); j++ {
+				usedArgs[j] = true
+			}
+			return tryN, usedArgs
+		}
+	}
+	return 0, usedArgs
 }
 
 // peekPlannableForwardValue returns the next non-structural candidate forward
