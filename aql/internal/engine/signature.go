@@ -77,6 +77,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			for idx, pattern := range sig.Patterns {
 				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
 					pattern.Data != nil && ordered[idx].Data != nil &&
+					!pattern.IsOptionsType() &&
 					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
 					if !openUnifyMap(pattern, ordered[idx]) {
 						patternOk = false

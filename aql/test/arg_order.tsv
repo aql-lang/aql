@@ -1,0 +1,101 @@
+# Argument ordering tests
+# Verifies that arguments can be split between prefix (stack) and suffix
+# (future tokens) at any point around the function word.
+#
+# For signature f a b c d, valid call forms are:
+#   f a b c d     — all suffix
+#   d f a b c     — 1 prefix, 3 suffix
+#   d c f a b     — 2 prefix, 2 suffix
+#   d c b f a     — 3 prefix, 1 suffix
+#   d c b a f     — all prefix
+#
+# Prefix args fill sig slots from deepest on stack (Args[0]).
+# Suffix args continue filling from where prefix left off.
+# Same-type args preserve positional order (sub 10 3 = 7).
+
+# =====================================================================
+# 2-param: [Opts Integer] — distinct types
+# =====================================================================
+
+# All suffix: {x:4}→Opts, 3→Integer
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
+
+# 1 prefix + 1 suffix: {x:4}→Opts (prefix), 3→Integer (suffix)
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] {x:4} f 3	7
+
+# All prefix: stack=[{x:4}, 3]. {x:4}→Opts, 3→Integer
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] {x:4} 3 f	7
+
+# =====================================================================
+# 2-param: [Integer String] — distinct scalar types
+# =====================================================================
+
+# All suffix
+def g fn [[n:Integer s:String] [String] [s add n]] g 5 "val:"	'val:5'
+
+# 1 prefix + 1 suffix: 5→Integer (prefix), "val:"→String (suffix)
+def g fn [[n:Integer s:String] [String] [s add n]] 5 g "val:"	'val:5'
+
+# All prefix: stack=[5, "val:"]. 5→Integer, "val:"→String
+def g fn [[n:Integer s:String] [String] [s add n]] 5 "val:" g	'val:5'
+
+# =====================================================================
+# 2-param: [Integer Integer] — same types preserve order
+# =====================================================================
+
+# sub(10, 3) = 7 in all valid forms
+10 3 sub	7
+10 sub 3	7
+sub 10 3	7
+
+# =====================================================================
+# 3-param: [Opts Integer String] — three distinct types
+# =====================================================================
+
+# All suffix
+def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
+
+# 1 prefix + 2 suffix
+def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} h 5 "!"	'15!'
+
+# 2 prefix + 1 suffix
+def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} 5 h "!"	'15!'
+
+# All prefix
+def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} 5 "!" h	'15!'
+
+# =====================================================================
+# Optional Options with ordering
+# =====================================================================
+
+# Suffix: opts then int
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] f {x:10} 5	15
+
+# 1 prefix (opts) + 1 suffix (int)
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} f 5	15
+
+# All prefix
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} 5 f	15
+
+# Optional omitted — just int
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f 5	5
+
+# =====================================================================
+# Extra values on stack should not be consumed
+# =====================================================================
+
+# Extra value before args, not consumed
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 99 {x:4} 3 f	99 7
+
+# =====================================================================
+# Boolean + Integer — distinct scalar subtypes
+# =====================================================================
+
+# All suffix
+def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] p true 5	5
+
+# 1 prefix + 1 suffix
+def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] true p 5	5
+
+# All prefix
+def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] true 5 p	5
