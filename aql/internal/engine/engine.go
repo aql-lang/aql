@@ -392,14 +392,13 @@ func (e *Engine) stepWord(val Value) error {
 			}
 			if bestSig != nil {
 				forwardNeeded := len(bestSig.Args) - stackCount
-				if forwardNeeded <= 0 {
-					forwardNeeded = 1 // at least take 1 from forward
-				}
 				if insideForward {
 					forwardNeeded = len(bestSig.Args)
 				}
-				e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
+				if forwardNeeded > 0 {
+					e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
+					return e.insertForward(w, bestSig, forwardNeeded, stackCount)
+				}
 			}
 		}
 

@@ -970,7 +970,7 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 		} else {
 			inner = append(inner, engine.NewWord(part))
 		}
-		inner = append(inner, engine.NewWordModified("dot", -1, true, false))
+		inner = append(inner, engine.NewWord("dot"))
 	}
 
 	// Leading dot operates on whatever is already on the stack,
