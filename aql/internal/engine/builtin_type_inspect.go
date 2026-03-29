@@ -68,7 +68,6 @@ func buildInspection(r *Registry, name string) Value {
 			argVals = []Value{}
 		}
 		sm.Set("args", NewList(argVals))
-		sm.Set("precedence", NewInteger(int64(sig.Precedence)))
 
 		sigMaps = append(sigMaps, NewMap(sm))
 	}

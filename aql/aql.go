@@ -26,9 +26,6 @@ type Value = engine.Value
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for prefix matching).
 //
-// Precedence controls binding strength for forward-precedence words;
-// higher values bind tighter (0 = default).
-//
 // Handler receives the matched args and returns replacement values for the stack.
 type Signature = engine.Signature
 
@@ -153,9 +150,6 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 //	        return []aql.Value{aql.NewInteger(n * 2)}, nil
 //	    },
 //	})
-//
-// Use the Precedence field on Signature to control binding strength
-// for forward argument collection (higher binds tighter, 0 = default).
 func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }

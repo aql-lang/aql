@@ -22,10 +22,9 @@ type NativeFunc struct {
 
 // NativeSig describes one overload of a native function.
 type NativeSig struct {
-	Args       []engine.Type
-	Precedence int
-	Handler    NativeHandler
-	Patterns   map[int]engine.Value // optional structural patterns for args
+	Args     []engine.Type
+	Handler  NativeHandler
+	Patterns map[int]engine.Value // optional structural patterns for args
 }
 
 // Register installs all built-in native functions into the given registry.
@@ -35,7 +34,6 @@ func Register(r *engine.Registry) {
 			handler := makeFullStackHandler(r, sig.Handler)
 			s := engine.Signature{
 				Args:             sig.Args,
-				Precedence:       sig.Precedence,
 				FullStackHandler: handler,
 				Patterns:         sig.Patterns,
 			}

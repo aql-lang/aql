@@ -301,8 +301,8 @@ func registerBuiltins(r *Registry) {
 	registerPrint(r)
 	registerTrace(r)
 
-	// Query
-	registerQuery(r)
+	// Query (temporarily disabled — precedence removal)
+	// registerQuery(r)
 
 	// Unify
 	registerUnify(r)

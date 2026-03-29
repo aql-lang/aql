@@ -17,14 +17,6 @@ type Signature struct {
 	// or manipulate the entire stack.
 	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
 
-	// Precedence controls evaluation ordering for forward-collecting words.
-	// When a forward-collecting word is about to collect a literal, and the
-	// next word has a higher Precedence, collection is deferred so the
-	// higher-precedence word can execute first. Used by query words
-	// (select, group, where, etc.) to ensure correct clause ordering.
-	// Arithmetic operators leave this at 0 for strict left-to-right evaluation.
-	Precedence int
-
 	// Patterns holds optional structural patterns for arguments (e.g. map
 	// literals in fn signatures). Key is arg index, value is the pattern.
 	// When set, the argument must unify with the pattern in addition to

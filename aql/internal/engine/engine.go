@@ -66,11 +66,7 @@ func traceSigStr(name string, sig *Signature) string {
 	for i, t := range sig.Args {
 		args[i] = t.String()
 	}
-	s := name + "(" + strings.Join(args, ", ") + ")"
-	if sig.Precedence > 0 {
-		s += fmt.Sprintf(" prec=%d", sig.Precedence)
-	}
-	return s
+	return name + "(" + strings.Join(args, ", ") + ")"
 }
 
 // stackInsert inserts val at index i, shifting elements right.
@@ -565,7 +561,6 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, pr
 		ExpectedArgs: forwardNeeded,
 		PrefixArgs:   pArgs,
 		FuncIndex:    e.pointer,
-		Precedence:   sig.Precedence,
 		Sig:          sig,
 	})
 
@@ -650,21 +645,6 @@ func (e *Engine) stepLiteral() error {
 		if !matchesAny {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
-		}
-	}
-
-	// Peek ahead: if the next item is a higher-precedence infix operator,
-	// defer collection and let that operator execute first.
-	if fwd.Precedence > 0 {
-		if nextPrec := e.peekPrecedence(valIdx + 1); nextPrec > fwd.Precedence {
-			nextName := ""
-			if valIdx+1 < len(e.stack) && e.stack[valIdx+1].IsWord() {
-				nextName = e.stack[valIdx+1].AsWord().Name
-			}
-			e.traceNote = fmt.Sprintf("defer %s prec=%d < %s prec=%d",
-				fwd.FuncName, fwd.Precedence, nextName, nextPrec)
-			e.pointer++
-			return nil
 		}
 	}
 
@@ -1720,30 +1700,6 @@ func (e *Engine) peekForwardValue() Value {
 		}
 	}
 	return next
-}
-
-// peekPrecedence returns the highest precedence of the word at stack[idx].
-func (e *Engine) peekPrecedence(idx int) int {
-	if idx >= len(e.stack) {
-		return 0
-	}
-	v := e.stack[idx]
-	if !v.IsWord() {
-		return 0
-	}
-	w := v.AsWord()
-	fn := e.registry.Lookup(w.Name)
-	if fn == nil || !fn.ForwardPrecedence {
-		return 0
-	}
-	var maxPrec int
-	for i := range fn.Signatures {
-		sig := &fn.Signatures[i]
-		if sig.Precedence > maxPrec {
-			maxPrec = sig.Precedence
-		}
-	}
-	return maxPrec
 }
 
 // curryOrPrefix handles a terminated forward. If the word at funcIdx can

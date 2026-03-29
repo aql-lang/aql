@@ -406,7 +406,6 @@ func registerQuery(r *Registry) {
 	r.Register("as",
 		Signature{
 			Args:       []Type{TList, TAtom},
-			Precedence: 2,
 			Handler:    asHandler,
 		},
 	)
@@ -459,18 +458,15 @@ func registerQuery(r *Registry) {
 		// Suffix: "select star from ..." → [TAtom, TList]
 		Signature{
 			Args:       []Type{TAtom, TList},
-			Precedence: 1,
 			Handler:    selectStarForwardHandler,
 		},
 		// Infix: "from ... select star" → [TList, TAtom]
 		Signature{
 			Args:       []Type{TList, TAtom},
-			Precedence: 1,
 			Handler:    selectStarInfixHandler,
 		},
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 1,
 			Handler:    selectColsHandler,
 		},
 	)
@@ -502,7 +498,6 @@ func registerQuery(r *Registry) {
 	r.Register("where",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    whereHandler,
 		},
 	)
@@ -540,12 +535,10 @@ func registerQuery(r *Registry) {
 	r.Register("order",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    orderListHandler,
 		},
 		Signature{
 			Args:       []Type{TList, TAtom},
-			Precedence: 2,
 			Handler:    orderAtomHandler,
 		},
 	)
@@ -582,7 +575,6 @@ func registerQuery(r *Registry) {
 	r.Register("limit",
 		Signature{
 			Args:       []Type{TList, TInteger},
-			Precedence: 2,
 			Handler:    limitHandler,
 		},
 	)
@@ -603,7 +595,6 @@ func registerQuery(r *Registry) {
 	r.Register("offset",
 		Signature{
 			Args:       []Type{TList, TInteger},
-			Precedence: 2,
 			Handler:    offsetHandler,
 		},
 	)
@@ -623,7 +614,6 @@ func registerQuery(r *Registry) {
 	r.Register("distinct",
 		Signature{
 			Args:       []Type{TList},
-			Precedence: 2,
 			Handler:    distinctHandler,
 		},
 	)
@@ -664,12 +654,10 @@ func registerQuery(r *Registry) {
 	r.Register("group",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    groupListHandler,
 		},
 		Signature{
 			Args:       []Type{TList, TAtom},
-			Precedence: 2,
 			Handler:    groupAtomHandler,
 		},
 	)
@@ -701,7 +689,6 @@ func registerQuery(r *Registry) {
 	r.Register("having",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    havingHandler,
 		},
 	)
@@ -739,7 +726,6 @@ func registerQuery(r *Registry) {
 	r.Register("on",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    onHandler,
 		},
 	)
@@ -774,7 +760,6 @@ func registerQuery(r *Registry) {
 	r.Register("using",
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    usingHandler,
 		},
 	)
@@ -812,7 +797,6 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 	r.Register(name,
 		Signature{
 			Args:       []Type{TList, TAtom},
-			Precedence: 2,
 			Handler:    handler,
 		},
 	)
@@ -843,7 +827,6 @@ func registerSetOpWord(r *Registry, name string, op string) {
 	r.Register(name,
 		Signature{
 			Args:       []Type{TList, TList},
-			Precedence: 2,
 			Handler:    handler,
 		},
 	)
