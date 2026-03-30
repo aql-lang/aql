@@ -39,17 +39,17 @@ type MatchResult struct {
 	Args []Value // args matched positionally to Sig.Args types
 }
 
-// MatchSignature finds the best matching signature for a function given the
+// MatchSignature finds the first matching signature for a function given the
 // resolved stack and optional word modifiers.
+//
+// Signatures are assumed to be pre-sorted by SortSignatures (longest and most
+// specific first, fallbacks last). The first match wins.
 //
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
 // modifiers control filtering (forceStack, forceForward, argCount).
 //
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
-	var best *MatchResult
-	var bestScore int
-
 	for i := range sigs {
 		sig := &sigs[i]
 
@@ -98,44 +98,21 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			}
 		}
 
-		score := signatureScore(sig)
-
-		// Match quality bonus: reward signatures where the actual values
-		// match specific (non-Any) type constraints. This prevents TAny
-		// from inflating scores when competing with specific types at
-		// different hierarchy depths (e.g. TWord vs TString).
-		for j := 0; j < n; j++ {
-			if sig.Args[j].Equal(TAny) {
-				continue
-			}
-			if ordered[j].VType.Equal(sig.Args[j]) {
-				score += 50 // exact type match
-			} else {
-				score += 10 // subtype (inexact) match
-			}
-		}
-
-		if best != nil && score <= bestScore {
-			continue
-		}
-
 		args := make([]Value, n)
 		copy(args, ordered)
-		best = &MatchResult{Sig: sig, Args: args}
-		bestScore = score
+		return &MatchResult{Sig: sig, Args: args}
 	}
 
-	return best
+	return nil
 }
 
 // MatchSignatureReversed is like MatchSignature but reads the stack in reverse
 // order: the top of the stack maps to sigArgs[0], the next deeper value maps
 // to sigArgs[1], etc. This is used for forward-precedence functions when all
 // arguments come from the stack (zero forward tokens).
+//
+// Signatures are assumed to be pre-sorted. The first match wins.
 func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
-	var best *MatchResult
-	var bestScore int
-
 	for i := range sigs {
 		sig := &sigs[i]
 
@@ -184,30 +161,12 @@ func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo)
 			}
 		}
 
-		score := signatureScore(sig)
-
-		for j := 0; j < n; j++ {
-			if sig.Args[j].Equal(TAny) {
-				continue
-			}
-			if ordered[j].VType.Equal(sig.Args[j]) {
-				score += 50
-			} else {
-				score += 10
-			}
-		}
-
-		if best != nil && score <= bestScore {
-			continue
-		}
-
 		args := make([]Value, n)
 		copy(args, ordered)
-		best = &MatchResult{Sig: sig, Args: args}
-		bestScore = score
+		return &MatchResult{Sig: sig, Args: args}
 	}
 
-	return best
+	return nil
 }
 
 // flexibleMatch checks whether values match the given types positionally.

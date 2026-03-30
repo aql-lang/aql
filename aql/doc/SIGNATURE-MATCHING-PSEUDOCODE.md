@@ -89,12 +89,13 @@ SIGNATURE_SCORE(sig):
 ## 4. Prefix (Stack) Matching — `MatchSignature`
 
 This is the primary dispatch path. The engine looks at the top of the stack
-and finds the best-matching signature.
+and finds the first matching signature. Signatures are pre-sorted by
+`SortSignatures` (longest and most specific first, fallbacks last), so the
+first match is the best match.
 
 ```
 MATCH_SIGNATURE(signatures[], stack[], modifiers):
-    best       = nil
-    bestScore  = 0
+    // signatures must be pre-sorted by SORT_SIGNATURES
 
     for each sig in signatures:
 
@@ -123,32 +124,16 @@ MATCH_SIGNATURE(signatures[], stack[], modifiers):
                     if NOT UNIFY(top[argIndex], pattern):
                         continue outer
 
-        // --- Compute score ---
-        score = SIGNATURE_SCORE(sig)
+        // --- First match wins ---
+        return sig, copy(top)
 
-        // Match quality bonus: reward specific (non-Any) type matches
-        for j in 0..n-1:
-            if sig.args[j] == Any:
-                continue                     // no bonus for catch-all
-            if top[j].type == sig.args[j]:
-                score += 50                  // exact type match bonus
-            else:
-                score += 10                  // subtype (inexact) match bonus
-
-        // --- Track best ---
-        if best == nil OR score > bestScore:
-            best      = sig
-            bestScore = score
-            bestArgs  = copy(top)
-
-    return best, bestArgs                    // nil if no match
+    return nil                               // no match
 ```
 
 **Key properties:**
-- Longer signatures (more args) always beat shorter ones (100 points per arg)
-- Among equal-length signatures, more specific types win
-- Exact type matches get +50 bonus, subtype matches get +10
-- `Any` args contribute no match quality bonus (prevents inflation)
+- Signatures are pre-sorted: longer first, then more specific types, fallbacks last
+- First match wins — no scoring needed at match time
+- Sorting ensures the most specific applicable signature is tried first
 
 ---
 
@@ -159,6 +144,7 @@ in reversed order (top of stack = first argument).
 
 ```
 MATCH_SIGNATURE_REVERSED(signatures[], stack[], modifiers):
+    // signatures must be pre-sorted by SORT_SIGNATURES
     // Same as MATCH_SIGNATURE, but extract values in reverse:
     for each sig (same filtering as above):
         n = len(sig.args)
@@ -169,7 +155,11 @@ MATCH_SIGNATURE_REVERSED(signatures[], stack[], modifiers):
         if NOT POSITIONAL_MATCH(reversed, sig.args):
             continue
 
-        // ... same pattern check and scoring as MATCH_SIGNATURE ...
+        // ... same pattern check as MATCH_SIGNATURE ...
+
+        return sig, copy(reversed)           // first match wins
+
+    return nil
 ```
 
 ---
@@ -283,20 +273,23 @@ SORT_SIGNATURES(sigs[]):
 
 ## 8. End-to-End Example
 
-Given a word `add` with signatures:
+Given a word `add` with signatures (registered in any order):
 ```
 sig1: (Scalar, Scalar)         → score: 200 + 1+1 = 202
 sig2: (Integer, Integer)       → score: 200 + 3+3 = 206
 sig3: (String, String)         → score: 200 + 2+2 = 204
 ```
 
+After `SortSignatures`, the order becomes (highest score first):
+```
+sig2: (Integer, Integer)       → score 206
+sig3: (String, String)         → score 204
+sig1: (Scalar, Scalar)         → score 202
+```
+
 And stack: `[... 3, 5]` (both Integer = Scalar/Number/Integer)
 
-1. **sig1 (Scalar, Scalar):** positional match succeeds (Integer matches Scalar).
-   Score = 202 + 10 + 10 = 222 (subtype bonuses, not exact)
-2. **sig2 (Integer, Integer):** positional match succeeds (exact match).
-   Score = 206 + 50 + 50 = 306 (exact match bonuses)
-3. **sig3 (String, String):** positional match fails (Integer doesn't match String).
-   Skipped.
+1. **sig2 (Integer, Integer):** positional match succeeds (exact match). **First match — return immediately.**
 
-Result: **sig2 wins** with score 306. The correct integer addition handler is invoked.
+Result: **sig2 wins**. The correct integer addition handler is invoked.
+The less specific signatures are never even tried.

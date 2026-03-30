@@ -520,6 +520,7 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},       // depth 6
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler},  // depth 7
 	}
+	SortSignatures(sigs)
 
 	// A value with the deepest type should match the most specific signature
 	val := Value{VType: mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge"), Data: nil}
@@ -541,6 +542,7 @@ func TestMatchSignatureMidLevelType(t *testing.T) {
 		{Args: []Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},
 	}
+	SortSignatures(sigs)
 
 	// A value at depth 6 should match the deepest available signature (depth 4)
 	val := Value{VType: mustTestType(t, "Data/Num/Int/I32/Signed/Big"), Data: nil}

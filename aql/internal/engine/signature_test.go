@@ -213,6 +213,7 @@ func TestMatchSignaturePrefersMostSpecific(t *testing.T) {
 		{Args: []Type{TInteger, TInteger}, Handler: dummyHandler},
 		{Args: []Type{TScalar, TScalar}, Handler: dummyHandler},
 	}
+	SortSignatures(sigs)
 	stack := []Value{NewInteger(1), NewInteger(2)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m == nil {
@@ -230,6 +231,7 @@ func TestMatchSignaturePrefersLonger(t *testing.T) {
 		{Args: []Type{TAny, TAny, TAny}, Handler: dummyHandler},
 		{Args: []Type{TAny, TAny}, Handler: dummyHandler},
 	}
+	SortSignatures(sigs)
 	stack := []Value{NewInteger(1), NewString("x"), NewBoolean(true)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m == nil {
@@ -314,10 +316,11 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	// Test with multiple specificity levels:
 	// boolean/true (3 parts) vs boolean (1 part) vs any (1 part)
 	sigs := []Signature{
-		{Args: []Type{TAny}, Handler: dummyHandler},              // score 101
-		{Args: []Type{TBoolean}, Handler: dummyHandler},          // score 101
-		{Args: []Type{TBooleanTrue}, Handler: dummyHandler},      // score 102
+		{Args: []Type{TAny}, Handler: dummyHandler},
+		{Args: []Type{TBoolean}, Handler: dummyHandler},
+		{Args: []Type{TBooleanTrue}, Handler: dummyHandler},
 	}
+	SortSignatures(sigs)
 	stack := []Value{NewBoolean(true)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m == nil {
@@ -376,6 +379,7 @@ func TestMatchSignaturePriorityByArgCount(t *testing.T) {
 				}
 				sigs = append(sigs, Signature{Args: args, Handler: dummyHandler})
 			}
+			SortSignatures(sigs)
 
 			stack := make([]Value, targetLen)
 			for i := range stack {
