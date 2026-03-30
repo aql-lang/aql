@@ -22,7 +22,13 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 		}
 
 		stackCount, usedArgs := plannerForwardStackCoverage(sig.Args, resolved)
-		score := signatureScore(sig)
+
+		// The planner uses its own scoring to rank candidates. The base
+		// score uses the compact formula (arity*100 + specificity_sum)
+		// that the bonuses below were calibrated against. The full
+		// signatureScore (with 1e6/1e4 multipliers) is used only by
+		// SortSignatures for first-match ordering.
+		score := plannerBaseScore(sig)
 
 		// Prefer signatures that can consume already-resolved stack values.
 		score += stackCount * 25
@@ -57,6 +63,17 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 	}
 
 	return best, bestStackCount
+}
+
+// plannerBaseScore computes a compact ranking score for the forward planner.
+// It uses the original formula (arity*100 + specificity_sum) that the
+// planner's stack/peek bonuses are calibrated against.
+func plannerBaseScore(sig *Signature) int {
+	score := sig.TotalArgs() * 100
+	for _, t := range sig.Args {
+		score += t.Specificity()
+	}
+	return score
 }
 
 // plannerStackCoverage returns how many values from the top of the resolved

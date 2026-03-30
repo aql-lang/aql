@@ -202,12 +202,95 @@ func positionalMatch(values []Value, types []Type) bool {
 	return true
 }
 
+// typeInherentScores maps fully-qualified type paths to an inherent score
+// reflecting roughly how many values the type can represent. Within the same
+// specificity level, types that match more values score higher and sort
+// earlier (tried first). Increments of 100. Unknown types default to 1000.
+var typeInherentScores = map[string]int{
+	// Depth 1 — Any is a wildcard (matches everything) so it gets the
+	// lowest score to ensure it sorts after all concrete root types.
+	"Any":    100,
+	"None":   100,
+	"Scalar": 3000,
+	"Node":   3000,
+	"Word":   2000,
+	"Object": 2000,
+
+	// Depth 2 — Scalar
+	"Scalar/String":  2000,
+	"Scalar/Number":  1500,
+	"Scalar/Boolean": 1000,
+
+	// Depth 2 — Node
+	"Node/List":  2000,
+	"Node/Map":   2000,
+	"Node/Error": 1000,
+
+	// Depth 2 — Word
+	"Word/Atom":     1000,
+	"Word/Function": 1500,
+	"Word/__FW":     500,
+	"Word/__OP":     500,
+	"Word/__PE":     500,
+	"Word/__FN":     500,
+	"Word/__UF":     500,
+	"Word/__RC":     500,
+	"Word/__DJ":     500,
+	"Word/__MK":     500,
+	"Word/__MV":     500,
+	"Word/__MD":     500,
+	"Word/__IN":     500,
+
+	// Depth 2 — Object
+	"Object/Table":    1500,
+	"Object/Record":   1500,
+	"Object/Fetch":    1000,
+	"Object/Resource": 1000,
+
+	// Depth 3 — Scalar
+	"Scalar/Number/Integer": 1100,
+	"Scalar/Number/Decimal": 1200,
+	"Scalar/String/Proper":  1000,
+	"Scalar/String/Empty":   1000,
+
+	// Depth 3 — Node
+	"Node/List/Args":    1000,
+	"Node/Map/Options":  1000,
+	"Node/Map/Word":     1000,
+	"Node/Map/Type":     1000,
+
+	// Depth 3 — Object
+	"Object/Fetch/Request":   1000,
+	"Object/Fetch/Response":  1000,
+	"Object/Resource/Entity": 1000,
+
+	// Depth 4
+	"Node/Map/Word/Inspect": 1000,
+	"Node/Map/Type/Inspect": 1000,
+}
+
+// typeInherentScore returns the inherent score for a type.
+// Defaults to 1000 for types not in the map.
+func typeInherentScore(t Type) int {
+	path := t.String()
+	if s, ok := typeInherentScores[path]; ok {
+		return s
+	}
+	return 1000
+}
+
 // signatureScore computes an intrinsic ranking score for a signature.
 // Higher is better: more args and more specific types win.
+//
+// Formula: arity * 1_000_000 + sum(specificity * 10_000 + inherentScore)
+//
+// Arity dominates (1e6), then specificity (1e4 per arg), then inherent
+// type score (up to ~9000) as a tiebreaker within the same specificity.
 func signatureScore(sig *Signature) int {
-	score := sig.TotalArgs() * 100 // arg count dominates
+	score := sig.TotalArgs() * 1_000_000
 	for _, t := range sig.Args {
-		score += t.Specificity()
+		score += t.Specificity() * 10_000
+		score += typeInherentScore(t)
 	}
 	return score
 }

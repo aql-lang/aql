@@ -63,9 +63,7 @@ func TestSignatureScoreZeroArgs(t *testing.T) {
 }
 
 func TestSignatureScoreArgCountDominates(t *testing.T) {
-	// 1 arg of any (specificity 1) = 101
 	sig1 := Signature{Args: []Type{TAny}}
-	// 2 args of any = 202
 	sig2 := Signature{Args: []Type{TAny, TAny}}
 	s1, s2 := SignatureScore(&sig1), SignatureScore(&sig2)
 	if s2 <= s1 {
@@ -74,9 +72,7 @@ func TestSignatureScoreArgCountDominates(t *testing.T) {
 }
 
 func TestSignatureScoreSpecificityBreaksTie(t *testing.T) {
-	// [integer, integer] specificity=2+2=4, total=204
 	sigNarrow := Signature{Args: []Type{TInteger, TInteger}}
-	// [scalar, scalar] specificity=1+1=2, total=202
 	sigWide := Signature{Args: []Type{TScalar, TScalar}}
 	sn, sw := SignatureScore(&sigNarrow), SignatureScore(&sigWide)
 	if sn <= sw {
@@ -85,9 +81,7 @@ func TestSignatureScoreSpecificityBreaksTie(t *testing.T) {
 }
 
 func TestSignatureScoreMixedSpecificity(t *testing.T) {
-	// [integer, any] = 200 + 2 + 1 = 203
 	sig1 := Signature{Args: []Type{TInteger, TAny}}
-	// [any, any] = 200 + 1 + 1 = 202
 	sig2 := Signature{Args: []Type{TAny, TAny}}
 	s1, s2 := SignatureScore(&sig1), SignatureScore(&sig2)
 	if s1 <= s2 {
@@ -96,7 +90,6 @@ func TestSignatureScoreMixedSpecificity(t *testing.T) {
 }
 
 func TestSignatureScoreDeepType(t *testing.T) {
-	// A 3-level type like "number/integer/positive" has specificity 3
 	deep, err := NewType("Number/Integer/Positive")
 	if err != nil {
 		t.Fatal(err)
@@ -340,18 +333,18 @@ func TestSignatureScoreValues(t *testing.T) {
 		score int
 	}{
 		{"empty", nil, 0},
-		{"1 any", []Type{TAny}, 101},
-		{"1 integer", []Type{TInteger}, 103},
-		{"2 any", []Type{TAny, TAny}, 202},
-		{"2 integer", []Type{TInteger, TInteger}, 206},
-		{"2 scalar", []Type{TScalar, TScalar}, 202},
-		{"3 any", []Type{TAny, TAny, TAny}, 303},
-		{"3 mixed", []Type{TInteger, TString, TAny}, 306},
-		{"4 any", []Type{TAny, TAny, TAny, TAny}, 404},
-		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 505},
-		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 606},
-		{"7 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 707},
-		{"7 integer", []Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 721},
+		{"1 any", []Type{TAny}, 1_010_100},
+		{"1 integer", []Type{TInteger}, 1_031_100},
+		{"2 any", []Type{TAny, TAny}, 2_020_200},
+		{"2 integer", []Type{TInteger, TInteger}, 2_062_200},
+		{"2 scalar", []Type{TScalar, TScalar}, 2_026_000},
+		{"3 any", []Type{TAny, TAny, TAny}, 3_030_300},
+		{"3 mixed", []Type{TInteger, TString, TAny}, 3_063_200},
+		{"4 any", []Type{TAny, TAny, TAny, TAny}, 4_040_400},
+		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 5_050_500},
+		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 6_060_600},
+		{"7 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 7_070_700},
+		{"7 integer", []Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 7_217_700},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
