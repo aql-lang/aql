@@ -410,7 +410,7 @@ func TestMaxArgsLimit(t *testing.T) {
 	}
 }
 
-func TestMaxArgsExceededPanics(t *testing.T) {
+func TestMaxArgsExceededReturnsError(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -419,10 +419,8 @@ func TestMaxArgsExceededPanics(t *testing.T) {
 	for i := range args {
 		args[i] = TAny
 	}
-	defer func() {
-		if rec := recover(); rec == nil {
-			t.Fatal("expected panic for signature exceeding MaxArgs")
-		}
-	}()
 	r.Register("toobig", Signature{Args: args, Handler: dummyHandler})
+	if r.Err() == nil {
+		t.Fatal("expected error for signature exceeding MaxArgs")
+	}
 }
