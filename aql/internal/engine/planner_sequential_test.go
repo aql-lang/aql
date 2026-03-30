@@ -177,7 +177,7 @@ func TestSequentialPlanner_DefFnSquare(t *testing.T) {
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("x", NewTypeLiteral(TNumber))
-			return NewMap(m)
+			return NewImplicitMap(m)
 		}(),
 	})
 	outputSig := NewList([]Value{NewTypeLiteral(TNumber)})
