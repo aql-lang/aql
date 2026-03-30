@@ -205,68 +205,64 @@ func positionalMatch(values []Value, types []Type) bool {
 // typeInherentScores maps fully-qualified type paths to an inherent score
 // reflecting roughly how many values the type can represent. Within the same
 // specificity level, types that match more values score higher and sort
-// earlier (tried first). Increments of 100. Unknown types default to 1000.
+// earlier (tried first). Every type has a unique score. Unknown types
+// default to 1000.
 var typeInherentScores = map[string]int{
-	// Depth 1 — Any is a wildcard (matches everything) so it gets the
-	// lowest score to ensure it sorts after all concrete root types.
-	"Any":    100,
+	// Depth 1 — Any/None are special; concrete roots ordered by breadth.
 	"None":   100,
-	"Scalar": 3000,
-	"Node":   3000,
-	"Word":   2000,
-	"Object": 2000,
+	"Any":    200,
+	"Object": 1400,
+	"Word":   1600,
+	"Scalar": 2500,
+	"Node":   2700,
 
-	// Depth 2 — Scalar
-	"Scalar/String":  2000,
-	"Scalar/Number":  1500,
-	"Scalar/Boolean": 1000,
+	// Depth 2 — Word internals (structural tokens, narrow cardinality)
+	"Word/__DJ": 100,
+	"Word/__FN": 200,
+	"Word/__FW": 300,
+	"Word/__IN": 400,
+	"Word/__MK": 500,
+	"Word/__MD": 600,
+	"Word/__MV": 700,
+	"Word/__OP": 800,
+	"Word/__PE": 900,
+	"Word/__RC": 1000,
+	"Word/__UF": 1100,
 
-	// Depth 2 — Node
-	"Node/List":  2000,
-	"Node/Map":   2000,
-	"Node/Error": 1000,
+	// Depth 2 — regular types, ordered by cardinality
+	"Scalar/Boolean": 1200,
+	"Word/Atom":      1300,
+	"Node/Error":     1400,
+	"Object/Fetch":   1500,
+	"Object/Resource": 1600,
+	"Scalar/Number":  1700,
+	"Word/Function":  1800,
+	"Object/Table":   1900,
+	"Object/Record":  2000,
+	"Scalar/String":  2100,
+	"Node/List":      2200,
+	"Node/Map":       2300,
 
-	// Depth 2 — Word
-	"Word/Atom":     1000,
-	"Word/Function": 1500,
-	"Word/__FW":     500,
-	"Word/__OP":     500,
-	"Word/__PE":     500,
-	"Word/__FN":     500,
-	"Word/__UF":     500,
-	"Word/__RC":     500,
-	"Word/__DJ":     500,
-	"Word/__MK":     500,
-	"Word/__MV":     500,
-	"Word/__MD":     500,
-	"Word/__IN":     500,
-
-	// Depth 2 — Object
-	"Object/Table":    1500,
-	"Object/Record":   1500,
-	"Object/Fetch":    1000,
-	"Object/Resource": 1000,
-
-	// Depth 3 — Scalar
+	// Depth 3 — Scalar subtypes
+	"Scalar/String/Empty":   900,
+	"Scalar/String/Proper":  1000,
 	"Scalar/Number/Integer": 1100,
 	"Scalar/Number/Decimal": 1200,
-	"Scalar/String/Proper":  1000,
-	"Scalar/String/Empty":   1000,
 
-	// Depth 3 — Node
-	"Node/List/Args":    1000,
-	"Node/Map/Options":  1000,
-	"Node/Map/Word":     1000,
-	"Node/Map/Type":     1000,
+	// Depth 3 — Node subtypes
+	"Node/List/Args":   1300,
+	"Node/Map/Options": 1400,
+	"Node/Map/Word":    1500,
+	"Node/Map/Type":    1600,
 
-	// Depth 3 — Object
-	"Object/Fetch/Request":   1000,
-	"Object/Fetch/Response":  1000,
-	"Object/Resource/Entity": 1000,
+	// Depth 3 — Object subtypes
+	"Object/Fetch/Request":   1700,
+	"Object/Fetch/Response":  1800,
+	"Object/Resource/Entity": 1900,
 
 	// Depth 4
-	"Node/Map/Word/Inspect": 1000,
-	"Node/Map/Type/Inspect": 1000,
+	"Node/Map/Word/Inspect": 2000,
+	"Node/Map/Type/Inspect": 2100,
 }
 
 // typeInherentScore returns the inherent score for a type.

@@ -333,17 +333,17 @@ func TestSignatureScoreValues(t *testing.T) {
 		score int
 	}{
 		{"empty", nil, 0},
-		{"1 any", []Type{TAny}, 1_010_100},
+		{"1 any", []Type{TAny}, 1_010_200},
 		{"1 integer", []Type{TInteger}, 1_031_100},
-		{"2 any", []Type{TAny, TAny}, 2_020_200},
+		{"2 any", []Type{TAny, TAny}, 2_020_400},
 		{"2 integer", []Type{TInteger, TInteger}, 2_062_200},
-		{"2 scalar", []Type{TScalar, TScalar}, 2_026_000},
-		{"3 any", []Type{TAny, TAny, TAny}, 3_030_300},
-		{"3 mixed", []Type{TInteger, TString, TAny}, 3_063_200},
-		{"4 any", []Type{TAny, TAny, TAny, TAny}, 4_040_400},
-		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 5_050_500},
-		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 6_060_600},
-		{"7 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 7_070_700},
+		{"2 scalar", []Type{TScalar, TScalar}, 2_025_000},
+		{"3 any", []Type{TAny, TAny, TAny}, 3_030_600},
+		{"3 mixed", []Type{TInteger, TString, TAny}, 3_063_400},
+		{"4 any", []Type{TAny, TAny, TAny, TAny}, 4_040_800},
+		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 5_051_000},
+		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 6_061_200},
+		{"7 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 7_071_400},
 		{"7 integer", []Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 7_217_700},
 	}
 	for _, tt := range tests {
