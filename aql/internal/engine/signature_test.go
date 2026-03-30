@@ -397,3 +397,32 @@ func TestMatchSignaturePriorityByArgCount(t *testing.T) {
 		})
 	}
 }
+
+func TestMaxArgsLimit(t *testing.T) {
+	// Exactly MaxArgs should be fine.
+	args := make([]Type, MaxArgs)
+	for i := range args {
+		args[i] = TAny
+	}
+	sig := Signature{Args: args, Handler: dummyHandler}
+	if sig.TotalArgs() != MaxArgs {
+		t.Fatalf("expected %d args, got %d", MaxArgs, sig.TotalArgs())
+	}
+}
+
+func TestMaxArgsExceededPanics(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatalf("new registry: %v", err)
+	}
+	args := make([]Type, MaxArgs+1)
+	for i := range args {
+		args[i] = TAny
+	}
+	defer func() {
+		if rec := recover(); rec == nil {
+			t.Fatal("expected panic for signature exceeding MaxArgs")
+		}
+	}()
+	r.Register("toobig", Signature{Args: args, Handler: dummyHandler})
+}

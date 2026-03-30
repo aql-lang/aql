@@ -127,6 +127,11 @@ func (r *Registry) Context() map[string]Value {
 
 // Register adds one or more signatures to a named function with forward precedence.
 func (r *Registry) Register(name string, sigs ...Signature) {
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			panic(fmt.Sprintf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+		}
+	}
 	fn, ok := r.funcs[name]
 	if !ok {
 		fn = &Function{Name: name, ForwardPrecedence: true}
@@ -138,6 +143,11 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 
 // RegisterStackOnly adds signatures to a named function without forward precedence.
 func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			panic(fmt.Sprintf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+		}
+	}
 	fn, ok := r.funcs[name]
 	if !ok {
 		fn = &Function{Name: name, ForwardPrecedence: false}

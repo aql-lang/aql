@@ -1,5 +1,8 @@
 package engine
 
+// MaxArgs is the maximum number of arguments a signature may declare.
+const MaxArgs = 32
+
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for stack matching).
