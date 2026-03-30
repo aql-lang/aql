@@ -28,17 +28,17 @@ func defStackOnly(v Value) bool {
 // evaluation. If the body is a list, its elements are spliced into the
 // stack. Otherwise the single value is pushed.
 //
-// Single handler, two signatures:
+// Two signatures with a single handler each:
 //
-//	Args:[TWord, TAny]   – def name body  or  body def name
-//	Args:[TString, TAny] – def "name" body  or  body def "name"
+//	Args:[TString, TAny]       – def "name" body
+//	Args:[TAtom/q, TAny]       – def name body  (word captured as atom via /q)
 //
-// Flexible matching handles reordering: in "body def name", forward collects
-// name(TWord), pushes it, then prefix sees [body, name] and flexible match
-// reorders to [name, body] matching [TWord, TAny].
+// The /q modifier on the Atom position causes Word values to be treated as
+// Atoms for matching, and captured without evaluation during forward
+// collection. Forward precedence rules handle all orderings (forward,
+// infix, postfix) without separate infix signatures.
 func registerDef(r *Registry) {
-	// All-forward handler: "def foo 42 end" → args=[foo(name), 42(body)]
-	defForwardHandler := func(args []Value) ([]Value, error) {
+	defHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		stackOnly := defStackOnly(args[0])
 		body := args[1]
@@ -46,33 +46,15 @@ func registerDef(r *Registry) {
 		return nil, nil
 	}
 
-	// Infix handler: "42 def foo" → args=[42(body), foo(name)]
-	defInfixHandler := func(args []Value) ([]Value, error) {
-		body := args[0]
-		name := defName(args[1])
-		stackOnly := defStackOnly(args[1])
-		installDef(r, name, body, stackOnly)
-		return nil, nil
-	}
-
 	r.Register("def",
-		// All-forward: name first, body second
-		Signature{
-			Args:    []Type{TWord, TAny},
-			Handler: defForwardHandler,
-		},
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: defForwardHandler,
-		},
-		// Infix: body first (prefix), name second (forward)
-		Signature{
-			Args:    []Type{TAny, TWord},
-			Handler: defInfixHandler,
+			Handler: defHandler,
 		},
 		Signature{
-			Args:    []Type{TAny, TString},
-			Handler: defInfixHandler,
+			Args:      []Type{TAtom, TAny},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   defHandler,
 		},
 	)
 }

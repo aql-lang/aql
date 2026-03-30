@@ -43,14 +43,22 @@ func (e *Engine) plannerBestSigForForward(fn *Function, w WordInfo, resolved []V
 					break
 				}
 			}
-			if firstUnmatched >= 0 && e.couldProduceType(*peekVal, sig.Args[firstUnmatched]) {
-				// Specific type matches get a stronger bonus than catch-all
-				// TAny matches. This ensures e.g. [TWord, TAny] is preferred
-				// over [TAny, TString] when the peek value is a word.
-				if sig.Args[firstUnmatched].Equal(TAny) {
-					score += 25
-				} else {
-					score += 50
+			if firstUnmatched >= 0 {
+				canMatch := e.couldProduceType(*peekVal, sig.Args[firstUnmatched])
+				// /q modifier: a Word peek value matches an Atom-typed /q slot.
+				if !canMatch && sig.QuoteArgs != nil && sig.QuoteArgs[firstUnmatched] &&
+					peekVal.VType.Equal(TWord) && TAtom.Matches(sig.Args[firstUnmatched]) {
+					canMatch = true
+				}
+				if canMatch {
+					// Specific type matches get a stronger bonus than catch-all
+					// TAny matches. This ensures e.g. [TWord, TAny] is preferred
+					// over [TAny, TString] when the peek value is a word.
+					if sig.Args[firstUnmatched].Equal(TAny) {
+						score += 25
+					} else {
+						score += 50
+					}
 				}
 			}
 		}

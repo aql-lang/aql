@@ -26,6 +26,12 @@ type Signature struct {
 	// matching the type.
 	Patterns map[int]Value
 
+	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
+	// When set, a Word value at that position is treated as an Atom for
+	// matching purposes and is captured without evaluation during forward
+	// collection.
+	QuoteArgs map[int]bool
+
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
@@ -70,7 +76,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		top := stack[base:]
 
 		// Try flexible match.
-		ordered, ok := flexibleMatch(top, sig.Args)
+		ordered, ok := flexibleMatch(top, sig)
 		if !ok {
 			continue
 		}
@@ -135,7 +141,7 @@ func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo)
 		}
 
 		// Try positional match on the reversed values.
-		ordered, ok := flexibleMatch(reversed, sig.Args)
+		ordered, ok := flexibleMatch(reversed, sig)
 		if !ok {
 			continue
 		}
@@ -172,30 +178,40 @@ func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo)
 	return nil
 }
 
-// flexibleMatch checks whether values match the given types positionally.
-// Arguments are never permuted — values[i] must match types[i].
+// flexibleMatch checks whether values match the given signature positionally.
+// Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
-func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
-	n := len(types)
+func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
+	n := len(sig.Args)
 	if len(values) < n {
 		return nil, false
 	}
 
-	if positionalMatch(values, types) {
+	if positionalMatch(values, sig) {
 		return values, true
 	}
 
 	return nil, false
 }
 
-// positionalMatch checks whether values match types in order.
-func positionalMatch(values []Value, types []Type) bool {
-	for i, t := range types {
-		if !values[i].VType.Matches(t) {
+// positionalMatch checks whether values match the signature's types in order.
+// Handles the /q modifier: a Word value at a QuoteArgs position is treated
+// as an Atom for type matching purposes.
+func positionalMatch(values []Value, sig *Signature) bool {
+	for i, t := range sig.Args {
+		v := values[i]
+		// /q modifier: treat Word as Atom for matching.
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
+			if !TAtom.Matches(t) {
+				return false
+			}
+			continue
+		}
+		if !v.VType.Matches(t) {
 			return false
 		}
 		// Reject type literals (Data==nil) for concrete Map/List signatures.
-		if values[i].Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
+		if v.Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
 			return false
 		}
 	}

@@ -4470,7 +4470,7 @@ func TestFlexibleMatchTooFewValues(t *testing.T) {
 	// Fewer values than types should return nil, false.
 	values := []Value{NewInteger(1)}
 	types := []Type{TInteger, TString}
-	result, ok := flexibleMatch(values, types)
+	result, ok := flexibleMatch(values, &Signature{Args: types})
 	if ok || result != nil {
 		t.Errorf("expected no match with fewer values than types")
 	}

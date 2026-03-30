@@ -1940,7 +1940,14 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
-				return fwd.Sig.Args[nextIdx].Equal(TWord)
+				if fwd.Sig.Args[nextIdx].Equal(TWord) {
+					return true
+				}
+				// /q modifier: capture word without evaluation.
+				if fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] {
+					return true
+				}
+				return false
 			}
 			break
 		}
