@@ -170,11 +170,11 @@ func deepEqual(a, b Value) bool {
 
 func registerComparison(r *Registry) {
 	// lt: [any, any] -> [boolean] — less than
+	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
 	r.Register("lt", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
-			cmp, err := compareValues(args[0], args[1])
+			cmp, err := compareValues(args[1], args[0])
 			if err != nil {
 				return nil, fmt.Errorf("lt: %w", err)
 			}
@@ -185,9 +185,8 @@ func registerComparison(r *Registry) {
 	// gt: [any, any] -> [boolean] — greater than
 	r.Register("gt", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
-			cmp, err := compareValues(args[0], args[1])
+			cmp, err := compareValues(args[1], args[0])
 			if err != nil {
 				return nil, fmt.Errorf("gt: %w", err)
 			}
@@ -198,9 +197,8 @@ func registerComparison(r *Registry) {
 	// lte: [any, any] -> [boolean] — less than or equal
 	r.Register("lte", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
-			cmp, err := compareValues(args[0], args[1])
+			cmp, err := compareValues(args[1], args[0])
 			if err != nil {
 				return nil, fmt.Errorf("lte: %w", err)
 			}
@@ -211,9 +209,8 @@ func registerComparison(r *Registry) {
 	// gte: [any, any] -> [boolean] — greater than or equal
 	r.Register("gte", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
-			cmp, err := compareValues(args[0], args[1])
+			cmp, err := compareValues(args[1], args[0])
 			if err != nil {
 				return nil, fmt.Errorf("gte: %w", err)
 			}
@@ -224,7 +221,6 @@ func registerComparison(r *Registry) {
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
 	r.Register("eq", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
 			return []Value{NewBoolean(exactEqual(args[0], args[1]))}, nil
 		},
@@ -233,7 +229,6 @@ func registerComparison(r *Registry) {
 	// neq: [any, any] -> [boolean] — not equal (negation of eq)
 	r.Register("neq", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
 			return []Value{NewBoolean(!exactEqual(args[0], args[1]))}, nil
 		},
@@ -242,7 +237,6 @@ func registerComparison(r *Registry) {
 	// deq: [any, any] -> [boolean] — deep equality (traverse non-scalars)
 	r.Register("deq", Signature{
 		Args:       []Type{TAny, TAny},
-		Precedence: 1,
 		Handler: func(args []Value) ([]Value, error) {
 			return []Value{NewBoolean(deepEqual(args[0], args[1]))}, nil
 		},

@@ -21,8 +21,8 @@ func registerTypeDef(r *Registry) {
 		return nil
 	}
 
-	// All-suffix handler: "type foo number" → args=[foo(name), number(body)]
-	typeSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward handler: "type foo number" → args=[foo(name), number(body)]
+	typeForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
 		if err := validateAndInstall(name, body); err != nil {
@@ -44,11 +44,11 @@ func registerTypeDef(r *Registry) {
 	r.Register("type",
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: typeSuffixHandler,
+			Handler: typeForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: typeSuffixHandler,
+			Handler: typeForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TAny, TWord},

@@ -3,7 +3,7 @@ package engine
 import "math"
 
 func registerAbs(r *Registry) {
-	// abs: [int] -> [int] (suffix precedence)
+	// abs: [int] -> [int] (forward precedence)
 	r.Register("abs", Signature{
 		Args: []Type{TInteger},
 		Handler: func(args []Value) ([]Value, error) {

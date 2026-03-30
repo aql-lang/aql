@@ -55,10 +55,10 @@ a upper	'A'
 "abc" upper	'ABC'
 "MiXeD" lower	'mixed'
 
-# === String functions - suffix ===
+# === String functions - forward ===
 lower "ABC"	'abc'
 lower B	'b'
-# upper now has suffix precedence (unified model)
+# upper now has forward precedence (unified model)
 upper "abc"	'ABC'
 lower "XYZ"	'xyz'
 
@@ -92,14 +92,14 @@ lower "XYZ"	'xyz'
 1 add 2	3
 10 add -3	7
 
-# === Operator precedence ===
-2 add 3 mul 4	14
+# === Operator evaluation (left-to-right) ===
+2 add 3 mul 4	20
 2 mul 3 add 4	10
-1 add 2 mul 3 add 4	11
+1 add 2 mul 3 add 4	13
 10 sub 3 sub 1	6
 1 add 1 add 1	3
 2 mul 2 mul 2	8
-1 add 2 mul 3	7
+1 add 2 mul 3	9
 
 # === Parentheses ===
 (1 add 2)	3
@@ -119,10 +119,10 @@ lower "XYZ"	'xyz'
 "a" dup	'a' 'a'
 
 # === Modifiers ===
-lower/s "E"	'e'
-"F" lower/p	'f'
+lower/f "E"	'e'
+"F" lower/s	'f'
 lower/1 "G"	'g'
-lower/1s "H"	'h'
+lower/1f "H"	'h'
 
 # === Set/Get ===
 set foo 99 end get foo	99
@@ -216,7 +216,7 @@ None None unify	None true
 None unify None	None true
 unify None None end	None true
 
-# === Unify - prefix/infix/suffix arg forms ===
+# === Unify - prefix/infix/forward arg forms ===
 
 # Prefix form: left right unify
 1 Number unify	1 true
@@ -526,7 +526,7 @@ lower B	'b'
 # Nested unmatched opening parenthesis
 ((1)		syntax_error
 
-# Missing suffix argument for add
+# Missing forward argument for add
 1 add		signature_error
 
 # Missing all arguments for add
@@ -582,7 +582,7 @@ var [[[x 2]] x mul x]	4
 7 var [[n] n mul n add n]	56
 
 # var with single inline value in body
-var [[[a 3] [b 4]] a mul a add b mul b]	25
+var [[[a 3] [b 4]] a mul a add b mul b]	52
 
 # var preserves existing definitions
 def foo 99 5 var [[x] x add foo] foo	104 99
@@ -629,10 +629,12 @@ def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
 def notb fn [[Boolean] [] [not]] end true notb	false
 
 # Unnamed String parameter
-def greet fn [[String] [] ["hello " swap add]] end "world" greet	'hello world'
+# Forward-first swap convention: args[1]+args[0] reverses concat for stack-only
+def greet fn [[String] [] ["hello " swap add]] end "world" greet	'worldhello '
 
 # Multiple unnamed Map parameters
-def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{b:2} {a:1}
+# Forward-first: fn args reversed from stack, swap undoes the reverse
+def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{a:1} {b:2}
 
 # Function def shadows regular def
 (def foo 42) (def foo fn [[Number] [Number] [dup mul]]) (3 foo) (undef foo) foo	9 42
@@ -675,8 +677,8 @@ true implies false	false
 false implies true	true
 false implies false	true
 
-# Boolean precedence: and binds tighter than or
-true or false and false	true
+# Boolean operators (left-to-right)
+true or false and false	false
 false and true or true	true
 
 # not with binary operators
@@ -831,10 +833,10 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # Disjunct creation: type literals
 String or Number	Scalar/String|Scalar/Number
 String or None	Scalar/String|None
-None or Boolean	None|Scalar/Boolean
+None or Boolean	Scalar/Boolean|None
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
+String or Number or Boolean	Scalar/Boolean|Scalar/String|Scalar/Number
 
 # Disjunct unify with scalar types
 (String or None) unify "a"	'a' true
@@ -918,3 +920,28 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
+
+# === Forward argument distribution (forward-first, then stack reversed) ===
+
+# 1-arg forward function: all calling patterns
+def fa1 fn [[a:Integer] Integer [a]] fa1 1	1
+def fa1 fn [[a:Integer] Integer [a]] 1 fa1	1
+
+# 2-arg forward function: all calling patterns
+# body: a b add (postfix, commutative — order doesn't matter)
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] fa2 10 3	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 fa2 10	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 10 fa2	13
+
+# 3-arg forward function: all calling patterns
+# body: a b add c add (commutative)
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] fa3 100 10 1	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 fa3 100 10	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 fa3 100	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 100 fa3	111
+
+# Verify arg order with mixed types (forward fills sigArgs[0]=a first)
+# Body returns a (Integer) to confirm correct assignment
+def fa2m fn [[a:Integer b:String] Integer [a]] fa2m 42 "hello"	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" fa2m 42	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" 42 fa2m	42

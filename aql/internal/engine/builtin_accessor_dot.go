@@ -7,20 +7,21 @@ import (
 
 // registerDot registers "dot" and its "." alias for property/index access.
 //
-// Usage (suffix):
+// Usage:
 //
-//	{a:1} dot a       => 1
-//
-// Usage (dot notation, handled by parser):
-//
-//	set foo a:b:1 foo.a.b  => 1
+//	{a:1} dot "x"     => 1   (infix)
+//	{a:1} "x" dot     => 1   (postfix)
+//	dot "x" {a:1}     => 1   (prefix)
+//	def bar {x:42} bar.x  => 42  (dot notation, handled by parser)
 func registerDot(r *Registry) {
+	// With forward-first matching, args are reversed: args[0]=key, args[1]=container.
+	// `a dot b` means access b on a, so container=args[1], key=args[0].
 	dotMapAtomHandler := func(args []Value) ([]Value, error) {
-		if args[0].Data == nil {
+		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
-		m := args[0].AsMap()
-		key := args[1].AsAtom()
+		m := args[1].AsMap()
+		key := args[0].AsAtom()
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -29,11 +30,11 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapStringHandler := func(args []Value) ([]Value, error) {
-		if args[0].Data == nil {
+		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
-		m := args[0].AsMap()
-		key := args[1].AsString()
+		m := args[1].AsMap()
+		key := args[0].AsString()
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -42,11 +43,11 @@ func registerDot(r *Registry) {
 	}
 
 	dotListHandler := func(args []Value) ([]Value, error) {
-		if args[0].Data == nil {
+		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot index type literal")
 		}
-		list := args[0].AsList()
-		idx := int(args[1].AsInteger())
+		list := args[1].AsList()
+		idx := int(args[0].AsInteger())
 		if idx < 0 || idx >= len(list) {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
@@ -54,11 +55,11 @@ func registerDot(r *Registry) {
 	}
 
 	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
-		if args[0].Data == nil {
+		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
-		m := args[0].AsMap()
-		key := strconv.FormatInt(args[1].AsInteger(), 10)
+		m := args[1].AsMap()
+		key := strconv.FormatInt(args[0].AsInteger(), 10)
 		val, ok := m.Get(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -71,17 +72,16 @@ func registerDot(r *Registry) {
 	}
 
 	dotObjectAtomHandler := func(args []Value) ([]Value, error) {
-		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
-		if m, ok := args[0].Data.(*OrderedMap); ok {
-			key := args[1].AsAtom()
+		if m, ok := args[1].Data.(*OrderedMap); ok {
+			key := args[0].AsAtom()
 			val, found := m.Get(key)
 			if !found {
 				return []Value{NewTypeLiteral(TNone)}, nil
 			}
 			return []Value{val}, nil
 		}
-		oi := args[0].AsObjectInstance()
-		key := args[1].AsAtom()
+		oi := args[1].AsObjectInstance()
+		key := args[0].AsAtom()
 		val, ok := oi.GetField(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -90,17 +90,16 @@ func registerDot(r *Registry) {
 	}
 
 	dotObjectStringHandler := func(args []Value) ([]Value, error) {
-		// Object types may carry either ObjectInstanceInfo or *OrderedMap data.
-		if m, ok := args[0].Data.(*OrderedMap); ok {
-			key := args[1].AsString()
+		if m, ok := args[1].Data.(*OrderedMap); ok {
+			key := args[0].AsString()
 			val, found := m.Get(key)
 			if !found {
 				return []Value{NewTypeLiteral(TNone)}, nil
 			}
 			return []Value{val}, nil
 		}
-		oi := args[0].AsObjectInstance()
-		key := args[1].AsString()
+		oi := args[1].AsObjectInstance()
+		key := args[0].AsString()
 		val, ok := oi.GetField(key)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -109,13 +108,13 @@ func registerDot(r *Registry) {
 	}
 
 	sigs := []Signature{
-		{Args: []Type{TObject, TAtom}, Handler: dotObjectAtomHandler},
-		{Args: []Type{TObject, TString}, Handler: dotObjectStringHandler},
-		{Args: []Type{TMap, TAtom}, Handler: dotMapAtomHandler},
-		{Args: []Type{TMap, TString}, Handler: dotMapStringHandler},
-		{Args: []Type{TList, TInteger}, Handler: dotListHandler},
-		{Args: []Type{TMap, TInteger}, Handler: dotMapIntegerHandler},
-		{Args: []Type{TNone, TAny}, Handler: dotNoneHandler},
+		{Args: []Type{TAtom, TObject}, Handler: dotObjectAtomHandler},
+		{Args: []Type{TString, TObject}, Handler: dotObjectStringHandler},
+		{Args: []Type{TAtom, TMap}, Handler: dotMapAtomHandler},
+		{Args: []Type{TString, TMap}, Handler: dotMapStringHandler},
+		{Args: []Type{TInteger, TList}, Handler: dotListHandler},
+		{Args: []Type{TInteger, TMap}, Handler: dotMapIntegerHandler},
+		{Args: []Type{TAny, TNone}, Handler: dotNoneHandler},
 	}
 
 	r.Register("dot", sigs...)

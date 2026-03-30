@@ -140,7 +140,7 @@ func init() {
 		Word:    "star",
 		Summary: "Push a wildcard column selector.",
 		Signatures: []string{"[] -> [atom]"},
-		Description: "Pushes the * selector for use in SELECT * queries. Prefix-only.",
+		Description: "Pushes the * selector for use in SELECT * queries. Stack-only.",
 		Examples: []string{
 			`"users" from star select`,
 			`"orders" from star select 10 limit`,

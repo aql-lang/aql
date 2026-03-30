@@ -2,14 +2,13 @@ package engine
 
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
-// on the stack, Args[last] = top of the stack for prefix matching).
+// on the stack, Args[last] = top of the stack for stack matching).
 //
-// For suffix-precedence words the engine collects future values into Args[0],
-// Args[1], ... in order, then pushes them onto the stack and retries as prefix.
+// For forward-precedence words the engine collects future values into Args[0],
+// Args[1], ... in order, then pushes them onto the stack and retries as a stack match.
 type Signature struct {
-	Args       []Type
-	Precedence int // higher binds tighter; 0 = default (no precedence)
-	Handler    func(args []Value) ([]Value, error)
+	Args    []Type
+	Handler func(args []Value) ([]Value, error)
 
 	// FullStackHandler, when non-nil, is called instead of Handler.
 	// It receives the matched args AND the full resolved stack before
@@ -23,6 +22,10 @@ type Signature struct {
 	// When set, the argument must unify with the pattern in addition to
 	// matching the type.
 	Patterns map[int]Value
+
+	// Fallback marks the generic 0-arg handler installed by def as the
+	// fallback entry. SortSignatures always places fallbacks last.
+	Fallback bool
 }
 
 // TotalArgs returns the number of arguments.
@@ -40,7 +43,7 @@ type MatchResult struct {
 // resolved stack and optional word modifiers.
 //
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
-// modifiers control filtering (forcePrefix, forceSuffix, argCount).
+// modifiers control filtering (forceStack, forceForward, argCount).
 //
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
@@ -108,7 +111,89 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			if ordered[j].VType.Equal(sig.Args[j]) {
 				score += 50 // exact type match
 			} else {
-				score += 10 // prefix (inexact) match
+				score += 10 // subtype (inexact) match
+			}
+		}
+
+		if best != nil && score <= bestScore {
+			continue
+		}
+
+		args := make([]Value, n)
+		copy(args, ordered)
+		best = &MatchResult{Sig: sig, Args: args}
+		bestScore = score
+	}
+
+	return best
+}
+
+// MatchSignatureReversed is like MatchSignature but reads the stack in reverse
+// order: the top of the stack maps to sigArgs[0], the next deeper value maps
+// to sigArgs[1], etc. This is used for forward-precedence functions when all
+// arguments come from the stack (zero forward tokens).
+func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
+	var best *MatchResult
+	var bestScore int
+
+	for i := range sigs {
+		sig := &sigs[i]
+
+		if modifiers.ArgCount >= 0 && sig.TotalArgs() != modifiers.ArgCount {
+			continue
+		}
+
+		n := len(sig.Args)
+		if len(stack) < n {
+			continue
+		}
+
+		// Extract top n values from the stack in reversed order.
+		reversed := make([]Value, n)
+		for j := 0; j < n; j++ {
+			reversed[j] = stack[len(stack)-1-j]
+		}
+
+		// Try positional match on the reversed values.
+		ordered, ok := flexibleMatch(reversed, sig.Args)
+		if !ok {
+			continue
+		}
+
+		// Check structural patterns.
+		if sig.Patterns != nil {
+			patternOk := true
+			for idx, pattern := range sig.Patterns {
+				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+					pattern.Data != nil && ordered[idx].Data != nil &&
+					!pattern.IsOptionsType() &&
+					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
+					if !openUnifyMap(pattern, ordered[idx]) {
+						patternOk = false
+						break
+					}
+				} else {
+					if _, uOk := Unify(ordered[idx], pattern); !uOk {
+						patternOk = false
+						break
+					}
+				}
+			}
+			if !patternOk {
+				continue
+			}
+		}
+
+		score := signatureScore(sig)
+
+		for j := 0; j < n; j++ {
+			if sig.Args[j].Equal(TAny) {
+				continue
+			}
+			if ordered[j].VType.Equal(sig.Args[j]) {
+				score += 50
+			} else {
+				score += 10
 			}
 		}
 
@@ -168,6 +253,40 @@ func signatureScore(sig *Signature) int {
 // SignatureScore exports signatureScore for testing.
 func SignatureScore(sig *Signature) int {
 	return signatureScore(sig)
+}
+
+// SortSignatures sorts a slice of signatures in-place by priority:
+// longest first, then most specific types. Fallback signatures always
+// sort last. Stable sort preserves registration order for equal scores.
+func SortSignatures(sigs []Signature) {
+	for i := 1; i < len(sigs); i++ {
+		for j := i; j > 0; j-- {
+			// Fallbacks always sink to the end.
+			if sigs[j-1].Fallback && !sigs[j].Fallback {
+				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
+				continue
+			}
+			if sigs[j].Fallback {
+				break
+			}
+			if signatureScore(&sigs[j]) > signatureScore(&sigs[j-1]) {
+				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
+			} else {
+				break
+			}
+		}
+	}
+}
+
+// KeepFallback returns a slice containing only the fallback signature.
+// If no fallback is found, returns nil.
+func KeepFallback(sigs []Signature) []Signature {
+	for i := range sigs {
+		if sigs[i].Fallback {
+			return []Signature{sigs[i]}
+		}
+	}
+	return nil
 }
 
 // RankSignatures returns the indices of sigs sorted by priority (best first).

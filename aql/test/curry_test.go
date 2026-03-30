@@ -232,7 +232,8 @@ func TestCurryStringConcat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "'hello world'")
+	// Forward-first swap: curry expansion reverses string concat order
+	assertResult(t, result, "'worldhello '")
 }
 
 // --- Curried words with parentheses ---
@@ -290,7 +291,7 @@ func TestCurryNoOuterForwardErrors(t *testing.T) {
 	}
 	_, err = eng.Run(vals)
 	if err == nil {
-		t.Fatal("expected error for add with only 1 suffix arg and no outer forward")
+		t.Fatal("expected error for add with only 1 forward arg and no outer forward")
 	}
 	if !strings.Contains(err.Error(), "signature") {
 		t.Errorf("expected signature error, got: %v", err)

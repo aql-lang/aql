@@ -183,7 +183,7 @@ markers being ##
 
 Quoted source is directly placed onto future token stream.
 
-The built in def has suffix precedence with signature: 
+The built in def has forward precedence with signature: 
 ```
 [
   [word any] []
@@ -199,7 +199,7 @@ def increment [[1 add]]
 2 increment # result [3|]
 
 def decrement [[1 sub]] 
-decrement 3 # result <2|>, works because sub allows suffix args
+decrement 3 # result <2|>, works because sub allows forward args
 ```
 
 New words defined with `def` can only handle prefix args internally.
@@ -220,7 +220,7 @@ returns <3 7 6>
 
 `def square [ [number] [number] [dup mul]]`
 
-Words are effectively functions. Thus square takes one argument, suffix precedence. 
+Words are effectively functions. Thus square takes one argument, forward precedence. 
 The argument can be:
 
 - list with 3n entries
@@ -230,7 +230,7 @@ Multiples of three define other signatures
 
 
 `def square [ number number [dup mul]]` - same as above, 
-except function square now has suffix precedence, abbreviate signatures for single args and returns.
+except function square now has forward precedence, abbreviate signatures for single args and returns.
 
 Recursion is possible using defined name, or `recur`
 

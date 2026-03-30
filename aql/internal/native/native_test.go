@@ -390,7 +390,7 @@ func TestSliceAllHandler(t *testing.T) {
 
 func TestSliceStartHandler(t *testing.T) {
 	data := newList(engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3))
-	result, err := sliceStartHandler([]engine.Value{data, engine.NewInteger(1)}, nil, nil, nil)
+	result, err := sliceStartHandler([]engine.Value{engine.NewInteger(1), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func TestSliceStartHandler(t *testing.T) {
 
 func TestSliceStartEndHandler(t *testing.T) {
 	data := newList(engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4))
-	result, err := sliceStartEndHandler([]engine.Value{data, engine.NewInteger(1), engine.NewInteger(3)}, nil, nil, nil)
+	result, err := sliceStartEndHandler([]engine.Value{engine.NewInteger(1), engine.NewInteger(3), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

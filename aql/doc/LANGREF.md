@@ -148,26 +148,26 @@ Any values left on the stack at the end are the result.
 
 Most words also accept arguments that appear *after* them. When a word
 does not yet have enough arguments on the stack, it waits: each
-subsequent value is collected as a suffix argument until the word has
+subsequent value is collected as a forward argument until the word has
 everything it needs. Then the word executes.
 
 ```
 add 1 2         => 3
 ```
 
-1. `add` — needs two arguments, stack is empty. Wait for suffix values.
+1. `add` — needs two arguments, stack is empty. Wait for forward values.
 2. `1` — collected as first argument to `add`.
 3. `2` — collected as second argument. `add` now has both; it executes.
 
-This is why the same word works in prefix, suffix, and infix position:
+This is why the same word works in prefix, forward, and infix position:
 
 ```
 1 2 add         => 3       # prefix: both args already on the stack
-add 1 2         => 3       # suffix: both args collected after the word
+add 1 2         => 3       # forward: both args collected after the word
 1 add 2         => 3       # infix: 1 from the stack, 2 collected after
 ```
 
-### Nested suffix collection
+### Nested forward collection
 
 When one word is waiting for arguments and encounters another word,
 the inner word collects *its* arguments first. The inner word's result
@@ -203,32 +203,26 @@ upper "hello" 42
 Result: `'HELLO' 42`. The `42` was never consumed because `upper`
 was satisfied after one argument.
 
-### Competing words and precedence
+### Left-to-right evaluation
 
-When two words are both waiting for suffix arguments, *operator
-precedence* determines who gets the value. A higher-precedence word
-captures the value before a lower-precedence word, even if the
-lower-precedence word started waiting first.
-
-```
-2 add 3 mul 4           => 14
-```
-
-`add` (precedence 1) is waiting for its second argument. It sees `3`,
-but `mul` (precedence 2) appears next — and `mul` binds tighter. So
-`mul` captures `3` and `4`, producing 12. That result becomes the
-second argument to `add`: 2 + 12 = 14.
+When two words are both waiting for forward arguments, evaluation
+proceeds strictly left-to-right. Each word collects its arguments
+before the next word executes.
 
 ```
-2 mul 3 add 4           => 10
+2 add 3 mul 4           => 20
 ```
 
-Here `mul` (higher precedence) captures `3` immediately. It executes:
-2 * 3 = 6. Then `add` gets 6 from the stack and captures `4`: 6 + 4 = 10.
+`add` collects `3` as its second argument: 2 + 3 = 5. Then `mul`
+collects `4`: 5 * 4 = 20. Use parentheses to control evaluation order:
+
+```
+2 add (3 mul 4)         => 14
+```
 
 ### The `end` keyword
 
-Sometimes you need to stop suffix collection early — for example, when
+Sometimes you need to stop forward collection early — for example, when
 a word's argument is followed by more tokens that should not be
 consumed.
 
@@ -294,9 +288,9 @@ lower "ABC"     => 'abc'
 10 sub 3        => 7
 ```
 
-By default most words have *suffix precedence*: when prefix arguments
-are available they are tried first; suffix collection is the fallback.
-Stack-manipulation words (`dup`, `swap`, `drop`) are prefix-only by
+By default most words have *forward precedence*: when prefix arguments
+are available they are tried first; forward collection is the fallback.
+Stack-manipulation words (`dup`, `swap`, `drop`) are stack-only by
 default.
 
 
@@ -306,40 +300,36 @@ Append a modifier to a word name to override argument behaviour.
 
 | Modifier | Meaning                              |
 |----------|--------------------------------------|
-| `/p`     | Force prefix-only arguments          |
-| `/s`     | Force suffix-only arguments          |
+| `/s`     | Force stack-only arguments          |
+| `/f`     | Force forward-only arguments          |
 | `/N`     | Expect exactly N arguments           |
-| `/Ns`    | Expect N arguments, suffix only      |
-| `/Np`    | Expect N arguments, prefix only      |
+| `/Nf`    | Expect N arguments, forward only      |
+| `/Ns`    | Expect N arguments, stack only      |
 
 ```
-lower/s "E"     => 'e'
-"F" lower/p     => 'f'
+lower/f "E"     => 'e'
+"F" lower/s     => 'f'
 lower/1 "G"     => 'g'
-lower/1s "H"    => 'h'
+lower/1f "H"    => 'h'
 ```
 
 
-## Operator Precedence
+## Evaluation Order
 
-Arithmetic words carry a precedence level. Higher precedence binds
-tighter when words compete for suffix arguments.
-
-| Precedence | Words                                          |
-|------------|------------------------------------------------|
-| 2 (high)   | `mul`, `div`, `mod`, `and`, `nand`             |
-| 1 (low)    | `add`, `sub`, `or`, `xor`, `implies`, `min`, `max`, `lt`, `gt`, `lte`, `gte`, `eq`, `neq`, `deq` |
+All operations evaluate strictly left-to-right. Use parentheses to
+control evaluation order when needed.
 
 ```
-2 add 3 mul 4               => 14      # 2+(3*4), mul binds tighter
+2 add 3 mul 4               => 20      # (2+3)*4, left-to-right
 2 mul 3 add 4               => 10      # (2*3)+4
-1 add 2 mul 3 add 4         => 11
+1 add 2 mul 3 add 4         => 13      # ((1+2)*3)+4
+2 add (3 mul 4)             => 14      # parens force mul first
 ```
 
 
 ## The `end` Keyword
 
-`end` terminates suffix argument collection for the nearest pending
+`end` terminates forward argument collection for the nearest pending
 word. Remaining arguments are taken from the stack.
 
 ```
@@ -357,7 +347,7 @@ unify 1 number end 42       => 1 true 42
 Convert a string or atom to uppercase.
 
 *Signatures:* `[string] -> [string]`, `[atom] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello" upper       => 'HELLO'
@@ -370,7 +360,7 @@ a upper             => 'A'
 Convert a string or atom to lowercase.
 
 *Signatures:* `[string] -> [string]`, `[atom] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "WORLD" lower       => 'world'
@@ -385,7 +375,7 @@ converted to its string representation. Use an options map to set a
 separator or to skip empty/nullish parts.
 
 *Signatures:* `[list] -> [string]`, `[list, map] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 ["a","b","c"] concat                          => 'abc'
@@ -401,7 +391,7 @@ Options: `sep` (string), `skipEmpty` (bool), `skipNullish` (bool).
 Split a string into a list of parts by a separator.
 
 *Signatures:* `[string, string] -> [list]`, `[string, string, map] -> [list]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "a,b,c" "," split                             => ['a','b','c']
@@ -423,7 +413,7 @@ Trim whitespace or specific characters from a string.
 - `[atom] -> [string]`
 - `[atom, map] -> [string]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "  hello  " trim                               => 'hello'
@@ -439,7 +429,7 @@ Options: `side` (left/right/both), `chars`, `cs`, `u`, `norm`.
 Test whether a string contains a search term.
 
 *Signatures:* `[string, string] -> [boolean]`, `[string, string, map] -> [boolean]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello world" "world" contains                           => true
@@ -457,7 +447,7 @@ Find the byte index of a search term in a string. Returns -1 if not
 found.
 
 *Signatures:* `[string, string] -> [integer]`, `[string, string, map] -> [integer]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello world" "world" indexof                            => 6
@@ -476,7 +466,7 @@ Replace occurrences of a search term in a string.
 - `[string, string, string] -> [string]`
 - `[string, string, string, map] -> [string]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello world" "world" "earth" replace                    => 'hello earth'
@@ -497,7 +487,7 @@ Extract a substring by numeric position.
 - `[string, integer, map] -> [string]`
 - `[string, integer, integer, map] -> [string]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello" 0 3 slice                                       => 'hel'
@@ -519,7 +509,7 @@ Apply a casing transformation to a string. Defaults to `"lower"`.
 - `[atom] -> [string]`
 - `[atom, map] -> [string]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "Hello World" changecase                                => 'hello world'
@@ -537,7 +527,7 @@ Options: `style`, `u`, `norm`, `loc`.
 Normalize Unicode and optionally clean whitespace and line endings.
 
 *Signatures:* `[string] -> [string]`, `[string, map] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "café" normalize                                        => 'café'
@@ -554,7 +544,7 @@ Options: `form` (NFC/NFD/NFKC/NFKD), `trim`, `collapseWs`,
 Repeat a string a fixed number of times.
 
 *Signatures:* `[string, integer] -> [string]`, `[string, integer, map] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "ab" 3 repeat                                           => 'ababab'
@@ -571,7 +561,7 @@ Pad a string to a desired length. Defaults to right-padding with
 spaces.
 
 *Signatures:* `[string, integer] -> [string]`, `[string, integer, map] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hi" 5 pad                                              => 'hi   '
@@ -592,7 +582,7 @@ Match a pattern and return a structured result map with fields: `ok`
 (start index), `e` (end index).
 
 *Signatures:* `[string, string] -> [map]`, `[string, string, map] -> [map]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello world" "world" match .ok                         => true
@@ -608,7 +598,7 @@ Options: `cs`, `mode`, `scope` (first/all), `u`, `norm`.
 Escape a string for safe use in shells and text tools.
 
 *Signatures:* `[string] -> [string]`, `[string, map] -> [string]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "hello world" escape                                    => 'hello\ world'
@@ -627,7 +617,7 @@ result is a decimal.
 #### `add`
 
 Addition for numbers; string concatenation when at least one argument
-is a non-numeric scalar. Precedence 1.
+is a non-numeric scalar.
 
 *Signatures:*
 - `[integer, integer] -> [integer]`
@@ -644,7 +634,7 @@ is a non-numeric scalar. Precedence 1.
 
 #### `sub`
 
-Subtraction. Precedence 1. The first argument is the minuend, the
+Subtraction. The first argument is the minuend, the
 second is the subtrahend.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
@@ -657,7 +647,7 @@ second is the subtrahend.
 
 #### `mul`
 
-Multiplication. Precedence 2.
+Multiplication.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -669,7 +659,7 @@ Multiplication. Precedence 2.
 
 #### `div`
 
-Division. Precedence 2. Integer division truncates toward zero.
+Division. Integer division truncates toward zero.
 Division by zero is an error.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
@@ -683,7 +673,7 @@ Division by zero is an error.
 
 #### `mod`
 
-Modulo. Precedence 2. Modulo by zero is an error.
+Modulo. Modulo by zero is an error.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -721,7 +711,7 @@ negate 7            => -7
 
 #### `min`
 
-Return the smaller of two numbers. Precedence 1.
+Return the smaller of two numbers.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -732,7 +722,7 @@ Return the smaller of two numbers. Precedence 1.
 
 #### `max`
 
-Return the larger of two numbers. Precedence 1.
+Return the larger of two numbers.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -743,7 +733,7 @@ Return the larger of two numbers. Precedence 1.
 
 #### `pow`
 
-Raise a number to a power. Precedence 2.
+Raise a number to a power.
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
@@ -981,7 +971,7 @@ Compute the two-argument arc tangent. Handles quadrant correctly:
 `y x atan2`.
 
 *Signature:* `[number, number] -> [decimal]`
-*Precedence:* 1
+
 
 ```
 1 1 atan2           => 0.7853981633974483
@@ -994,7 +984,7 @@ Compute the two-argument arc tangent. Handles quadrant correctly:
 Compute the hypotenuse length: `sqrt(x*x + y*y)` without overflow.
 
 *Signature:* `[number, number] -> [decimal]`
-*Precedence:* 1
+
 
 ```
 3 4 hypot           => 5
@@ -1006,7 +996,7 @@ Compute the hypotenuse length: `sqrt(x*x + y*y)` without overflow.
 
 #### `math-pi`
 
-Push the constant *π* (3.14159...). Prefix-only.
+Push the constant *π* (3.14159...). Stack-only.
 
 *Signature:* `[] -> [decimal]`
 
@@ -1017,7 +1007,7 @@ math-pi 2 mul       => 6.283185307179586
 
 #### `math-e`
 
-Push Euler's number *e* (2.71828...). Prefix-only.
+Push Euler's number *e* (2.71828...). Stack-only.
 
 *Signature:* `[] -> [decimal]`
 
@@ -1031,7 +1021,7 @@ math-e log          => 1
 #### `or`
 
 Logical OR for booleans; disjunction (type union) for non-boolean
-values. Precedence 1.
+values.
 
 *Signatures:*
 - `[boolean, boolean] -> [boolean]` — logical OR
@@ -1052,7 +1042,7 @@ number or string or boolean     => number|string|boolean
 
 #### `and`
 
-Logical AND. Precedence 2 (binds tighter than `or`).
+Logical AND.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1075,7 +1065,7 @@ not false               => true
 
 #### `xor`
 
-Exclusive OR. Precedence 1.
+Exclusive OR.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1086,7 +1076,7 @@ true xor true           => false
 
 #### `nand`
 
-Logical NAND (NOT AND). Precedence 2.
+Logical NAND (NOT AND).
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1098,7 +1088,7 @@ true nand false         => true
 #### `implies`
 
 Logical implication (a → b). False only when the first argument is
-true and the second is false. Precedence 1.
+true and the second is false.
 
 *Signature:* `[boolean, boolean] -> [boolean]`
 
@@ -1109,8 +1099,8 @@ false implies true      => true
 
 ### Comparison Words
 
-Comparison words take two arguments with suffix precedence at
-precedence level 1. They use natural type comparisons: integers
+Comparison words take two arguments with forward precedence.
+They use natural type comparisons: integers
 compare numerically, strings compare lexicographically, booleans
 compare as `false < true`, atoms compare lexicographically on
 their name.
@@ -1128,7 +1118,7 @@ on non-scalars.
 Less than.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 lt 2                  => true
@@ -1143,7 +1133,7 @@ false lt true           => true
 Greater than.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 2 gt 1                  => true
@@ -1156,7 +1146,7 @@ Greater than.
 Less than or equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 lte 2                 => true
@@ -1169,7 +1159,7 @@ Less than or equal.
 Greater than or equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 2 gte 1                 => true
@@ -1184,7 +1174,7 @@ compares by value. For non-scalars (list, map), compares by identity
 (same in-memory object).
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 eq 1                  => true
@@ -1200,7 +1190,7 @@ Not equal. The negation of `eq`. Returns `true` when the two values
 are not exactly equal, `false` when they are.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 neq 2                 => true
@@ -1217,7 +1207,7 @@ and each element is deeply equal. Two maps are deeply equal if they
 have the same keys and each value is deeply equal.
 
 *Signature:* `[any, any] -> [boolean]`
-*Precedence:* 1
+
 
 ```
 1 deq 1                 => true
@@ -1240,7 +1230,7 @@ specifies a variant (string shorthand) or a settings map.
 - `[any, any] -> [scalar]` — 2-arg form: value and target type
 - `[any, any, any] -> [scalar]` — 3-arg form: value, target type, variant or settings map
 
-*Precedence:* suffix
+*Precedence:* forward
 
 **To string:**
 
@@ -1300,7 +1290,7 @@ convert 255 string {base:hex, size:1}     => 'f'
 
 ### Stack Words
 
-Stack words are prefix-only by default.
+Stack words are stack-only by default.
 
 #### `dup`
 
@@ -1458,7 +1448,7 @@ Store a value under a key. The key may be a bare word or a string.
 - `[word, any] -> []`
 - `[any, any] -> []`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 set foo 99 end
@@ -1471,7 +1461,7 @@ set "key" 42 end
 Retrieve a previously stored value by key.
 
 *Signature:* `[any] -> [any]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 set foo 99 end get foo      => 99
@@ -1485,7 +1475,7 @@ value and `context get key` to retrieve it. Context values are scoped
 to the current execution context.
 
 *Signature:* `[word] -> []`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 context set "x" 42 context get "x"        => 42
@@ -1501,7 +1491,7 @@ Attempt to unify two values. Pushes the unified value and a boolean
 indicating success.
 
 *Signature:* `[any, any] -> [any, boolean]`
-*Precedence:* suffix
+*Precedence:* forward
 
 On failure the unified value is the string `'~unify-fail'` and the
 boolean is `false`.
@@ -1576,7 +1566,7 @@ Define a new word as a literal substitution. The body can be a list
 - `[word, any] -> []`
 - `[string, any] -> []`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 def increment [1 add]
@@ -1694,13 +1684,13 @@ def sq fn [[x:number] [number] [x mul x]]
 4 sq x                      => 16 x
 ```
 
-Function definitions support all argument styles (prefix, suffix,
+Function definitions support all argument styles (prefix, forward,
 infix):
 
 ```
 def sq fn [[x:number] [number] [x mul x]]
 5 sq                        => 25       # prefix
-sq 6                        => 36       # suffix
+sq 6                        => 36       # forward
 ```
 
 Multiple overloaded signatures can be specified as consecutive triples:
@@ -1721,7 +1711,7 @@ stacked, the previous one is revealed.
 - `[word] -> []`
 - `[string] -> []`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 def foo 1 foo undef foo foo             => 1 foo
@@ -1739,7 +1729,7 @@ elements form the body. After the body executes, all variables are
 automatically undefined.
 
 *Signature:* `[list] -> [results...]`
-*Precedence:* suffix
+*Precedence:* forward
 
 Each declaration is one of:
 
@@ -1812,7 +1802,7 @@ value. Used with `def` to create functions with typed and/or named
 parameters.
 
 *Signature:* `[list] -> [fndef]`
-*Precedence:* suffix
+*Precedence:* forward
 
 The list argument must contain one or more triples of
 `[input-sig] [output-sig] [body]`. The `fn` word returns an internal
@@ -1833,7 +1823,7 @@ Evaluate a list as code on the current stack. Similar to `do` but
 designed for invoking callback lists in higher-order patterns.
 
 *Signature:* `[list] -> [any...]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 5 [dup mul] call            => 25
@@ -1845,7 +1835,7 @@ designed for invoking callback lists in higher-order patterns.
 #### `args`
 
 Push the current function's argument list onto the stack. Only
-available inside a `fn`-defined function. Prefix-only.
+available inside a `fn`-defined function. Stack-only.
 
 *Signature:* `[] -> [list]`
 
@@ -1867,7 +1857,7 @@ A record type is a schema that validates maps: it requires exactly the
 specified keys, each with a value matching the field's type constraint.
 
 *Signature:* `[list] -> [record-type]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 record [x:number y:string]                => record{x:number,y:string}
@@ -1983,7 +1973,7 @@ Create a table type from a record type. A table represents a list of
 record instances — each row is a map conforming to the record schema.
 
 *Signature:* `[record-type] -> [table-type]`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 table record [x:number y:string]          => table{x:number,y:string}
@@ -2033,7 +2023,7 @@ table type, disjunct, type literal, typed list, or typed map. Unlike
 - `[word, any] -> []`
 - `[string, any] -> []`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 type Point record [x:number y:number]
@@ -2059,7 +2049,7 @@ values. Takes a type and a value (with an optional options map).
 - `[any, any] -> [any]` — type and value
 - `[any, any, map] -> [any]` — type, value, and options
 
-*Precedence:* suffix
+*Precedence:* forward
 
 **Scalar conversion:**
 
@@ -2110,7 +2100,7 @@ stream; maps have their list values evaluated depth-first.
 - `[list] -> [results...]`
 - `[map] -> [map]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 **List evaluation** — elements are executed as if they were tokens in
 the main program:
@@ -2176,7 +2166,7 @@ target is `none`, returns `none` without error.
 - `[integer, map] -> [any]`
 - `[any, none] -> [none]`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 {x:1,y:2} dot x            => 1
@@ -2197,7 +2187,7 @@ is `none` or when the key/index is missing.
 - `[integer, map] -> [any]`
 - `[any, none] -> ERROR`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 {x:1,y:2} dotr x           => 1
@@ -2210,13 +2200,13 @@ none !. x                   => ERROR
 #### `inspect`
 
 Return an introspection map for a word, containing its name, kind
-(`builtin` or `defined`), whether it has suffix precedence, and its
+(`builtin` or `defined`), whether it has forward precedence, and its
 list of signatures.
 
 *Signature:* `[word] -> [map]`
 
 ```
-inspect add    => {name:'add', kind:builtin, suffix_precedence:true, signatures:[...]}
+inspect add    => {name:'add', kind:builtin, forward_precedence:true, signatures:[...]}
 ```
 
 ### Output Words
@@ -2229,7 +2219,7 @@ tables are printed as aligned text with column headers. The value is
 consumed (removed from the stack).
 
 *Signature:* `[any] -> []`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 print "hello"               # outputs: hello\n
@@ -2243,7 +2233,7 @@ Same as `print` but does **not** emit a trailing newline. Useful for
 building output incrementally or for prompts.
 
 *Signature:* `[any] -> []`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 printstr "hello "           # outputs: hello  (no newline)
@@ -2263,7 +2253,7 @@ branches produce no side effects.
 - `[any, any, any] -> [any]` — 3-arg: condition, then-branch, else-branch
 - `[any, any] -> [any]` — 2-arg: condition, then-branch (returns nothing if false)
 
-*Precedence:* suffix
+*Precedence:* forward
 
 **Condition evaluation:** If the condition is a list, it is evaluated
 as code (like `do`). The result is then tested for truthiness.
@@ -2367,7 +2357,7 @@ The range is exclusive of the end value (like Go's `for i := start; i < end; i +
 
 #### `break`
 
-Exit the current `for` loop immediately. Prefix-only.
+Exit the current `for` loop immediately. Stack-only.
 
 *Signature:* `[] -> []`
 
@@ -2378,7 +2368,7 @@ for 5 [if [i eq 3] [break] i]  => 0 1 2
 #### `continue`
 
 Skip the rest of the current iteration and advance to the next.
-Prefix-only.
+Stack-only.
 
 *Signature:* `[] -> []`
 
@@ -2393,7 +2383,7 @@ for 5 [if [i eq 2] [continue] i]   => 0 1 3 4
 Evaluate a list as code (like `do`) with step-by-step tracing output.
 Shows the stack state at each step of evaluation, including
 resolved vs pending values, pointer position, and annotations for
-dispatch decisions (suffix/prefix matching, precedence deferral,
+dispatch decisions (forward/prefix matching,
 argument collection). Output is color-coded for terminals.
 
 *Signature:* `[list] -> [any...]`
@@ -2419,7 +2409,7 @@ description, signatures, examples, and notes.
 - `[atom] -> []`
 - `[string] -> []`
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 help                           # prints help about help
@@ -2448,7 +2438,7 @@ a string with line endings normalized to `\n`.
 - `[string] -> [string]` — read file at path
 - `[string, map] -> [string|list|map]` — read with options
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 read "data.txt"                         # read as text
@@ -2491,7 +2481,7 @@ Write content to a file. Returns the path written.
 - `[string, string, map] -> [string]` — path, content, options -> path
 - `[string, any, map] -> [string]` — path, data, options (auto-serializes)
 
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 write "out.txt" "hello world"
@@ -2509,7 +2499,7 @@ write "out.txt" "a\nb\n" {nl:"crlf"}
 | `mode` | `"write"` | `"write"` (truncate), `"append"`           |
 | `nl`   | `"lf"`    | `"lf"`, `"crlf"`, `"raw"`                 |
 
-**Note:** With two string arguments of the same type, prefer suffix
+**Note:** With two string arguments of the same type, prefer forward
 style (`write "path" "content"`) for clarity. The infix form
 `"content" write "path"` is ambiguous because the engine cannot
 distinguish path from content when both are strings.
@@ -2566,7 +2556,7 @@ or a list of column names. Column aliases use nested lists.
 - `[atom("*"), table] -> [table]` — select all columns
 - `[list, table] -> [table]` — select named columns
 
-*Precedence:* 1
+
 
 ```
 select * from people                          # all columns
@@ -2596,7 +2586,7 @@ Supported operators: `eq` (=), `neq` (!=), `lt` (<), `gt` (>),
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people where [age gt "25"]
@@ -2614,7 +2604,7 @@ with optional `asc`/`desc` direction.
 - `[atom, table] -> [table]` — order by single column
 - `[list, table] -> [table]` — order by column list
 
-*Precedence:* 2
+
 
 ```
 from people order name
@@ -2644,7 +2634,7 @@ Restrict the number of rows returned.
 
 *Signature:* `[integer, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people limit 2
@@ -2657,7 +2647,7 @@ Skip a number of rows from the result.
 
 *Signature:* `[integer, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people offset 5
@@ -2670,7 +2660,7 @@ Remove duplicate rows from the result.
 
 *Signature:* `[table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 select * (distinct (from people))
@@ -2682,7 +2672,7 @@ Add a table alias to a query (useful for joins and subqueries).
 
 *Signature:* `[atom, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from people as p
@@ -2697,7 +2687,7 @@ a list of columns.
 - `[atom, table] -> [table]` — group by single column
 - `[list, table] -> [table]` — group by column list
 
-*Precedence:* 2
+
 
 ```
 from sales group by [region]
@@ -2711,7 +2701,7 @@ Filter groups after `group by`. Uses the same condition syntax as
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from sales group by [region] having [count gt 5]
@@ -2725,7 +2715,7 @@ Join two tables. `join` and `innerjoin` produce an inner join,
 
 *Signature:* `[atom, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products on [orders.product_id eq products.id]
@@ -2739,7 +2729,7 @@ Set the ON condition for the most recent join.
 
 *Signature:* `[condition-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products on [orders.pid eq products.id]
@@ -2752,7 +2742,7 @@ the same name in both tables).
 
 *Signature:* `[column-list, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 from orders join products using [id]
@@ -2766,7 +2756,7 @@ rows in both, `except` returns rows in the left but not the right.
 
 *Signature:* `[table, table] -> [table]`
 
-*Precedence:* 2
+
 
 ```
 (from employees) union (from contractors)
@@ -2798,7 +2788,7 @@ select [[cast age integer]] from people
 
 #### `star`
 
-Push the wildcard column selector (`*`). Prefix-only.
+Push the wildcard column selector (`*`). Stack-only.
 
 *Signature:* `[] -> [atom]`
 
@@ -2816,7 +2806,7 @@ isolated scope and exported words become available under the module
 name.
 
 *Signature:* `[atom, list] -> []`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 def mymod [def double [2 mul]] module
@@ -2829,7 +2819,7 @@ Import a module from a `.aql` file, making its exported words
 available. Use a list argument to rename imports.
 
 *Signatures:* `[string] -> []`, `[list, string] -> []`
-*Precedence:* suffix
+*Precedence:* forward
 
 ```
 "utils.aql" import

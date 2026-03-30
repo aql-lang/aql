@@ -56,14 +56,14 @@ func registerFor(r *Registry) {
 	)
 
 	// break: stops the current for loop iteration and exits the loop.
-	r.RegisterPrefixOnly("break", Signature{
+	r.RegisterStackOnly("break", Signature{
 		Handler: func(_ []Value) ([]Value, error) {
 			return nil, errBreak
 		},
 	})
 
 	// continue: stops the current iteration and moves to the next.
-	r.RegisterPrefixOnly("continue", Signature{
+	r.RegisterStackOnly("continue", Signature{
 		Handler: func(_ []Value) ([]Value, error) {
 			return nil, errContinue
 		},

@@ -294,20 +294,19 @@ type ModuleDesc struct {
 type WordInfo struct {
 	Name        string
 	ArgCount    int  // -1 = unspecified
-	ForcePrefix bool // lower/p
-	ForceSuffix bool // lower/s
+	ForceStack bool // lower/s
+	ForceForward bool // lower/f
 }
 
-// ForwardInfo tracks suffix argument collection for a deferred function call.
+// ForwardInfo tracks forward argument collection for a deferred function call.
 type ForwardInfo struct {
 	FuncName      string
 	ExpectedArgs  int
 	CollectedArgs int
-	PrefixArgs    int // number of sig args already consumed from the prefix (stack)
+	StackArgs     int // number of sig args already consumed from the stack
 	// FuncIndex records where the deferred function word sits in the stack.
-	FuncIndex  int
-	Precedence int        // copied from matched Signature
-	Sig        *Signature // the matched signature, for direct execution on completion
+	FuncIndex int
+	Sig       *Signature // the matched signature, for direct execution on completion
 }
 
 // Value is a typed entry on the AQL stack.
@@ -482,16 +481,16 @@ func NewWord(name string) Value {
 }
 
 // NewWordModified creates a word value with explicit modifiers.
-func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value {
+func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
 		Name:        name,
 		ArgCount:    argCount,
-		ForcePrefix: forcePrefix,
-		ForceSuffix: forceSuffix,
+		ForceStack: forceStack,
+		ForceForward: forceForward,
 	})
 }
 
-// NewForward creates a forward primitive value for suffix argument tracking.
+// NewForward creates a forward primitive value for forward argument tracking.
 func NewForward(info ForwardInfo) Value {
 	return newValue(TForward, info)
 }

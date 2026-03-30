@@ -1,8 +1,8 @@
 package engine
 
 func registerSet(r *Registry) {
-	// All-suffix handler: "set foo 99" → args=[foo(key), 99(value)]
-	setSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward handler: "set foo 99" → args=[foo(key), 99(value)]
+	setForwardHandler := func(args []Value) ([]Value, error) {
 		key := storeKey(args[0])
 		r.Store[key] = args[1]
 		return nil, nil
@@ -16,16 +16,16 @@ func registerSet(r *Registry) {
 	}
 
 	r.Register("set",
-		// All-suffix: key first, value second
+		// All-forward: key first, value second
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: setSuffixHandler,
+			Handler: setForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: setSuffixHandler,
+			Handler: setForwardHandler,
 		},
-		// Infix: value first (prefix), key second (suffix)
+		// Infix: value first (prefix), key second (forward)
 		Signature{
 			Args:    []Type{TAny, TString},
 			Handler: setInfixHandler,
@@ -37,7 +37,7 @@ func registerSet(r *Registry) {
 		// Fallback
 		Signature{
 			Args:    []Type{TAny, TAny},
-			Handler: setSuffixHandler,
+			Handler: setForwardHandler,
 		},
 	)
 }

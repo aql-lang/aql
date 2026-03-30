@@ -52,8 +52,8 @@ func buildInspection(r *Registry, name string) Value {
 		result.Set("kind", NewAtom("builtin"))
 	}
 
-	// Add suffix_precedence flag.
-	result.Set("suffix_precedence", NewBoolean(fn.SuffixPrecedence))
+	// Add forward_precedence flag.
+	result.Set("forward_precedence", NewBoolean(fn.ForwardPrecedence))
 
 	// Build signature list.
 	var sigMaps []Value
@@ -68,7 +68,6 @@ func buildInspection(r *Registry, name string) Value {
 			argVals = []Value{}
 		}
 		sm.Set("args", NewList(argVals))
-		sm.Set("precedence", NewInteger(int64(sig.Precedence)))
 
 		sigMaps = append(sigMaps, NewMap(sm))
 	}

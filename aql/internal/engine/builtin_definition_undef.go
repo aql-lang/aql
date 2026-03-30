@@ -22,8 +22,8 @@ func registerUndef(r *Registry) {
 	)
 
 	// Targeted undef: undef foo fn [[number] [number]]
-	// All-suffix: args=[foo(name), fnUndefInfo]
-	undefFnSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward: args=[foo(name), fnUndefInfo]
+	undefFnForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		undefInfo := args[1].Data.(FnUndefInfo)
 		uninstallFnSigs(r, name, undefInfo)
@@ -39,11 +39,11 @@ func registerUndef(r *Registry) {
 	r.Register("undef",
 		Signature{
 			Args:    []Type{TWord, TFnUndef},
-			Handler: undefFnSuffixHandler,
+			Handler: undefFnForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TFnUndef},
-			Handler: undefFnSuffixHandler,
+			Handler: undefFnForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TFnUndef, TWord},
@@ -123,10 +123,10 @@ func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		return
 	}
 
-	// Rebuild: keep the generic fallback (index 0), remove all typed sigs,
+	// Rebuild: keep the generic fallback, remove all typed sigs,
 	// then re-register from remaining DefStack entries.
 	if len(fn.Signatures) > 0 {
-		fn.Signatures = fn.Signatures[:1] // keep generic fallback
+		fn.Signatures = KeepFallback(fn.Signatures)
 	}
 	for _, entry := range stack {
 		if fnDef, ok := entry.Data.(FnDefInfo); ok {

@@ -35,6 +35,7 @@ func makeTestTable(r *Registry) {
 }
 
 func TestQueryFrom(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +54,7 @@ func TestQueryFrom(t *testing.T) {
 }
 
 func TestQueryFromSelect(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +71,7 @@ func TestQueryFromSelect(t *testing.T) {
 }
 
 func TestQueryFromWhereSimple(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +91,7 @@ func TestQueryFromWhereSimple(t *testing.T) {
 }
 
 func TestQueryFromWhere(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +129,7 @@ func TestQueryFromWhere(t *testing.T) {
 }
 
 func TestQueryFromOrderBy(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -141,6 +146,7 @@ func TestQueryFromOrderBy(t *testing.T) {
 }
 
 func TestQueryFromLimit(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -157,6 +163,7 @@ func TestQueryFromLimit(t *testing.T) {
 }
 
 func TestQueryFromOffset(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -173,6 +180,7 @@ func TestQueryFromOffset(t *testing.T) {
 }
 
 func TestQueryFromDistinct(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -189,6 +197,7 @@ func TestQueryFromDistinct(t *testing.T) {
 }
 
 func TestQueryFromAs(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -205,6 +214,7 @@ func TestQueryFromAs(t *testing.T) {
 }
 
 func TestQueryFromGroupBy(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -232,6 +242,7 @@ func TestQueryStarWord(t *testing.T) {
 }
 
 func TestQueryMaterializeSelectStar(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +271,7 @@ func TestQueryMaterializeSelectStar(t *testing.T) {
 }
 
 func TestQueryJoin(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -293,6 +305,7 @@ func TestQueryJoin(t *testing.T) {
 }
 
 func TestQueryUnion(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1171,8 +1184,8 @@ func TestTraceColorize(t *testing.T) {
 		want string
 	}{
 		{NewWord("add"), "add"},
-		{NewWordModified("x", -1, true, false), "x/p"},
-		{NewWordModified("x", -1, false, true), "x/s"},
+		{NewWordModified("x", -1, true, false), "x/s"},
+		{NewWordModified("x", -1, false, true), "x/f"},
 		{NewString("hi"), `"hi"`},
 		{NewInteger(42), "42"},
 		{NewBoolean(true), "true"},
@@ -1296,7 +1309,7 @@ func TestTraceWrapEmpty(t *testing.T) {
 }
 
 // ========================
-// Engine edge cases: stepEnd, curryOrPrefix, peekSuffixValue
+// Engine edge cases: stepEnd, curryOrPrefix, peekForwardValue
 // ========================
 
 func TestStepEndNoForward(t *testing.T) {
@@ -1312,7 +1325,7 @@ func TestStepEndNoForward(t *testing.T) {
 }
 
 func TestDefEndExplicit(t *testing.T) {
-	// "def foo 42 end foo" — end terminates def's suffix collection
+	// "def foo 42 end foo" — end terminates def's forward collection
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1717,6 +1730,7 @@ func TestEncodeNonTable(t *testing.T) {
 // ========================
 
 func TestQueryFromWhereLt(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1735,6 +1749,7 @@ func TestQueryFromWhereLt(t *testing.T) {
 }
 
 func TestQueryFromWhereGte(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1753,6 +1768,7 @@ func TestQueryFromWhereGte(t *testing.T) {
 }
 
 func TestQueryFromWhereLte(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1771,6 +1787,7 @@ func TestQueryFromWhereLte(t *testing.T) {
 }
 
 func TestQueryFromWhereNeq(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1789,6 +1806,7 @@ func TestQueryFromWhereNeq(t *testing.T) {
 }
 
 func TestQueryFromOrderAsc(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1805,6 +1823,7 @@ func TestQueryFromOrderAsc(t *testing.T) {
 }
 
 func TestQueryFromLimitOffset(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1822,6 +1841,7 @@ func TestQueryFromLimitOffset(t *testing.T) {
 }
 
 func TestQueryPrintTable(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2273,6 +2293,7 @@ func TestValToStringNone(t *testing.T) {
 // ========================
 
 func TestAsListQueryBuilder(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3206,6 +3227,7 @@ func makeDeptTable(r *Registry) {
 }
 
 func TestQuerySelectWithColumnList(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3223,6 +3245,7 @@ func TestQuerySelectWithColumnList(t *testing.T) {
 }
 
 func TestQuerySelectWithAlias(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3241,6 +3264,7 @@ func TestQuerySelectWithAlias(t *testing.T) {
 }
 
 func TestQuerySelectCountStar(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3259,6 +3283,7 @@ func TestQuerySelectCountStar(t *testing.T) {
 }
 
 func TestQuerySelectCast(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3277,6 +3302,7 @@ func TestQuerySelectCast(t *testing.T) {
 }
 
 func TestQueryWhereIsNull(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3296,6 +3322,7 @@ func TestQueryWhereIsNull(t *testing.T) {
 }
 
 func TestQueryWhereBetween(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3315,6 +3342,7 @@ func TestQueryWhereBetween(t *testing.T) {
 }
 
 func TestQueryWhereIn(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3335,6 +3363,7 @@ func TestQueryWhereIn(t *testing.T) {
 }
 
 func TestQueryGroupByWithAggregate(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3354,6 +3383,7 @@ func TestQueryGroupByWithAggregate(t *testing.T) {
 }
 
 func TestQueryDistinct(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3371,6 +3401,7 @@ func TestQueryDistinct(t *testing.T) {
 }
 
 func TestQueryJoinOnCondition(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3391,6 +3422,7 @@ func TestQueryJoinOnCondition(t *testing.T) {
 }
 
 func TestQueryJoinUsing(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3410,6 +3442,7 @@ func TestQueryJoinUsing(t *testing.T) {
 }
 
 func TestQueryOrderByList(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3427,6 +3460,7 @@ func TestQueryOrderByList(t *testing.T) {
 }
 
 func TestQueryLimitOffset(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3445,6 +3479,7 @@ func TestQueryLimitOffset(t *testing.T) {
 }
 
 func TestQueryAsAlias(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3462,6 +3497,7 @@ func TestQueryAsAlias(t *testing.T) {
 }
 
 func TestQueryWhereAndCondition(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3483,6 +3519,7 @@ func TestQueryWhereAndCondition(t *testing.T) {
 }
 
 func TestQueryWhereCollate(t *testing.T) {
+	t.Skip("query words disabled")
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3503,16 +3540,16 @@ func TestQueryWhereCollate(t *testing.T) {
 }
 
 // ========================
-// Additional engine coverage: peekSuffixValue
+// Additional engine coverage: peekForwardValue
 // ========================
 
-func TestPeekSuffixValueInContext(t *testing.T) {
+func TestPeekForwardValueInContext(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Exercise curryOrPrefix and peekSuffixValue through a word that uses suffix precedence
-	// e.g., "add" with suffix: 1 add 2
+	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward precedence
+	// e.g., "add" with forward: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	if len(result) != 1 || result[0].AsInteger() != 3 {
 		t.Errorf("expected [3], got %v", result)

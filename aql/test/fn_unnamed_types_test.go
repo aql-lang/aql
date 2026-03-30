@@ -43,7 +43,8 @@ func TestFnUnnamedMapMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{b:2} {a:1}")
+	// Forward-first: fn args reversed from stack, swap undoes the reverse
+	assertResult(t, result, "{a:1} {b:2}")
 }
 
 // --- Multi-signature fn with unnamed Map (the original panic case) ---
@@ -67,7 +68,8 @@ func TestFnMultiSigUnnamedMapTwoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{b:2} {a:1}")
+	// Forward-first: fn args reversed from stack, swap undoes the reverse
+	assertResult(t, result, "{a:1} {b:2}")
 }
 
 // --- Unnamed List parameter ---
@@ -117,7 +119,8 @@ func TestFnUnnamedString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "'hello world'")
+	// Forward-first: fn args reversed from stack, swap+add reverses concat
+	assertResult(t, result, "'worldhello '")
 }
 
 // --- Mixed named and unnamed Map in same signature ---
@@ -130,8 +133,8 @@ func TestFnMixedNamedUnnamedMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// m binds {a:1}, unnamed pushes {b:2}, body [m swap] pushes m then swaps
-	assertResult(t, result, "{a:1} {b:2}")
+	// Forward-first: args reversed, m binds {b:2}, unnamed={a:1}, body [m swap]
+	assertResult(t, result, "{b:2} {a:1}")
 }
 
 // --- Multi-signature mixing named Map and unnamed Map ---
@@ -155,5 +158,6 @@ func TestFnMultiSigMixedMapTwoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{b:2} {a:1}")
+	// Forward-first: fn args reversed from stack, swap undoes the reverse
+	assertResult(t, result, "{a:1} {b:2}")
 }

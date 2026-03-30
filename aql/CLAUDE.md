@@ -86,7 +86,7 @@ Lists are **evaluated by default**: `[1 add 2]` → `[3]`. Auto-evaluation
 happens at the end of `Run()` for parser-created lists (`Eval=true`) that
 were not consumed by any word.
 
-The `quote` word (suffix precedence) prevents evaluation:
+The `quote` word (forward precedence) prevents evaluation:
 - `quote [1 add 2]` → `[Integer(1), Word(add), Integer(2)]`
 - `quote a` → `Atom(a)` (words become atoms)
 - `quote 99` → `99` (scalars unchanged)
@@ -95,7 +95,7 @@ Quotation is **implicit** in well-defined contexts:
 - `def` body: `def double [dup add]` — list consumed by def, not auto-evaluated
 - `fn` body: function definition bodies
 - Control words: `if`, `for` branches/bodies
-- Any word that consumes a list via suffix/prefix argument collection
+- Any word that consumes a list via forward/prefix argument collection
 
 Implementation: parser sets `Eval=true` on lists. `execMatch` strips `Eval`
 from consumed arguments. `quote` sets `Quoted=true`. End-of-`Run()` only

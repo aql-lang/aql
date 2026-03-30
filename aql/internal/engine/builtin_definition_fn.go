@@ -501,11 +501,11 @@ func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
 // installFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via installDef, returns body tokens, and appends undef cleanup.
-func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool) {
-	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
+	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	registerFn := r.Register
-	if isPrefixOnly {
-		registerFn = r.RegisterPrefixOnly
+	if isStackOnly {
+		registerFn = r.RegisterStackOnly
 	}
 	// Expand optional parameters into additional signatures.
 	fnDef.Sigs = expandOptionalSigs(name, fnDef.Sigs)
@@ -556,7 +556,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, prefixOnly ...bool)
 			// Pop the args stack to restore the previous args (for nesting).
 			result = append(result, NewWord("__pa"))
 			for i := len(names) - 1; i >= 0; i-- {
-				// Force suffix so undef takes the name word that follows,
+				// Force forward so undef takes the name word that follows,
 				// not a same-typed value from the prefix stack (e.g. a
 				// string return value when the param is also a string).
 				result = append(result,

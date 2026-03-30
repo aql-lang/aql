@@ -3,7 +3,7 @@ package engine
 import "fmt"
 
 func registerPick(r *Registry) {
-	r.RegisterPrefixOnly("pick", Signature{
+	r.RegisterStackOnly("pick", Signature{
 		Args: []Type{TInteger},
 		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
 			n := int(args[0].AsInteger())

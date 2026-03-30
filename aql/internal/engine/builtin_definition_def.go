@@ -13,11 +13,11 @@ func defName(v Value) string {
 	return v.AsString()
 }
 
-// defPrefixOnly returns true if the name word carries the /p modifier,
-// indicating the defined word should be prefix-only (not suffix precedence).
-func defPrefixOnly(v Value) bool {
+// defStackOnly returns true if the name word carries the /s modifier,
+// indicating the defined word should be stack-only (not forward precedence).
+func defStackOnly(v Value) bool {
 	if v.IsWord() {
-		return v.AsWord().ForcePrefix
+		return v.AsWord().ForceStack
 	}
 	return false
 }
@@ -33,16 +33,16 @@ func defPrefixOnly(v Value) bool {
 //	Args:[TWord, TAny]   – def name body  or  body def name
 //	Args:[TString, TAny] – def "name" body  or  body def "name"
 //
-// Flexible matching handles reordering: in "body def name", suffix collects
+// Flexible matching handles reordering: in "body def name", forward collects
 // name(TWord), pushes it, then prefix sees [body, name] and flexible match
 // reorders to [name, body] matching [TWord, TAny].
 func registerDef(r *Registry) {
-	// All-suffix handler: "def foo 42 end" → args=[foo(name), 42(body)]
-	defSuffixHandler := func(args []Value) ([]Value, error) {
+	// All-forward handler: "def foo 42 end" → args=[foo(name), 42(body)]
+	defForwardHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
-		prefixOnly := defPrefixOnly(args[0])
+		stackOnly := defStackOnly(args[0])
 		body := args[1]
-		installDef(r, name, body, prefixOnly)
+		installDef(r, name, body, stackOnly)
 		return nil, nil
 	}
 
@@ -50,22 +50,22 @@ func registerDef(r *Registry) {
 	defInfixHandler := func(args []Value) ([]Value, error) {
 		body := args[0]
 		name := defName(args[1])
-		prefixOnly := defPrefixOnly(args[1])
-		installDef(r, name, body, prefixOnly)
+		stackOnly := defStackOnly(args[1])
+		installDef(r, name, body, stackOnly)
 		return nil, nil
 	}
 
 	r.Register("def",
-		// All-suffix: name first, body second
+		// All-forward: name first, body second
 		Signature{
 			Args:    []Type{TWord, TAny},
-			Handler: defSuffixHandler,
+			Handler: defForwardHandler,
 		},
 		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: defSuffixHandler,
+			Handler: defForwardHandler,
 		},
-		// Infix: body first (prefix), name second (suffix)
+		// Infix: body first (prefix), name second (forward)
 		Signature{
 			Args:    []Type{TAny, TWord},
 			Handler: defInfixHandler,
@@ -84,16 +84,17 @@ func registerDef(r *Registry) {
 // When body is a FnDefInfo value (produced by the fn word), installDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
-func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
-	isPrefixOnly := len(prefixOnly) > 0 && prefixOnly[0]
+func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
+	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	registerFn := r.Register
-	if isPrefixOnly {
-		registerFn = r.RegisterPrefixOnly
+	if isStackOnly {
+		registerFn = r.RegisterStackOnly
 	}
 	if len(r.DefStacks[name]) == 0 {
 		// First definition: register one generic fallback handler
 		// that reads the top of the definition stack.
 		registerFn(name, Signature{
+			Fallback: true,
 			Handler: func(_ []Value) ([]Value, error) {
 				stack := r.DefStacks[name]
 				if len(stack) == 0 {
@@ -108,7 +109,7 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 					if fn := r.Lookup(name); fn != nil {
 						for i := range fn.Signatures {
 							sig := &fn.Signatures[i]
-							if len(sig.Args) == 0 && sig.Handler != nil && i > 0 {
+							if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
 								result, err := sig.Handler(nil)
 								if err != nil {
 									return nil, err
@@ -160,17 +161,17 @@ func installDef(r *Registry, name string, body Value, prefixOnly ...bool) {
 				// Rebuild typed signatures from remaining DefStack entries.
 				fn := r.funcs[name]
 				if fn != nil && len(fn.Signatures) > 0 {
-					fn.Signatures = fn.Signatures[:1] // keep generic fallback
+					fn.Signatures = KeepFallback(fn.Signatures)
 				}
 				for _, entry := range filtered {
 					if fd, ok := entry.Data.(FnDefInfo); ok {
-						installFnDef(r, name, fd, isPrefixOnly)
+						installFnDef(r, name, fd, isStackOnly)
 					}
 				}
 			}
 		}
 
-		installFnDef(r, name, fnDef, isPrefixOnly)
+		installFnDef(r, name, fnDef, isStackOnly)
 		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
 		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
 		return
@@ -254,19 +255,20 @@ func uninstallDef(r *Registry, name string) {
 		return
 	}
 
-	// Remove typed signatures from the end.
-	if sigsToRemove > 0 && len(fn.Signatures) >= sigsToRemove {
-		fn.Signatures = fn.Signatures[:len(fn.Signatures)-sigsToRemove]
+	// If DefStacks is now empty, remove the function entirely.
+	if len(r.DefStacks[name]) == 0 {
+		delete(r.funcs, name)
+		delete(r.DefStacks, name)
+		return
 	}
 
-	// If DefStacks is now empty, also remove the generic fallback handler.
-	if len(r.DefStacks[name]) == 0 {
-		if len(fn.Signatures) > 0 {
-			fn.Signatures = fn.Signatures[:len(fn.Signatures)-1]
+	// Rebuild: keep fallback, re-register from remaining DefStack entries.
+	if sigsToRemove > 0 {
+		fn.Signatures = KeepFallback(fn.Signatures)
+		for _, entry := range r.DefStacks[name] {
+			if fd, ok := entry.Data.(FnDefInfo); ok {
+				installFnDef(r, name, fd)
+			}
 		}
-		if len(fn.Signatures) == 0 {
-			delete(r.funcs, name)
-		}
-		delete(r.DefStacks, name)
 	}
 }

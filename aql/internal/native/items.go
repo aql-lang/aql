@@ -8,12 +8,12 @@ import (
 )
 
 // itemsFunc returns the "items" native function definition.
-// items has suffix precedence and one signature:
+// items has forward precedence and one signature:
 //   - [any] — returns key-value pairs as a list of [key, value] lists
 func itemsFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "items",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},

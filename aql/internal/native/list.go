@@ -7,7 +7,7 @@ import (
 )
 
 // listFunc returns the "list" native function definition.
-// list has suffix precedence and four signatures:
+// list has forward precedence and four signatures:
 //   - [table, map]  — returns records whose fields match the map's key-value pairs
 //   - [table]       — returns all records from the table
 //   - [map, map]    — record type + filter: returns empty table
@@ -20,7 +20,7 @@ func listFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "list",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{

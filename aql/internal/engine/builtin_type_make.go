@@ -5,6 +5,15 @@ import (
 	"strconv"
 )
 
+// isTypeLike returns true if a value looks like a type target for make
+// (type literal with nil Data, record type, options type, table type, or object type).
+func isTypeLike(v Value) bool {
+	if v.Data == nil {
+		return true
+	}
+	return v.IsRecordType() || v.IsOptionsType() || v.IsTableType() || v.IsObjectType()
+}
+
 func registerMake(r *Registry) {
 	// makeRecord creates a record instance from a source value and options.
 	makeRecord := func(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
@@ -274,9 +283,12 @@ func registerMake(r *Registry) {
 		})}, nil
 	}
 
+	// Position-agnostic: detect which arg is the type and which is the source.
 	makeHandler := func(args []Value) ([]Value, error) {
-		targetVal := args[0]
-		srcVal := args[1]
+		targetVal, srcVal := args[0], args[1]
+		if !isTypeLike(targetVal) && isTypeLike(srcVal) {
+			targetVal, srcVal = srcVal, targetVal
+		}
 
 		// Object type instance creation.
 		if targetVal.IsObjectType() {
@@ -406,10 +418,19 @@ func registerMake(r *Registry) {
 	}
 
 	// 3-arg handler with prototype: make ObjType source prototype
+	// Position-agnostic: finds object type, prototype instance, and source.
 	makeWithPrototype := func(args []Value) ([]Value, error) {
-		targetVal := args[0]
-		srcVal := args[1]
-		protoVal := args[2]
+		var targetVal, srcVal, protoVal Value
+		for _, a := range args {
+			switch {
+			case a.IsObjectType() && targetVal.VType.Equal(Type{}):
+				targetVal = a
+			case a.IsObjectInstance():
+				protoVal = a
+			default:
+				srcVal = a
+			}
+		}
 
 		if !targetVal.IsObjectType() {
 			return nil, fmt.Errorf("make: prototype can only be used with object types, got %s", targetVal.String())
@@ -424,10 +445,27 @@ func registerMake(r *Registry) {
 	}
 
 	// 3-arg handler: make RecType source {options}
+	// Position-agnostic: finds type, source, and options.
 	makeWithOpts := func(args []Value) ([]Value, error) {
-		targetVal := args[0]
-		srcVal := args[1]
-		optsVal := args[2]
+		var targetVal, srcVal, optsVal Value
+		for _, a := range args {
+			switch {
+			case isTypeLike(a) && targetVal.VType.Equal(Type{}):
+				targetVal = a
+			default:
+				// Remaining args: one is source, one is options map.
+				if srcVal.VType.Equal(Type{}) {
+					srcVal = a
+				} else {
+					optsVal = a
+				}
+			}
+		}
+		// The options map should be the plain map argument (not a list).
+		// If srcVal is a map and optsVal is a list (or vice versa), swap.
+		if optsVal.VType.Equal(TList) && srcVal.VType.Equal(TMap) && srcVal.Data != nil {
+			srcVal, optsVal = optsVal, srcVal
+		}
 
 		useBase, err := parseOptions(optsVal)
 		if err != nil {
@@ -445,7 +483,7 @@ func registerMake(r *Registry) {
 		}
 
 		// For non-record/object types, options are ignored — delegate to 2-arg.
-		return makeHandler(args[:2])
+		return makeHandler([]Value{srcVal, targetVal})
 	}
 
 	r.Register("make",

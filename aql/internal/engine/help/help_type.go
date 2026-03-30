@@ -36,7 +36,7 @@ func init() {
 		Word:    "inspect",
 		Summary: "Return a detailed map describing a registered word.",
 		Signatures: []string{"[word] -> [map]"},
-		Description: "Returns a map with name, kind, suffix_precedence, and signatures for " +
+		Description: "Returns a map with name, kind, forward_precedence, and signatures for " +
 			"the named word. Useful for introspecting built-in and user-defined words.",
 		Examples: []string{
 			`add inspect .name              => 'add'`,

@@ -67,7 +67,7 @@ func init() {
 		Word:    "break",
 		Summary: "Exit the current for loop early.",
 		Signatures: []string{"[] -> []"},
-		Description: "Immediately terminates the innermost for loop. Prefix-only.",
+		Description: "Immediately terminates the innermost for loop. Stack-only.",
 		Examples: []string{
 			`5 [(i 3 eq) [break] if i] for                => 0 1 2`,
 			`10 [(i 2 eq) [break] if i] for               => 0 1`,
@@ -80,7 +80,7 @@ func init() {
 		Word:    "continue",
 		Summary: "Skip to the next iteration of the current for loop.",
 		Signatures: []string{"[] -> []"},
-		Description: "Skips the rest of the current loop body and continues with the next iteration. Prefix-only.",
+		Description: "Skips the rest of the current loop body and continues with the next iteration. Stack-only.",
 		Examples: []string{
 			`5 [(i 2 eq) [continue] if i] for             => 0 1 3 4`,
 			`5 [(i 0 eq) [continue] if i] for             => 1 2 3 4`,
@@ -99,7 +99,7 @@ func init() {
 		Description: "Defines a new word with the given name and body. When the word is later " +
 			"invoked, the body is evaluated. Definitions are stackable: multiple defs " +
 			"for the same name stack, and undef pops the top definition. " +
-			"Has suffix precedence, so both 'def name body' and 'body def name' work " +
+			"Has forward precedence, so both 'def name body' and 'body def name' work " +
 			"via flexible argument matching.",
 		Examples: []string{
 			`def double [2 mul] 5 double                  => 10`,
@@ -216,7 +216,7 @@ func init() {
 		Summary: "Push the current function's argument list.",
 		Signatures: []string{"[] -> [list]"},
 		Description: "Returns the list of arguments passed to the current fn-defined function. " +
-			"Prefix-only.",
+			"Stack-only.",
 		Examples: []string{
 			`def show fn [[{x: Number}] [] [args]] 42 show  => [42]`,
 			`def f fn [[{a: Number} {b: Number}] [] [args]]` +

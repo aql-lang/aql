@@ -3,7 +3,7 @@ package engine
 // registerQuote registers the "quote" word.
 //
 // quote prevents auto-evaluation of its argument and returns it as-is.
-// It has suffix precedence and takes a single argument:
+// It has forward precedence and takes a single argument:
 //
 //	quote [1 add 2]  →  [Integer(1), Word(add), Integer(2)]
 //	quote a          →  Atom(a)

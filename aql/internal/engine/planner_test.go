@@ -2,11 +2,11 @@ package engine
 
 import "testing"
 
-func TestPlannerPrefixCoverage(t *testing.T) {
+func TestPlannerStackCoverage(t *testing.T) {
 	resolved := []Value{NewInteger(1), NewString("a")}
-	count, used := plannerPrefixCoverage([]Type{TInteger, TString}, resolved)
+	count, used := plannerStackCoverage([]Type{TInteger, TString}, resolved)
 	if count != 2 {
-		t.Fatalf("expected 2 prefix values, got %d", count)
+		t.Fatalf("expected 2 stack values, got %d", count)
 	}
 	if !(used[0] && used[1]) {
 		t.Fatalf("expected both arg slots used, got %#v", used)
@@ -29,7 +29,7 @@ func TestUnifiedPlannerFlag_BasicInfix(t *testing.T) {
 	}
 }
 
-func TestPeekPlannableSuffixValue(t *testing.T) {
+func TestPeekPlannableForwardValue(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -38,13 +38,13 @@ func TestPeekPlannableSuffixValue(t *testing.T) {
 	e.stack = []Value{NewWord("add"), NewInteger(2)}
 	e.pointer = 0
 
-	v := e.peekPlannableSuffixValue()
+	v := e.peekPlannableForwardValue()
 	if v == nil || v.AsInteger() != 2 {
-		t.Fatalf("expected suffix integer 2, got %#v", v)
+		t.Fatalf("expected forward integer 2, got %#v", v)
 	}
 }
 
-func TestPeekPlannableSuffixValue_StructuralWordsSkipped(t *testing.T) {
+func TestPeekPlannableForwardValue_StructuralWordsSkipped(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -52,8 +52,8 @@ func TestPeekPlannableSuffixValue_StructuralWordsSkipped(t *testing.T) {
 	e := New(r)
 	e.stack = []Value{NewWord("add"), NewWord("end")}
 	e.pointer = 0
-	if v := e.peekPlannableSuffixValue(); v != nil {
-		t.Fatalf("expected nil for structural suffix token, got %#v", v)
+	if v := e.peekPlannableForwardValue(); v != nil {
+		t.Fatalf("expected nil for structural forward token, got %#v", v)
 	}
 }
 
@@ -68,18 +68,18 @@ func TestPlannerBestSigForForward_NoCandidates(t *testing.T) {
 		t.Fatal("add function not registered")
 	}
 	// Impossible arg-count filter should reject all signatures.
-	sig, prefix := e.plannerBestSigForForward(fn, WordInfo{Name: "add", ArgCount: 999}, nil)
-	if sig != nil || prefix != 0 {
-		t.Fatalf("expected no candidate, got sig=%#v prefix=%d", sig, prefix)
+	sig, stackN := e.plannerBestSigForForward(fn, WordInfo{Name: "add", ArgCount: 999}, nil)
+	if sig != nil || stackN != 0 {
+		t.Fatalf("expected no candidate, got sig=%#v stack=%d", sig, stackN)
 	}
 }
 
-func TestPlannerPrefixCoverage_PartialPositional(t *testing.T) {
+func TestPlannerStackCoverage_PartialPositional(t *testing.T) {
 	// One integer value should positionally match first arg of [integer, integer].
 	resolved := []Value{NewInteger(2)}
-	count, used := plannerPrefixCoverage([]Type{TInteger, TInteger}, resolved)
+	count, used := plannerStackCoverage([]Type{TInteger, TInteger}, resolved)
 	if count != 1 {
-		t.Fatalf("expected 1 prefix value, got %d", count)
+		t.Fatalf("expected 1 stack value, got %d", count)
 	}
 	if !used[0] || used[1] {
 		t.Fatalf("expected only first arg slot used, got %#v", used)

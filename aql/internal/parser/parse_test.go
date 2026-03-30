@@ -16,8 +16,8 @@ func valuesEqual(a, b engine.Value) bool {
 		aw, bw := a.AsWord(), b.AsWord()
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
-			aw.ForcePrefix == bw.ForcePrefix &&
-			aw.ForceSuffix == bw.ForceSuffix
+			aw.ForceStack == bw.ForceStack &&
+			aw.ForceForward == bw.ForceForward
 	case a.IsOpenParen():
 		return true
 	case a.VType.Matches(engine.TString):
@@ -132,7 +132,7 @@ func TestParsePrefixExpression(t *testing.T) {
 	})
 }
 
-func TestParseSuffixExpression(t *testing.T) {
+func TestParseForwardExpression(t *testing.T) {
 	// lower B → two words
 	assertParse(t, "lower B", []engine.Value{
 		engine.NewWord("lower"),
@@ -255,30 +255,30 @@ func TestParseArgCountModifier(t *testing.T) {
 	})
 }
 
-func TestParseForceSuffixModifier(t *testing.T) {
-	// lower/s
-	assertParse(t, "lower/s", []engine.Value{
+func TestParseForceForwardModifier(t *testing.T) {
+	// lower/f
+	assertParse(t, "lower/f", []engine.Value{
 		engine.NewWordModified("lower", -1, false, true),
 	})
 }
 
-func TestParseForcePrefixModifier(t *testing.T) {
-	// lower/p
-	assertParse(t, "lower/p", []engine.Value{
+func TestParseForceStackModifier(t *testing.T) {
+	// lower/s
+	assertParse(t, "lower/s", []engine.Value{
 		engine.NewWordModified("lower", -1, true, false),
 	})
 }
 
-func TestParseArgCountAndSuffixModifier(t *testing.T) {
-	// lower/1s
-	assertParse(t, "lower/1s", []engine.Value{
+func TestParseArgCountAndForwardModifier(t *testing.T) {
+	// lower/1f
+	assertParse(t, "lower/1f", []engine.Value{
 		engine.NewWordModified("lower", 1, false, true),
 	})
 }
 
-func TestParseArgCountAndPrefixModifier(t *testing.T) {
-	// lower/1p
-	assertParse(t, "lower/1p", []engine.Value{
+func TestParseArgCountAndStackModifier(t *testing.T) {
+	// lower/1s
+	assertParse(t, "lower/1s", []engine.Value{
 		engine.NewWordModified("lower", 1, true, false),
 	})
 }
@@ -298,8 +298,8 @@ func TestParseArgCountTwo(t *testing.T) {
 }
 
 func TestParseModifierInExpression(t *testing.T) {
-	// B lower/s → word then modified word
-	assertParse(t, "B lower/s", []engine.Value{
+	// B lower/f → word then modified word
+	assertParse(t, "B lower/f", []engine.Value{
 		engine.NewWord("B"),
 		engine.NewWordModified("lower", -1, false, true),
 	})
@@ -964,7 +964,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 }
 
 func TestExpandDottedLeadingSingle(t *testing.T) {
-	// ".x" → leading dot, just x dot/p
+	// ".x" → leading dot, just x dot/s
 	assertExpand(t, ".x", []engine.Value{
 		engine.NewWord("x"),
 		engine.NewWordModified("dot", -1, true, false),
@@ -1171,9 +1171,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList()
-	// ( foo bar dot/p ) = 5 elements
+	// ( foo bar dot/s ) = 5 elements
 	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements (( foo bar dot/p )), got %d", len(elems))
+		t.Fatalf("expected 5 elements (( foo bar dot/s )), got %d", len(elems))
 	}
 }
 
@@ -1286,7 +1286,7 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	}
 	// 1 ( foo bar dot ) = 6 values
 	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo bar dot/p )), got %d", len(got))
+		t.Fatalf("expected 6 values (1 ( foo bar dot/s )), got %d", len(got))
 	}
 }
 
@@ -1494,13 +1494,13 @@ func TestParseEscapeInStringWithParens(t *testing.T) {
 // --- parseWord edge cases ---
 
 func TestParseEmptyNameAfterModifier(t *testing.T) {
-	// /1s → modifier on empty name, should error
-	assertParseError(t, "/1s")
+	// /1f → modifier on empty name, should error
+	assertParseError(t, "/1f")
 }
 
-func TestParseSlashSModifier(t *testing.T) {
-	// /s → empty name with suffix modifier, should error
-	assertParseError(t, "/s")
+func TestParseSlashFModifier(t *testing.T) {
+	// /f → empty name with forward modifier, should error
+	assertParseError(t, "/f")
 }
 
 // --- convertTopLevelValue / convertDataValue unreachable cases ---
@@ -1690,7 +1690,7 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		ok    bool
 	}{
 		{"hello", "hello", true},
-		{"foo/2p", "foo", true},
+		{"foo/2s", "foo", true},
 		{"foo/0", "foo", true},
 		{"foo/bad", "foo/bad", true},   // unrecognized modifier
 		{"foo/", "foo/", true},         // slash at end not processed

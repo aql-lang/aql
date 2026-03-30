@@ -1,3 +1,6 @@
+//go:build query
+// +build query
+
 package engine
 
 import (

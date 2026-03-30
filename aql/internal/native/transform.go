@@ -8,12 +8,12 @@ import (
 )
 
 // transformFunc returns the "transform" native function definition.
-// transform has suffix precedence and one signature:
+// transform has forward precedence and one signature:
 //   - [any, map] — transforms the data using the map as the transform spec
 func transformFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "transform",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TMap},

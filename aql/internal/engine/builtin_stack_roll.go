@@ -3,7 +3,7 @@ package engine
 import "fmt"
 
 func registerRoll(r *Registry) {
-	r.RegisterPrefixOnly("roll", Signature{
+	r.RegisterStackOnly("roll", Signature{
 		Args: []Type{TInteger},
 		FullStackHandler: func(args []Value, stack []Value) ([]Value, error) {
 			n := int(args[0].AsInteger())

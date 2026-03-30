@@ -898,13 +898,13 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 	}
 }
 
-func TestEngineFnCatterPartialSuffix(t *testing.T) {
+func TestEngineFnCatterPartialForward(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// def catter fn [[integer string] [string] [add]] end
-	// Case: [2|] -> catter "b" -> string from suffix, integer from prefix
+	// Case: [2|] -> catter "b" -> string from forward, integer from prefix
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Integer"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -919,13 +919,13 @@ func TestEngineFnCatterPartialSuffix(t *testing.T) {
 	}
 }
 
-func TestEngineFnCatterFullSuffix(t *testing.T) {
+func TestEngineFnCatterFullForward(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// def catter fn [[integer string] [string] [add]] end
-	// Case: [|] -> catter 3 "c" -> both args from suffix (positional match)
+	// Case: [|] -> catter 3 "c" -> both args from forward (positional match)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Integer"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -971,9 +971,9 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		}
 	})
 
-	// Subtest: 1 prefix + 2 suffix
+	// Subtest: 1 prefix + 2 forward
 	// "A" joiner "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
-	t.Run("MixedPrefixSuffix", func(t *testing.T) {
+	t.Run("MixedPrefixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -987,9 +987,9 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		}
 	})
 
-	// Subtest: 2 prefix + 1 suffix
+	// Subtest: 2 prefix + 1 forward
 	// "A" "B" joiner "C" -> args=["A","B","C"] -> concat -> "ABC"
-	t.Run("TwoPrefixOneSuffix", func(t *testing.T) {
+	t.Run("TwoPrefixOneForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1003,9 +1003,9 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		}
 	})
 
-	// Subtest: all args from suffix
+	// Subtest: all args from forward
 	// joiner "A" "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
-	t.Run("AllSuffix", func(t *testing.T) {
+	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1058,8 +1058,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		}
 	})
 
-	// "X" mix4 7 true "Z" -> 1 prefix, 3 suffix
-	t.Run("OnePrefixThreeSuffix", func(t *testing.T) {
+	// "X" mix4 7 true "Z" -> 1 prefix, 3 forward
+	t.Run("OnePrefixThreeForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1072,8 +1072,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		}
 	})
 
-	// "X" 7 mix4 true "Z" -> 2 prefix, 2 suffix
-	t.Run("TwoPrefixTwoSuffix", func(t *testing.T) {
+	// "X" 7 mix4 true "Z" -> 2 prefix, 2 forward
+	t.Run("TwoPrefixTwoForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1086,8 +1086,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		}
 	})
 
-	// mix4 "X" 7 true "Z" -> all suffix
-	t.Run("AllSuffix", func(t *testing.T) {
+	// mix4 "X" 7 true "Z" -> all forward
+	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1096,7 +1096,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
 		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
-			t.Errorf(`all-suffix mix4 = %v, want ["X7trueZ"]`, result)
+			t.Errorf(`all-forward mix4 = %v, want ["X7trueZ"]`, result)
 		}
 	})
 }
@@ -1132,8 +1132,8 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		}
 	})
 
-	// "a" 3 mix5 1.5 false "z" -> 2 prefix, 3 suffix
-	t.Run("TwoPrefixThreeSuffix", func(t *testing.T) {
+	// "a" 3 mix5 1.5 false "z" -> 2 prefix, 3 forward
+	t.Run("TwoPrefixThreeForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1147,8 +1147,8 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		}
 	})
 
-	// mix5 "a" 3 1.5 false "z" -> all suffix
-	t.Run("AllSuffix", func(t *testing.T) {
+	// mix5 "a" 3 1.5 false "z" -> all forward
+	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1158,7 +1158,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 			NewDecimal(1.5), NewBoolean(false), NewString("z"),
 		))
 		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
-			t.Errorf(`all-suffix mix5 = %v, want ["a31.5falsez"]`, result)
+			t.Errorf(`all-forward mix5 = %v, want ["a31.5falsez"]`, result)
 		}
 	})
 }
@@ -1199,8 +1199,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 	})
 
-	// 3 prefix + 4 suffix
-	t.Run("ThreePrefixFourSuffix", func(t *testing.T) {
+	// 3 prefix + 4 forward
+	t.Run("ThreePrefixFourForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1214,8 +1214,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 	})
 
-	// 1 prefix + 6 suffix
-	t.Run("OnePrefixSixSuffix", func(t *testing.T) {
+	// 1 prefix + 6 forward
+	t.Run("OnePrefixSixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1229,8 +1229,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 	})
 
-	// All suffix
-	t.Run("AllSuffix", func(t *testing.T) {
+	// All forward
+	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1239,13 +1239,13 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		tokens = append(tokens, argVals...)
 		result := runAQL(t, r, tokens)
 		if len(result) != 1 || result[0].AsString() != want {
-			t.Errorf("all-suffix mix7 = %v, want [%q]", result, want)
+			t.Errorf("all-forward mix7 = %v, want [%q]", result, want)
 		}
 	})
 }
 
 func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
-	// Tests that the "end" word stops suffix argument collection,
+	// Tests that the "end" word stops forward argument collection,
 	// preventing the fn from consuming tokens that follow.
 
 	// def cat3 fn [[string string string] [string]
@@ -1271,7 +1271,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	}
 
 	// cat3 "A" "B" "C" end "trailing" -> cat3 gets "ABC", "trailing" on stack
-	t.Run("EndStopsSuffix3", func(t *testing.T) {
+	t.Run("EndStopsForward3", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1293,7 +1293,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	})
 
 	// "X" cat4 7 true "Z" end "after" -> cat4 gets "X7trueZ", "after" untouched
-	t.Run("EndStopsSuffix4Mixed", func(t *testing.T) {
+	t.Run("EndStopsForward4Mixed", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1315,7 +1315,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	})
 
 	// Two fn calls using parens and end: (cat3 "A" "B" "C" end) (cat3 "D" "E" "F" end)
-	// Parens isolate each call; end stops suffix collection within each group.
+	// Parens isolate each call; end stops forward collection within each group.
 	t.Run("EndSeparatesTwoCalls", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
@@ -1372,8 +1372,8 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	})
 
 	// Prefix-heavy with end: "P" "Q" cat3 "R" end "extra"
-	// 2 prefix, 1 suffix, end stops collection, "extra" remains.
-	t.Run("EndAfterPartialSuffix", func(t *testing.T) {
+	// 2 prefix, 1 forward, end stops collection, "extra" remains.
+	t.Run("EndAfterPartialForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
@@ -1494,9 +1494,9 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def doubler/p fn [[x:integer] [integer] [x x add]] end
-	// doubler/p registers as prefix-only: takes args from the stack only,
-	// never collects suffix args via forward.
+	// def doubler/s fn [[x:integer] [integer] [x x add]] end
+	// doubler/s registers as stack-only: takes args from the stack only,
+	// never collects forward args via forward.
 	fnBody := NewList([]Value{
 		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
 		NewList([]Value{NewWord("Integer")}),
@@ -1512,13 +1512,13 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	}
 }
 
-func TestEngineFnDefPrefixOnlyNoSuffixCollection(t *testing.T) {
+func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def doubler/p fn [[x:integer] [integer] [x x add]] end
-	// doubler 5 — prefix-only word should NOT collect 5 as suffix arg.
+	// def doubler/s fn [[x:integer] [integer] [x x add]] end
+	// doubler 5 — stack-only word should NOT collect 5 as forward arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
 		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
@@ -2125,17 +2125,12 @@ func TestEngineInspectBuiltin(t *testing.T) {
 		t.Error("expected at least one signature for add")
 	}
 
-	// Check first signature has args and precedence.
+	// Check first signature has args.
 	sig0 := sigList[0].AsMap()
 	args, _ := sig0.Get("args")
 	argList := args.AsList()
 	if len(argList) != 2 {
 		t.Errorf("expected 2 args for add, got %d", len(argList))
-	}
-
-	prec, _ := sig0.Get("precedence")
-	if prec.AsInteger() == 0 {
-		t.Error("expected non-zero precedence for add")
 	}
 }
 

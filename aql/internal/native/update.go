@@ -7,7 +7,7 @@ import (
 )
 
 // updateFunc returns the "update" native function definition.
-// update has suffix precedence and three signatures:
+// update has forward precedence and three signatures:
 //   - [map(kind:"api")] — updates an entity via the SDK
 //   - [table, map]      — finds a record by "id" and merges the map's fields into it
 //   - [map, map]        — record type + patch: returns empty table
@@ -18,7 +18,7 @@ func updateFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "update",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{

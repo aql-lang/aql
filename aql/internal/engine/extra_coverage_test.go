@@ -731,8 +731,8 @@ func TestExtraStepEndNoForward(t *testing.T) {
 	}
 }
 
-func TestExtraStepEndAfterSuffix(t *testing.T) {
-	// Use "end" to terminate a suffix expression: 1 add 2 end
+func TestExtraStepEndAfterForward(t *testing.T) {
+	// Use "end" to terminate a forward expression: 1 add 2 end
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)

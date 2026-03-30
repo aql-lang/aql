@@ -441,14 +441,14 @@ func TestRunDefaultBranch(t *testing.T) {
 	}
 }
 
-// --- Register / RegisterPrefixOnly ---
+// --- Register / RegisterStackOnly ---
 
-func TestRegisterSuffixWord(t *testing.T) {
+func TestRegisterForwardWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" as a suffix-precedence word: 5 double => 10
+	// Register "double" as a forward-precedence word: 5 double => 10
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -466,12 +466,12 @@ func TestRegisterSuffixWord(t *testing.T) {
 	}
 }
 
-func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
+func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" with suffix precedence — can collect arg after the word.
+	// Register "double" with forward precedence — can collect arg after the word.
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
@@ -489,13 +489,13 @@ func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyWord(t *testing.T) {
+func TestRegisterStackOnlyWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "neg" as prefix-only: 5 neg => -5
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	// Register "neg" as stack-only: 5 neg => -5
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			n := args[0].AsInteger()
@@ -512,12 +512,12 @@ func TestRegisterPrefixOnlyWord(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
+func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			n := args[0].AsInteger()
@@ -525,11 +525,11 @@ func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
 		},
 	})
 
-	// "neg 5" — neg is prefix-only so it should not consume 5 from suffix.
+	// "neg 5" — neg is stack-only so it should not consume 5 from forward.
 	// Without a value on the stack, it should error.
 	_, err = a.Run("neg 5")
 	if err == nil {
-		t.Fatal("expected error: neg is prefix-only and has no prefix args")
+		t.Fatal("expected error: neg is stack-only and has no prefix args")
 	}
 }
 
@@ -575,35 +575,32 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	}
 }
 
-func TestRegisterWithPrecedence(t *testing.T) {
+func TestRegisterLeftToRight(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Register "myadd" with low precedence and "mymul" with high precedence.
 	a.Register("myadd", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 1,
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			return []aql.Value{aql.NewInteger(args[0].AsInteger() + args[1].AsInteger())}, nil
 		},
 	})
 	a.Register("mymul", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 2,
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
 			return []aql.Value{aql.NewInteger(args[0].AsInteger() * args[1].AsInteger())}, nil
 		},
 	})
 
-	// 2 myadd 3 mymul 4 => mymul binds tighter, so 3*4=12 first, then 2+12=14
+	// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
 	result, err := a.Run("2 myadd 3 mymul 4")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || result[0] != int64(14) {
-		t.Errorf("got %v, want [14]", result)
+	if len(result) != 1 || result[0] != int64(20) {
+		t.Errorf("got %v, want [20]", result)
 	}
 }
 
@@ -613,10 +610,11 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Register "divmod" that returns quotient and remainder.
+	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
 	a.Register("divmod", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			a, b := args[0].AsInteger(), args[1].AsInteger()
+			a, b := args[1].AsInteger(), args[0].AsInteger()
 			if b == 0 {
 				return nil, fmt.Errorf("division by zero")
 			}

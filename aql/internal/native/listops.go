@@ -15,7 +15,7 @@ import (
 func pushFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "push",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TAny},
@@ -55,7 +55,7 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 func popFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "pop",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList},
@@ -87,7 +87,7 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 func unshiftFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "unshift",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TAny},
@@ -129,7 +129,7 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 func shiftFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "shift",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList},

@@ -9,7 +9,7 @@ import (
 )
 
 // walkFunc returns the "walk" native function definition.
-// walk is prefix-only and has three signatures:
+// walk is stack-only and has three signatures:
 //   - [any, function, function] — walks the value with before and after callbacks,
 //     returning the transformed tree
 //   - [any, function] — walks the value with a before callback,
@@ -19,7 +19,7 @@ import (
 func walkFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "walk",
-		SuffixPrecedence: false,
+		ForwardPrecedence: false,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TFunction, engine.TFunction},
