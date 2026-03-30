@@ -392,16 +392,34 @@ PLANNER_SEQUENTIAL_FORWARD(function, modifiers, resolvedStack[]):
 
 ### Sequential Token Matching
 
-Walks the forward token stream starting after the current pointer. For each
-token, decides whether it satisfies the next expected signature argument.
+Walks the forward token stream starting after the current pointer. Stack
+suffix coverage is computed FIRST to determine how many positions need to
+come from forward tokens. The forward scan fills only the remaining prefix
+positions.
+
+**Argument ordering convention:** Forward args fill positions from the
+start (0, 1, ...) of the signature. Stack args fill positions from the
+end (..., N-2, N-1). Arguments cannot change order.
 
 ```
-TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
-    nArgs          = len(sig.args)
+TRY_SEQUENTIAL_MATCH(function, sig, resolvedStack[]):
+    nArgs = len(sig.args)
+
+    // Step 1: compute stack suffix coverage FIRST.
+    stackCount = SEQUENTIAL_SUFFIX_MATCH(sig.args, resolvedStack)
+    if stackCount >= nArgs:
+        // Stack alone satisfies — defer to stack-only matcher.
+        // Forcing forward collection here would over-collect the next
+        // function word (e.g. "2 3 1 add mul" where add has enough
+        // stack args and mul is the next operation, not an argument).
+        return 0, 0
+
+    // Step 2: forward scan fills positions 0..forwardNeeded-1.
+    forwardNeeded  = nArgs - stackCount
     forwardMatched = 0
     scanIdx        = pointer + 1
 
-    while forwardMatched < nArgs AND scanIdx < len(stack):
+    while forwardMatched < forwardNeeded AND scanIdx < len(stack):
         tok          = stack[scanIdx]
         expectedType = sig.args[forwardMatched]
 
@@ -412,15 +430,19 @@ TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
         if tok is word:
             name = tok.name
 
-            // End / close-paren: stop
+            // (B) End / close-paren: stop
             if name == "end" OR name == ")":
                 break
 
-            // Open paren: sub-expression will produce a value
+            // (E) Open paren: sub-expression will produce a value
             if name == "(":
                 forwardMatched++; scanIdx++; continue
 
-            // /q position: word treated as Atom
+            // TWord position: any word matches directly
+            if Word.MATCHES(expectedType):
+                forwardMatched++; scanIdx++; continue
+
+            // (F) /q position: word treated as Atom
             if sig.quoteArgs[forwardMatched]:
                 if Atom.MATCHES(expectedType):
                     forwardMatched++; scanIdx++; continue
@@ -437,12 +459,15 @@ TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
                     break   // simple def, type mismatch
                 // fn-based def: fall through to LOOKUP
 
-            // Known function with forward precedence: will produce a value
+            // (D) Known function: accept as one forward arg, then stop.
+            // The function will execute and produce a result value.
+            // Exception: if the outer function has a QuoteArgs sig at
+            // this position, reject — let the QuoteArgs sig handle it.
             if fn = LOOKUP(name); fn != nil:
-                if fn.forwardPrecedence:
-                    forwardMatched++; scanIdx++; continue
-                else:
-                    break   // stack-only function, stop
+                if HAS_QUOTE_ARG_AT(function, forwardMatched):
+                    break   // prefer QuoteArgs sig for this word
+                forwardMatched++; scanIdx++
+                break       // stop after one function (case D)
 
             // Unknown word: becomes Atom (or Boolean for true/false)
             resolvedType = Atom
@@ -462,34 +487,64 @@ TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
 
         break   // type mismatch
 
-    // All matched from forward?
-    if forwardMatched == nArgs:
-        return forwardMatched, 0
-
-    // Try filling remaining args from the stack (suffix)
-    remaining  = nArgs - forwardMatched
-    stackCount = SEQUENTIAL_STACK_MATCH(sig.args, forwardMatched, resolvedStack)
-    if stackCount == remaining:
+    // (A) All forward positions filled?
+    if forwardMatched == forwardNeeded:
         return forwardMatched, stackCount
+
+    // (C) Partial forward: try filling remaining from stack suffix.
+    remaining = nArgs - forwardMatched
+    if forwardMatched > 0 AND remaining > 0 AND len(resolvedStack) >= remaining:
+        ok = true
+        for j in 0..remaining-1:
+            stackVal = resolvedStack[len(resolvedStack) - 1 - j]
+            if NOT stackVal.type.MATCHES(sig.args[forwardMatched + j]):
+                ok = false; break
+        if ok:
+            return forwardMatched, remaining
 
     return forwardMatched, 0   // partial — not enough args
 ```
 
-### Sequential Stack Match
+### Sequential Suffix Match
 
-Fills remaining signature positions from the resolved stack.
+Matches stack values against the LAST N positions of the signature.
+Stack top maps to the last sig position. Tries the largest coverage
+first, shrinks until it fits.
 
 ```
-SEQUENTIAL_STACK_MATCH(sigArgs[], startIdx, resolved[]):
-    remaining = len(sigArgs) - startIdx
-    if remaining <= 0 OR len(resolved) < remaining:
-        return 0
-    for j in 0..remaining-1:
-        stackVal = resolved[len(resolved) - 1 - j]
-        if NOT stackVal.type.MATCHES(sigArgs[startIdx + j]):
-            return 0
-    return remaining
+SEQUENTIAL_SUFFIX_MATCH(sigArgs[], resolved[]):
+    maxTry = min(len(sigArgs), len(resolved))
+    for tryN = maxTry downto 1:
+        sigStart = len(sigArgs) - tryN
+        ok = true
+        for j in 0..tryN-1:
+            stackVal = resolved[len(resolved) - 1 - j]
+            if NOT stackVal.type.MATCHES(sigArgs[sigStart + j]):
+                ok = false; break
+        if ok:
+            return tryN
+    return 0
 ```
+
+### QuoteArgs Guard (HAS_QUOTE_ARG_AT)
+
+Returns true if any signature of the function has QuoteArgs set at the
+given argument position. This prevents function words from being greedily
+accepted when a QuoteArgs variant exists that should handle them instead.
+
+```
+HAS_QUOTE_ARG_AT(function, position):
+    for each sig in function.signatures:
+        if sig.quoteArgs[position] == true:
+            return true
+    return false
+```
+
+Example: `undef myFn` where undef has sigs `[TString]` and `[TAtom/q]`.
+Without this guard, the `[TString]` sig would accept `myFn` via the Lookup
+check (since myFn is a registered function). The guard detects that position
+0 has a QuoteArgs variant and rejects the Lookup match, allowing the
+`[TAtom/q]` sig to match correctly.
 
 ### Design: Simple Defs Don't Register Functions
 
@@ -505,7 +560,7 @@ matching, falling through to `LOOKUP` only for fn-based defs.
 
 ### Test Results (Feature-Flagged)
 
-**Targeted tests** (planner_sequential_test.go): 12/13 pass
+**Targeted tests** (planner_sequential_test.go): All pass
 
 | Test | Result | Notes |
 |------|--------|-------|
@@ -516,23 +571,15 @@ matching, falling through to `LOOKUP` only for fn-based defs.
 | SetGet (set k 99 get k) | PASS | |
 | ContextSetGet | PASS | |
 | AddPrefix/Forward/Infix | PASS | All 3 positions work |
-| DefFnSquare (fn [...] 5 sq) | **FAIL** | Pre-existing issue (fails without sequential planner too) |
+| DefFnSquare (fn [...] 5 sq) | PASS | |
 | Quote | PASS | |
 | Dup | PASS | |
 | TypeDef | PASS | |
 | PlannerUnit | PASS | |
 | PlannerStackMatch | PASS | |
 
-**Integration tests** (planner_sequential_full_test.go): 21/21 pass
+**Integration tests** (planner_sequential_full_test.go): All pass
 
-| Test | Result |
-|------|--------|
-| add_forward, add_infix, add_prefix | PASS |
-| mul_forward, sub_infix | PASS |
-| def_word_int, def_string_body, def_list_body | PASS |
-| undef_basic, undef_stacked | PASS |
-| set_get_word, set_get_string | PASS |
-| quote_word, quote_int | PASS |
-| dup, swap, drop | PASS |
-| lt_true, gt_false, eq_true | PASS |
-| nested_forward | PASS |
+**Full engine test suite**: Zero new failures vs baseline. The only
+failure (`TestContextDifferentValueTypes`) is pre-existing and occurs
+with both the scoring planner and sequential planner.

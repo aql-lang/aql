@@ -33,7 +33,7 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 			continue
 		}
 
-		forwardMatched, stackCount := e.trySequentialMatch(sig, resolved)
+		forwardMatched, stackCount := e.trySequentialMatch(fn, sig, resolved)
 		if forwardMatched+stackCount == len(sig.Args) && forwardMatched > 0 {
 			return sig, stackCount
 		}
@@ -51,7 +51,7 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 // arg is needed, and the scan stops after "2".
 //
 // Returns (forwardMatched, stackCount).
-func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int) {
+func (e *Engine) trySequentialMatch(fn *Function, sig *Signature, resolved []Value) (int, int) {
 	nArgs := len(sig.Args)
 
 	// Step 1: compute how many SUFFIX args the stack can provide.
@@ -60,12 +60,11 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 	// shrink until it fits.
 	stackCount := sequentialSuffixMatch(sig.Args, resolved)
 	if stackCount >= nArgs {
-		// Stack alone satisfies everything — but we need at least 1
-		// forward arg for a forward match.
-		stackCount = nArgs - 1
-		if stackCount < 0 {
-			return 0, 0
-		}
+		// Stack alone satisfies everything — defer to stack-only matcher.
+		// Forcing forward collection here would over-collect the next
+		// function word (e.g. "1 2 3 rot add mul" where add has enough
+		// stack args and mul is the next operation, not an argument).
+		return 0, 0
 	}
 
 	// The forward scan needs to fill positions 0..forwardNeeded-1.
@@ -139,7 +138,16 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 			// (case D). The function will execute as a sub-expression
 			// and produce one result value. We can't predict what
 			// tokens follow it, so we stop scanning here.
+			//
+			// Exception: if the outer function has a QuoteArgs sig at
+			// this position (e.g. undef has [TAtom/q] alongside [TString]),
+			// reject the function word here so the QuoteArgs sig can
+			// match it instead. This prevents "undef myFn" from matching
+			// [TString] when [TAtom/q] is the correct choice.
 			if knownFn := e.registry.Lookup(ww.Name); knownFn != nil {
+				if hasQuoteArgAt(fn, forwardMatched) {
+					break
+				}
 				forwardMatched++
 				scanIdx++
 				break
@@ -233,4 +241,16 @@ func sequentialSuffixMatch(sigArgs []Type, resolved []Value) int {
 		}
 	}
 	return 0
+}
+
+// hasQuoteArgAt returns true if any signature in fn has QuoteArgs set at the
+// given argument position. This indicates the function has a variant that
+// expects to capture the word itself (as an Atom) rather than evaluating it.
+func hasQuoteArgAt(fn *Function, pos int) bool {
+	for i := range fn.Signatures {
+		if fn.Signatures[i].QuoteArgs != nil && fn.Signatures[i].QuoteArgs[pos] {
+			return true
+		}
+	}
+	return false
 }
