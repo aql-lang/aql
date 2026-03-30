@@ -46,6 +46,7 @@ type Registry struct {
 	SDKCache       map[string]any     // cached SDK instances keyed by spec name
 	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
 	errs           []error            // registration errors accumulated during setup
+	SequentialPlanner bool            // feature flag: use sequential forward planner instead of scoring-based
 }
 
 // NewRegistry creates an empty registry.

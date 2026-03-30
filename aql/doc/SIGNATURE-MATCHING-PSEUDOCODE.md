@@ -361,3 +361,188 @@ And stack: `[... 3, 5]` (both Integer = Scalar/Number/Integer)
 
 Result: **sig2 wins**. The correct integer addition handler is invoked.
 The less specific signatures are never even tried.
+
+---
+
+## 10. Sequential Forward Planner (Experimental)
+
+An alternative to the scoring-based `plannerBestSigForForward` (Section 6).
+Instead of computing scores for all signatures and picking the highest, this
+planner walks through pre-sorted signatures sequentially and tries to match
+each one against the actual forward token stream. The first fully-matched
+signature wins. Controlled by `Registry.SequentialPlanner` feature flag.
+
+```
+PLANNER_SEQUENTIAL_FORWARD(function, modifiers, resolvedStack[]):
+    // signatures are pre-sorted by SIGNATURE_SCORE (highest first)
+    for each sig in function.signatures:
+        if len(sig.args) == 0:
+            continue
+        if modifiers.argCount >= 0 AND len(sig.args) != modifiers.argCount:
+            continue
+        if sig.fallback:
+            continue
+
+        forwardMatched, stackCount = TRY_SEQUENTIAL_MATCH(sig, resolvedStack)
+        if forwardMatched + stackCount == len(sig.args) AND forwardMatched > 0:
+            return sig, stackCount
+
+    return nil, 0
+```
+
+### Sequential Token Matching
+
+Walks the forward token stream starting after the current pointer. For each
+token, decides whether it satisfies the next expected signature argument.
+
+```
+TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
+    nArgs          = len(sig.args)
+    forwardMatched = 0
+    scanIdx        = pointer + 1
+
+    while forwardMatched < nArgs AND scanIdx < len(stack):
+        tok          = stack[scanIdx]
+        expectedType = sig.args[forwardMatched]
+
+        // --- Structural markers: stop scanning ---
+        if tok is forward marker:
+            break
+
+        if tok is word:
+            name = tok.name
+
+            // End / close-paren: stop
+            if name == "end" OR name == ")":
+                break
+
+            // Open paren: sub-expression will produce a value
+            if name == "(":
+                forwardMatched++; scanIdx++; continue
+
+            // /q position: word treated as Atom
+            if sig.quoteArgs[forwardMatched]:
+                if Atom.MATCHES(expectedType):
+                    forwardMatched++; scanIdx++; continue
+                else:
+                    break
+
+            // Known function with forward precedence: will produce a value
+            if fn = LOOKUP(name); fn != nil:
+                if fn.forwardPrecedence:
+                    forwardMatched++; scanIdx++; continue
+                else:
+                    break   // stack-only function, stop
+
+            // Defined word: resolve to its def type
+            if def = DEF_STACK(name); def exists:
+                if def.type.MATCHES(expectedType) OR expectedType == Any:
+                    forwardMatched++; scanIdx++; continue
+                else:
+                    break
+
+            // Unknown word: becomes Atom (or Boolean for true/false)
+            resolvedType = Atom
+            if name == "true" OR name == "false":
+                resolvedType = Boolean
+            if name is a type name:
+                break   // type literals are not collectible values
+            if resolvedType.MATCHES(expectedType) OR expectedType == Any:
+                forwardMatched++; scanIdx++; continue
+            break
+
+        // Literal value: direct type check
+        if tok.type.MATCHES(expectedType) OR expectedType == Any:
+            if tok.data == nil AND (expectedType == Map OR expectedType == List):
+                break   // reject type literals
+            forwardMatched++; scanIdx++; continue
+
+        break   // type mismatch
+
+    // All matched from forward?
+    if forwardMatched == nArgs:
+        return forwardMatched, 0
+
+    // Try filling remaining args from the stack (suffix)
+    remaining  = nArgs - forwardMatched
+    stackCount = SEQUENTIAL_STACK_MATCH(sig.args, forwardMatched, resolvedStack)
+    if stackCount == remaining:
+        return forwardMatched, stackCount
+
+    return forwardMatched, 0   // partial — not enough args
+```
+
+### Sequential Stack Match
+
+Fills remaining signature positions from the resolved stack.
+
+```
+SEQUENTIAL_STACK_MATCH(sigArgs[], startIdx, resolved[]):
+    remaining = len(sigArgs) - startIdx
+    if remaining <= 0 OR len(resolved) < remaining:
+        return 0
+    for j in 0..remaining-1:
+        stackVal = resolved[len(resolved) - 1 - j]
+        if NOT stackVal.type.MATCHES(sigArgs[startIdx + j]):
+            return 0
+    return remaining
+```
+
+### Known Limitations
+
+The sequential planner has a known ordering issue: `LOOKUP(name)` runs before
+`DEF_STACK(name)`. User-defined words (created by `def`) are registered as
+forward-precedence functions, so `LOOKUP` finds them and optimistically accepts
+them at any type position — bypassing the actual type check that `DEF_STACK`
+would perform. This causes incorrect signature matching when a def'd word's
+type doesn't match the expected signature position (e.g. `undef a` where `a`
+is defined as Integer, but the sig expects `TFnUndef` at position 1).
+
+### Test Results (Feature-Flagged)
+
+**Targeted tests** (planner_sequential_test.go): 11/13 pass
+
+| Test | Result | Notes |
+|------|--------|-------|
+| BasicInfix (2 add 3) | PASS | |
+| DefForward (def foo 42 foo) | PASS | |
+| DefGreeting (def greeting "hello") | PASS | |
+| UndefSimple (def foo 1 undef foo foo) | **FAIL** | "no matching signature for undef" — Lookup/DefStack ordering bug |
+| SetGet (set k 99 get k) | PASS | |
+| ContextSetGet | PASS | |
+| AddPrefix/Forward/Infix | PASS | All 3 positions work |
+| DefFnSquare (fn [...] 5 sq) | **FAIL** | "no matching signature for sq" — fn-defined functions not handled |
+| Quote | PASS | |
+| Dup | PASS | |
+| TypeDef | PASS | |
+| PlannerUnit | PASS | |
+| PlannerStackMatch | PASS | |
+
+**Integration tests** (planner_sequential_full_test.go): 19/22 pass
+
+| Test | Result | Notes |
+|------|--------|-------|
+| add_forward, add_infix, add_prefix | PASS | |
+| mul_forward, sub_infix | PASS | |
+| def_word_int, def_string_body, def_list_body | PASS | |
+| undef_basic | **FAIL** | Lookup/DefStack ordering bug |
+| undef_stacked | **FAIL** | Same root cause |
+| set_get_word, set_get_string | PASS | |
+| quote_word, quote_int | PASS | |
+| dup, swap, drop | PASS | |
+| lt_true, gt_false, eq_true | PASS | |
+| concat_forward | **FAIL** | concat expects TList; 3 string args not auto-collected |
+| nested_forward | PASS | |
+
+**Root causes of failures:**
+
+1. **Lookup before DefStack** (undef, DefFnSquare): Def'd words are registered
+   as forward-precedence functions via `installDef`. `LOOKUP(name)` finds them
+   and optimistically accepts at any type position, bypassing the DefStack type
+   check. Fixing: check DefStack before Lookup, or add type awareness to the
+   Lookup path.
+
+2. **concat expects TList** (concat_forward): concat's signature is
+   `[TList]` — it expects a single list argument. The test passes 3 separate
+   words. The scoring-based planner wouldn't match this either; the test case
+   itself is likely incorrect for any forward-matching planner.
