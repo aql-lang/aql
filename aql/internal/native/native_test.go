@@ -699,7 +699,7 @@ func TestFilterHandler(t *testing.T) {
 // --- walk with before callback ---
 
 // makeWalkValueFn creates an AQL function that extracts the "value" field
-// from the walk node map. Body: [node getpath "value"]
+// from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{
 		Sigs: []engine.FnSig{
@@ -708,8 +708,8 @@ func makeWalkValueFn() engine.Value {
 					{Name: "node", Type: engine.TMap},
 				},
 				Body: []engine.Value{
-					engine.NewWord("node"),
 					engine.NewWord("getpath"),
+					engine.NewWord("node"),
 					engine.NewString("value"),
 				},
 			},

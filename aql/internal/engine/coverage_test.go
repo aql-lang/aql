@@ -3805,9 +3805,9 @@ func TestDblcallWithAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 3 dblcall [add 1] => 7  (3*2=6, then 6 add 1 = 7)
+	// dblcall 3 [add 1] => 7  (3*2=6, then 6 add 1 = 7)
 	result := runAQL(t, r, []Value{
-		NewInteger(3), NewWord("dblcall"),
+		NewWord("dblcall"), NewInteger(3),
 		NewList([]Value{NewWord("add"), NewInteger(1)}),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 7 {
@@ -4470,7 +4470,7 @@ func TestFlexibleMatchTooFewValues(t *testing.T) {
 	// Fewer values than types should return nil, false.
 	values := []Value{NewInteger(1)}
 	types := []Type{TInteger, TString}
-	result, ok := flexibleMatch(values, types)
+	result, ok := flexibleMatch(values, &Signature{Args: types})
 	if ok || result != nil {
 		t.Errorf("expected no match with fewer values than types")
 	}

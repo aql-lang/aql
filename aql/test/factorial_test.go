@@ -8,7 +8,7 @@ import (
 
 func TestFactorialNamedBase0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -19,7 +19,7 @@ func TestFactorialNamedBase0(t *testing.T) {
 
 func TestFactorialNamedBase1(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -30,7 +30,7 @@ func TestFactorialNamedBase1(t *testing.T) {
 
 func TestFactorialNamedBase5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -41,7 +41,7 @@ func TestFactorialNamedBase5(t *testing.T) {
 
 func TestFactorialNamedBase10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Integer] [1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`10 fact`,
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestFactorialNamedBase10(t *testing.T) {
 
 func TestFactorialUnnamedBase0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -65,7 +65,7 @@ func TestFactorialUnnamedBase0(t *testing.T) {
 
 func TestFactorialUnnamedBase1(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestFactorialUnnamedBase1(t *testing.T) {
 
 func TestFactorialUnnamedBase5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestFactorialUnnamedBase5(t *testing.T) {
 
 func TestFactorialUnnamedBase10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Integer [drop 1] [x:Integer] [Integer] [x (fact (x sub 1)) mul]] end`,
 		`10 fact`,
 	})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestFactorialUnnamedBase10(t *testing.T) {
 func TestFactorialTailRecBase0(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Integer] [Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Integer] [Integer] [swap drop] [Integer,Integer] [Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Integer,_:0] [Integer] [acc] [acc:Integer,n:Integer] [Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -113,7 +113,7 @@ func TestFactorialTailRecBase0(t *testing.T) {
 func TestFactorialTailRecBase1(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Integer] [Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Integer] [Integer] [swap drop] [Integer,Integer] [Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Integer,_:0] [Integer] [acc] [acc:Integer,n:Integer] [Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -125,7 +125,7 @@ func TestFactorialTailRecBase1(t *testing.T) {
 func TestFactorialTailRecBase5(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Integer] [Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Integer] [Integer] [swap drop] [Integer,Integer] [Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Integer,_:0] [Integer] [acc] [acc:Integer,n:Integer] [Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -137,7 +137,7 @@ func TestFactorialTailRecBase5(t *testing.T) {
 func TestFactorialTailRecBase10(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Integer] [Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Integer] [Integer] [swap drop] [Integer,Integer] [Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Integer,_:0] [Integer] [acc] [acc:Integer,n:Integer] [Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`10 fact`,
 	})
 	if err != nil {

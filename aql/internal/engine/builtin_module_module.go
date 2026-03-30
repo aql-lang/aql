@@ -119,6 +119,61 @@ func registerModule(r *Registry) {
 		return nil, installRenamedExports(r, desc, args[0].AsList())
 	}
 
+	// import: [atom/q list] -> [] — inline module: import module [body]
+	// The /q captures "module" as a quoted word; the handler runs the body
+	// to produce a module descriptor, then imports all exports.
+	importInlineHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[0])
+		if name != "module" {
+			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
+		}
+		if args[1].Data == nil {
+			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		}
+		desc, err := runModuleBody(r, args[1].AsList())
+		if err != nil {
+			return nil, fmt.Errorf("import module: %w", err)
+		}
+		installExports(r, desc, nil)
+		return nil, nil
+	}
+
+	// import: [list atom/q list] -> [] — inline module with renames
+	importInlineRenameHandler := func(args []Value) ([]Value, error) {
+		name := defName(args[1])
+		if name != "module" {
+			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
+		}
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
+		}
+		if args[2].Data == nil {
+			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		}
+		desc, err := runModuleBody(r, args[2].AsList())
+		if err != nil {
+			return nil, fmt.Errorf("import module: %w", err)
+		}
+		return nil, installRenamedExports(r, desc, args[0].AsList())
+	}
+
+	// import: [atom atom/q list] -> [] — inline module with single rename
+	importInlineSingleRenameHandler := func(args []Value) ([]Value, error) {
+		modName := defName(args[1])
+		if modName != "module" {
+			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", modName)
+		}
+		if args[2].Data == nil {
+			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		}
+		desc, err := runModuleBody(r, args[2].AsList())
+		if err != nil {
+			return nil, fmt.Errorf("import module: %w", err)
+		}
+		return nil, installSingleRename(r, desc, defName(args[0]))
+	}
+
+	// Standard signatures used by both scoring and sequential planners.
 	r.Register("import",
 		Signature{
 			Args:    []Type{TModule},
@@ -141,6 +196,26 @@ func registerModule(r *Registry) {
 		Signature{
 			Args:    []Type{TList, TString},
 			Handler: importFileRenameHandler,
+		},
+	)
+
+	// Inline module forms: use /q to capture "module" as a quoted word
+	// instead of executing it as a function.
+	r.Register("import",
+		Signature{
+			Args:      []Type{TAtom, TList},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   importInlineHandler,
+		},
+		Signature{
+			Args:      []Type{TList, TAtom, TList},
+			QuoteArgs: map[int]bool{1: true},
+			Handler:   importInlineRenameHandler,
+		},
+		Signature{
+			Args:      []Type{TAtom, TAtom, TList},
+			QuoteArgs: map[int]bool{1: true},
+			Handler:   importInlineSingleRenameHandler,
 		},
 	)
 }

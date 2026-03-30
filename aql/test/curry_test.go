@@ -45,7 +45,7 @@ func assertResult(t *testing.T, result []engine.Value, want string) {
 
 func TestCurryAdd5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def add5 add 5 end`,
+		`def add5 [add 5] end`,
 		`10 add5`,
 	})
 	if err != nil {
@@ -56,7 +56,7 @@ func TestCurryAdd5(t *testing.T) {
 
 func TestCurrySub1(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def sub1 sub 1 end`,
+		`def sub1 [sub 1] end`,
 		`10 sub1`,
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func TestCurrySub1(t *testing.T) {
 
 func TestCurryMul3(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def mul3 mul 3 end`,
+		`def mul3 [mul 3] end`,
 		`4 mul3`,
 	})
 	if err != nil {
@@ -78,7 +78,7 @@ func TestCurryMul3(t *testing.T) {
 
 func TestCurryDiv2(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def div2 div 2 end`,
+		`def div2 [div 2] end`,
 		`10 div2`,
 	})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestCurryDiv2(t *testing.T) {
 
 func TestCurryMod3(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def mod3 mod 3 end`,
+		`def mod3 [mod 3] end`,
 		`10 mod3`,
 	})
 	if err != nil {
@@ -115,8 +115,8 @@ func TestCurryReuse(t *testing.T) {
 
 func TestCurryChain(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def add5 add 5 end`,
-		`def mul2 mul 2 end`,
+		`def add5 [add 5] end`,
+		`def mul2 [mul 2] end`,
 		`3 add5 mul2`,
 	})
 	if err != nil {
@@ -127,8 +127,8 @@ func TestCurryChain(t *testing.T) {
 
 func TestCurryChainReversed(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def mul2 mul 2 end`,
-		`def add5 add 5 end`,
+		`def mul2 [mul 2] end`,
+		`def add5 [add 5] end`,
 		`3 mul2 add5`,
 	})
 	if err != nil {
@@ -141,8 +141,8 @@ func TestCurryChainReversed(t *testing.T) {
 
 func TestCurryInfix(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def add5 add 5 end`,
-		`10 add add5 3`,
+		`def add5 [add 5] end`,
+		`10 add (add5 3)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestCurryListSquare(t *testing.T) {
 
 func TestCurryAnd(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def and_true and true end`,
+		`def and_true [and true] end`,
 		`false and_true`,
 	})
 	if err != nil {
@@ -189,7 +189,7 @@ func TestCurryAnd(t *testing.T) {
 
 func TestCurryOr(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def or_true or true end`,
+		`def or_true [or true] end`,
 		`false or_true`,
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func TestCurryOr(t *testing.T) {
 
 func TestCurryLt10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def lt10 lt 10 end`,
+		`def lt10 [lt 10] end`,
 		`5 lt10`,
 	})
 	if err != nil {
@@ -213,7 +213,7 @@ func TestCurryLt10(t *testing.T) {
 
 func TestCurryGte0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def gte0 gte 0 end`,
+		`def gte0 [gte 0] end`,
 		`-1 gte0`,
 	})
 	if err != nil {
@@ -226,7 +226,7 @@ func TestCurryGte0(t *testing.T) {
 
 func TestCurryStringConcat(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def greet add "hello " end`,
+		`def greet [add "hello "] end`,
 		`greet "world"`,
 	})
 	if err != nil {
@@ -240,7 +240,7 @@ func TestCurryStringConcat(t *testing.T) {
 
 func TestCurryInParens(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def add5 add 5 end`,
+		`def add5 [add 5] end`,
 		`(3 add5) mul 2`,
 	})
 	if err != nil {
@@ -253,7 +253,7 @@ func TestCurryInParens(t *testing.T) {
 
 func TestCurryCompose(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def add5 add 5 end`,
+		`def add5 [add 5] end`,
 		`def add5_twice [add5 add5]`,
 		`10 add5_twice`,
 	})
@@ -267,7 +267,7 @@ func TestCurryCompose(t *testing.T) {
 
 func TestCurryConvert(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def to_string convert String end`,
+		`def to_string [convert String] end`,
 		`42 to_string`,
 	})
 	if err != nil {
@@ -304,7 +304,7 @@ func TestCurryDefPreservesWord(t *testing.T) {
 	// Ensure that a curried word defined via `def ... end` actually
 	// creates a working definition, not just a list.
 	result, err := runSteps(t, []string{
-		`def add10 add 10 end`,
+		`def add10 [add 10] end`,
 		`5 add10`,
 		`20 add10`,
 	})

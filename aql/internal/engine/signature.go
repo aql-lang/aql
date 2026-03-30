@@ -1,5 +1,8 @@
 package engine
 
+// MaxArgs is the maximum number of arguments a signature may declare.
+const MaxArgs = 32
+
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for stack matching).
@@ -23,6 +26,12 @@ type Signature struct {
 	// matching the type.
 	Patterns map[int]Value
 
+	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
+	// When set, a Word value at that position is treated as an Atom for
+	// matching purposes and is captured without evaluation during forward
+	// collection.
+	QuoteArgs map[int]bool
+
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
@@ -39,17 +48,17 @@ type MatchResult struct {
 	Args []Value // args matched positionally to Sig.Args types
 }
 
-// MatchSignature finds the best matching signature for a function given the
+// MatchSignature finds the first matching signature for a function given the
 // resolved stack and optional word modifiers.
+//
+// Signatures are assumed to be pre-sorted by SortSignatures (longest and most
+// specific first, fallbacks last). The first match wins.
 //
 // stack is the resolved portion of the stack (index 0 = bottom, last = top).
 // modifiers control filtering (forceStack, forceForward, argCount).
 //
 // Returns nil if no signature matches.
 func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
-	var best *MatchResult
-	var bestScore int
-
 	for i := range sigs {
 		sig := &sigs[i]
 
@@ -67,7 +76,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		top := stack[base:]
 
 		// Try flexible match.
-		ordered, ok := flexibleMatch(top, sig.Args)
+		ordered, ok := flexibleMatch(top, sig)
 		if !ok {
 			continue
 		}
@@ -98,44 +107,21 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			}
 		}
 
-		score := signatureScore(sig)
-
-		// Match quality bonus: reward signatures where the actual values
-		// match specific (non-Any) type constraints. This prevents TAny
-		// from inflating scores when competing with specific types at
-		// different hierarchy depths (e.g. TWord vs TString).
-		for j := 0; j < n; j++ {
-			if sig.Args[j].Equal(TAny) {
-				continue
-			}
-			if ordered[j].VType.Equal(sig.Args[j]) {
-				score += 50 // exact type match
-			} else {
-				score += 10 // subtype (inexact) match
-			}
-		}
-
-		if best != nil && score <= bestScore {
-			continue
-		}
-
 		args := make([]Value, n)
 		copy(args, ordered)
-		best = &MatchResult{Sig: sig, Args: args}
-		bestScore = score
+		return &MatchResult{Sig: sig, Args: args}
 	}
 
-	return best
+	return nil
 }
 
 // MatchSignatureReversed is like MatchSignature but reads the stack in reverse
 // order: the top of the stack maps to sigArgs[0], the next deeper value maps
 // to sigArgs[1], etc. This is used for forward-precedence functions when all
 // arguments come from the stack (zero forward tokens).
+//
+// Signatures are assumed to be pre-sorted. The first match wins.
 func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
-	var best *MatchResult
-	var bestScore int
-
 	for i := range sigs {
 		sig := &sigs[i]
 
@@ -155,7 +141,7 @@ func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo)
 		}
 
 		// Try positional match on the reversed values.
-		ordered, ok := flexibleMatch(reversed, sig.Args)
+		ordered, ok := flexibleMatch(reversed, sig)
 		if !ok {
 			continue
 		}
@@ -184,68 +170,139 @@ func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo)
 			}
 		}
 
-		score := signatureScore(sig)
-
-		for j := 0; j < n; j++ {
-			if sig.Args[j].Equal(TAny) {
-				continue
-			}
-			if ordered[j].VType.Equal(sig.Args[j]) {
-				score += 50
-			} else {
-				score += 10
-			}
-		}
-
-		if best != nil && score <= bestScore {
-			continue
-		}
-
 		args := make([]Value, n)
 		copy(args, ordered)
-		best = &MatchResult{Sig: sig, Args: args}
-		bestScore = score
+		return &MatchResult{Sig: sig, Args: args}
 	}
 
-	return best
+	return nil
 }
 
-// flexibleMatch checks whether values match the given types positionally.
-// Arguments are never permuted — values[i] must match types[i].
+// flexibleMatch checks whether values match the given signature positionally.
+// Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
-func flexibleMatch(values []Value, types []Type) ([]Value, bool) {
-	n := len(types)
+func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
+	n := len(sig.Args)
 	if len(values) < n {
 		return nil, false
 	}
 
-	if positionalMatch(values, types) {
+	if positionalMatch(values, sig) {
 		return values, true
 	}
 
 	return nil, false
 }
 
-// positionalMatch checks whether values match types in order.
-func positionalMatch(values []Value, types []Type) bool {
-	for i, t := range types {
-		if !values[i].VType.Matches(t) {
+// positionalMatch checks whether values match the signature's types in order.
+// Handles the /q modifier: a Word value at a QuoteArgs position is treated
+// as an Atom for type matching purposes.
+func positionalMatch(values []Value, sig *Signature) bool {
+	for i, t := range sig.Args {
+		v := values[i]
+		// /q modifier: treat Word as Atom for matching.
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
+			if !TAtom.Matches(t) {
+				return false
+			}
+			continue
+		}
+		if !v.VType.Matches(t) {
 			return false
 		}
 		// Reject type literals (Data==nil) for concrete Map/List signatures.
-		if values[i].Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
+		if v.Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
 			return false
 		}
 	}
 	return true
 }
 
+// typeInherentScores maps fully-qualified type paths to an inherent score
+// reflecting roughly how many values the type can represent. Within the same
+// specificity level, types that match more values score higher and sort
+// earlier (tried first). Every type has a unique score. Unknown types
+// default to 1000.
+var typeInherentScores = map[string]int{
+	// Depth 1 — Any/None are special; concrete roots ordered by breadth.
+	"None":   100,
+	"Any":    200,
+	"Object": 1400,
+	"Word":   1600,
+	"Scalar": 2500,
+	"Node":   2700,
+
+	// Depth 2 — Word internals (structural tokens, narrow cardinality)
+	"Word/__DJ": 100,
+	"Word/__FN": 200,
+	"Word/__FW": 300,
+	"Word/__IN": 400,
+	"Word/__MK": 500,
+	"Word/__MD": 600,
+	"Word/__MV": 700,
+	"Word/__OP": 800,
+	"Word/__PE": 900,
+	"Word/__RC": 1000,
+	"Word/__UF": 1100,
+
+	// Depth 2 — regular types, ordered by cardinality
+	"Scalar/Boolean": 1200,
+	"Word/Atom":      1300,
+	"Node/Error":     1400,
+	"Object/Fetch":   1500,
+	"Object/Resource": 1600,
+	"Scalar/Number":  1700,
+	"Word/Function":  1800,
+	"Object/Table":   1900,
+	"Object/Record":  2000,
+	"Scalar/String":  2100,
+	"Node/List":      2200,
+	"Node/Map":       2300,
+
+	// Depth 3 — Scalar subtypes
+	"Scalar/String/Empty":   900,
+	"Scalar/String/Proper":  1000,
+	"Scalar/Number/Integer": 1100,
+	"Scalar/Number/Decimal": 1200,
+
+	// Depth 3 — Node subtypes
+	"Node/List/Args":   1300,
+	"Node/Map/Options": 1400,
+	"Node/Map/Word":    1500,
+	"Node/Map/Type":    1600,
+
+	// Depth 3 — Object subtypes
+	"Object/Fetch/Request":   1700,
+	"Object/Fetch/Response":  1800,
+	"Object/Resource/Entity": 1900,
+
+	// Depth 4
+	"Node/Map/Word/Inspect": 2000,
+	"Node/Map/Type/Inspect": 2100,
+}
+
+// typeInherentScore returns the inherent score for a type.
+// Defaults to 1000 for types not in the map.
+func typeInherentScore(t Type) int {
+	path := t.String()
+	if s, ok := typeInherentScores[path]; ok {
+		return s
+	}
+	return 1000
+}
+
 // signatureScore computes an intrinsic ranking score for a signature.
 // Higher is better: more args and more specific types win.
+//
+// Formula: arity * 1_000_000 + sum(specificity * 10_000 + inherentScore)
+//
+// Arity dominates (1e6), then specificity (1e4 per arg), then inherent
+// type score (up to ~9000) as a tiebreaker within the same specificity.
 func signatureScore(sig *Signature) int {
-	score := sig.TotalArgs() * 100 // arg count dominates
+	score := sig.TotalArgs() * 1_000_000
 	for _, t := range sig.Args {
-		score += t.Specificity()
+		score += t.Specificity() * 10_000
+		score += typeInherentScore(t)
 	}
 	return score
 }

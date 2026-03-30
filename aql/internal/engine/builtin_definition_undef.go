@@ -2,7 +2,16 @@ package engine
 
 // registerUndef registers the "undef" word for removing word definitions.
 // undef removes the most recent definition, potentially revealing a
-// shadowed one. Signature: [word|string] -> [].
+// shadowed one.
+//
+// Two simple signatures plus two targeted-undef signatures:
+//
+//	[TString]             – undef "name"
+//	[TAtom/q]             – undef name  (word captured as atom via /q)
+//	[TString, TFnUndef]   – undef "name" fn [spec]
+//	[TAtom/q, TFnUndef]   – undef name fn [spec]
+//
+// Forward precedence handles all orderings without infix signatures.
 func registerUndef(r *Registry) {
 	undefHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
@@ -12,46 +21,32 @@ func registerUndef(r *Registry) {
 
 	r.Register("undef",
 		Signature{
-			Args:    []Type{TWord},
+			Args:    []Type{TString},
 			Handler: undefHandler,
 		},
 		Signature{
-			Args:    []Type{TString},
-			Handler: undefHandler,
+			Args:      []Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   undefHandler,
 		},
 	)
 
 	// Targeted undef: undef foo fn [[number] [number]]
-	// All-forward: args=[foo(name), fnUndefInfo]
-	undefFnForwardHandler := func(args []Value) ([]Value, error) {
+	undefFnHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		undefInfo := args[1].Data.(FnUndefInfo)
 		uninstallFnSigs(r, name, undefInfo)
 		return nil, nil
 	}
-	// Infix: args=[fnUndefInfo, foo(name)]
-	undefFnInfixHandler := func(args []Value) ([]Value, error) {
-		undefInfo := args[0].Data.(FnUndefInfo)
-		name := defName(args[1])
-		uninstallFnSigs(r, name, undefInfo)
-		return nil, nil
-	}
 	r.Register("undef",
 		Signature{
-			Args:    []Type{TWord, TFnUndef},
-			Handler: undefFnForwardHandler,
-		},
-		Signature{
 			Args:    []Type{TString, TFnUndef},
-			Handler: undefFnForwardHandler,
+			Handler: undefFnHandler,
 		},
 		Signature{
-			Args:    []Type{TFnUndef, TWord},
-			Handler: undefFnInfixHandler,
-		},
-		Signature{
-			Args:    []Type{TFnUndef, TString},
-			Handler: undefFnInfixHandler,
+			Args:      []Type{TAtom, TFnUndef},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   undefFnHandler,
 		},
 	)
 }

@@ -45,6 +45,7 @@ type Registry struct {
 	Manager        any                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache       map[string]any     // cached SDK instances keyed by spec name
 	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
+	errs           []error            // registration errors accumulated during setup
 }
 
 // NewRegistry creates an empty registry.
@@ -127,6 +128,12 @@ func (r *Registry) Context() map[string]Value {
 
 // Register adds one or more signatures to a named function with forward precedence.
 func (r *Registry) Register(name string, sigs ...Signature) {
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+			return
+		}
+	}
 	fn, ok := r.funcs[name]
 	if !ok {
 		fn = &Function{Name: name, ForwardPrecedence: true}
@@ -138,6 +145,12 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 
 // RegisterStackOnly adds signatures to a named function without forward precedence.
 func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+			return
+		}
+	}
 	fn, ok := r.funcs[name]
 	if !ok {
 		fn = &Function{Name: name, ForwardPrecedence: false}
@@ -169,7 +182,18 @@ func DefaultRegistry() (*Registry, error) {
 		return nil, err
 	}
 	registerBuiltins(r)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
 	return r, nil
+}
+
+// Err returns the first registration error, or nil if none occurred.
+func (r *Registry) Err() error {
+	if len(r.errs) == 0 {
+		return nil
+	}
+	return r.errs[0]
 }
 
 func registerBuiltins(r *Registry) {
