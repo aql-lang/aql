@@ -679,6 +679,12 @@ func (e *Engine) stepLiteral() error {
 				matchesAny = true
 				break
 			}
+			// /q modifier: Word values match Atom-typed /q slots.
+			if fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[i] &&
+				val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[i]) {
+				matchesAny = true
+				break
+			}
 		}
 		if !matchesAny {
 			// The forward's chosen sig doesn't accept this value, but
@@ -692,6 +698,13 @@ func (e *Engine) stepLiteral() error {
 					}
 					for ai := range altSig.Args {
 						if val.VType.Matches(altSig.Args[ai]) {
+							fwd.Sig = altSig
+							e.stack[fwdIdx] = NewForward(fwd)
+							matchesAny = true
+							break
+						}
+						if altSig.QuoteArgs != nil && altSig.QuoteArgs[ai] &&
+							val.VType.Equal(TWord) && TAtom.Matches(altSig.Args[ai]) {
 							fwd.Sig = altSig
 							e.stack[fwdIdx] = NewForward(fwd)
 							matchesAny = true
@@ -1107,10 +1120,16 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 		// Positional match: collectedTypes[i] must match sig.Args[i].
 		allMatch := true
 		for i := range sig.Args {
-			if !collectedTypes[i].Matches(sig.Args[i]) {
-				allMatch = false
-				break
+			if collectedTypes[i].Matches(sig.Args[i]) {
+				continue
 			}
+			// /q modifier: Word values match Atom-typed /q slots.
+			if sig.QuoteArgs != nil && sig.QuoteArgs[i] &&
+				collectedTypes[i].Equal(TWord) && TAtom.Matches(sig.Args[i]) {
+				continue
+			}
+			allMatch = false
+			break
 		}
 		if allMatch {
 			hasShorterMatch = true
@@ -1761,10 +1780,15 @@ func (e *Engine) hasForwardValues(fn *Function) bool {
 			if knownFn.ForwardPrecedence {
 				return true
 			}
-			// Stack-only functions: only collectible if fn expects TWord or TFunction args.
+			// Stack-only functions: only collectible if fn expects TWord,
+			// TFunction, or /q args (which capture words as atoms).
 			for si := range fn.Signatures {
-				for _, argType := range fn.Signatures[si].Args {
+				sig := &fn.Signatures[si]
+				for ai, argType := range sig.Args {
 					if argType.Equal(TWord) || argType.Equal(TFunction) {
+						return true
+					}
+					if sig.QuoteArgs != nil && sig.QuoteArgs[ai] {
 						return true
 					}
 				}

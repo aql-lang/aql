@@ -51,16 +51,27 @@ TYPE.EQUAL(other):
 ## 2. Positional Match
 
 Values are matched against signature types strictly in order — no permutation.
+The `/q` modifier (implicit quote) on a signature position allows Word values
+to match as Atoms without evaluation.
 
 ```
-POSITIONAL_MATCH(values[], types[]):
-    if len(values) < len(types):
+POSITIONAL_MATCH(values[], sig):
+    if len(values) < len(sig.args):
         return false
-    for i in 0..len(types)-1:
-        if NOT values[i].type.MATCHES(types[i]):
+    for i in 0..len(sig.args)-1:
+        v = values[i]
+        t = sig.args[i]
+
+        // /q modifier: treat Word as Atom for matching
+        if sig.quoteArgs[i] AND v.type == Word:
+            if NOT Atom.MATCHES(t):
+                return false
+            continue
+
+        if NOT v.type.MATCHES(t):
             return false
         // Reject type literals (nil data) for concrete Map/List signatures
-        if values[i].data == nil AND (types[i] == Map OR types[i] == List):
+        if v.data == nil AND (t == Map OR t == List):
             return false
     return true
 ```
@@ -69,20 +80,26 @@ POSITIONAL_MATCH(values[], types[]):
 
 ## 3. Signature Scoring
 
-Signatures are ranked by a numeric score. Higher is better.
+Signatures are ranked by a numeric score. Higher is better. The score uses
+three magnitude tiers: arity (1e6), specificity (1e4), and type inherent score.
 
 ```
 SIGNATURE_SCORE(sig):
-    score = len(sig.args) * 100              // arity dominates
+    score = len(sig.args) * 1_000_000       // arity dominates
     for each type t in sig.args:
-        score += t.SPECIFICITY()             // deeper types = more specific
+        score += t.SPECIFICITY() * 10_000   // specificity tier
+        score += TYPE_INHERENT_SCORE(t)     // unique per type (~100 increments)
     return score
 ```
 
+Each type has a unique inherent score based roughly on value cardinality
+(e.g. Boolean=1200, Integer=1100, String=2100, Any=200). This ensures
+deterministic ordering even between types at the same depth.
+
 **Example scores:**
-- `(Integer)` → 1×100 + 3 = 103  (Integer = Scalar/Number/Integer, depth 3)
-- `(String, String)` → 2×100 + 2+2 = 204
-- `(Any)` → 1×100 + 1 = 101
+- `(Integer)` → 1×1e6 + 3×1e4 + 1100 = 1_031_100
+- `(String, String)` → 2×1e6 + (2×1e4+2100)×2 = 2_044_200
+- `(Any)` → 1×1e6 + 1×1e4 + 200 = 1_010_200
 
 ---
 
@@ -111,7 +128,7 @@ MATCH_SIGNATURE(signatures[], stack[], modifiers):
         top = stack[len(stack)-n .. len(stack)-1]
 
         // --- Positional type check ---
-        if NOT POSITIONAL_MATCH(top, sig.args):
+        if NOT POSITIONAL_MATCH(top, sig):
             continue
 
         // --- Structural pattern check (e.g. map literal patterns) ---
@@ -152,7 +169,7 @@ MATCH_SIGNATURE_REVERSED(signatures[], stack[], modifiers):
         for j in 0..n-1:
             reversed[j] = stack[len(stack) - 1 - j]   // top → arg[0]
 
-        if NOT POSITIONAL_MATCH(reversed, sig.args):
+        if NOT POSITIONAL_MATCH(reversed, sig):
             continue
 
         // ... same pattern check as MATCH_SIGNATURE ...
@@ -194,7 +211,12 @@ PLANNER_BEST_SIG_FOR_FORWARD(function, modifiers, resolvedStack[]):
         // unmatched arg position?
         if peekVal != nil AND stackCount < len(sig.args):
             firstUnmatched = first index i where usedArgs[i] == false
-            if COULD_PRODUCE_TYPE(peekVal, sig.args[firstUnmatched]):
+            canMatch = COULD_PRODUCE_TYPE(peekVal, sig.args[firstUnmatched])
+            // /q modifier: Word peek value matches Atom-typed /q slot
+            if NOT canMatch AND sig.quoteArgs[firstUnmatched]
+               AND peekVal.type == Word AND Atom.MATCHES(sig.args[firstUnmatched]):
+                canMatch = true
+            if canMatch:
                 if sig.args[firstUnmatched] == Any:
                     score += 25              // weaker bonus for catch-all
                 else:
@@ -242,7 +264,53 @@ FORWARD_STACK_COVERAGE(sigArgs[], resolved[]):
 
 ---
 
-## 7. Signature Sorting
+## 7. The /q Modifier (Implicit Quote)
+
+The `/q` modifier on a signature argument position indicates that a Word value
+at that position should be treated as an Atom for matching purposes and captured
+without evaluation during forward collection.
+
+### Signature Definition
+
+```
+Signature {
+    args:      Type[]
+    quoteArgs: map[int]bool   // positions with /q modifier
+    handler:   function
+    ...
+}
+```
+
+### Where /q applies
+
+The /q modifier affects matching at every point in the engine where type
+compatibility is checked:
+
+1. **POSITIONAL_MATCH** — Word at /q position matches if Atom.MATCHES(sigType)
+2. **Forward collection** — Word value at /q position is accepted by the forward
+3. **Forward word capture** — `hasPendingForwardExpectingWord` returns true for /q positions, preventing word evaluation during collection
+4. **Planner peek bonus** — Word peek at /q position gets the specific-type bonus
+5. **Early resolution** — `shouldResolveForwardEarly` recognizes /q when checking if a shorter sig matches collected types
+6. **hasForwardValues** — /q positions are recognized as accepting words
+7. **Overload switching** — /q positions match Word values during forward sig switching
+
+### Example: `def` signatures
+
+```
+sig1: [String, Any]                          — def "name" body
+sig2: [Atom/q, Any]   quoteArgs={0: true}   — def name body
+```
+
+In `def foo 42`:
+- Planner selects sig2 (Atom/q matches word peek)
+- `foo` arrives as Word; hasPendingForwardExpectingWord → true (quoteArgs[0])
+- Word captured without evaluation
+- positionalMatch: Word at /q slot → Atom.MATCHES(Atom) → true
+- Handler receives Word(foo), extracts name "foo"
+
+---
+
+## 8. Signature Sorting
 
 Signatures are pre-sorted so higher-priority ones are checked first.
 
@@ -271,20 +339,20 @@ SORT_SIGNATURES(sigs[]):
 
 ---
 
-## 8. End-to-End Example
+## 9. End-to-End Example
 
 Given a word `add` with signatures (registered in any order):
 ```
-sig1: (Scalar, Scalar)         → score: 200 + 1+1 = 202
-sig2: (Integer, Integer)       → score: 200 + 3+3 = 206
-sig3: (String, String)         → score: 200 + 2+2 = 204
+sig1: (Scalar, Scalar)         → score: 2e6 + (1e4+2500)*2 = 2_025_000
+sig2: (Integer, Integer)       → score: 2e6 + (3e4+1100)*2 = 2_062_200
+sig3: (String, String)         → score: 2e6 + (2e4+2100)*2 = 2_044_200
 ```
 
 After `SortSignatures`, the order becomes (highest score first):
 ```
-sig2: (Integer, Integer)       → score 206
-sig3: (String, String)         → score 204
-sig1: (Scalar, Scalar)         → score 202
+sig2: (Integer, Integer)       → score 2_062_200
+sig3: (String, String)         → score 2_044_200
+sig1: (Scalar, Scalar)         → score 2_025_000
 ```
 
 And stack: `[... 3, 5]` (both Integer = Scalar/Number/Integer)

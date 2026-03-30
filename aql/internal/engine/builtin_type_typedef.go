@@ -21,8 +21,9 @@ func registerTypeDef(r *Registry) {
 		return nil
 	}
 
-	// All-forward handler: "type foo number" → args=[foo(name), number(body)]
-	typeForwardHandler := func(args []Value) ([]Value, error) {
+	// Forward handler: "type foo number" → args=[foo(name), number(body)]
+	// Forward precedence handles all orderings without infix signatures.
+	typeHandler := func(args []Value) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
 		if err := validateAndInstall(name, body); err != nil {
@@ -31,32 +32,15 @@ func registerTypeDef(r *Registry) {
 		return nil, nil
 	}
 
-	// Infix handler: "number type foo" → args=[number(body), foo(name)]
-	typeInfixHandler := func(args []Value) ([]Value, error) {
-		body := args[0]
-		name := defName(args[1])
-		if err := validateAndInstall(name, body); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
-
 	r.Register("type",
 		Signature{
-			Args:    []Type{TWord, TAny},
-			Handler: typeForwardHandler,
-		},
-		Signature{
 			Args:    []Type{TString, TAny},
-			Handler: typeForwardHandler,
+			Handler: typeHandler,
 		},
 		Signature{
-			Args:    []Type{TAny, TWord},
-			Handler: typeInfixHandler,
-		},
-		Signature{
-			Args:    []Type{TAny, TString},
-			Handler: typeInfixHandler,
+			Args:      []Type{TAtom, TAny},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   typeHandler,
 		},
 	)
 }

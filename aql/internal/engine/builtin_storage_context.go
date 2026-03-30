@@ -10,25 +10,14 @@ import "fmt"
 //	context get "key"         — retrieve value (returns none if key not found)
 //	context get foo           — retrieve with word key
 func registerContext(r *Registry) {
-	// All-forward handler: "context-set key value" → args=[key, value]
-	ctxSetForwardHandler := func(args []Value) ([]Value, error) {
+	// context-set handler: "context-set key value" → args=[key, value]
+	ctxSetHandler := func(args []Value) ([]Value, error) {
 		ctx := r.Context()
 		if ctx == nil {
 			return nil, fmt.Errorf("context: no active context")
 		}
 		key := storeKey(args[0])
 		ctx[key] = args[1]
-		return nil, nil
-	}
-
-	// Infix handler: "value context-set key" → args=[value, key]
-	ctxSetInfixHandler := func(args []Value) ([]Value, error) {
-		ctx := r.Context()
-		if ctx == nil {
-			return nil, fmt.Errorf("context: no active context")
-		}
-		key := storeKey(args[1])
-		ctx[key] = args[0]
 		return nil, nil
 	}
 
@@ -46,21 +35,23 @@ func registerContext(r *Registry) {
 	}
 
 	// Register "context-set" and "context-get" as the implementation words.
+	// Forward precedence handles all orderings without infix signatures.
 	r.Register("context-set",
-		// All-forward: key first, value second
-		Signature{Args: []Type{TString, TAny}, Handler: ctxSetForwardHandler},
-		Signature{Args: []Type{TWord, TAny}, Handler: ctxSetForwardHandler},
-		// Infix: value first (prefix), key second (forward)
-		Signature{Args: []Type{TAny, TString}, Handler: ctxSetInfixHandler},
-		Signature{Args: []Type{TAny, TWord}, Handler: ctxSetInfixHandler},
-		// Fallback
-		Signature{Args: []Type{TAny, TAny}, Handler: ctxSetForwardHandler},
+		Signature{Args: []Type{TString, TAny}, Handler: ctxSetHandler},
+		Signature{
+			Args:      []Type{TAtom, TAny},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   ctxSetHandler,
+		},
 	)
 
 	r.Register("context-get",
 		Signature{Args: []Type{TString}, Handler: ctxGetHandler},
-		Signature{Args: []Type{TWord}, Handler: ctxGetHandler},
-		Signature{Args: []Type{TAny}, Handler: ctxGetHandler},
+		Signature{
+			Args:      []Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   ctxGetHandler,
+		},
 	)
 
 	// Register "context" as a dispatcher that converts the sub-command
