@@ -186,6 +186,10 @@ func DefaultRegistry() (*Registry, error) {
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	// Allow enabling the sequential planner via environment variable for testing.
+	if os.Getenv("AQL_SEQUENTIAL_PLANNER") == "1" {
+		r.SequentialPlanner = true
+	}
 	return r, nil
 }
 
