@@ -7,18 +7,19 @@ package engine
 // (end, function words, open parens) to decide when to stop.
 //
 // For each signature (already sorted by signatureScore, highest first):
-//  1. Try to fill args from front to back using forward tokens.
-//  2. Any remaining unfilled suffix args are matched from the stack (reversed).
+//  1. Compute how many suffix args the stack can provide.
+//  2. Scan forward for the remaining prefix args.
 //  3. The first signature that can be fully satisfied wins.
 //
 // Token handling during forward scan:
 //   - Literal/value: match against the current sig arg type
-//   - end: stop scanning, try stack match for remaining args
-//   - Known function word: stop before it, try stack match for remaining
-//   - Open paren "(" : will resolve to a value — assume it matches (like TAny)
+//   - end / ")": stop scanning, try stack match for remaining args
+//   - Known function word: accept as one forward arg, then stop (case D)
+//   - Open paren "(" : will resolve to a value — count as one arg
+//   - Word at TWord position: matches directly (raw word)
 //   - Word with /q: treat as quoted (Atom) for matching
 //   - Defined word: resolve to its def type for matching
-//   - Unknown word: becomes Atom
+//   - Unknown word: becomes Atom (or Boolean for true/false)
 func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
@@ -40,22 +41,41 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 	return nil, 0
 }
 
-// seqDebug is a temporary debug flag for development tracing.
-var seqDebug = false
-
 // trySequentialMatch walks the forward token stream and tries to match
 // sig args from the front, then fills remaining args from the stack.
-// Returns (forwardMatched, stackCount) where forwardMatched is how many
-// args were matched from forward tokens and stackCount is how many were
-// matched from the stack suffix.
+//
+// The stack is checked FIRST to determine how many suffix positions it can
+// fill. The forward scan then only needs to fill the remaining prefix
+// positions. This prevents over-collection in chained infix expressions
+// like "1 add 2 add 3" — the stack provides arg 0, so only 1 forward
+// arg is needed, and the scan stops after "2".
+//
+// Returns (forwardMatched, stackCount).
 func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int) {
 	nArgs := len(sig.Args)
+
+	// Step 1: compute how many SUFFIX args the stack can provide.
+	// Uses the same logic as plannerForwardStackCoverage: try the
+	// largest coverage first (fill last N positions from stack top),
+	// shrink until it fits.
+	stackCount := sequentialSuffixMatch(sig.Args, resolved)
+	if stackCount >= nArgs {
+		// Stack alone satisfies everything — but we need at least 1
+		// forward arg for a forward match.
+		stackCount = nArgs - 1
+		if stackCount < 0 {
+			return 0, 0
+		}
+	}
+
+	// The forward scan needs to fill positions 0..forwardNeeded-1.
+	forwardNeeded := nArgs - stackCount
 	forwardMatched := 0
 
-	// Scan forward tokens starting after the current pointer.
+	// Step 2: scan forward tokens for the prefix positions.
 	scanIdx := e.pointer + 1
 
-	for forwardMatched < nArgs && scanIdx < len(e.stack) {
+	for forwardMatched < forwardNeeded && scanIdx < len(e.stack) {
 		tok := e.stack[scanIdx]
 		expectedType := sig.Args[forwardMatched]
 
@@ -79,18 +99,21 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 
 			// "(" starts a sub-expression — assume it can produce any type.
 			if ww.Name == "(" {
-				// A paren expression will evaluate to some value.
-				// Accept it if the expected type could be satisfied by any value.
 				forwardMatched++
-				// Skip past the matching ")" to find the next forward token.
-				// For now, just count this as one token consumed.
+				scanIdx++
+				continue
+			}
+
+			// Sig expects TWord: any word matches directly, regardless
+			// of whether it's a function name.
+			if TWord.Matches(expectedType) {
+				forwardMatched++
 				scanIdx++
 				continue
 			}
 
 			// /q modifier: word at this position is treated as Atom.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[forwardMatched] {
-				// Word will be captured as-is; check if Atom matches expected type.
 				if TAtom.Matches(expectedType) {
 					forwardMatched++
 					scanIdx++
@@ -100,10 +123,6 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 			}
 
 			// Defined word (simple value): resolves to its def type.
-			// Check DefStacks BEFORE Lookup — simple defs don't register
-			// functions, so Lookup won't find them. For fn-based defs,
-			// both DefStacks and Lookup exist; we check DefStacks first
-			// to get the actual value type for accurate matching.
 			if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
 				top := ds[len(ds)-1]
 				if top.VType.Matches(expectedType) || expectedType.Equal(TAny) {
@@ -111,36 +130,27 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 					scanIdx++
 					continue
 				}
-				// Def'd value type doesn't match — but it might be a
-				// fn-based def that Lookup knows as a function. Fall
-				// through to Lookup check.
 				if _, ok := top.Data.(FnDefInfo); !ok {
 					break // simple def, type mismatch
 				}
 			}
 
-			// Known function with forward precedence: it will execute as a
-			// sub-expression and produce a result.
+			// Known function: accept as one forward arg, then stop
+			// (case D). The function will execute as a sub-expression
+			// and produce one result value. We can't predict what
+			// tokens follow it, so we stop scanning here.
 			if knownFn := e.registry.Lookup(ww.Name); knownFn != nil {
-				if knownFn.ForwardPrecedence {
-					// This function will produce a value. We can't know the
-					// exact type, so accept it optimistically.
-					forwardMatched++
-					scanIdx++
-					continue
-				}
-				// Stack-only function: can't produce a value in forward context.
-				// Stop scanning.
+				forwardMatched++
+				scanIdx++
 				break
 			}
 
-			// Unknown word: becomes Atom.
+			// Unknown word: becomes Atom (or Boolean for true/false).
 			resolvedType := TAtom
 			if ww.Name == "true" || ww.Name == "false" {
 				resolvedType = TBoolean
 			} else if _, isType := typeNames[ww.Name]; isType {
-				// Type names stay as type literals — not forward-collectible values.
-				break
+				break // type names are not collectible values
 			}
 			if resolvedType.Matches(expectedType) || expectedType.Equal(TAny) {
 				forwardMatched++
@@ -152,7 +162,6 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 
 		// Open paren value (already an OpenParen marker).
 		if tok.IsOpenParen() {
-			// Will resolve to some value — accept optimistically.
 			forwardMatched++
 			scanIdx++
 			continue
@@ -160,9 +169,8 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 
 		// Literal value: direct type check.
 		if tok.VType.Matches(expectedType) || expectedType.Equal(TAny) {
-			// Reject type literals (nil data) for concrete Map/List.
 			if tok.Data == nil && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
-				break
+				break // reject type literals
 			}
 			forwardMatched++
 			scanIdx++
@@ -173,36 +181,56 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 		break
 	}
 
-	// If all args matched from forward, no stack args needed.
-	if forwardMatched == nArgs {
-		return forwardMatched, 0
-	}
-
-	// Try to fill remaining args from the stack (suffix matching).
-	remaining := nArgs - forwardMatched
-	stackCount := e.sequentialStackMatch(sig.Args, forwardMatched, resolved)
-	if stackCount == remaining {
+	// Check if forward + stack fully satisfies the signature.
+	if forwardMatched == forwardNeeded {
 		return forwardMatched, stackCount
 	}
 
-	// Partial match — not enough args.
+	// Forward scan stopped short. Try filling remaining from stack suffix.
+	remaining := nArgs - forwardMatched
+	if forwardMatched > 0 && remaining > 0 && len(resolved) >= remaining {
+		// Check if stack top can fill sigArgs[forwardMatched:].
+		ok := true
+		for j := 0; j < remaining; j++ {
+			stackVal := resolved[len(resolved)-1-j]
+			sigIdx := forwardMatched + j
+			if !stackVal.VType.Matches(sig.Args[sigIdx]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return forwardMatched, remaining
+		}
+	}
+
 	return forwardMatched, 0
 }
 
-// sequentialStackMatch checks if the top of the resolved stack can fill
-// sig.Args[startIdx:] in reverse order (top of stack → first remaining arg).
-func (e *Engine) sequentialStackMatch(sigArgs []Type, startIdx int, resolved []Value) int {
-	remaining := len(sigArgs) - startIdx
-	if remaining <= 0 || len(resolved) < remaining {
-		return 0
+// sequentialSuffixMatch returns how many values from the top of the resolved
+// stack can fill the LAST N positions of sigArgs. Tries the largest coverage
+// first, shrinks until it fits. Stack top maps to the last sig position.
+//
+// Example: sigArgs=[Integer, Integer], resolved=[1]
+//   tryN=1: sigStart=1, stack top=1(Integer) matches sigArgs[1] → returns 1
+func sequentialSuffixMatch(sigArgs []Type, resolved []Value) int {
+	maxTry := len(sigArgs)
+	if maxTry > len(resolved) {
+		maxTry = len(resolved)
 	}
-
-	// Stack top fills sigArgs[startIdx], next fills sigArgs[startIdx+1], etc.
-	for j := 0; j < remaining; j++ {
-		stackVal := resolved[len(resolved)-1-j]
-		if !stackVal.VType.Matches(sigArgs[startIdx+j]) {
-			return 0
+	for tryN := maxTry; tryN >= 1; tryN-- {
+		sigStart := len(sigArgs) - tryN
+		ok := true
+		for j := 0; j < tryN; j++ {
+			stackVal := resolved[len(resolved)-1-j]
+			if !stackVal.VType.Matches(sigArgs[sigStart+j]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return tryN
 		}
 	}
-	return remaining
+	return 0
 }
