@@ -200,27 +200,24 @@ func registerModule(r *Registry) {
 	)
 
 	// Inline module forms: use /q to capture "module" as a quoted word
-	// instead of executing it. Only registered when the sequential planner
-	// is active — the scoring planner handles this via function-as-forward-arg.
-	if r.SequentialPlanner {
-		r.Register("import",
-			Signature{
-				Args:      []Type{TAtom, TList},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   importInlineHandler,
-			},
-			Signature{
-				Args:      []Type{TList, TAtom, TList},
-				QuoteArgs: map[int]bool{1: true},
-				Handler:   importInlineRenameHandler,
-			},
-			Signature{
-				Args:      []Type{TAtom, TAtom, TList},
-				QuoteArgs: map[int]bool{1: true},
-				Handler:   importInlineSingleRenameHandler,
-			},
-		)
-	}
+	// instead of executing it as a function.
+	r.Register("import",
+		Signature{
+			Args:      []Type{TAtom, TList},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   importInlineHandler,
+		},
+		Signature{
+			Args:      []Type{TList, TAtom, TList},
+			QuoteArgs: map[int]bool{1: true},
+			Handler:   importInlineRenameHandler,
+		},
+		Signature{
+			Args:      []Type{TAtom, TAtom, TList},
+			QuoteArgs: map[int]bool{1: true},
+			Handler:   importInlineSingleRenameHandler,
+		},
+	)
 }
 
 // runModuleBody creates an isolated module engine, runs the given values,

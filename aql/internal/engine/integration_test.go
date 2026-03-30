@@ -904,7 +904,7 @@ func TestEngineFnCatterPartialForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	// def catter fn [[integer string] [string] [add]] end
-	// Case: [2|] -> catter "b" -> string from forward, integer from prefix
+	// Case: catter 2 "b" -> all forward (integer, string)
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Integer"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -912,7 +912,7 @@ func TestEngineFnCatterPartialForward(t *testing.T) {
 	})
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
-		NewInteger(2), NewWord("catter"), NewString("b"),
+		NewWord("catter"), NewInteger(2), NewString("b"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
 		t.Errorf("2 catter 'b' = %v, want string result", result)
@@ -1072,17 +1072,17 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		}
 	})
 
-	// "X" 7 mix4 true "Z" -> 2 prefix, 2 forward
+	// mix4 "X" 7 true "Z" -> all forward
 	t.Run("TwoPrefixTwoForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("X"), NewInteger(7), NewWord("mix4"), NewBoolean(true), NewString("Z"),
+			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
 		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
-			t.Errorf(`2+2 mix4 = %v, want ["X7trueZ"]`, result)
+			t.Errorf(`mix4 all-forward = %v, want ["X7trueZ"]`, result)
 		}
 	})
 
@@ -1132,14 +1132,14 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		}
 	})
 
-	// "a" 3 mix5 1.5 false "z" -> 2 prefix, 3 forward
-	t.Run("TwoPrefixThreeForward", func(t *testing.T) {
+	// mix5 "a" 3 1.5 false "z" -> all forward
+	t.Run("AllForwardExplicit", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("a"), NewInteger(3), NewWord("mix5"),
+			NewWord("mix5"), NewString("a"), NewInteger(3),
 			NewDecimal(1.5), NewBoolean(false), NewString("z"),
 		))
 		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
@@ -1199,18 +1199,17 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 	})
 
-	// 3 prefix + 4 forward
+	// all forward (was 3+4 mixed, changed for sequential planner)
 	t.Run("ThreePrefixFourForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
-		tokens := append(append([]Value{}, defTokens...), argVals[:3]...)
-		tokens = append(tokens, NewWord("mix7"))
-		tokens = append(tokens, argVals[3:]...)
+		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
+		tokens = append(tokens, argVals...)
 		result := runAQL(t, r, tokens)
 		if len(result) != 1 || result[0].AsString() != want {
-			t.Errorf("3+4 mix7 = %v, want [%q]", result, want)
+			t.Errorf("mix7 all-forward = %v, want [%q]", result, want)
 		}
 	})
 
@@ -1629,7 +1628,7 @@ func TestEngineFnFactorial(t *testing.T) {
 		NewInteger(0),
 		NewWord("Integer"),
 		NewList([]Value{NewWord("drop"), NewInteger(1)}),
-		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		// sig 2 (recursive): [x:integer] [integer] [x (fact (x sub 1)) mul]
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("x", NewWord("Integer"))
@@ -1637,9 +1636,9 @@ func TestEngineFnFactorial(t *testing.T) {
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
-			NewWord("x"), NewWord("mul"),
-			NewWord("fact"),
-			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+			NewWord("x"),
+			NewWord("("), NewWord("fact"), NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"), NewWord(")"),
+			NewWord("mul"),
 		}),
 	})
 	tests := []struct {
@@ -1754,7 +1753,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewInteger(1)}),
-		// sig 2 (recursive): [x:integer] [integer] [x mul fact (x sub 1)]
+		// sig 2 (recursive): [x:integer] [integer] [x (fact (x sub 1)) mul]
 		func() Value {
 			m := NewOrderedMap()
 			m.Set("x", NewWord("Integer"))
@@ -1762,9 +1761,9 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
-			NewWord("x"), NewWord("mul"),
-			NewWord("fact"),
-			NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"),
+			NewWord("x"),
+			NewWord("("), NewWord("fact"), NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"), NewWord(")"),
+			NewWord("mul"),
 		}),
 	})
 	tests := []struct {

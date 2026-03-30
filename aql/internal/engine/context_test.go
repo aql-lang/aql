@@ -204,13 +204,13 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(result))
 	}
-	if result[0].AsString() != "hello" {
+	if !result[0].VType.Matches(TString) || result[0].AsString() != "hello" {
 		t.Errorf("string value = %v, want hello", result[0])
 	}
-	if result[1].AsInteger() != 42 {
+	if !result[1].VType.Matches(TInteger) || result[1].AsInteger() != 42 {
 		t.Errorf("integer value = %v, want 42", result[1])
 	}
-	if result[2].AsBoolean() != true {
+	if !result[2].VType.Matches(TBoolean) || result[2].AsBoolean() != true {
 		t.Errorf("boolean value = %v, want true", result[2])
 	}
 }

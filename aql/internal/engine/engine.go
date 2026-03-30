@@ -366,12 +366,7 @@ func (e *Engine) stepWord(val Value) error {
 	if w.ForceForward {
 		// Force forward: skip stack match attempt, collect all args from forward.
 		resolved := e.effectiveResolved()
-		var bestSig *Signature
-		if e.registry.SequentialPlanner {
-			bestSig, _ = e.plannerSequentialForward(fn, w, resolved)
-		} else {
-			bestSig, _ = e.plannerBestSigForForward(fn, w, resolved)
-		}
+		bestSig, _ := e.plannerSequentialForward(fn, w, resolved)
 		if bestSig == nil {
 			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 		}
@@ -391,13 +386,7 @@ func (e *Engine) stepWord(val Value) error {
 		// then fill remaining args from the stack in reverse order (top →
 		// first remaining sig arg).
 		if e.hasForwardValues(fn) {
-			var bestSig *Signature
-			var stackCount int
-			if e.registry.SequentialPlanner {
-				bestSig, stackCount = e.plannerSequentialForward(fn, w, resolved)
-			} else {
-				bestSig, stackCount = e.plannerBestSigForForward(fn, w, resolved)
-			}
+			bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
 			if insideForward {
 				stackCount = 0
 			}

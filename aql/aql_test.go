@@ -259,7 +259,7 @@ func TestMultilineMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := "set x 10 end\nset y 20 end\nget x\nadd\nget y"
+	src := "set x 10 end\nset y 20 end\n(get x)\n(get y)\nadd"
 	result, err := a.Run(src)
 	if err != nil {
 		t.Fatal(err)
@@ -305,9 +305,9 @@ func TestMultilineScript(t *testing.T) {
 	script := `
 		set width 10 end
 		set height 5 end
-		get width
+		(get width)
+		(get height)
 		mul
-		get height
 	`
 	result, err := a.Run(script)
 	if err != nil {
@@ -328,9 +328,9 @@ func TestMultilineWithComments(t *testing.T) {
 		set x 7 end
 		set y 3 end
 		# compute
-		get x
+		(get x)
+		(get y)
 		add
-		get y
 		# result should be 10
 	`
 	result, err := a.Run(script)

@@ -58,7 +58,7 @@ func TestSequentialPlanner_FullEngineTests(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r.SequentialPlanner = true
+			// sequential planner is now the default
 			e := NewTop(r)
 			out, err := e.Run(tt.tokens)
 			if err != nil {

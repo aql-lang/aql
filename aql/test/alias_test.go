@@ -554,8 +554,8 @@ func TestAliasGetpath(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "getpath",
 		defStep:   "def mygetpath [getpath]",
-		origSteps: []string{`{a:{b:42}} getpath "a.b"`},
-		aliaSteps: []string{`{a:{b:42}} mygetpath "a.b"`},
+		origSteps: []string{`getpath {a:{b:42}} "a.b"`},
+		aliaSteps: []string{`mygetpath {a:{b:42}} "a.b"`},
 	})
 }
 

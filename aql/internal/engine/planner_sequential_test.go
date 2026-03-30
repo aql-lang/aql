@@ -11,7 +11,7 @@ func TestSequentialPlanner_BasicInfix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := New(r)
 	out, err := e.Run([]Value{NewInteger(2), NewWord("add"), NewInteger(3)})
 	if err != nil {
@@ -28,7 +28,7 @@ func TestSequentialPlanner_DefForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	out, err := e.Run([]Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42),
@@ -48,7 +48,7 @@ func TestSequentialPlanner_DefGreeting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	out, err := e.Run([]Value{
 		NewWord("def"), NewWord("greeting"), NewString("hello"),
@@ -68,7 +68,7 @@ func TestSequentialPlanner_UndefSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	out, err := e.Run([]Value{
 		NewWord("def"), NewWord("foo"), NewInteger(1),
@@ -96,7 +96,7 @@ func TestSequentialPlanner_SetGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	out, err := e.Run([]Value{
 		NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -116,7 +116,7 @@ func TestSequentialPlanner_ContextSetGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	r.PushContext(make(map[string]Value))
 	out, err := e.Run([]Value{
@@ -137,7 +137,7 @@ func TestSequentialPlanner_AddPrefixAndForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 
 	tests := []struct {
 		name   string
@@ -169,7 +169,7 @@ func TestSequentialPlanner_DefFnSquare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 
 	// Build fn spec list: [[x:Number] [Number] [x mul x]]
@@ -203,7 +203,7 @@ func TestSequentialPlanner_Quote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := New(r)
 	out, err := e.Run([]Value{NewWord("quote"), NewWord("hello")})
 	if err != nil {
@@ -220,7 +220,7 @@ func TestSequentialPlanner_Dup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := New(r)
 	out, err := e.Run([]Value{NewInteger(7), NewWord("dup")})
 	if err != nil {
@@ -237,7 +237,7 @@ func TestSequentialPlanner_TypeDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := NewTop(r)
 	// type MyNum Number
 	out, err := e.Run([]Value{
@@ -255,7 +255,7 @@ func TestSequentialPlanner_PlannerUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := New(r)
 
 	// Test: add with [Integer, Integer] on forward stream
@@ -283,7 +283,7 @@ func TestSequentialPlanner_PlannerStackMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.SequentialPlanner = true
+	// sequential planner is now the default
 	e := New(r)
 
 	fn := r.Lookup("add")

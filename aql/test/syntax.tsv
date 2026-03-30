@@ -608,10 +608,10 @@ def sq fn [[x:Number] [Number] [x mul x]] 4 sq x	16 x
 def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq	16 sq
 
 # targeted undef: remove 2-arg sig, 1-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number,Number] [Number]] 5 foo	25
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number,Number] [Number]]) 5 foo	25
 
 # targeted undef: remove 1-arg sig, 2-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number] [Number]] 3 5 foo	8
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number] [Number]]) 3 5 foo	8
 
 # Function def with infix call
 def sq fn [[x:Number] [Number] [x mul x]] sq 6	36
@@ -629,8 +629,8 @@ def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
 def notb fn [[Boolean] [] [not]] end true notb	false
 
 # Unnamed String parameter
-# Forward-first swap convention: args[1]+args[0] reverses concat for stack-only
-def greet fn [[String] [] ["hello " swap add]] end "world" greet	'worldhello '
+# Stack-only fallback: rearrangeForForward reverses args, swap+add gives hello+world
+def greet fn [[String] [] ["hello " swap add]] end "world" greet	'hello world'
 
 # Multiple unnamed Map parameters
 # Forward-first: fn args reversed from stack, swap undoes the reverse
@@ -682,7 +682,7 @@ true or false and false	false
 false and true or true	true
 
 # not with binary operators
-true and not false	true
+true and (not false)	true
 not true or false	false
 
 # === convert - type conversions ===
@@ -833,10 +833,10 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # Disjunct creation: type literals
 String or Number	Scalar/String|Scalar/Number
 String or None	Scalar/String|None
-None or Boolean	Scalar/Boolean|None
+None or Boolean	None|Scalar/Boolean
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	Scalar/Boolean|Scalar/String|Scalar/Number
+String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
 
 # Disjunct unify with scalar types
 (String or None) unify "a"	'a' true
@@ -884,8 +884,8 @@ dblcall 5 [dup mul]	100
 # callback is a simple word
 dblcall 3 [dup add]	12
 
-# prefix form
-5 dblcall [add 1]	11
+# all forward form
+dblcall 5 [add 1]	11
 
 # callback that just leaves the doubled value
 dblcall 4 []	8

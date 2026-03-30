@@ -119,8 +119,8 @@ func TestFnUnnamedString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Forward-first: fn args reversed from stack, swap+add reverses concat
-	assertResult(t, result, "'worldhello '")
+	// Stack-only fallback: rearrangeForForward reverses args, swap+add gives hello+world
+	assertResult(t, result, "'hello world'")
 }
 
 // --- Mixed named and unnamed Map in same signature ---

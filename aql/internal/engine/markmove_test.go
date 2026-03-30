@@ -47,13 +47,13 @@ func TestMarkMoveBasic(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 values on stack, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 11 {
+	if !result[0].VType.Matches(TInteger) || result[0].AsInteger() != 11 {
 		t.Errorf("result[0] = %v, want 11", result[0])
 	}
-	if result[1].AsInteger() != 22 {
+	if !result[1].VType.Matches(TInteger) || result[1].AsInteger() != 22 {
 		t.Errorf("result[1] = %v, want 22", result[1])
 	}
-	if result[2].AsInteger() != 33 {
+	if !result[2].VType.Matches(TInteger) || result[2].AsInteger() != 33 {
 		t.Errorf("result[2] = %v, want 33", result[2])
 	}
 }

@@ -46,7 +46,6 @@ type Registry struct {
 	SDKCache       map[string]any     // cached SDK instances keyed by spec name
 	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
 	errs           []error            // registration errors accumulated during setup
-	SequentialPlanner bool            // feature flag: use sequential forward planner instead of scoring-based
 }
 
 // NewRegistry creates an empty registry.
@@ -181,11 +180,6 @@ func DefaultRegistry() (*Registry, error) {
 	r, err := NewRegistry()
 	if err != nil {
 		return nil, err
-	}
-	// Allow enabling the sequential planner via environment variable for testing.
-	// Must be set BEFORE registerBuiltins so conditional sigs are registered.
-	if os.Getenv("AQL_SEQUENTIAL_PLANNER") == "1" {
-		r.SequentialPlanner = true
 	}
 	registerBuiltins(r)
 	if err := r.Err(); err != nil {

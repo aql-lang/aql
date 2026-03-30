@@ -33,7 +33,7 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 			continue
 		}
 
-		forwardMatched, stackCount := e.trySequentialMatch(sig, resolved)
+		forwardMatched, stackCount := e.trySequentialMatch(sig, resolved, w.ForceForward)
 		if forwardMatched+stackCount == len(sig.Args) && forwardMatched > 0 {
 			return sig, stackCount
 		}
@@ -51,20 +51,17 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 // arg is needed, and the scan stops after "2".
 //
 // Returns (forwardMatched, stackCount).
-func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int) {
+func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForward bool) (int, int) {
 	nArgs := len(sig.Args)
 
 	// Step 1: compute how many SUFFIX args the stack can provide.
-	// Uses the same logic as plannerForwardStackCoverage: try the
-	// largest coverage first (fill last N positions from stack top),
-	// shrink until it fits.
-	stackCount := sequentialSuffixMatch(sig.Args, resolved)
-	if stackCount >= nArgs {
-		// Stack alone satisfies everything — defer to stack-only matcher.
-		// Forcing forward collection here would over-collect the next
-		// function word (e.g. "1 2 3 rot add mul" where add has enough
-		// stack args and mul is the next operation, not an argument).
-		return 0, 0
+	stackCount := 0
+	if !forceForward {
+		stackCount = sequentialSuffixMatch(sig.Args, resolved)
+		if stackCount >= nArgs {
+			// Stack alone satisfies — defer to stack-only matcher.
+			return 0, 0
+		}
 	}
 
 	// The forward scan needs to fill positions 0..forwardNeeded-1.
@@ -97,9 +94,24 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 			}
 
 			// "(" starts a sub-expression — assume it can produce any type.
+			// Skip past the matching ")" so the scan continues with
+			// the token AFTER the paren group.
 			if ww.Name == "(" {
 				forwardMatched++
 				scanIdx++
+				depth := 1
+				for scanIdx < len(e.stack) && depth > 0 {
+					inner := e.stack[scanIdx]
+					if inner.IsWord() {
+						iw := inner.AsWord()
+						if iw.Name == "(" {
+							depth++
+						} else if iw.Name == ")" {
+							depth--
+						}
+					}
+					scanIdx++
+				}
 				continue
 			}
 
@@ -185,10 +197,11 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 	// Forward scan stopped short. Try filling remaining from stack suffix.
 	remaining := nArgs - forwardMatched
 	if forwardMatched > 0 && remaining > 0 && len(resolved) >= remaining {
-		// Check if stack top can fill sigArgs[forwardMatched:].
+		// Check if stack can fill sigArgs[forwardMatched:] using bottom-up
+		// ordering consistent with MatchSignature.
 		ok := true
 		for j := 0; j < remaining; j++ {
-			stackVal := resolved[len(resolved)-1-j]
+			stackVal := resolved[len(resolved)-remaining+j]
 			sigIdx := forwardMatched + j
 			if !stackVal.VType.Matches(sig.Args[sigIdx]) {
 				ok = false
@@ -218,7 +231,10 @@ func sequentialSuffixMatch(sigArgs []Type, resolved []Value) int {
 		sigStart := len(sigArgs) - tryN
 		ok := true
 		for j := 0; j < tryN; j++ {
-			stackVal := resolved[len(resolved)-1-j]
+			// Map bottom-up: resolved[len-tryN+j] → sigArgs[sigStart+j].
+			// This matches MatchSignature's ordering where stack[base+j]
+			// corresponds to sigArgs[j].
+			stackVal := resolved[len(resolved)-tryN+j]
 			if !stackVal.VType.Matches(sigArgs[sigStart+j]) {
 				ok = false
 				break
