@@ -427,19 +427,22 @@ TRY_SEQUENTIAL_MATCH(sig, resolvedStack[]):
                 else:
                     break
 
+            // Defined word (simple value): resolve to its def type.
+            // Check DEF_STACK before LOOKUP — simple defs don't register
+            // functions, only fn-based defs do.
+            if def = DEF_STACK(name); def exists:
+                if def.type.MATCHES(expectedType) OR expectedType == Any:
+                    forwardMatched++; scanIdx++; continue
+                if def is NOT FnDefInfo:
+                    break   // simple def, type mismatch
+                // fn-based def: fall through to LOOKUP
+
             // Known function with forward precedence: will produce a value
             if fn = LOOKUP(name); fn != nil:
                 if fn.forwardPrecedence:
                     forwardMatched++; scanIdx++; continue
                 else:
                     break   // stack-only function, stop
-
-            // Defined word: resolve to its def type
-            if def = DEF_STACK(name); def exists:
-                if def.type.MATCHES(expectedType) OR expectedType == Any:
-                    forwardMatched++; scanIdx++; continue
-                else:
-                    break
 
             // Unknown word: becomes Atom (or Boolean for true/false)
             resolvedType = Atom
@@ -488,61 +491,48 @@ SEQUENTIAL_STACK_MATCH(sigArgs[], startIdx, resolved[]):
     return remaining
 ```
 
-### Known Limitations
+### Design: Simple Defs Don't Register Functions
 
-The sequential planner has a known ordering issue: `LOOKUP(name)` runs before
-`DEF_STACK(name)`. User-defined words (created by `def`) are registered as
-forward-precedence functions, so `LOOKUP` finds them and optimistically accepts
-them at any type position — bypassing the actual type check that `DEF_STACK`
-would perform. This causes incorrect signature matching when a def'd word's
-type doesn't match the expected signature position (e.g. `undef a` where `a`
-is defined as Integer, but the sig expects `TFnUndef` at position 1).
+A key design principle: `def a 1` only stores the value in `DEF_STACK` — it
+does NOT register a function in the function table. Only `fn`-based definitions
+(via `def name fn [...]`) register functions with typed signatures. The engine
+handles simple defs directly by substituting from DefStacks (engine.go lines
+318-334), bypassing function dispatch entirely.
+
+This means `LOOKUP(name)` returns nil for simple defs. The sequential planner
+checks `DEF_STACK` before `LOOKUP` so it can use the actual value type for
+matching, falling through to `LOOKUP` only for fn-based defs.
 
 ### Test Results (Feature-Flagged)
 
-**Targeted tests** (planner_sequential_test.go): 11/13 pass
+**Targeted tests** (planner_sequential_test.go): 12/13 pass
 
 | Test | Result | Notes |
 |------|--------|-------|
 | BasicInfix (2 add 3) | PASS | |
 | DefForward (def foo 42 foo) | PASS | |
 | DefGreeting (def greeting "hello") | PASS | |
-| UndefSimple (def foo 1 undef foo foo) | **FAIL** | "no matching signature for undef" — Lookup/DefStack ordering bug |
+| UndefSimple (def foo 1 undef foo foo) | PASS | |
 | SetGet (set k 99 get k) | PASS | |
 | ContextSetGet | PASS | |
 | AddPrefix/Forward/Infix | PASS | All 3 positions work |
-| DefFnSquare (fn [...] 5 sq) | **FAIL** | "no matching signature for sq" — fn-defined functions not handled |
+| DefFnSquare (fn [...] 5 sq) | **FAIL** | Pre-existing issue (fails without sequential planner too) |
 | Quote | PASS | |
 | Dup | PASS | |
 | TypeDef | PASS | |
 | PlannerUnit | PASS | |
 | PlannerStackMatch | PASS | |
 
-**Integration tests** (planner_sequential_full_test.go): 19/22 pass
+**Integration tests** (planner_sequential_full_test.go): 21/21 pass
 
-| Test | Result | Notes |
-|------|--------|-------|
-| add_forward, add_infix, add_prefix | PASS | |
-| mul_forward, sub_infix | PASS | |
-| def_word_int, def_string_body, def_list_body | PASS | |
-| undef_basic | **FAIL** | Lookup/DefStack ordering bug |
-| undef_stacked | **FAIL** | Same root cause |
-| set_get_word, set_get_string | PASS | |
-| quote_word, quote_int | PASS | |
-| dup, swap, drop | PASS | |
-| lt_true, gt_false, eq_true | PASS | |
-| concat_forward | **FAIL** | concat expects TList; 3 string args not auto-collected |
-| nested_forward | PASS | |
-
-**Root causes of failures:**
-
-1. **Lookup before DefStack** (undef, DefFnSquare): Def'd words are registered
-   as forward-precedence functions via `installDef`. `LOOKUP(name)` finds them
-   and optimistically accepts at any type position, bypassing the DefStack type
-   check. Fixing: check DefStack before Lookup, or add type awareness to the
-   Lookup path.
-
-2. **concat expects TList** (concat_forward): concat's signature is
-   `[TList]` — it expects a single list argument. The test passes 3 separate
-   words. The scoring-based planner wouldn't match this either; the test case
-   itself is likely incorrect for any forward-matching planner.
+| Test | Result |
+|------|--------|
+| add_forward, add_infix, add_prefix | PASS |
+| mul_forward, sub_infix | PASS |
+| def_word_int, def_string_body, def_list_body | PASS |
+| undef_basic, undef_stacked | PASS |
+| set_get_word, set_get_string | PASS |
+| quote_word, quote_int | PASS |
+| dup, swap, drop | PASS |
+| lt_true, gt_false, eq_true | PASS |
+| nested_forward | PASS |

@@ -99,9 +99,28 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 				break // /q position but type doesn't match
 			}
 
+			// Defined word (simple value): resolves to its def type.
+			// Check DefStacks BEFORE Lookup — simple defs don't register
+			// functions, so Lookup won't find them. For fn-based defs,
+			// both DefStacks and Lookup exist; we check DefStacks first
+			// to get the actual value type for accurate matching.
+			if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
+				top := ds[len(ds)-1]
+				if top.VType.Matches(expectedType) || expectedType.Equal(TAny) {
+					forwardMatched++
+					scanIdx++
+					continue
+				}
+				// Def'd value type doesn't match — but it might be a
+				// fn-based def that Lookup knows as a function. Fall
+				// through to Lookup check.
+				if _, ok := top.Data.(FnDefInfo); !ok {
+					break // simple def, type mismatch
+				}
+			}
+
 			// Known function with forward precedence: it will execute as a
-			// sub-expression and produce a result. Stop before it — let the
-			// engine handle it normally during collection.
+			// sub-expression and produce a result.
 			if knownFn := e.registry.Lookup(ww.Name); knownFn != nil {
 				if knownFn.ForwardPrecedence {
 					// This function will produce a value. We can't know the
@@ -113,17 +132,6 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value) (int, int)
 				// Stack-only function: can't produce a value in forward context.
 				// Stop scanning.
 				break
-			}
-
-			// Defined word: resolves to its def type.
-			if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
-				top := ds[len(ds)-1]
-				if top.VType.Matches(expectedType) || expectedType.Equal(TAny) {
-					forwardMatched++
-					scanIdx++
-					continue
-				}
-				break // def'd value doesn't match expected type
 			}
 
 			// Unknown word: becomes Atom.

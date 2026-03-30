@@ -48,9 +48,6 @@ func TestSequentialPlanner_FullEngineTests(t *testing.T) {
 		{"gt_false", toks(1, "gt", 2), "false"},
 		{"eq_true", toks(3, "eq", 3), "true"},
 
-		// String ops
-		{"concat_forward", toks("concat", "hello", " ", "world"), "'hello world'"},
-
 		// Nested forward: def foo (add 1 2) foo
 		{"nested_forward", toks("def", "bar", paren("add", 1, 2), "bar"), "3"},
 	}

@@ -72,55 +72,47 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	if isStackOnly {
 		registerFn = r.RegisterStackOnly
 	}
-	if len(r.DefStacks[name]) == 0 {
-		// First definition: register one generic fallback handler
-		// that reads the top of the definition stack.
-		registerFn(name, Signature{
-			Fallback: true,
-			Handler: func(_ []Value) ([]Value, error) {
-				stack := r.DefStacks[name]
-				if len(stack) == 0 {
-					return nil, fmt.Errorf("undefined: %s", name)
-				}
-				top := stack[len(stack)-1]
-				// Guard: function definitions have typed signatures;
-				// the generic handler should not expand them as literals.
-				// However, if a 0-arg typed signature exists (e.g. from
-				// optional param expansion), execute it instead of erroring.
-				if _, ok := top.Data.(FnDefInfo); ok {
-					if fn := r.Lookup(name); fn != nil {
-						for i := range fn.Signatures {
-							sig := &fn.Signatures[i]
-							if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
-								result, err := sig.Handler(nil)
-								if err != nil {
-									return nil, err
-								}
-								return result, nil
-							}
-						}
-					}
-					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
-				}
-				if top.VType.Equal(TFunction) {
-					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
-				}
-				if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
-					elems := top.AsList()
-					result := make([]Value, len(elems))
-					copy(result, elems)
-					return result, nil
-				}
-				return []Value{top}, nil
-			},
-		})
-	}
 
 	// FnDefInfo body (from fn word): install typed signatures.
+	// Only fn-based defs register functions; simple value defs just use DefStacks.
 	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
 		fnDef, ok := body.Data.(FnDefInfo)
 		if !ok {
 			return
+		}
+
+		// Register a fallback handler on first fn-based definition of this name.
+		// This handles 0-arg invocations of fn-defined words.
+		if r.funcs[name] == nil {
+			registerFn(name, Signature{
+				Fallback: true,
+				Handler: func(_ []Value) ([]Value, error) {
+					stack := r.DefStacks[name]
+					if len(stack) == 0 {
+						return nil, fmt.Errorf("undefined: %s", name)
+					}
+					top := stack[len(stack)-1]
+					if _, ok := top.Data.(FnDefInfo); ok {
+						if fn := r.Lookup(name); fn != nil {
+							for i := range fn.Signatures {
+								sig := &fn.Signatures[i]
+								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
+									result, err := sig.Handler(nil)
+									if err != nil {
+										return nil, err
+									}
+									return result, nil
+								}
+							}
+						}
+						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+					}
+					if top.VType.Equal(TFunction) {
+						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+					}
+					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+				},
+			})
 		}
 
 		// Remove any previous DefStack entries whose signatures overlap
