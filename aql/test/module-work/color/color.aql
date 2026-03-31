@@ -16,11 +16,11 @@ def hex2rgb fn [[hex:String] [Map] [
 ]]
 
 def rgb2hex fn [[rgb:RGB] [String] [
-  "#" add (int2hex rgb.r) add (int2hex rgb.g) add (int2hex rgb.b)
+  "#" add (int2hex (rgb.r)) add (int2hex (rgb.g)) add (int2hex (rgb.b))
 ]]
 
 def clamp fn [[n:Integer] [Integer] [
-  (n lt 0) [0] [(n gt 255) [255] [n] if] if
+  if (n lt 0) [0] [if (n gt 255) [255] [n]]
 ]]
 
 def clamp-rgb fn [[rgb:RGB] [Map] [

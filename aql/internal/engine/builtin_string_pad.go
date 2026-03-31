@@ -6,32 +6,36 @@ import (
 )
 
 func registerPad(r *Registry) {
-	// pad: [string, integer] -> [string]
+	// pad: [integer, string] -> [string]
+	// Forward-first: args[0]=width (forward), args[1]=string (stack).
+	// Usage: "ab" pad 5 → "ab   "
 	padHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doPad(args[0].AsString(), args[1].AsInteger(), strOpts{side: "right", fill: " "})
+		return doPad(args[1].AsString(), args[0].AsInteger(), strOpts{side: "right", fill: " "})
 	}
 
-	// pad: [string, integer, map] -> [string]
+	// pad: [integer, map, string] -> [string]
+	// Forward-first: args[0]=width (forward), args[1]=opts (forward), args[2]=string (stack).
+	// Usage: "ab" pad 5 {side:"left" fill:"0"} → "000ab"
 	padOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[2].Data == nil {
+		if args[1].Data == nil {
 			return nil, fmt.Errorf("pad: options must be a concrete map, got type literal")
 		}
-		opts := parseStrOpts(args[2])
+		opts := parseStrOpts(args[1])
 		if opts.fill == "" {
 			opts.fill = " "
 		}
 		// Default side for pad is "right", not "both" from parseStrOpts.
-		if m := args[2].AsMap(); m != nil {
+		if m := args[1].AsMap(); m != nil {
 			if _, ok := m.Get("side"); !ok {
 				opts.side = "right"
 			}
 		}
-		return doPad(args[0].AsString(), args[1].AsInteger(), opts)
+		return doPad(args[2].AsString(), args[0].AsInteger(), opts)
 	}
 
 	r.Register("pad",
-		Signature{Args: []Type{TString, TInteger, TMap}, Handler: padOptsHandler},
-		Signature{Args: []Type{TString, TInteger}, Handler: padHandler},
+		Signature{Args: []Type{TInteger, TMap, TString}, Handler: padOptsHandler},
+		Signature{Args: []Type{TInteger, TString}, Handler: padHandler},
 	)
 }
 
