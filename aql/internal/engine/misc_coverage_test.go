@@ -362,8 +362,9 @@ func TestWriteStdout(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
+	// write to stdout using the explicit "<stdout>" path.
 	result := runAQL(t, r, []Value{
-		NewWord("stdout"), NewString("hello"), NewWord("write"),
+		NewWord("write"), NewString("<stdout>"), NewString("hello"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))

@@ -193,12 +193,19 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Use context dispatcher with end separators, matching the parser output
+	// for: context set "str" "hello"; context set "num" 42; ...
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("str"), NewString("hello"),
+		NewWord("end"),
 		NewWord("context"), NewWord("set"), NewString("num"), NewInteger(42),
+		NewWord("end"),
 		NewWord("context"), NewWord("set"), NewString("bool"), NewBoolean(true),
+		NewWord("end"),
 		NewWord("context"), NewWord("get"), NewString("str"),
+		NewWord("end"),
 		NewWord("context"), NewWord("get"), NewString("num"),
+		NewWord("end"),
 		NewWord("context"), NewWord("get"), NewString("bool"),
 	})
 	if len(result) != 3 {
