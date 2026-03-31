@@ -70,11 +70,16 @@ func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack
 		if err != nil {
 			continue // non-integer key, ignore
 		}
-		if idx < 0 || idx >= len(result) {
-			continue // out of range, ignore
+		if idx < 0 {
+			continue // negative index, ignore
 		}
 		val, _ := m.Get(key)
-		result[idx] = val
+		if idx < len(result) {
+			result[idx] = val
+		} else if idx == len(result) {
+			result = append(result, val)
+		}
+		// idx > len(result): gap, ignore
 	}
 
 	return []engine.Value{engine.NewList(result)}, nil
