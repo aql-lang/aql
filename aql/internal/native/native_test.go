@@ -513,46 +513,46 @@ func TestFuncDefinitions(t *testing.T) {
 	}
 }
 
-// --- makeFullStackHandler ---
+// --- wrapSafetyCheck ---
 
-func TestMakeFullStackHandler(t *testing.T) {
-	r, err := engine.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+func TestWrapSafetyCheck(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return []engine.Value{engine.NewInteger(42)}, nil
 	}
-	handler := makeFullStackHandler(r, inner)
+	handler := wrapSafetyCheck(inner)
 
-	stackBefore := []engine.Value{engine.NewString("bottom")}
-	result, herr := handler(nil, stackBefore)
+	result, herr := handler([]engine.Value{engine.NewString("hello")}, nil, nil, nil)
 	if herr != nil {
 		t.Fatal(herr)
 	}
-	// Should be [bottom, 42]
-	if len(result) != 2 {
-		t.Fatalf("expected 2, got %d", len(result))
+	if len(result) != 1 {
+		t.Fatalf("expected 1, got %d", len(result))
 	}
-	if result[0].AsString() != "bottom" {
-		t.Errorf("expected bottom, got %s", result[0].AsString())
-	}
-	if result[1].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[1].AsInteger())
+	if result[0].AsInteger() != 42 {
+		t.Errorf("expected 42, got %d", result[0].AsInteger())
 	}
 }
 
-func TestMakeFullStackHandlerError(t *testing.T) {
-	r, err := engine.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
+func TestWrapSafetyCheckRejectsTypeLiteral(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+		return []engine.Value{engine.NewInteger(1)}, nil
 	}
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+	handler := wrapSafetyCheck(inner)
+
+	// Type literal has Data==nil — should be rejected.
+	_, herr := handler([]engine.Value{engine.NewTypeLiteral(engine.TMap)}, nil, nil, nil)
+	if herr == nil {
+		t.Fatal("expected error for type literal")
+	}
+}
+
+func TestWrapSafetyCheckError(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return nil, fmt.Errorf("test error")
 	}
-	handler := makeFullStackHandler(r, inner)
+	handler := wrapSafetyCheck(inner)
 
-	_, herr := handler(nil, nil)
+	_, herr := handler(nil, nil, nil, nil)
 	if herr == nil {
 		t.Fatal("expected error")
 	}
@@ -657,7 +657,6 @@ func makeTrueFilterFn() engine.Value {
 		},
 	})
 }
-
 
 func defaultRegistry(t *testing.T) *engine.Registry {
 	t.Helper()

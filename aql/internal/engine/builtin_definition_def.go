@@ -38,7 +38,7 @@ func defStackOnly(v Value) bool {
 // collection. Forward precedence rules handle all orderings (forward,
 // infix, postfix) without separate infix signatures.
 func registerDef(r *Registry) {
-	defHandler := func(args []Value) ([]Value, error) {
+	defHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		stackOnly := defStackOnly(args[0])
 		body := args[1]
@@ -86,7 +86,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		if r.funcs[name] == nil {
 			registerFn(name, Signature{
 				Fallback: true,
-				Handler: func(_ []Value) ([]Value, error) {
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					stack := r.DefStacks[name]
 					if len(stack) == 0 {
 						return nil, fmt.Errorf("undefined: %s", name)
@@ -97,7 +97,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 							for i := range fn.Signatures {
 								sig := &fn.Signatures[i]
 								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
-									result, err := sig.Handler(nil)
+									result, err := sig.Handler(nil, nil, nil, r)
 									if err != nil {
 										return nil, err
 									}

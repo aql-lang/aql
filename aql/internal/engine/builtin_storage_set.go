@@ -9,7 +9,7 @@ package engine
 //
 // Forward precedence handles all orderings without infix signatures.
 func registerSet(r *Registry) {
-	setHandler := func(args []Value) ([]Value, error) {
+	setHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		key := storeKey(args[0])
 		r.Store[key] = args[1]
 		return nil, nil

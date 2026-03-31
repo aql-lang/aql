@@ -15,7 +15,7 @@ import "fmt"
 func registerDblcall(r *Registry) {
 	r.Register("dblcall", Signature{
 		Args: []Type{TInteger, TList},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			n := args[0].AsInteger()
 			body := args[1]
 

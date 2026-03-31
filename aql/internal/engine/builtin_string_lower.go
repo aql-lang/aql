@@ -3,7 +3,7 @@ package engine
 import "strings"
 
 func registerLower(r *Registry) {
-	lowerHandler := func(args []Value) ([]Value, error) {
+	lowerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		s := args[0].Data.(string)
 		return []Value{NewString(strings.ToLower(s))}, nil
 	}

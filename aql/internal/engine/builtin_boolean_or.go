@@ -8,8 +8,8 @@ func registerOr(r *Registry) {
 	// boolean signature is registered first, so it wins for boolean args.
 	// Swap: `a or b` means left=a, right=b, so left=args[1], right=args[0].
 	r.Register("or", Signature{
-		Args:       []Type{TAny, TAny},
-		Handler: func(args []Value) ([]Value, error) {
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			var alts []Value
 			// Flatten left side if already a disjunct.
 			if args[1].IsDisjunct() {

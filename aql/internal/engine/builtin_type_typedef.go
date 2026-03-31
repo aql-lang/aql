@@ -23,7 +23,7 @@ func registerTypeDef(r *Registry) {
 
 	// Forward handler: "type foo number" → args=[foo(name), number(body)]
 	// Forward precedence handles all orderings without infix signatures.
-	typeHandler := func(args []Value) ([]Value, error) {
+	typeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		body := args[1]
 		if err := validateAndInstall(name, body); err != nil {

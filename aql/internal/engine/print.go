@@ -13,7 +13,7 @@ import (
 //   - maps/lists: printed as JSON-like text
 //   - tables: printed as a formatted table with column headers
 func registerPrint(r *Registry) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		out := formatForPrint(v)
 		fmt.Fprintln(r.Output, out)
@@ -27,7 +27,7 @@ func registerPrint(r *Registry) {
 		},
 	)
 
-	handlerStr := func(args []Value) ([]Value, error) {
+	handlerStr := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		out := formatForPrint(v)
 		fmt.Fprint(r.Output, out)

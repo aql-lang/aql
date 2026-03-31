@@ -688,46 +688,43 @@ not true or false	false
 # === convert - type conversions ===
 
 # Integer to string
-convert 99 String	'99'
-convert 0 String	'0'
-convert -5 String	'-5'
+99 convert String	'99'
+0 convert String	'0'
+-5 convert String	'-5'
 
-# Integer to string with variant
-convert 10 String "hex"	'a'
-convert 255 String "hex"	'ff'
-convert 255 String "HEX"	'FF'
-convert 10 String "bin"	'1010'
-convert 8 String "oct"	'10'
+# Integer to string with settings
+10 convert String {base:"hex"}	'a'
+255 convert String {base:"hex"}	'ff'
+255 convert String {base:"HEX"}	'FF'
+10 convert String {base:"bin"}	'1010'
+8 convert String {base:"oct"}	'10'
 
 # String to number
-convert "42" Number	42
-convert "-5" Number	-5
+"42" convert Number	42
+"-5" convert Number	-5
 
-# String to number with variant
-convert "ff" Number "hex"	255
-convert "1010" Number "bin"	10
-convert "10" Number "oct"	8
+# String to number with settings
+"ff" convert Number {base:"hex"}	255
+"1010" convert Number {base:"bin"}	10
+"10" convert Number {base:"oct"}	8
 
 # Boolean to string
-convert true String	'true'
-convert false String	'false'
+true convert String	'true'
+false convert String	'false'
 
 # Number to boolean
-convert 1 Boolean	true
-convert 0 Boolean	false
+1 convert Boolean	true
+0 convert Boolean	false
 
 # String to boolean
-convert "true" Boolean	true
-convert "false" Boolean	false
-convert "" Boolean	false
-convert "anything" Boolean	true
+"true" convert Boolean	true
+"false" convert Boolean	false
+"" convert Boolean	false
+"anything" convert Boolean	true
 
-# Atom to string
-convert foo String	'foo'
-
-# Any to atom
-convert 42 Atom	42
-convert "hello" Atom	hello
+# Atom conversion (Atom is Scalar/Atom)
+"hello" convert Atom	hello
+"42" convert Atom	42
 
 # === make - type instance creation ===
 

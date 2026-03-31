@@ -3,6 +3,12 @@ package engine
 // MaxArgs is the maximum number of arguments a signature may declare.
 const MaxArgs = 32
 
+// Handler is the unified function handler type for all AQL words.
+// It receives the matched arguments, the current context map, the
+// resolved stack (only populated for FullStack signatures), and the
+// registry.
+type Handler func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error)
+
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for stack matching).
@@ -11,14 +17,13 @@ const MaxArgs = 32
 // Args[1], ... in order, then pushes them onto the stack and retries as a stack match.
 type Signature struct {
 	Args    []Type
-	Handler func(args []Value) ([]Value, error)
+	Handler Handler
 
-	// FullStackHandler, when non-nil, is called instead of Handler.
-	// It receives the matched args AND the full resolved stack before
-	// the word (excluding forwards and the matched args themselves).
-	// Use this for words like depth, pick, roll that need to inspect
-	// or manipulate the entire stack.
-	FullStackHandler func(args []Value, stack []Value) ([]Value, error)
+	// FullStack, when true, causes the engine to pass the full resolved
+	// stack (excluding matched args) and to splice the results as a
+	// complete replacement for base..pointer. Use this for words like
+	// depth, pick, roll that need to inspect or manipulate the entire stack.
+	FullStack bool
 
 	// Patterns holds optional structural patterns for arguments (e.g. map
 	// literals in fn signatures). Key is arg index, value is the pattern.
@@ -194,6 +199,19 @@ func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	return nil, false
 }
 
+// sigTypeMatches checks whether a value's type matches a signature arg type,
+// including metatype awareness: a type literal (Data==nil) whose metatype
+// matches a metatype signature arg (e.g. String literal matches TScalarType).
+func sigTypeMatches(v Value, t Type) bool {
+	if v.VType.Matches(t) {
+		return true
+	}
+	if v.Data == nil && IsMetaType(t) {
+		return MetatypeFor(v.VType).Matches(t)
+	}
+	return false
+}
+
 // positionalMatch checks whether values match the signature's types in order.
 // Handles the /q modifier: a Word value at a QuoteArgs position is treated
 // as an Atom for type matching purposes.
@@ -207,7 +225,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 			}
 			continue
 		}
-		if !v.VType.Matches(t) {
+		if !sigTypeMatches(v, t) {
 			return false
 		}
 		// Reject type literals (Data==nil) for concrete Map/List signatures.
@@ -246,18 +264,18 @@ var typeInherentScores = map[string]int{
 	"Word/__UF": 1100,
 
 	// Depth 2 — regular types, ordered by cardinality
-	"Scalar/Boolean": 1200,
-	"Word/Atom":      1300,
-	"Node/Error":     1400,
-	"Object/Fetch":   1500,
+	"Scalar/Boolean":  1200,
+	"Scalar/Atom":     1300,
+	"Node/Error":      1400,
+	"Object/Fetch":    1500,
 	"Object/Resource": 1600,
-	"Scalar/Number":  1700,
-	"Word/Function":  1800,
-	"Object/Table":   1900,
-	"Object/Record":  2000,
-	"Scalar/String":  2100,
-	"Node/List":      2200,
-	"Node/Map":       2300,
+	"Scalar/Number":   1700,
+	"Word/Function":   1800,
+	"Object/Table":    1900,
+	"Object/Record":   2000,
+	"Scalar/String":   2100,
+	"Node/List":       2200,
+	"Node/Map":        2300,
 
 	// Depth 3 — Scalar subtypes
 	"Scalar/String/Empty":   900,
@@ -279,6 +297,11 @@ var typeInherentScores = map[string]int{
 	// Depth 4
 	"Node/Map/Word/Inspect": 2000,
 	"Node/Map/Type/Inspect": 2100,
+
+	// Metatypes
+	"Type":                1500,
+	"Type/ScalarType":     1350,
+	"Type/NodeType":       1350,
 }
 
 // typeInherentScore returns the inherent score for a type.

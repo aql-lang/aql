@@ -4,12 +4,12 @@ import "strings"
 
 func registerIndexOf(r *Registry) {
 	// indexof: [string, string] -> [integer]
-	indexOfHandler := func(args []Value) ([]Value, error) {
+	indexOfHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doIndexOf(args[0].AsString(), args[1].AsString(), strOpts{cs: "sensitive", mode: "literal", occ: "first"})
 	}
 
 	// indexof: [string, string, map] -> [integer]
-	indexOfOptsHandler := func(args []Value) ([]Value, error) {
+	indexOfOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
 		return doIndexOf(args[0].AsString(), args[1].AsString(), opts)
 	}

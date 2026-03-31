@@ -7,12 +7,12 @@ import (
 
 func registerNormalize(r *Registry) {
 	// normalize: [string] -> [string]
-	normalizeHandler := func(args []Value) ([]Value, error) {
+	normalizeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doNormalize(args[0].AsString(), strOpts{form: "NFC", eol: "preserve"})
 	}
 
 	// normalize: [string, map] -> [string]
-	normalizeOptsHandler := func(args []Value) ([]Value, error) {
+	normalizeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
 		return doNormalize(args[0].AsString(), opts)
 	}

@@ -13,7 +13,7 @@ package engine
 //
 // Forward precedence handles all orderings without infix signatures.
 func registerUndef(r *Registry) {
-	undefHandler := func(args []Value) ([]Value, error) {
+	undefHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		uninstallDef(r, name)
 		return nil, nil
@@ -32,7 +32,7 @@ func registerUndef(r *Registry) {
 	)
 
 	// Targeted undef: undef foo fn [[number] [number]]
-	undefFnHandler := func(args []Value) ([]Value, error) {
+	undefFnHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		undefInfo := args[1].Data.(FnUndefInfo)
 		uninstallFnSigs(r, name, undefInfo)

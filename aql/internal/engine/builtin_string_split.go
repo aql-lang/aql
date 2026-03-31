@@ -4,12 +4,12 @@ import "strings"
 
 func registerSplit(r *Registry) {
 	// split: [string, string] -> [list]
-	splitHandler := func(args []Value) ([]Value, error) {
+	splitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doSplit(args[0].AsString(), args[1].AsString(), strOpts{cs: "sensitive", mode: "literal"})
 	}
 
 	// split: [string, string, map] -> [list]
-	splitOptsHandler := func(args []Value) ([]Value, error) {
+	splitOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
 		return doSplit(args[0].AsString(), args[1].AsString(), opts)
 	}

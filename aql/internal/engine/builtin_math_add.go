@@ -7,25 +7,12 @@ func registerAdd(r *Registry) {
 	// args to strings and concatenates. More specific signatures
 	// (e.g. [TInteger, TInteger]) win due to higher specificity.
 	// Swap: `a add b` means a+b, so concat args[1]+args[0].
-	concatHandler := func(args []Value) ([]Value, error) {
+	concatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewString(valToString(args[1]) + valToString(args[0]))}, nil
 	}
 	r.Register("add", Signature{
-		Args:       []Type{TScalar, TScalar},
-		Handler:    concatHandler,
-	})
-	// Atom overloads: atoms are now under Word/Atom, not Scalar.
-	r.Register("add", Signature{
-		Args:       []Type{TAtom, TScalar},
-		Handler:    concatHandler,
-	})
-	r.Register("add", Signature{
-		Args:       []Type{TScalar, TAtom},
-		Handler:    concatHandler,
-	})
-	r.Register("add", Signature{
-		Args:       []Type{TAtom, TAtom},
-		Handler:    concatHandler,
+		Args:    []Type{TScalar, TScalar},
+		Handler: concatHandler,
 	})
 	registerBinaryNumOp(r, "add", func(a, b float64) (float64, error) { return a + b, nil })
 }

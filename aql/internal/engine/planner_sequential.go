@@ -20,6 +20,7 @@ package engine
 //   - Word with /q: treat as quoted (Atom) for matching
 //   - Defined word: resolve to its def type for matching
 //   - Unknown word: becomes Atom (or Boolean for true/false)
+//   - Type name: if expected type is a metatype, collect as forward arg
 func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
@@ -136,7 +137,7 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 			// Defined word (simple value): resolves to its def type.
 			if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
 				top := ds[len(ds)-1]
-				if top.VType.Matches(expectedType) || expectedType.Equal(TAny) {
+				if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
 					forwardMatched++
 					scanIdx++
 					continue
@@ -154,13 +155,20 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 			}
 
 			// Unknown word: becomes Atom (or Boolean for true/false).
+			// Type names: if expected type is a metatype, collect as forward arg.
 			resolvedType := TAtom
 			if ww.Name == "true" || ww.Name == "false" {
 				resolvedType = TBoolean
-			} else if _, isType := typeNames[ww.Name]; isType {
-				break // type names are not collectible values
+			} else if tn, isType := typeNames[ww.Name]; isType {
+				typeLit := NewTypeLiteral(tn)
+				if sigTypeMatches(typeLit, expectedType) {
+					forwardMatched++
+					scanIdx++
+					continue
+				}
+				break // type name doesn't match expected metatype
 			}
-			if resolvedType.Matches(expectedType) || expectedType.Equal(TAny) {
+			if sigTypeMatches(Value{VType: resolvedType}, expectedType) || expectedType.Equal(TAny) {
 				forwardMatched++
 				scanIdx++
 				continue
@@ -175,10 +183,10 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 			continue
 		}
 
-		// Literal value: direct type check.
-		if tok.VType.Matches(expectedType) || expectedType.Equal(TAny) {
+		// Literal value: direct type check (metatype-aware).
+		if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
 			if tok.Data == nil && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
-				break // reject type literals
+				break // reject type literals for concrete Map/List
 			}
 			forwardMatched++
 			scanIdx++
@@ -203,7 +211,7 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 		for j := 0; j < remaining; j++ {
 			stackVal := resolved[len(resolved)-remaining+j]
 			sigIdx := forwardMatched + j
-			if !stackVal.VType.Matches(sig.Args[sigIdx]) {
+			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
 				ok = false
 				break
 			}
@@ -235,7 +243,7 @@ func sequentialSuffixMatch(sigArgs []Type, resolved []Value) int {
 			// This matches MatchSignature's ordering where stack[base+j]
 			// corresponds to sigArgs[j].
 			stackVal := resolved[len(resolved)-tryN+j]
-			if !stackVal.VType.Matches(sigArgs[sigStart+j]) {
+			if !sigTypeMatches(stackVal, sigArgs[sigStart+j]) {
 				ok = false
 				break
 			}
@@ -246,5 +254,3 @@ func sequentialSuffixMatch(sigArgs []Type, resolved []Value) int {
 	}
 	return 0
 }
-
-

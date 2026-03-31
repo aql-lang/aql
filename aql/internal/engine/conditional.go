@@ -56,7 +56,7 @@ func spliceArg(v Value) []Value {
 func registerIf(r *Registry) {
 	// if: [any, any, any] -> [any] — 3-arg
 	// "if cond then else": args=[cond, then, else]
-	if3Handler := func(args []Value) ([]Value, error) {
+	if3Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		cond := args[0]
 		thenBranch := spliceArg(args[1])
 		elseBranch := spliceArg(args[2])
@@ -84,7 +84,7 @@ func registerIf(r *Registry) {
 
 	// if: [any, any] -> [any] — 2-arg
 	// "if cond then": args=[cond, then]
-	if2Handler := func(args []Value) ([]Value, error) {
+	if2Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		cond := args[0]
 		thenBranch := spliceArg(args[1])
 

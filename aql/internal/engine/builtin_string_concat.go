@@ -7,12 +7,12 @@ import (
 
 func registerConcat(r *Registry) {
 	// concat: [list] -> [string]
-	concatHandler := func(args []Value) ([]Value, error) {
+	concatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doConcat(args[0], strOpts{})
 	}
 
 	// concat: [list, map] -> [string]
-	concatOptsHandler := func(args []Value) ([]Value, error) {
+	concatOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
 		return doConcat(args[0], opts)
 	}

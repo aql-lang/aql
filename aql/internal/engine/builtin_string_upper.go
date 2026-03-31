@@ -3,7 +3,7 @@ package engine
 import "strings"
 
 func registerUpper(r *Registry) {
-	upperHandler := func(args []Value) ([]Value, error) {
+	upperHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		s := args[0].Data.(string)
 		return []Value{NewString(strings.ToUpper(s))}, nil
 	}

@@ -7,34 +7,21 @@ import (
 )
 
 func registerConvert(r *Registry) {
-	const defaultSize = 222
-
-	// truncate limits a string to maxLen characters.
-	truncate := func(s string, maxLen int) string {
-		if maxLen < 0 {
-			maxLen = 0
-		}
-		if len(s) > maxLen {
-			return s[:maxLen]
-		}
-		return s
-	}
-
 	// convertTo performs the actual conversion.
-	convertTo := func(src Value, targetType Type, variant string, size int) (Value, error) {
+	convertTo := func(src Value, targetType Type, base string) (Value, error) {
 		switch {
 		case targetType.Matches(TString):
 			// Convert to string.
-			if variant == "" {
-				return NewString(truncate(valToString(src), size)), nil
+			if base == "" {
+				return NewString(valToString(src)), nil
 			}
-			// Variant-based string conversion (only for integer numbers).
+			// Base-based string conversion (only for integer numbers).
 			if !src.VType.Matches(TInteger) {
-				return Value{}, fmt.Errorf("convert: variant %q only supported for integer to string", variant)
+				return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 			}
 			n := src.AsInteger()
 			var s string
-			switch variant {
+			switch base {
 			case "hex":
 				s = strconv.FormatInt(n, 16)
 			case "HEX":
@@ -44,9 +31,9 @@ func registerConvert(r *Registry) {
 			case "oct":
 				s = strconv.FormatInt(n, 8)
 			default:
-				return Value{}, fmt.Errorf("convert: unknown string variant %q", variant)
+				return Value{}, fmt.Errorf("convert: unknown base %q", base)
 			}
-			return NewString(truncate(s, size)), nil
+			return NewString(s), nil
 
 		case targetType.Matches(TDecimal):
 			// Convert to decimal.
@@ -60,27 +47,27 @@ func registerConvert(r *Registry) {
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
 			text := valToString(src)
-			if variant == "" {
+			if base == "" {
 				n, err := strconv.ParseInt(text, 10, 64)
 				if err != nil {
 					return Value{}, fmt.Errorf("convert: cannot convert %q to number", text)
 				}
 				return NewInteger(n), nil
 			}
-			var base int
-			switch variant {
+			var numBase int
+			switch base {
 			case "hex":
-				base = 16
+				numBase = 16
 			case "bin":
-				base = 2
+				numBase = 2
 			case "oct":
-				base = 8
+				numBase = 8
 			default:
-				return Value{}, fmt.Errorf("convert: unknown number variant %q", variant)
+				return Value{}, fmt.Errorf("convert: unknown base %q", base)
 			}
-			n, err := strconv.ParseInt(text, base, 64)
+			n, err := strconv.ParseInt(text, numBase, 64)
 			if err != nil {
-				return Value{}, fmt.Errorf("convert: cannot convert %q to number (base %d)", text, base)
+				return Value{}, fmt.Errorf("convert: cannot convert %q to number (base %d)", text, numBase)
 			}
 			return NewInteger(n), nil
 
@@ -104,7 +91,6 @@ func registerConvert(r *Registry) {
 			}
 
 		case targetType.Equal(TAtom):
-			// Convert to atom.
 			return NewAtom(valToString(src)), nil
 
 		default:
@@ -112,101 +98,62 @@ func registerConvert(r *Registry) {
 		}
 	}
 
-	// 2-arg: convert value type
-	// With forward-first matching, args are reversed: args[0]=type, args[1]=value.
-	// `value convert Type` → args[0]=Type(forward), args[1]=value(stack)
-	convert2Handler := func(args []Value) ([]Value, error) {
-		src, targetType := args[1], args[0]
+	// 2-arg: convert ScalarType Scalar
+	// args[0] = ScalarType literal (target, forward), args[1] = Scalar (source, stack)
+	convert2Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetType := args[0]
+		src := args[1]
 		if targetType.Data != nil {
-			// Try reversed order (pure prefix: convert Type value)
-			if args[1].Data == nil {
-				src, targetType = args[0], args[1]
-			} else {
-				return nil, fmt.Errorf("convert: one argument must be a type literal")
-			}
+			return nil, fmt.Errorf("convert: first argument must be a type literal, got %s", targetType.VType)
 		}
-		result, err := convertTo(src, targetType.VType, "", defaultSize)
+		result, err := convertTo(src, targetType.VType, "")
 		if err != nil {
 			return nil, err
 		}
 		return []Value{result}, nil
 	}
 
-	// 3-arg: convert value type <base-or-settings>
-	// Position-agnostic: finds the type literal (Data==nil) among the 3 args.
-	convert3Handler := func(args []Value) ([]Value, error) {
-		typeIdx := -1
-		for i := range args {
-			if args[i].Data == nil {
-				typeIdx = i
-				break
-			}
+	// 3-arg: convert ScalarType Options Scalar
+	// args[0] = ScalarType literal (target, forward), args[1] = Options map (forward), args[2] = Scalar (source, stack)
+	convert3Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetType := args[0]
+		opts := args[1]
+		src := args[2]
+		if targetType.Data != nil {
+			return nil, fmt.Errorf("convert: first argument must be a type literal, got %s", targetType.VType)
 		}
-		if typeIdx < 0 {
-			return nil, fmt.Errorf("convert: one argument must be a type literal")
-		}
-		// Collect the two remaining (non-type) arg indices.
-		var others [2]int
-		oi := 0
-		for i := range args {
-			if i != typeIdx {
-				others[oi] = i
-				oi++
-			}
-		}
-		a, b := args[others[0]], args[others[1]]
 
-		var src Value
 		base := ""
-		size := defaultSize
-
-		applySettings := func(v Value) {
-			if v.VType.Equal(TMap) && v.Data != nil {
-				m := v.AsMap()
+		if opts.Data != nil {
+			m := opts.AsMap()
+			if m != nil {
 				if bv, ok := m.Get("base"); ok {
 					base = valToString(bv)
 				}
-				if sv, ok := m.Get("size"); ok && sv.VType.Matches(TInteger) {
-					size = int(sv.AsInteger())
-				}
-			} else {
-				base = valToString(v)
 			}
 		}
 
-		switch {
-		case a.VType.Equal(TMap) && a.Data != nil:
-			applySettings(a)
-			src = b
-		case b.VType.Equal(TMap) && b.Data != nil:
-			applySettings(b)
-			src = a
-		case a.VType.Matches(TString) && !b.VType.Matches(TString):
-			base = valToString(a)
-			src = b
-		case b.VType.Matches(TString) && !a.VType.Matches(TString):
-			base = valToString(b)
-			src = a
-		default:
-			src = a
-			base = valToString(b)
-		}
-
-		result, err := convertTo(src, args[typeIdx].VType, base, size)
+		result, err := convertTo(src, targetType.VType, base)
 		if err != nil {
 			return nil, err
 		}
 		return []Value{result}, nil
 	}
+
+	// Options pattern for 3-arg variant: {base?: String|None}
+	baseOpts := NewOrderedMap()
+	baseOpts.Set("base", NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)}))
+	optsPattern := NewOptionsType(baseOpts)
 
 	r.Register("convert",
 		// 3-arg variant registered first (higher score from more args)
 		Signature{
-			Args:    []Type{TAny, TAny, TAny},
-			Handler: convert3Handler,
+			Args:     []Type{TScalarType, TMap, TScalar},
+			Patterns: map[int]Value{1: optsPattern},
+			Handler:  convert3Handler,
 		},
 		Signature{
-			Args:    []Type{TAny, TAny},
+			Args:    []Type{TScalarType, TScalar},
 			Handler: convert2Handler,
 		},
 	)

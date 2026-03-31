@@ -155,8 +155,8 @@ func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
 		t.Fatal(err)
 	}
 	sigs := []Signature{
-		{Args: []Type{deep, deep}},        // 200 + 3+3 = 206
-		{Args: []Type{TAny, TAny, TAny}},  // 300 + 1+1+1 = 303
+		{Args: []Type{deep, deep}},       // 200 + 3+3 = 206
+		{Args: []Type{TAny, TAny, TAny}}, // 300 + 1+1+1 = 303
 	}
 	ranked := RankSignatures(sigs)
 	if ranked[0] != 1 {
@@ -180,11 +180,11 @@ func TestRankSignaturesStableForEqualScores(t *testing.T) {
 func TestRankSignatures4To7Args(t *testing.T) {
 	// Verify scoring works correctly for larger signatures.
 	sigs := []Signature{
-		{Args: []Type{TAny, TAny, TAny, TAny}},                                       // 4*100+4 = 404
-		{Args: []Type{TAny, TAny, TAny, TAny, TAny}},                                 // 5*100+5 = 505
-		{Args: []Type{TAny, TAny, TAny, TAny, TAny, TAny}},                           // 6*100+6 = 606
-		{Args: []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}},                     // 7*100+7 = 707
-		{Args: []Type{TInteger, TInteger, TInteger, TInteger, TInteger}},             // 5*100+10 = 510
+		{Args: []Type{TAny, TAny, TAny, TAny}},                           // 4*100+4 = 404
+		{Args: []Type{TAny, TAny, TAny, TAny, TAny}},                     // 5*100+5 = 505
+		{Args: []Type{TAny, TAny, TAny, TAny, TAny, TAny}},               // 6*100+6 = 606
+		{Args: []Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}},         // 7*100+7 = 707
+		{Args: []Type{TInteger, TInteger, TInteger, TInteger, TInteger}}, // 5*100+10 = 510
 	}
 	ranked := RankSignatures(sigs)
 	// 7-arg(3), 6-arg(2), 5-int(4), 5-any(1), 4-any(0)
@@ -198,7 +198,9 @@ func TestRankSignatures4To7Args(t *testing.T) {
 
 // --- MatchSignature priority tests ---
 
-func dummyHandler(args []Value) ([]Value, error) { return args, nil }
+func dummyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return args, nil
+}
 
 func TestMatchSignaturePrefersMostSpecific(t *testing.T) {
 	sigs := []Signature{

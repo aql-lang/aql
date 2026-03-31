@@ -909,7 +909,7 @@ func TestConvertIntToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("String"),
+		NewInteger(42), NewWord("convert"), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "42" {
 		t.Errorf("expected '42', got %v", result)
@@ -921,8 +921,10 @@ func TestConvertIntToStringHex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("hex"),
+		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -934,8 +936,10 @@ func TestConvertIntToStringBin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	binOpts := NewOrderedMap()
+	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
+		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
 		t.Errorf("expected '1010', got %v", result)
@@ -947,8 +951,10 @@ func TestConvertIntToStringOct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	octOpts := NewOrderedMap()
+	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
+		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
 		t.Errorf("expected '10', got %v", result)
@@ -961,7 +967,7 @@ func TestConvertStringToNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("99"), NewWord("Number"),
+		NewString("99"), NewWord("convert"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99, got %v", result)
@@ -974,7 +980,7 @@ func TestConvertBoolToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("String"),
+		NewBoolean(true), NewWord("convert"), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "true" {
 		t.Errorf("expected 'true', got %v", result)
@@ -987,7 +993,7 @@ func TestConvertIntToBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
+		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -1000,7 +1006,7 @@ func TestConvertIntToBoolZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
+		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
 		t.Errorf("expected false, got %v", result)
@@ -1013,7 +1019,7 @@ func TestConvertStringToBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("Boolean"),
+		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
 		t.Errorf("expected true, got %v", result)
@@ -1028,7 +1034,7 @@ func TestConvertWithSettingsMap(t *testing.T) {
 	settings := NewOrderedMap()
 	settings.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("String"), NewMap(settings),
+		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(settings),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
@@ -2394,8 +2400,8 @@ func TestBuildWhereClauseSimpleEq(t *testing.T) {
 
 func TestBuildWhereClauseLtGteLteNeq(t *testing.T) {
 	tests := []struct {
-		op     string
-		sqlOp  string
+		op    string
+		sqlOp string
 	}{
 		{"lt", "<"},
 		{"gte", ">="},
@@ -4251,7 +4257,7 @@ func TestMatchSignaturePatternReject(t *testing.T) {
 	sig := Signature{
 		Args:     []Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
-		Handler:  func(args []Value) ([]Value, error) { return args, nil },
+		Handler:  func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil },
 	}
 
 	// Matching map: {x:99}
@@ -4284,11 +4290,15 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 	specificSig := Signature{
 		Args:     []Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
-		Handler:  func(args []Value) ([]Value, error) { return []Value{NewString("specific")}, nil },
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{NewString("specific")}, nil
+		},
 	}
 	fallbackSig := Signature{
-		Args:    []Type{TMap},
-		Handler: func(args []Value) ([]Value, error) { return []Value{NewString("fallback")}, nil },
+		Args: []Type{TMap},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{NewString("fallback")}, nil
+		},
 	}
 
 	// Non-matching map should fall through to fallback.
@@ -4300,7 +4310,7 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected fallback match")
 	}
-	out, _ := result.Sig.Handler(result.Args)
+	out, _ := result.Sig.Handler(result.Args, nil, nil, nil)
 	if out[0].AsString() != "fallback" {
 		t.Errorf("expected fallback, got %s", out[0].AsString())
 	}
@@ -4431,7 +4441,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewTypeLiteral(TString)}), // valid param
-			NewString("nonexistent_type"),              // invalid return type
+			NewString("nonexistent_type"),             // invalid return type
 			NewList([]Value{NewTypeLiteral(TString)}),
 			NewString("nonexistent_type"),
 		}),
@@ -4519,4 +4529,3 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 		t.Errorf("expected 'B' for {x:100}, got %v", result2)
 	}
 }
-

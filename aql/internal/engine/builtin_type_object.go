@@ -17,7 +17,7 @@ func registerObject(r *Registry) {
 
 	// objectHandler creates an object type from a field map (no parent).
 	// Syntax: object {a:String, b:Boolean}
-	objectHandler := func(args []Value) ([]Value, error) {
+	objectHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		fieldsVal := args[0]
 		if !fieldsVal.VType.Equal(TMap) {
 			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
@@ -40,7 +40,7 @@ func registerObject(r *Registry) {
 	// objectWithParentHandler creates an object type with a parent.
 	// Syntax: object {d:Integer} Foo
 	// The second argument must be an existing object type.
-	objectWithParentHandler := func(args []Value) ([]Value, error) {
+	objectWithParentHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		fieldsVal := args[0]
 		parentVal := args[1]
 

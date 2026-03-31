@@ -1,25 +1,41 @@
 package engine
 
 func registerInspect(r *Registry) {
-	r.Register("inspect", Signature{
-		Args: []Type{TWord},
-		Handler: func(args []Value) ([]Value, error) {
-			name := args[0].AsWord().Name
+	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		name := args[0].AsWord().Name
 
-			// If the word names a user-defined type, return a type inspection.
+		// If the word names a user-defined type, return a type inspection.
+		if stack := r.DefStacks[name]; len(stack) > 0 {
+			top := stack[len(stack)-1]
+			if isTypeValue(top) {
+				return []Value{buildTypeInspection(name, top)}, nil
+			}
+		}
+
+		return []Value{buildInspection(r, name)}, nil
+	}
+	r.Register("inspect", Signature{
+		Args:    []Type{TWord},
+		Handler: wordHandler,
+	})
+
+	// Atom (now Scalar/Atom): inspect by name, same as words.
+	r.Register("inspect", Signature{
+		Args: []Type{TAtom},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			name := args[0].AsAtom()
 			if stack := r.DefStacks[name]; len(stack) > 0 {
 				top := stack[len(stack)-1]
 				if isTypeValue(top) {
 					return []Value{buildTypeInspection(name, top)}, nil
 				}
 			}
-
 			return []Value{buildInspection(r, name)}, nil
 		},
 	})
 
 	// Type literal (Data==nil): inspect number, inspect string, etc.
-	typeHandler := func(args []Value) ([]Value, error) {
+	typeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{buildTypeInspection("", args[0])}, nil
 	}
 

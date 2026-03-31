@@ -214,7 +214,7 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	r.Register("side-effect",
 		Signature{
 			Args: []Type{TAny},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				callCount++
 				return args, nil
 			},
@@ -493,9 +493,9 @@ func TestEngineConvert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// convert 99 string
+	// 99 convert String
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(99), NewWord("String"),
+		NewInteger(99), NewWord("convert"), NewWord("String"),
 	})
 	if len(result) != 1 || result[0].AsString() != "99" {
 		t.Errorf("convert 99 string = %v, want '99'", result)
@@ -678,36 +678,45 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// convert 10 string "hex" → 'a'
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
+	HEXOpts := NewOrderedMap()
+	HEXOpts.Set("base", NewString("HEX"))
+	binOpts := NewOrderedMap()
+	binOpts.Set("base", NewString("bin"))
+	octOpts := NewOrderedMap()
+	octOpts.Set("base", NewString("oct"))
+
+	// 10 convert String {base:hex} → 'a'
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("hex"),
+		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "a" {
-		t.Errorf("convert 10 string hex = %v, want 'a'", result)
+		t.Errorf("10 convert String {base:hex} = %v, want 'a'", result)
 	}
 
-	// convert 255 string "HEX" → 'FF'
+	// 255 convert String {base:HEX} → 'FF'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(255), NewWord("String"), NewString("HEX"),
+		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(HEXOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "FF" {
-		t.Errorf("convert 255 string HEX = %v, want 'FF'", result)
+		t.Errorf("255 convert String {base:HEX} = %v, want 'FF'", result)
 	}
 
-	// convert 10 string "bin" → '1010'
+	// 10 convert String {base:bin} → '1010'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(10), NewWord("String"), NewString("bin"),
+		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
-		t.Errorf("convert 10 string bin = %v, want '1010'", result)
+		t.Errorf("10 convert String {base:bin} = %v, want '1010'", result)
 	}
 
-	// convert 8 string "oct" → '10'
+	// 8 convert String {base:oct} → '10'
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(8), NewWord("String"), NewString("oct"),
+		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
-		t.Errorf("convert 8 string oct = %v, want '10'", result)
+		t.Errorf("8 convert String {base:oct} = %v, want '10'", result)
 	}
 }
 
@@ -716,36 +725,43 @@ func TestEngineConvertToNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// convert "42" number → 42
+	// "42" convert Number → 42
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewString("42"), NewWord("Number"),
+		NewString("42"), NewWord("convert"), NewWord("Number"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 42 {
-		t.Errorf("convert '42' number = %v, want 42", result)
+		t.Errorf("'42' convert Number = %v, want 42", result)
 	}
 
-	// convert "ff" number "hex" → 255
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
+	binOpts := NewOrderedMap()
+	binOpts.Set("base", NewString("bin"))
+	octOpts := NewOrderedMap()
+	octOpts.Set("base", NewString("oct"))
+
+	// "ff" convert Number {base:hex} → 255
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("ff"), NewWord("Number"), NewString("hex"),
+		NewString("ff"), NewWord("convert"), NewWord("Number"), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 255 {
-		t.Errorf("convert 'ff' number hex = %v, want 255", result)
+		t.Errorf("'ff' convert Number {base:hex} = %v, want 255", result)
 	}
 
-	// convert "1010" number "bin" → 10
+	// "1010" convert Number {base:bin} → 10
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("1010"), NewWord("Number"), NewString("bin"),
+		NewString("1010"), NewWord("convert"), NewWord("Number"), NewMap(binOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 10 {
-		t.Errorf("convert '1010' number bin = %v, want 10", result)
+		t.Errorf("'1010' convert Number {base:bin} = %v, want 10", result)
 	}
 
-	// convert "10" number "oct" → 8
+	// "10" convert Number {base:oct} → 8
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("10"), NewWord("Number"), NewString("oct"),
+		NewString("10"), NewWord("convert"), NewWord("Number"), NewMap(octOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 8 {
-		t.Errorf("convert '10' number oct = %v, want 8", result)
+		t.Errorf("'10' convert Number {base:oct} = %v, want 8", result)
 	}
 }
 
@@ -754,57 +770,44 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// convert 1 boolean → true
+	// 1 convert Boolean → true
 	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(1), NewWord("Boolean"),
+		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
-		t.Errorf("convert 1 boolean = %v, want true", result)
+		t.Errorf("1 convert Boolean = %v, want true", result)
 	}
 
-	// convert 0 boolean → false
+	// 0 convert Boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(0), NewWord("Boolean"),
+		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
-		t.Errorf("convert 0 boolean = %v, want false", result)
+		t.Errorf("0 convert Boolean = %v, want false", result)
 	}
 
-	// convert "true" boolean → true
+	// "true" convert Boolean → true
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString("true"), NewWord("Boolean"),
+		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
-		t.Errorf("convert 'true' boolean = %v, want true", result)
+		t.Errorf("'true' convert Boolean = %v, want true", result)
 	}
 
-	// convert "" boolean → false
+	// "" convert Boolean → false
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewString(""), NewWord("Boolean"),
+		NewString(""), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || result[0].AsBoolean() {
-		t.Errorf("convert '' boolean = %v, want false", result)
+		t.Errorf("'' convert Boolean = %v, want false", result)
 	}
 
-	// convert true boolean → true (passthrough)
+	// true convert Boolean → true (passthrough)
 	result = runAQL(t, r, []Value{
-		NewWord("convert"), NewBoolean(true), NewWord("Boolean"),
+		NewBoolean(true), NewWord("convert"), NewWord("Boolean"),
 	})
 	if len(result) != 1 || !result[0].AsBoolean() {
-		t.Errorf("convert true boolean = %v, want true", result)
-	}
-}
-
-func TestEngineConvertToAtom(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := runAQL(t, r, []Value{
-		NewWord("convert"), NewInteger(42), NewWord("Atom"),
-	})
-	if len(result) != 1 || !result[0].IsAtom() {
-		t.Errorf("convert 42 atom = %v, want atom", result)
+		t.Errorf("true convert Boolean = %v, want true", result)
 	}
 }
 
@@ -814,9 +817,9 @@ func TestEngineBaseTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := []struct {
-		name     string
-		typeLit  Type
-		wantStr  string
+		name    string
+		typeLit Type
+		wantStr string
 	}{
 		{"number", TNumber, "0"},
 		{"string", TString, "''"},
@@ -1497,7 +1500,11 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	// doubler/s registers as stack-only: takes args from the stack only,
 	// never collects forward args via forward.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("Integer"))
+			return NewList([]Value{NewImplicitMap(m)})
+		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
@@ -1520,7 +1527,11 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	// doubler 5 — stack-only word should NOT collect 5 as forward arg.
 	// It should fail because there's nothing on the stack for prefix match.
 	fnBody := NewList([]Value{
-		func() Value { m := NewOrderedMap(); m.Set("x", NewWord("Integer")); return NewList([]Value{NewImplicitMap(m)}) }(),
+		func() Value {
+			m := NewOrderedMap()
+			m.Set("x", NewWord("Integer"))
+			return NewList([]Value{NewImplicitMap(m)})
+		}(),
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
@@ -2793,5 +2804,136 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	})
 	if len(result) != 1 || result[0].AsInteger() != 9 {
 		t.Fatalf("3 foo after undef B = %v, want 9", result)
+	}
+}
+
+// --- Metatype integration tests ---
+
+func TestTypeofMetatypes(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		typeLit  Value
+		wantType string // expected typeof result
+		wantFull string // expected fulltypeof result
+	}{
+		{"String", NewTypeLiteral(TString), "ScalarType", "Type/ScalarType"},
+		{"Number", NewTypeLiteral(TNumber), "ScalarType", "Type/ScalarType"},
+		{"Integer", NewTypeLiteral(TInteger), "ScalarType", "Type/ScalarType"},
+		{"Decimal", NewTypeLiteral(TDecimal), "ScalarType", "Type/ScalarType"},
+		{"Boolean", NewTypeLiteral(TBoolean), "ScalarType", "Type/ScalarType"},
+		{"List", NewTypeLiteral(TList), "NodeType", "Type/NodeType"},
+		{"Map", NewTypeLiteral(TMap), "NodeType", "Type/NodeType"},
+		{"Scalar", NewTypeLiteral(TScalar), "Type", "Type"},
+		{"Node", NewTypeLiteral(TNode), "Type", "Type"},
+		{"Any", NewTypeLiteral(TAny), "Type", "Type"},
+		{"None", NewTypeLiteral(TNone), "Type", "Type"},
+		{"Object", NewTypeLiteral(TObject), "Type", "Type"},
+		{"Table", NewTypeLiteral(TTable), "Type", "Type"},
+		{"Record", NewTypeLiteral(TRecord), "Type", "Type"},
+		{"Resource", NewTypeLiteral(TResource), "Type", "Type"},
+		{"Atom", NewTypeLiteral(TAtom), "ScalarType", "Type/ScalarType"},
+		{"Type", NewTypeLiteral(TType), "Type", "Type"},
+		{"ScalarType", NewTypeLiteral(TScalarType), "Type", "Type"},
+		{"NodeType", NewTypeLiteral(TNodeType), "Type", "Type"},
+	}
+
+	for _, tt := range tests {
+		t.Run("typeof-"+tt.name, func(t *testing.T) {
+			result := runAQL(t, r, []Value{tt.typeLit, NewWord("typeof")})
+			if len(result) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(result))
+			}
+			got := result[0].AsString()
+			if got != tt.wantType {
+				t.Errorf("typeof %s = %q, want %q", tt.name, got, tt.wantType)
+			}
+		})
+		t.Run("fulltypeof-"+tt.name, func(t *testing.T) {
+			result := runAQL(t, r, []Value{tt.typeLit, NewWord("fulltypeof")})
+			if len(result) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(result))
+			}
+			got := result[0].AsString()
+			if got != tt.wantFull {
+				t.Errorf("fulltypeof %s = %q, want %q", tt.name, got, tt.wantFull)
+			}
+		})
+	}
+
+	// Concrete values unchanged.
+	t.Run("typeof-concrete-integer", func(t *testing.T) {
+		result := runAQL(t, r, []Value{NewInteger(42), NewWord("typeof")})
+		if len(result) != 1 || result[0].AsString() != "Number" {
+			t.Errorf("typeof 42 = %v, want Number", result)
+		}
+	})
+	t.Run("typeof-concrete-boolean", func(t *testing.T) {
+		result := runAQL(t, r, []Value{NewBoolean(true), NewWord("typeof")})
+		if len(result) != 1 || result[0].AsString() != "Boolean" {
+			t.Errorf("typeof true = %v, want Boolean", result)
+		}
+	})
+}
+
+func TestIsMetatypes(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		val  Value
+		pat  Value
+		want bool
+	}{
+		// ScalarType matches scalar subtypes
+		{"Boolean is ScalarType", NewTypeLiteral(TBoolean), NewTypeLiteral(TScalarType), true},
+		{"String is ScalarType", NewTypeLiteral(TString), NewTypeLiteral(TScalarType), true},
+		{"Integer is ScalarType", NewTypeLiteral(TInteger), NewTypeLiteral(TScalarType), true},
+
+		// NodeType matches node subtypes
+		{"List is NodeType", NewTypeLiteral(TList), NewTypeLiteral(TNodeType), true},
+		{"Map is NodeType", NewTypeLiteral(TMap), NewTypeLiteral(TNodeType), true},
+
+		// Type matches everything
+		{"Boolean is Type", NewTypeLiteral(TBoolean), NewTypeLiteral(TType), true},
+		{"List is Type", NewTypeLiteral(TList), NewTypeLiteral(TType), true},
+		{"Object is Type", NewTypeLiteral(TObject), NewTypeLiteral(TType), true},
+		{"Any is Type", NewTypeLiteral(TAny), NewTypeLiteral(TType), true},
+
+		// Negative cases
+		{"List is ScalarType", NewTypeLiteral(TList), NewTypeLiteral(TScalarType), false},
+		{"Boolean is NodeType", NewTypeLiteral(TBoolean), NewTypeLiteral(TNodeType), false},
+		{"Object is ScalarType", NewTypeLiteral(TObject), NewTypeLiteral(TScalarType), false},
+		{"Object is NodeType", NewTypeLiteral(TObject), NewTypeLiteral(TNodeType), false},
+
+		// Scalar/Node roots have metatype Type, not ScalarType/NodeType
+		{"Scalar is ScalarType", NewTypeLiteral(TScalar), NewTypeLiteral(TScalarType), false},
+		{"Node is NodeType", NewTypeLiteral(TNode), NewTypeLiteral(TNodeType), false},
+		{"Scalar is Type", NewTypeLiteral(TScalar), NewTypeLiteral(TType), true},
+		{"Node is Type", NewTypeLiteral(TNode), NewTypeLiteral(TType), true},
+
+		// Metatypes themselves
+		{"ScalarType is Type", NewTypeLiteral(TScalarType), NewTypeLiteral(TType), true},
+		{"NodeType is Type", NewTypeLiteral(TNodeType), NewTypeLiteral(TType), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runAQL(t, r, []Value{tt.val, NewWord("is"), tt.pat})
+			if len(result) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(result))
+			}
+			got := result[0].AsBoolean()
+			if got != tt.want {
+				t.Errorf("%s = %v, want %v", tt.name, got, tt.want)
+			}
+		})
 	}
 }

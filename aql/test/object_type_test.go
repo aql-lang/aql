@@ -408,8 +408,8 @@ func TestValueIDPrefixes(t *testing.T) {
 	}
 
 	atom := engine.NewAtom("foo")
-	if !strings.HasPrefix(atom.ID, "W_") {
-		t.Errorf("atom ID should start with W_, got %s", atom.ID)
+	if !strings.HasPrefix(atom.ID, "S_") {
+		t.Errorf("atom ID should start with S_, got %s", atom.ID)
 	}
 
 	// Type/Object values get T_ prefix

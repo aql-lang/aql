@@ -4,13 +4,13 @@ import "strings"
 
 func registerReplace(r *Registry) {
 	// replace: [string, string, string] -> [string]
-	replaceHandler := func(args []Value) ([]Value, error) {
+	replaceHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doReplace(args[0].AsString(), args[1].AsString(), args[2].AsString(),
 			strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 	}
 
 	// replace: [string, string, string, map] -> [string]
-	replaceOptsHandler := func(args []Value) ([]Value, error) {
+	replaceOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[3])
 		return doReplace(args[0].AsString(), args[1].AsString(), args[2].AsString(), opts)
 	}

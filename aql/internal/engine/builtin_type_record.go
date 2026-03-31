@@ -3,7 +3,7 @@ package engine
 import "fmt"
 
 func registerRecord(r *Registry) {
-	recordHandler := func(args []Value) ([]Value, error) {
+	recordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		list := args[0]
 		if !list.VType.Equal(TList) {
 			return nil, fmt.Errorf("record: argument must be a list")

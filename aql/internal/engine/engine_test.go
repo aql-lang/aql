@@ -3284,7 +3284,7 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 	}
 	r.Register("echo", Signature{
 		Args:    []Type{TAny},
-		Handler: func(args []Value) ([]Value, error) { return args, nil },
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil },
 	})
 	e := NewTop(r)
 	result, err := e.Run([]Value{NewWord("echo"), NewInteger(42)})
@@ -3304,7 +3304,7 @@ func TestEdgeSignatureMultipleForward(t *testing.T) {
 	}
 	r.Register("pair", Signature{
 		Args: []Type{TAny, TAny},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return args, nil
 		},
 	})
@@ -3328,7 +3328,7 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 	}
 	r.Register("triple", Signature{
 		Args: []Type{TAny},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0], args[0], args[0]}, nil
 		},
 	})
@@ -5033,5 +5033,69 @@ func TestUnhandledErrorOnStack(t *testing.T) {
 	}
 	if result[1].AsInteger() != 12 {
 		t.Errorf("result[1] = %v, want 12", result[1])
+	}
+}
+
+// --- Metatype tests ---
+
+func TestMetatypeFor(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  Type
+		want Type
+	}{
+		{"String → ScalarType", TString, TScalarType},
+		{"Number → ScalarType", TNumber, TScalarType},
+		{"Integer → ScalarType", TInteger, TScalarType},
+		{"Decimal → ScalarType", TDecimal, TScalarType},
+		{"Boolean → ScalarType", TBoolean, TScalarType},
+		{"List → NodeType", TList, TNodeType},
+		{"Map → NodeType", TMap, TNodeType},
+		{"Scalar → Type", TScalar, TType},
+		{"Node → Type", TNode, TType},
+		{"Any → Type", TAny, TType},
+		{"None → Type", TNone, TType},
+		{"Object → Type", TObject, TType},
+		{"Table → Type", TTable, TType},
+		{"Record → Type", TRecord, TType},
+		{"Resource → Type", TResource, TType},
+		{"Atom → ScalarType", TAtom, TScalarType},
+		{"Type → Type", TType, TType},
+		{"ScalarType → Type", TScalarType, TType},
+		{"NodeType → Type", TNodeType, TType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MetatypeFor(tt.typ)
+			if !got.Equal(tt.want) {
+				t.Errorf("MetatypeFor(%s) = %s, want %s", tt.typ, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsMetaType(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  Type
+		want bool
+	}{
+		{"Type", TType, true},
+		{"ScalarType", TScalarType, true},
+		{"NodeType", TNodeType, true},
+		{"String", TString, false},
+		{"Integer", TInteger, false},
+		{"List", TList, false},
+		{"Map", TMap, false},
+		{"Any", TAny, false},
+		{"Scalar", TScalar, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsMetaType(tt.typ)
+			if got != tt.want {
+				t.Errorf("IsMetaType(%s) = %v, want %v", tt.typ, got, tt.want)
+			}
+		})
 	}
 }

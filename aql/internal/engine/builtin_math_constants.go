@@ -7,13 +7,13 @@ func registerMathConstants(r *Registry) {
 	// Named with "math-" prefix to avoid colliding with user-defined words.
 	r.RegisterStackOnly("math-pi", Signature{
 		Args: []Type{},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewDecimal(math.Pi)}, nil
 		},
 	})
 	r.RegisterStackOnly("math-e", Signature{
 		Args: []Type{},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewDecimal(math.E)}, nil
 		},
 	})

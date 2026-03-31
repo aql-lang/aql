@@ -11,8 +11,8 @@ import (
 
 // Function groups all signatures for a named function.
 type Function struct {
-	Name             string
-	Signatures       []Signature
+	Name              string
+	Signatures        []Signature
 	ForwardPrecedence bool // true = engine tries forward-first; false = stack-only
 }
 
@@ -26,26 +26,26 @@ type TypeDef struct {
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	funcs     map[string]*Function
-	Store     map[string]Value   // key-value store for set/get
-	DefStacks map[string][]Value // stacked bodies for def-defined words
-	Types     map[string]TypeDef // complex type registry keyed by full type path
-	FileOps   fileops.FileOps    // file operations for read/write words
-	Formats   map[string]Format  // format registry for read/write (keyed by name)
-	Output    io.Writer          // output writer for print/printstr and stdout
-	ErrOutput io.Writer          // error output writer for stderr
-	Input     io.Reader          // input reader for stdin
-	SQLite    *SQLiteStore       // in-memory SQLite store for table data
-	Modules        map[string]ModuleDesc    // child modules keyed by generated ID
-	moduleSeq      int                      // counter for generating module IDs
+	funcs          map[string]*Function
+	Store          map[string]Value              // key-value store for set/get
+	DefStacks      map[string][]Value            // stacked bodies for def-defined words
+	Types          map[string]TypeDef            // complex type registry keyed by full type path
+	FileOps        fileops.FileOps               // file operations for read/write words
+	Formats        map[string]Format             // format registry for read/write (keyed by name)
+	Output         io.Writer                     // output writer for print/printstr and stdout
+	ErrOutput      io.Writer                     // error output writer for stderr
+	Input          io.Reader                     // input reader for stdin
+	SQLite         *SQLiteStore                  // in-memory SQLite store for table data
+	Modules        map[string]ModuleDesc         // child modules keyed by generated ID
+	moduleSeq      int                           // counter for generating module IDs
 	ParseFunc      func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
-	ctxStack       []map[string]Value // scoped context stack; top = current engine's context
-	argsStack      []Value            // stack of args lists for nested fn calls
-	KnownTypeParts map[string]bool    // set of all type path parts (for uniqueness enforcement)
-	Manager        any                // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache       map[string]any     // cached SDK instances keyed by spec name
-	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
-	errs           []error            // registration errors accumulated during setup
+	ctxStack       []map[string]Value            // scoped context stack; top = current engine's context
+	argsStack      []Value                       // stack of args lists for nested fn calls
+	KnownTypeParts map[string]bool               // set of all type path parts (for uniqueness enforcement)
+	Manager        any                           // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache       map[string]any                // cached SDK instances keyed by spec name
+	BaseDir        string                        // base directory for resolving relative file paths (set by loadFileModule)
+	errs           []error                       // registration errors accumulated during setup
 }
 
 // NewRegistry creates an empty registry.
@@ -206,7 +206,6 @@ func registerBuiltins(r *Registry) {
 	registerContains(r)
 	registerIndexOf(r)
 	registerReplace(r)
-	registerSlice(r)
 	registerChangeCase(r)
 	registerNormalize(r)
 	registerRepeat(r)
@@ -345,7 +344,7 @@ func registerBuiltins(r *Registry) {
 // registerBinaryIntOp registers a binary integer operation with a single
 // signature Args:[int, int] and forward precedence.
 func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		result, err := op(args[0].AsInteger(), args[1].AsInteger())
 		if err != nil {
 			return nil, err
@@ -361,7 +360,7 @@ func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, e
 // registerBinaryNumOp registers a binary numeric operation with three
 // overloads: [decimal, decimal], [number, decimal], and [decimal, number].
 func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		result, err := op(args[0].AsNumber(), args[1].AsNumber())
 		if err != nil {
 			return nil, err
@@ -385,7 +384,7 @@ func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float6
 // registerUnaryNumOp registers a unary numeric operation with two overloads:
 // [integer] -> [decimal] and [decimal] -> [decimal].
 func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewDecimal(op(args[0].AsNumber()))}, nil
 	}
 	r.Register(name, Signature{
@@ -401,7 +400,7 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // registerBinaryBoolOp registers a binary boolean operation with a single
 // signature Args:[boolean, boolean] and forward precedence.
 func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil
 	}
 	r.Register(name, Signature{
@@ -452,4 +451,3 @@ func storeKey(v Value) string {
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
-

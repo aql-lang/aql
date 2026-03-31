@@ -134,7 +134,7 @@ Key patterns to follow:
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
   `internal/native/transform.go` have nil-Data guards. If you add new
   conversion helpers, include the same guard.
-- **Native function safety.** `makeFullStackHandler()` in
+- **Native function safety.** `wrapSafetyCheck()` in
   `internal/native/native.go` rejects type literals and Options types
   centrally before any native handler runs. If you bypass this wrapper,
   add your own guard.

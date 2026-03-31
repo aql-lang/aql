@@ -3,9 +3,13 @@ package engine
 import "strings"
 
 func registerTypeof(r *Registry) {
-	typeofHandler := func(args []Value) ([]Value, error) {
+	typeofHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		parts := v.VType.Parts
+		// Type literals: report metatype instead of represented type.
+		if v.Data == nil && !v.VType.Matches(TWord) {
+			parts = MetatypeFor(v.VType).Parts
+		}
 		// Strip numeric/negative literal suffix if present
 		// (e.g. the "42" in Scalar/Number/Integer/42).
 		if len(parts) > 0 {
@@ -32,9 +36,13 @@ func registerTypeof(r *Registry) {
 }
 
 func registerFullTypeof(r *Registry) {
-	fulltypeofHandler := func(args []Value) ([]Value, error) {
+	fulltypeofHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		parts := v.VType.Parts
+		// Type literals: report metatype instead of represented type.
+		if v.Data == nil && !v.VType.Matches(TWord) {
+			parts = MetatypeFor(v.VType).Parts
+		}
 		// Strip numeric/negative literal suffix if present.
 		if len(parts) > 0 {
 			last := parts[len(parts)-1]

@@ -8,24 +8,27 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"Any":       TAny,
-	"None":      TNone,
-	"Scalar":    TScalar,
-	"Number":    TNumber,
-	"Integer":   TInteger,
-	"Decimal":   TDecimal,
-	"String":    TString,
-	"Boolean":   TBoolean,
-	"Atom":      TAtom,
-	"Node":      TNode,
-	"List":      TList,
-	"Map":       TMap,
-	"Table":     TTable,
-	"Record":    TRecord,
-	"Options":   TOptions,
-	"Object":    TObject,
-	"Resource":  TResource,
-	"Entity":    TResourceEntity,
+	"Any":      TAny,
+	"None":     TNone,
+	"Scalar":   TScalar,
+	"Number":   TNumber,
+	"Integer":  TInteger,
+	"Decimal":  TDecimal,
+	"String":   TString,
+	"Boolean":  TBoolean,
+	"Atom":     TAtom,
+	"Node":     TNode,
+	"List":     TList,
+	"Map":      TMap,
+	"Table":    TTable,
+	"Record":   TRecord,
+	"Options":  TOptions,
+	"Object":   TObject,
+	"Resource":   TResource,
+	"Entity":     TResourceEntity,
+	"Type":       TType,
+	"ScalarType": TScalarType,
+	"NodeType":   TNodeType,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -459,11 +462,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		match.Args[i].Eval = false
 	}
 
-	var results []Value
-	var err error
-	if match.Sig.FullStackHandler != nil {
-		// Find the nearest open-paren barrier so that FullStackHandler
-		// only replaces within the current paren scope, not below it.
+	// Compute context (cheap O(1) call).
+	ctx := e.registry.Context()
+
+	var fullStack []Value
+	if match.Sig.FullStack {
+		// Find the nearest open-paren barrier so that FullStack handlers
+		// only replace within the current paren scope, not below it.
 		base := 0
 		for i := e.pointer - 1; i >= 0; i-- {
 			if e.stack[i].IsOpenParen() {
@@ -473,19 +478,19 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		// Collect the full resolved stack before the pointer (from base),
 		// excluding the matched args and forwards.
-		fullStack := e.resolvedStackBeforeFrom(base, indices)
-		results, err = match.Sig.FullStackHandler(match.Args, fullStack)
+		fullStack = e.resolvedStackBeforeFrom(base, indices)
+		results, err := match.Sig.Handler(match.Args, ctx, fullStack, e.registry)
 		if err != nil {
 			return err
 		}
-		// FullStackHandler returns the complete replacement for
+		// FullStack handler returns the complete replacement for
 		// everything from base through the pointer (inclusive).
 		e.stackSplice(base, e.pointer+1-base, results...)
 		e.pointer = base
 		return nil
 	}
 
-	results, err = match.Sig.Handler(match.Args)
+	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
 		return err
 	}
@@ -621,7 +626,7 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
 		ExpectedArgs: forwardNeeded,
-		StackArgs:   pArgs,
+		StackArgs:    pArgs,
 		FuncIndex:    e.pointer,
 		Sig:          sig,
 	})
@@ -675,7 +680,7 @@ func (e *Engine) stepLiteral() error {
 		val := e.stack[valIdx]
 		matchesAny := false
 		for i := 0; i < len(fwd.Sig.Args); i++ {
-			if val.VType.Matches(fwd.Sig.Args[i]) {
+			if sigTypeMatches(val, fwd.Sig.Args[i]) {
 				matchesAny = true
 				break
 			}
@@ -697,7 +702,7 @@ func (e *Engine) stepLiteral() error {
 						continue
 					}
 					for ai := range altSig.Args {
-						if val.VType.Matches(altSig.Args[ai]) {
+						if sigTypeMatches(val, altSig.Args[ai]) {
 							fwd.Sig = altSig
 							e.stack[fwdIdx] = NewForward(fwd)
 							matchesAny = true
@@ -1157,8 +1162,8 @@ func (e *Engine) shouldResolveForwardEarly(fwd ForwardInfo, fwdIdx int) bool {
 // a direct type check. For words, it predicts based on definitions or
 // assumes built-in functions could produce any type.
 func (e *Engine) couldProduceType(v Value, expected Type) bool {
-	// Direct type match (works for all literals).
-	if v.VType.Matches(expected) {
+	// Direct type match (works for all literals, metatype-aware).
+	if sigTypeMatches(v, expected) {
 		return true
 	}
 
@@ -1186,8 +1191,11 @@ func (e *Engine) couldProduceType(v Value, expected Type) bool {
 		if w.Name == "true" || w.Name == "false" {
 			return TBoolean.Matches(expected)
 		}
-		// Type names stay as type literals.
-		if _, isType := typeNames[w.Name]; isType {
+		// Type names: can produce matching values when expected is a metatype.
+		if t, isType := typeNames[w.Name]; isType {
+			if IsMetaType(expected) && MetatypeFor(t).Matches(expected) {
+				return true
+			}
 			return false
 		}
 		// Defined word (via DefStacks): resolves to a known type.

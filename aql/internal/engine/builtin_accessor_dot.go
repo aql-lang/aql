@@ -16,7 +16,7 @@ import (
 func registerDot(r *Registry) {
 	// With forward-first matching, args are reversed: args[0]=key, args[1]=container.
 	// `a dot b` means access b on a, so container=args[1], key=args[0].
-	dotMapAtomHandler := func(args []Value) ([]Value, error) {
+	dotMapAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -29,7 +29,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotMapStringHandler := func(args []Value) ([]Value, error) {
+	dotMapStringHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -42,7 +42,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotListHandler := func(args []Value) ([]Value, error) {
+	dotListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot index type literal")
 		}
@@ -54,7 +54,7 @@ func registerDot(r *Registry) {
 		return []Value{list[idx]}, nil
 	}
 
-	dotMapIntegerHandler := func(args []Value) ([]Value, error) {
+	dotMapIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("dot: cannot access property on type literal")
 		}
@@ -67,11 +67,11 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotNoneHandler := func(args []Value) ([]Value, error) {
+	dotNoneHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 
-	dotObjectAtomHandler := func(args []Value) ([]Value, error) {
+	dotObjectAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if m, ok := args[1].Data.(*OrderedMap); ok {
 			key := args[0].AsAtom()
 			val, found := m.Get(key)
@@ -89,7 +89,7 @@ func registerDot(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotObjectStringHandler := func(args []Value) ([]Value, error) {
+	dotObjectStringHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if m, ok := args[1].Data.(*OrderedMap); ok {
 			key := args[0].AsString()
 			val, found := m.Get(key)

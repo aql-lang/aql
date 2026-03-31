@@ -6,9 +6,16 @@ func registerIs(r *Registry) {
 	// This is a type/value check: "42 is Number" → true, "42 is String" → false.
 	// Swap: `a is Type` means check a against Type, so a=args[1], b=args[0].
 	r.Register("is", Signature{
-		Args:       []Type{TAny, TAny},
-		Handler: func(args []Value) ([]Value, error) {
+		Args: []Type{TAny, TAny},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			a, b := args[1], args[0]
+			// Metatype early-return: when pattern (b) is a metatype and
+			// value (a) is a type literal, directly check metatype matching.
+			// (a=value, b=pattern due to the swap above.)
+			if b.Data == nil && IsMetaType(b.VType) && a.Data == nil {
+				aMeta := MetatypeFor(a.VType)
+				return []Value{NewBoolean(aMeta.Matches(b.VType))}, nil
+			}
 			unified, ok := Unify(a, b)
 			if !ok {
 				return []Value{NewBoolean(false)}, nil

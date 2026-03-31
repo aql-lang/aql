@@ -7,12 +7,12 @@ import (
 
 func registerPad(r *Registry) {
 	// pad: [string, integer] -> [string]
-	padHandler := func(args []Value) ([]Value, error) {
+	padHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doPad(args[0].AsString(), args[1].AsInteger(), strOpts{side: "right", fill: " "})
 	}
 
 	// pad: [string, integer, map] -> [string]
-	padOptsHandler := func(args []Value) ([]Value, error) {
+	padOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("pad: options must be a concrete map, got type literal")
 		}

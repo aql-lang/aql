@@ -16,7 +16,7 @@ import (
 //	none a dotr       => ERROR (parent is none)
 //	[10,20] 5 dotr    => ERROR (index out of bounds)
 func registerDotr(r *Registry) {
-	dotrMapAtomHandler := func(args []Value) ([]Value, error) {
+	dotrMapAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("dotr: cannot access property on type literal")
 		}
@@ -29,7 +29,7 @@ func registerDotr(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotrMapStringHandler := func(args []Value) ([]Value, error) {
+	dotrMapStringHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("dotr: cannot access property on type literal")
 		}
@@ -42,7 +42,7 @@ func registerDotr(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotrListHandler := func(args []Value) ([]Value, error) {
+	dotrListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("dotr: cannot index type literal")
 		}
@@ -54,7 +54,7 @@ func registerDotr(r *Registry) {
 		return []Value{list[idx]}, nil
 	}
 
-	dotrMapIntegerHandler := func(args []Value) ([]Value, error) {
+	dotrMapIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("dotr: cannot access property on type literal")
 		}
@@ -67,7 +67,7 @@ func registerDotr(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	dotrNoneHandler := func(args []Value) ([]Value, error) {
+	dotrNoneHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return nil, fmt.Errorf("dotr: parent is None")
 	}
 

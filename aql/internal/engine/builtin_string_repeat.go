@@ -7,12 +7,12 @@ import (
 
 func registerRepeat(r *Registry) {
 	// repeat: [string, integer] -> [string]
-	repeatHandler := func(args []Value) ([]Value, error) {
+	repeatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doRepeat(args[0].AsString(), args[1].AsInteger(), strOpts{})
 	}
 
 	// repeat: [string, integer, map] -> [string]
-	repeatOptsHandler := func(args []Value) ([]Value, error) {
+	repeatOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
 		return doRepeat(args[0].AsString(), args[1].AsInteger(), opts)
 	}

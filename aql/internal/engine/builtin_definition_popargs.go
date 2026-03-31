@@ -4,7 +4,7 @@ package engine
 // the args stack after a fn-defined function body finishes executing.
 func registerPopArgs(r *Registry) {
 	r.Register("__pa", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if len(r.argsStack) > 0 {
 				r.argsStack = r.argsStack[:len(r.argsStack)-1]
 			}

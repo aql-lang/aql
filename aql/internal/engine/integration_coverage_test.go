@@ -594,117 +594,105 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	}
 }
 
-func TestIntegConvertToAtom(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewString("foo"), NewWord("convert"), NewTypeLiteral(TAtom),
-	})
-	if len(result) != 1 || result[0].AsAtom() != "foo" {
-		t.Errorf("'foo' convert Atom = %v, want :foo", result)
-	}
-}
-
 func TestIntegConvertIntToHexString(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 255 convert String "hex"
+	// 255 convert String {base: "hex"}
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewString("hex"),
+		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "ff" {
-		t.Errorf("255 convert String hex = %v, want 'ff'", result)
+		t.Errorf("255 convert String {base:hex} = %v, want 'ff'", result)
 	}
 }
 
 func TestIntegConvertIntToHEXString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("HEX"))
 	result := runAQL(t, r, []Value{
-		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewString("HEX"),
+		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "FF" {
-		t.Errorf("255 convert String HEX = %v, want 'FF'", result)
+		t.Errorf("255 convert String {base:HEX} = %v, want 'FF'", result)
 	}
 }
 
 func TestIntegConvertIntToBinString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	binOpts := NewOrderedMap()
+	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
-		NewInteger(10), NewWord("convert"), NewTypeLiteral(TString), NewString("bin"),
+		NewInteger(10), NewWord("convert"), NewTypeLiteral(TString), NewMap(binOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "1010" {
-		t.Errorf("10 convert String bin = %v, want '1010'", result)
+		t.Errorf("10 convert String {base:bin} = %v, want '1010'", result)
 	}
 }
 
 func TestIntegConvertIntToOctString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	octOpts := NewOrderedMap()
+	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
-		NewInteger(8), NewWord("convert"), NewTypeLiteral(TString), NewString("oct"),
+		NewInteger(8), NewWord("convert"), NewTypeLiteral(TString), NewMap(octOpts),
 	})
 	if len(result) != 1 || result[0].AsString() != "10" {
-		t.Errorf("8 convert String oct = %v, want '10'", result)
+		t.Errorf("8 convert String {base:oct} = %v, want '10'", result)
 	}
 }
 
 func TestIntegConvertHexStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// "ff" convert Number "hex"
+	// "ff" convert Number {base: "hex"}
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
-		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewString("hex"),
+		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(hexOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 255 {
-		t.Errorf("'ff' convert Number hex = %v, want 255", result)
+		t.Errorf("'ff' convert Number {base:hex} = %v, want 255", result)
 	}
 }
 
 func TestIntegConvertBinStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	binOpts := NewOrderedMap()
+	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
-		NewString("1010"), NewWord("convert"), NewTypeLiteral(TNumber), NewString("bin"),
+		NewString("1010"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(binOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 10 {
-		t.Errorf("'1010' convert Number bin = %v, want 10", result)
+		t.Errorf("'1010' convert Number {base:bin} = %v, want 10", result)
 	}
 }
 
 func TestIntegConvertOctStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	octOpts := NewOrderedMap()
+	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
-		NewString("10"), NewWord("convert"), NewTypeLiteral(TNumber), NewString("oct"),
+		NewString("10"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(octOpts),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 8 {
-		t.Errorf("'10' convert Number oct = %v, want 8", result)
+		t.Errorf("'10' convert Number {base:oct} = %v, want 8", result)
 	}
 }
 
 func TestIntegConvertWithSettingsMap(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 255 convert String {base: "hex", size: 3}
+	// 255 convert String {base: "hex"}
 	opts := NewOrderedMap()
 	opts.Set("base", NewString("hex"))
-	opts.Set("size", NewInteger(3))
 	result := runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(opts),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	// "ff" truncated to 3 chars, so still "ff" since len("ff") < 3
 	if result[0].AsString() != "ff" {
-		t.Errorf("255 convert String {base:hex,size:3} = %v, want 'ff'", result)
-	}
-}
-
-func TestIntegConvertWithSizeTruncation(t *testing.T) {
-	r, _ := DefaultRegistry()
-	// 256 convert String {base: "hex", size: 1}
-	opts := NewOrderedMap()
-	opts.Set("base", NewString("hex"))
-	opts.Set("size", NewInteger(1))
-	result := runAQL(t, r, []Value{
-		NewInteger(256), NewWord("convert"), NewTypeLiteral(TString), NewMap(opts),
-	})
-	if len(result) != 1 || result[0].AsString() != "1" {
-		t.Errorf("256 convert String {base:hex,size:1} = %v, want '1'", result)
+		t.Errorf("255 convert String {base:hex} = %v, want 'ff'", result)
 	}
 }
 
@@ -740,8 +728,10 @@ func TestIntegConvertErrorBadNumber(t *testing.T) {
 
 func TestIntegConvertErrorBadVariant(t *testing.T) {
 	r, _ := DefaultRegistry()
+	badOpts := NewOrderedMap()
+	badOpts.Set("base", NewString("badvariant"))
 	err := runAQLError(t, r, []Value{
-		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString), NewString("badvariant"),
+		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString), NewMap(badOpts),
 	})
 	if err == nil {
 		t.Error("expected error for unknown string variant")
@@ -750,8 +740,10 @@ func TestIntegConvertErrorBadVariant(t *testing.T) {
 
 func TestIntegConvertErrorBadNumberVariant(t *testing.T) {
 	r, _ := DefaultRegistry()
+	badOpts := NewOrderedMap()
+	badOpts.Set("base", NewString("badvariant"))
 	err := runAQLError(t, r, []Value{
-		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewString("badvariant"),
+		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(badOpts),
 	})
 	if err == nil {
 		t.Error("expected error for unknown number variant")
@@ -761,8 +753,10 @@ func TestIntegConvertErrorBadNumberVariant(t *testing.T) {
 func TestIntegConvertErrorVariantNotInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Variant conversion only supported for integer to string
+	hexOpts := NewOrderedMap()
+	hexOpts.Set("base", NewString("hex"))
 	err := runAQLError(t, r, []Value{
-		NewString("hello"), NewWord("convert"), NewTypeLiteral(TString), NewString("hex"),
+		NewString("hello"), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	if err == nil {
 		t.Error("expected error for variant with non-integer source")

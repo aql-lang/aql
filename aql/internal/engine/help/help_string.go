@@ -180,31 +180,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "slice",
-		Summary: "Extract a substring by numeric position.",
-		Signatures: []string{
-			"[string integer] -> [string]",
-			"[string integer integer] -> [string]",
-			"[string integer map] -> [string]",
-			"[string integer integer map] -> [string]",
-		},
-		Description: "Extracts a substring starting at the given index. If end is omitted, " +
-			"slices to the end of the string. Supports negative indices (counted from the end) " +
-			"and different counting units (code-unit, code-point, grapheme).",
-		Examples: []string{
-			`"hello" 0 3 slice                                       => 'hel'`,
-			`"hello" 2 slice                                         => 'llo'`,
-			`"hello" -3 slice                                        => 'llo'`,
-			`"hello" 1 -1 slice                                      => 'ell'`,
-		},
-		Notes: []string{
-			"Default unit is \"code-unit\" (bytes). Use unit: \"code-point\" for rune-based slicing.",
-			"Negative indices are Python-style: -1 means one before the end.",
-			"Options: unit, fromEnd, u, norm.",
-		},
-	})
-
-	register(&Entry{
 		Word:    "changecase",
 		Summary: "Apply a casing transformation to a string.",
 		Signatures: []string{

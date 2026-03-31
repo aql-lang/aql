@@ -4,13 +4,13 @@ import "strings"
 
 func registerMatch(r *Registry) {
 	// match: [string, string] -> [map]
-	matchHandler := func(args []Value) ([]Value, error) {
+	matchHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doMatch(args[0].AsString(), args[1].AsString(),
 			strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 	}
 
 	// match: [string, string, map] -> [map]
-	matchOptsHandler := func(args []Value) ([]Value, error) {
+	matchOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
 		return doMatch(args[0].AsString(), args[1].AsString(), opts)
 	}

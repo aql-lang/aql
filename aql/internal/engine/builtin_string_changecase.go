@@ -7,12 +7,12 @@ import (
 
 func registerChangeCase(r *Registry) {
 	// changecase: [string] -> [string] (default: lower)
-	changeCaseHandler := func(args []Value) ([]Value, error) {
+	changeCaseHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doChangeCase(args[0].AsString(), strOpts{style: "lower"})
 	}
 
 	// changecase: [string, map] -> [string]
-	changeCaseOptsHandler := func(args []Value) ([]Value, error) {
+	changeCaseOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
 		if opts.style == "" {
 			opts.style = "lower"

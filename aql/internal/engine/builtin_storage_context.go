@@ -11,7 +11,7 @@ import "fmt"
 //	context get foo           — retrieve with word key
 func registerContext(r *Registry) {
 	// context-set handler: "context-set key value" → args=[key, value]
-	ctxSetHandler := func(args []Value) ([]Value, error) {
+	ctxSetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		ctx := r.Context()
 		if ctx == nil {
 			return nil, fmt.Errorf("context: no active context")
@@ -21,7 +21,7 @@ func registerContext(r *Registry) {
 		return nil, nil
 	}
 
-	ctxGetHandler := func(args []Value) ([]Value, error) {
+	ctxGetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		ctx := r.Context()
 		if ctx == nil {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -59,7 +59,7 @@ func registerContext(r *Registry) {
 	r.Register("context",
 		Signature{
 			Args: []Type{TWord},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				cmd := args[0].AsWord().Name
 				switch cmd {
 				case "set":

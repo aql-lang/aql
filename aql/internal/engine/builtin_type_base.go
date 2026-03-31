@@ -3,7 +3,7 @@ package engine
 import "fmt"
 
 func registerBase(r *Registry) {
-	baseHandler := func(args []Value) ([]Value, error) {
+	baseHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		t := v.VType
 		result, err := baseValue(t)

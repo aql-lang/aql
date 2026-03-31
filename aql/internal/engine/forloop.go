@@ -24,14 +24,14 @@ import "fmt"
 // which delegates to handleLoopBreak/handleLoopContinue.
 func registerFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
-	forCountHandler := func(args []Value) ([]Value, error) {
+	forCountHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		n := args[0].AsInteger()
 		body := args[1]
 		return runForLoop(r, 0, n, 1, "i", body)
 	}
 
 	// for [list, list] — range spec [end] or [start,end] or [start,end,step]
-	forRangeHandler := func(args []Value) ([]Value, error) {
+	forRangeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
 		}
@@ -57,14 +57,14 @@ func registerFor(r *Registry) {
 
 	// break: stops the current for loop iteration and exits the loop.
 	r.RegisterStackOnly("break", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return nil, errBreak
 		},
 	})
 
 	// continue: stops the current iteration and moves to the next.
 	r.RegisterStackOnly("continue", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return nil, errContinue
 		},
 	})

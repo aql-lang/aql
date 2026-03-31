@@ -84,7 +84,7 @@ func registerDo(r *Registry) {
 	r.Register("do",
 		Signature{
 			Args: []Type{TList},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				if args[0].Data == nil {
 					return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")
 				}
@@ -93,7 +93,7 @@ func registerDo(r *Registry) {
 		},
 		Signature{
 			Args: []Type{TMap},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				result, err := evalMapValue(args[0])
 				if err != nil {
 					return nil, err

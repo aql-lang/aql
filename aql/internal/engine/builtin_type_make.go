@@ -284,7 +284,7 @@ func registerMake(r *Registry) {
 	}
 
 	// Position-agnostic: detect which arg is the type and which is the source.
-	makeHandler := func(args []Value) ([]Value, error) {
+	makeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
 		if !isTypeLike(targetVal) && isTypeLike(srcVal) {
 			targetVal, srcVal = srcVal, targetVal
@@ -419,7 +419,7 @@ func registerMake(r *Registry) {
 
 	// 3-arg handler with prototype: make ObjType source prototype
 	// Position-agnostic: finds object type, prototype instance, and source.
-	makeWithPrototype := func(args []Value) ([]Value, error) {
+	makeWithPrototype := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		var targetVal, srcVal, protoVal Value
 		for _, a := range args {
 			switch {
@@ -446,7 +446,7 @@ func registerMake(r *Registry) {
 
 	// 3-arg handler: make RecType source {options}
 	// Position-agnostic: finds type, source, and options.
-	makeWithOpts := func(args []Value) ([]Value, error) {
+	makeWithOpts := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		var targetVal, srcVal, optsVal Value
 		for _, a := range args {
 			switch {
@@ -483,7 +483,7 @@ func registerMake(r *Registry) {
 		}
 
 		// For non-record/object types, options are ignored — delegate to 2-arg.
-		return makeHandler([]Value{srcVal, targetVal})
+		return makeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
 	}
 
 	r.Register("make",

@@ -29,6 +29,7 @@ var typeRoots = map[string]bool{
 	"Object": true,
 	"Any":    true,
 	"None":   true,
+	"Type":   true,
 }
 
 // typeAncestry maps short (legacy) first-part names to their full ancestry
@@ -39,7 +40,7 @@ var typeAncestry = map[string]string{
 	"Integer":     "Scalar/Number/Integer",
 	"Decimal":     "Scalar/Number/Decimal",
 	"Boolean":     "Scalar/Boolean",
-	"Atom":        "Word/Atom",
+	"Atom":        "Scalar/Atom",
 	"List":        "Node/List",
 	"Map":         "Node/Map",
 	"Table":       "Object/Table",
@@ -56,6 +57,8 @@ var typeAncestry = map[string]string{
 	"Module":      "Word/__MD",
 	"Resource":    "Object/Resource",
 	"Entity":      "Object/Resource/Entity",
+	"ScalarType":  "Type/ScalarType",
+	"NodeType":    "Type/NodeType",
 }
 
 // Well-known types.
@@ -77,7 +80,7 @@ var (
 	TOptions      = mustType("Node/Map/Options")
 	TTable        = mustType("Object/Table")
 	TRecord       = mustType("Object/Record")
-	TAtom         = mustType("Word/Atom")
+	TAtom         = mustType("Scalar/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
 	TForward      = mustType("Word/__FW")
@@ -100,6 +103,9 @@ var (
 	TFetchRequest  = mustType("Object/Fetch/Request")
 	TFetchResponse = mustType("Object/Fetch/Response")
 	TError         = mustType("Node/Error")
+	TType          = mustType("Type")
+	TScalarType    = mustType("Type/ScalarType")
+	TNodeType      = mustType("Type/NodeType")
 
 	// Deprecated aliases — kept temporarily for migration.
 	TBooleanTrue    = TBoolean
@@ -128,7 +134,7 @@ var builtinTypeIDs = map[string]int{
 	"Object/Table":             15,
 	"Object/Record":            16,
 	"Word":                     17,
-	"Word/Atom":                18,
+	"Scalar/Atom":              18,
 	"Word/Function":            19,
 	"Word/__IN":                20,
 	"Word/__FW":                21,
@@ -149,6 +155,9 @@ var builtinTypeIDs = map[string]int{
 	"Object/Fetch/Response":    35,
 	"Object/Resource":          36,
 	"Object/Resource/Entity":   37,
+	"Type":                     39,
+	"Type/ScalarType":          40,
+	"Type/NodeType":            41,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -172,6 +181,8 @@ func IDPrefixForParts(parts []string) string {
 	case "Word":
 		return "W_"
 	case "Object":
+		return "T_"
+	case "Type":
 		return "T_"
 	default:
 		return "T_"
@@ -302,6 +313,7 @@ func builtinTypeParts() map[string]bool {
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
+		TType, TScalarType, TNodeType,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {
@@ -309,6 +321,26 @@ func builtinTypeParts() map[string]bool {
 		}
 	}
 	return parts
+}
+
+// MetatypeFor returns the metatype for a given type.
+// Scalar subtypes (len>1) → TScalarType, Node subtypes (len>1) → TNodeType,
+// everything else (including Scalar and Node themselves) → TType.
+func MetatypeFor(t Type) Type {
+	if len(t.Parts) > 1 {
+		switch t.Parts[0] {
+		case "Scalar":
+			return TScalarType
+		case "Node":
+			return TNodeType
+		}
+	}
+	return TType
+}
+
+// IsMetaType reports whether t is in the Type/* metatype hierarchy.
+func IsMetaType(t Type) bool {
+	return len(t.Parts) > 0 && t.Parts[0] == "Type"
 }
 
 // ValidateTypeNameParts checks that a type name (slash-separated) does not

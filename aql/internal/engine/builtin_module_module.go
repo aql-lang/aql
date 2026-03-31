@@ -31,7 +31,7 @@ func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.Register("module", Signature{
 		Args: []Type{TList},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 			}
@@ -44,14 +44,14 @@ func registerModule(r *Registry) {
 	})
 
 	// import: [module-desc] -> [] — import all exports as defs
-	importAllHandler := func(args []Value) ([]Value, error) {
+	importAllHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		desc := args[0].AsModule()
 		installExports(r, desc, nil)
 		return nil, nil
 	}
 
 	// import: [list module-desc] -> [] — rename imports via list
-	importRenameHandler := func(args []Value) ([]Value, error) {
+	importRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		desc := args[1].AsModule()
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
@@ -70,7 +70,7 @@ func registerModule(r *Registry) {
 	// Bare names (e.g. "foo") resolve via .aql/foo/index.aql walking up directories.
 	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
-	importFileHandler := func(args []Value) ([]Value, error) {
+	importFileHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		if !isFilePath(path) {
 			resolved, err := resolveBareModule(r, path)
@@ -96,7 +96,7 @@ func registerModule(r *Registry) {
 	}
 
 	// import: [list string] -> [] — import from file or bare module with renaming.
-	importFileRenameHandler := func(args []Value) ([]Value, error) {
+	importFileRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[1].AsString()
 		if !isFilePath(path) {
 			resolved, err := resolveBareModule(r, path)
@@ -122,7 +122,7 @@ func registerModule(r *Registry) {
 	// import: [atom/q list] -> [] — inline module: import module [body]
 	// The /q captures "module" as a quoted word; the handler runs the body
 	// to produce a module descriptor, then imports all exports.
-	importInlineHandler := func(args []Value) ([]Value, error) {
+	importInlineHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		if name != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
@@ -139,7 +139,7 @@ func registerModule(r *Registry) {
 	}
 
 	// import: [list atom/q list] -> [] — inline module with renames
-	importInlineRenameHandler := func(args []Value) ([]Value, error) {
+	importInlineRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[1])
 		if name != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
@@ -158,7 +158,7 @@ func registerModule(r *Registry) {
 	}
 
 	// import: [atom atom/q list] -> [] — inline module with single rename
-	importInlineSingleRenameHandler := func(args []Value) ([]Value, error) {
+	importInlineSingleRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		modName := defName(args[1])
 		if modName != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", modName)
@@ -185,7 +185,7 @@ func registerModule(r *Registry) {
 		},
 		Signature{
 			Args: []Type{TAtom, TModule},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return importSingleRenameHandler(args[0].AsAtom(), args)
 			},
 		},
@@ -257,7 +257,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 
 	modReg.Register("export", Signature{
 		Args: []Type{TAtom, TMap},
-		Handler: func(eargs []Value) ([]Value, error) {
+		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if eargs[1].Data == nil {
 				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 			}
@@ -266,7 +266,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		},
 	}, Signature{
 		Args: []Type{TString, TMap},
-		Handler: func(eargs []Value) ([]Value, error) {
+		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if eargs[1].Data == nil {
 				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 			}

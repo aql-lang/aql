@@ -205,7 +205,7 @@ func valueToJsonic(v Value) string {
 // registerFileIO registers the read and write words.
 func registerFileIO(r *Registry) {
 	// read: [string] -> [string|list|map]
-	readHandler := func(args []Value) ([]Value, error) {
+	readHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		format := formatFromExt(path)
 		if format == "" {
@@ -215,7 +215,7 @@ func registerFileIO(r *Registry) {
 	}
 
 	// read: [string, map] -> [string|list|map]
-	readOptsHandler := func(args []Value) ([]Value, error) {
+	readOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		enc, format, _, nl, fmtExplicit := parseFileOpts(args[1])
 		// If fmt was not explicitly set, use file extension.
@@ -239,14 +239,14 @@ func registerFileIO(r *Registry) {
 	)
 
 	// write: [string, string] -> [string]
-	writeHandler := func(args []Value) ([]Value, error) {
+	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		content := args[1].AsString()
 		return doWrite(r, path, content, "utf8", "text", "write", "lf")
 	}
 
 	// write: [string, string, map] -> [string]
-	writeOptsHandler := func(args []Value) ([]Value, error) {
+	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		content := args[1].AsString()
 		enc, format, mode, nl, _ := parseFileOpts(args[2])
@@ -254,7 +254,7 @@ func registerFileIO(r *Registry) {
 	}
 
 	// write: [string, any, map] -> [string] (for non-string data with fmt)
-	writeAnyOptsHandler := func(args []Value) ([]Value, error) {
+	writeAnyOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
 		_, format, mode, nl, _ := parseFileOpts(args[2])
 		if format == "text" {
@@ -282,20 +282,26 @@ func registerFileIO(r *Registry) {
 	// stdin, stdout, stderr push special path strings for use with read/write.
 	r.Register("stdin",
 		Signature{
-			Args:    []Type{},
-			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStdin)}, nil },
+			Args: []Type{},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewString(pathStdin)}, nil
+			},
 		},
 	)
 	r.Register("stdout",
 		Signature{
-			Args:    []Type{},
-			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStdout)}, nil },
+			Args: []Type{},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewString(pathStdout)}, nil
+			},
 		},
 	)
 	r.Register("stderr",
 		Signature{
-			Args:    []Type{},
-			Handler: func(args []Value) ([]Value, error) { return []Value{NewString(pathStderr)}, nil },
+			Args: []Type{},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewString(pathStderr)}, nil
+			},
 		},
 	)
 }

@@ -105,7 +105,7 @@ func traceVisibleLen(s string) int {
 func registerTrace(r *Registry) {
 	r.Register("trace", Signature{
 		Args: []Type{TList},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 			}

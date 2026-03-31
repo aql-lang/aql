@@ -4,7 +4,7 @@ func registerSign(r *Registry) {
 	// sign: [int] -> [int] returns -1, 0, or 1
 	r.Register("sign", Signature{
 		Args: []Type{TInteger},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			v := args[0].AsInteger()
 			switch {
 			case v < 0:
@@ -19,7 +19,7 @@ func registerSign(r *Registry) {
 	// sign: [decimal] -> [int]
 	r.Register("sign", Signature{
 		Args: []Type{TDecimal},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			v := args[0].AsDecimal()
 			switch {
 			case v < 0:

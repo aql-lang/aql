@@ -17,7 +17,7 @@ import (
 // When the list length is divisible by 2 but not 3, it is parsed as pairs
 // (input+output, no body) producing a FnUndefInfo for targeted undef.
 func registerFn(r *Registry) {
-	fnHandler := func(args []Value) ([]Value, error) {
+	fnHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		list := args[0]
 		if !list.VType.Equal(TList) {
 			return nil, fmt.Errorf("fn: argument must be a list")
@@ -522,7 +522,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			}
 		}
 		s := sig // capture for closure
-		handler := func(args []Value) ([]Value, error) {
+		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			var result []Value
 			var names []string
 			// Wrap the entire expansion (unnamed args + body + undef

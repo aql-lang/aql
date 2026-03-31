@@ -255,7 +255,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"for-list-range", `for List [1]`},
 
 		// Type ops
-		{"convert-map-opts", `1 convert String Map`},
+		{"convert-type-literal", `Map convert String`},
 		{"make-list", `Integer make List`},
 
 		// Comparison (TAny sigs)
@@ -309,6 +309,14 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		// Conversion with type literals
 		{"convert-map-string", `Map convert String`},
 		{"convert-list-string", `List convert String`},
+
+		// Metatype type literals
+		{"typeof-type", `Type typeof`},
+		{"typeof-scalartype", `ScalarType typeof`},
+		{"typeof-nodetype", `NodeType typeof`},
+		{"is-type-type", `Type is Type`},
+		{"is-scalartype-type", `ScalarType is Type`},
+		{"is-nodetype-type", `NodeType is Type`},
 	}
 
 	for _, tc := range cases {

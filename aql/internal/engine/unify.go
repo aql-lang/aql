@@ -54,6 +54,23 @@ func Unify(a, b Value) (Value, bool) {
 		return a, true
 	}
 
+	// Metatype matching: when both are type literals and one has a metatype
+	// VType, check if the other's computed metatype matches.
+	if a.Data == nil && b.Data == nil {
+		aIsMeta := IsMetaType(aType)
+		bIsMeta := IsMetaType(bType)
+		if bIsMeta && !aIsMeta {
+			if MetatypeFor(aType).Matches(bType) {
+				return a, true
+			}
+		}
+		if aIsMeta && !bIsMeta {
+			if MetatypeFor(bType).Matches(aType) {
+				return b, true
+			}
+		}
+	}
+
 	// List unification.
 	aList := aType.Equal(TList)
 	bList := bType.Equal(TList)
@@ -711,7 +728,7 @@ func resolveWordsDeep(v Value) Value {
 
 // registerUnify registers the "unify" word in the given registry.
 func registerUnify(r *Registry) {
-	unifyHandler := func(args []Value) ([]Value, error) {
+	unifyHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		unified, ok := Unify(args[0], args[1])
 		if ok {
 			return []Value{unified, NewBoolean(true)}, nil

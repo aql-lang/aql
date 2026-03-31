@@ -8,7 +8,7 @@ import (
 
 func registerHelp(r *Registry) {
 	// help: [] -> [] (print self-help)
-	selfHandler := func(args []Value) ([]Value, error) {
+	selfHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		fmt.Fprintln(r.Output, "help — Show help for an AQL word.")
 		fmt.Fprintln(r.Output, "")
 		fmt.Fprintln(r.Output, "Usage:")
@@ -19,7 +19,7 @@ func registerHelp(r *Registry) {
 	}
 
 	// help: [atom] -> [] or [string] -> []
-	wordHandler := func(args []Value) ([]Value, error) {
+	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := valToString(args[0])
 		entry := help.Lookup(name)
 		if entry == nil {
@@ -41,4 +41,3 @@ func registerHelp(r *Registry) {
 		Signature{Args: []Type{}, Handler: selfHandler},
 	)
 }
-

@@ -11,7 +11,7 @@ import "fmt"
 func registerCall(r *Registry) {
 	r.Register("call", Signature{
 		Args: []Type{TList},
-		Handler: func(args []Value) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			body := args[0]
 
 			if body.Data == nil {

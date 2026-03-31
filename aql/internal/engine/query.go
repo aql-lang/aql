@@ -25,7 +25,7 @@ type SetOp struct {
 // (where, order, limit), the QueryBuilder collects all clauses and
 // executes a single combined query when materialized.
 type QueryBuilder struct {
-	Source   TableData  // the source table data
+	Source   TableData // the source table data
 	Registry *Registry // needed for SQLite access during materialization
 	Where    string    // WHERE condition (without keyword)
 	OrderBy  string    // ORDER BY clause (without keyword)
@@ -44,8 +44,8 @@ func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 	return QueryBuilder{
 		Source:   td,
 		Registry: r,
-		Limit:   -1,
-		Offset:  -1,
+		Limit:    -1,
+		Offset:   -1,
 	}
 }
 
@@ -357,13 +357,13 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 func registerQuery(r *Registry) {
 	// star: [] -> [atom("*")]
 	r.RegisterStackOnly("star", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewAtom("*")}, nil
 		},
 	})
 
 	// from: [atom] -> [query-builder]
-	fromHandler := func(args []Value) ([]Value, error) {
+	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := args[0].AsAtom()
 		val, ok := r.Store[name]
 		if !ok {
@@ -391,7 +391,7 @@ func registerQuery(r *Registry) {
 
 	// as: [table/query(prefix), atom(forward)] -> [query-builder with alias]
 	// Usage: from people as p
-	asHandler := func(args []Value) ([]Value, error) {
+	asHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		alias := args[1].AsAtom()
 
@@ -405,15 +405,15 @@ func registerQuery(r *Registry) {
 
 	r.Register("as",
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Handler:    asHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: asHandler,
 		},
 	)
 
 	// select: [list, atom] -> [table]  (select * from ...)
 	// select: [list, list] -> [table]  (select [a, b] from ...)
 	// Infix star handler: "from products select star" → args=[table, star]
-	selectStarInfixHandler := func(args []Value) ([]Value, error) {
+	selectStarInfixHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colSpec := args[1]
 
@@ -425,7 +425,7 @@ func registerQuery(r *Registry) {
 	}
 
 	// Suffix star handler: "select star from products" → args=[star, table]
-	selectStarForwardHandler := func(args []Value) ([]Value, error) {
+	selectStarForwardHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		colSpec := args[0]
 		table := args[1]
 
@@ -436,7 +436,7 @@ func registerQuery(r *Registry) {
 		return doSelect(r, nil, table)
 	}
 
-	selectColsHandler := func(args []Value) ([]Value, error) {
+	selectColsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		colList := args[0]
 		table := args[1]
 
@@ -457,22 +457,22 @@ func registerQuery(r *Registry) {
 	r.Register("select",
 		// Suffix: "select star from ..." → [TAtom, TList]
 		Signature{
-			Args:       []Type{TAtom, TList},
-			Handler:    selectStarForwardHandler,
+			Args:    []Type{TAtom, TList},
+			Handler: selectStarForwardHandler,
 		},
 		// Infix: "from ... select star" → [TList, TAtom]
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Handler:    selectStarInfixHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: selectStarInfixHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    selectColsHandler,
+			Args:    []Type{TList, TList},
+			Handler: selectColsHandler,
 		},
 	)
 
 	// where: [condition(forward), table/query(prefix)] -> [query-builder]
-	whereHandler := func(args []Value) ([]Value, error) {
+	whereHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -497,13 +497,13 @@ func registerQuery(r *Registry) {
 
 	r.Register("where",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    whereHandler,
+			Args:    []Type{TList, TList},
+			Handler: whereHandler,
 		},
 	)
 
 	// order: [columns(forward), table/query(prefix)] -> [query-builder]
-	orderListHandler := func(args []Value) ([]Value, error) {
+	orderListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
@@ -520,7 +520,7 @@ func registerQuery(r *Registry) {
 		return []Value{newValue(TList, qb)}, nil
 	}
 
-	orderAtomHandler := func(args []Value) ([]Value, error) {
+	orderAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		col := args[1]
 
@@ -534,12 +534,12 @@ func registerQuery(r *Registry) {
 
 	r.Register("order",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    orderListHandler,
+			Args:    []Type{TList, TList},
+			Handler: orderListHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Handler:    orderAtomHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: orderAtomHandler,
 		},
 	)
 
@@ -547,20 +547,20 @@ func registerQuery(r *Registry) {
 	r.Register("by",
 		Signature{
 			Args: []Type{TAtom},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewList(args)}, nil
 			},
 		},
 		Signature{
 			Args: []Type{TList},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return args, nil
 			},
 		},
 	)
 
 	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
-	limitHandler := func(args []Value) ([]Value, error) {
+	limitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		n := args[1].AsInteger()
 
@@ -574,13 +574,13 @@ func registerQuery(r *Registry) {
 
 	r.Register("limit",
 		Signature{
-			Args:       []Type{TList, TInteger},
-			Handler:    limitHandler,
+			Args:    []Type{TList, TInteger},
+			Handler: limitHandler,
 		},
 	)
 
 	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
-	offsetHandler := func(args []Value) ([]Value, error) {
+	offsetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		n := args[1].AsInteger()
 
@@ -594,13 +594,13 @@ func registerQuery(r *Registry) {
 
 	r.Register("offset",
 		Signature{
-			Args:       []Type{TList, TInteger},
-			Handler:    offsetHandler,
+			Args:    []Type{TList, TInteger},
+			Handler: offsetHandler,
 		},
 	)
 
 	// distinct: [table/query(prefix)] -> [query-builder]
-	distinctHandler := func(args []Value) ([]Value, error) {
+	distinctHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 
 		qb, err := toQueryBuilder(r, table)
@@ -613,8 +613,8 @@ func registerQuery(r *Registry) {
 
 	r.Register("distinct",
 		Signature{
-			Args:       []Type{TList},
-			Handler:    distinctHandler,
+			Args:    []Type{TList},
+			Handler: distinctHandler,
 		},
 	)
 
@@ -622,7 +622,7 @@ func registerQuery(r *Registry) {
 	// Usage: from sales group by [region]
 	//        from sales group by [region product]
 	//        from sales group [region]
-	groupListHandler := func(args []Value) ([]Value, error) {
+	groupListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
@@ -639,7 +639,7 @@ func registerQuery(r *Registry) {
 		return []Value{newValue(TList, qb)}, nil
 	}
 
-	groupAtomHandler := func(args []Value) ([]Value, error) {
+	groupAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		col := args[1]
 
@@ -653,18 +653,18 @@ func registerQuery(r *Registry) {
 
 	r.Register("group",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    groupListHandler,
+			Args:    []Type{TList, TList},
+			Handler: groupListHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Handler:    groupAtomHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: groupAtomHandler,
 		},
 	)
 
 	// having: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from sales groupby [region] having [count gt 5]
-	havingHandler := func(args []Value) ([]Value, error) {
+	havingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -688,8 +688,8 @@ func registerQuery(r *Registry) {
 
 	r.Register("having",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    havingHandler,
+			Args:    []Type{TList, TList},
+			Handler: havingHandler,
 		},
 	)
 
@@ -703,7 +703,7 @@ func registerQuery(r *Registry) {
 	// on: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Sets the ON condition for the most recent join.
 	// Usage: from orders join products on [orders.product_id eq products.id]
-	onHandler := func(args []Value) ([]Value, error) {
+	onHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -725,14 +725,14 @@ func registerQuery(r *Registry) {
 
 	r.Register("on",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    onHandler,
+			Args:    []Type{TList, TList},
+			Handler: onHandler,
 		},
 	)
 
 	// using: [columns(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products using [id]
-	usingHandler := func(args []Value) ([]Value, error) {
+	usingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
@@ -759,8 +759,8 @@ func registerQuery(r *Registry) {
 
 	r.Register("using",
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    usingHandler,
+			Args:    []Type{TList, TList},
+			Handler: usingHandler,
 		},
 	)
 
@@ -779,7 +779,7 @@ func registerQuery(r *Registry) {
 
 // registerJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
 func registerJoinWord(r *Registry, name string, joinType string) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		tableName := args[1].AsAtom()
 
@@ -796,15 +796,15 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 
 	r.Register(name,
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Handler:    handler,
+			Args:    []Type{TList, TAtom},
+			Handler: handler,
 		},
 	)
 }
 
 // registerSetOpWord registers a set operation word (union, unionall, intersect, except).
 func registerSetOpWord(r *Registry, name string, op string) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		left := args[0]
 		right := args[1]
 
@@ -826,8 +826,8 @@ func registerSetOpWord(r *Registry, name string, op string) {
 
 	r.Register(name,
 		Signature{
-			Args:       []Type{TList, TList},
-			Handler:    handler,
+			Args:    []Type{TList, TList},
+			Handler: handler,
 		},
 	)
 }
@@ -1110,6 +1110,7 @@ var logicalOps = map[string]string{
 //	[column is null]                           — IS NULL
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
+//
 // resolveSelectSubExprs evaluates parenthesized sub-expressions in a
 // SELECT column list, replacing them with their results. This enables
 // scalar subqueries in the column list:
@@ -1269,11 +1270,11 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	return NewList(result), nil
 }
 
-//	[column not between value1 value2]         — NOT BETWEEN ... AND ...
-//	[column in [v1 v2 v3]]                     — IN (v1, v2, v3)
-//	[column in (select [col] from table)]      — IN (subquery result)
-//	[column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
-//	[... and/or ...]                           — logical connectives
+// [column not between value1 value2]         — NOT BETWEEN ... AND ...
+// [column in [v1 v2 v3]]                     — IN (v1, v2, v3)
+// [column in (select [col] from table)]      — IN (subquery result)
+// [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
+// [... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
 	elems := condList.AsList()
 	if len(elems) == 0 {

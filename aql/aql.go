@@ -26,22 +26,24 @@ type Value = engine.Value
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for prefix matching).
 //
-// Handler receives the matched args and returns replacement values for the stack.
+// Handler receives the matched args, the current context map, the resolved
+// stack (only for FullStack signatures), and the registry. Most handlers
+// only use the first parameter and ignore the rest with _.
 type Signature = engine.Signature
 
 // Well-known AQL types for use in Signature definitions.
 var (
-	TAny     = engine.TAny
-	TScalar  = engine.TScalar
-	TString  = engine.TString
-	TNumber  = engine.TNumber
-	TInteger = engine.TInteger
-	TDecimal = engine.TDecimal
-	TBoolean = engine.TBoolean
-	TNode    = engine.TNode
-	TAtom    = engine.TAtom
-	TList    = engine.TList
-	TMap     = engine.TMap
+	TAny            = engine.TAny
+	TScalar         = engine.TScalar
+	TString         = engine.TString
+	TNumber         = engine.TNumber
+	TInteger        = engine.TInteger
+	TDecimal        = engine.TDecimal
+	TBoolean        = engine.TBoolean
+	TNode           = engine.TNode
+	TAtom           = engine.TAtom
+	TList           = engine.TList
+	TMap            = engine.TMap
 	TTable          = engine.TTable
 	TRecord         = engine.TRecord
 	TResource       = engine.TResource
@@ -141,11 +143,12 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 // Registered words use forward precedence: the engine tries to collect
 // arguments from after the word before falling back to prefix matching.
 //
-// Example — register a word "double" that doubles an integer:
+// Example — register a word "double" that doubles an integer
+// (extra handler params are context, stack, and registry — use _ to ignore):
 //
 //	a.Register("double", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
-//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 //	        n := args[0].AsInteger()
 //	        return []aql.Value{aql.NewInteger(n * 2)}, nil
 //	    },
@@ -162,7 +165,7 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 //
 //	a.RegisterStackOnly("neg", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
-//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 //	        n := args[0].AsInteger()
 //	        return []aql.Value{aql.NewInteger(-n)}, nil
 //	    },

@@ -7,12 +7,12 @@ import (
 
 func registerTrim(r *Registry) {
 	// trim: [string] -> [string]
-	trimHandler := func(args []Value) ([]Value, error) {
+	trimHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewString(strings.TrimSpace(args[0].AsString()))}, nil
 	}
 
 	// trim: [string, map] -> [string]
-	trimOptsHandler := func(args []Value) ([]Value, error) {
+	trimOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
 		return doTrim(args[0].AsString(), opts)
 	}
