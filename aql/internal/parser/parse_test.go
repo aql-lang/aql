@@ -907,8 +907,8 @@ func TestExpandDottedSimple(t *testing.T) {
 	assertExpand(t, "foo.bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
+		engine.NewWord("dot"),
 		engine.NewWord("bar"),
-		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord(")"),
 	})
 }
@@ -917,20 +917,20 @@ func TestExpandDottedChain(t *testing.T) {
 	assertExpand(t, "foo.a.b", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
+		engine.NewWord("dot"),
 		engine.NewWord("a"),
-		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord("dot"),
 		engine.NewWord("b"),
-		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord(")"),
 	})
 }
 
 func TestExpandDottedLeading(t *testing.T) {
 	assertExpand(t, ".a.b", []engine.Value{
+		engine.NewWord("dot"),
 		engine.NewWord("a"),
-		engine.NewWordModified("dot", -1, true, false),
+		engine.NewWord("dot"),
 		engine.NewWord("b"),
-		engine.NewWordModified("dot", -1, true, false),
 	})
 }
 
@@ -938,8 +938,8 @@ func TestExpandDottedIntegerKey(t *testing.T) {
 	assertExpand(t, "foo.0", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
+		engine.NewWord("dot"),
 		engine.NewInteger(0),
-		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord(")"),
 	})
 }
@@ -957,17 +957,17 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 	assertExpand(t, "foo..bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
+		engine.NewWord("dot"),
 		engine.NewWord("bar"),
-		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord(")"),
 	})
 }
 
 func TestExpandDottedLeadingSingle(t *testing.T) {
-	// ".x" → leading dot, just x dot/s
+	// ".x" → leading dot, just dot x
 	assertExpand(t, ".x", []engine.Value{
+		engine.NewWord("dot"),
 		engine.NewWord("x"),
-		engine.NewWordModified("dot", -1, true, false),
 	})
 }
 
@@ -1171,9 +1171,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList()
-	// ( foo bar dot/s ) = 5 elements
+	// ( foo dot bar ) = 5 elements
 	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements (( foo bar dot/s )), got %d", len(elems))
+		t.Fatalf("expected 5 elements (( foo dot bar )), got %d", len(elems))
 	}
 }
 
@@ -1258,8 +1258,8 @@ func TestExpandDottedArgs(t *testing.T) {
 	assertExpand(t, "args.x", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("args"),
+		engine.NewWord("dot"),
 		engine.NewWord("x"),
-		engine.NewWordModified("dot", -1, true, false),
 		engine.NewWord(")"),
 	})
 }
@@ -1284,9 +1284,9 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	// 1 ( foo bar dot ) = 6 values
+	// 1 ( foo dot bar ) = 6 values
 	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo bar dot/s )), got %d", len(got))
+		t.Fatalf("expected 6 values (1 ( foo dot bar )), got %d", len(got))
 	}
 }
 

@@ -703,6 +703,188 @@ func TestDotNone(t *testing.T) {
 	}
 }
 
+// --- dot: list access ---
+
+func TestDotListByIndex(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
+	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("dot")})
+	if len(result) != 1 || result[0].AsInteger() != 20 {
+		t.Errorf("expected 20, got %v", result)
+	}
+}
+
+func TestDotListAtomKeyReturnsNone(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := NewList([]Value{NewInteger(10), NewInteger(20)})
+	result := runAQL(t, r, []Value{list, NewWord("x"), NewWord("dot")})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Errorf("expected none for atom key on list, got %v", result)
+	}
+}
+
+func TestDotListStringKeyReturnsNone(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := NewList([]Value{NewInteger(10)})
+	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("dot")})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Errorf("expected none for string key on list, got %v", result)
+	}
+}
+
+// --- dot: nested map access (chained) ---
+
+func TestDotNestedMapChain(t *testing.T) {
+	// {a:{b:{c:1}}} dot a dot b dot c → 1
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := NewOrderedMap()
+	inner.Set("c", NewInteger(1))
+	mid := NewOrderedMap()
+	mid.Set("b", NewMap(inner))
+	outer := NewOrderedMap()
+	outer.Set("a", NewMap(mid))
+	result := runAQL(t, r, []Value{
+		NewMap(outer),
+		NewWord("a"), NewWord("dot"),
+		NewWord("b"), NewWord("dot"),
+		NewWord("c"), NewWord("dot"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected 1, got %v", result)
+	}
+}
+
+// --- dot: map containing list ---
+
+func TestDotMapThenList(t *testing.T) {
+	// {items:[10 20 30]} dot items dot 1 → 20
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewOrderedMap()
+	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
+	result := runAQL(t, r, []Value{
+		NewMap(m),
+		NewWord("items"), NewWord("dot"),
+		NewInteger(1), NewWord("dot"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 20 {
+		t.Errorf("expected 20, got %v", result)
+	}
+}
+
+// --- dot: list containing maps ---
+
+func TestDotListThenMap(t *testing.T) {
+	// [{x:1} {x:2}] dot 0 dot x → 1
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m0 := NewOrderedMap()
+	m0.Set("x", NewInteger(1))
+	m1 := NewOrderedMap()
+	m1.Set("x", NewInteger(2))
+	list := NewList([]Value{NewMap(m0), NewMap(m1)})
+	result := runAQL(t, r, []Value{
+		list,
+		NewInteger(0), NewWord("dot"),
+		NewWord("x"), NewWord("dot"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 1 {
+		t.Errorf("expected 1, got %v", result)
+	}
+}
+
+func TestDotListThenMapSecondElement(t *testing.T) {
+	// [{x:1} {x:2}] dot 1 dot x → 2
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m0 := NewOrderedMap()
+	m0.Set("x", NewInteger(1))
+	m1 := NewOrderedMap()
+	m1.Set("x", NewInteger(2))
+	list := NewList([]Value{NewMap(m0), NewMap(m1)})
+	result := runAQL(t, r, []Value{
+		list,
+		NewInteger(1), NewWord("dot"),
+		NewWord("x"), NewWord("dot"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 2 {
+		t.Errorf("expected 2, got %v", result)
+	}
+}
+
+// --- dot: . alias works identically ---
+
+func TestDotAliasMapAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewOrderedMap()
+	m.Set("key", NewInteger(99))
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("key"), NewWord(".")})
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Errorf("expected 99 via . alias, got %v", result)
+	}
+}
+
+func TestDotAliasListAccess(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := NewList([]Value{NewString("a"), NewString("b")})
+	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord(".")})
+	if len(result) != 1 || result[0].AsString() != "a" {
+		t.Errorf("expected 'a' via . alias, got %v", result)
+	}
+}
+
+// --- dot: deeply nested list/map combo ---
+
+func TestDotDeepListMapCombo(t *testing.T) {
+	// {a:[{b:[100 200]} {b:[300 400]}]} dot a dot 1 dot b dot 0 → 300
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b0 := NewList([]Value{NewInteger(100), NewInteger(200)})
+	b1 := NewList([]Value{NewInteger(300), NewInteger(400)})
+	m0 := NewOrderedMap()
+	m0.Set("b", b0)
+	m1 := NewOrderedMap()
+	m1.Set("b", b1)
+	outer := NewOrderedMap()
+	outer.Set("a", NewList([]Value{NewMap(m0), NewMap(m1)}))
+	result := runAQL(t, r, []Value{
+		NewMap(outer),
+		NewWord("a"), NewWord("dot"),
+		NewInteger(1), NewWord("dot"),
+		NewWord("b"), NewWord("dot"),
+		NewInteger(0), NewWord("dot"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 300 {
+		t.Errorf("expected 300, got %v", result)
+	}
+}
+
 func TestDotrMapSuccess(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
