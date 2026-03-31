@@ -2138,8 +2138,8 @@ func TestEdgeLongMixedLeftToRight(t *testing.T) {
 }
 
 func TestEdgePrefixChain(t *testing.T) {
-	// 1 2 add 3 4 add mul → add takes 3 from forward: (2+3)=5,
-	// then (5+4)=9, then 1*9=9
+	// 1 2 add 3 4 add mul → forward collection cannot cross functions,
+	// so each add uses its own stack group: (1+2)=3, (3+4)=7, 3*7=21
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -2156,8 +2156,8 @@ func TestEdgePrefixChain(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 9 {
-		t.Errorf("got %d, want 9", result[0].AsInteger())
+	if result[0].AsInteger() != 21 {
+		t.Errorf("got %d, want 21", result[0].AsInteger())
 	}
 }
 
@@ -3813,10 +3813,12 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 }
 
 func TestDefForthSumOfSquares(t *testing.T) {
-	// : square dup mul ;
-	// 3 square 4 square add → with forward precedence, mul in
-	// square body grabs 4 from forward: 3 dup mul 4 → mul(3,4)=12,
-	// then square(12)=144, add(3,144)=147
+	// square = [dup mul]
+	// 3 square → 3 dup mul → 9
+	// 4 square → 4 dup mul → 16
+	// add → 9+16 = 25
+	// Forward collection cannot cross into def body, so each square
+	// operates independently on its own stack value.
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3839,8 +3841,8 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 147 {
-		t.Errorf("got %v, want [147]", result)
+	if len(result) != 1 || result[0].AsInteger() != 25 {
+		t.Errorf("got %v, want [25]", result)
 	}
 }
 
