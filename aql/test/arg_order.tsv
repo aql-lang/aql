@@ -77,8 +77,8 @@ def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) a
 # 1 prefix (opts) + 1 forward (int)
 def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} f 5	15
 
-# All prefix
-def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} 5 f	15
+# All prefix: sig[0]=Opts (nearest to f), sig[1]=Integer
+def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] 5 {x:10} f	15
 
 # Optional omitted — just int
 def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f 5	5

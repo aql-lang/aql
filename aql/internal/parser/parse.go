@@ -923,17 +923,18 @@ func parseWord(text string) (engine.Value, error) {
 }
 
 // expandDottedWord expands dot notation like "foo.a.b" into a sequence of
-// engine values: [( foo a dot b dot )]. The first segment is emitted as a
+// engine values: [( foo dot a dot b )]. The first segment is emitted as a
 // plain word, resolved by the engine (def lookup, registered function, or
-// atom). Each subsequent segment extracts a key using the "dot" word.
+// atom). Each subsequent segment emits "dot" followed by the key, so that
+// dot forward-collects the key in the same way as standalone "dot a".
 // A standalone "." becomes the "dot" word.
-// Leading dot (e.g. ".a.b") omits the first word and emits [a, dot, b, dot],
+// Leading dot (e.g. ".a.b") omits the first word and emits [dot a dot b],
 // operating on whatever value is already on the stack (no paren wrapping).
 //
 // The entire multi-token expansion is wrapped in parentheses so that it
 // evaluates as a single sub-expression. This gives dot very high binding,
 // letting forward-precedence words like "list" consume the result:
-// list foo.a → list ( foo a dot ).
+// list foo.a → list ( foo dot a ).
 func expandDottedWord(text string) ([]engine.Value, error) {
 	// Standalone "." → just the dot word.
 	if text == "." {
@@ -959,18 +960,19 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 		inner = append(inner, w)
 	}
 
-	// Subsequent parts (after each dot): emit key then dot (prefix).
+	// Subsequent parts (after each dot): emit dot then key, so dot
+	// forward-collects the key — identical to standalone "dot a" syntax.
 	for _, part := range parts[1:] {
 		if part == "" {
 			continue
 		}
+		inner = append(inner, engine.NewWord("dot"))
 		// Integer keys for list access.
 		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
 			inner = append(inner, engine.NewInteger(n))
 		} else {
 			inner = append(inner, engine.NewWord(part))
 		}
-		inner = append(inner, engine.NewWord("dot"))
 	}
 
 	// Leading dot operates on whatever is already on the stack,

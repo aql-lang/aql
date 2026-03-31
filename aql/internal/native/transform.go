@@ -8,26 +8,29 @@ import (
 )
 
 // transformFunc returns the "transform" native function definition.
-// transform has forward precedence and one signature:
-//   - [any, map] — transforms the data using the map as the transform spec
+// transform has forward precedence with sig [Map, Any]:
+//
+//	data transform {spec}   — spec (Map) forward-collected → args[0], data from stack → args[1]
+//
+// The spec (transform template) is always the Map at sig[0].
 func transformFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "transform",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []engine.Type{engine.TAny, engine.TMap},
+				Args:    []engine.Type{engine.TMap, engine.TAny},
 				Handler: transformHandler,
 			},
 		},
 	}
 }
 
-// transformHandler calls voxgig struct Transform, converting between
-// engine.Value and Go any types.
+// transformHandler calls voxgig struct Transform.
+// args[0]=spec (Map, forward-collected), args[1]=data (Any, from stack).
 func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	spec := valueToAny(args[1])
+	spec := valueToAny(args[0])
+	data := valueToAny(args[1])
 
 	result := voxgigstruct.Transform(data, spec)
 

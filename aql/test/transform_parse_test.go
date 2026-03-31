@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-// transform {a:"hello"} {x:"`a`"} — injects value from data into spec
+// {a:"hello"} transform {x:"`a`"} — injects value from data into spec
 func TestTransformInject(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `transform {a:"hello"} {x:"` + bt + `a` + bt + `"}`
+	input := `{a:"hello"} transform {x:"` + bt + `a` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
@@ -25,10 +25,10 @@ func TestTransformInject(t *testing.T) {
 	}
 }
 
-// transform {a:"1"} {x:99} — literal spec passthrough
+// {a:"1"} transform {x:99} — literal spec passthrough
 func TestTransformPassthrough(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`transform {a:"1"} {x:99}`,
+		`{a:"1"} transform {x:99}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -40,10 +40,10 @@ func TestTransformPassthrough(t *testing.T) {
 	}
 }
 
-// transform with nested path: {a:{b:42}} {val:"`a.b`"}
+// transform with nested path: {a:{b:42}} transform {val:"`a.b`"}
 func TestTransformNestedPath(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `transform {a:{b:42}} {val:"` + bt + `a.b` + bt + `"}`
+	input := `{a:{b:42}} transform {val:"` + bt + `a.b` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)

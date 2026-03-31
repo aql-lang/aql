@@ -25,23 +25,40 @@ have stack only args. The traditional forth words such as dup, swap,
 drop, etc always have stack only args. Everything else has forward
 precedence. For forward precedence, the engine signature matching
 should attempt to find the longest and most specific match against
-future tokens. Partial matches are then completed by looking prefix
+future tokens. Partial matches are then completed by looking at prefix
 values, that is, the stack. Evaluation is strictly left-to-right.
 
 NOTE: once a signature match has been found, the engine should move
 the matched future tokens to stack, in reverse order. Thus the
-internal code of the function always operates as if all arg were
+internal code of the function always operates as if all args were
 prefix args.
+
+
+### Argument Equivalence Principle
+
+A function word consumes arguments **outward from its position**.
+The value nearest the function on each side maps to sig[0], the next
+nearest to sig[1], and so on. Forward args fill sig slots first
+(from sig[0]); remaining slots are filled from the stack
+(top-of-stack first). This means all placements of a function word
+among its arguments are equivalent:
+
+```
+j a b c       →  sig[0]=a  sig[1]=b  sig[2]=c   (all forward)
+c j a b       →  sig[0]=a  sig[1]=b  sig[2]=c   (1 prefix, 2 forward)
+c b j a       →  sig[0]=a  sig[1]=b  sig[2]=c   (2 prefix, 1 forward)
+c b a j       →  sig[0]=a  sig[1]=b  sig[2]=c   (all prefix/stack)
+```
+
+This is a fundamental property of the language. Left-to-right source
+order is NOT preserved — the function word acts as a pivot, consuming
+outward symmetrically.
 
 Here are some examples ([|] indicates the state of the stack: [current|future]):
 * def catter fn [[integer string] [string] [add]]
-   * [1 "a"|] -> catter -> ["a1"|] 
+   * [1 "a"|] -> catter -> ["a1"|]
    * [2|] -> catter "b" -> ["b2"|]  # as if stack was [2 "b"|]
    * [|] -> catter "c" 3 -> ["c3"|] # as if stack was [3 "c"|]
-
-Review the signature matching and word argument arrangement and adjust
-if necessary. also review the forward mechanism to see if it is
-actually needed
 
 
 
@@ -175,14 +192,16 @@ If a word has forward precedence (the default), the arguments to match
 against the signature can be constructed using the stack and future
 tokens as follows: match each type in the signature in order against
 future tokens, until a mismatch, then continue matching against the
-stack in reverse order.
+stack (top-of-stack first). The value nearest the function word on
+each side maps to sig[0], producing the argument equivalence described
+above.
 
 For example:
 
 
 `def square [ [integer] [integer] [dup mul swap drop] ]`
 
-Define word with name "square" accepting one integer type argument from the top of the stack, 
+Define word with name "square" accepting one integer type argument from the top of the stack,
 and replacing the top of the stack with another integer. However it can also accept forward
 arguments.
 Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
@@ -190,9 +209,10 @@ Thus: [|] -> `2 square` -> [4|] but also [|] -> `square 2` -> [4|]
 
 `def area [ [float integer] [float] [mul] ]`
 
-* [|] -> `area 1.5 2` -> [3|]
-* [|] -> `1.5 area 2` -> [3|]
-* [|] -> `1.5 2 area` -> [3|]
+All three are equivalent (sig[0]=nearest, sig[1]=next nearest):
+* [|] -> `area 1.5 2` -> [3|]   (all forward: 1.5→sig[0], 2→sig[1])
+* [|] -> `1.5 area 2` -> [3|]   (mixed: fwd 2→sig[0], stack 1.5→sig[1])
+* [|] -> `1.5 2 area` -> [3|]   (all prefix: top=2→sig[0], 1.5→sig[1])
 
 
 Implementation: words themselves should never deal with forward precedence. Instead the 

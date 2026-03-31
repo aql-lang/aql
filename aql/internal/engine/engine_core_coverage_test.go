@@ -40,7 +40,10 @@ func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 
 func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Semicolons (end) as sequence separators: 1 add 2 end 3 add 4
+	// 1 add 2 end 3 add 4:
+	// First add: fwd 2→sig[0], stack 1→sig[1] → add(2,1)=3.
+	// Push 3 → stack=[3, 3]. Second add prefers stack: add(3,3)=6.
+	// Push 4 → [6, 4]. Semicolons don't create stack barriers.
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("end"),
 		NewInteger(3), NewWord("add"), NewInteger(4),
@@ -889,14 +892,15 @@ func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 
 func TestEngineCoreForceForward(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Force forward on add: uses ForceForward flag
+	// Force forward on add: ALL args must come from forward.
+	// add/f 10 5 → forward-collects both → add(10, 5) = 15
 	result := runAQL(t, r, []Value{
-		NewInteger(10),
 		NewWordModified("add", -1, false, true),
+		NewInteger(10),
 		NewInteger(5),
 	})
 	if len(result) != 1 || result[0].AsNumber() != 15 {
-		t.Errorf("10 ~add 5 = %v, want 15", result)
+		t.Errorf("~add 10 5 = %v, want 15", result)
 	}
 }
 

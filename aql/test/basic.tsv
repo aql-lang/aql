@@ -351,9 +351,10 @@ None is None	true
 [foo] is [String]	false
 
 # is - record type equality (records only unify with records)
-record [x:Number y:String] is record [x:Number y:String]	true
-record [x:Number y:String] is record [x:Any y:Any]	true
-record [x:Number y:String] is record [x:String y:String]	false
+# Use parens to scope each record expression so `is` gets both as args.
+(record [x:Number y:String]) is (record [x:Number y:String])	true
+(record [x:Number y:String]) is (record [x:Any y:Any])	true
+(record [x:Number y:String]) is (record [x:String y:String])	false
 
 # is - table type equality (tables only unify with tables)
 type R record [x:Number] (table R) is (table R)	true

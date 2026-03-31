@@ -70,8 +70,8 @@ upper "abc"	'ABC'
 1 add 2	3
 
 # Stack fully satisfies add's sig — no forward collection needed.
-# add takes 1 and 2 from stack, 3 remains.
-1 2 add 3	3 3
+# add forward-collects 3, takes 2 from stack. 1 remains.
+1 2 add 3	1 5
 
 # --- Up to 7 elements interacting ---
 

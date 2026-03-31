@@ -193,13 +193,20 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Wrap each context get in parens so previous results on the stack
+	// don't get consumed by the next get (stack-preference rule: when
+	// a String result is on the stack, context-get would take it as
+	// its key instead of forward-collecting the intended key).
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("str"), NewString("hello"),
+		NewWord("end"),
 		NewWord("context"), NewWord("set"), NewString("num"), NewInteger(42),
+		NewWord("end"),
 		NewWord("context"), NewWord("set"), NewString("bool"), NewBoolean(true),
-		NewWord("context"), NewWord("get"), NewString("str"),
-		NewWord("context"), NewWord("get"), NewString("num"),
-		NewWord("context"), NewWord("get"), NewString("bool"),
+		NewWord("end"),
+		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("str"), NewWord(")"),
+		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("num"), NewWord(")"),
+		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("bool"), NewWord(")"),
 	})
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(result))

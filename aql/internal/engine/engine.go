@@ -1769,6 +1769,19 @@ func (e *Engine) hasForwardValues(fn *Function) bool {
 		if nw.Name == ")" || nw.Name == "end" {
 			return false
 		}
+		// If any signature expects TWord or has /q for this position,
+		// the unresolved word itself is collectible (e.g. inspect captures names).
+		// Check this BEFORE resolving defs, since def expansion may execute code.
+		for si := range fn.Signatures {
+			for ai, argType := range fn.Signatures[si].Args {
+				if argType.Equal(TWord) {
+					return true
+				}
+				if fn.Signatures[si].QuoteArgs != nil && fn.Signatures[si].QuoteArgs[ai] {
+					return true
+				}
+			}
+		}
 		// Def'd parameters resolve to concrete values (Integer, String, etc.)
 		// and should be forward-collectible if they type-match.
 		if ds := e.registry.DefStacks[nw.Name]; len(ds) > 0 {

@@ -78,7 +78,32 @@ Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context
 - `convertDataValue()` / `convertMapData()` — data context (atoms, not strings)
 - `convertWordList()` / `convertDataList()` — lists (word context, Eval=true)
-- `expandDottedWord()` — transforms `foo.a.b` into `( foo a dot b dot )`
+- `expandDottedWord()` — transforms `foo.a.b` into `( foo dot a dot b )`
+
+## Argument Ordering (CRITICAL)
+
+AQL is a concatenative language where a function word consumes arguments
+**outward from its position**. The value nearest the function on each side
+maps to `sig[0]`, the next nearest to `sig[1]`, and so on. Stack (prefix)
+args are consumed top-of-stack first; forward args are collected
+left-to-right after the word. This means all positions are equivalent:
+
+```
+j a b c       →  sig[0]=a  sig[1]=b  sig[2]=c   (all forward)
+c j a b       →  sig[0]=a  sig[1]=b  sig[2]=c   (1 prefix, 2 forward)
+c b j a       →  sig[0]=a  sig[1]=b  sig[2]=c   (2 prefix, 1 forward)
+c b a j       →  sig[0]=a  sig[1]=b  sig[2]=c   (all prefix)
+```
+
+Forward args fill sig slots first (from sig[0]), then remaining slots are
+filled from the stack (top-of-stack → next unfilled sig slot). This is the
+fundamental design of the language — do NOT assume left-to-right source
+order is preserved. All four forms above produce identical results.
+
+Implementation: `rearrangeForForward()` in `engine.go` places forward-collected
+values before stack values (reversed) so that `execMatch` always sees args in
+signature order. `MatchSignatureReversed` handles the all-prefix case by
+matching top-of-stack → sig[0].
 
 ## Quotation System
 
