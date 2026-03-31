@@ -959,7 +959,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	}
 
 	// Subtest: all args from prefix (stack)
-	// "A" "B" "C" joiner -> args=["A","B","C"] -> concat -> "ABC"
+	// "A" "B" "C" joiner → nearest to joiner is "C"→sig[0], "B"→sig[1], "A"→sig[2]
+	// All positions are equivalent: values nearest the word map to sig[0].
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
@@ -969,13 +970,13 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "ABC" {
-			t.Errorf(`"A" "B" "C" joiner = %v, want ["ABC"]`, result)
+		if len(result) != 1 || result[0].AsString() != "CBA" {
+			t.Errorf(`"A" "B" "C" joiner = %v, want ["CBA"]`, result)
 		}
 	})
 
 	// Subtest: 1 prefix + 2 forward
-	// "A" joiner "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
+	// "A" joiner "B" "C" → fwd: "B"→sig[0], "C"→sig[1]; stack: "A"→sig[2]
 	t.Run("MixedPrefixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
@@ -985,13 +986,13 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewWord("joiner"), NewString("B"), NewString("C"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "ABC" {
-			t.Errorf(`"A" joiner "B" "C" = %v, want ["ABC"]`, result)
+		if len(result) != 1 || result[0].AsString() != "BCA" {
+			t.Errorf(`"A" joiner "B" "C" = %v, want ["BCA"]`, result)
 		}
 	})
 
 	// Subtest: 2 prefix + 1 forward
-	// "A" "B" joiner "C" -> args=["A","B","C"] -> concat -> "ABC"
+	// "A" "B" joiner "C" → fwd: "C"→sig[0]; stack: top="B"→sig[1], "A"→sig[2]
 	t.Run("TwoPrefixOneForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
@@ -1001,8 +1002,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewString("B"), NewWord("joiner"), NewString("C"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "ABC" {
-			t.Errorf(`"A" "B" joiner "C" = %v, want ["ABC"]`, result)
+		if len(result) != 1 || result[0].AsString() != "CBA" {
+			t.Errorf(`"A" "B" joiner "C" = %v, want ["CBA"]`, result)
 		}
 	})
 
@@ -1375,6 +1376,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 
 	// Prefix-heavy with end: "P" "Q" cat3 "R" end "extra"
 	// 2 prefix, 1 forward, end stops collection, "extra" remains.
+	// fwd: "R"→sig[0]; stack: top="Q"→sig[1], "P"→sig[2] → "RQP"
 	t.Run("EndAfterPartialForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
@@ -1388,8 +1390,8 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("P Q cat3 R end extra: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "PQR" {
-			t.Errorf("cat3 = %q, want %q", result[0].AsString(), "PQR")
+		if result[0].AsString() != "RQP" {
+			t.Errorf("cat3 = %q, want %q", result[0].AsString(), "RQP")
 		}
 		if result[1].AsString() != "extra" {
 			t.Errorf("trailing = %v, want 'extra'", result[1])

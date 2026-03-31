@@ -9,8 +9,8 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	}
 	// def joiner fn [[a:string b:string c:string] [string] [a b add c add]] end
 	// Named string params: body concatenates a+b+c via add.
-	// BUG: undef cleanup has [TString] signature that greedily consumes
-	// the string return value from the stack instead of the param name word.
+	// All prefix: "A" "B" "C" joiner → nearest to joiner is "C"→sig[0](a),
+	// "B"→sig[1](b), "A"→sig[2](c). Body: a b add c add → "CB" + "A" → "CBA".
 	aParam := NewOrderedMap()
 	aParam.Set("a", NewWord("String"))
 	bParam := NewOrderedMap()
@@ -31,7 +31,7 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bug confirmed: %v", err)
 	}
-	if len(result) != 1 || result[0].AsString() != "ABC" {
-		t.Errorf("got %v, want [ABC] — undef consumed the result", result)
+	if len(result) != 1 || result[0].AsString() != "CBA" {
+		t.Errorf("got %v, want [CBA]", result)
 	}
 }
