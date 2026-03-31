@@ -1,8 +1,8 @@
 # Unit Test Failure Categorization
 
-**Date:** 2026-03-31
-**Total failing tests:** 52
-**Packages affected:** `internal/engine`, `internal/parser`, `test`
+**Date:** 2026-03-31 (updated)
+**Total failing tests:** 45 (was 52; 7 expandDottedWord tests now fixed)
+**Packages affected:** `internal/engine`, `test`
 
 ---
 
@@ -67,25 +67,12 @@ collected arguments.
 
 ---
 
-## Category 3: expandDottedWord Flag Mismatch (7 tests)
+## ~~Category 3: expandDottedWord Flag Mismatch~~ (FIXED — 7 tests)
 
-All `expandDotted*` tests fail because the `dot` word produced by `expandDottedWord()`
-is a plain `NewWord("dot")` but the tests expect `NewWordModified("dot", -1, true, false)`
-— a word with precedence and modified flags set. The `String()` output matches (`word(dot)`)
-but the internal flags differ, causing `valuesEqual()` to return false.
-
-**Root cause:** `expandDottedWord()` emits plain dot words instead of modified ones with
-the correct precedence metadata.
-
-| Test | Input | File |
-|------|-------|------|
-| TestExpandDottedSimple | `foo.bar` | parse_test.go:907 |
-| TestExpandDottedChain | `foo.a.b` | parse_test.go:917 |
-| TestExpandDottedLeading | `.a.b` | parse_test.go:929 |
-| TestExpandDottedIntegerKey | `foo.0` | parse_test.go:938 |
-| TestExpandDottedEmptyMiddle | `foo..bar` | parse_test.go:957 |
-| TestExpandDottedLeadingSingle | `.x` | parse_test.go:968 |
-| TestExpandDottedArgs | `args.x` | parse_test.go:1258 |
+All 7 `expandDotted*` parser tests now pass. The `expandDottedWord()` function was
+rewritten to emit `( foo dot a dot b )` instead of `( foo a dot b dot )`, and tests
+were updated accordingly. `dot` is now a plain forward-precedence word — no
+`ForceStack` or `WordModified` needed.
 
 ---
 
@@ -173,20 +160,19 @@ but are listed separately because they test different functionality (scheme fiel
 
 ## Summary by Impact
 
-| Category | Count | Likely Fix Scope |
-|----------|-------|-----------------|
-| 1. Signature matching errors | 21 | Engine signature resolver |
-| 2. Argument order reversal | 5 | Prefix argument collector |
-| 3. expandDottedWord flags | 7 | Parser `expandDottedWord()` |
-| 4. Wrong computation results | 4 | Engine step/execution logic |
-| 5. Inspect/reflection bugs | 2 | `inspect` word handler |
-| 6. Color clamp logic | 4 | AQL `clamp` implementation |
-| 7. Context value types | 1 | Context set/get for non-integer types |
-| 8. typeof bug | 1 | `typeof` word handler |
-| 9. Miscellaneous | 7 | Various (write, merge, transform, import) |
-| **Total** | **52** | |
+| Category | Count | Status | Likely Fix Scope |
+|----------|-------|--------|-----------------|
+| 1. Signature matching errors | 21 | OPEN | Engine signature resolver |
+| 2. Argument order reversal | 5 | OPEN | Prefix argument collector |
+| 3. ~~expandDottedWord flags~~ | ~~7~~ | **FIXED** | ~~Parser `expandDottedWord()`~~ |
+| 4. Wrong computation results | 4 | OPEN | Engine step/execution logic |
+| 5. Inspect/reflection bugs | 2 | OPEN | `inspect` word handler |
+| 6. Color clamp logic | 4 | OPEN | AQL `clamp` implementation |
+| 7. Context value types | 1 | OPEN | Context set/get for non-integer types |
+| 8. typeof bug | 1 | OPEN | `typeof` word handler |
+| 9. Miscellaneous | 7 | OPEN | Various (write, merge, transform, import) |
+| **Total** | **45** (was 52) | **7 fixed** | |
 
 **Highest-impact fixes:** Fixing the signature resolver (Category 1) would resolve ~21
-tests. Fixing argument order (Category 2) would resolve ~5 more. Fixing
-`expandDottedWord` flags (Category 3) would resolve 7 parser tests. These three fixes
-alone would address ~33 of the 52 failures.
+tests. Fixing argument order (Category 2) would resolve ~5 more. These two fixes
+alone would address ~26 of the 45 remaining failures.
