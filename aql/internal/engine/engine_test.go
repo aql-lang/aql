@@ -2352,21 +2352,22 @@ func TestEdgeEndBetweenLiterals(t *testing.T) {
 // --- Edge: set/get ---
 
 func TestEdgeSetWithIntegerKey(t *testing.T) {
-	// 42 100 set → uses integer as key
+	// set requires String or Atom keys. Integer keys use convert first:
+	// (convert String 42) 100 set → string key "42"
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewInteger(42), NewInteger(100), NewWord("set"),
+		NewWord("set"), NewString("42"), NewInteger(100),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// get 42 → 100
+	// get "42" → 100
 	result, err := e.Run([]Value{
-		NewInteger(42), NewWord("get"),
+		NewWord("get"), NewString("42"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

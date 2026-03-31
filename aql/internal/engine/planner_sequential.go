@@ -22,6 +22,33 @@ package engine
 //   - Unknown word: becomes Atom (or Boolean for true/false)
 //   - Type name: if expected type is a metatype, collect as forward arg
 func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
+	// If the next forward token is a word with a DefStack entry, prefer
+	// signatures that accept TWord at position 0 — this allows inspect and
+	// similar words to capture the name without executing the def body.
+	if e.pointer+1 < len(e.stack) {
+		next := e.stack[e.pointer+1]
+		if next.IsWord() {
+			nw := next.AsWord()
+			if len(e.registry.DefStacks[nw.Name]) > 0 {
+				for i := range fn.Signatures {
+					sig := &fn.Signatures[i]
+					if len(sig.Args) == 0 || sig.Fallback {
+						continue
+					}
+					if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
+						continue
+					}
+					if sig.Args[0].Equal(TWord) || (sig.QuoteArgs != nil && sig.QuoteArgs[0]) {
+						fm, sc := e.trySequentialMatch(sig, resolved, w.ForceForward)
+						if fm+sc == len(sig.Args) && fm > 0 {
+							return sig, sc
+						}
+					}
+				}
+			}
+		}
+	}
+
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
 		if len(sig.Args) == 0 {

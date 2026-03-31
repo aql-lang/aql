@@ -56,6 +56,12 @@ func buildInspection(r *Registry, name string) Value {
 
 	fn := r.Lookup(name)
 	if fn == nil {
+		// No registered function — check if it's a simple def (list body).
+		if len(r.DefStacks[name]) > 0 {
+			result.Set("kind", NewAtom("defined"))
+			result.Set("signatures", NewList(nil))
+			return newValue(TWordInspect, result)
+		}
 		result.Set("kind", NewAtom("unknown"))
 		result.Set("signatures", NewList(nil))
 		return newValue(TWordInspect, result)
