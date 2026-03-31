@@ -210,6 +210,7 @@ func registerBuiltins(r *Registry) {
 	registerNormalize(r)
 	registerRepeat(r)
 	registerPad(r)
+	registerSlice(r)
 	registerMatch(r)
 	registerEscape(r)
 
