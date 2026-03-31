@@ -1062,14 +1062,15 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		}
 	})
 
-	// "X" mix4 7 true "Z" -> 1 prefix, 3 forward
+	// "Z" mix4 "X" 7 true → 1 prefix + 3 forward, types align with sig positions.
+	// sig[0]=String("X"), sig[1]=Integer(7), sig[2]=Boolean(true), sig[3]=String("Z" from stack).
 	t.Run("OnePrefixThreeForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("X"), NewWord("mix4"), NewInteger(7), NewBoolean(true), NewString("Z"),
+			NewString("Z"), NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true),
 		))
 		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
 			t.Errorf(`1+3 mix4 = %v, want ["X7trueZ"]`, result)
@@ -1217,15 +1218,16 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 	})
 
-	// 1 prefix + 6 forward
+	// 1 prefix + 6 forward: last arg ("r7") as prefix, rest forward.
+	// Forward types must align with sig[0..5], prefix fills sig[6].
 	t.Run("OnePrefixSixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
-		tokens := append(append([]Value{}, defTokens...), argVals[0])
+		tokens := append(append([]Value{}, defTokens...), argVals[6]) // "r7" prefix
 		tokens = append(tokens, NewWord("mix7"))
-		tokens = append(tokens, argVals[1:]...)
+		tokens = append(tokens, argVals[:6]...) // "p1" 2 3.5 true "q4" 56 forward
 		result := runAQL(t, r, tokens)
 		if len(result) != 1 || result[0].AsString() != want {
 			t.Errorf("1+6 mix7 = %v, want [%q]", result, want)
@@ -1295,19 +1297,20 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		}
 	})
 
-	// "X" cat4 7 true "Z" end "after" -> cat4 gets "X7trueZ", "after" untouched
+	// "Z" cat4 "X" 7 true end "after" → 1 prefix + 3 forward, types align.
+	// sig[0]=String("X"), sig[1]=Integer(7), sig[2]=Boolean(true), sig[3]=String("Z" from stack).
 	t.Run("EndStopsForward4Mixed", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		tokens := append(append([]Value{}, cat4Def...),
-			NewString("X"), NewWord("cat4"), NewInteger(7), NewBoolean(true), NewString("Z"),
+			NewString("Z"), NewWord("cat4"), NewString("X"), NewInteger(7), NewBoolean(true),
 			NewWord("end"), NewString("after"),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
-			t.Fatalf("X cat4 7 true Z end after: got %d results, want 2: %v", len(result), result)
+			t.Fatalf("Z cat4 X 7 true end after: got %d results, want 2: %v", len(result), result)
 		}
 		if result[0].AsString() != "X7trueZ" {
 			t.Errorf("cat4 result = %q, want %q", result[0].AsString(), "X7trueZ")

@@ -8,13 +8,21 @@ import (
 )
 
 // setpathFunc returns the "setpath" native function definition.
-// setpath has forward precedence and one signature:
-//   - [any, string, any] — sets a value at a dot-separated path in the data
+// setpath has forward precedence and two signatures covering both
+// calling conventions:
+//   - [string, any, any] — "data setpath path newVal" (string nearest forward)
+//   - [any, string, any] — "setpath data path newVal" (all forward, data first)
+//
+// The handler is position-agnostic: it finds the string arg as the path.
 func setpathFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "setpath",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				Args:    []engine.Type{engine.TString, engine.TAny, engine.TAny},
+				Handler: setpathHandler,
+			},
 			{
 				Args:    []engine.Type{engine.TAny, engine.TString, engine.TAny},
 				Handler: setpathHandler,

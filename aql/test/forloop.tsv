@@ -150,7 +150,7 @@ for 3 [i i add 10]	0 10 2 10 4 10
 for 4 [i mul 3 add 1]	1 4 7 10
 
 # === For + type operations ===
-for 3 [i typeof]	Atom
+for 3 [i typeof]	Number Number Number
 
 # === For result used in further computation ===
 # Results from for feed into subsequent words
