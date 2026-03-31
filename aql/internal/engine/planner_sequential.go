@@ -72,39 +72,26 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 // trySequentialMatch walks the forward token stream and tries to match
 // sig args from the front, then fills remaining args from the stack.
 //
-// The stack is checked FIRST to determine how many suffix positions it can
-// fill. The forward scan then only needs to fill the remaining prefix
-// positions. This prevents over-collection in chained infix expressions
-// like "1 add 2 add 3" — the stack provides arg 1, so only 1 forward
-// arg is needed, and the scan stops after "2".
+// Forward is always tried first (forward precedence rule). The forward
+// scan matches sig args starting from sig[0], stopping at function words,
+// end, or type mismatches. Any remaining unfilled suffix positions are
+// then matched from the stack (top-of-stack first).
 //
 // Returns (forwardMatched, stackCount).
 func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForward bool) (int, int) {
 	nArgs := len(sig.Args)
 
-	// Step 1: compute how many SUFFIX args the stack can provide.
-	stackCount := 0
-	if !forceForward {
-		stackCount = sequentialSuffixMatch(sig.Args, resolved)
-		if stackCount >= nArgs {
-			// Stack alone satisfies — defer to stack-only matcher.
-			return 0, 0
-		}
-	}
-
-	// The forward scan needs to fill positions 0..forwardNeeded-1.
-	forwardNeeded := nArgs - stackCount
+	// Step 1: scan forward tokens for as many prefix args as possible.
 	forwardMatched := 0
-
-	// Step 2: scan forward tokens for the prefix positions.
 	scanIdx := e.pointer + 1
 
-	for forwardMatched < forwardNeeded && scanIdx < len(e.stack) {
+	for forwardMatched < nArgs && scanIdx < len(e.stack) {
 		tok := e.stack[scanIdx]
 		expectedType := sig.Args[forwardMatched]
 
-		// Structural token: stop forward scanning.
-		if tok.IsForward() {
+		// Structural/internal tokens: stop forward scanning.
+		if tok.IsForward() || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
+			tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
 			break
 		}
 
@@ -224,14 +211,14 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 		break
 	}
 
-	// Check if forward + stack fully satisfies the signature.
-	if forwardMatched == forwardNeeded {
-		return forwardMatched, stackCount
+	// Step 2: if forward satisfied all args, done.
+	if forwardMatched == nArgs {
+		return forwardMatched, 0
 	}
 
-	// Forward scan stopped short. Try filling remaining from stack suffix.
+	// Step 3: forward stopped short. Fill remaining suffix from stack.
 	remaining := nArgs - forwardMatched
-	if forwardMatched > 0 && remaining > 0 && len(resolved) >= remaining {
+	if forwardMatched > 0 && remaining > 0 && !forceForward && len(resolved) >= remaining {
 		ok := true
 		for j := 0; j < remaining; j++ {
 			stackVal := resolved[len(resolved)-remaining+j]

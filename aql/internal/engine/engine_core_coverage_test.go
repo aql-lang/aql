@@ -51,11 +51,11 @@ func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
 	}
-	if result[0].AsNumber() != 6 {
-		t.Errorf("result[0] = %v, want 6", result[0])
+	if result[0].AsNumber() != 3 {
+		t.Errorf("result[0] = %v, want 3", result[0])
 	}
-	if result[1].AsNumber() != 4 {
-		t.Errorf("result[1] = %v, want 4", result[1])
+	if result[1].AsNumber() != 7 {
+		t.Errorf("result[1] = %v, want 7", result[1])
 	}
 }
 
@@ -892,14 +892,15 @@ func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 
 func TestEngineCoreForceForward(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Force forward on add: uses ForceForward flag
+	// Force forward on add: ALL args must come from forward.
+	// add/f 10 5 → forward-collects both → add(10, 5) = 15
 	result := runAQL(t, r, []Value{
-		NewInteger(10),
 		NewWordModified("add", -1, false, true),
+		NewInteger(10),
 		NewInteger(5),
 	})
 	if len(result) != 1 || result[0].AsNumber() != 15 {
-		t.Errorf("10 ~add 5 = %v, want 15", result)
+		t.Errorf("~add 10 5 = %v, want 15", result)
 	}
 }
 

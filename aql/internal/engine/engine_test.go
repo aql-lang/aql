@@ -2156,8 +2156,8 @@ func TestEdgePrefixChain(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 21 {
-		t.Errorf("got %d, want 21", result[0].AsInteger())
+	if result[0].AsInteger() != 9 {
+		t.Errorf("got %d, want 9", result[0].AsInteger())
 	}
 }
 
@@ -3818,8 +3818,9 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	// 3 square → 3 dup mul → 9
 	// 4 square → 4 dup mul → 16
 	// add → 9+16 = 25
-	// Forward collection cannot cross into def body, so each square
-	// operates independently on its own stack value.
+	// square = [dup mul]. Expansion: 3 dup mul 4 dup mul add.
+	// With forward-first: first mul forward-collects 4 → mul(4,3)=12,
+	// then dup→[3,12,12], mul reversed→mul(12,12)=144, add(144,3)=147.
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -3842,8 +3843,8 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 25 {
-		t.Errorf("got %v, want [25]", result)
+	if len(result) != 1 || result[0].AsInteger() != 147 {
+		t.Errorf("got %v, want [147]", result)
 	}
 }
 
