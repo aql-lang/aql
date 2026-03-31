@@ -138,8 +138,9 @@ type FnUndefInfo struct {
 
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
-	FuncName string
-	Returns  []Type
+	FuncName     string
+	Returns      []Type
+	UnnamedCount int // number of unnamed params pushed onto the stack before the body
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.

@@ -541,6 +541,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsList := NewList(argsCopy)
 			r.argsStack = append(r.argsStack, argsList)
 
+			unnamedCount := 0
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -548,6 +549,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				} else {
 					// Unnamed parameter: push value back for the body to use
 					result = append(result, args[i])
+					unnamedCount++
 				}
 			}
 			body := make([]Value, len(s.Body))
@@ -567,8 +569,9 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Inject return-check if return types are declared.
 			if len(s.Returns) > 0 {
 				result = append(result, NewReturnCheck(ReturnCheckInfo{
-					FuncName: name,
-					Returns:  s.Returns,
+					FuncName:     name,
+					Returns:      s.Returns,
+					UnnamedCount: unnamedCount,
 				}))
 			}
 			result = append(result, NewWord(")"))

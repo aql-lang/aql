@@ -2383,22 +2383,38 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def toomany fn [[number] [number number] [dup]] end
-	// Body produces 2 values but signature declares 2 returns, dup produces 2 from 1.
-	// Actually let's make it expect 1 but body produces 2.
+	// def toomany fn [[number] [number] [dup]] end
+	// Body produces 2 values (dup), signature declares 1 return.
+	// The extra value is the unconsumed unnamed arg which is discarded,
+	// leaving only the declared return value.
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
-		NewList([]Value{NewWord("dup")}), // produces 2 values, signature expects 1
+		NewList([]Value{NewWord("dup")}),
 	})
-	err = runAQLError(t, r, []Value{
+	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("toomany"),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 5 {
+		t.Errorf("expected [5], got %v", result)
+	}
+
+	// Genuinely wrong: body produces more values than unnamed args + declared returns.
+	// def bad fn [[number] [number] [dup dup]] end — 3 results, 1 unnamed + 1 return = 2 max.
+	fnBody2 := NewList([]Value{
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("Number")}),
+		NewList([]Value{NewWord("dup"), NewWord("dup")}),
+	})
+	err = runAQLError(t, r, []Value{
+		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody2, NewWord("end"),
+		NewInteger(5), NewWord("bad"),
 	})
 	if err == nil {
 		t.Fatal("expected return count error, got nil")
 	}
-	if !strings.Contains(err.Error(), "toomany") {
+	if !strings.Contains(err.Error(), "bad") {
 		t.Errorf("error should mention function name, got: %v", err)
 	}
 }
