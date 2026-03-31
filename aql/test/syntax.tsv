@@ -833,7 +833,7 @@ String or None	Scalar/String|None
 None or Boolean	None|Scalar/Boolean
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
+String or Number or Boolean	Scalar/Number|Scalar/String|Scalar/Boolean
 
 # Disjunct unify with scalar types
 (String or None) unify "a"	'a' true
