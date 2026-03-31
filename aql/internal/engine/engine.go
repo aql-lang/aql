@@ -352,6 +352,10 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
+		if t, ok := ResolveTypePath(w.Name); ok {
+			e.stack[e.pointer] = NewTypeLiteral(t)
+			return nil
+		}
 		e.stack[e.pointer] = NewAtom(w.Name)
 		return nil
 	}

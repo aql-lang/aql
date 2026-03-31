@@ -835,6 +835,9 @@ func resolveTextValue(text string) engine.Value {
 	if t, ok := typeNames[text]; ok {
 		return engine.NewTypeLiteral(t)
 	}
+	if t, ok := engine.ResolveTypePath(text); ok {
+		return engine.NewTypeLiteral(t)
+	}
 	return engine.NewAtom(text)
 }
 
@@ -916,6 +919,9 @@ func parseWord(text string) (engine.Value, error) {
 	// Type names resolve to type literals even in word context, so that
 	// they retain their meaning inside quotations (e.g. [String,Decimal]).
 	if t, ok := typeNames[name]; ok {
+		return engine.NewTypeLiteral(t), nil
+	}
+	if t, ok := engine.ResolveTypePath(name); ok {
 		return engine.NewTypeLiteral(t), nil
 	}
 

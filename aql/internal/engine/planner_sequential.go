@@ -181,6 +181,14 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 					continue
 				}
 				break // type name doesn't match expected metatype
+			} else if tn, isType := ResolveTypePath(ww.Name); isType {
+				typeLit := NewTypeLiteral(tn)
+				if sigTypeMatches(typeLit, expectedType) {
+					forwardMatched++
+					scanIdx++
+					continue
+				}
+				break
 			}
 			if sigTypeMatches(Value{VType: resolvedType}, expectedType) || expectedType.Equal(TAny) {
 				forwardMatched++
