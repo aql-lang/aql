@@ -75,7 +75,7 @@ func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []V
 // The stack is checked FIRST to determine how many suffix positions it can
 // fill. The forward scan then only needs to fill the remaining prefix
 // positions. This prevents over-collection in chained infix expressions
-// like "1 add 2 add 3" — the stack provides arg 0, so only 1 forward
+// like "1 add 2 add 3" — the stack provides arg 1, so only 1 forward
 // arg is needed, and the scan stops after "2".
 //
 // Returns (forwardMatched, stackCount).
@@ -232,8 +232,6 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 	// Forward scan stopped short. Try filling remaining from stack suffix.
 	remaining := nArgs - forwardMatched
 	if forwardMatched > 0 && remaining > 0 && len(resolved) >= remaining {
-		// Check if stack can fill sigArgs[forwardMatched:] using bottom-up
-		// ordering consistent with MatchSignature.
 		ok := true
 		for j := 0; j < remaining; j++ {
 			stackVal := resolved[len(resolved)-remaining+j]
