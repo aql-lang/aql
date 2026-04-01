@@ -50,6 +50,27 @@ func Words() []string {
 	return names
 }
 
+// isNonCommutative2Arg returns true if the word is a non-commutative
+// binary operation (where arg order matters).
+func isNonCommutative2Arg(info FuncInfo) bool {
+	has2Arg := false
+	for _, sig := range info.Sigs {
+		if len(sig.Args) == 2 {
+			has2Arg = true
+			break
+		}
+	}
+	if !has2Arg {
+		return false
+	}
+	switch info.Name {
+	case "sub", "div", "mod", "pow", "atan2",
+		"lt", "gt", "lte", "gte", "implies":
+		return true
+	}
+	return false
+}
+
 // typeAbbrev shortens a full type path to its leaf name.
 func typeAbbrev(t string) string {
 	parts := strings.Split(t, "/")
@@ -117,6 +138,9 @@ func FormatDynamic(info FuncInfo) string {
 	desc := "<not described>"
 	if entry != nil && entry.Description != "" {
 		desc = entry.Description
+	}
+	if isNonCommutative2Arg(info) {
+		desc += " NOTE: most significant argument is last."
 	}
 	b.WriteString("\nDescription:\n")
 	writeWrapped(&b, desc, 70, "  ")
