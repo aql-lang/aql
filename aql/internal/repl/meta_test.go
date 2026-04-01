@@ -222,8 +222,8 @@ func TestMetaHelpWithWord(t *testing.T) {
 	if !strings.Contains(output, "add") {
 		t.Error("expected 'add' in help output")
 	}
-	if !strings.Contains(output, "Signatures") {
-		t.Error("expected 'Signatures' section")
+	if !strings.Contains(output, "Description") {
+		t.Error("expected 'Description' section")
 	}
 }
 

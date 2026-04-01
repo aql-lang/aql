@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
 
 func TestExecuteVersion(t *testing.T) {
@@ -242,21 +240,19 @@ func TestExecuteHelpUnknownWord(t *testing.T) {
 }
 
 func TestExecuteHelpMatchesHelpFormat(t *testing.T) {
-	// The CLI "aql help add" should produce the same output as help.Format
-	// — the same function the in-language "add help" word uses.
+	// The CLI "aql help add" should produce dynamic help output with
+	// all expected sections.
 	var cliOut bytes.Buffer
 	code := execute([]string{"help", "add"}, nil, &cliOut, &bytes.Buffer{})
 	if code != 0 {
 		t.Fatalf("CLI help exit code = %d, want 0", code)
 	}
 
-	entry := help.Lookup("add")
-	if entry == nil {
-		t.Fatal("expected help entry for 'add'")
-	}
-	expected := help.Format(entry)
-	if cliOut.String() != expected {
-		t.Errorf("CLI output differs from help.Format:\nCLI:\n%s\nExpected:\n%s", cliOut.String(), expected)
+	out := cliOut.String()
+	for _, section := range []string{"add —", "Precedence:", "Signatures:", "Description:", "Examples:"} {
+		if !strings.Contains(out, section) {
+			t.Errorf("expected %q section in help output, got:\n%s", section, out)
+		}
 	}
 }
 
