@@ -7,6 +7,7 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -23,6 +24,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	}
 	reg.SetFileOps(mem)
 	native.Register(reg)
+	nativemod.RegisterMath(reg)
 
 	eng := engine.NewTop(reg)
 	var result []engine.Value

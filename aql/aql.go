@@ -4,6 +4,7 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 
 	udk "voxgiguniversalsdk"
@@ -112,6 +113,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
+	reg.NativeModResolver = nativemod.Resolve
 	native.Register(reg)
 
 	um := udk.NewUniversalManager(map[string]any{

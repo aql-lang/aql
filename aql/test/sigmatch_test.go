@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -48,6 +49,7 @@ func TestSigMatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			nativemod.RegisterMath(reg)
 			eng := engine.NewTop(reg)
 			result, err := eng.Run(values)
 

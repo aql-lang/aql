@@ -671,36 +671,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 
 // ── Math binary ops with decimal coverage ────────────────────────────
 
-func TestMathMinMaxDecimal(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// min with decimals
-	result := runAQL(t, r, []Value{NewDecimal(1.5), NewWord("min"), NewDecimal(2.5)})
-	if result[0].AsNumber() != 1.5 {
-		t.Errorf("expected 1.5, got %v", result[0])
-	}
-
-	// max with decimals
-	result = runAQL(t, r, []Value{NewDecimal(1.5), NewWord("max"), NewDecimal(2.5)})
-	if result[0].AsNumber() != 2.5 {
-		t.Errorf("expected 2.5, got %v", result[0])
-	}
-
-	// atan2 with decimals
-	result = runAQL(t, r, []Value{NewDecimal(1.0), NewWord("atan2"), NewDecimal(1.0)})
-	if result[0].AsNumber() == 0 {
-		t.Error("expected non-zero atan2 result")
-	}
-
-	// hypot with decimals
-	result = runAQL(t, r, []Value{NewDecimal(3.0), NewWord("hypot"), NewDecimal(4.0)})
-	if result[0].AsNumber() != 5.0 {
-		t.Errorf("expected 5.0, got %v", result[0])
-	}
-}
+// TestMathMinMaxDecimal moved to internal/nativemod/ (aql:math module).
 
 // ── Make table ───────────────────────────────────────────────────────
 

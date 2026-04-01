@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -16,6 +17,7 @@ func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	nativemod.RegisterMath(reg)
 	eng := engine.NewTop(reg)
 
 	var result []engine.Value
