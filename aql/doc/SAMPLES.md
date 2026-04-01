@@ -127,33 +127,29 @@ numberic: pi euler
 
 ## Storage
 
-`set foo 99` - sets store key foo to value 99
-set has signature: set [string any]
+`set` and `get` require an explicit Store argument.
+The `context` word (0-arg) pushes the current context Store.
+
+`context set foo 99` - sets context key foo to value 99
+set has signature: set [string any Store]
 
 examples:
 
-`set foo 99`
+`context set foo 99`
 
-[|foo 99] -> [99|] - the value is left on the stack
+[|context set foo 99] -> [|] - value stored in context
 
+`context set foo 99 end 88` - shows usage of end
 
-`set foo` - assumes value is already on stack
-
-[99 | foo] -> [99|]
-
-
-`set` - all args on stack - note order
-
-[99 foo|] -> [99|]
+[|context set foo 99 end 88] -> [88|] - and context contains foo:99
 
 
-`set foo end 88` - shows usage of end
+`context get foo` - gets value of context key foo
 
-[99 | foo end 88] -> [99 88|] - and store contains foo:99
+`get` also accesses Map, List, and Object fields (alias: `.`):
 
-
-
-`get foo` - gets value of store key foo
+`{x:1} . x` => 1
+`[10,20] . 1` => 20
 
 
 

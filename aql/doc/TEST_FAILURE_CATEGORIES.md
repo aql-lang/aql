@@ -70,9 +70,9 @@ collected arguments.
 ## ~~Category 3: expandDottedWord Flag Mismatch~~ (FIXED — 7 tests)
 
 All 7 `expandDotted*` parser tests now pass. The `expandDottedWord()` function was
-rewritten to emit `( foo dot a dot b )` instead of `( foo a dot b dot )`, and tests
-were updated accordingly. `dot` is now a plain forward-precedence word — no
-`ForceStack` or `WordModified` needed.
+rewritten to emit `( foo get a get b )` instead of `( foo a dot b dot )`, and tests
+were updated accordingly. `get` (formerly `dot`) is a plain forward-precedence word —
+no `ForceStack` or `WordModified` needed. `.` is now an alias for `get`.
 
 ---
 
