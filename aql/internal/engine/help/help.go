@@ -139,6 +139,8 @@ func FormatDynamic(info FuncInfo) string {
 }
 
 // writePrecedenceExamples shows all arg configurations for forward words.
+// For 2-arg words: word x y <=> y word x <=> y x word
+// This reflects outward-consumption: sig[0] is nearest to word on each side.
 func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	// Find longest signature (up to 3 args)
 	maxArgs := 0
@@ -157,17 +159,24 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	vars := []string{"x", "y", "z"}[:maxArgs]
 	name := info.Name
 
-	// Generate all configurations: 0 prefix to maxArgs prefix
+	// Generate all configurations: 0 prefix to maxArgs prefix.
+	// prefix=0: word x y z      (all forward)
+	// prefix=1: z word x y      (1 on stack = sig[maxArgs-1], rest forward)
+	// prefix=2: z y word x      (2 on stack, 1 forward)
+	// prefix=3: z y x word      (all stack)
+	//
+	// Stack args appear outermost-first in source (deepest on stack = leftmost).
+	// Forward args appear nearest-first after word.
 	configs := make([]string, 0, maxArgs+1)
 	for prefix := 0; prefix <= maxArgs; prefix++ {
 		var parts []string
-		// prefix args (reversed: deepest first on stack)
-		for i := prefix - 1; i >= 0; i-- {
+		// Stack args: the last `prefix` vars, in reverse order (deepest first)
+		for i := maxArgs - 1; i >= maxArgs-prefix; i-- {
 			parts = append(parts, vars[i])
 		}
 		parts = append(parts, name)
-		// forward args
-		for i := prefix; i < maxArgs; i++ {
+		// Forward args: the first (maxArgs-prefix) vars, in order
+		for i := 0; i < maxArgs-prefix; i++ {
 			parts = append(parts, vars[i])
 		}
 		configs = append(configs, strings.Join(parts, " "))
@@ -261,8 +270,8 @@ func writeSigs(b *strings.Builder, sigs []SigInfo) {
 // Standard example values by type leaf name.
 var exampleValues = map[string][]string{
 	"Integer": {"2", "3", "4", "5", "6", "7", "8", "9"},
-	"Decimal": {"2.1", "3.2", "4.3", "5.4", "6.5", "7.6", "8.7", "9.8"},
-	"Number":  {"2", "3.1", "4", "5.1", "6", "7.1", "8", "9.1"},
+	"Decimal": {"2.25", "3.5", "4.75", "5.25", "6.5", "7.75", "8.25", "9.5"},
+	"Number":  {"2", "3.5", "4", "5.25", "6", "7.5", "8", "9.25"},
 	"String":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},
 	"Scalar":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},
 	"Atom":    {"a", "b", "c", "d", "e", "f"},
@@ -300,7 +309,8 @@ func sigArgsSameType(sig SigInfo) bool {
 }
 
 // writeExamples generates column-aligned examples, one per signature,
-// cycling through arg configurations.
+// cycling through arg configurations. For 2-arg words, infix examples
+// come first. Args appear descending left-to-right in source.
 func writeExamples(b *strings.Builder, info FuncInfo) {
 	if len(info.Sigs) == 0 {
 		b.WriteString("  (no examples)\n")
@@ -310,13 +320,14 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 	type exLine struct {
 		expr   string
 		result string
+		prefix int // for sorting: infix (1) first
 	}
 	var examples []exLine
 	maxExprLen := 0
 
-	configIdx := 0 // cycles through configurations across sigs
+	configIdx := 0
 
-	// Per-type counters for cycling example values
+	// Per-type counters for cycling example values (descending)
 	counters := map[string]int{}
 
 	for _, sig := range info.Sigs {
@@ -325,7 +336,9 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			continue
 		}
 
-		// Pick example values for this signature
+		// Pick example values: vals[0] gets the smaller value (sig[0]),
+		// vals[1] gets the larger (sig[1]). In infix form (vals[1] word vals[0]),
+		// this gives descending left-to-right.
 		vals := make([]string, nArgs)
 		for i, a := range sig.Args {
 			leaf := typeAbbrev(a)
@@ -334,30 +347,51 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			counters[leaf] = c
 		}
 
+		// Compute result (same for all configs due to arg equivalence)
+		sigArgs := buildSigArgs(vals, 0, nArgs)
+		result := computeExampleResult(info.Name, sig, sigArgs)
+
 		// Show all configs when both args are the same type,
 		// otherwise show one config and cycle.
 		if sigArgsSameType(sig) {
 			for prefix := 0; prefix <= nArgs; prefix++ {
-				orderedVals := buildSigArgs(vals, prefix, nArgs)
-				result := computeExampleResult(info.Name, sig, orderedVals)
 				expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
 				if len(expr) > maxExprLen {
 					maxExprLen = len(expr)
 				}
-				examples = append(examples, exLine{expr: expr, result: result})
+				examples = append(examples, exLine{expr: expr, result: result, prefix: prefix})
 			}
 		} else {
 			prefix := configIdx % (nArgs + 1)
-			orderedVals := buildSigArgs(vals, prefix, nArgs)
-			result := computeExampleResult(info.Name, sig, orderedVals)
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
 			if len(expr) > maxExprLen {
 				maxExprLen = len(expr)
 			}
-			examples = append(examples, exLine{expr: expr, result: result})
+			examples = append(examples, exLine{expr: expr, result: result, prefix: prefix})
 		}
 
 		configIdx++
+	}
+
+	// For 2-arg words, sort so infix examples (prefix=1) come first
+	// within each signature group. We do this by partitioning: infix first,
+	// then others in original order.
+	maxArgs := 0
+	for _, sig := range info.Sigs {
+		if len(sig.Args) > maxArgs {
+			maxArgs = len(sig.Args)
+		}
+	}
+	if maxArgs == 2 {
+		var infix, others []exLine
+		for _, ex := range examples {
+			if ex.prefix == 1 {
+				infix = append(infix, ex)
+			} else {
+				others = append(others, ex)
+			}
+		}
+		examples = append(infix, others...)
 	}
 
 	for _, ex := range examples {
@@ -367,51 +401,36 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		for i := 0; i < padding; i++ {
 			b.WriteByte(' ')
 		}
-		b.WriteString("=> ")
+		b.WriteString(";# ")
 		b.WriteString(ex.result)
 		b.WriteByte('\n')
 	}
 }
 
-// buildSigArgs computes the effective sig arg values for a given configuration.
-// With `prefix` values before the word and the rest forward:
-//   - Forward args fill sig[0], sig[1], ... (nearest to word first)
-//   - Remaining slots filled from stack (top-of-stack first)
-//
-// Expression layout: vals[prefix-1] ... vals[0] word vals[prefix] ... vals[n-1]
-//   Stack values (reversed in source): vals[0] is top of stack.
-//   Forward values: vals[prefix], vals[prefix+1], ...
+// buildSigArgs returns the sig args in signature order for a given config.
+// Regardless of prefix/forward layout, the argument equivalence principle
+// means all configs produce sig[0]=vals[0], sig[1]=vals[1], etc.
 func buildSigArgs(vals []string, prefix, nArgs int) []string {
-	forward := vals[prefix:] // forward args in source order
-	// stack values: vals[0..prefix-1], with vals[prefix-1] deepest, vals[0] on top
-
-	sigArgs := make([]string, nArgs)
-	fwdCount := len(forward)
-
-	// Forward fills sig[0], sig[1], ...
-	for i := 0; i < fwdCount; i++ {
-		sigArgs[i] = forward[i]
-	}
-	// Stack fills remaining, top-of-stack first
-	stackIdx := 0
-	for i := fwdCount; i < nArgs; i++ {
-		sigArgs[i] = vals[stackIdx]
-		stackIdx++
-	}
-	return sigArgs
+	result := make([]string, len(vals))
+	copy(result, vals)
+	return result
 }
 
-// buildExampleExpr constructs an expression with `prefix` args before the word
-// and the rest after.
+// buildExampleExpr constructs an expression with `prefix` args on stack
+// and the rest forward. Mirrors the precedence layout:
+//   prefix=0: word v0 v1 v2      (all forward)
+//   prefix=1: v2 word v0 v1      (last on stack)
+//   prefix=2: v2 v1 word v0      (last two on stack)
+//   prefix=3: v2 v1 v0 word      (all on stack)
 func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 	var parts []string
-	// prefix args (reversed: innermost first on stack = outermost in source)
-	for i := prefix - 1; i >= 0; i-- {
+	// Stack args: last `prefix` vals, outermost (deepest) first
+	for i := nArgs - 1; i >= nArgs-prefix; i-- {
 		parts = append(parts, vals[i])
 	}
 	parts = append(parts, name)
-	// forward args
-	for i := prefix; i < nArgs; i++ {
+	// Forward args: first (nArgs-prefix) vals, in order
+	for i := 0; i < nArgs-prefix; i++ {
 		parts = append(parts, vals[i])
 	}
 	return strings.Join(parts, " ")
