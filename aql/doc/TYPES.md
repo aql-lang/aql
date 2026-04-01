@@ -26,7 +26,6 @@ Node
   Map                        -- ordered key-value pairs
     Options                  -- map with defaults/constraints
     Inspect                  -- inspection result (word or type)
-  Error                      -- error value
 
 Word
   Function                   -- callable function reference
@@ -45,6 +44,7 @@ Word
 Object                       -- mutable typed instances
   Store                      -- mutable key-value store with prototype chain
     System                   -- system configuration store
+  Error                      -- error value
   Table                      -- list of typed records (SQL-backed)
   Record                     -- typed field schema
   Fetch                      -- HTTP fetch operation

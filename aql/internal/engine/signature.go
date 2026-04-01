@@ -266,7 +266,7 @@ var typeInherentScores = map[string]int{
 	// Depth 2 — regular types, ordered by cardinality
 	"Scalar/Boolean":  1200,
 	"Scalar/Atom":     1300,
-	"Node/Error":      1400,
+	"Object/Error":    1400,
 	"Object/Fetch":    1500,
 	"Object/Resource": 1600,
 	"Scalar/Number":   1700,

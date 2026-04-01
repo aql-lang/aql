@@ -56,6 +56,7 @@ var typeAncestry = map[string]string{
 	"Returncheck": "Word/__RC",
 	"Disjunct":    "Word/__DJ",
 	"Module":      "Word/__MD",
+	"Error":       "Object/Error",
 	"Resource":    "Object/Resource",
 	"Entity":      "Object/Resource/Entity",
 	"ScalarType":  "Type/ScalarType",
@@ -104,7 +105,7 @@ var (
 	TFetchFunction  = mustType("Object/Fetch")
 	TFetchRequest  = mustType("Object/Fetch/Request")
 	TFetchResponse = mustType("Object/Fetch/Response")
-	TError         = mustType("Node/Error")
+	TError         = mustType("Object/Error")
 	TType          = mustType("Type")
 	TScalarType    = mustType("Type/ScalarType")
 	TNodeType      = mustType("Type/NodeType")
@@ -152,6 +153,7 @@ var builtinTypeIDs = map[string]int{
 	"Object/Fetch/Response":    35,
 	"Object/Store":             42,
 	"Object/Store/System":      43,
+	"Object/Error":             44,
 	"Object/Resource":          36,
 	"Object/Resource/Entity":   37,
 	"Type":                     39,
@@ -276,7 +278,7 @@ var builtinTypeList = []Type{
 	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 	TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
-	TObject, TStore, TStoreSystem, TResource, TResourceEntity, TType, TScalarType, TNodeType,
+	TObject, TStore, TStoreSystem, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -356,7 +358,7 @@ func builtinTypeParts() map[string]bool {
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TInspect, TObject,
-		TStore, TStoreSystem,
+		TStore, TStoreSystem, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 		TType, TScalarType, TNodeType,
 	}
