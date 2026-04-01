@@ -262,14 +262,20 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 	return result
 }
 
-// StoreInstanceInfo is a mutable key-value store (Object/Store).
+// StoreInstanceInfo is a copy-on-write key-value store (Object/Store).
 // Unlike regular Object instances which have typed fields, Store instances
 // hold arbitrary key-value pairs. Key resolution walks the prototype chain,
 // enabling scope-like lookup when contexts are nested.
+//
+// Copy-on-write: the AQL `set` word creates a new Store layer (prototype =
+// old Store) instead of mutating in place. If this Store is nested inside
+// a parent Store, the parent is COW'd too, propagating up to the ctxStack.
 type StoreInstanceInfo struct {
 	TypeName  string              // full type path, e.g. "Object/Store" or "Object/Store/System"
-	Data      map[string]Value    // mutable key-value pairs
-	Prototype *StoreInstanceInfo  // prototype chain for key lookup
+	Data      map[string]Value    // own key-value pairs (COW layer)
+	Prototype *StoreInstanceInfo  // prototype chain for key lookup / COW base
+	Parent    *StoreInstanceInfo  // containing Store (for COW propagation), nil if root
+	ParentKey string              // key in Parent that references this Store
 }
 
 // Get looks up a key in this store, walking the prototype chain if not found.
@@ -283,9 +289,15 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 	return Value{}, false
 }
 
-// Set stores a key-value pair in this store (does not walk the prototype chain).
+// Set stores a key-value pair directly (for internal/init use only).
+// AQL code should use the set word which does COW via cowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
 	si.Data[key] = val
+	// Track parent relationship for nested Stores.
+	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {
+		childStore.Parent = si
+		childStore.ParentKey = key
+	}
 }
 
 // ArrayInstanceInfo is a mutable ordered array (Object/Array).

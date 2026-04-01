@@ -404,9 +404,10 @@ func TestArrayStringRepresentation(t *testing.T) {
 	}
 }
 
-// --- Store mutability (for completeness) ---
+// --- Store copy-on-write ---
 
-func TestStoreMutableViaSet(t *testing.T) {
+func TestStoreCOWBasic(t *testing.T) {
+	// set on a Store creates a new COW layer; get resolves through prototype.
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("k"), NewInteger(7),
@@ -415,5 +416,124 @@ func TestStoreMutableViaSet(t *testing.T) {
 	})
 	if len(result) != 1 || result[0].AsInteger() != 7 {
 		t.Fatalf("got %v, want 7", result)
+	}
+}
+
+func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
+	// After COW set, the original Store is unchanged.
+	store := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     map[string]Value{"x": NewInteger(1)},
+	}
+	r, _ := DefaultRegistry()
+	r.InitRootContext()
+	// Put store in context
+	ctx := r.ContextStore()
+	ctx.Set("s", NewStoreValue(store))
+
+	e := New(r)
+	// Get the nested store, set a key on it
+	_, err := e.Run([]Value{
+		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("set"), NewWord("y"), NewInteger(99),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The original store should NOT have key "y"
+	if _, ok := store.Data["y"]; ok {
+		t.Fatal("COW violated: original store was mutated")
+	}
+	// Original "x" is still 1
+	if store.Data["x"].AsInteger() != 1 {
+		t.Fatal("original store's x was changed")
+	}
+}
+
+func TestStoreCOWParentPropagation(t *testing.T) {
+	// Nested stores: context → parent → child
+	// Set on child should COW child AND propagate to parent in context.
+	r, _ := DefaultRegistry()
+	r.InitRootContext()
+	ctx := r.ContextStore()
+
+	child := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	child.Set("val", NewInteger(10))
+	parent := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	parent.Set("child", NewStoreValue(child))
+	ctx.Set("parent", NewStoreValue(parent))
+
+	e := New(r)
+	// context get parent → get child → set val 42
+	result, err := e.Run([]Value{
+		NewWord("context"), NewWord("get"), NewWord("parent"),
+		NewWord("get"), NewWord("child"),
+		NewWord("set"), NewWord("val"), NewInteger(42),
+		NewWord("end"),
+		// Now read it back through the context
+		NewWord("context"), NewWord("get"), NewWord("parent"),
+		NewWord("get"), NewWord("child"),
+		NewWord("get"), NewWord("val"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Fatalf("got %v, want 42 (COW propagated through parent)", result)
+	}
+
+	// Original child store should be unchanged
+	if child.Data["val"].AsInteger() != 10 {
+		t.Fatal("COW violated: original child was mutated")
+	}
+}
+
+func TestStoreCOWPrototypeResolution(t *testing.T) {
+	// After COW, unchanged keys resolve through the prototype chain.
+	r, _ := DefaultRegistry()
+	r.InitRootContext()
+	ctx := r.ContextStore()
+
+	store := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     map[string]Value{"a": NewInteger(1), "b": NewInteger(2)},
+	}
+	ctx.Set("s", NewStoreValue(store))
+
+	e := New(r)
+	// Set "a" to 99, then read both "a" and "b"
+	result, err := e.Run([]Value{
+		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("set"), NewWord("a"), NewInteger(99),
+		NewWord("end"),
+		// Read "a" (from COW layer)
+		NewOpenParen(),
+		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("get"), NewWord("a"),
+		NewWord(")"),
+		// Read "b" (from prototype, unchanged)
+		NewOpenParen(),
+		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("get"), NewWord("b"),
+		NewWord(")"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d results, want 2", len(result))
+	}
+	if result[0].AsInteger() != 99 {
+		t.Errorf("a = %v, want 99 (from COW layer)", result[0])
+	}
+	if result[1].AsInteger() != 2 {
+		t.Errorf("b = %v, want 2 (from prototype)", result[1])
 	}
 }

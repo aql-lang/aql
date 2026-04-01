@@ -143,6 +143,39 @@ func (r *Registry) ContextStore() *StoreInstanceInfo {
 	return r.ctxStack[len(r.ctxStack)-1]
 }
 
+// UpdateCtxStoreChain updates ctxStack entries affected by a COW operation.
+// origRoot is the original Store that was COW'd (the prototype of the new
+// root). newRoot is the COW'd replacement. For each ctxStack entry whose
+// prototype chain passes through origRoot, replace origRoot with newRoot
+// in that chain by creating a new Store layer.
+func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
+	for i := len(r.ctxStack) - 1; i >= 0; i-- {
+		entry := r.ctxStack[i]
+		// Direct match: this ctxStack entry IS the original root.
+		if entry == origRoot {
+			r.ctxStack[i] = newRoot
+			return
+		}
+		// Check if the entry's prototype chain passes through origRoot.
+		// If so, rebuild the entry with newRoot substituted in.
+		for p := entry; p != nil; p = p.Prototype {
+			if p.Prototype == origRoot {
+				// p's prototype is the original root. Create a new entry
+				// that preserves p's own data but uses newRoot as prototype.
+				rebuilt := &StoreInstanceInfo{
+					TypeName:  entry.TypeName,
+					Data:      entry.Data,
+					Prototype: newRoot,
+					Parent:    entry.Parent,
+					ParentKey: entry.ParentKey,
+				}
+				r.ctxStack[i] = rebuilt
+				return
+			}
+		}
+	}
+}
+
 // Register adds one or more signatures to a named function with forward precedence.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
