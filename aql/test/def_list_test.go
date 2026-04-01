@@ -24,7 +24,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	}
 	reg.SetFileOps(mem)
 	native.Register(reg)
-	nativemod.RegisterMath(reg)
+	nativemod.InstallMathExports(reg)
 
 	eng := engine.NewTop(reg)
 	var result []engine.Value

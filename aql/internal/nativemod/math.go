@@ -6,15 +6,108 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// RegisterMath registers the extended math words provided by the "aql:math"
-// native module. These include unary operations (abs, negate, sign), rounding
-// (ceil, floor, round, trunc), roots and exponentials (sqrt, cbrt, exp, log,
-// log2, log10), trigonometry (sin, cos, tan, asin, acos, atan, atan2, hypot),
-// min/max, and constants (math-pi, math-e).
+// BuildMathModule creates the "aql:math" native module. It registers the
+// Go-implemented math words into an isolated sub-registry and returns a
+// ModuleDesc with a "math" export containing FnDef wrappers for each word.
+//
+// After import, words are accessed via dot notation: math.sin, math.abs, etc.
 //
 // The basic arithmetic operations (add, sub, mul, div, mod, pow) remain
 // built-in and do not require this module.
-func RegisterMath(r *engine.Registry) {
+func BuildMathModule(parent *engine.Registry) (engine.ModuleDesc, error) {
+	// Create an isolated sub-registry for the module's Go words.
+	subReg, err := engine.DefaultRegistry()
+	if err != nil {
+		return engine.ModuleDesc{}, err
+	}
+
+	// Register all math words into the sub-registry.
+	registerAllMathWords(subReg)
+
+	// Build the export map with FnDef wrappers.
+	exports := engine.NewOrderedMap()
+
+	// Unary operations: [Number] -> [Number]
+	for _, name := range []string{
+		"abs", "negate", "sign",
+		"ceil", "floor", "round", "trunc",
+		"sqrt", "cbrt", "exp", "log", "log2", "log10",
+		"sin", "cos", "tan", "asin", "acos", "atan",
+	} {
+		exports.Set(name, makeUnaryFnDef(name, subReg))
+	}
+
+	// Binary operations: [Number, Number] -> [Number]
+	for _, name := range []string{"min", "max", "atan2", "hypot"} {
+		exports.Set(name, makeBinaryFnDef(name, subReg))
+	}
+
+	// Constants: [] -> [Decimal]
+	exports.Set("pi", makeConstFnDef("math-pi", subReg))
+	exports.Set("e", makeConstFnDef("math-e", subReg))
+
+	modID := parent.NextModuleID()
+	desc := engine.ModuleDesc{
+		ID:      modID,
+		Exports: map[string]*engine.OrderedMap{"math": exports},
+	}
+	parent.Modules[modID] = desc
+	return desc, nil
+}
+
+// makeUnaryFnDef creates a FnDef value that wraps a unary math word.
+// Uses unnamed params so args are pushed directly onto the stack.
+func makeUnaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{
+			{
+				Params:  []engine.FnParam{{Type: engine.TNumber}},
+				Returns: []engine.Type{engine.TNumber},
+				Body:    []engine.Value{engine.NewWord(wordName)},
+			},
+		},
+		Registry: subReg,
+	}
+	return engine.NewFnDef(fnDef)
+}
+
+// makeBinaryFnDef creates a FnDef value that wraps a binary math word.
+// Uses unnamed params so args are pushed directly onto the stack.
+func makeBinaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{
+			{
+				Params: []engine.FnParam{
+					{Type: engine.TNumber},
+					{Type: engine.TNumber},
+				},
+				Returns: []engine.Type{engine.TNumber},
+				Body:    []engine.Value{engine.NewWord(wordName)},
+			},
+		},
+		Registry: subReg,
+	}
+	return engine.NewFnDef(fnDef)
+}
+
+// makeConstFnDef creates a FnDef value that wraps a zero-arg constant word.
+func makeConstFnDef(wordName string, subReg *engine.Registry) engine.Value {
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{
+			{
+				Params:  []engine.FnParam{},
+				Returns: []engine.Type{engine.TDecimal},
+				Body:    []engine.Value{engine.NewWord(wordName)},
+			},
+		},
+		Registry: subReg,
+	}
+	return engine.NewFnDef(fnDef)
+}
+
+// registerAllMathWords registers the Go-implemented math words into a registry.
+// These are the internal implementations used by the FnDef wrappers.
+func registerAllMathWords(r *engine.Registry) {
 	registerAbs(r)
 	registerNegate(r)
 	registerSign(r)
@@ -45,7 +138,7 @@ func RegisterMath(r *engine.Registry) {
 	registerMathConstants(r)
 }
 
-// --- Unary operations ---
+// --- Registration functions (Go implementations) ---
 
 func registerAbs(r *engine.Registry) {
 	r.Register("abs", engine.Signature{
@@ -112,8 +205,6 @@ func registerSign(r *engine.Registry) {
 	})
 }
 
-// --- Min/Max ---
-
 func registerMin(r *engine.Registry) {
 	engine.RegisterBinaryIntOp(r, "min", func(a, b int64) (int64, error) {
 		if a < b {
@@ -143,8 +234,6 @@ func registerMax(r *engine.Registry) {
 		return b, nil
 	})
 }
-
-// --- Rounding ---
 
 func registerCeil(r *engine.Registry) {
 	r.Register("ceil", engine.Signature{
@@ -182,57 +271,18 @@ func registerTrunc(r *engine.Registry) {
 	})
 }
 
-// --- Roots, exponentials, logarithms ---
-
-func registerSqrt(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "sqrt", func(x float64) float64 { return math.Sqrt(x) })
-}
-
-func registerCbrt(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "cbrt", func(x float64) float64 { return math.Cbrt(x) })
-}
-
-func registerExp(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "exp", func(x float64) float64 { return math.Exp(x) })
-}
-
-func registerLog(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "log", func(x float64) float64 { return math.Log(x) })
-}
-
-func registerLog2(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "log2", func(x float64) float64 { return math.Log2(x) })
-}
-
-func registerLog10(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "log10", func(x float64) float64 { return math.Log10(x) })
-}
-
-// --- Trigonometry ---
-
-func registerSin(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "sin", func(x float64) float64 { return math.Sin(x) })
-}
-
-func registerCos(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "cos", func(x float64) float64 { return math.Cos(x) })
-}
-
-func registerTan(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "tan", func(x float64) float64 { return math.Tan(x) })
-}
-
-func registerAsin(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "asin", func(x float64) float64 { return math.Asin(x) })
-}
-
-func registerAcos(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "acos", func(x float64) float64 { return math.Acos(x) })
-}
-
-func registerAtan(r *engine.Registry) {
-	engine.RegisterUnaryNumOp(r, "atan", func(x float64) float64 { return math.Atan(x) })
-}
+func registerSqrt(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "sqrt", math.Sqrt) }
+func registerCbrt(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "cbrt", math.Cbrt) }
+func registerExp(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "exp", math.Exp) }
+func registerLog(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "log", math.Log) }
+func registerLog2(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "log2", math.Log2) }
+func registerLog10(r *engine.Registry) { engine.RegisterUnaryNumOp(r, "log10", math.Log10) }
+func registerSin(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "sin", math.Sin) }
+func registerCos(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "cos", math.Cos) }
+func registerTan(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "tan", math.Tan) }
+func registerAsin(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "asin", math.Asin) }
+func registerAcos(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "acos", math.Acos) }
+func registerAtan(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "atan", math.Atan) }
 
 func registerAtan2(r *engine.Registry) {
 	engine.RegisterBinaryNumOp(r, "atan2", func(a, b float64) (float64, error) {
@@ -257,8 +307,6 @@ func registerHypot(r *engine.Registry) {
 		},
 	})
 }
-
-// --- Constants ---
 
 func registerMathConstants(r *engine.Registry) {
 	r.RegisterStackOnly("math-pi", engine.Signature{

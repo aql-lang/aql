@@ -27,29 +27,29 @@ type TypeDef struct {
 // Registry maps function names to their definitions.
 type Registry struct {
 	funcs             map[string]*Function
-	DefStacks         map[string][]Value                   // stacked bodies for def-defined words
-	Types             map[string]TypeDef                   // complex type registry keyed by full type path
-	FileOps           fileops.FileOps                      // file operations for read/write words (OS-backed default)
-	MemOps            *fileops.MemFileOps                  // in-memory file ops (used when __sys.fs.mem = true)
-	Formats           map[string]Format                    // format registry for read/write (keyed by name)
-	Output            io.Writer                            // output writer for print/printstr and stdout
-	ErrOutput         io.Writer                            // error output writer for stderr
-	Input             io.Reader                            // input reader for stdin
-	SQLite            *SQLiteStore                         // in-memory SQLite store for table data
-	Modules           map[string]ModuleDesc                // child modules keyed by generated ID
-	moduleSeq         int                                  // counter for generating module IDs
-	ParseFunc         func(string) ([]Value, error)        // parser callback (set externally to avoid circular import)
-	ctxStack          []*StoreInstanceInfo                 // scoped context stack; top = current engine's context Store
-	argsStack         []Value                              // stack of args lists for nested fn calls
-	KnownTypeParts    map[string]bool                      // set of all type path parts (for uniqueness enforcement)
-	Manager           any                                  // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache          map[string]any                       // cached SDK instances keyed by spec name
-	BaseDir           string                               // base directory for resolving relative file paths (set by loadFileModule)
-	errs              []error                              // registration errors accumulated during setup
-	ready             bool                                 // true after initial setup; triggers dynamic help generation
-	OnRegisterHook    func(name string)                    // called when a function is registered after startup
-	NativeModResolver func(name string, r *Registry) error // resolves "aql:<name>" native module imports
-	loadedNativeMods  map[string]bool                      // tracks which native modules have been loaded
+	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	Types             map[string]TypeDef                                 // complex type registry keyed by full type path
+	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
+	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
+	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
+	Output            io.Writer                                          // output writer for print/printstr and stdout
+	ErrOutput         io.Writer                                          // error output writer for stderr
+	Input             io.Reader                                          // input reader for stdin
+	SQLite            *SQLiteStore                                       // in-memory SQLite store for table data
+	Modules           map[string]ModuleDesc                              // child modules keyed by generated ID
+	moduleSeq         int                                                // counter for generating module IDs
+	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
+	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
+	argsStack         []Value                                            // stack of args lists for nested fn calls
+	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
+	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
+	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
+	errs              []error                                            // registration errors accumulated during setup
+	ready             bool                                               // true after initial setup; triggers dynamic help generation
+	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
+	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
+	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 }
 
 // NewRegistry creates an empty registry.

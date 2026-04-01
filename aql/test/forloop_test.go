@@ -52,7 +52,7 @@ func TestForLoop(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			nativemod.RegisterMath(reg)
+			nativemod.InstallMathExports(reg)
 			eng := engine.NewTop(reg)
 			result, err := eng.Run(values)
 

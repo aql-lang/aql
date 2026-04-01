@@ -1,9 +1,13 @@
 // Package nativemod provides built-in native AQL modules that are imported
 // using names of the form "aql:<name>". Each native module contains both
-// Go-implemented words and (optionally) AQL code definitions.
+// Go-implemented words and AQL code definitions.
 //
-// Native modules are registered into the engine registry when imported,
-// making their words available as regular AQL words in the current scope.
+// Native modules produce a ModuleDesc with exports, just like file-based
+// modules. The exported words are accessed via dot notation:
+//
+//	"aql:math" import
+//	0.5 math.sin          # access sin via the math export
+//	3 math.min 7          # min of 3 and 7
 package nativemod
 
 import (
@@ -12,20 +16,35 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// modules maps native module names to their registration functions.
-var modules = map[string]func(r *engine.Registry){
-	"math": RegisterMath,
+// modules maps native module names to their builder functions.
+// Each builder creates a sub-registry with the module's words and returns
+// a ModuleDesc whose exports contain FnDef wrappers for those words.
+var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error){
+	"math": BuildMathModule,
 }
 
-// Resolve resolves a native module name and registers its words into the
-// given registry. Returns an error if the module name is unknown.
-// This function is intended to be assigned to Registry.NativeModResolver.
-func Resolve(name string, r *engine.Registry) error {
+// Resolve resolves a native module name and returns a ModuleDesc.
+// The parent registry is used to generate module IDs and inherit context.
+// This function is intended to be called from the import handler.
+func Resolve(name string, parent *engine.Registry) (engine.ModuleDesc, error) {
 	fn, ok := modules[name]
 	if !ok {
-		return fmt.Errorf("unknown native module: aql:%s", name)
+		return engine.ModuleDesc{}, fmt.Errorf("unknown native module: aql:%s", name)
 	}
-	fn(r)
+	return fn(parent)
+}
+
+// InstallMathExports builds the math module and installs its exports as defs
+// in the given registry. This is a convenience for test setup — equivalent to
+// what happens when AQL code runs "aql:math" import.
+func InstallMathExports(r *engine.Registry) error {
+	desc, err := BuildMathModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+	}
 	return nil
 }
 

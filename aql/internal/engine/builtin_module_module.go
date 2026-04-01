@@ -598,8 +598,9 @@ func isNativeModImport(path string) bool {
 
 // resolveNativeMod resolves a native module import (e.g. "aql:math").
 // The module name is extracted from the "aql:" prefix and resolved via the
-// registry's NativeModResolver callback. Each native module is loaded at
-// most once per registry.
+// registry's NativeModResolver callback. The resolver returns a ModuleDesc
+// whose exports are installed as defs, just like file-based modules.
+// Each native module is loaded at most once per registry.
 func resolveNativeMod(r *Registry, path string) error {
 	name := strings.TrimPrefix(path, "aql:")
 	if name == "" {
@@ -611,9 +612,11 @@ func resolveNativeMod(r *Registry, path string) error {
 	if r.NativeModResolver == nil {
 		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)
 	}
-	if err := r.NativeModResolver(name, r); err != nil {
+	desc, err := r.NativeModResolver(name, r)
+	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
+	installExports(r, desc, nil)
 	r.MarkNativeModLoaded(name)
 	return nil
 }

@@ -17,7 +17,7 @@ func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nativemod.RegisterMath(reg)
+	nativemod.InstallMathExports(reg)
 	eng := engine.NewTop(reg)
 
 	var result []engine.Value

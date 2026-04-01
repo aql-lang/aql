@@ -49,7 +49,8 @@ func TestSigMatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			nativemod.RegisterMath(reg)
+			reg.SetParseFunc(parser.Parse)
+			nativemod.InstallMathExports(reg)
 			eng := engine.NewTop(reg)
 			result, err := eng.Run(values)
 
