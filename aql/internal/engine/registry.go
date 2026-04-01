@@ -443,6 +443,7 @@ func registerBuiltins(r *Registry) {
 
 	// I/O
 	registerFileIO(r)
+	registerFolder(r)
 	registerPrint(r)
 	registerTrace(r)
 

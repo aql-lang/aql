@@ -217,6 +217,10 @@ func sigTypeMatches(v Value, t Type) bool {
 			return MetatypeFor(v.VType).Matches(t)
 		}
 	}
+	// Options values have VType=TMap but should match TOptions signatures.
+	if v.IsOptionsType() && t.Equal(TOptions) {
+		return true
+	}
 	return false
 }
 
