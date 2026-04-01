@@ -27,7 +27,8 @@ type FuncInfo struct {
 	Name              string
 	ForwardPrecedence bool
 	Sigs              []SigInfo
-	Entry             *Entry // static docs (may be nil)
+	Entry             *Entry               // static docs (may be nil)
+	Eval              func(string) (string, error) // run an expression, return formatted stack
 }
 
 // registry holds all help entries keyed by word name.
@@ -301,7 +302,7 @@ var exampleValues = map[string][]string{
 	"Boolean": {"true", "false", "true", "false"},
 	"List":    {"['a','b']", "['c','d']", "['e','f']"},
 	"Map":     {"{a:1,b:2}", "{c:3,d:4}", "{e:5,f:6}"},
-	"Any":     {"2", "'a'", "true", "['x']"},
+	"Any":     {"2", "3", "4", "5", "6", "7", "8", "9"},
 	"Node":    {"{a:1}", "['x']", "{b:2}", "['y']"},
 }
 
@@ -370,23 +371,24 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			counters[leaf] = c
 		}
 
-		// Compute result (same for all configs due to arg equivalence)
-		sigArgs := buildSigArgs(vals, 0, nArgs)
-		result := computeExampleResult(info.Name, sig, sigArgs)
-
-		// Show all configs when both args are the same type,
-		// otherwise show one config and cycle.
-		if sigArgsSameType(sig) {
-			for prefix := 0; prefix <= nArgs; prefix++ {
-				expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
-				if len(expr) > maxExprLen {
-					maxExprLen = len(expr)
-				}
-				examples = append(examples, exLine{expr: expr, result: result, prefix: prefix})
+		// Build expressions for each config.
+		// Stack-only words: only all-prefix config.
+		// Same-type args: show all prefix/forward configs.
+		// Otherwise: one config, cycling.
+		var prefixes []int
+		if !info.ForwardPrecedence {
+			prefixes = []int{nArgs} // all on stack
+		} else if sigArgsSameType(sig) {
+			for p := 0; p <= nArgs; p++ {
+				prefixes = append(prefixes, p)
 			}
 		} else {
-			prefix := configIdx % (nArgs + 1)
+			prefixes = []int{configIdx % (nArgs + 1)}
+		}
+
+		for _, prefix := range prefixes {
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
+			result := evalExample(info.Eval, expr, info.Name, sig, vals)
 			if len(expr) > maxExprLen {
 				maxExprLen = len(expr)
 			}
@@ -464,6 +466,20 @@ func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 		parts = append(parts, vals[i])
 	}
 	return strings.Join(parts, " ")
+}
+
+// evalExample evaluates an example expression using the live engine if
+// available, falling back to static computation.
+func evalExample(eval func(string) (string, error), expr, name string, sig SigInfo, vals []string) string {
+	if eval != nil {
+		result, err := eval(expr)
+		if err == nil && result != "" {
+			return result
+		}
+		// Fall through on error (e.g. side-effect-only words)
+	}
+	sigArgs := buildSigArgs(vals, 0, len(vals))
+	return computeExampleResult(name, sig, sigArgs)
 }
 
 // computeExampleResult computes a result string for an example.

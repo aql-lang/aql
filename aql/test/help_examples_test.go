@@ -75,11 +75,18 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		t.Fatal(err)
 	}
 	native.Register(reg)
+	reg.SetParseFunc(parser.Parse)
+
+	// Words with non-deterministic output (e.g. unique IDs).
+	skipWords := map[string]bool{"module": true}
 
 	words := allRegisteredWords(reg)
 	testedCount := 0
 
 	for _, word := range words {
+		if skipWords[word] {
+			continue
+		}
 		info := engine.BuildFuncInfo(reg, word)
 		if info == nil {
 			continue
