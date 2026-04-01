@@ -29,7 +29,8 @@ type Registry struct {
 	funcs          map[string]*Function
 	DefStacks      map[string][]Value            // stacked bodies for def-defined words
 	Types          map[string]TypeDef            // complex type registry keyed by full type path
-	FileOps        fileops.FileOps               // file operations for read/write words
+	FileOps        fileops.FileOps               // file operations for read/write words (OS-backed default)
+	MemOps         *fileops.MemFileOps           // in-memory file ops (used when __sys.fs.mem = true)
 	Formats        map[string]Format             // format registry for read/write (keyed by name)
 	Output         io.Writer                     // output writer for print/printstr and stdout
 	ErrOutput      io.Writer                     // error output writer for stderr
@@ -96,6 +97,42 @@ func (r *Registry) SetFileOps(ops fileops.FileOps) {
 	}
 }
 
+// EffectiveFileOps returns the file operations to use based on __sys.fs.mem.
+// If mem is true, returns the in-memory file ops; otherwise the OS-backed default.
+func (r *Registry) EffectiveFileOps() fileops.FileOps {
+	store := r.ContextStore()
+	if store == nil {
+		return r.FileOps
+	}
+	sysVal, ok := store.Get("__sys")
+	if !ok {
+		return r.FileOps
+	}
+	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return r.FileOps
+	}
+	fsVal, ok := sysStore.Get("fs")
+	if !ok {
+		return r.FileOps
+	}
+	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return r.FileOps
+	}
+	memVal, ok := fsStore.Get("mem")
+	if !ok {
+		return r.FileOps
+	}
+	if memVal.VType.Matches(TBoolean) && memVal.AsBoolean() {
+		if r.MemOps == nil {
+			r.MemOps = fileops.NewMem()
+		}
+		return r.MemOps
+	}
+	return r.FileOps
+}
+
 // SetParseFunc sets the parser callback used by file-based import.
 func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 	r.ParseFunc = fn
@@ -143,34 +180,25 @@ func (r *Registry) ContextStore() *StoreInstanceInfo {
 	return r.ctxStack[len(r.ctxStack)-1]
 }
 
-// UpdateCtxStoreChain updates ctxStack entries affected by a COW operation.
+// UpdateCtxStoreChain updates ALL ctxStack entries affected by a COW operation.
 // origRoot is the original Store that was COW'd (the prototype of the new
 // root). newRoot is the COW'd replacement. For each ctxStack entry whose
 // prototype chain passes through origRoot, replace origRoot with newRoot
-// in that chain by creating a new Store layer.
+// in that chain.
 func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
-	for i := len(r.ctxStack) - 1; i >= 0; i-- {
+	for i := 0; i < len(r.ctxStack); i++ {
 		entry := r.ctxStack[i]
 		// Direct match: this ctxStack entry IS the original root.
 		if entry == origRoot {
 			r.ctxStack[i] = newRoot
-			return
+			continue
 		}
 		// Check if the entry's prototype chain passes through origRoot.
-		// If so, rebuild the entry with newRoot substituted in.
+		// If so, rebuild the chain with newRoot substituted.
 		for p := entry; p != nil; p = p.Prototype {
 			if p.Prototype == origRoot {
-				// p's prototype is the original root. Create a new entry
-				// that preserves p's own data but uses newRoot as prototype.
-				rebuilt := &StoreInstanceInfo{
-					TypeName:  entry.TypeName,
-					Data:      entry.Data,
-					Prototype: newRoot,
-					Parent:    entry.Parent,
-					ParentKey: entry.ParentKey,
-				}
-				r.ctxStack[i] = rebuilt
-				return
+				p.Prototype = newRoot
+				break
 			}
 		}
 	}
@@ -233,22 +261,34 @@ func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchR
 
 // InitRootContext initializes the root context Store with the __sys key.
 // The __sys value is a Store/System instance containing system configuration.
+// All containers at every depth are Stores.
 func (r *Registry) InitRootContext() {
 	root := &StoreInstanceInfo{
 		TypeName: "Object/Store",
 		Data:     make(map[string]Value),
 	}
 
-	// Create the System store with fs configuration.
+	// Create the System store.
 	sysStore := &StoreInstanceInfo{
 		TypeName: "Object/Store/System",
 		Data:     make(map[string]Value),
 	}
-	// fs: an Object instance with {mem: false, impl: None}
-	fsFields := NewOrderedMap()
-	fsFields.Set("mem", NewBoolean(false))
-	fsFields.Set("impl", NewTypeLiteral(TNone))
-	sysStore.Set("fs", NewMap(fsFields))
+
+	// fs: a Store with {mem: false, impl: None}
+	fsStore := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	fsStore.Set("mem", NewBoolean(false))
+	fsStore.Set("impl", NewTypeLiteral(TNone))
+	sysStore.Set("fs", NewStoreValue(fsStore))
+
+	// __val: a Store for user-defined values
+	valStore := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	sysStore.Set("__val", NewStoreValue(valStore))
 
 	root.Set("__sys", NewStoreValue(sysStore))
 	r.ctxStack = append(r.ctxStack, root)

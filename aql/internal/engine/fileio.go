@@ -316,7 +316,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 			return nil, fmt.Errorf("read: stdin: %w", err)
 		}
 	} else {
-		data, err = r.FileOps.ReadFile(path)
+		data, err = r.EffectiveFileOps().ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read: %w", err)
 		}
@@ -381,13 +381,13 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 	data := []byte(content)
 
 	if mode == "append" {
-		existing, err := r.FileOps.ReadFile(path)
+		existing, err := r.EffectiveFileOps().ReadFile(path)
 		if err == nil {
 			data = append(existing, data...)
 		}
 	}
 
-	if err := r.FileOps.WriteFile(path, data, 0644); err != nil {
+	if err := r.EffectiveFileOps().WriteFile(path, data, 0644); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
 
