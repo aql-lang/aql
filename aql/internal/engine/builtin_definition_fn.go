@@ -96,12 +96,18 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			bodyElems = []Value{body}
 		}
 
-		// Append concrete return values to the body with a semicolon separator.
+		// Append concrete return values to the body with an end separator.
+		// Set returns to [Any, Any, ...] so the ReturnCheck still fires
+		// to clean up unconsumed unnamed args.
 		if concreteReturns {
 			retVals := outputSigValues(outputSig)
 			if len(retVals) > 0 {
 				bodyElems = append(bodyElems, NewWord("end"))
 				bodyElems = append(bodyElems, retVals...)
+				returns = make([]Type, len(retVals))
+				for j := range retVals {
+					returns[j] = TAny
+				}
 			}
 		}
 
