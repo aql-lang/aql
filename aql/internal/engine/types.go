@@ -109,12 +109,6 @@ var (
 	TScalarType    = mustType("Type/ScalarType")
 	TNodeType      = mustType("Type/NodeType")
 
-	// Deprecated aliases — kept temporarily for migration.
-	TBooleanTrue    = TBoolean
-	TBooleanFalse   = TBoolean
-	TWordInspect    = TInspect
-	TTypeInspect    = TInspect
-	TWordInspection = TInspect
 )
 
 // builtinTypeIDs maps fully-qualified builtin type paths to their fixed

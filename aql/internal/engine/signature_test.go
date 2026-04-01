@@ -313,7 +313,7 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	sigs := []Signature{
 		{Args: []Type{TAny}, Handler: dummyHandler},
 		{Args: []Type{TBoolean}, Handler: dummyHandler},
-		{Args: []Type{TBooleanTrue}, Handler: dummyHandler},
+		{Args: []Type{TBoolean}, Handler: dummyHandler},
 	}
 	SortSignatures(sigs)
 	stack := []Value{NewBoolean(true)}
@@ -321,7 +321,7 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected match")
 	}
-	if !m.Sig.Args[0].Equal(TBooleanTrue) {
+	if !m.Sig.Args[0].Equal(TBoolean) {
 		t.Errorf("expected boolean/true match, got %v", m.Sig.Args[0])
 	}
 }

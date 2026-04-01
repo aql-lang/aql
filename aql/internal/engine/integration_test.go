@@ -2113,8 +2113,8 @@ func TestEngineInspectBuiltin(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 	v := result[0]
-	if !v.VType.Equal(TWordInspection) {
-		t.Fatalf("expected type %s, got %s", TWordInspection, v.VType)
+	if !v.VType.Equal(TInspect) {
+		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
 	m := v.AsMap()
 
@@ -2229,8 +2229,8 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 	v := result[0]
-	if !v.VType.Equal(TTypeInspect) {
-		t.Fatalf("expected type %s, got %s", TTypeInspect, v.VType)
+	if !v.VType.Equal(TInspect) {
+		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
 	m := v.AsMap()
 
