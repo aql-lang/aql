@@ -197,9 +197,7 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Any"}
 
 	// Accessors
-	case "dot", ".":
-		return []string{"Any"}
-	case "dotr", "!.":
+	case "getr", "!.":
 		return []string{"Any"}
 
 	// I/O

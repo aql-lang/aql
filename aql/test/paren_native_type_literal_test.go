@@ -228,7 +228,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		// Accessors
 		{"dot-map-atom", `Map dot a`},
 		{"dot-list-int", `List dot 0`},
-		{"dotr-map-atom", `Map a dotr`},
+		{"getr-map-atom", `Map a getr`},
 
 		// Control
 		{"do-list", `do List`},
@@ -277,7 +277,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 
 		// Additional accessors
 		{"dot-map-no-field", `Map dot`},
-		{"dotr-list", `List 0 dotr`},
+		{"getr-list", `List 0 getr`},
 
 		// Stack ops with type literals
 		{"dup-map", `Map dup`},

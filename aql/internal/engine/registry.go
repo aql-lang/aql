@@ -366,8 +366,7 @@ func registerBuiltins(r *Registry) {
 	registerQuote(r)
 
 	// Accessors
-	registerDot(r)
-	registerDotr(r)
+	registerGetr(r)
 
 	// I/O
 	registerFileIO(r)

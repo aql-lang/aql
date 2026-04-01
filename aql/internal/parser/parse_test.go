@@ -896,18 +896,18 @@ func assertExpand(t *testing.T, text string, want []engine.Value) {
 }
 
 func TestExpandDotStandalone(t *testing.T) {
-	assertExpand(t, ".", []engine.Value{engine.NewWord("dot")})
+	assertExpand(t, ".", []engine.Value{engine.NewWord("get")})
 }
 
 func TestExpandBangDotStandalone(t *testing.T) {
-	assertExpand(t, "!.", []engine.Value{engine.NewWord("dotr")})
+	assertExpand(t, "!.", []engine.Value{engine.NewWord("getr")})
 }
 
 func TestExpandDottedSimple(t *testing.T) {
 	assertExpand(t, "foo.bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("bar"),
 		engine.NewWord(")"),
 	})
@@ -917,9 +917,9 @@ func TestExpandDottedChain(t *testing.T) {
 	assertExpand(t, "foo.a.b", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("a"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("b"),
 		engine.NewWord(")"),
 	})
@@ -927,9 +927,9 @@ func TestExpandDottedChain(t *testing.T) {
 
 func TestExpandDottedLeading(t *testing.T) {
 	assertExpand(t, ".a.b", []engine.Value{
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("a"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("b"),
 	})
 }
@@ -938,7 +938,7 @@ func TestExpandDottedIntegerKey(t *testing.T) {
 	assertExpand(t, "foo.0", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewInteger(0),
 		engine.NewWord(")"),
 	})
@@ -957,7 +957,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 	assertExpand(t, "foo..bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("bar"),
 		engine.NewWord(")"),
 	})
@@ -966,7 +966,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 func TestExpandDottedLeadingSingle(t *testing.T) {
 	// ".x" → leading dot, just dot x
 	assertExpand(t, ".x", []engine.Value{
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("x"),
 	})
 }
@@ -1258,7 +1258,7 @@ func TestExpandDottedArgs(t *testing.T) {
 	assertExpand(t, "args.x", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("args"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("x"),
 		engine.NewWord(")"),
 	})

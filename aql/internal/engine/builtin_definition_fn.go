@@ -573,7 +573,7 @@ func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
 							NewOpenParen(),
 							NewWord("args"),
 							NewAtom(fmt.Sprintf("%d", presentIdx)),
-							NewWord("dot"),
+							NewWord("get"),
 							NewWord(")"),
 						)
 					}

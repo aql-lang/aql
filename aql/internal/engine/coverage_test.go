@@ -623,7 +623,7 @@ func TestDotMapAtom(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dot")})
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("get")})
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("expected 42, got %v", result)
 	}
@@ -636,7 +636,7 @@ func TestDotMapString(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dot")})
+	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("get")})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99, got %v", result)
 	}
@@ -648,7 +648,7 @@ func TestDotListIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
-	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("dot")})
+	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	if len(result) != 1 || result[0].AsString() != "b" {
 		t.Errorf("expected 'b', got %v", result)
 	}
@@ -660,7 +660,7 @@ func TestDotListOutOfBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewString("a")})
-	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("dot")})
+	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -673,7 +673,7 @@ func TestDotMapMissing(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dot")})
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
@@ -686,7 +686,7 @@ func TestDotMapIntegerKey(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
-	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("dot")})
+	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("get")})
 	if len(result) != 1 || result[0].AsString() != "zero" {
 		t.Errorf("expected 'zero', got %v", result)
 	}
@@ -697,7 +697,7 @@ func TestDotNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dot")})
+	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -711,7 +711,7 @@ func TestDotListByIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
-	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("dot")})
+	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	if len(result) != 1 || result[0].AsInteger() != 20 {
 		t.Errorf("expected 20, got %v", result)
 	}
@@ -723,7 +723,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
-	result := runAQL(t, r, []Value{list, NewWord("x"), NewWord("dot")})
+	result := runAQL(t, r, []Value{list, NewWord("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
@@ -735,7 +735,7 @@ func TestDotListStringKeyReturnsNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewInteger(10)})
-	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("dot")})
+	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for string key on list, got %v", result)
 	}
@@ -757,9 +757,9 @@ func TestDotNestedMapChain(t *testing.T) {
 	outer.Set("a", NewMap(mid))
 	result := runAQL(t, r, []Value{
 		NewMap(outer),
-		NewWord("a"), NewWord("dot"),
-		NewWord("b"), NewWord("dot"),
-		NewWord("c"), NewWord("dot"),
+		NewWord("a"), NewWord("get"),
+		NewWord("b"), NewWord("get"),
+		NewWord("c"), NewWord("get"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 1 {
 		t.Errorf("expected 1, got %v", result)
@@ -778,8 +778,8 @@ func TestDotMapThenList(t *testing.T) {
 	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
 	result := runAQL(t, r, []Value{
 		NewMap(m),
-		NewWord("items"), NewWord("dot"),
-		NewInteger(1), NewWord("dot"),
+		NewWord("items"), NewWord("get"),
+		NewInteger(1), NewWord("get"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 20 {
 		t.Errorf("expected 20, got %v", result)
@@ -801,8 +801,8 @@ func TestDotListThenMap(t *testing.T) {
 	list := NewList([]Value{NewMap(m0), NewMap(m1)})
 	result := runAQL(t, r, []Value{
 		list,
-		NewInteger(0), NewWord("dot"),
-		NewWord("x"), NewWord("dot"),
+		NewInteger(0), NewWord("get"),
+		NewWord("x"), NewWord("get"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 1 {
 		t.Errorf("expected 1, got %v", result)
@@ -822,8 +822,8 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 	list := NewList([]Value{NewMap(m0), NewMap(m1)})
 	result := runAQL(t, r, []Value{
 		list,
-		NewInteger(1), NewWord("dot"),
-		NewWord("x"), NewWord("dot"),
+		NewInteger(1), NewWord("get"),
+		NewWord("x"), NewWord("get"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 2 {
 		t.Errorf("expected 2, got %v", result)
@@ -875,10 +875,10 @@ func TestDotDeepListMapCombo(t *testing.T) {
 	outer.Set("a", NewList([]Value{NewMap(m0), NewMap(m1)}))
 	result := runAQL(t, r, []Value{
 		NewMap(outer),
-		NewWord("a"), NewWord("dot"),
-		NewInteger(1), NewWord("dot"),
-		NewWord("b"), NewWord("dot"),
-		NewInteger(0), NewWord("dot"),
+		NewWord("a"), NewWord("get"),
+		NewInteger(1), NewWord("get"),
+		NewWord("b"), NewWord("get"),
+		NewInteger(0), NewWord("get"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 300 {
 		t.Errorf("expected 300, got %v", result)
@@ -892,7 +892,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("dotr")})
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("getr")})
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("expected 42, got %v", result)
 	}
@@ -905,7 +905,7 @@ func TestDotrMapMissingError(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -919,7 +919,7 @@ func TestDotrNoneError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}
@@ -934,7 +934,7 @@ func TestDotrListOutOfBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewString("a")})
-	err = runAQLError(t, r, []Value{list, NewInteger(5), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{list, NewInteger(5), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for out of bounds")
 	}
@@ -950,7 +950,7 @@ func TestDotrMapStringKey(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("dotr")})
+	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("getr")})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99, got %v", result)
 	}
@@ -963,7 +963,7 @@ func TestDotrMapStringMissing(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing string key")
 	}
@@ -976,7 +976,7 @@ func TestDotrMapIntegerKey(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("5", NewString("five"))
-	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("dotr")})
+	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("getr")})
 	if len(result) != 1 || result[0].AsString() != "five" {
 		t.Errorf("expected 'five', got %v", result)
 	}
@@ -989,7 +989,7 @@ func TestDotrMapIntegerKeyMissing(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
-	err = runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("dotr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing integer key")
 	}

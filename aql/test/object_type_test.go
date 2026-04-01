@@ -1364,7 +1364,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`foo1 x dot`,
+		`foo1 x get`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1379,7 +1379,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 		`def foo1 make Foo {x:1}`,
 		`def Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
-		`barA y dot`,
+		`barA y get`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1394,7 +1394,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 		`def foo1 make Foo {x:1}`,
 		`def Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
-		`barA x dot`,
+		`barA x get`,
 	})
 	if err != nil {
 		t.Fatal(err)
