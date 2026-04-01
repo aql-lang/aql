@@ -204,9 +204,25 @@ func valueToJsonic(v Value) string {
 
 // registerFileIO registers the read and write words.
 func registerFileIO(r *Registry) {
-	// read: [string] -> [string|list|map]
+	// extractPath returns the path string from a String or Path value.
+	extractPath := func(v Value) string {
+		if v.IsPath() {
+			return v.AsPath().String()
+		}
+		return v.AsString()
+	}
+
+	// returnPath wraps the result path: if input was a Path, return Path; else String.
+	returnPath := func(v Value, pathStr string) Value {
+		if v.IsPath() {
+			return v
+		}
+		return NewString(pathStr)
+	}
+
+	// read: [path/string] -> [string|list|map]
 	readHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path := extractPath(args[0])
 		format := formatFromExt(path)
 		if format == "" {
 			format = "text"
@@ -214,11 +230,10 @@ func registerFileIO(r *Registry) {
 		return doRead(r, path, "utf8", format, "lf")
 	}
 
-	// read: [string, map] -> [string|list|map]
+	// read: [path/string, map] -> [string|list|map]
 	readOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path := extractPath(args[0])
 		enc, format, _, nl, fmtExplicit := parseFileOpts(args[1])
-		// If fmt was not explicitly set, use file extension.
 		if !fmtExplicit {
 			if extFmt := formatFromExt(path); extFmt != "" {
 				format = extFmt
@@ -227,56 +242,62 @@ func registerFileIO(r *Registry) {
 		return doRead(r, path, enc, format, nl)
 	}
 
-	r.Register("read",
-		Signature{
-			Args:    []Type{TString, TMap},
-			Handler: readOptsHandler,
-		},
-		Signature{
-			Args:    []Type{TString},
-			Handler: readHandler,
-		},
-	)
-
-	// write: [string, string] -> [string]
+	// write: [path/string, string] -> [path/string]
 	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path := extractPath(args[0])
 		content := args[1].AsString()
-		return doWrite(r, path, content, "utf8", "text", "write", "lf")
+		result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
+		if err != nil {
+			return result, err
+		}
+		return []Value{returnPath(args[0], path)}, nil
 	}
 
-	// write: [string, string, map] -> [string]
+	// write: [path/string, string, map] -> [path/string]
 	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path := extractPath(args[0])
 		content := args[1].AsString()
 		enc, format, mode, nl, _ := parseFileOpts(args[2])
-		return doWrite(r, path, content, enc, format, mode, nl)
+		result, err := doWrite(r, path, content, enc, format, mode, nl)
+		if err != nil {
+			return result, err
+		}
+		return []Value{returnPath(args[0], path)}, nil
 	}
 
-	// write: [string, any, map] -> [string] (for non-string data with fmt)
+	// write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
 	writeAnyOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path := extractPath(args[0])
 		_, format, mode, nl, _ := parseFileOpts(args[2])
 		if format == "text" {
 			format = "jsonic"
 		}
 		content := valueToJsonic(args[1])
-		return doWrite(r, path, content, "utf8", format, mode, nl)
+		result, err := doWrite(r, path, content, "utf8", format, mode, nl)
+		if err != nil {
+			return result, err
+		}
+		return []Value{returnPath(args[0], path)}, nil
 	}
 
+	r.Register("read",
+		// Path signatures
+		Signature{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
+		Signature{Args: []Type{TPath}, Handler: readHandler},
+		// String signatures (backward compatible)
+		Signature{Args: []Type{TString, TMap}, Handler: readOptsHandler},
+		Signature{Args: []Type{TString}, Handler: readHandler},
+	)
+
 	r.Register("write",
-		Signature{
-			Args:    []Type{TString, TString, TMap},
-			Handler: writeOptsHandler,
-		},
-		Signature{
-			Args:    []Type{TString, TAny, TMap},
-			Handler: writeAnyOptsHandler,
-		},
-		Signature{
-			Args:    []Type{TString, TString},
-			Handler: writeHandler,
-		},
+		// Path signatures
+		Signature{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler},
+		Signature{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler},
+		Signature{Args: []Type{TPath, TString}, Handler: writeHandler},
+		// String signatures (backward compatible)
+		Signature{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler},
+		Signature{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler},
+		Signature{Args: []Type{TString, TString}, Handler: writeHandler},
 	)
 
 	// stdin, stdout, stderr push special path strings for use with read/write.
