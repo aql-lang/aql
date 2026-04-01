@@ -20,7 +20,9 @@ import (
 // Each builder creates a sub-registry with the module's words and returns
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
 var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error){
-	"math": BuildMathModule,
+	"math":   BuildMathModule,
+	"time":   BuildTimeModule,
+	"matrix": BuildMatrixModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -39,6 +41,30 @@ func Resolve(name string, parent *engine.Registry) (engine.ModuleDesc, error) {
 // what happens when AQL code runs "aql:math" import.
 func InstallMathExports(r *engine.Registry) error {
 	desc, err := BuildMathModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallTimeExports builds the time module and installs its exports as defs.
+func InstallTimeExports(r *engine.Registry) error {
+	desc, err := BuildTimeModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallMatrixExports builds the matrix module and installs its exports as defs.
+func InstallMatrixExports(r *engine.Registry) error {
+	desc, err := BuildMatrixModule(r)
 	if err != nil {
 		return err
 	}
