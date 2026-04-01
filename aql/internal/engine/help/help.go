@@ -334,13 +334,12 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			counters[leaf] = c
 		}
 
-		// Compute expected result
-		result := computeExampleResult(info.Name, sig, vals)
-
-		// Show all configs when both args are the same depth-1 type,
+		// Show all configs when both args are the same type,
 		// otherwise show one config and cycle.
 		if sigArgsSameType(sig) {
 			for prefix := 0; prefix <= nArgs; prefix++ {
+				orderedVals := buildSigArgs(vals, prefix, nArgs)
+				result := computeExampleResult(info.Name, sig, orderedVals)
 				expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
 				if len(expr) > maxExprLen {
 					maxExprLen = len(expr)
@@ -349,6 +348,8 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			}
 		} else {
 			prefix := configIdx % (nArgs + 1)
+			orderedVals := buildSigArgs(vals, prefix, nArgs)
+			result := computeExampleResult(info.Name, sig, orderedVals)
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
 			if len(expr) > maxExprLen {
 				maxExprLen = len(expr)
@@ -372,6 +373,34 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 	}
 }
 
+// buildSigArgs computes the effective sig arg values for a given configuration.
+// With `prefix` values before the word and the rest forward:
+//   - Forward args fill sig[0], sig[1], ... (nearest to word first)
+//   - Remaining slots filled from stack (top-of-stack first)
+//
+// Expression layout: vals[prefix-1] ... vals[0] word vals[prefix] ... vals[n-1]
+//   Stack values (reversed in source): vals[0] is top of stack.
+//   Forward values: vals[prefix], vals[prefix+1], ...
+func buildSigArgs(vals []string, prefix, nArgs int) []string {
+	forward := vals[prefix:] // forward args in source order
+	// stack values: vals[0..prefix-1], with vals[prefix-1] deepest, vals[0] on top
+
+	sigArgs := make([]string, nArgs)
+	fwdCount := len(forward)
+
+	// Forward fills sig[0], sig[1], ...
+	for i := 0; i < fwdCount; i++ {
+		sigArgs[i] = forward[i]
+	}
+	// Stack fills remaining, top-of-stack first
+	stackIdx := 0
+	for i := fwdCount; i < nArgs; i++ {
+		sigArgs[i] = vals[stackIdx]
+		stackIdx++
+	}
+	return sigArgs
+}
+
 // buildExampleExpr constructs an expression with `prefix` args before the word
 // and the rest after.
 func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
@@ -389,20 +418,21 @@ func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 }
 
 // computeExampleResult computes a result string for an example.
+// sigArgs are in signature order: sigArgs[0] = sig[0], sigArgs[1] = sig[1].
 // For common operations we compute real results; otherwise use "...".
-func computeExampleResult(name string, sig SigInfo, vals []string) string {
-	// We can compute results for arithmetic operations
-	if len(vals) == 2 {
-		return computeBinaryResult(name, sig, vals[0], vals[1])
+func computeExampleResult(name string, sig SigInfo, sigArgs []string) string {
+	if len(sigArgs) == 2 {
+		return computeBinaryResult(name, sig, sigArgs[0], sigArgs[1])
 	}
-	if len(vals) == 1 {
-		return computeUnaryResult(name, sig, vals[0])
+	if len(sigArgs) == 1 {
+		return computeUnaryResult(name, sig, sigArgs[0])
 	}
 	return "..."
 }
 
 func computeBinaryResult(name string, sig SigInfo, a, b string) string {
-	// Try to parse as numbers
+	// a = sig[0] (nearest arg), b = sig[1] (further arg).
+	// Non-commutative ops compute args[1] op args[0] = b op a.
 	aF, aOk := parseNum(a)
 	bF, bOk := parseNum(b)
 
@@ -412,19 +442,19 @@ func computeBinaryResult(name string, sig SigInfo, a, b string) string {
 		case "add":
 			result = aF + bF
 		case "sub":
-			result = aF - bF
+			result = bF - aF
 		case "mul":
 			result = aF * bF
 		case "div":
-			if bF == 0 {
+			if aF == 0 {
 				return "error"
 			}
-			result = aF / bF
+			result = bF / aF
 		case "mod":
-			if bF == 0 {
+			if aF == 0 {
 				return "error"
 			}
-			result = float64(int64(aF) % int64(bF))
+			result = float64(int64(bF) % int64(aF))
 		case "pow":
 			return "..."
 		case "min":
@@ -445,11 +475,11 @@ func computeBinaryResult(name string, sig SigInfo, a, b string) string {
 		return formatResult(result, sig)
 	}
 
-	// String concat for add
+	// String concat for add: handler does args[1] + args[0] = b + a
 	if name == "add" {
 		aStr := strings.Trim(a, "'")
 		bStr := strings.Trim(b, "'")
-		return "'" + aStr + bStr + "'"
+		return "'" + bStr + aStr + "'"
 	}
 
 	return "..."
