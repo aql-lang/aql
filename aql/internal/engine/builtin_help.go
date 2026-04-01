@@ -45,30 +45,185 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 }
 
 // inferReturns attempts to determine return types for a signature.
-// This uses known patterns for builtin words.
+// Uses known patterns for builtin words.
 func inferReturns(name string, sig Signature) []string {
 	nArgs := len(sig.Args)
 
-	// Known return type patterns for builtin words.
+	// Exact overrides first (word → return types per sig shape).
+	if ret := inferExact(name, sig); ret != nil {
+		return ret
+	}
+
+	// Category-based inference.
 	switch {
-	// Binary arithmetic: same type or promotion
 	case nArgs == 2 && isArithWord(name):
 		return inferArithReturns(name, sig)
-	// Unary math
 	case nArgs == 1 && isUnaryMathWord(name):
 		return inferUnaryMathReturns(name, sig)
-	// Comparison
 	case nArgs == 2 && isCompareWord(name):
-		return []string{"Boolean"}
-	// Boolean ops
+		return []string{"Scalar/Boolean"}
 	case nArgs == 2 && isBoolWord(name):
-		return []string{"Boolean"}
+		return []string{"Scalar/Boolean"}
 	case nArgs == 1 && name == "not":
-		return []string{"Boolean"}
-	// Stack ops return varying counts, skip
-	default:
+		return []string{"Scalar/Boolean"}
+	}
+	return nil
+}
+
+// inferExact handles words with specific, known return types.
+func inferExact(name string, sig Signature) []string {
+	nArgs := len(sig.Args)
+	switch name {
+	// String ops
+	case "upper", "lower":
+		return []string{"Scalar/String"}
+	case "concat":
+		return []string{"Scalar/String"}
+	case "split":
+		return []string{"Node/List"}
+	case "trim", "changecase", "normalize", "escape", "repeat", "pad", "replace":
+		return []string{"Scalar/String"}
+	case "contains":
+		return []string{"Scalar/Boolean"}
+	case "indexof":
+		return []string{"Scalar/Number/Integer"}
+	case "match":
+		return []string{"Node/Map"}
+	case "slice":
+		if nArgs > 0 {
+			last := sig.Args[nArgs-1].String()
+			if last == "Node/List" {
+				return []string{"Node/List"}
+			}
+		}
+		return []string{"Scalar/String"}
+
+	// Type ops
+	case "typeof", "fulltypeof":
+		return []string{"Scalar/Atom"}
+	case "is":
+		return []string{"Scalar/Boolean"}
+	case "inspect":
+		return []string{"Node/Map"}
+	case "convert":
+		return []string{"Scalar"}
+	case "base":
+		return []string{"Any"}
+	case "record":
+		return []string{"Object/Record"}
+	case "table":
+		return []string{"Object/Table"}
+	case "object":
+		return []string{"Object"}
+	case "make":
+		return []string{"Any"}
+
+	// Storage
+	case "set", "context-set":
+		return nil // no return
+	case "get", "context-get":
+		return []string{"Any"}
+
+	// Definition
+	case "def", "undef", "type":
+		return nil
+	case "fn":
+		return []string{"Word/Function"}
+	case "call":
+		return []string{"Any"}
+	case "args":
+		return []string{"Node/List"}
+	case "var":
+		return []string{"Any"}
+
+	// Control flow
+	case "do":
+		return []string{"Any"}
+	case "if":
+		return []string{"Any"}
+	case "for":
+		return []string{"Any"}
+	case "quote":
+		return []string{"Any"}
+	case "error":
+		return []string{"Any"}
+
+	// Accessors
+	case "dot", ".":
+		return []string{"Any"}
+	case "dotr", "!.":
+		return []string{"Any"}
+
+	// I/O
+	case "print", "printstr":
+		return nil
+	case "read":
+		return []string{"Any"}
+	case "write":
+		return []string{"Scalar/String"}
+	case "trace":
+		return []string{"Any"}
+	case "stdin", "stdout", "stderr":
+		return []string{"Scalar/String"}
+
+	// Module
+	case "module":
+		return []string{"Word/__MD"}
+	case "import":
+		return nil
+
+	// Unify
+	case "unify":
+		return []string{"Scalar/String", "Scalar/Boolean"}
+
+	// Boolean special: or with [Any,Any] → Disjunct
+	case "or":
+		if nArgs == 2 && sig.Args[0].String() == "Any" {
+			return []string{"Any"}
+		}
+		return []string{"Scalar/Boolean"}
+
+	// Help
+	case "help":
+		return nil
+
+	// Constants
+	case "math-pi", "math-e":
+		return []string{"Scalar/Number/Decimal"}
+
+	// Stack ops
+	case "depth":
+		return []string{"Scalar/Number/Integer"}
+	case "stack":
+		return []string{"Node/List"}
+	case "dup":
+		return []string{"Any", "Any"}
+	case "swap":
+		return []string{"Any", "Any"}
+	case "drop":
+		return nil
+	case "over":
+		return []string{"Any", "Any", "Any"}
+	case "rot":
+		return []string{"Any", "Any", "Any"}
+	case "nip":
+		return []string{"Any"}
+	case "tuck":
+		return []string{"Any", "Any", "Any"}
+	case "2dup":
+		return []string{"Any", "Any", "Any", "Any"}
+	case "2swap":
+		return []string{"Any", "Any", "Any", "Any"}
+	case "2drop":
+		return nil
+	case "2over":
+		return []string{"Any", "Any", "Any", "Any", "Any", "Any"}
+	case "pick", "roll":
+		return []string{"Any"}
+	case "break", "continue":
 		return nil
 	}
+	return nil
 }
 
 func isArithWord(name string) bool {
@@ -113,16 +268,12 @@ func inferArithReturns(name string, sig Signature) []string {
 	a0 := sig.Args[0].String()
 	a1 := sig.Args[1].String()
 
-	// add's Scalar+Scalar → String
 	if name == "add" && a0 == "Scalar" && a1 == "Scalar" {
 		return []string{"Scalar/String"}
 	}
-
-	// Integer+Integer → Integer for most ops
 	if a0 == "Scalar/Number/Integer" && a1 == "Scalar/Number/Integer" {
 		return []string{"Scalar/Number/Integer"}
 	}
-	// Any decimal involvement → Decimal
 	return []string{"Scalar/Number/Decimal"}
 }
 
@@ -130,7 +281,7 @@ func inferUnaryMathReturns(name string, sig Signature) []string {
 	a0 := sig.Args[0].String()
 	switch name {
 	case "abs", "negate":
-		return []string{a0} // preserve input type
+		return []string{a0}
 	case "sign":
 		return []string{"Scalar/Number/Integer"}
 	case "ceil", "floor", "round", "trunc":
