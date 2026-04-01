@@ -245,10 +245,11 @@ var typeInherentScores = map[string]int{
 	// Depth 1 — Any/None are special; concrete roots ordered by breadth.
 	"None":   100,
 	"Any":    200,
-	"Object": 1400,
-	"Word":   1600,
-	"Scalar": 2500,
-	"Node":   2700,
+	"Type":   300,
+	"Object": 400,
+	"Word":   500,
+	"Scalar": 600,
+	"Node":   700,
 
 	// Depth 2 — Word internals (structural tokens, narrow cardinality)
 	"Word/__DJ": 100,
@@ -268,14 +269,17 @@ var typeInherentScores = map[string]int{
 	"Scalar/Atom":     1300,
 	"Object/Error":    1400,
 	"Object/Fetch":    1500,
-	"Object/Resource": 1600,
-	"Scalar/Number":   1700,
-	"Word/Function":   1800,
-	"Object/Table":    1900,
-	"Object/Record":   2000,
-	"Scalar/String":   2100,
-	"Node/List":       2200,
-	"Node/Map":        2300,
+	"Object/Store":    1600,
+	"Object/Resource": 1700,
+	"Scalar/Number":   1800,
+	"Word/Function":   1900,
+	"Object/Table":    2000,
+	"Object/Record":   2100,
+	"Scalar/String":   2200,
+	"Node/List":       2300,
+	"Node/Map":        2400,
+	"Type/ScalarType": 2500,
+	"Type/NodeType":   2600,
 
 	// Depth 3 — Scalar subtypes
 	"Scalar/String/Empty":   900,
@@ -286,21 +290,13 @@ var typeInherentScores = map[string]int{
 	// Depth 3 — Node subtypes
 	"Node/List/Args":   1300,
 	"Node/Map/Options": 1400,
-	"Node/Map/Word":    1500,
-	"Node/Map/Type":    1600,
+	"Node/Map/Inspect": 1500,
 
 	// Depth 3 — Object subtypes
-	"Object/Fetch/Request":   1700,
-	"Object/Fetch/Response":  1800,
-	"Object/Resource/Entity": 1900,
-
-	// Depth 3
-	"Node/Map/Inspect": 2000,
-
-	// Metatypes
-	"Type":                1500,
-	"Type/ScalarType":     1350,
-	"Type/NodeType":       1350,
+	"Object/Fetch/Request":   1600,
+	"Object/Fetch/Response":  1700,
+	"Object/Resource/Entity": 1800,
+	"Object/Store/System":    1900,
 }
 
 // typeInherentScore returns the inherent score for a type.
