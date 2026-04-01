@@ -281,7 +281,7 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 
 		switch {
 		case elem.VType.Equal(TMap) && elem.Data != nil:
-			m := elem.AsMap()
+			m := elem.AsMutableMap()
 			if m != nil && m.Implicit {
 				// Named parameter from implicit pair syntax: [x:Integer]
 				keys := m.Keys()

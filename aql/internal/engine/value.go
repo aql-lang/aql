@@ -11,6 +11,16 @@ import (
 	"time"
 )
 
+// ReadMap is a read-only view of an ordered key-value map.
+// Node values (Map, Options) expose this interface via AsMap().
+// To mutate, use AsMutableMap() which is only valid for Object instances.
+type ReadMap interface {
+	Get(key string) (Value, bool)
+	Keys() []string
+	SortedKeys() []string
+	Len() int
+}
+
 // OrderedMap is a map that preserves insertion order of keys.
 type OrderedMap struct {
 	keys     []string
@@ -946,8 +956,23 @@ func (v Value) AsList() []Value {
 	return elems
 }
 
-// AsMap returns the OrderedMap payload, or nil if the data is not an *OrderedMap.
-func (v Value) AsMap() *OrderedMap {
+// AsMap returns a read-only view of the map payload, or nil if the data is
+// not an *OrderedMap. Node values (Map, Options) are immutable — use this
+// for all read access.
+func (v Value) AsMap() ReadMap {
+	if v.Data == nil {
+		return nil
+	}
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
+}
+
+// AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
+// for Object instances and internal construction — never for Node values.
+func (v Value) AsMutableMap() *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}

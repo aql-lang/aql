@@ -1732,7 +1732,7 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if !m.Implicit {
 		t.Error("expected Implicit=true for pair syntax [x:Integer]")
 	}
@@ -1759,7 +1759,7 @@ func TestParseExplicitMapInList(t *testing.T) {
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
 	}
@@ -1777,7 +1777,7 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if !vals[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
-	m := vals[0].AsMap()
+	m := vals[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
@@ -1847,7 +1847,7 @@ func TestParseOptionalFieldInList(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if m == nil {
 		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
 	}

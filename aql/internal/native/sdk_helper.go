@@ -11,7 +11,7 @@ import (
 
 // getSDK extracts the spec and entity name from an API map ({kind:"api", spec:..., entity:...}),
 // looks up or creates the SDK instance, and returns the SDK and entity name.
-func getSDK(apiMap *engine.OrderedMap, opName string, r *engine.Registry) (*udk.UniversalSDK, string, error) {
+func getSDK(apiMap engine.ReadMap, opName string, r *engine.Registry) (*udk.UniversalSDK, string, error) {
 	specVal, ok := apiMap.Get("spec")
 	if !ok {
 		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
@@ -66,7 +66,7 @@ func entityToAPIMap(v engine.Value) *engine.OrderedMap {
 
 // entityToAPIMapWithOpts converts an Entity instance into an API map and
 // merges an options map into the given field (query or data).
-func entityToAPIMapWithOpts(v engine.Value, opts *engine.OrderedMap, field string) *engine.OrderedMap {
+func entityToAPIMapWithOpts(v engine.Value, opts engine.ReadMap, field string) *engine.OrderedMap {
 	m := entityToAPIMap(v)
 	return mergeAPIOptions(m, opts, field)
 }
@@ -100,7 +100,7 @@ func convertResultItem(item any, opName string) (engine.Value, error) {
 }
 
 // extractQuery extracts an optional query map from the API options map.
-func extractQuery(apiMap *engine.OrderedMap) map[string]any {
+func extractQuery(apiMap engine.ReadMap) map[string]any {
 	if queryVal, ok := apiMap.Get("query"); ok && queryVal.VType.Matches(engine.TMap) {
 		return valueToMap(queryVal)
 	}
@@ -108,7 +108,7 @@ func extractQuery(apiMap *engine.OrderedMap) map[string]any {
 }
 
 // extractData extracts an optional data map from the API options map.
-func extractData(apiMap *engine.OrderedMap) map[string]any {
+func extractData(apiMap engine.ReadMap) map[string]any {
 	if dataVal, ok := apiMap.Get("data"); ok && dataVal.VType.Matches(engine.TMap) {
 		return valueToMap(dataVal)
 	}
@@ -119,7 +119,7 @@ func extractData(apiMap *engine.OrderedMap) map[string]any {
 // For query operations (list, load, remove), options keys go into query.
 // For data operations (create, update), options keys go into data.
 // Returns a new map; the original is not modified.
-func mergeAPIOptions(base *engine.OrderedMap, opts *engine.OrderedMap, field string) *engine.OrderedMap {
+func mergeAPIOptions(base engine.ReadMap, opts engine.ReadMap, field string) *engine.OrderedMap {
 	merged := engine.NewOrderedMap()
 	for _, k := range base.Keys() {
 		v, _ := base.Get(k)

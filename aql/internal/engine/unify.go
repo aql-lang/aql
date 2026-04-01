@@ -333,7 +333,7 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 // unifyTypedMapWithConcrete unifies a child type constraint against each value
 // of a concrete map. Every value must unify with the child type.
-func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
+func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, bool) {
 	result := NewOrderedMap()
 	for _, key := range m.Keys() {
 		val, _ := m.Get(key)
@@ -629,7 +629,7 @@ func listsEqual(a, b []Value) bool {
 }
 
 // mapsEqual compares two map payloads by keys and values.
-func mapsEqual(a, b *OrderedMap) bool {
+func mapsEqual(a, b ReadMap) bool {
 	if a.Len() != b.Len() {
 		return false
 	}

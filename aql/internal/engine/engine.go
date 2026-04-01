@@ -856,7 +856,7 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
-	m := val.AsMap()
+	m := val.AsMutableMap()
 	out := NewOrderedMap()
 	if m.Implicit {
 		out.Implicit = true

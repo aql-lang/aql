@@ -153,7 +153,7 @@ func listRecordFilterHandler(args []engine.Value, ctx map[string]engine.Value, s
 // recordMatches reports whether all key-value pairs in filter are present
 // in rec with equal values. Equality is checked by comparing Value.String()
 // representations for scalar types and structural equality for others.
-func recordMatches(rec *engine.OrderedMap, filter *engine.OrderedMap) bool {
+func recordMatches(rec engine.ReadMap, filter engine.ReadMap) bool {
 	for _, key := range filter.Keys() {
 		filterVal, _ := filter.Get(key)
 		recVal, ok := rec.Get(key)

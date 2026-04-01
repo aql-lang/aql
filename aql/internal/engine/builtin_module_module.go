@@ -242,7 +242,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 
 	exports := make(map[string]*OrderedMap)
 
-	exportHandler := func(name string, rawMap *OrderedMap) {
+	exportHandler := func(name string, rawMap ReadMap) {
 		resolved := NewOrderedMap()
 		for _, key := range rawMap.Keys() {
 			val, _ := rawMap.Get(key)

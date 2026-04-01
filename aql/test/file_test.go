@@ -284,7 +284,7 @@ func TestFileReadTSVPrint(t *testing.T) {
 }
 
 // assertField checks that an OrderedMap has a field with the expected string value.
-func assertField(t *testing.T, om *engine.OrderedMap, key, want string) {
+func assertField(t *testing.T, om engine.ReadMap, key, want string) {
 	t.Helper()
 	val, ok := om.Get(key)
 	if !ok {

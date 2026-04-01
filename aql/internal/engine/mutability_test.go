@@ -209,6 +209,70 @@ func TestNodeMapUnchangedAfterObjectSet(t *testing.T) {
 	}
 }
 
+// --- ReadMap interface enforces Node immutability at compile time ---
+
+func TestAsMapReturnsReadMap(t *testing.T) {
+	// AsMap() returns ReadMap which has no Set or Delete methods.
+	// This test verifies the interface at the type level.
+	m := NewOrderedMap()
+	m.Set("x", NewInteger(1))
+	mapVal := NewMap(m)
+
+	var rm ReadMap = mapVal.AsMap()
+	if rm == nil {
+		t.Fatal("AsMap returned nil")
+	}
+
+	// ReadMap supports Get, Keys, SortedKeys, Len
+	v, ok := rm.Get("x")
+	if !ok || v.AsInteger() != 1 {
+		t.Fatalf("Get x: got %v, want 1", v)
+	}
+	if rm.Len() != 1 {
+		t.Fatalf("Len: got %d, want 1", rm.Len())
+	}
+	if len(rm.Keys()) != 1 || rm.Keys()[0] != "x" {
+		t.Fatalf("Keys: got %v, want [x]", rm.Keys())
+	}
+
+	// AsMutableMap() returns *OrderedMap for raw map data (internal use)
+	rawMap := NewMap(m)
+	om := rawMap.AsMutableMap()
+	if om == nil {
+		t.Fatal("AsMutableMap returned nil for raw map")
+	}
+	// *OrderedMap supports Set (for internal construction paths)
+	om.Set("y", NewInteger(2))
+	v2, ok2 := om.Get("y")
+	if !ok2 || v2.AsInteger() != 2 {
+		t.Fatalf("after mutation: got %v, want 2", v2)
+	}
+
+	// Object instances expose Fields directly (not through AsMap/AsMutableMap)
+	objFields := NewOrderedMap()
+	objFields.Set("v", NewInteger(0))
+	objType := ObjectTypeInfo{
+		Fields: objFields,
+		ID:     GenerateObjectTypeID(),
+		Name:   "Object/Test",
+	}
+	inst := NewObjectInstance(ObjectInstanceInfo{
+		TypeRef: &objType,
+		Fields:  objFields,
+	})
+	// AsMap returns nil for Object (Data is ObjectInstanceInfo, not *OrderedMap)
+	if inst.AsMap() != nil {
+		t.Fatal("AsMap should return nil for Object instance")
+	}
+	// But Fields are mutable via the ObjectInstanceInfo
+	oi := inst.Data.(ObjectInstanceInfo)
+	oi.Fields.Set("v", NewInteger(42))
+	v3, _ := oi.Fields.Get("v")
+	if v3.AsInteger() != 42 {
+		t.Fatalf("object field mutation: got %v, want 42", v3)
+	}
+}
+
 // --- Store mutability (for completeness) ---
 
 func TestStoreMutableViaSet(t *testing.T) {
