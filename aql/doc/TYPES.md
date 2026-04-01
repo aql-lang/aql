@@ -25,8 +25,7 @@ Node
     Args                     -- argument list (internal)
   Map                        -- ordered key-value pairs
     Options                  -- map with defaults/constraints
-    Word/Inspect             -- word inspection result
-    Type/Inspect             -- type inspection result
+    Inspect                  -- inspection result (word or type)
   Error                      -- error value
 
 Word

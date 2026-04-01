@@ -294,9 +294,8 @@ var typeInherentScores = map[string]int{
 	"Object/Fetch/Response":  1800,
 	"Object/Resource/Entity": 1900,
 
-	// Depth 4
-	"Node/Map/Word/Inspect": 2000,
-	"Node/Map/Type/Inspect": 2100,
+	// Depth 3
+	"Node/Map/Inspect": 2000,
 
 	// Metatypes
 	"Type":                1500,

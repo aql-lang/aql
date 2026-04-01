@@ -95,8 +95,7 @@ var (
 	TMove         = mustType("Word/__MV")
 	TModule       = mustType("Word/__MD")
 	TInternal     = mustType("Word/__IN")
-	TWordInspect  = mustType("Node/Map/Word/Inspect")
-	TTypeInspect  = mustType("Node/Map/Type/Inspect")
+	TInspect      = mustType("Node/Map/Inspect")
 	TObject         = mustType("Object")
 	TStore          = mustType("Object/Store")
 	TStoreSystem    = mustType("Object/Store/System")
@@ -113,7 +112,9 @@ var (
 	// Deprecated aliases — kept temporarily for migration.
 	TBooleanTrue    = TBoolean
 	TBooleanFalse   = TBoolean
-	TWordInspection = TWordInspect
+	TWordInspect    = TInspect
+	TTypeInspect    = TInspect
+	TWordInspection = TInspect
 )
 
 // builtinTypeIDs maps fully-qualified builtin type paths to their fixed
@@ -151,8 +152,7 @@ var builtinTypeIDs = map[string]int{
 	"Word/__MD":                29,
 	"Node/Map/Options":         38,
 	"Object":                   30,
-	"Node/Map/Word/Inspect":    31,
-	"Node/Map/Type/Inspect":    32,
+	"Node/Map/Inspect":         31,
 	"Object/Fetch":             33,
 	"Object/Fetch/Request":     34,
 	"Object/Fetch/Response":    35,
@@ -361,7 +361,7 @@ func builtinTypeParts() map[string]bool {
 		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
-		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
+		TMove, TModule, TInternal, TInspect, TObject,
 		TStore, TStoreSystem,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 		TType, TScalarType, TNodeType,
