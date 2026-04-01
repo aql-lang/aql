@@ -320,3 +320,109 @@ func TestFnArgCleanup_ThreeArgs_ThreeReturns(t *testing.T) {
 	}
 	assertResult(t, result, "10 20 30")
 }
+
+// --- Concrete return values (non-type output sig appended to body) ---
+
+func TestFnArgCleanup_ConcreteReturn_Simple(t *testing.T) {
+	// Output 1 is not a type, so body becomes [print end 1].
+	result, err := runSteps(t, []string{
+		`def f fn [Atom 1 [print]]`,
+		`f a`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestFnArgCleanup_ConcreteReturn_MultipleValues(t *testing.T) {
+	result, err := runSteps(t, []string{
+		`def f fn [[Atom] [1 2] [print]]`,
+		`f a`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1 2")
+}
+
+func TestFnArgCleanup_ConcreteReturn_Factorial(t *testing.T) {
+	// Base case uses [0] 1 [] — concrete return 1 for input 0.
+	// Recursive case uses named param and type return.
+	result, err := runSteps(t, []string{
+		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`fact 5`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "120")
+}
+
+func TestFnArgCleanup_ConcreteReturn_FactorialZero(t *testing.T) {
+	result, err := runSteps(t, []string{
+		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`fact 0`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestFnArgCleanup_ConcreteReturn_FactorialOne(t *testing.T) {
+	result, err := runSteps(t, []string{
+		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`fact 1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "1")
+}
+
+func TestFnArgCleanup_ConcreteReturn_FactorialTen(t *testing.T) {
+	result, err := runSteps(t, []string{
+		`def fact fn [[0] 1 [] [n:Integer] [Integer] [n mul (n sub 1 fact)]]`,
+		`fact 10`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "3628800")
+}
+
+func TestFnArgCleanup_ConcreteReturn_TypeOutputUnchanged(t *testing.T) {
+	// String IS a type, so normal return type checking applies.
+	result, err := runSteps(t, []string{
+		`def f fn [[Atom] [String] [upper]]`,
+		`f hello`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'HELLO'")
+}
+
+func TestFnArgCleanup_ConcreteReturn_EmptyBody(t *testing.T) {
+	// Body is empty, concrete return 42 appended after end.
+	result, err := runSteps(t, []string{
+		`def f fn [[Atom] 42 []]`,
+		`f x`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "42")
+}
+
+func TestFnArgCleanup_ConcreteReturn_StringValue(t *testing.T) {
+	result, err := runSteps(t, []string{
+		`def f fn [[Integer] "done" [print]]`,
+		`f 7`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'done'")
+}
