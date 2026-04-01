@@ -219,6 +219,7 @@ func writeSigs(b *strings.Builder, sigs []SigInfo) {
 	}
 	var lines []sigLine
 	maxArgsLen := 0
+	maxRetLen := 0
 	for _, sig := range sigs {
 		abbrevArgs := make([]string, len(sig.Args))
 		for i, a := range sig.Args {
@@ -235,18 +236,25 @@ func writeSigs(b *strings.Builder, sigs []SigInfo) {
 		if len(argsStr) > maxArgsLen {
 			maxArgsLen = len(argsStr)
 		}
+		if len(retStr) > maxRetLen {
+			maxRetLen = len(retStr)
+		}
 		lines = append(lines, sigLine{args: argsStr, returns: retStr})
 	}
 
 	for _, l := range lines {
 		b.WriteString("  [ ")
 		b.WriteString(l.args)
-		padding := maxArgsLen - len(l.args) + 2
-		for i := 0; i < padding; i++ {
+		argPad := maxArgsLen - len(l.args) + 2
+		for i := 0; i < argPad; i++ {
 			b.WriteByte(' ')
 		}
 		b.WriteString(l.returns)
-		b.WriteString(" ]\n")
+		retPad := maxRetLen - len(l.returns) + 1
+		for i := 0; i < retPad; i++ {
+			b.WriteByte(' ')
+		}
+		b.WriteString("]\n")
 	}
 }
 
