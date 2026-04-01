@@ -281,6 +281,7 @@ var typeInherentScores = map[string]int{
 	"Node/Map":        2400,
 	"Type/ScalarType": 2500,
 	"Type/NodeType":   2600,
+	"Type/ObjectType": 2700,
 
 	// Depth 3 — Scalar subtypes
 	"Scalar/String/Empty":   900,

@@ -58,6 +58,7 @@ Object                       -- mutable typed instances
 Type                         -- metatypes (types of types)
   ScalarType                 -- metatype for Scalar subtypes
   NodeType                   -- metatype for Node subtypes
+  ObjectType                 -- metatype for Object subtypes
 ```
 
 ## Mutability
@@ -120,4 +121,5 @@ The `Type` hierarchy classifies types themselves:
 
 - `Type/ScalarType` — metatype for Scalar subtypes (depth > 1)
 - `Type/NodeType` — metatype for Node subtypes (depth > 1)
-- `Type` — metatype for everything else (roots, Object types)
+- `Type/ObjectType` — metatype for Object subtypes (depth > 1)
+- `Type` — metatype for everything else (roots)

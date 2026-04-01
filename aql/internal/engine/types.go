@@ -62,6 +62,7 @@ var typeAncestry = map[string]string{
 	"Entity":      "Object/Resource/Entity",
 	"ScalarType":  "Type/ScalarType",
 	"NodeType":    "Type/NodeType",
+	"ObjectType": "Type/ObjectType",
 }
 
 // Well-known types.
@@ -111,6 +112,7 @@ var (
 	TType          = mustType("Type")
 	TScalarType    = mustType("Type/ScalarType")
 	TNodeType      = mustType("Type/NodeType")
+	TObjectType    = mustType("Type/ObjectType")
 
 )
 
@@ -162,6 +164,7 @@ var builtinTypeIDs = map[string]int{
 	"Type":                     39,
 	"Type/ScalarType":          40,
 	"Type/NodeType":            41,
+	"Type/ObjectType":          46,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -281,7 +284,7 @@ var builtinTypeList = []Type{
 	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 	TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
-	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType,
+	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -363,7 +366,7 @@ func builtinTypeParts() map[string]bool {
 		TMove, TModule, TInternal, TInspect, TObject,
 		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
-		TType, TScalarType, TNodeType,
+		TType, TScalarType, TNodeType, TObjectType,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {
@@ -375,7 +378,8 @@ func builtinTypeParts() map[string]bool {
 
 // MetatypeFor returns the metatype for a given type.
 // Scalar subtypes (len>1) → TScalarType, Node subtypes (len>1) → TNodeType,
-// everything else (including Scalar and Node themselves) → TType.
+// Object subtypes (len>1) → TObjectType,
+// everything else (including roots themselves) → TType.
 func MetatypeFor(t Type) Type {
 	if len(t.Parts) > 1 {
 		switch t.Parts[0] {
@@ -383,6 +387,8 @@ func MetatypeFor(t Type) Type {
 			return TScalarType
 		case "Node":
 			return TNodeType
+		case "Object":
+			return TObjectType
 		}
 	}
 	return TType
