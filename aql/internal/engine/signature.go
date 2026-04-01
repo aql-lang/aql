@@ -270,6 +270,7 @@ var typeInherentScores = map[string]int{
 	"Object/Error":    1400,
 	"Object/Fetch":    1500,
 	"Object/Store":    1600,
+	"Object/Array":    1650,
 	"Object/Resource": 1700,
 	"Scalar/Number":   1800,
 	"Word/Function":   1900,

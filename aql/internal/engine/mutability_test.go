@@ -302,6 +302,108 @@ func TestAsListReturnsReadList(t *testing.T) {
 	}
 }
 
+// --- Array mutability ---
+
+func TestArrayGetByIndex(t *testing.T) {
+	r, _ := DefaultRegistry()
+	arr := NewArray([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
+
+	result := runAQL(t, r, []Value{
+		arr, NewWord("get"), NewInteger(1),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 20 {
+		t.Fatalf("got %v, want 20", result)
+	}
+}
+
+func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
+	r, _ := DefaultRegistry()
+	arr := NewArray([]Value{NewInteger(10)})
+
+	result := runAQL(t, r, []Value{
+		arr, NewWord("get"), NewInteger(5),
+	})
+	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+		t.Fatalf("got %v, want None", result)
+	}
+}
+
+func TestArraySetByIndex(t *testing.T) {
+	r, _ := DefaultRegistry()
+	arr := NewArray([]Value{NewInteger(10), NewInteger(20)})
+
+	// set 0 99 arr
+	runAQL(t, r, []Value{
+		arr, NewWord("set"), NewInteger(0), NewInteger(99),
+	})
+
+	// Verify mutation
+	result := runAQL(t, r, []Value{
+		arr, NewWord("get"), NewInteger(0),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 99 {
+		t.Fatalf("after set: got %v, want 99", result)
+	}
+}
+
+func TestArraySetOutOfBoundsErrors(t *testing.T) {
+	r, _ := DefaultRegistry()
+	arr := NewArray([]Value{NewInteger(10)})
+
+	err := runAQLError(t, r, []Value{
+		arr, NewWord("set"), NewInteger(5), NewInteger(99),
+	})
+	if err == nil {
+		t.Fatal("expected error for out-of-bounds set")
+	}
+}
+
+func TestArrayMutationSharedReference(t *testing.T) {
+	// Two values wrapping the same ArrayInstanceInfo see mutations
+	r, _ := DefaultRegistry()
+	ai := &ArrayInstanceInfo{Elems: []Value{NewInteger(0)}}
+	ref1 := newValue(TArray, ai)
+	ref2 := newValue(TArray, ai)
+
+	runAQL(t, r, []Value{
+		ref1, NewWord("set"), NewInteger(0), NewInteger(42),
+	})
+
+	result := runAQL(t, r, []Value{
+		ref2, NewWord("get"), NewInteger(0),
+	})
+	if len(result) != 1 || result[0].AsInteger() != 42 {
+		t.Fatalf("ref2 got %v, want 42 (shared mutation)", result)
+	}
+}
+
+func TestArrayIsDistinctFromList(t *testing.T) {
+	// Array is Object/Array; List is Node/List — different types
+	arr := NewArray([]Value{NewInteger(1)})
+	list := NewList([]Value{NewInteger(1)})
+
+	if arr.VType.Matches(TList) {
+		t.Error("Array should not match TList")
+	}
+	if list.VType.Matches(TArray) {
+		t.Error("List should not match TArray")
+	}
+	if !arr.VType.Matches(TObject) {
+		t.Error("Array should match TObject")
+	}
+	if !arr.VType.Matches(TArray) {
+		t.Error("Array should match TArray")
+	}
+}
+
+func TestArrayStringRepresentation(t *testing.T) {
+	arr := NewArray([]Value{NewInteger(1), NewString("hello")})
+	s := arr.String()
+	if s != "Array[1,'hello']" {
+		t.Errorf("got %q, want Array[1,'hello']", s)
+	}
+}
+
 // --- Store mutability (for completeness) ---
 
 func TestStoreMutableViaSet(t *testing.T) {

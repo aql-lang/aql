@@ -43,6 +43,18 @@ func registerSet(r *Registry) {
 		return nil, nil
 	}
 
+	arrayHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		arr := args[2].AsArray()
+		if arr == nil {
+			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+		}
+		idx := int(args[0].AsInteger())
+		if !arr.Set(idx, args[1]) {
+			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
+		}
+		return nil, nil
+	}
+
 	r.Register("set",
 		// Store
 		Signature{
@@ -53,6 +65,11 @@ func registerSet(r *Registry) {
 			Args:      []Type{TAtom, TAny, TStore},
 			QuoteArgs: map[int]bool{0: true},
 			Handler:   storeHandler,
+		},
+		// Array (indexed by integer)
+		Signature{
+			Args:    []Type{TInteger, TAny, TArray},
+			Handler: arrayHandler,
 		},
 		// Object
 		Signature{

@@ -44,6 +44,7 @@ Word
 Object                       -- mutable typed instances
   Store                      -- mutable key-value store with prototype chain
     System                   -- system configuration store
+  Array                      -- mutable ordered array
   Error                      -- error value
   Table                      -- list of typed records (SQL-backed)
   Record                     -- typed field schema

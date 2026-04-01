@@ -288,6 +288,40 @@ func (si *StoreInstanceInfo) Set(key string, val Value) {
 	si.Data[key] = val
 }
 
+// ArrayInstanceInfo is a mutable ordered array (Object/Array).
+// Unlike immutable Node/List values, Array instances can be modified
+// in place via set (index assignment), append, etc.
+type ArrayInstanceInfo struct {
+	Elems []Value
+}
+
+// Get returns the element at index i. Returns zero Value and false if out of bounds.
+func (ai *ArrayInstanceInfo) Get(i int) (Value, bool) {
+	if i < 0 || i >= len(ai.Elems) {
+		return Value{}, false
+	}
+	return ai.Elems[i], true
+}
+
+// Set sets the element at index i. Returns false if out of bounds.
+func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
+	if i < 0 || i >= len(ai.Elems) {
+		return false
+	}
+	ai.Elems[i] = val
+	return true
+}
+
+// Len returns the number of elements.
+func (ai *ArrayInstanceInfo) Len() int {
+	return len(ai.Elems)
+}
+
+// Append adds a value to the end of the array.
+func (ai *ArrayInstanceInfo) Append(val Value) {
+	ai.Elems = append(ai.Elems, val)
+}
+
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -684,6 +718,18 @@ func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value 
 	})
 }
 
+// NewArray creates a mutable Array value from a slice of elements.
+func NewArray(elems []Value) Value {
+	data := make([]Value, len(elems))
+	copy(data, elems)
+	return newValue(TArray, &ArrayInstanceInfo{Elems: data})
+}
+
+// NewArrayEmpty creates an empty mutable Array value.
+func NewArrayEmpty() Value {
+	return newValue(TArray, &ArrayInstanceInfo{Elems: nil})
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
@@ -807,6 +853,21 @@ func (v Value) AsStore() *StoreInstanceInfo {
 		return nil
 	}
 	return si
+}
+
+// IsArray reports whether this value is an Array instance.
+func (v Value) IsArray() bool {
+	_, ok := v.Data.(*ArrayInstanceInfo)
+	return ok && v.VType.Matches(TArray)
+}
+
+// AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
+func (v Value) AsArray() *ArrayInstanceInfo {
+	ai, ok := v.Data.(*ArrayInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return ai
 }
 
 // IsObjectInstance reports whether this value is an object instance.
@@ -1106,6 +1167,14 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsArray():
+		arr := v.AsArray()
+		parts := make([]string, arr.Len())
+		for i := 0; i < arr.Len(); i++ {
+			e, _ := arr.Get(i)
+			parts[i] = e.String()
+		}
+		return "Array[" + strings.Join(parts, ",") + "]"
 	case v.IsObjectInstance():
 		oi := v.AsObjectInstance()
 		allFields := oi.AllFields()

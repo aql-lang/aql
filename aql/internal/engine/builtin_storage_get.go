@@ -170,6 +170,20 @@ func registerGet(r *Registry) {
 		return []Value{val}, nil
 	}
 
+	// --- Array handler ---
+
+	arrayIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		arr := args[1].AsArray()
+		if arr == nil {
+			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+		}
+		val, ok := arr.Get(int(args[0].AsInteger()))
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+
 	// --- None handler ---
 
 	noneHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -184,6 +198,8 @@ func registerGet(r *Registry) {
 		{Args: []Type{TAtom, TNode}, Handler: nodeAtomHandler},
 		{Args: []Type{TString, TNode}, Handler: nodeStringHandler},
 		{Args: []Type{TInteger, TNode}, Handler: nodeIntegerHandler},
+		// Array containers (mutable, indexed by integer)
+		{Args: []Type{TInteger, TArray}, Handler: arrayIntegerHandler},
 		// Object containers (Record, Entity, etc.)
 		{Args: []Type{TAtom, TObject}, Handler: objectAtomHandler},
 		{Args: []Type{TString, TObject}, Handler: objectStringHandler},
