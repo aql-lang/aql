@@ -1,4 +1,6 @@
 // Package help provides embedded help text for AQL built-in words.
+//
+//go:generate go run ../../../cmd/genhelp
 package help
 
 import (
@@ -27,12 +29,21 @@ type FuncInfo struct {
 	Name              string
 	ForwardPrecedence bool
 	Sigs              []SigInfo
-	Entry             *Entry               // static docs (may be nil)
-	Eval              func(string) (string, error) // run an expression, return formatted stack
+	Entry             *Entry // static docs (may be nil)
 }
 
 // registry holds all help entries keyed by word name.
 var registry = map[string]*Entry{}
+
+// exampleResults holds pre-computed example results keyed by expression.
+// Populated by go:generate via cmd/genhelp.
+var exampleResults = map[string]string{}
+
+// SetExampleResults replaces the pre-computed example results map.
+// Called by the generated file or by test code.
+func SetExampleResults(m map[string]string) {
+	exampleResults = m
+}
 
 // register adds an entry to the global help registry.
 func register(e *Entry) {
@@ -332,6 +343,43 @@ func sigArgsSameType(sig SigInfo) bool {
 	return true
 }
 
+// ExampleExprs returns all example expressions that would be generated
+// for a word, without computing results. Used by the generator to know
+// which expressions to pre-compute.
+func ExampleExprs(info FuncInfo) []string {
+	var exprs []string
+	configIdx := 0
+	counters := map[string]int{}
+	for _, sig := range info.Sigs {
+		nArgs := len(sig.Args)
+		if nArgs == 0 {
+			continue
+		}
+		vals := make([]string, nArgs)
+		for i, a := range sig.Args {
+			leaf := typeAbbrev(a)
+			c := counters[leaf]
+			vals[i] = exampleVal(a, &c)
+			counters[leaf] = c
+		}
+		var prefixes []int
+		if !info.ForwardPrecedence {
+			prefixes = []int{nArgs}
+		} else if sigArgsSameType(sig) {
+			for p := 0; p <= nArgs; p++ {
+				prefixes = append(prefixes, p)
+			}
+		} else {
+			prefixes = []int{configIdx % (nArgs + 1)}
+		}
+		for _, prefix := range prefixes {
+			exprs = append(exprs, buildExampleExpr(info.Name, vals, prefix, nArgs))
+		}
+		configIdx++
+	}
+	return exprs
+}
+
 // writeExamples generates column-aligned examples, one per signature,
 // cycling through arg configurations. For 2-arg words, infix examples
 // come first. Args appear descending left-to-right in source.
@@ -388,7 +436,7 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 
 		for _, prefix := range prefixes {
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
-			result := evalExample(info.Eval, expr, info.Name, sig, vals)
+			result := evalExample(expr, info.Name, sig, vals)
 			if len(expr) > maxExprLen {
 				maxExprLen = len(expr)
 			}
@@ -468,15 +516,11 @@ func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 	return strings.Join(parts, " ")
 }
 
-// evalExample evaluates an example expression using the live engine if
-// available, falling back to static computation.
-func evalExample(eval func(string) (string, error), expr, name string, sig SigInfo, vals []string) string {
-	if eval != nil {
-		result, err := eval(expr)
-		if err == nil && result != "" {
-			return result
-		}
-		// Fall through on error (e.g. side-effect-only words)
+// evalExample looks up a pre-computed result for an expression,
+// falling back to static computation.
+func evalExample(expr, name string, sig SigInfo, vals []string) string {
+	if result, ok := exampleResults[expr]; ok {
+		return result
 	}
 	sigArgs := buildSigArgs(vals, 0, len(vals))
 	return computeExampleResult(name, sig, sigArgs)

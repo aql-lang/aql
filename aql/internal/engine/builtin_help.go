@@ -2,40 +2,9 @@ package engine
 
 import (
 	"fmt"
-	"io"
-	"strings"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
-
-// makeEvalFunc returns a function that parses and evaluates an AQL expression,
-// returning the formatted result stack. Uses the registry's ParseFunc.
-func makeEvalFunc(r *Registry) func(string) (string, error) {
-	if r.ParseFunc == nil {
-		return nil
-	}
-	return func(expr string) (string, error) {
-		vals, err := r.ParseFunc(expr)
-		if err != nil {
-			return "", err
-		}
-		// Suppress output from print/trace during help example evaluation.
-		savedOut := r.Output
-		r.Output = io.Discard
-		defer func() { r.Output = savedOut }()
-
-		eng := NewTop(r)
-		result, err := eng.Run(vals)
-		if err != nil {
-			return "", err
-		}
-		var parts []string
-		for _, v := range result {
-			parts = append(parts, v.String())
-		}
-		return strings.Join(parts, " "), nil
-	}
-}
 
 // BuildFuncInfo extracts dynamic signature data from the registry for a word.
 func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
@@ -55,7 +24,6 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 		Name:              fn.Name,
 		ForwardPrecedence: fn.ForwardPrecedence,
 		Entry:             help.Lookup(name),
-		Eval:              makeEvalFunc(r),
 	}
 
 	for _, sig := range fn.Signatures {
