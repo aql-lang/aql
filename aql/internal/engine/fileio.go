@@ -180,8 +180,8 @@ func valueToJsonic(v Value) string {
 	case v.VType.Equal(TList):
 		if _, ok := v.Data.([]Value); ok {
 			elems := v.AsList()
-			parts := make([]string, len(elems))
-			for i, e := range elems {
+			parts := make([]string, elems.Len())
+			for i, e := range elems.Slice() {
 				parts[i] = valueToJsonic(e)
 			}
 			return "[" + strings.Join(parts, ",") + "]"

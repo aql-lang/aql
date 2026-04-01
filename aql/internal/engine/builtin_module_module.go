@@ -35,7 +35,7 @@ func registerModule(r *Registry) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 			}
-			desc, err := runModuleBody(r, args[0].AsList())
+			desc, err := runModuleBody(r, args[0].AsList().Slice())
 			if err != nil {
 				return nil, fmt.Errorf("module: %w", err)
 			}
@@ -56,7 +56,7 @@ func registerModule(r *Registry) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [word/atom module-desc] -> [] — rename single export
@@ -107,7 +107,7 @@ func registerModule(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			return nil, installRenamedExports(r, desc, args[0].AsList())
+			return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 		}
 		if isDataFile(path) {
 			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
@@ -116,7 +116,7 @@ func registerModule(r *Registry) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [atom/q list] -> [] — inline module: import module [body]
@@ -130,7 +130,7 @@ func registerModule(r *Registry) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[1].AsList())
+		desc, err := runModuleBody(r, args[1].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -150,11 +150,11 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList())
+		desc, err := runModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [atom atom/q list] -> [] — inline module with single rename
@@ -166,7 +166,7 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList())
+		desc, err := runModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -509,11 +509,11 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
 			pairElems := pair.AsList()
-			if len(pairElems) != 2 {
+			if pairElems.Len() != 2 {
 				return fmt.Errorf("import: rename pair must have exactly 2 elements")
 			}
-			fromName := valToAtomOrString(pairElems[0])
-			toName := valToAtomOrString(pairElems[1])
+			fromName := valToAtomOrString(pairElems.Get(0))
+			toName := valToAtomOrString(pairElems.Get(1))
 			exportMap, ok := desc.Exports[fromName]
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)

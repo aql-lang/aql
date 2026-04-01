@@ -49,7 +49,7 @@ func TestDefListAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -65,7 +65,7 @@ func TestDefListFilterPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
@@ -90,7 +90,7 @@ func TestDefListFilterParens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
@@ -116,7 +116,7 @@ func TestDefListFilterParensDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
@@ -132,7 +132,7 @@ func TestDefParensListFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
@@ -158,7 +158,7 @@ func TestDefParensListAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -174,7 +174,7 @@ func TestDefParensCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 4 {
 		t.Fatalf("expected 4 rows, got %d", len(rows))
 	}
@@ -215,7 +215,7 @@ func TestDefParensUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -240,7 +240,7 @@ func TestDefParensRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}

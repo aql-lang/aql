@@ -273,6 +273,35 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	}
 }
 
+// --- ReadList interface enforces List immutability at compile time ---
+
+func TestAsListReturnsReadList(t *testing.T) {
+	listVal := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
+
+	rl := listVal.AsList()
+	if rl.IsNil() {
+		t.Fatal("AsList returned nil ReadList")
+	}
+
+	// ReadList supports Get, Len, Slice, IsNil
+	if rl.Len() != 3 {
+		t.Fatalf("Len: got %d, want 3", rl.Len())
+	}
+	if rl.Get(0).AsInteger() != 1 {
+		t.Fatalf("Get(0): got %v, want 1", rl.Get(0))
+	}
+	if rl.Get(2).AsInteger() != 3 {
+		t.Fatalf("Get(2): got %v, want 3", rl.Get(2))
+	}
+
+	// Slice returns a copy — mutating the copy doesn't affect the original
+	sliceCopy := rl.Slice()
+	sliceCopy[0] = NewInteger(99)
+	if rl.Get(0).AsInteger() != 1 {
+		t.Fatal("mutating Slice() copy should not affect ReadList")
+	}
+}
+
 // --- Store mutability (for completeness) ---
 
 func TestStoreMutableViaSet(t *testing.T) {

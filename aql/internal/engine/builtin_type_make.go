@@ -79,16 +79,16 @@ func registerMake(r *Registry) {
 		elems := srcVal.AsList()
 
 		// Check if named or positional.
-		isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
+		isNamed := elems.Len() > 0 && elems.Get(0).VType.Equal(TMap)
 		if isNamed {
-			if _, ok := elems[0].Data.(*OrderedMap); !ok {
+			if _, ok := elems.Get(0).Data.(*OrderedMap); !ok {
 				isNamed = false
 			}
 		}
 
 		if isNamed {
 			provided := NewOrderedMap()
-			for _, elem := range elems {
+			for _, elem := range elems.Slice() {
 				if !elem.VType.Equal(TMap) {
 					return nil, fmt.Errorf("make: mixed named and positional fields")
 				}
@@ -105,13 +105,13 @@ func registerMake(r *Registry) {
 				return nil, err
 			}
 		} else {
-			if len(elems) != len(fieldKeys) {
+			if elems.Len() != len(fieldKeys) {
 				return nil, fmt.Errorf("make: expected %d values, got %d",
-					len(fieldKeys), len(elems))
+					len(fieldKeys), elems.Len())
 			}
 			for i, key := range fieldKeys {
 				constraint, _ := recType.Fields.Get(key)
-				converted, err := makeFieldValue(elems[i], constraint)
+				converted, err := makeFieldValue(elems.Get(i), constraint)
 				if err != nil {
 					return nil, fmt.Errorf("make: field %q: %w", key, err)
 				}
@@ -327,9 +327,9 @@ func registerMake(r *Registry) {
 			}
 			rows := srcVal.AsList()
 			fieldKeys := recType.Fields.Keys()
-			resultRows := make([]Value, 0, len(rows))
+			resultRows := make([]Value, 0, rows.Len())
 
-			for rowIdx, rowVal := range rows {
+			for rowIdx, rowVal := range rows.Slice() {
 				if !rowVal.VType.Equal(TList) {
 					return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
 				}
@@ -339,9 +339,9 @@ func registerMake(r *Registry) {
 				rowElems := rowVal.AsList()
 
 				// Check if named or positional.
-				isNamed := len(rowElems) > 0 && rowElems[0].VType.Equal(TMap)
+				isNamed := rowElems.Len() > 0 && rowElems.Get(0).VType.Equal(TMap)
 				if isNamed {
-					if _, ok := rowElems[0].Data.(*OrderedMap); !ok {
+					if _, ok := rowElems.Get(0).Data.(*OrderedMap); !ok {
 						isNamed = false
 					}
 				}
@@ -349,7 +349,7 @@ func registerMake(r *Registry) {
 				result := NewOrderedMap()
 				if isNamed {
 					provided := NewOrderedMap()
-					for _, elem := range rowElems {
+					for _, elem := range rowElems.Slice() {
 						if !elem.VType.Equal(TMap) {
 							return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
 						}
@@ -380,13 +380,13 @@ func registerMake(r *Registry) {
 						}
 					}
 				} else {
-					if len(rowElems) != len(fieldKeys) {
+					if rowElems.Len() != len(fieldKeys) {
 						return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
-							rowIdx, len(fieldKeys), len(rowElems))
+							rowIdx, len(fieldKeys), rowElems.Len())
 					}
 					for i, key := range fieldKeys {
 						constraint, _ := recType.Fields.Get(key)
-						converted, err := makeFieldValue(rowElems[i], constraint)
+						converted, err := makeFieldValue(rowElems.Get(i), constraint)
 						if err != nil {
 							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 						}
@@ -640,8 +640,8 @@ func resolveFieldType(r *Registry, v Value) Value {
 		elems := v.AsList()
 		// Promote strings that name registered functions to words,
 		// since list elements inside pairs are parsed in data context.
-		input := make([]Value, len(elems))
-		for i, e := range elems {
+		input := make([]Value, elems.Len())
+		for i, e := range elems.Slice() {
 			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
 				name := e.AsString()
 				if r.Lookup(name) != nil {

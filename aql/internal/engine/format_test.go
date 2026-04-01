@@ -123,7 +123,7 @@ func TestLinesFormatDecode(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	elems := result[0].AsList()
+	elems := result[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(elems))
 	}
@@ -193,7 +193,7 @@ func TestCSVFormatDecode(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -232,7 +232,7 @@ func TestCSVFormatDecodeEmpty(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -244,7 +244,7 @@ func TestCSVFormatDecodeQuoted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -346,7 +346,7 @@ func TestTSVFormatDecode(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}

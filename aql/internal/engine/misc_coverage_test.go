@@ -50,7 +50,7 @@ func TestLinesFormatDecodeCov(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := vals[0].AsList()
+	list := vals[0].AsList().Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(list))
 	}
@@ -118,7 +118,7 @@ func TestJsonicToValueList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := v.AsList()
+	list := v.AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -728,7 +728,7 @@ func TestMakeTable(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(list))
 	}

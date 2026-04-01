@@ -29,7 +29,7 @@ func doConcat(listVal Value, o strOpts) ([]Value, error) {
 	}
 	elems := listVal.AsList()
 	var parts []string
-	for _, e := range elems {
+	for _, e := range elems.Slice() {
 		if e.VType.Equal(TNone) {
 			if o.skipNullish {
 				continue

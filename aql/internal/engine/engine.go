@@ -324,8 +324,8 @@ func (e *Engine) stepWord(val Value) error {
 			// For list bodies, expand onto the stack like the fallback handler does.
 			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 				elems := top.AsList()
-				expanded := make([]Value, len(elems))
-				copy(expanded, elems)
+				expanded := make([]Value, elems.Len())
+				copy(expanded, elems.Slice())
 				e.stackSplice(e.pointer, 1, expanded...)
 				return nil
 			}
@@ -835,12 +835,12 @@ func (e *Engine) autoEvalStack() error {
 // returning a new list containing the results. For example, [1 add 2] → [3].
 func (e *Engine) autoEvalList(val Value) (Value, error) {
 	elems := val.AsList()
-	if len(elems) == 0 {
+	if elems.Len() == 0 {
 		return val, nil
 	}
 	sub := New(e.registry)
-	input := make([]Value, len(elems))
-	copy(input, elems)
+	input := make([]Value, elems.Len())
+	copy(input, elems.Slice())
 	result, err := sub.Run(input)
 	if err != nil {
 		return Value{}, err

@@ -24,22 +24,22 @@ func registerVar(r *Registry) {
 			return nil, fmt.Errorf("var: argument must be a concrete list, got type literal")
 		}
 		elems := list.AsList()
-		if len(elems) == 0 {
+		if elems.Len() == 0 {
 			return nil, fmt.Errorf("var: empty list")
 		}
 
 		// First element must be a list of variable declarations.
-		declVal := elems[0]
+		declVal := elems.Get(0)
 		if !declVal.VType.Equal(TList) || declVal.Data == nil {
 			return nil, fmt.Errorf("var: first element must be a list of variable declarations")
 		}
 		decls := declVal.AsList()
-		body := elems[1:]
+		body := elems.Slice()[1:]
 
 		var result []Value
 		var varNames []string
 
-		for _, decl := range decls {
+		for _, decl := range decls.Slice() {
 			switch {
 			case decl.IsWord():
 				// Bare word: take value from stack.
@@ -50,20 +50,20 @@ func registerVar(r *Registry) {
 			case decl.VType.Equal(TList) && decl.Data != nil:
 				// List [name value...]: define with given value.
 				declElems := decl.AsList()
-				if len(declElems) < 2 {
+				if declElems.Len() < 2 {
 					return nil, fmt.Errorf("var: declaration list must have name and value")
 				}
 				var name string
-				if declElems[0].IsWord() {
-					name = declElems[0].AsWord().Name
-				} else if declElems[0].VType.Matches(TString) {
-					name = declElems[0].AsString()
+				if declElems.Get(0).IsWord() {
+					name = declElems.Get(0).AsWord().Name
+				} else if declElems.Get(0).VType.Matches(TString) {
+					name = declElems.Get(0).AsString()
 				} else {
 					return nil, fmt.Errorf("var: declaration name must be a word or string")
 				}
 				varNames = append(varNames, name)
 				result = append(result, NewWord("def"), NewWord(name))
-				result = append(result, declElems[1:]...)
+				result = append(result, declElems.Slice()[1:]...)
 				result = append(result, NewWord("end"))
 
 			case decl.VType.Matches(TString):

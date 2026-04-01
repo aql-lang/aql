@@ -87,12 +87,12 @@ func registerGet(r *Registry) {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
 		idx := args[0].AsInteger()
-		if list := container.AsList(); list != nil && container.VType.Matches(TList) {
+		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
 			i := int(idx)
-			if i < 0 || i >= len(list) {
+			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
 			}
-			return []Value{list[i]}, nil
+			return []Value{list.Get(i)}, nil
 		}
 		if m := container.AsMap(); m != nil {
 			key := strconv.FormatInt(idx, 10)

@@ -46,7 +46,7 @@ func TestListAllHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(list))
 	}
@@ -76,7 +76,7 @@ func TestListFilterHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 matching rows, got %d", len(list))
 	}
@@ -114,7 +114,7 @@ func TestListFilterMultipleKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 1 {
 		t.Errorf("expected 1 matching row, got %d", len(list))
 	}
@@ -145,7 +145,7 @@ func TestListFilterNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
 	}
@@ -170,7 +170,7 @@ func TestListFilterMissingField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
 	}
@@ -183,7 +183,7 @@ func TestListAllEmptyTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}

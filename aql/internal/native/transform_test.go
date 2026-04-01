@@ -206,7 +206,7 @@ func TestValueToAnyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := back.AsList()
+	list := back.AsList().Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}

@@ -108,7 +108,7 @@ func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listAllHandler returns all records from a table as a list.
 func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
 	return []engine.Value{engine.NewList(result)}, nil
@@ -118,7 +118,7 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // A record matches when every key-value pair in the filter map has an equal
 // value in the corresponding record field.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	filter := args[1].AsMap()
 
 	var matched []engine.Value

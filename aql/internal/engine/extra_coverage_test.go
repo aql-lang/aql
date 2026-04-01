@@ -182,7 +182,7 @@ func TestExtraAsNumberDecimal(t *testing.T) {
 	}
 }
 
-// ── 3. Value.AsList() with TableData ────────────────────────────────────
+// ── 3. Value.AsList().Slice() with TableData ────────────────────────────────────
 
 func TestExtraAsListTableData(t *testing.T) {
 	fields := NewOrderedMap()
@@ -192,7 +192,7 @@ func TestExtraAsListTableData(t *testing.T) {
 	row.Set("col", NewString("val"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 	v := Value{VType: TList, Data: td}
-	list := v.AsList()
+	list := v.AsList().Slice()
 	if len(list) != 1 {
 		t.Fatalf("AsList() on TableData got %d rows, want 1", len(list))
 	}
@@ -253,7 +253,7 @@ func TestExtraCSVDecodeEncode(t *testing.T) {
 	if !vals[0].IsTableType() {
 		t.Fatal("CSV decode: result should be a table type")
 	}
-	rows := vals[0].AsList()
+	rows := vals[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("CSV decode: got %d rows, want 2", len(rows))
 	}
@@ -278,7 +278,7 @@ func TestExtraTSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("TSV decode: got %d values, want 1", len(vals))
 	}
-	rows := vals[0].AsList()
+	rows := vals[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("TSV decode: got %d rows, want 2", len(rows))
 	}
@@ -409,7 +409,7 @@ func TestExtraUnifyListsSameSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical lists should unify")
 	}
-	elems := result.AsList()
+	elems := result.AsList().Slice()
 	if len(elems) != 2 {
 		t.Errorf("unified list has %d elems, want 2", len(elems))
 	}
@@ -505,7 +505,7 @@ func TestExtraUnifyListTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("list type literal should unify with concrete list")
 	}
-	if len(result.AsList()) != 1 {
+	if len(result.AsList().Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -518,7 +518,7 @@ func TestExtraUnifyListTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete list should unify with list type literal")
 	}
-	if len(result.AsList()) != 1 {
+	if len(result.AsList().Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }

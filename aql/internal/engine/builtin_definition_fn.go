@@ -25,7 +25,7 @@ func registerFn(r *Registry) {
 		if list.Data == nil {
 			return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
 		}
-		elems := list.AsList()
+		elems := list.AsList().Slice()
 		if len(elems) == 0 {
 			return nil, fmt.Errorf("fn: list must not be empty")
 		}
@@ -91,7 +91,7 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		// Abbreviation: non-list body is treated as [body].
 		var bodyElems []Value
 		if body.VType.Equal(TList) && body.Data != nil {
-			bodyElems = body.AsList()
+			bodyElems = body.AsList().Slice()
 		} else {
 			bodyElems = []Value{body}
 		}
@@ -127,10 +127,10 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 func outputSigIsConcreteReturns(outputSig Value) bool {
 	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
 		elems := outputSig.AsList()
-		if len(elems) == 0 {
+		if elems.Len() == 0 {
 			return false
 		}
-		for _, e := range elems {
+		for _, e := range elems.Slice() {
 			if isSigTypeValue(e) {
 				return false
 			}
@@ -183,8 +183,7 @@ func isSigTypeValue(v Value) bool {
 func outputSigValues(outputSig Value) []Value {
 	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
 		elems := outputSig.AsList()
-		result := make([]Value, len(elems))
-		copy(result, elems)
+		result := elems.Slice()
 		return result
 	}
 	return []Value{outputSig}
@@ -234,11 +233,11 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 		return []Type{t}, nil
 	}
 	elems := outputSig.AsList()
-	if len(elems) == 0 {
+	if elems.Len() == 0 {
 		return nil, nil
 	}
-	types := make([]Type, len(elems))
-	for i, e := range elems {
+	types := make([]Type, elems.Len())
+	for i, e := range elems.Slice() {
 		var err error
 		types[i], _, err = resolveSigType(nil, e)
 		if err != nil {
@@ -267,8 +266,8 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 	elems := inputSig.AsList()
 	var params []FnParam
 
-	for i := 0; i < len(elems); i++ {
-		elem := elems[i]
+	for i := 0; i < elems.Len(); i++ {
+		elem := elems.Get(i)
 
 		// Check if this element is a "?" marker — skip it but mark
 		// the previous param as optional.

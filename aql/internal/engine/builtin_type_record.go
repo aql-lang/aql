@@ -12,11 +12,11 @@ func registerRecord(r *Registry) {
 			return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
 		}
 		elems := list.AsList()
-		if len(elems) == 0 {
+		if elems.Len() == 0 {
 			return nil, fmt.Errorf("record: list must have at least one field")
 		}
 		fields := NewOrderedMap()
-		for _, elem := range elems {
+		for _, elem := range elems.Slice() {
 			if !elem.VType.Equal(TMap) {
 				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
 			}

@@ -42,7 +42,7 @@ func TestFileReadCSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -84,7 +84,7 @@ func TestFileReadSimpleCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -101,7 +101,7 @@ func TestFileReadQuotedCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -124,7 +124,7 @@ func TestFileReadEmptyCSV(t *testing.T) {
 			t.Fatalf("expected list/table type, got %s", v.VType)
 		}
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -146,7 +146,7 @@ func TestFileReadTSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -211,7 +211,7 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 	if !v.IsTableType() {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Errorf("expected 3 rows, got %d", len(rows))
 	}

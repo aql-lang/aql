@@ -1213,7 +1213,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TList) {
 		t.Fatalf("read lines should return list, got %v", result)
 	}
-	elems := result[0].AsList()
+	elems := result[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("read lines should have 3 elements, got %d", len(elems))
 	}

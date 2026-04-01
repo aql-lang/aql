@@ -702,7 +702,7 @@ func TestParseExplicitList(t *testing.T) {
 	if !got[0].VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", got[0].VType)
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -717,7 +717,7 @@ func TestParseListWithStrings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 2 {
 		t.Errorf("expected 2 elements, got %d", len(elems))
 	}
@@ -745,7 +745,7 @@ func TestParseMapWithList(t *testing.T) {
 	if !xVal.VType.Equal(engine.TList) {
 		t.Errorf("expected list, got %s", xVal.VType)
 	}
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -1059,7 +1059,7 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
@@ -1133,7 +1133,7 @@ func TestParseListWithMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
@@ -1153,7 +1153,7 @@ func TestParseNestedList(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1170,7 +1170,7 @@ func TestParseListWithDottedWord(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	// ( foo dot bar ) = 5 elements
 	if len(elems) != 5 {
 		t.Fatalf("expected 5 elements (( foo dot bar )), got %d", len(elems))
@@ -1471,7 +1471,7 @@ func TestParseDataListWithDecimal(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1725,7 +1725,7 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !list.VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", list.VType)
 	}
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
@@ -1752,7 +1752,7 @@ func TestParseExplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
@@ -1843,7 +1843,7 @@ func TestParseOptionalFieldInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}

@@ -11,6 +11,34 @@ import (
 	"time"
 )
 
+// ReadList is a read-only view of a list of Values.
+// Node list values expose this via AsList(). To mutate, use AsMutableList().
+type ReadList struct {
+	elems []Value
+}
+
+// Get returns the element at index i. Panics if out of bounds.
+func (l ReadList) Get(i int) Value {
+	return l.elems[i]
+}
+
+// Len returns the number of elements.
+func (l ReadList) Len() int {
+	return len(l.elems)
+}
+
+// Slice returns a copy of the underlying slice.
+func (l ReadList) Slice() []Value {
+	out := make([]Value, len(l.elems))
+	copy(out, l.elems)
+	return out
+}
+
+// IsNil reports whether this ReadList has no backing data.
+func (l ReadList) IsNil() bool {
+	return l.elems == nil
+}
+
 // ReadMap is a read-only view of an ordered key-value map.
 // Node values (Map, Options) expose this interface via AsMap().
 // To mutate, use AsMutableMap() which is only valid for Object instances.
@@ -935,19 +963,34 @@ func (v Value) AsBoolean() bool {
 // AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
-func (v Value) AsList() []Value {
+// AsList returns a read-only view of the list payload.
+// Returns a ReadList with nil backing if the data is not a list.
+func (v Value) AsList() ReadList {
 	if v.Data == nil {
-		return nil
+		return ReadList{}
 	}
 	if td, ok := v.Data.(TableData); ok {
-		return td.Rows
+		return ReadList{elems: td.Rows}
 	}
 	if qb, ok := v.Data.(QueryBuilder); ok {
 		td, err := qb.Materialize()
 		if err != nil {
-			return nil
+			return ReadList{}
 		}
-		return td.Rows
+		return ReadList{elems: td.Rows}
+	}
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return ReadList{}
+	}
+	return ReadList{elems: elems}
+}
+
+// AsMutableList returns the underlying []Value slice for mutation.
+// Only valid for internal construction paths — never for immutable Node values.
+func (v Value) AsMutableList() []Value {
+	if v.Data == nil {
+		return nil
 	}
 	elems, ok := v.Data.([]Value)
 	if !ok {
@@ -1057,7 +1100,7 @@ func (v Value) String() string {
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = e.String()
@@ -1145,8 +1188,8 @@ func IsTypeValue(v Value) bool {
 	// Concrete list: check each element recursively.
 	if v.VType.Matches(TList) && v.Data != nil {
 		elems := v.AsList()
-		if elems != nil {
-			for _, elem := range elems {
+		if !elems.IsNil() {
+			for _, elem := range elems.Slice() {
 				if IsTypeValue(elem) {
 					return true
 				}

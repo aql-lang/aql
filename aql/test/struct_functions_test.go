@@ -64,7 +64,7 @@ func TestMergeListMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
@@ -86,7 +86,7 @@ func TestMergeMapList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(list))
 	}
@@ -102,7 +102,7 @@ func TestMergeMapListIgnoreNonInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(list))
 	}
@@ -117,7 +117,7 @@ func TestPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 || list[2].AsString() != "c" {
 		t.Errorf("expected [a,b,c], got %v", result[0].String())
 	}
@@ -130,7 +130,7 @@ func TestPushSpread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 4 {
 		t.Errorf("expected 4 elements, got %d", len(list))
 	}
@@ -146,7 +146,7 @@ func TestPop(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results (list + popped), got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
@@ -162,7 +162,7 @@ func TestUnshift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 || list[0].AsString() != "c" {
 		t.Errorf("expected [c,a,b], got %v", result[0].String())
 	}
@@ -175,7 +175,7 @@ func TestUnshiftSpread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 4 || list[0].AsString() != "c" || list[1].AsString() != "d" {
 		t.Errorf("expected [c,d,a,b], got %v", result[0].String())
 	}
@@ -191,7 +191,7 @@ func TestShift(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
@@ -356,7 +356,7 @@ func TestWalkFlat(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	leaves := result[0].AsList()
+	leaves := result[0].AsList().Slice()
 	if len(leaves) != 2 {
 		t.Fatalf("expected 2 leaves, got %d", len(leaves))
 	}
@@ -383,7 +383,7 @@ func TestWalkNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaves := result[0].AsList()
+	leaves := result[0].AsList().Slice()
 	if len(leaves) != 3 {
 		t.Fatalf("expected 3 leaves, got %d", len(leaves))
 	}

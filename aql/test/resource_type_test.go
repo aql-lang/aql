@@ -112,7 +112,7 @@ func TestResourceTypeTable(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -239,7 +239,7 @@ func TestEntityTypeTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -306,7 +306,7 @@ func TestEntityTypeList(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -320,7 +320,7 @@ func TestEntityTypeListFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -334,7 +334,7 @@ func TestEntityTypeCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -366,7 +366,7 @@ func TestEntityTypeUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -380,7 +380,7 @@ func TestEntityTypeRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -395,7 +395,7 @@ func TestResourceTypeListEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -409,7 +409,7 @@ func TestResourceTypeCreateEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}

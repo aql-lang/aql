@@ -2495,7 +2495,7 @@ func TestAsListQueryBuilder(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	// Accessing AsList on a QueryBuilder triggers materialization
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3 rows via AsList, got %d", len(list))
 	}
@@ -4098,7 +4098,7 @@ func TestArgsDirectAccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	argsList := result[0].AsList()
+	argsList := result[0].AsList().Slice()
 	if len(argsList) != 2 {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}

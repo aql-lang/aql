@@ -109,7 +109,7 @@ func TestValueAsTableTypeCov(t *testing.T) {
 
 func TestValueAsListCov(t *testing.T) {
 	v := NewList([]Value{NewInteger(1), NewInteger(2)})
-	list := v.AsList()
+	list := v.AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -123,7 +123,7 @@ func TestValueAsListCov(t *testing.T) {
 		Rows:   []Value{NewMap(row)},
 	}
 	v = Value{VType: TList, Data: td}
-	list = v.AsList()
+	list = v.AsList().Slice()
 	if len(list) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(list))
 	}

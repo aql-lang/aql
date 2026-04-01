@@ -50,10 +50,10 @@ func registerGetr(r *Registry) {
 		}
 		list := args[0].AsList()
 		idx := int(args[1].AsInteger())
-		if idx < 0 || idx >= len(list) {
-			return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, len(list))
+		if idx < 0 || idx >= list.Len() {
+			return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, list.Len())
 		}
-		return []Value{list[idx]}, nil
+		return []Value{list.Get(idx)}, nil
 	}
 
 	getrMapIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
