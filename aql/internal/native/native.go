@@ -11,6 +11,7 @@ import (
 type NativeFunc struct {
 	Name              string
 	ForwardPrecedence bool
+	SkipSafetyCheck   bool // when true, bypass wrapSafetyCheck (for type-inspecting words)
 	Signatures        []NativeSig
 }
 
@@ -25,7 +26,10 @@ type NativeSig struct {
 func Register(r *engine.Registry) {
 	for _, fn := range All() {
 		for _, sig := range fn.Signatures {
-			handler := wrapSafetyCheck(sig.Handler)
+			handler := sig.Handler
+			if !fn.SkipSafetyCheck {
+				handler = wrapSafetyCheck(handler)
+			}
 			s := engine.Signature{
 				Args:     sig.Args,
 				Handler:  handler,
@@ -89,5 +93,6 @@ func All() []NativeFunc {
 		popFunc(),
 		unshiftFunc(),
 		shiftFunc(),
+		istypeFunc(),
 	}
 }

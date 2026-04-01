@@ -235,6 +235,51 @@ func NewType(path string) (Type, error) {
 	return Type{Parts: parts}, nil
 }
 
+// ResolveTypePath attempts to resolve a name (possibly slash-separated) to a
+// known Type. Returns the Type and true if the name is a valid type path that
+// is a prefix of (or equal to) a known builtin type. Returns zero Type and
+// false otherwise.
+func ResolveTypePath(name string) (Type, bool) {
+	// Fast path: single-part names handled by the existing typeAncestry or typeRoots.
+	if !strings.Contains(name, "/") {
+		return Type{}, false
+	}
+
+	t, err := NewType(name)
+	if err != nil {
+		return Type{}, false
+	}
+
+	// Validate that the resolved path is a prefix of a known builtin type.
+	for _, bt := range builtinTypeList {
+		if bt.hasPrefix(t) {
+			return t, true
+		}
+	}
+	return Type{}, false
+}
+
+// hasPrefix reports whether t starts with the parts of prefix.
+func (t Type) hasPrefix(prefix Type) bool {
+	if len(t.Parts) < len(prefix.Parts) {
+		return false
+	}
+	for i, p := range prefix.Parts {
+		if t.Parts[i] != p {
+			return false
+		}
+	}
+	return true
+}
+
+// builtinTypeList is the set of all known builtin types for path validation.
+var builtinTypeList = []Type{
+	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
+	TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
+	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
+	TObject, TResource, TResourceEntity, TType, TScalarType, TNodeType,
+}
+
 // Matches reports whether this type satisfies the given pattern.
 //   - "Any" pattern matches everything.
 //   - A child matches a parent: Scalar/String/Proper matches Scalar/String.

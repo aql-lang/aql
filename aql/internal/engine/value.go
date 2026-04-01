@@ -138,8 +138,9 @@ type FnUndefInfo struct {
 
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
-	FuncName string
-	Returns  []Type
+	FuncName     string
+	Returns      []Type
+	UnnamedCount int // number of unnamed params pushed onto the stack before the body
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -1023,4 +1024,46 @@ func (v Value) String() string {
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}
+}
+
+// IsTypeValue returns true if v is a type literal, an Options instance,
+// or a Node that contains a leaf that is a type.
+func IsTypeValue(v Value) bool {
+	// Type literal: Data==nil with a real type (not None).
+	if v.Data == nil && !v.VType.Equal(TNone) {
+		return true
+	}
+
+	// Options type, record type, typed list/map, table type, object type.
+	if v.IsOptionsType() || v.IsRecordType() || v.IsTypedList() ||
+		v.IsTypedMap() || v.IsTableType() || v.IsObjectType() {
+		return true
+	}
+
+	// Concrete list: check each element recursively.
+	if v.VType.Matches(TList) && v.Data != nil {
+		elems := v.AsList()
+		if elems != nil {
+			for _, elem := range elems {
+				if IsTypeValue(elem) {
+					return true
+				}
+			}
+		}
+	}
+
+	// Concrete map: check each value recursively.
+	if v.VType.Matches(TMap) && v.Data != nil {
+		m := v.AsMap()
+		if m != nil {
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				if IsTypeValue(val) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

@@ -46,6 +46,8 @@ type Registry struct {
 	SDKCache       map[string]any                // cached SDK instances keyed by spec name
 	BaseDir        string                        // base directory for resolving relative file paths (set by loadFileModule)
 	errs           []error                       // registration errors accumulated during setup
+	ready          bool                          // true after initial setup; triggers dynamic help generation
+	OnRegisterHook func(name string)             // called when a function is registered after startup
 }
 
 // NewRegistry creates an empty registry.
@@ -101,6 +103,12 @@ func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 	r.ParseFunc = fn
 }
 
+// MarkReady signals that initial setup is complete. Subsequent Register
+// calls will trigger dynamic help example generation via OnRegisterHook.
+func (r *Registry) MarkReady() {
+	r.ready = true
+}
+
 // PushContext pushes a new context layer that is a shallow copy of parent.
 // Values are copied by reference (like Go's context.WithValue pattern).
 func (r *Registry) PushContext(parent map[string]Value) {
@@ -141,6 +149,9 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
 	SortSignatures(fn.Signatures)
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
+	}
 }
 
 // RegisterStackOnly adds signatures to a named function without forward precedence.
@@ -158,6 +169,9 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 	}
 	fn.Signatures = append(fn.Signatures, sigs...)
 	SortSignatures(fn.Signatures)
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
+	}
 }
 
 // Lookup returns the Function for a name, or nil.

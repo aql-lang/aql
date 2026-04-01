@@ -352,6 +352,10 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
+		if t, ok := ResolveTypePath(w.Name); ok {
+			e.stack[e.pointer] = NewTypeLiteral(t)
+			return nil
+		}
 		e.stack[e.pointer] = NewAtom(w.Name)
 		return nil
 	}
@@ -1038,12 +1042,14 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	e.registry.argsStack = append(e.registry.argsStack, NewList(argsCopy))
 
 	var names []string
+	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			installDef(e.registry, p.Name, args[i])
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
+			unnamedCount++
 		}
 	}
 	body := make([]Value, len(sig.Body))
@@ -1059,8 +1065,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	}
 	if len(sig.Returns) > 0 {
 		tokens = append(tokens, NewReturnCheck(ReturnCheckInfo{
-			FuncName: "<fn>",
-			Returns:  sig.Returns,
+			FuncName:     "<fn>",
+			Returns:      sig.Returns,
+			UnnamedCount: unnamedCount,
 		}))
 	}
 	tokens = append(tokens, NewWord(")"))
@@ -1654,15 +1661,32 @@ func (e *Engine) stepCloseParen() error {
 				results = append(results, e.stack[j])
 			}
 
-			if len(results) != len(rc.Returns) {
+			// Unconsumed unnamed args sit at the bottom of the scope,
+			// body results sit at the top. Allow extra values up to the
+			// number of unnamed params that were pushed before the body.
+			nret := len(rc.Returns)
+			if len(results) < nret {
 				return fmt.Errorf("%s: expected %d return value(s), got %d",
-					rc.FuncName, len(rc.Returns), len(results))
+					rc.FuncName, nret, len(results))
 			}
+			extra := len(results) - nret
+			if extra > rc.UnnamedCount {
+				return fmt.Errorf("%s: expected %d return value(s), got %d",
+					rc.FuncName, nret, len(results)-rc.UnnamedCount)
+			}
+
+			// Validate the top nret values match declared return types.
 			for k, exp := range rc.Returns {
-				if !results[k].VType.Matches(exp) {
+				if !results[extra+k].VType.Matches(exp) {
 					return fmt.Errorf("%s: return value %d: expected %s, got %s",
-						rc.FuncName, k+1, exp, results[k].VType)
+						rc.FuncName, k+1, exp, results[extra+k].VType)
 				}
+			}
+
+			// Discard unconsumed unnamed args from the bottom of the scope.
+			for j := 0; j < extra; j++ {
+				e.stackRemove(openIdx + 1)
+				closeIdx--
 			}
 			break
 		}

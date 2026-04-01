@@ -75,9 +75,17 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			return FnDefInfo{}, err
 		}
 
-		returns, err := parseFnReturns(outputSig)
-		if err != nil {
-			return FnDefInfo{}, err
+		// Check if all output values are concrete (non-type). If so, they
+		// are literal return values to append to the body, not type
+		// declarations for return checking.
+		concreteReturns := outputSigIsConcreteReturns(outputSig)
+
+		var returns []Type
+		if !concreteReturns {
+			returns, err = parseFnReturns(outputSig)
+			if err != nil {
+				return FnDefInfo{}, err
+			}
 		}
 
 		// Abbreviation: non-list body is treated as [body].
@@ -88,6 +96,21 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			bodyElems = []Value{body}
 		}
 
+		// Append concrete return values to the body with an end separator.
+		// Set returns to [Any, Any, ...] so the ReturnCheck still fires
+		// to clean up unconsumed unnamed args.
+		if concreteReturns {
+			retVals := outputSigValues(outputSig)
+			if len(retVals) > 0 {
+				bodyElems = append(bodyElems, NewWord("end"))
+				bodyElems = append(bodyElems, retVals...)
+				returns = make([]Type, len(retVals))
+				for j := range retVals {
+					returns[j] = TAny
+				}
+			}
+		}
+
 		sigs = append(sigs, FnSig{
 			Params:  params,
 			Returns: returns,
@@ -95,6 +118,76 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
+}
+
+// outputSigIsConcreteReturns checks whether all values in the output signature
+// are concrete (non-type) values. If so, they should be appended to the body
+// as literal return values rather than used for return type checking.
+// An empty output list is NOT concrete returns (it means no return types).
+func outputSigIsConcreteReturns(outputSig Value) bool {
+	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
+		elems := outputSig.AsList()
+		if len(elems) == 0 {
+			return false
+		}
+		for _, e := range elems {
+			if isSigTypeValue(e) {
+				return false
+			}
+		}
+		return true
+	}
+	// Single non-list value: check if it's a type.
+	return !isSigTypeValue(outputSig)
+}
+
+// isSigTypeValue returns true if v looks like a type in a signature context.
+// This handles: type literals (Data==nil), Words that are type names,
+// Atoms/Strings that are type names, and structured types (Record, Options, etc).
+func isSigTypeValue(v Value) bool {
+	// Already a type literal (parser-resolved).
+	if v.Data == nil && !v.VType.Equal(TNone) {
+		return true
+	}
+	// Structured type values.
+	if v.IsOptionsType() || v.IsRecordType() || v.IsTypedList() ||
+		v.IsTypedMap() || v.IsTableType() || v.IsObjectType() {
+		return true
+	}
+	// Word that is a type name (from token-based API).
+	if v.IsWord() {
+		name := v.AsWord().Name
+		if _, ok := typeNames[name]; ok {
+			return true
+		}
+		if _, ok := ResolveTypePath(name); ok {
+			return true
+		}
+		return false
+	}
+	// Atom or String that is a type name.
+	if v.VType.Matches(TAtom) || v.VType.Matches(TString) {
+		name := v.AsString()
+		if _, ok := typeNames[name]; ok {
+			return true
+		}
+		if _, ok := ResolveTypePath(name); ok {
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+// outputSigValues extracts the concrete values from an output signature.
+func outputSigValues(outputSig Value) []Value {
+	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
+		elems := outputSig.AsList()
+		result := make([]Value, len(elems))
+		copy(result, elems)
+		return result
+	}
+	return []Value{outputSig}
 }
 
 // parseFnUndefSpec parses a list of signature pairs (input+output, no body)
@@ -541,6 +634,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsList := NewList(argsCopy)
 			r.argsStack = append(r.argsStack, argsList)
 
+			unnamedCount := 0
 			for i, p := range s.Params {
 				if p.Name != "" {
 					installDef(r, p.Name, args[i])
@@ -548,6 +642,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				} else {
 					// Unnamed parameter: push value back for the body to use
 					result = append(result, args[i])
+					unnamedCount++
 				}
 			}
 			body := make([]Value, len(s.Body))
@@ -567,8 +662,9 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Inject return-check if return types are declared.
 			if len(s.Returns) > 0 {
 				result = append(result, NewReturnCheck(ReturnCheckInfo{
-					FuncName: name,
-					Returns:  s.Returns,
+					FuncName:     name,
+					Returns:      s.Returns,
+					UnnamedCount: unnamedCount,
 				}))
 			}
 			result = append(result, NewWord(")"))
