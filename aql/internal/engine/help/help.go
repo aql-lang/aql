@@ -3,6 +3,8 @@ package help
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 )
 
@@ -501,7 +503,7 @@ func computeBinaryResult(name string, sig SigInfo, a, b string) string {
 			if aF == 0 {
 				return "error"
 			}
-			result = float64(int64(bF) % int64(aF))
+			result = math.Mod(bF, aF)
 		case "pow":
 			return "..."
 		case "min":
@@ -532,7 +534,7 @@ func computeBinaryResult(name string, sig SigInfo, a, b string) string {
 	return "..."
 }
 
-// formatResult formats a numeric result based on the return type.
+// formatResult formats a numeric result to match the engine's output.
 func formatResult(result float64, sig SigInfo) string {
 	if len(sig.Returns) == 0 {
 		return "..."
@@ -541,19 +543,8 @@ func formatResult(result float64, sig SigInfo) string {
 	if retLeaf == "Integer" {
 		return fmt.Sprintf("%d", int64(result))
 	}
-	// Use fixed precision to avoid floating point noise,
-	// then trim trailing zeros.
-	s := fmt.Sprintf("%.10f", result)
-	// Trim trailing zeros after decimal point
-	if strings.Contains(s, ".") {
-		s = strings.TrimRight(s, "0")
-		s = strings.TrimRight(s, ".")
-	}
-	// Ensure at least one decimal place for decimal types
-	if !strings.Contains(s, ".") {
-		s += ".0"
-	}
-	return s
+	// Match engine: strconv.FormatFloat with 'f', -1, 64
+	return strconv.FormatFloat(result, 'f', -1, 64)
 }
 
 func computeUnaryResult(name string, sig SigInfo, a string) string {

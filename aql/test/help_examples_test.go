@@ -1,6 +1,7 @@
 package test
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -10,9 +11,64 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
-// TestHelpExamplesCorrect extracts the dynamically generated examples from
-// help output for add and sub, runs each expression through the engine, and
-// verifies the result matches the documented output.
+// TestHelpAllWords checks that every registered word produces valid
+// dynamic help output with the expected sections.
+func TestHelpAllWords(t *testing.T) {
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	native.Register(reg)
+
+	words := allRegisteredWords(reg)
+	if len(words) == 0 {
+		t.Fatal("no words registered")
+	}
+
+	for _, word := range words {
+		t.Run(word, func(t *testing.T) {
+			info := engine.BuildFuncInfo(reg, word)
+			if info == nil {
+				t.Skipf("no func info for %q (simple def)", word)
+				return
+			}
+			helpText := help.FormatDynamic(*info)
+
+			// Must contain the word name and " — "
+			if !strings.Contains(helpText, word+" — ") {
+				t.Errorf("missing header for %q", word)
+			}
+
+			// Must contain Precedence section
+			if !strings.Contains(helpText, "Precedence:") {
+				t.Errorf("missing Precedence section for %q", word)
+			}
+
+			// Must contain Signatures section
+			if !strings.Contains(helpText, "Signatures:") {
+				t.Errorf("missing Signatures section for %q", word)
+			}
+
+			// Must have at least one signature line with [ ... ]
+			if !strings.Contains(helpText, "[ [") && !strings.Contains(helpText, "[ ]") {
+				// 0-arg words have [ ] without inner brackets
+				if !strings.Contains(helpText, "(none)") {
+					t.Errorf("missing signature entries for %q", word)
+				}
+			}
+
+			// Must contain Description section
+			if !strings.Contains(helpText, "Description:") {
+				t.Errorf("missing Description section for %q", word)
+			}
+		})
+	}
+}
+
+// TestHelpExamplesCorrect extracts dynamically generated examples from
+// help output, runs each expression through the engine, and verifies
+// the result matches the documented output. Skips examples with "..."
+// results (not computable).
 func TestHelpExamplesCorrect(t *testing.T) {
 	reg, err := engine.DefaultRegistry()
 	if err != nil {
@@ -20,25 +76,36 @@ func TestHelpExamplesCorrect(t *testing.T) {
 	}
 	native.Register(reg)
 
-	for _, word := range []string{"add", "sub"} {
+	words := allRegisteredWords(reg)
+	testedCount := 0
+
+	for _, word := range words {
+		info := engine.BuildFuncInfo(reg, word)
+		if info == nil {
+			continue
+		}
+		helpText := help.FormatDynamic(*info)
+		examples := extractExamples(helpText)
+
+		// Filter to runnable examples (non-"..." results)
+		var runnable []helpExample
+		for _, ex := range examples {
+			if ex.expected != "..." {
+				runnable = append(runnable, ex)
+			}
+		}
+		if len(runnable) == 0 {
+			continue
+		}
+
 		t.Run(word, func(t *testing.T) {
-			info := engine.BuildFuncInfo(reg, word)
-			if info == nil {
-				t.Fatalf("no func info for %q", word)
-			}
-			helpText := help.FormatDynamic(*info)
-
-			examples := extractExamples(helpText)
-			if len(examples) == 0 {
-				t.Fatalf("no examples found in help for %q", word)
-			}
-
-			for _, ex := range examples {
+			for _, ex := range runnable {
 				t.Run(ex.expr, func(t *testing.T) {
 					vals, err := parser.Parse(ex.expr)
 					if err != nil {
 						t.Fatalf("parse %q: %v", ex.expr, err)
 					}
+					// Use a fresh engine per example to avoid state leaks
 					eng := engine.NewTop(reg)
 					result, err := eng.Run(vals)
 					if err != nil {
@@ -48,10 +115,33 @@ func TestHelpExamplesCorrect(t *testing.T) {
 					if got != ex.expected {
 						t.Errorf("%s ;# got %q, want %q", ex.expr, got, ex.expected)
 					}
+					testedCount++
 				})
 			}
 		})
 	}
+
+	t.Logf("validated %d examples across all words", testedCount)
+}
+
+// allRegisteredWords returns a sorted list of all words in the registry
+// that have function definitions (not just simple defs).
+func allRegisteredWords(reg *engine.Registry) []string {
+	// Collect words that have help entries
+	helpWords := help.Words()
+
+	// Also collect words from the registry's function table
+	// by trying BuildFuncInfo on help words
+	seen := map[string]bool{}
+	var words []string
+	for _, w := range helpWords {
+		if !seen[w] {
+			seen[w] = true
+			words = append(words, w)
+		}
+	}
+	sort.Strings(words)
+	return words
 }
 
 type helpExample struct {
