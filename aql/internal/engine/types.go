@@ -40,6 +40,7 @@ var typeAncestry = map[string]string{
 	"Integer":     "Scalar/Number/Integer",
 	"Decimal":     "Scalar/Number/Decimal",
 	"Boolean":     "Scalar/Boolean",
+	"Path":        "Scalar/Path",
 	"Atom":        "Scalar/Atom",
 	"List":        "Node/List",
 	"Map":         "Node/Map",
@@ -77,6 +78,7 @@ var (
 	TInteger      = mustType("Scalar/Number/Integer")
 	TDecimal      = mustType("Scalar/Number/Decimal")
 	TBoolean      = mustType("Scalar/Boolean")
+	TPath         = mustType("Scalar/Path")
 	TNode         = mustType("Node")
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
@@ -130,6 +132,7 @@ var builtinTypeIDs = map[string]int{
 	"Scalar/Number/Integer":    8,
 	"Scalar/Number/Decimal":    9,
 	"Scalar/Boolean":           10,
+	"Scalar/Path":              47,
 	"Node":                     11,
 	"Node/List":                12,
 	"Node/List/Args":           13,
@@ -282,7 +285,7 @@ func (t Type) hasPrefix(prefix Type) bool {
 // builtinTypeList is the set of all known builtin types for path validation.
 var builtinTypeList = []Type{
 	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
-	TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
+	TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
 	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
 }
@@ -360,7 +363,7 @@ func builtinTypeParts() map[string]bool {
 	parts := make(map[string]bool)
 	builtins := []Type{
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
-		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
+		TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
 		TMove, TModule, TInternal, TInspect, TObject,

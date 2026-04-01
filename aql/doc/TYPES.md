@@ -18,6 +18,7 @@ Scalar
     Integer                  -- int64; literal subtypes e.g. Integer/42
     Decimal                  -- float64
   Boolean                    -- true / false
+  Path                       -- filesystem path (list of parts, abs flag)
   Atom                       -- bare unquoted word used as data
 
 Node

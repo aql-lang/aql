@@ -548,6 +548,8 @@ func valToString(v Value) string {
 			return "true"
 		}
 		return "false"
+	case v.IsPath():
+		return v.AsPath().String()
 	case v.IsWord():
 		return v.AsWord().Name
 	default:

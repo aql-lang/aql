@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // isTypeLike returns true if a value looks like a type target for make
@@ -283,6 +284,32 @@ func registerMake(r *Registry) {
 		})}, nil
 	}
 
+	// makePath creates a Path value from a source (list or string).
+	makePath := func(srcVal Value, abs bool) ([]Value, error) {
+		switch {
+		case srcVal.VType.Matches(TList) && srcVal.Data != nil:
+			elems := srcVal.AsList()
+			parts := make([]string, elems.Len())
+			for i := 0; i < elems.Len(); i++ {
+				parts[i] = valToString(elems.Get(i))
+			}
+			return []Value{NewPath(parts, abs)}, nil
+		case srcVal.VType.Matches(TString) && srcVal.Data != nil:
+			s := srcVal.AsString()
+			if len(s) > 0 && s[0] == '/' {
+				abs = true
+				s = s[1:]
+			}
+			var parts []string
+			if s != "" {
+				parts = strings.Split(s, "/")
+			}
+			return []Value{NewPath(parts, abs)}, nil
+		default:
+			return nil, fmt.Errorf("make: Path source must be a list or string, got %s", srcVal.String())
+		}
+	}
+
 	// Position-agnostic: detect which arg is the type and which is the source.
 	makeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
@@ -294,6 +321,11 @@ func registerMake(r *Registry) {
 		if targetVal.IsObjectType() {
 			objType := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
+		}
+
+		// Path construction: make Path [a b c] or make Path "a/b/c"
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			return makePath(srcVal, false)
 		}
 
 		// Options type creation: make Options {x:1, y:String}
@@ -482,6 +514,17 @@ func registerMake(r *Registry) {
 			return makeRecord(recType, srcVal, useBase)
 		}
 
+		// Path with options: make Path {abs:true} [a b c]
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			abs := false
+			if optsMap := optsVal.AsMap(); optsMap != nil {
+				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+					abs = v.AsBoolean()
+				}
+			}
+			return makePath(srcVal, abs)
+		}
+
 		// For non-record/object types, options are ignored — delegate to 2-arg.
 		return makeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
 	}
@@ -495,6 +538,10 @@ func registerMake(r *Registry) {
 			return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
 		}
 		targetType := targetVal.VType
+		// Path construction
+		if targetType.Equal(TPath) {
+			return makePath(srcVal, false)
+		}
 		if srcVal.VType.Matches(targetType) {
 			return []Value{srcVal}, nil
 		}
@@ -533,8 +580,25 @@ func registerMake(r *Registry) {
 		return []Value{NewArray(srcVal.AsList().Slice())}, nil
 	}
 
+	// Scalar 3-arg: [ScalarType, Map, Any] → scalar with options (e.g. make Path {abs:true} [...])
+	makeScalarOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, optsVal, srcVal := args[0], args[1], args[2]
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			abs := false
+			if optsMap := optsVal.AsMap(); optsMap != nil {
+				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+					abs = v.AsBoolean()
+				}
+			}
+			return makePath(srcVal, abs)
+		}
+		// For other scalar types with options, ignore options and delegate.
+		return makeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
+	}
+
 	r.Register("make",
 		// New specific signatures
+		Signature{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},
 		Signature{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
 		Signature{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
 		Signature{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},

@@ -109,6 +109,23 @@ func (m *OrderedMap) Delete(key string) bool {
 	return true
 }
 
+// PathInfo holds the data for a Scalar/Path value.
+// A Path represents a filesystem path as a sequence of parts.
+// Absolute paths start from the root (Abs = true).
+type PathInfo struct {
+	Parts []string // path segments (e.g. ["usr", "local", "bin"])
+	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
+}
+
+// String returns the OS path string for this path.
+func (p PathInfo) String() string {
+	joined := strings.Join(p.Parts, "/")
+	if p.Abs {
+		return "/" + joined
+	}
+	return joined
+}
+
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
 // For example, [:string] constrains all list elements to be strings,
 // and {:string} constrains all map values to be strings.
@@ -580,6 +597,13 @@ func NewAtom(name string) Value {
 	return newValue(TAtom, name)
 }
 
+// NewPath creates a Path value from parts and an absolute flag.
+func NewPath(parts []string, abs bool) Value {
+	p := make([]string, len(parts))
+	copy(p, parts)
+	return newValue(TPath, PathInfo{Parts: p, Abs: abs})
+}
+
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
@@ -904,6 +928,17 @@ func (v Value) AsModule() ModuleDesc {
 }
 
 // IsAtom reports whether this value is an atom.
+// IsPath reports whether this value is a Path.
+func (v Value) IsPath() bool {
+	_, ok := v.Data.(PathInfo)
+	return ok && v.VType.Equal(TPath)
+}
+
+// AsPath returns the PathInfo. Panics if not a path.
+func (v Value) AsPath() PathInfo {
+	return v.Data.(PathInfo)
+}
+
 func (v Value) IsAtom() bool {
 	return v.VType.Equal(TAtom)
 }
@@ -1141,6 +1176,8 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
+	case v.IsPath():
+		return v.AsPath().String()
 	case v.VType.Equal(TList):
 		if tt, ok := v.Data.(TableTypeInfo); ok {
 			parts := make([]string, 0, tt.Record.Fields.Len())
