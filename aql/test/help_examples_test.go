@@ -77,6 +77,10 @@ func extractExamples(helpText string) []helpExample {
 			if idx := strings.Index(trimmed, ";#"); idx >= 0 {
 				expr := strings.TrimSpace(trimmed[:idx])
 				expected := strings.TrimSpace(trimmed[idx+2:])
+				// Strip trailing NOTE annotation if present
+				if ni := strings.Index(expected, "  NOTE:"); ni >= 0 {
+					expected = strings.TrimSpace(expected[:ni])
+				}
 				if expr != "" && expected != "" {
 					examples = append(examples, helpExample{expr: expr, expected: expected})
 				}

@@ -206,9 +206,6 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	b.WriteString("  ")
 	b.WriteString(strings.Join(configs, "  <=>  "))
 	b.WriteByte('\n')
-	if isNonCommutative2Arg(info) {
-		b.WriteString("  NOTE: most significant argument is last.\n")
-	}
 }
 
 // writePrecedenceExamplesStack shows the stack-only pattern.
@@ -418,6 +415,9 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		examples = append(infix, others...)
 	}
 
+	nonComm := isNonCommutative2Arg(info)
+	noteShown := false
+
 	for _, ex := range examples {
 		b.WriteString("  ")
 		b.WriteString(ex.expr)
@@ -427,6 +427,10 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		}
 		b.WriteString(";# ")
 		b.WriteString(ex.result)
+		if nonComm && ex.prefix == 0 && !noteShown {
+			b.WriteString("  NOTE: most significant argument is last")
+			noteShown = true
+		}
 		b.WriteByte('\n')
 	}
 }
