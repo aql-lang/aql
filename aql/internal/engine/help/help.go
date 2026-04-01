@@ -139,9 +139,6 @@ func FormatDynamic(info FuncInfo) string {
 	if entry != nil && entry.Description != "" {
 		desc = entry.Description
 	}
-	if isNonCommutative2Arg(info) {
-		desc += " NOTE: most significant argument is last."
-	}
 	b.WriteString("\nDescription:\n")
 	writeWrapped(&b, desc, 70, "  ")
 
@@ -209,6 +206,9 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	b.WriteString("  ")
 	b.WriteString(strings.Join(configs, "  <=>  "))
 	b.WriteByte('\n')
+	if isNonCommutative2Arg(info) {
+		b.WriteString("  NOTE: most significant argument is last.\n")
+	}
 }
 
 // writePrecedenceExamplesStack shows the stack-only pattern.
