@@ -120,6 +120,10 @@ func New(opts ...Options) (*AQL, error) {
 
 	reg.Manager = um
 
+	// Enable dynamic help generation for functions registered after this point.
+	engine.EnableDynamicHelp(reg)
+	reg.MarkReady()
+
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 

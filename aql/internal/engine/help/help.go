@@ -39,10 +39,37 @@ var registry = map[string]*Entry{}
 // Populated by go:generate via cmd/genhelp.
 var exampleResults = map[string]string{}
 
+// dynamicExampleResults holds example results generated at runtime for
+// words registered after initial startup (e.g. native functions added
+// via the API). Checked after the static map.
+var dynamicExampleResults = map[string]string{}
+
 // SetExampleResults replaces the pre-computed example results map.
 // Called by the generated file or by test code.
 func SetExampleResults(m map[string]string) {
 	exampleResults = m
+}
+
+// GenerateDynamicExamples computes and stores example results for a word
+// using the provided eval function. Called when new functions are
+// registered after initial startup.
+func GenerateDynamicExamples(info FuncInfo, eval func(string) (string, error)) {
+	if eval == nil {
+		return
+	}
+	for _, expr := range ExampleExprs(info) {
+		if _, ok := exampleResults[expr]; ok {
+			continue // already in static map
+		}
+		if _, ok := dynamicExampleResults[expr]; ok {
+			continue
+		}
+		result, err := eval(expr)
+		if err != nil || result == "" {
+			continue
+		}
+		dynamicExampleResults[expr] = result
+	}
 }
 
 // register adds an entry to the global help registry.
@@ -517,9 +544,13 @@ func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 }
 
 // evalExample looks up a pre-computed result for an expression,
-// falling back to static computation.
+// checking the static map first, then the dynamic map, then falling
+// back to static computation.
 func evalExample(expr, name string, sig SigInfo, vals []string) string {
 	if result, ok := exampleResults[expr]; ok {
+		return result
+	}
+	if result, ok := dynamicExampleResults[expr]; ok {
 		return result
 	}
 	sigArgs := buildSigArgs(vals, 0, len(vals))

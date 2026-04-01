@@ -2,9 +2,57 @@ package engine
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 )
+
+// EnableDynamicHelp sets up the OnRegisterHook so that functions
+// registered after MarkReady() get their help examples computed
+// dynamically. Call this after initial setup and ParseFunc are ready.
+func EnableDynamicHelp(r *Registry) {
+	r.OnRegisterHook = func(name string) {
+		info := BuildFuncInfo(r, name)
+		if info == nil {
+			return
+		}
+		eval := makeDynamicEval(r)
+		if eval == nil {
+			return
+		}
+		help.GenerateDynamicExamples(*info, eval)
+	}
+}
+
+// makeDynamicEval returns a function that parses and evaluates an AQL
+// expression, returning the formatted result. Returns nil if ParseFunc
+// is not set.
+func makeDynamicEval(r *Registry) func(string) (string, error) {
+	if r.ParseFunc == nil {
+		return nil
+	}
+	return func(expr string) (string, error) {
+		vals, err := r.ParseFunc(expr)
+		if err != nil {
+			return "", err
+		}
+		savedOut := r.Output
+		r.Output = io.Discard
+		defer func() { r.Output = savedOut }()
+
+		eng := NewTop(r)
+		result, err := eng.Run(vals)
+		if err != nil {
+			return "", err
+		}
+		var parts []string
+		for _, v := range result {
+			parts = append(parts, v.String())
+		}
+		return strings.Join(parts, " "), nil
+	}
+}
 
 // BuildFuncInfo extracts dynamic signature data from the registry for a word.
 func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
