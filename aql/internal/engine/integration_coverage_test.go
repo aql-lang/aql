@@ -1118,7 +1118,7 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 
 func TestIntegContextSetGet(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// context set "key" 42 context get "key"
+	// set "key" 42 context get "key" context
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("mykey"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("mykey"),
@@ -1130,18 +1130,18 @@ func TestIntegContextSetGet(t *testing.T) {
 
 func TestIntegContextGetMissing(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// context get on non-existent key => None
-	result := runAQL(t, r, []Value{
+	// get on non-existent key => error (unknown key)
+	err := runAQLError(t, r, []Value{
 		NewWord("context"), NewWord("get"), NewString("nonexistent"),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
-		t.Errorf("context get missing = %v, want None", result)
+	if err == nil {
+		t.Error("expected error for get on non-existent key")
 	}
 }
 
 func TestIntegContextSetWithWord(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// context set wordKey 99 context get wordKey
+	// set wkey 99 context get wkey context
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("wkey"), NewInteger(99),
 		NewWord("context"), NewWord("get"), NewWord("wkey"),
@@ -1164,13 +1164,14 @@ func TestIntegContextOverwrite(t *testing.T) {
 	}
 }
 
-func TestIntegContextUnknownSubCommand(t *testing.T) {
+func TestIntegContextPushesStore(t *testing.T) {
 	r, _ := DefaultRegistry()
-	err := runAQLError(t, r, []Value{
-		NewWord("context"), NewWord("badcmd"),
+	// context is a 0-arg word that pushes the context store onto the stack
+	result := runAQL(t, r, []Value{
+		NewWord("context"),
 	})
-	if err == nil {
-		t.Error("expected error for unknown context sub-command")
+	if len(result) != 1 {
+		t.Errorf("context should push 1 value, got %d", len(result))
 	}
 }
 

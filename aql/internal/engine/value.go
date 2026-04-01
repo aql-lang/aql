@@ -224,6 +224,32 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 	return result
 }
 
+// StoreInstanceInfo is a mutable key-value store (Object/Store).
+// Unlike regular Object instances which have typed fields, Store instances
+// hold arbitrary key-value pairs. Key resolution walks the prototype chain,
+// enabling scope-like lookup when contexts are nested.
+type StoreInstanceInfo struct {
+	TypeName  string              // full type path, e.g. "Object/Store" or "Object/Store/System"
+	Data      map[string]Value    // mutable key-value pairs
+	Prototype *StoreInstanceInfo  // prototype chain for key lookup
+}
+
+// Get looks up a key in this store, walking the prototype chain if not found.
+func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
+	if v, ok := si.Data[key]; ok {
+		return v, true
+	}
+	if si.Prototype != nil {
+		return si.Prototype.Get(key)
+	}
+	return Value{}, false
+}
+
+// Set stores a key-value pair in this store (does not walk the prototype chain).
+func (si *StoreInstanceInfo) Set(key string, val Value) {
+	si.Data[key] = val
+}
+
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -584,6 +610,42 @@ func NewObjectInstance(info ObjectInstanceInfo) Value {
 	return newValue(t, info)
 }
 
+// NewStore creates a Store value with the given type name.
+// If typeName is empty, defaults to "Object/Store".
+func NewStore(typeName string) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName: typeName,
+		Data:     make(map[string]Value),
+	})
+}
+
+// NewStoreValue wraps an existing StoreInstanceInfo into a Value.
+func NewStoreValue(si *StoreInstanceInfo) Value {
+	typeName := si.TypeName
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, si)
+}
+
+// NewStoreWithPrototype creates a Store value with a prototype chain.
+func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName:  typeName,
+		Data:      make(map[string]Value),
+		Prototype: prototype,
+	})
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
@@ -692,6 +754,21 @@ func (v Value) IsObjectType() bool {
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
 func (v Value) AsObjectType() ObjectTypeInfo {
 	return v.Data.(ObjectTypeInfo)
+}
+
+// IsStore reports whether this value is a Store instance.
+func (v Value) IsStore() bool {
+	_, ok := v.Data.(*StoreInstanceInfo)
+	return ok && v.VType.Matches(TStore)
+}
+
+// AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
+func (v Value) AsStore() *StoreInstanceInfo {
+	si, ok := v.Data.(*StoreInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return si
 }
 
 // IsObjectInstance reports whether this value is an object instance.

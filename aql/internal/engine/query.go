@@ -164,8 +164,8 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if qb.Registry.SQLite.HasTable(j.Table) {
 			continue
 		}
-		// Look up the table in the store and load it.
-		val, ok := qb.Registry.Store[j.Table]
+		// Look up the table in the context store and load it.
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
 		}
@@ -197,7 +197,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	}
 	// Add joined table fields.
 	for _, j := range qb.Joins {
-		val, ok := qb.Registry.Store[j.Table]
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			// Try the original name if it was remapped to a temp table.
 			continue
@@ -365,7 +365,7 @@ func registerQuery(r *Registry) {
 	// from: [atom] -> [query-builder]
 	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := args[0].AsAtom()
-		val, ok := r.Store[name]
+		val, ok := contextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
 		}

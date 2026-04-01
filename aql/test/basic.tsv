@@ -67,7 +67,7 @@ lower/f "E"	'e'
 "F" lower/s	'f'
 
 # Set/Get
-set foo 99 end get foo	99
+context set foo 99 end context get foo	99
 
 # Make - scalar types
 make String 9	'9'
@@ -626,7 +626,7 @@ def obj {a:1} obj.b	None
 def obj {a:1} obj.b.c	None
 
 # Dot notation - store requires explicit get
-set sv {x:42} (get sv) x .	42
+context set sv {x:42} end (context get sv) x .	42
 
 # Dot notation - leading dot (stack access)
 {a:1} .a	1

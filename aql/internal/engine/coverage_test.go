@@ -31,7 +31,7 @@ func makeTestTable(r *Registry) {
 		Record: rec,
 		Rows:   []Value{NewMap(row1), NewMap(row2), NewMap(row3)},
 	}
-	r.Store["people"] = Value{VType: TList, Data: td}
+	r.ContextSet("people", Value{VType: TList, Data: td})
 }
 
 func TestQueryFrom(t *testing.T) {
@@ -292,7 +292,7 @@ func TestQueryJoin(t *testing.T) {
 	row2.Set("score", NewInteger(88))
 
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
-	r.Store["scores"] = Value{VType: TList, Data: td}
+	r.ContextSet("scores", Value{VType: TList, Data: td})
 
 	result := runAQL(t, r, []Value{
 		NewWord("from"), NewWord("people"),
@@ -322,7 +322,7 @@ func TestQueryUnion(t *testing.T) {
 	row1.Set("name", NewString("dave"))
 	row1.Set("age", NewInteger(40))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1)}}
-	r.Store["people2"] = Value{VType: TList, Data: td}
+	r.ContextSet("people2", Value{VType: TList, Data: td})
 
 	result := runAQL(t, r, []Value{
 		NewWord("from"), NewWord("people"),
@@ -2546,9 +2546,7 @@ func TestNewRegistryHasStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Store == nil {
-		t.Error("expected Store to be initialized")
-	}
+	// Store field removed; context store is initialized by InitRootContext.
 	if r.Formats == nil {
 		t.Error("expected Formats to be initialized")
 	}
@@ -3387,7 +3385,7 @@ func makeTestTableWithDepts(r *Registry) {
 			mkRow("dave", 28, "sales"),
 		},
 	}
-	r.Store["employees"] = Value{VType: TList, Data: td}
+	r.ContextSet("employees", Value{VType: TList, Data: td})
 }
 
 func makeDeptTable(r *Registry) {
@@ -3411,7 +3409,7 @@ func makeDeptTable(r *Registry) {
 			mkRow("sales", 50000),
 		},
 	}
-	r.Store["departments"] = Value{VType: TList, Data: td}
+	r.ContextSet("departments", Value{VType: TList, Data: td})
 }
 
 func TestQuerySelectWithColumnList(t *testing.T) {

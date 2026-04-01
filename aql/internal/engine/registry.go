@@ -27,7 +27,6 @@ type TypeDef struct {
 // Registry maps function names to their definitions.
 type Registry struct {
 	funcs          map[string]*Function
-	Store          map[string]Value              // key-value store for set/get
 	DefStacks      map[string][]Value            // stacked bodies for def-defined words
 	Types          map[string]TypeDef            // complex type registry keyed by full type path
 	FileOps        fileops.FileOps               // file operations for read/write words
@@ -39,7 +38,7 @@ type Registry struct {
 	Modules        map[string]ModuleDesc         // child modules keyed by generated ID
 	moduleSeq      int                           // counter for generating module IDs
 	ParseFunc      func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
-	ctxStack       []map[string]Value            // scoped context stack; top = current engine's context
+	ctxStack       []*StoreInstanceInfo           // scoped context stack; top = current engine's context Store
 	argsStack      []Value                       // stack of args lists for nested fn calls
 	KnownTypeParts map[string]bool               // set of all type path parts (for uniqueness enforcement)
 	Manager        any                           // external manager (e.g. UniversalManager) for SDK operations
@@ -67,7 +66,6 @@ func NewRegistry() (*Registry, error) {
 
 	r := &Registry{
 		funcs:          make(map[string]*Function),
-		Store:          make(map[string]Value),
 		DefStacks:      make(map[string][]Value),
 		Types:          make(map[string]TypeDef),
 		FileOps:        ops,
@@ -109,12 +107,13 @@ func (r *Registry) MarkReady() {
 	r.ready = true
 }
 
-// PushContext pushes a new context layer that is a shallow copy of parent.
-// Values are copied by reference (like Go's context.WithValue pattern).
-func (r *Registry) PushContext(parent map[string]Value) {
-	child := make(map[string]Value, len(parent))
-	for k, v := range parent {
-		child[k] = v
+// PushContext pushes a new context Store whose prototype is the parent.
+// Key resolution walks the prototype chain, enabling scope-like lookup.
+func (r *Registry) PushContext(parent *StoreInstanceInfo) {
+	child := &StoreInstanceInfo{
+		TypeName:  "Object/Store",
+		Data:      make(map[string]Value),
+		Prototype: parent,
 	}
 	r.ctxStack = append(r.ctxStack, child)
 }
@@ -126,8 +125,18 @@ func (r *Registry) PopContext() {
 	}
 }
 
-// Context returns the current (top) context map, or nil if no context is active.
+// Context returns the current (top) context as a map for handler compatibility.
+// Returns nil if no context is active.
 func (r *Registry) Context() map[string]Value {
+	si := r.ContextStore()
+	if si == nil {
+		return nil
+	}
+	return si.Data
+}
+
+// ContextStore returns the current (top) context Store, or nil if no context is active.
+func (r *Registry) ContextStore() *StoreInstanceInfo {
 	if len(r.ctxStack) == 0 {
 		return nil
 	}
@@ -189,6 +198,29 @@ func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchR
 	return MatchSignature(fn.Signatures, stack, modifiers)
 }
 
+// InitRootContext initializes the root context Store with the __sys key.
+// The __sys value is a Store/System instance containing system configuration.
+func (r *Registry) InitRootContext() {
+	root := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+
+	// Create the System store with fs configuration.
+	sysStore := &StoreInstanceInfo{
+		TypeName: "Object/Store/System",
+		Data:     make(map[string]Value),
+	}
+	// fs: an Object instance with {mem: false, impl: None}
+	fsFields := NewOrderedMap()
+	fsFields.Set("mem", NewBoolean(false))
+	fsFields.Set("impl", NewTypeLiteral(TNone))
+	sysStore.Set("fs", NewMap(fsFields))
+
+	root.Set("__sys", NewStoreValue(sysStore))
+	r.ctxStack = append(r.ctxStack, root)
+}
+
 // DefaultRegistry returns a registry populated with built-in primitives.
 func DefaultRegistry() (*Registry, error) {
 	r, err := NewRegistry()
@@ -199,6 +231,7 @@ func DefaultRegistry() (*Registry, error) {
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
+	r.InitRootContext()
 	return r, nil
 }
 
@@ -448,6 +481,27 @@ func valToString(v Value) string {
 	default:
 		return v.String()
 	}
+}
+
+// contextStoreLookup looks up a key in the registry's context store,
+// walking the prototype chain. Returns the value and true if found.
+func contextStoreLookup(r *Registry, key string) (Value, bool) {
+	store := r.ContextStore()
+	if store == nil {
+		return Value{}, false
+	}
+	return store.Get(key)
+}
+
+// ContextSet stores a key-value pair in the root context store.
+// Convenience method for programmatic setup (e.g. tests, query setup).
+func (r *Registry) ContextSet(key string, val Value) {
+	store := r.ContextStore()
+	if store == nil {
+		r.InitRootContext()
+		store = r.ContextStore()
+	}
+	store.Set(key, val)
 }
 
 // storeKey converts a Value to a string key for the store.

@@ -236,12 +236,8 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
-	if parentCtx := parent.Context(); parentCtx != nil {
-		copied := make(map[string]Value, len(parentCtx))
-		for k, v := range parentCtx {
-			copied[k] = v
-		}
-		modReg.ctxStack = append(modReg.ctxStack, copied)
+	if parentCtx := parent.ContextStore(); parentCtx != nil {
+		modReg.ctxStack = append(modReg.ctxStack, parentCtx)
 	}
 
 	exports := make(map[string]*OrderedMap)

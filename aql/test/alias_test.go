@@ -449,8 +449,8 @@ func TestAliasSetGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "set",
 		defStep:   "def myset [set]",
-		origSteps: []string{`42 set "x"`, `get "x"`},
-		aliaSteps: []string{`42 myset "x"`, `get "x"`},
+		origSteps: []string{`context set "x" 42 end context get "x"`},
+		aliaSteps: []string{`context myset "x" 42 end context get "x"`},
 	})
 }
 
@@ -458,8 +458,8 @@ func TestAliasGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "get",
 		defStep:   "def myget [get]",
-		origSteps: []string{`42 set "v"`, `get "v"`},
-		aliaSteps: []string{`42 set "v"`, `myget "v"`},
+		origSteps: []string{`context set "v" 42 end context get "v"`},
+		aliaSteps: []string{`context set "v" 42 end context myget "v"`},
 	})
 }
 

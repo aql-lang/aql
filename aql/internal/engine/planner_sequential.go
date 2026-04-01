@@ -225,11 +225,13 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 	}
 
 	// Step 3: forward stopped short. Fill remaining suffix from stack.
+	// Stack args are mapped top-of-stack → first remaining sig position,
+	// matching rearrangeForForward's reversal order.
 	remaining := nArgs - forwardMatched
 	if forwardMatched > 0 && remaining > 0 && !forceForward && len(resolved) >= remaining {
 		ok := true
 		for j := 0; j < remaining; j++ {
-			stackVal := resolved[len(resolved)-remaining+j]
+			stackVal := resolved[len(resolved)-1-j]
 			sigIdx := forwardMatched + j
 			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
 				ok = false

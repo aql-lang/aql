@@ -116,11 +116,8 @@ func (e *Engine) stackSplice(i, count int, replacements ...Value) {
 // Run executes the input values through the stack machine and returns the
 // resulting stack.
 func (e *Engine) Run(input []Value) ([]Value, error) {
-	// Push a scoped context layer (shallow copy of parent context).
-	parent := e.registry.Context()
-	if parent == nil {
-		parent = make(map[string]Value)
-	}
+	// Push a scoped context Store whose prototype is the parent context.
+	parent := e.registry.ContextStore()
 	e.registry.PushContext(parent)
 	defer e.registry.PopContext()
 

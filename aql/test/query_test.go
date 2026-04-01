@@ -43,7 +43,7 @@ func runQuery(t *testing.T, setup string, query string) ([]engine.Value, error) 
 func TestFromLooksUpTable(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people`,
 	)
 	if err != nil {
@@ -83,7 +83,7 @@ func TestFromUnknownTable(t *testing.T) {
 func TestSelectStarFromFile(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set items ("file/items.tsv" read)`,
+		`context set items ("file/items.tsv" read)`,
 		`select * from items`,
 	)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestSelectStarFromFile(t *testing.T) {
 func TestSelectSpecificColumns(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [name city] from people`,
 	)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestSelectSpecificColumns(t *testing.T) {
 func TestSelectWithAlias(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[name person_name] city] from people`,
 	)
 	if err != nil {
@@ -228,7 +228,7 @@ func TestSelectAgainstInternalTable(t *testing.T) {
 func TestStarWord(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select star from people`,
 	)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestCurriedFrom(t *testing.T) {
 	eng := engine.NewTop(reg)
 
 	steps := []string{
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`def from01 from people end`,
 		`select * from01`,
 	}
@@ -293,7 +293,7 @@ func TestCurriedSelect(t *testing.T) {
 	eng := engine.NewTop(reg)
 
 	steps := []string{
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`def select01 select star end`,
 		`select01 from people`,
 	}
@@ -326,7 +326,7 @@ func TestCurriedBoth(t *testing.T) {
 	eng := engine.NewTop(reg)
 
 	steps := []string{
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`def select01 select star end`,
 		`def from01 from people end`,
 		`select01 from01`,
@@ -362,7 +362,7 @@ func TestCurriedSelectCols(t *testing.T) {
 	eng := engine.NewTop(reg)
 
 	steps := []string{
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`def sel_name select [name] end`,
 		`sel_name from people`,
 	}
@@ -395,7 +395,7 @@ func TestCurriedSelectCols(t *testing.T) {
 func TestWhereBasic(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name eq "Alice"]`,
 	)
 	if err != nil {
@@ -413,7 +413,7 @@ func TestWhereBasic(t *testing.T) {
 func TestWhereNumericComparison(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age gt "25"]`,
 	)
 	if err != nil {
@@ -429,7 +429,7 @@ func TestWhereNumericComparison(t *testing.T) {
 func TestWhereLt(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age lt "30"]`,
 	)
 	if err != nil {
@@ -446,7 +446,7 @@ func TestWhereLt(t *testing.T) {
 func TestWhereAnd(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age gte "30" and city eq "London"]`,
 	)
 	if err != nil {
@@ -463,7 +463,7 @@ func TestWhereAnd(t *testing.T) {
 func TestWhereOr(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [city eq "London" or city eq "Tokyo"]`,
 	)
 	if err != nil {
@@ -480,7 +480,7 @@ func TestWhereWithColumns(t *testing.T) {
 	t.Skip("query words disabled")
 	// Use parens so where filters before select projects columns.
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [name] (from people where [city eq "Paris"])`,
 	)
 	if err != nil {
@@ -499,7 +499,7 @@ func TestWhereWithColumns(t *testing.T) {
 
 func TestWhereNoMatch(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name eq "Nobody"]`,
 	)
 	if err != nil {
@@ -515,7 +515,7 @@ func TestWhereNoMatch(t *testing.T) {
 func TestWhereLike(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name like "A%"]`,
 	)
 	if err != nil {
@@ -532,7 +532,7 @@ func TestWhereLike(t *testing.T) {
 func TestWhereNeq(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name neq "Alice"]`,
 	)
 	if err != nil {
@@ -552,7 +552,7 @@ func TestWhereNeq(t *testing.T) {
 func TestOrderByColumn(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [name]`,
 	)
 	if err != nil {
@@ -572,7 +572,7 @@ func TestOrderByColumn(t *testing.T) {
 func TestOrderByDesc(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [name desc]`,
 	)
 	if err != nil {
@@ -592,7 +592,7 @@ func TestOrderByDesc(t *testing.T) {
 func TestOrderByAtom(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order name`,
 	)
 	if err != nil {
@@ -608,7 +608,7 @@ func TestOrderBySyntax(t *testing.T) {
 	t.Skip("query words disabled")
 	// "order by name" should work the same as "order name"
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order by name`,
 	)
 	if err != nil {
@@ -624,7 +624,7 @@ func TestOrderByListSyntax(t *testing.T) {
 	t.Skip("query words disabled")
 	// "order by [name desc]" should work
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order by [name desc]`,
 	)
 	if err != nil {
@@ -641,7 +641,7 @@ func TestOrderByListSyntax(t *testing.T) {
 func TestLimit(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people limit 2`,
 	)
 	if err != nil {
@@ -657,7 +657,7 @@ func TestLimit(t *testing.T) {
 func TestLimitOne(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people limit 1`,
 	)
 	if err != nil {
@@ -672,7 +672,7 @@ func TestLimitOne(t *testing.T) {
 
 func TestLimitZero(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people limit 0`,
 	)
 	if err != nil {
@@ -690,7 +690,7 @@ func TestLimitZero(t *testing.T) {
 func TestWhereOrderLimit(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age gte "25"] order [name] limit 2`,
 	)
 	if err != nil {
@@ -710,7 +710,7 @@ func TestWhereAndOrder(t *testing.T) {
 	t.Skip("query words disabled")
 	// Use parens so where and order are applied before select projects columns.
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [name] (from people where [age gte "30"] order [name desc])`,
 	)
 	if err != nil {
@@ -729,7 +729,7 @@ func TestWhereAndOrder(t *testing.T) {
 func TestOrderAndLimit(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [age] limit 1`,
 	)
 	if err != nil {
@@ -795,7 +795,7 @@ func TestWhereOnInternalTable(t *testing.T) {
 func TestOffset(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [name] limit 2 offset 1`,
 	)
 	if err != nil {
@@ -814,7 +814,7 @@ func TestOffset(t *testing.T) {
 func TestLimitOffset(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [name] limit 1 offset 2`,
 	)
 	if err != nil {
@@ -835,7 +835,7 @@ func TestDistinct(t *testing.T) {
 	t.Skip("query words disabled")
 	// Create a table with duplicate city values.
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [city] from people`,
 	)
 	if err != nil {
@@ -848,7 +848,7 @@ func TestDistinct(t *testing.T) {
 
 	// With distinct — all cities happen to be unique, so same count.
 	result, err = runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [city] (from people distinct)`,
 	)
 	if err != nil {
@@ -956,7 +956,7 @@ func TestOrderNullsFirst(t *testing.T) {
 func TestOrderByPosition(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [1]`,
 	)
 	if err != nil {
@@ -975,7 +975,7 @@ func TestOrderByPosition(t *testing.T) {
 func TestOrderByPositionDesc(t *testing.T) {
 	t.Skip("query words disabled")
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [1 desc]`,
 	)
 	if err != nil {
@@ -1035,7 +1035,7 @@ func TestWhereIsNull(t *testing.T) {
 
 func TestWhereBetween(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age between "25" "30"]`,
 	)
 	if err != nil {
@@ -1050,7 +1050,7 @@ func TestWhereBetween(t *testing.T) {
 
 func TestWhereNotBetween(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age not between "25" "30"]`,
 	)
 	if err != nil {
@@ -1069,7 +1069,7 @@ func TestWhereNotBetween(t *testing.T) {
 func TestWhereNotSimple(t *testing.T) {
 	// [not name eq "Alice"] → NOT ("name" = 'Alice')
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [not name eq "Alice"] order [name]`,
 	)
 	if err != nil {
@@ -1086,7 +1086,7 @@ func TestWhereNotSimple(t *testing.T) {
 func TestWhereNotWithSubList(t *testing.T) {
 	// [not [city eq "London" or city eq "Tokyo"]] → NOT ("city" = 'London' OR "city" = 'Tokyo')
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [not [city eq "London" or city eq "Tokyo"]]`,
 	)
 	if err != nil {
@@ -1102,7 +1102,7 @@ func TestWhereNotWithSubList(t *testing.T) {
 func TestWhereNotAndOther(t *testing.T) {
 	// [not name eq "Alice" and city eq "Tokyo"] → NOT ("name" = 'Alice') AND "city" = 'Tokyo'
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [not name eq "Alice" and city eq "Tokyo"]`,
 	)
 	if err != nil {
@@ -1121,7 +1121,7 @@ func TestWhereNestedGroup(t *testing.T) {
 	// [[city eq "London" or city eq "Paris"] and age gte "30"]
 	// → ("city" = 'London' OR "city" = 'Paris') AND "age" >= '30'
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [[city eq "London" or city eq "Paris"] and age gte "30"]`,
 	)
 	if err != nil {
@@ -1138,7 +1138,7 @@ func TestWhereNestedGroupRight(t *testing.T) {
 	// [age gte "30" and [city eq "London" or city eq "Tokyo"]]
 	// → "age" >= '30' AND ("city" = 'London' OR "city" = 'Tokyo')
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age gte "30" and [city eq "London" or city eq "Tokyo"]]`,
 	)
 	if err != nil {
@@ -1153,7 +1153,7 @@ func TestWhereNestedGroupRight(t *testing.T) {
 func TestWhereNotWithNestedGroup(t *testing.T) {
 	// [not [city eq "London" or city eq "Paris"]] → NOT (...) — only Tokyo remains
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [not [city eq "London" or city eq "Paris"]]`,
 	)
 	if err != nil {
@@ -1169,7 +1169,7 @@ func TestWhereNotWithNestedGroup(t *testing.T) {
 func TestWhereDoubleNested(t *testing.T) {
 	// [[city eq "London"] or [city eq "Tokyo"]] — two groups connected by OR
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [[city eq "London"] or [city eq "Tokyo"]] order [name]`,
 	)
 	if err != nil {
@@ -1185,7 +1185,7 @@ func TestWhereDoubleNested(t *testing.T) {
 
 func TestWhereBetweenAndOther(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age between "25" "35" and city eq "London"]`,
 	)
 	if err != nil {
@@ -1203,7 +1203,7 @@ func TestWhereBetweenAndOther(t *testing.T) {
 
 func TestWhereGlob(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name glob "A*"]`,
 	)
 	if err != nil {
@@ -1220,7 +1220,7 @@ func TestWhereGlob(t *testing.T) {
 func TestWhereGlobCaseSensitive(t *testing.T) {
 	// GLOB is case-sensitive unlike LIKE.
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name glob "a*"]`,
 	)
 	if err != nil {
@@ -1408,7 +1408,7 @@ func TestTypedIntegerOrdering(t *testing.T) {
 
 func TestWhereIn(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [city in ["London" "Tokyo"]]`,
 	)
 	if err != nil {
@@ -1422,7 +1422,7 @@ func TestWhereIn(t *testing.T) {
 
 func TestWhereNotIn(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [city not in ["London" "Tokyo"]]`,
 	)
 	if err != nil {
@@ -1443,7 +1443,7 @@ func TestWhereNotIn(t *testing.T) {
 
 func TestWhereInSubquery(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`context set people ("file/people.csv" read) context set cities ("file/cities.csv" read)`,
 		`select * from people where [city in (select [city] from cities)] order [name]`,
 	)
 	if err != nil {
@@ -1459,7 +1459,7 @@ func TestWhereInSubquery(t *testing.T) {
 
 func TestWhereNotInSubquery(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`context set people ("file/people.csv" read) context set cities ("file/cities.csv" read)`,
 		`select * from people where [city not in (select [city] from cities)]`,
 	)
 	if err != nil {
@@ -1474,7 +1474,7 @@ func TestWhereNotInSubquery(t *testing.T) {
 
 func TestWhereInSubqueryWithFilter(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`context set people ("file/people.csv" read) context set cities ("file/cities.csv" read)`,
 		`select * from people where [city in (select [city] from cities where [country eq "UK"])]`,
 	)
 	if err != nil {
@@ -1489,7 +1489,7 @@ func TestWhereInSubqueryWithFilter(t *testing.T) {
 
 func TestWhereInSubqueryEmpty(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read) set cities ("file/cities.csv" read)`,
+		`context set people ("file/people.csv" read) context set cities ("file/cities.csv" read)`,
 		`select * from people where [city in (select [city] from cities where [country eq "None"])]`,
 	)
 	if err != nil {
@@ -1505,7 +1505,7 @@ func TestWhereInSubqueryEmpty(t *testing.T) {
 
 func TestWhereRegexp(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name regexp "^[AB]"]`,
 	)
 	if err != nil {
@@ -1521,7 +1521,7 @@ func TestWhereRegexp(t *testing.T) {
 
 func TestWhereRegexpNoMatch(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [name regexp "^Z"]`,
 	)
 	if err != nil {
@@ -1535,7 +1535,7 @@ func TestWhereRegexpNoMatch(t *testing.T) {
 
 func TestWhereNotRegexp(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [not [name regexp "^[AB]"]]`,
 	)
 	if err != nil {
@@ -1550,7 +1550,7 @@ func TestWhereNotRegexp(t *testing.T) {
 
 func TestWhereRegexpDigits(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [age regexp "^3"]`,
 	)
 	if err != nil {
@@ -1679,7 +1679,7 @@ func TestHaving(t *testing.T) {
 
 func TestFromAlias(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people as p`,
 	)
 	if err != nil {
@@ -2007,7 +2007,7 @@ func TestExcept(t *testing.T) {
 
 func TestCast(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[cast age integer age_int]] from people order [age_int]`,
 	)
 	if err != nil {
@@ -2031,7 +2031,7 @@ func TestCast(t *testing.T) {
 
 func TestCountStar(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[count * total]] from people`,
 	)
 	if err != nil {
@@ -2213,7 +2213,7 @@ func TestJoinWithOnDotQualified(t *testing.T) {
 	// Test dot-qualified column names in ON clause with SQLite-backed tables.
 	// This exercises quoteJoinCol with dot notation.
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read) set departments ("file/departments.csv" read)`,
+		`context set people ("file/people.csv" read) context set departments ("file/departments.csv" read)`,
 		`select * from people join departments on ["people.age" eq "departments.dept_id"] order [name]`,
 	)
 	if err != nil {
@@ -2269,7 +2269,7 @@ func TestCrossJoin(t *testing.T) {
 
 func TestCastToReal(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[cast age real]] from people order [age]`,
 	)
 	if err != nil {
@@ -2323,7 +2323,7 @@ func TestCastToText(t *testing.T) {
 
 func TestCastWithoutAlias(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[cast age integer]] from people limit 1`,
 	)
 	if err != nil {
@@ -2432,7 +2432,7 @@ func TestMinMaxAggregate(t *testing.T) {
 
 func TestAggregateWithoutAlias(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[count name]] from people`,
 	)
 	if err != nil {
@@ -2676,7 +2676,7 @@ func TestInnerJoinKeyword(t *testing.T) {
 
 func TestOrderByMultipleKeys(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [city asc name asc]`,
 	)
 	if err != nil {
@@ -2694,7 +2694,7 @@ func TestOrderByMultipleKeys(t *testing.T) {
 
 func TestOrderByMultipleKeysDesc(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people order [city desc name asc]`,
 	)
 	if err != nil {
@@ -2713,7 +2713,7 @@ func TestOrderByMultipleKeysDesc(t *testing.T) {
 func TestOrderByMultipleKeysMixed(t *testing.T) {
 	// Create test data with duplicate city values to test secondary sort
 	result, err := runQuery(t,
-		`set cities ("file/cities.csv" read)`,
+		`context set cities ("file/cities.csv" read)`,
 		`select * from cities order [country asc city desc]`,
 	)
 	if err != nil {
@@ -2732,7 +2732,7 @@ func TestOrderByMultipleKeysMixed(t *testing.T) {
 
 func TestOrderCollateNocase(t *testing.T) {
 	result, err := runQuery(t,
-		`set data ("file/mixed_case.csv" read)`,
+		`context set data ("file/mixed_case.csv" read)`,
 		`select * from data order [name collate nocase asc]`,
 	)
 	if err != nil {
@@ -2750,7 +2750,7 @@ func TestOrderCollateNocase(t *testing.T) {
 
 func TestOrderCollateBinary(t *testing.T) {
 	result, err := runQuery(t,
-		`set data ("file/mixed_case.csv" read)`,
+		`context set data ("file/mixed_case.csv" read)`,
 		`select * from data order [name collate binary asc]`,
 	)
 	if err != nil {
@@ -2768,7 +2768,7 @@ func TestOrderCollateBinary(t *testing.T) {
 
 func TestWhereEqCollateNocase(t *testing.T) {
 	result, err := runQuery(t,
-		`set data ("file/mixed_case.csv" read)`,
+		`context set data ("file/mixed_case.csv" read)`,
 		`select * from data where [name eq "ALICE" collate nocase]`,
 	)
 	if err != nil {
@@ -2784,7 +2784,7 @@ func TestWhereEqCollateNocase(t *testing.T) {
 func TestWhereEqCollateNocaseNoMatch(t *testing.T) {
 	// Without collate nocase, "ALICE" should not match "alice"
 	result, err := runQuery(t,
-		`set data ("file/mixed_case.csv" read)`,
+		`context set data ("file/mixed_case.csv" read)`,
 		`select * from data where [name eq "ALICE"]`,
 	)
 	if err != nil {
@@ -2798,7 +2798,7 @@ func TestWhereEqCollateNocaseNoMatch(t *testing.T) {
 
 func TestWhereLikeCollateNocase(t *testing.T) {
 	result, err := runQuery(t,
-		`set data ("file/mixed_case.csv" read)`,
+		`context set data ("file/mixed_case.csv" read)`,
 		`select * from data where [name like "b%" collate nocase]`,
 	)
 	if err != nil {
@@ -2999,7 +2999,7 @@ func TestMixedTypeStorage(t *testing.T) {
 
 func TestCastWithTypeAliases(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[cast age int i1] [cast name string s1]] from people limit 1`,
 	)
 	if err != nil {
@@ -3021,7 +3021,7 @@ func TestCastWithTypeAliases(t *testing.T) {
 
 func TestCastFloat(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[cast age float f1] [cast age number n1]] from people limit 1`,
 	)
 	if err != nil {
@@ -3037,7 +3037,7 @@ func TestCastFloat(t *testing.T) {
 
 func TestSelectStringColumns(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select ["name" "city"] from people limit 1`,
 	)
 	if err != nil {
@@ -3098,7 +3098,7 @@ func TestWhereBetweenIntegers(t *testing.T) {
 func TestWhereInSingleValue(t *testing.T) {
 	// IN with a single non-list value (covers buildInList single-value branch)
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [city in "London"]`,
 	)
 	if err != nil {
@@ -3190,7 +3190,7 @@ func TestAggregateWithStringColName(t *testing.T) {
 	// Uses string literal inside aggregate spec: [count "name" cnt]
 	// This covers nameFromValue string branch
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select [[count "name" cnt]] from people`,
 	)
 	if err != nil {
@@ -3208,7 +3208,7 @@ func TestAggregateWithStringColName(t *testing.T) {
 
 func TestWhereWithAtomValue(t *testing.T) {
 	result, err := runQuery(t,
-		`set people ("file/people.csv" read)`,
+		`context set people ("file/people.csv" read)`,
 		`select * from people where [city eq London]`,
 	)
 	if err != nil {
@@ -3245,7 +3245,7 @@ func TestFileLoadSetsSQLiteFlag(t *testing.T) {
 func TestScalarSubqueryInWhereGt(t *testing.T) {
 	// avg age = (30+25+35+28)/4 = 29.5, so age > 29.5 → Alice(30), Charlie(35)
 	result, err := runQuery(t,
-		`set emp ("file/employees.csv" read)`,
+		`context set emp ("file/employees.csv" read)`,
 		`select * from emp where [age gt (select [[avg age]] from emp)] order [name]`,
 	)
 	if err != nil {
@@ -3263,7 +3263,7 @@ func TestScalarSubqueryInWhereEq(t *testing.T) {
 	// Subquery returns Alice's dept = "Engineering".
 	// Engineering employees: Alice, Charlie.
 	result, err := runQuery(t,
-		`set emp ("file/employees.csv" read)`,
+		`context set emp ("file/employees.csv" read)`,
 		`select * from emp where [dept eq (select [dept] from emp where [name eq "Alice"])] order [name]`,
 	)
 	if err != nil {
@@ -3280,7 +3280,7 @@ func TestScalarSubqueryInWhereEq(t *testing.T) {
 func TestScalarSubqueryInSelect(t *testing.T) {
 	// Each row gets a top_salary column with the max salary (90000).
 	result, err := runQuery(t,
-		`set emp ("file/employees.csv" read)`,
+		`context set emp ("file/employees.csv" read)`,
 		`select [name [(select [[max salary]] from emp) top_salary]] from emp order [name]`,
 	)
 	if err != nil {
@@ -3299,7 +3299,7 @@ func TestScalarSubqueryInSelect(t *testing.T) {
 func TestScalarSubqueryMultipleRowsError(t *testing.T) {
 	// Subquery returns 4 rows — should error.
 	_, err := runQuery(t,
-		`set emp ("file/employees.csv" read)`,
+		`context set emp ("file/employees.csv" read)`,
 		`select * from emp where [age gt (select [age] from emp)]`,
 	)
 	if err == nil {
@@ -3311,7 +3311,7 @@ func TestScalarSubqueryEmptyReturnsNull(t *testing.T) {
 	// Subquery returns no rows (nobody named "Nobody").
 	// Comparing with NULL should return no matches.
 	result, err := runQuery(t,
-		`set emp ("file/employees.csv" read)`,
+		`context set emp ("file/employees.csv" read)`,
 		`select * from emp where [name eq (select [name] from emp where [name eq "Nobody"])]`,
 	)
 	if err != nil {
