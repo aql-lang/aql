@@ -35,7 +35,7 @@ func registerFor(r *Registry) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
 		}
-		rangeSpec := args[0].AsList()
+		rangeSpec := args[0].AsList().Slice()
 		body := args[1]
 		start, end, step, err := parseRange(rangeSpec)
 		if err != nil {
@@ -103,14 +103,14 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	if body.Data == nil {
 		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
 	}
-	bodyElems := body.AsList()
+	bodySlice := body.AsList().Slice()
 
 	// Install the iterator variable for the first iteration.
 	installDef(r, iterName, NewInteger(start))
 
 	// Create the continuation state.
-	bodyCopy := make([]Value, len(bodyElems))
-	copy(bodyCopy, bodyElems)
+	bodyCopy := make([]Value, len(bodySlice))
+	copy(bodyCopy, bodySlice)
 
 	cont := &ForCont{
 		Registry: r,
@@ -123,10 +123,10 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 
 	// Build the stack segment: mark + body + move.
 	id := NextMarkID()
-	tokens := make([]Value, 0, len(bodyElems)+2)
-	tokens = append(tokens, NewMark(id, bodyElems...))
-	bodyTokens := make([]Value, len(bodyElems))
-	copy(bodyTokens, bodyElems)
+	tokens := make([]Value, 0, len(bodySlice)+2)
+	tokens = append(tokens, NewMark(id, bodySlice...))
+	bodyTokens := make([]Value, len(bodySlice))
+	copy(bodyTokens, bodySlice)
 	tokens = append(tokens, bodyTokens...)
 	tokens = append(tokens, NewMoveCont(id, "for loop", cont))
 

@@ -155,11 +155,11 @@ The match result is a map-like structure:
 => {match:"abc-123", groups:["abc","123"], pos:0}
 ```
 
-Access fields with `dot`:
+Access fields with `get` (alias `.`):
 
 ```
-"abc-123" rm/([a-z]+)-(\d+)/ dot match    => "abc-123"
-"abc-123" rm/([a-z]+)-(\d+)/ dot groups   => ["abc","123"]
+"abc-123" rm/([a-z]+)-(\d+)/ get match    => "abc-123"
+"abc-123" rm/([a-z]+)-(\d+)/ get groups   => ["abc","123"]
 ```
 
 ### rs — Regexp Substitute

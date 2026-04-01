@@ -751,7 +751,7 @@ func TestEngineCoreBaseList(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("base List got %d results", len(result))
 	}
-	if len(result[0].AsList()) != 0 {
+	if len(result[0].AsList().Slice()) != 0 {
 		t.Errorf("base List = %v, want empty list", result)
 	}
 }
@@ -1539,7 +1539,7 @@ func TestEngineCoreMakeTablePositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("make table got %d results", len(result))
 	}
-	rowList := result[0].AsList()
+	rowList := result[0].AsList().Slice()
 	if len(rowList) != 2 {
 		t.Errorf("table has %d rows, want 2", len(rowList))
 	}

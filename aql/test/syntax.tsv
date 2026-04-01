@@ -125,8 +125,8 @@ lower/1 "G"	'g'
 lower/1f "H"	'h'
 
 # === Set/Get ===
-set foo 99 end get foo	99
-set bar "hello" end get bar	'hello'
+context set foo 99 end context get foo	99
+context set bar "hello" end context get bar	'hello'
 
 # === Unify - identical scalars (prefix: left right unify) ===
 1 1 unify	1 true

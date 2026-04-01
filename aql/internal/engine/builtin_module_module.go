@@ -35,7 +35,7 @@ func registerModule(r *Registry) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 			}
-			desc, err := runModuleBody(r, args[0].AsList())
+			desc, err := runModuleBody(r, args[0].AsList().Slice())
 			if err != nil {
 				return nil, fmt.Errorf("module: %w", err)
 			}
@@ -56,7 +56,7 @@ func registerModule(r *Registry) {
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [word/atom module-desc] -> [] — rename single export
@@ -107,7 +107,7 @@ func registerModule(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			return nil, installRenamedExports(r, desc, args[0].AsList())
+			return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 		}
 		if isDataFile(path) {
 			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
@@ -116,7 +116,7 @@ func registerModule(r *Registry) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [atom/q list] -> [] — inline module: import module [body]
@@ -130,7 +130,7 @@ func registerModule(r *Registry) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[1].AsList())
+		desc, err := runModuleBody(r, args[1].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -150,11 +150,11 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList())
+		desc, err := runModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList())
+		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
 	}
 
 	// import: [atom atom/q list] -> [] — inline module with single rename
@@ -166,7 +166,7 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList())
+		desc, err := runModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -231,22 +231,19 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
 	modReg.FileOps = parent.FileOps
+	modReg.MemOps = parent.MemOps
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
-	if parentCtx := parent.Context(); parentCtx != nil {
-		copied := make(map[string]Value, len(parentCtx))
-		for k, v := range parentCtx {
-			copied[k] = v
-		}
-		modReg.ctxStack = append(modReg.ctxStack, copied)
+	if parentCtx := parent.ContextStore(); parentCtx != nil {
+		modReg.ctxStack = append(modReg.ctxStack, parentCtx)
 	}
 
 	exports := make(map[string]*OrderedMap)
 
-	exportHandler := func(name string, rawMap *OrderedMap) {
+	exportHandler := func(name string, rawMap ReadMap) {
 		resolved := NewOrderedMap()
 		for _, key := range rawMap.Keys() {
 			val, _ := rawMap.Get(key)
@@ -324,7 +321,7 @@ func isDataFile(path string) bool {
 // returns the main file specified there. If the file doesn't exist or has
 // no main property, returns "index.aql".
 func resolveModuleMain(r *Registry, dir string) string {
-	data, err := r.FileOps.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(dir, ".aql", "aql.json"))
 	if err != nil {
 		return "index.aql"
 	}
@@ -367,7 +364,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		startDir = r.BaseDir
 	} else {
 		var err error
-		startDir, err = r.FileOps.ResolvePath(".")
+		startDir, err = r.EffectiveFileOps().ResolvePath(".")
 		if err != nil {
 			return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
 		}
@@ -378,7 +375,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		modDir := filepath.Join(dir, ".aql", name)
 		main := resolveModuleMain(r, modDir)
 		candidate := filepath.Join(modDir, main)
-		if _, err := r.FileOps.ReadFile(candidate); err == nil {
+		if _, err := r.EffectiveFileOps().ReadFile(candidate); err == nil {
 			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
@@ -416,7 +413,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 
 	resolved := resolveImportPath(parent, path)
 
-	data, err := parent.FileOps.ReadFile(resolved)
+	data, err := parent.EffectiveFileOps().ReadFile(resolved)
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %w", err)
 	}
@@ -450,7 +447,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 // property (map of key→filename). For each entry it loads the data file
 // from the module directory and adds a "resource" export to the descriptor.
 func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
-	data, err := r.FileOps.ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
 	if err != nil {
 		return nil // no aql.json — nothing to do
 	}
@@ -513,11 +510,11 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
 			pairElems := pair.AsList()
-			if len(pairElems) != 2 {
+			if pairElems.Len() != 2 {
 				return fmt.Errorf("import: rename pair must have exactly 2 elements")
 			}
-			fromName := valToAtomOrString(pairElems[0])
-			toName := valToAtomOrString(pairElems[1])
+			fromName := valToAtomOrString(pairElems.Get(0))
+			toName := valToAtomOrString(pairElems.Get(1))
 			exportMap, ok := desc.Exports[fromName]
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)

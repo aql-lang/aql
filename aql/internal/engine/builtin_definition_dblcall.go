@@ -29,7 +29,7 @@ func registerDblcall(r *Registry) {
 			doubled := NewInteger(n * 2)
 
 			bodyElems := body.AsList()
-			if len(bodyElems) == 0 {
+			if bodyElems.Len() == 0 {
 				return []Value{doubled}, nil
 			}
 
@@ -38,11 +38,10 @@ func registerDblcall(r *Registry) {
 			// on the main engine stack (no sub-engine). The callback
 			// body executes with the doubled value on the stack, and
 			// the paren scope collapses to the result.
-			tokens := make([]Value, 0, len(bodyElems)+3)
+			tokens := make([]Value, 0, bodyElems.Len()+3)
 			tokens = append(tokens, NewOpenParen())
 			tokens = append(tokens, doubled)
-			bodyCopy := make([]Value, len(bodyElems))
-			copy(bodyCopy, bodyElems)
+			bodyCopy := bodyElems.Slice()
 			tokens = append(tokens, bodyCopy...)
 			tokens = append(tokens, NewWord(")"))
 			return tokens, nil

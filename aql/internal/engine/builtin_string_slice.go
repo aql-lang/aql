@@ -59,8 +59,8 @@ func valueToSliceArg(v Value) interface{} {
 	}
 	if v.VType.Matches(TList) {
 		list := v.AsList()
-		result := make([]interface{}, len(list))
-		for i, elem := range list {
+		result := make([]interface{}, list.Len())
+		for i, elem := range list.Slice() {
 			result[i] = valueToSliceArg(elem)
 		}
 		return result

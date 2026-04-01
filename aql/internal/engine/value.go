@@ -11,6 +11,44 @@ import (
 	"time"
 )
 
+// ReadList is a read-only view of a list of Values.
+// Node list values expose this via AsList(). To mutate, use AsMutableList().
+type ReadList struct {
+	elems []Value
+}
+
+// Get returns the element at index i. Panics if out of bounds.
+func (l ReadList) Get(i int) Value {
+	return l.elems[i]
+}
+
+// Len returns the number of elements.
+func (l ReadList) Len() int {
+	return len(l.elems)
+}
+
+// Slice returns a copy of the underlying slice.
+func (l ReadList) Slice() []Value {
+	out := make([]Value, len(l.elems))
+	copy(out, l.elems)
+	return out
+}
+
+// IsNil reports whether this ReadList has no backing data.
+func (l ReadList) IsNil() bool {
+	return l.elems == nil
+}
+
+// ReadMap is a read-only view of an ordered key-value map.
+// Node values (Map, Options) expose this interface via AsMap().
+// To mutate, use AsMutableMap() which is only valid for Object instances.
+type ReadMap interface {
+	Get(key string) (Value, bool)
+	Keys() []string
+	SortedKeys() []string
+	Len() int
+}
+
 // OrderedMap is a map that preserves insertion order of keys.
 type OrderedMap struct {
 	keys     []string
@@ -69,6 +107,23 @@ func (m *OrderedMap) Delete(key string) bool {
 		}
 	}
 	return true
+}
+
+// PathInfo holds the data for a Scalar/Path value.
+// A Path represents a filesystem path as a sequence of parts.
+// Absolute paths start from the root (Abs = true).
+type PathInfo struct {
+	Parts []string // path segments (e.g. ["usr", "local", "bin"])
+	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
+}
+
+// String returns the OS path string for this path.
+func (p PathInfo) String() string {
+	joined := strings.Join(p.Parts, "/")
+	if p.Abs {
+		return "/" + joined
+	}
+	return joined
 }
 
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
@@ -222,6 +277,78 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 		result.Set(k, v)
 	}
 	return result
+}
+
+// StoreInstanceInfo is a copy-on-write key-value store (Object/Store).
+// Unlike regular Object instances which have typed fields, Store instances
+// hold arbitrary key-value pairs. Key resolution walks the prototype chain,
+// enabling scope-like lookup when contexts are nested.
+//
+// Copy-on-write: the AQL `set` word creates a new Store layer (prototype =
+// old Store) instead of mutating in place. If this Store is nested inside
+// a parent Store, the parent is COW'd too, propagating up to the ctxStack.
+type StoreInstanceInfo struct {
+	TypeName  string              // full type path, e.g. "Object/Store" or "Object/Store/System"
+	Data      map[string]Value    // own key-value pairs (COW layer)
+	Prototype *StoreInstanceInfo  // prototype chain for key lookup / COW base
+	Parent    *StoreInstanceInfo  // containing Store (for COW propagation), nil if root
+	ParentKey string              // key in Parent that references this Store
+}
+
+// Get looks up a key in this store, walking the prototype chain if not found.
+func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
+	if v, ok := si.Data[key]; ok {
+		return v, true
+	}
+	if si.Prototype != nil {
+		return si.Prototype.Get(key)
+	}
+	return Value{}, false
+}
+
+// Set stores a key-value pair directly (for internal/init use only).
+// AQL code should use the set word which does COW via cowSet.
+func (si *StoreInstanceInfo) Set(key string, val Value) {
+	si.Data[key] = val
+	// Track parent relationship for nested Stores.
+	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {
+		childStore.Parent = si
+		childStore.ParentKey = key
+	}
+}
+
+// ArrayInstanceInfo is a mutable ordered array (Object/Array).
+// Unlike immutable Node/List values, Array instances can be modified
+// in place via set (index assignment), append, etc.
+type ArrayInstanceInfo struct {
+	Elems []Value
+}
+
+// Get returns the element at index i. Returns zero Value and false if out of bounds.
+func (ai *ArrayInstanceInfo) Get(i int) (Value, bool) {
+	if i < 0 || i >= len(ai.Elems) {
+		return Value{}, false
+	}
+	return ai.Elems[i], true
+}
+
+// Set sets the element at index i. Returns false if out of bounds.
+func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
+	if i < 0 || i >= len(ai.Elems) {
+		return false
+	}
+	ai.Elems[i] = val
+	return true
+}
+
+// Len returns the number of elements.
+func (ai *ArrayInstanceInfo) Len() int {
+	return len(ai.Elems)
+}
+
+// Append adds a value to the end of the array.
+func (ai *ArrayInstanceInfo) Append(val Value) {
+	ai.Elems = append(ai.Elems, val)
 }
 
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
@@ -470,6 +597,13 @@ func NewAtom(name string) Value {
 	return newValue(TAtom, name)
 }
 
+// NewPath creates a Path value from parts and an absolute flag.
+func NewPath(parts []string, abs bool) Value {
+	p := make([]string, len(parts))
+	copy(p, parts)
+	return newValue(TPath, PathInfo{Parts: p, Abs: abs})
+}
+
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
@@ -584,6 +718,54 @@ func NewObjectInstance(info ObjectInstanceInfo) Value {
 	return newValue(t, info)
 }
 
+// NewStore creates a Store value with the given type name.
+// If typeName is empty, defaults to "Object/Store".
+func NewStore(typeName string) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName: typeName,
+		Data:     make(map[string]Value),
+	})
+}
+
+// NewStoreValue wraps an existing StoreInstanceInfo into a Value.
+func NewStoreValue(si *StoreInstanceInfo) Value {
+	typeName := si.TypeName
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, si)
+}
+
+// NewStoreWithPrototype creates a Store value with a prototype chain.
+func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName:  typeName,
+		Data:      make(map[string]Value),
+		Prototype: prototype,
+	})
+}
+
+// NewArray creates a mutable Array value from a slice of elements.
+func NewArray(elems []Value) Value {
+	data := make([]Value, len(elems))
+	copy(data, elems)
+	return newValue(TArray, &ArrayInstanceInfo{Elems: data})
+}
+
+// NewArrayEmpty creates an empty mutable Array value.
+func NewArrayEmpty() Value {
+	return newValue(TArray, &ArrayInstanceInfo{Elems: nil})
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
@@ -694,6 +876,36 @@ func (v Value) AsObjectType() ObjectTypeInfo {
 	return v.Data.(ObjectTypeInfo)
 }
 
+// IsStore reports whether this value is a Store instance.
+func (v Value) IsStore() bool {
+	_, ok := v.Data.(*StoreInstanceInfo)
+	return ok && v.VType.Matches(TStore)
+}
+
+// AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
+func (v Value) AsStore() *StoreInstanceInfo {
+	si, ok := v.Data.(*StoreInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return si
+}
+
+// IsArray reports whether this value is an Array instance.
+func (v Value) IsArray() bool {
+	_, ok := v.Data.(*ArrayInstanceInfo)
+	return ok && v.VType.Matches(TArray)
+}
+
+// AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
+func (v Value) AsArray() *ArrayInstanceInfo {
+	ai, ok := v.Data.(*ArrayInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return ai
+}
+
 // IsObjectInstance reports whether this value is an object instance.
 func (v Value) IsObjectInstance() bool {
 	_, ok := v.Data.(ObjectInstanceInfo)
@@ -716,6 +928,17 @@ func (v Value) AsModule() ModuleDesc {
 }
 
 // IsAtom reports whether this value is an atom.
+// IsPath reports whether this value is a Path.
+func (v Value) IsPath() bool {
+	_, ok := v.Data.(PathInfo)
+	return ok && v.VType.Equal(TPath)
+}
+
+// AsPath returns the PathInfo. Panics if not a path.
+func (v Value) AsPath() PathInfo {
+	return v.Data.(PathInfo)
+}
+
 func (v Value) IsAtom() bool {
 	return v.VType.Equal(TAtom)
 }
@@ -848,19 +1071,34 @@ func (v Value) AsBoolean() bool {
 // AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
-func (v Value) AsList() []Value {
+// AsList returns a read-only view of the list payload.
+// Returns a ReadList with nil backing if the data is not a list.
+func (v Value) AsList() ReadList {
 	if v.Data == nil {
-		return nil
+		return ReadList{}
 	}
 	if td, ok := v.Data.(TableData); ok {
-		return td.Rows
+		return ReadList{elems: td.Rows}
 	}
 	if qb, ok := v.Data.(QueryBuilder); ok {
 		td, err := qb.Materialize()
 		if err != nil {
-			return nil
+			return ReadList{}
 		}
-		return td.Rows
+		return ReadList{elems: td.Rows}
+	}
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return ReadList{}
+	}
+	return ReadList{elems: elems}
+}
+
+// AsMutableList returns the underlying []Value slice for mutation.
+// Only valid for internal construction paths — never for immutable Node values.
+func (v Value) AsMutableList() []Value {
+	if v.Data == nil {
+		return nil
 	}
 	elems, ok := v.Data.([]Value)
 	if !ok {
@@ -869,8 +1107,23 @@ func (v Value) AsList() []Value {
 	return elems
 }
 
-// AsMap returns the OrderedMap payload, or nil if the data is not an *OrderedMap.
-func (v Value) AsMap() *OrderedMap {
+// AsMap returns a read-only view of the map payload, or nil if the data is
+// not an *OrderedMap. Node values (Map, Options) are immutable — use this
+// for all read access.
+func (v Value) AsMap() ReadMap {
+	if v.Data == nil {
+		return nil
+	}
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
+}
+
+// AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
+// for Object instances and internal construction — never for Node values.
+func (v Value) AsMutableMap() *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}
@@ -923,6 +1176,8 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
+	case v.IsPath():
+		return v.AsPath().String()
 	case v.VType.Equal(TList):
 		if tt, ok := v.Data.(TableTypeInfo); ok {
 			parts := make([]string, 0, tt.Record.Fields.Len())
@@ -955,12 +1210,20 @@ func (v Value) String() string {
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsArray():
+		arr := v.AsArray()
+		parts := make([]string, arr.Len())
+		for i := 0; i < arr.Len(); i++ {
+			e, _ := arr.Get(i)
+			parts[i] = e.String()
+		}
+		return "Array[" + strings.Join(parts, ",") + "]"
 	case v.IsObjectInstance():
 		oi := v.AsObjectInstance()
 		allFields := oi.AllFields()
@@ -1043,8 +1306,8 @@ func IsTypeValue(v Value) bool {
 	// Concrete list: check each element recursively.
 	if v.VType.Matches(TList) && v.Data != nil {
 		elems := v.AsList()
-		if elems != nil {
-			for _, elem := range elems {
+		if !elems.IsNil() {
+			for _, elem := range elems.Slice() {
 				if IsTypeValue(elem) {
 					return true
 				}

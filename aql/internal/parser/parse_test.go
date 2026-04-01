@@ -702,7 +702,7 @@ func TestParseExplicitList(t *testing.T) {
 	if !got[0].VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", got[0].VType)
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -717,7 +717,7 @@ func TestParseListWithStrings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 2 {
 		t.Errorf("expected 2 elements, got %d", len(elems))
 	}
@@ -745,7 +745,7 @@ func TestParseMapWithList(t *testing.T) {
 	if !xVal.VType.Equal(engine.TList) {
 		t.Errorf("expected list, got %s", xVal.VType)
 	}
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -896,18 +896,18 @@ func assertExpand(t *testing.T, text string, want []engine.Value) {
 }
 
 func TestExpandDotStandalone(t *testing.T) {
-	assertExpand(t, ".", []engine.Value{engine.NewWord("dot")})
+	assertExpand(t, ".", []engine.Value{engine.NewWord("get")})
 }
 
 func TestExpandBangDotStandalone(t *testing.T) {
-	assertExpand(t, "!.", []engine.Value{engine.NewWord("dotr")})
+	assertExpand(t, "!.", []engine.Value{engine.NewWord("getr")})
 }
 
 func TestExpandDottedSimple(t *testing.T) {
 	assertExpand(t, "foo.bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("bar"),
 		engine.NewWord(")"),
 	})
@@ -917,9 +917,9 @@ func TestExpandDottedChain(t *testing.T) {
 	assertExpand(t, "foo.a.b", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("a"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("b"),
 		engine.NewWord(")"),
 	})
@@ -927,9 +927,9 @@ func TestExpandDottedChain(t *testing.T) {
 
 func TestExpandDottedLeading(t *testing.T) {
 	assertExpand(t, ".a.b", []engine.Value{
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("a"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("b"),
 	})
 }
@@ -938,7 +938,7 @@ func TestExpandDottedIntegerKey(t *testing.T) {
 	assertExpand(t, "foo.0", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewInteger(0),
 		engine.NewWord(")"),
 	})
@@ -957,7 +957,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 	assertExpand(t, "foo..bar", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("foo"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("bar"),
 		engine.NewWord(")"),
 	})
@@ -966,7 +966,7 @@ func TestExpandDottedEmptyMiddle(t *testing.T) {
 func TestExpandDottedLeadingSingle(t *testing.T) {
 	// ".x" → leading dot, just dot x
 	assertExpand(t, ".x", []engine.Value{
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("x"),
 	})
 }
@@ -1059,7 +1059,7 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
@@ -1133,7 +1133,7 @@ func TestParseListWithMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
@@ -1153,7 +1153,7 @@ func TestParseNestedList(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1170,7 +1170,7 @@ func TestParseListWithDottedWord(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	// ( foo dot bar ) = 5 elements
 	if len(elems) != 5 {
 		t.Fatalf("expected 5 elements (( foo dot bar )), got %d", len(elems))
@@ -1258,7 +1258,7 @@ func TestExpandDottedArgs(t *testing.T) {
 	assertExpand(t, "args.x", []engine.Value{
 		engine.NewOpenParen(),
 		engine.NewWord("args"),
-		engine.NewWord("dot"),
+		engine.NewWord("get"),
 		engine.NewWord("x"),
 		engine.NewWord(")"),
 	})
@@ -1471,7 +1471,7 @@ func TestParseDataListWithDecimal(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1725,14 +1725,14 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !list.VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", list.VType)
 	}
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if !m.Implicit {
 		t.Error("expected Implicit=true for pair syntax [x:Integer]")
 	}
@@ -1752,14 +1752,14 @@ func TestParseExplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
 	}
@@ -1777,7 +1777,7 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if !vals[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
-	m := vals[0].AsMap()
+	m := vals[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
@@ -1843,11 +1843,11 @@ func TestParseOptionalFieldInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if m == nil {
 		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
 	}

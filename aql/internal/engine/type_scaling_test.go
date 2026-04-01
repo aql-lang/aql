@@ -567,7 +567,7 @@ func TestUnifyListsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer lists should succeed")
 	}
-	elems := result.AsList()
+	elems := result.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}

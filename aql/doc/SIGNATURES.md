@@ -218,17 +218,13 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
-| `dot` / `.` | `[A, Node]` | `[Any]` | Property access; returns None if missing | — |
-| | `[S, Node]` | `[Any]` | | — |
-| | `[I, Node]` | `[Any]` | List index or map key | — |
-| | `[A, Object]` | `[Any]` | Object field access | — |
-| | `[S, Object]` | `[Any]` | | — |
-| | `[I, Object]` | `[Any]` | | — |
-| | `[Any, None]` | `[None]` | None propagation | — |
-| `dotr` / `!.` | `[M, A]` | `[Any]` | Strict: error if key not found | — |
+| `getr` / `!.` | `[M, A]` | `[Any]` | Strict: error if key not found | — |
 | | `[M, S]` | `[Any]` | | — |
 | | `[L, I]` | `[Any]` | Strict: error if index OOB | `arg0: L` |
 | | `[M, I]` | `[Any]` | | — |
+| | `[O, A]` | `[Any]` | Object field access (strict) | — |
+| | `[O, S]` | `[Any]` | | — |
+| | `[O, I]` | `[Any]` | | — |
 | | `[None, Any]` | error | Error if parent is None | — |
 
 
@@ -236,14 +232,18 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
-| `context` | `[W]` | `[W]` | Dispatcher: converts set/get to context-set/context-get | — |
-| `context-get` | `[S]` | `[Any]` | Returns None if key not in context | — |
-| | `[A]` /q | `[Any]` | | — |
-| `context-set` | `[S, Any]` | `[]` | Store in scoped context | — |
-| | `[A, Any]` /q | `[]` | | — |
-| `get` | `[Any]` | `[Any]` | Retrieve from store (or return as-is) | — |
-| `set` | `[S, Any]` | `[]` | Store key=value globally | — |
-| | `[A, Any]` /q | `[]` | | — |
+| `context` | `[]` | `[Store]` | Push current context Store onto stack | — |
+| `get` / `.` | `[S, Store]` | `[Any]` | Store lookup (prototype chain) | — |
+| | `[A, Store]` /q | `[Any]` | | — |
+| | `[A, Node]` | `[Any]` | Map property access; None if missing | — |
+| | `[S, Node]` | `[Any]` | | — |
+| | `[I, Node]` | `[Any]` | List index or map key | — |
+| | `[A, Object]` | `[Any]` | Object field access | — |
+| | `[S, Object]` | `[Any]` | | — |
+| | `[I, Object]` | `[Any]` | | — |
+| | `[Any, None]` | `[None]` | None propagation | — |
+| `set` | `[S, Any, Store]` | `[]` | Store key=value in Store | — |
+| | `[A, Any, Store]` /q | `[]` | | — |
 
 
 ## Definition

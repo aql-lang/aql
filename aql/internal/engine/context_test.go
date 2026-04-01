@@ -51,19 +51,17 @@ func TestContextSetOverwrite(t *testing.T) {
 
 // --- Unknown key returns none ---
 
-func TestContextGetUnknownKeyReturnsNone(t *testing.T) {
+func TestContextGetUnknownKeyReturnsError(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
+	e := New(r)
+	_, err = e.Run([]Value{
 		NewWord("context"), NewWord("get"), NewString("missing"),
 	})
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	if !result[0].VType.Equal(TNone) {
-		t.Errorf("context get missing = %v (type %s), want none", result[0], result[0].VType)
+	if err == nil {
+		t.Fatal("expected error for unknown key, got nil")
 	}
 }
 
@@ -113,17 +111,15 @@ func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
+	e := New(r)
+	_, err = e.Run([]Value{
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("set"), NewString("secret"), NewInteger(42),
 		}),
 		NewWord("context"), NewWord("get"), NewString("secret"),
 	})
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	if !result[0].VType.Equal(TNone) {
-		t.Errorf("sub-engine key should not leak to parent, got %v", result[0])
+	if err == nil {
+		t.Fatal("expected error: sub-engine key should not leak to parent")
 	}
 }
 
@@ -311,49 +307,49 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	}
 
 	// Initially no context
-	if r.Context() != nil {
+	if r.ContextStore() != nil {
 		t.Fatal("expected nil context initially")
 	}
 
-	// Push empty context
-	r.PushContext(make(map[string]Value))
-	ctx := r.Context()
-	if ctx == nil {
-		t.Fatal("expected non-nil context after push")
+	// Push empty context (nil parent)
+	r.PushContext(nil)
+	store := r.ContextStore()
+	if store == nil {
+		t.Fatal("expected non-nil context store after push")
 	}
-	if len(ctx) != 0 {
-		t.Fatalf("expected empty context, got %d entries", len(ctx))
+	if len(store.Data) != 0 {
+		t.Fatalf("expected empty context, got %d entries", len(store.Data))
 	}
 
-	// Write to context
-	ctx["key1"] = NewInteger(1)
+	// Write to context store
+	store.Set("key1", NewInteger(1))
 
-	// Push child — should inherit key1
-	r.PushContext(ctx)
-	child := r.Context()
-	v, ok := child["key1"]
+	// Push child — should inherit key1 via prototype
+	r.PushContext(store)
+	childStore := r.ContextStore()
+	v, ok := childStore.Get("key1")
 	if !ok || v.AsInteger() != 1 {
-		t.Error("child should inherit key1=1 from parent")
+		t.Error("child should inherit key1=1 from parent via prototype")
 	}
 
 	// Write to child doesn't affect parent
-	child["key1"] = NewInteger(99)
-	child["key2"] = NewInteger(2)
+	childStore.Set("key1", NewInteger(99))
+	childStore.Set("key2", NewInteger(2))
 
 	// Pop child
 	r.PopContext()
-	restored := r.Context()
-	v, ok = restored["key1"]
+	restored := r.ContextStore()
+	v, ok = restored.Get("key1")
 	if !ok || v.AsInteger() != 1 {
 		t.Errorf("parent key1 should still be 1 after pop, got %v", v)
 	}
-	if _, ok := restored["key2"]; ok {
+	if _, ok := restored.Get("key2"); ok {
 		t.Error("parent should not have key2 after child pop")
 	}
 
 	// Pop parent
 	r.PopContext()
-	if r.Context() != nil {
+	if r.ContextStore() != nil {
 		t.Error("expected nil context after popping all layers")
 	}
 }

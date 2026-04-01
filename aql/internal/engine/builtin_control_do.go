@@ -56,7 +56,7 @@ func registerDo(r *Registry) {
 	var evalMapValue func(v Value) (Value, error)
 	evalMapValue = func(v Value) (Value, error) {
 		if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-			results, err := evalDataList(v.AsList())
+			results, err := evalDataList(v.AsList().Slice())
 			if err != nil {
 				return Value{}, err
 			}
@@ -88,7 +88,7 @@ func registerDo(r *Registry) {
 				if args[0].Data == nil {
 					return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")
 				}
-				return evalList(args[0].AsList())
+				return evalList(args[0].AsList().Slice())
 			},
 		},
 		Signature{

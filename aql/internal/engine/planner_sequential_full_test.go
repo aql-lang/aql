@@ -30,9 +30,9 @@ func TestSequentialPlanner_FullEngineTests(t *testing.T) {
 		{"undef_basic", toks("def", "a", 1, "undef", "a", "a"), "a"},
 		{"undef_stacked", toks("def", "a", 1, "def", "a", 2, "a", "undef", "a", "a"), "2 1"},
 
-		// set/get
-		{"set_get_word", toks("set", "k", 99, "get", "k"), "99"},
-		{"set_get_string", toks("set", "hello", 7, "get", "hello"), "7"},
+		// set/get (store is context)
+		{"set_get_word", toks("context", "set", "k", 99, "context", "get", "k"), "99"},
+		{"set_get_string", toks("context", "set", "hello", 7, "context", "get", "hello"), "7"},
 
 		// quote
 		{"quote_word", toks("quote", "hello"), "hello"},

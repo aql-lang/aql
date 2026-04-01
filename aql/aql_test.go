@@ -136,45 +136,34 @@ func TestIndependentInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := aql.New()
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	// Store in a.
-	_, err = a.Run("set x 42 end")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// b should not see x.
-	_, err = b.Run("get x")
-	if err == nil {
-		t.Fatal("expected error: b should not have key x")
-	}
-
-	// a should still see x.
-	result, err := a.Run("get x")
+	// Store and retrieve in a within a single Run.
+	result, err := a.Run("context set x 42 end context get x")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 1 || result[0] != int64(42) {
 		t.Errorf("got %v, want [42]", result)
 	}
+
+	// A separate instance should not see x.
+	b, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.Run("context get x")
+	if err == nil {
+		t.Fatal("expected error: b should not have key x")
+	}
 }
 
-func TestStatePersistsAcrossRuns(t *testing.T) {
+func TestStatePersistsWithinRun(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = a.Run("set counter 10 end")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := a.Run("get counter")
+	result, err := a.Run("context set counter 10 end context get counter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,28 +173,15 @@ func TestStatePersistsAcrossRuns(t *testing.T) {
 }
 
 func TestManyIndependentInstances(t *testing.T) {
-	instances := make([]*aql.AQL, 5)
-	for i := range instances {
-		var err error
-		instances[i], err = aql.New()
+	// Each instance stores and retrieves its own index within a single Run.
+	for i := 0; i < 5; i++ {
+		a, err := aql.New()
 		if err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	// Each instance stores its own index.
-	for i, a := range instances {
-		_, err := a.Run("set idx " + itoa(i) + " end")
+		result, err := a.Run("context set idx " + itoa(i) + " end context get idx")
 		if err != nil {
-			t.Fatalf("instance %d set: %v", i, err)
-		}
-	}
-
-	// Each instance retrieves only its own index.
-	for i, a := range instances {
-		result, err := a.Run("get idx")
-		if err != nil {
-			t.Fatalf("instance %d get: %v", i, err)
+			t.Fatalf("instance %d: %v", i, err)
 		}
 		if result[0] != int64(i) {
 			t.Errorf("instance %d: got %v, want %d", i, result[0], i)
@@ -260,7 +236,7 @@ func TestMultilineMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := "set x 10 end\nset y 20 end\n(get x)\n(get y)\nadd"
+	src := "context set x 10 end\ncontext set y 20 end\n(context get x)\n(context get y)\nadd"
 	result, err := a.Run(src)
 	if err != nil {
 		t.Fatal(err)
@@ -304,10 +280,10 @@ func TestMultilineScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `
-		set width 10 end
-		set height 5 end
-		(get width)
-		(get height)
+		context set width 10 end
+		context set height 5 end
+		(context get width)
+		(context get height)
 		mul
 	`
 	result, err := a.Run(script)
@@ -326,11 +302,11 @@ func TestMultilineWithComments(t *testing.T) {
 	}
 	script := `
 		# set up values
-		set x 7 end
-		set y 3 end
+		context set x 7 end
+		context set y 3 end
 		# compute
-		(get x)
-		(get y)
+		(context get x)
+		(context get y)
 		add
 		# result should be 10
 	`

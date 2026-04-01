@@ -99,8 +99,8 @@ func TestSequentialPlanner_SetGet(t *testing.T) {
 	// sequential planner is now the default
 	e := NewTop(r)
 	out, err := e.Run([]Value{
-		NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -118,7 +118,7 @@ func TestSequentialPlanner_ContextSetGet(t *testing.T) {
 	}
 	// sequential planner is now the default
 	e := NewTop(r)
-	r.PushContext(make(map[string]Value))
+	r.PushContext(nil)
 	out, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewWord("x"),

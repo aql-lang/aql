@@ -16,6 +16,7 @@ var typeNames = map[string]Type{
 	"Decimal":  TDecimal,
 	"String":   TString,
 	"Boolean":  TBoolean,
+	"Path":     TPath,
 	"Atom":     TAtom,
 	"Node":     TNode,
 	"List":     TList,
@@ -26,9 +27,11 @@ var typeNames = map[string]Type{
 	"Object":   TObject,
 	"Resource":   TResource,
 	"Entity":     TResourceEntity,
+	"Array":      TArray,
 	"Type":       TType,
 	"ScalarType": TScalarType,
 	"NodeType":   TNodeType,
+	"ObjectType": TObjectType,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
@@ -116,11 +119,8 @@ func (e *Engine) stackSplice(i, count int, replacements ...Value) {
 // Run executes the input values through the stack machine and returns the
 // resulting stack.
 func (e *Engine) Run(input []Value) ([]Value, error) {
-	// Push a scoped context layer (shallow copy of parent context).
-	parent := e.registry.Context()
-	if parent == nil {
-		parent = make(map[string]Value)
-	}
+	// Push a scoped context Store whose prototype is the parent context.
+	parent := e.registry.ContextStore()
 	e.registry.PushContext(parent)
 	defer e.registry.PopContext()
 
@@ -327,8 +327,8 @@ func (e *Engine) stepWord(val Value) error {
 			// For list bodies, expand onto the stack like the fallback handler does.
 			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
 				elems := top.AsList()
-				expanded := make([]Value, len(elems))
-				copy(expanded, elems)
+				expanded := make([]Value, elems.Len())
+				copy(expanded, elems.Slice())
 				e.stackSplice(e.pointer, 1, expanded...)
 				return nil
 			}
@@ -838,12 +838,12 @@ func (e *Engine) autoEvalStack() error {
 // returning a new list containing the results. For example, [1 add 2] → [3].
 func (e *Engine) autoEvalList(val Value) (Value, error) {
 	elems := val.AsList()
-	if len(elems) == 0 {
+	if elems.Len() == 0 {
 		return val, nil
 	}
 	sub := New(e.registry)
-	input := make([]Value, len(elems))
-	copy(input, elems)
+	input := make([]Value, elems.Len())
+	copy(input, elems.Slice())
 	result, err := sub.Run(input)
 	if err != nil {
 		return Value{}, err
@@ -859,7 +859,7 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
-	m := val.AsMap()
+	m := val.AsMutableMap()
 	out := NewOrderedMap()
 	if m.Implicit {
 		out.Implicit = true

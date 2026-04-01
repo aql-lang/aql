@@ -57,7 +57,7 @@ func traceColorize(v Value) string {
 		}
 		return cRed + s + cReset
 	case v.VType.Equal(TList):
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = traceColorize(e)
@@ -109,7 +109,7 @@ func registerTrace(r *Registry) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 			}
-			elems := args[0].AsList()
+			elems := args[0].AsList().Slice()
 			return runTrace(r, elems, r.Output)
 		},
 	})

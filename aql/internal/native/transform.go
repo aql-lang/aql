@@ -68,7 +68,7 @@ func valueToAny(v engine.Value) any {
 		}
 		return out
 	case v.VType.Matches(engine.TList):
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		out := make([]any, len(elems))
 		for i, elem := range elems {
 			out[i] = valueToAny(elem)

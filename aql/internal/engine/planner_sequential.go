@@ -207,7 +207,7 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 
 		// Literal value: direct type check (metatype-aware).
 		if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
-			if tok.Data == nil && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
+			if tok.Data == nil && tok.VType.Equal(expectedType) && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
 				break // reject type literals for concrete Map/List
 			}
 			forwardMatched++
@@ -225,11 +225,13 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 	}
 
 	// Step 3: forward stopped short. Fill remaining suffix from stack.
+	// Stack args are mapped top-of-stack → first remaining sig position,
+	// matching rearrangeForForward's reversal order.
 	remaining := nArgs - forwardMatched
 	if forwardMatched > 0 && remaining > 0 && !forceForward && len(resolved) >= remaining {
 		ok := true
 		for j := 0; j < remaining; j++ {
-			stackVal := resolved[len(resolved)-remaining+j]
+			stackVal := resolved[len(resolved)-1-j]
 			sigIdx := forwardMatched + j
 			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
 				ok = false

@@ -28,7 +28,7 @@ func TestCreateHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -117,7 +117,7 @@ func TestUpdateHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -181,7 +181,7 @@ func TestRemoveHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}

@@ -539,7 +539,7 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 	for i := 0; i < len(items); i++ {
 		// Standalone dot (space-separated) → the dot word.
 		if isStandaloneDot(items[i]) {
-			values = append(values, engine.NewWord("dot"))
+			values = append(values, engine.NewWord("get"))
 			continue
 		}
 
@@ -556,16 +556,16 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 				continue
 			}
 			// Adjacent dot with nothing after → treat as dot word.
-			values = append(values, engine.NewWord("dot"))
+			values = append(values, engine.NewWord("get"))
 			continue
 		}
 
 		// Unquoted text potentially followed by an adjacent dot.
 		if text, ok := items[i].(jsonic.Text); ok && text.Quote == "" {
 			if i+1 < len(items) && isDotMarker(items[i+1]) {
-				// "!" followed by adjacent dot with nothing useful after → dotr.
+				// "!" followed by adjacent dot with nothing useful after → getr.
 				if text.Str == "!" && (i+2 >= len(items) || !isTextOrNumber(items[i+2])) {
-					values = append(values, engine.NewWord("dotr"))
+					values = append(values, engine.NewWord("getr"))
 					i++ // skip the dot marker
 					continue
 				}
@@ -931,9 +931,9 @@ func parseWord(text string) (engine.Value, error) {
 // expandDottedWord expands dot notation like "foo.a.b" into a sequence of
 // engine values: [( foo dot a dot b )]. The first segment is emitted as a
 // plain word, resolved by the engine (def lookup, registered function, or
-// atom). Each subsequent segment emits "dot" followed by the key, so that
+// atom). Each subsequent segment emits "get" followed by the key, so that
 // dot forward-collects the key in the same way as standalone "dot a".
-// A standalone "." becomes the "dot" word.
+// A standalone "." becomes the "get" word.
 // Leading dot (e.g. ".a.b") omits the first word and emits [dot a dot b],
 // operating on whatever value is already on the stack (no paren wrapping).
 //
@@ -944,12 +944,12 @@ func parseWord(text string) (engine.Value, error) {
 func expandDottedWord(text string) ([]engine.Value, error) {
 	// Standalone "." → just the dot word.
 	if text == "." {
-		return []engine.Value{engine.NewWord("dot")}, nil
+		return []engine.Value{engine.NewWord("get")}, nil
 	}
 
-	// Standalone "!." → just the dotr word.
+	// Standalone "!." → just the getr word.
 	if text == "!." {
-		return []engine.Value{engine.NewWord("dotr")}, nil
+		return []engine.Value{engine.NewWord("getr")}, nil
 	}
 
 	parts := strings.Split(text, ".")
@@ -972,7 +972,7 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 		if part == "" {
 			continue
 		}
-		inner = append(inner, engine.NewWord("dot"))
+		inner = append(inner, engine.NewWord("get"))
 		// Integer keys for list access.
 		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
 			inner = append(inner, engine.NewInteger(n))

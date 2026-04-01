@@ -293,7 +293,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TList) {
 		t.Errorf("read with lines fmt = %v, want list", result)
 	}
-	elems := result[0].AsList()
+	elems := result[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 lines, got %d", len(elems))
 	}
@@ -2000,7 +2000,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	if !v.IsTableType() {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -2031,7 +2031,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	if !v.IsTableType() {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -2113,8 +2113,8 @@ func TestEngineInspectBuiltin(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 	v := result[0]
-	if !v.VType.Equal(TWordInspection) {
-		t.Fatalf("expected type %s, got %s", TWordInspection, v.VType)
+	if !v.VType.Equal(TInspect) {
+		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
 	m := v.AsMap()
 
@@ -2135,7 +2135,7 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	if !ok {
 		t.Fatal("missing signatures field")
 	}
-	sigList := sigs.AsList()
+	sigList := sigs.AsList().Slice()
 	if len(sigList) == 0 {
 		t.Error("expected at least one signature for add")
 	}
@@ -2143,7 +2143,7 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	// Check first signature has args.
 	sig0 := sigList[0].AsMap()
 	args, _ := sig0.Get("args")
-	argList := args.AsList()
+	argList := args.AsList().Slice()
 	if len(argList) != 2 {
 		t.Errorf("expected 2 args for add, got %d", len(argList))
 	}
@@ -2192,7 +2192,7 @@ func TestEngineInspectUnknown(t *testing.T) {
 	}
 
 	sigs, _ := m.Get("signatures")
-	if len(sigs.AsList()) != 0 {
+	if len(sigs.AsList().Slice()) != 0 {
 		t.Errorf("expected empty signatures for unknown word")
 	}
 }
@@ -2229,8 +2229,8 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 	v := result[0]
-	if !v.VType.Equal(TTypeInspect) {
-		t.Fatalf("expected type %s, got %s", TTypeInspect, v.VType)
+	if !v.VType.Equal(TInspect) {
+		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
 	m := v.AsMap()
 
@@ -2854,9 +2854,9 @@ func TestTypeofMetatypes(t *testing.T) {
 		{"Any", NewTypeLiteral(TAny), "Type", "Type"},
 		{"None", NewTypeLiteral(TNone), "Type", "Type"},
 		{"Object", NewTypeLiteral(TObject), "Type", "Type"},
-		{"Table", NewTypeLiteral(TTable), "Type", "Type"},
-		{"Record", NewTypeLiteral(TRecord), "Type", "Type"},
-		{"Resource", NewTypeLiteral(TResource), "Type", "Type"},
+		{"Table", NewTypeLiteral(TTable), "ObjectType", "Type/ObjectType"},
+		{"Record", NewTypeLiteral(TRecord), "ObjectType", "Type/ObjectType"},
+		{"Resource", NewTypeLiteral(TResource), "ObjectType", "Type/ObjectType"},
 		{"Atom", NewTypeLiteral(TAtom), "ScalarType", "Type/ScalarType"},
 		{"Type", NewTypeLiteral(TType), "Type", "Type"},
 		{"ScalarType", NewTypeLiteral(TScalarType), "Type", "Type"},

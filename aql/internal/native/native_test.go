@@ -80,7 +80,7 @@ func TestCloneHandlerList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -95,7 +95,7 @@ func TestFlattenDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 4 {
 		t.Errorf("expected 4 elements, got %d", len(list))
 	}
@@ -111,7 +111,7 @@ func TestFlattenDepthHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	// [1, 3, [4]] -> 3 elements
 	if len(list) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(list))
@@ -201,12 +201,12 @@ func TestItemsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 pairs, got %d", len(list))
 	}
 	// Each item is [key, value]
-	pair := list[0].AsList()
+	pair := list[0].AsList().Slice()
 	if len(pair) != 2 {
 		t.Fatalf("expected pair of 2, got %d", len(pair))
 	}
@@ -382,7 +382,7 @@ func TestSliceAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3, got %d", len(list))
 	}
@@ -394,7 +394,7 @@ func TestSliceStartHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -406,7 +406,7 @@ func TestSliceStartEndHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -437,7 +437,7 @@ func TestWalkHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) < 2 {
 		t.Errorf("expected at least 2 leaf nodes, got %d", len(list))
 	}
@@ -459,7 +459,7 @@ func TestWalkHandlerEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 leaves for empty map, got %d", len(list))
 	}
@@ -566,7 +566,7 @@ func TestListRecordAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -579,7 +579,7 @@ func TestListRecordFilterHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -593,7 +593,7 @@ func TestCreateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -622,7 +622,7 @@ func TestUpdateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -636,7 +636,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -683,7 +683,7 @@ func TestFilterHandler(t *testing.T) {
 	// All items should pass the filter (fn always returns true).
 	// voxgigstruct.Filter on a map may return a map or list; just check non-nil.
 	if result[0].VType.Equal(engine.TList) {
-		list := result[0].AsList()
+		list := result[0].AsList().Slice()
 		if len(list) != 2 {
 			t.Errorf("expected 2 entries, got %d", len(list))
 		}

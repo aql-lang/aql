@@ -108,7 +108,7 @@ func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listAllHandler returns all records from a table as a list.
 func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
 	return []engine.Value{engine.NewList(result)}, nil
@@ -118,7 +118,7 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // A record matches when every key-value pair in the filter map has an equal
 // value in the corresponding record field.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	filter := args[1].AsMap()
 
 	var matched []engine.Value
@@ -153,7 +153,7 @@ func listRecordFilterHandler(args []engine.Value, ctx map[string]engine.Value, s
 // recordMatches reports whether all key-value pairs in filter are present
 // in rec with equal values. Equality is checked by comparing Value.String()
 // representations for scalar types and structural equality for others.
-func recordMatches(rec *engine.OrderedMap, filter *engine.OrderedMap) bool {
+func recordMatches(rec engine.ReadMap, filter engine.ReadMap) bool {
 	for _, key := range filter.Keys() {
 		filterVal, _ := filter.Get(key)
 		recVal, ok := rec.Get(key)

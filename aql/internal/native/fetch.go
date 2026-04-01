@@ -87,7 +87,7 @@ func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 //   - headers (map, optional) — request headers
 //   - body    (string, optional) — request body
 //   - timeout (integer, optional, default 30000) — timeout in milliseconds
-func doFetch(reqOM *engine.OrderedMap) ([]engine.Value, error) {
+func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {

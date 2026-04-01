@@ -26,7 +26,7 @@ func pushFunc() NativeFunc {
 }
 
 func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList()
+	list := args[0].AsList().Slice()
 	if list == nil {
 		return nil, fmt.Errorf("push: expected concrete list")
 	}
@@ -37,7 +37,7 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 
 	// If element is a list, spread its elements.
 	if elem.VType.Equal(engine.TList) && elem.Data != nil {
-		if elems := elem.AsList(); elems != nil {
+		if elems := elem.AsList().Slice(); elems != nil {
 			result = append(result, elems...)
 		}
 	} else {
@@ -66,7 +66,7 @@ func popFunc() NativeFunc {
 }
 
 func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList()
+	list := args[0].AsList().Slice()
 	if list == nil || len(list) == 0 {
 		return nil, fmt.Errorf("pop: cannot pop from empty list")
 	}
@@ -98,7 +98,7 @@ func unshiftFunc() NativeFunc {
 }
 
 func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList()
+	list := args[0].AsList().Slice()
 	if list == nil {
 		return nil, fmt.Errorf("unshift: expected concrete list")
 	}
@@ -107,7 +107,7 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	var prefix []engine.Value
 	// If element is a list, spread its elements.
 	if elem.VType.Equal(engine.TList) && elem.Data != nil {
-		if elems := elem.AsList(); elems != nil {
+		if elems := elem.AsList().Slice(); elems != nil {
 			prefix = elems
 		}
 	} else {
@@ -140,7 +140,7 @@ func shiftFunc() NativeFunc {
 }
 
 func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList()
+	list := args[0].AsList().Slice()
 	if list == nil || len(list) == 0 {
 		return nil, fmt.Errorf("shift: cannot shift from empty list")
 	}

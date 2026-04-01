@@ -164,8 +164,8 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if qb.Registry.SQLite.HasTable(j.Table) {
 			continue
 		}
-		// Look up the table in the store and load it.
-		val, ok := qb.Registry.Store[j.Table]
+		// Look up the table in the context store and load it.
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
 		}
@@ -197,7 +197,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	}
 	// Add joined table fields.
 	for _, j := range qb.Joins {
-		val, ok := qb.Registry.Store[j.Table]
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			// Try the original name if it was remapped to a temp table.
 			continue
@@ -365,7 +365,7 @@ func registerQuery(r *Registry) {
 	// from: [atom] -> [query-builder]
 	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := args[0].AsAtom()
-		val, ok := r.Store[name]
+		val, ok := contextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
 		}
@@ -736,7 +736,7 @@ func registerQuery(r *Registry) {
 		table := args[0]
 		colList := args[1]
 
-		elems := colList.AsList()
+		elems := colList.AsList().Slice()
 		cols := make([]string, 0, len(elems))
 		for _, e := range elems {
 			name := valueToColName(e)
@@ -858,7 +858,7 @@ type columnSpec struct {
 //   - [[cast age integer]]       — CAST("age" AS INTEGER)
 //   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
 func parseColumnSpec(colList Value) ([]columnSpec, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	cols := make([]columnSpec, 0, len(elems))
 	for _, e := range elems {
 		switch {
@@ -872,7 +872,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 			wname := e.AsWord().Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
-			pair := e.AsList()
+			pair := e.AsList().Slice()
 			if len(pair) < 2 {
 				return nil, fmt.Errorf("select: column spec list must have at least 2 elements")
 			}
@@ -1120,7 +1120,7 @@ var logicalOps = map[string]string{
 // The inner list elements are scanned for paren tokens. When found, the
 // sub-expression is evaluated and the result replaces the paren tokens.
 func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return colList, nil
 	}
@@ -1199,7 +1199,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 // The "(select [city] from cities)" tokens are evaluated, producing a
 // TableData value that buildInList can extract values from.
 func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return condList, nil
 	}
@@ -1276,7 +1276,7 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 // [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
 // [... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1555,7 +1555,7 @@ func buildInList(v Value) (string, error) {
 		return buildInListFromTable(td)
 	}
 
-	elems := v.AsList()
+	elems := v.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty IN list")
 	}
@@ -1675,7 +1675,7 @@ func valueToSQL(v Value) (string, error) {
 
 // buildGroupByClause translates a column list into a SQL GROUP BY clause.
 func buildGroupByClause(colList Value) (string, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty group by column list")
 	}
@@ -1693,7 +1693,7 @@ func buildGroupByClause(colList Value) (string, error) {
 // buildJoinCondition translates a condition list into a SQL ON clause.
 // Supports dot-separated qualified names: [a.id eq b.id]
 func buildJoinCondition(condList Value) (string, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1759,7 +1759,7 @@ func quoteJoinCol(name string) string {
 //   - [col1 asc nulls first]         — with nulls placement
 //   - [1, 2 desc]                    — positional (1-based)
 func buildOrderClause(colList Value) (string, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty order column list")
 	}

@@ -31,8 +31,7 @@ func registerError(r *Registry) {
 			return nil, fmt.Errorf("error: handler must be a concrete list, got type literal")
 		}
 		sub := New(r)
-		body := make([]Value, len(args[1].AsList()))
-		copy(body, args[1].AsList())
+		body := args[1].AsList().Slice()
 		return sub.Run(body)
 	}
 

@@ -44,9 +44,9 @@ func isTruthy(v Value) bool {
 func spliceArg(v Value) []Value {
 	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList()
-		result := make([]Value, 0, len(elems)+2)
+		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
-		result = append(result, elems...)
+		result = append(result, elems.Slice()...)
 		result = append(result, NewWord(")"))
 		return result
 	}
@@ -63,11 +63,11 @@ func registerIf(r *Registry) {
 
 		// If condition is a list, use mark/move to evaluate it in-place.
 		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
-			condElems := cond.AsList()
+			condSlice := cond.AsList().Slice()
 			id := NextMarkID()
-			tokens := make([]Value, 0, len(condElems)+2)
-			tokens = append(tokens, NewMark(id, condElems...))
-			tokens = append(tokens, condElems...)
+			tokens := make([]Value, 0, len(condSlice)+2)
+			tokens = append(tokens, NewMark(id, condSlice...))
+			tokens = append(tokens, condSlice...)
 			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
 				Then: thenBranch,
 				Else: elseBranch,
@@ -90,11 +90,11 @@ func registerIf(r *Registry) {
 
 		// If condition is a list, use mark/move to evaluate it in-place.
 		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
-			condElems := cond.AsList()
+			condSlice := cond.AsList().Slice()
 			id := NextMarkID()
-			tokens := make([]Value, 0, len(condElems)+2)
-			tokens = append(tokens, NewMark(id, condElems...))
-			tokens = append(tokens, condElems...)
+			tokens := make([]Value, 0, len(condSlice)+2)
+			tokens = append(tokens, NewMark(id, condSlice...))
+			tokens = append(tokens, condSlice...)
 			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
 				Then: thenBranch,
 				Else: nil,

@@ -22,12 +22,11 @@ func registerCall(r *Registry) {
 			}
 
 			bodyElems := body.AsList()
-			if len(bodyElems) == 0 {
+			if bodyElems.Len() == 0 {
 				return nil, nil
 			}
 
-			bodyCopy := make([]Value, len(bodyElems))
-			copy(bodyCopy, bodyElems)
+			bodyCopy := bodyElems.Slice()
 			return bodyCopy, nil
 		},
 	})

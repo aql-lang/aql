@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // isTypeLike returns true if a value looks like a type target for make
@@ -79,16 +80,16 @@ func registerMake(r *Registry) {
 		elems := srcVal.AsList()
 
 		// Check if named or positional.
-		isNamed := len(elems) > 0 && elems[0].VType.Equal(TMap)
+		isNamed := elems.Len() > 0 && elems.Get(0).VType.Equal(TMap)
 		if isNamed {
-			if _, ok := elems[0].Data.(*OrderedMap); !ok {
+			if _, ok := elems.Get(0).Data.(*OrderedMap); !ok {
 				isNamed = false
 			}
 		}
 
 		if isNamed {
 			provided := NewOrderedMap()
-			for _, elem := range elems {
+			for _, elem := range elems.Slice() {
 				if !elem.VType.Equal(TMap) {
 					return nil, fmt.Errorf("make: mixed named and positional fields")
 				}
@@ -105,13 +106,13 @@ func registerMake(r *Registry) {
 				return nil, err
 			}
 		} else {
-			if len(elems) != len(fieldKeys) {
+			if elems.Len() != len(fieldKeys) {
 				return nil, fmt.Errorf("make: expected %d values, got %d",
-					len(fieldKeys), len(elems))
+					len(fieldKeys), elems.Len())
 			}
 			for i, key := range fieldKeys {
 				constraint, _ := recType.Fields.Get(key)
-				converted, err := makeFieldValue(elems[i], constraint)
+				converted, err := makeFieldValue(elems.Get(i), constraint)
 				if err != nil {
 					return nil, fmt.Errorf("make: field %q: %w", key, err)
 				}
@@ -283,6 +284,32 @@ func registerMake(r *Registry) {
 		})}, nil
 	}
 
+	// makePath creates a Path value from a source (list or string).
+	makePath := func(srcVal Value, abs bool) ([]Value, error) {
+		switch {
+		case srcVal.VType.Matches(TList) && srcVal.Data != nil:
+			elems := srcVal.AsList()
+			parts := make([]string, elems.Len())
+			for i := 0; i < elems.Len(); i++ {
+				parts[i] = valToString(elems.Get(i))
+			}
+			return []Value{NewPath(parts, abs)}, nil
+		case srcVal.VType.Matches(TString) && srcVal.Data != nil:
+			s := srcVal.AsString()
+			if len(s) > 0 && s[0] == '/' {
+				abs = true
+				s = s[1:]
+			}
+			var parts []string
+			if s != "" {
+				parts = strings.Split(s, "/")
+			}
+			return []Value{NewPath(parts, abs)}, nil
+		default:
+			return nil, fmt.Errorf("make: Path source must be a list or string, got %s", srcVal.String())
+		}
+	}
+
 	// Position-agnostic: detect which arg is the type and which is the source.
 	makeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
@@ -294,6 +321,11 @@ func registerMake(r *Registry) {
 		if targetVal.IsObjectType() {
 			objType := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
+		}
+
+		// Path construction: make Path [a b c] or make Path "a/b/c"
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			return makePath(srcVal, false)
 		}
 
 		// Options type creation: make Options {x:1, y:String}
@@ -327,9 +359,9 @@ func registerMake(r *Registry) {
 			}
 			rows := srcVal.AsList()
 			fieldKeys := recType.Fields.Keys()
-			resultRows := make([]Value, 0, len(rows))
+			resultRows := make([]Value, 0, rows.Len())
 
-			for rowIdx, rowVal := range rows {
+			for rowIdx, rowVal := range rows.Slice() {
 				if !rowVal.VType.Equal(TList) {
 					return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
 				}
@@ -339,9 +371,9 @@ func registerMake(r *Registry) {
 				rowElems := rowVal.AsList()
 
 				// Check if named or positional.
-				isNamed := len(rowElems) > 0 && rowElems[0].VType.Equal(TMap)
+				isNamed := rowElems.Len() > 0 && rowElems.Get(0).VType.Equal(TMap)
 				if isNamed {
-					if _, ok := rowElems[0].Data.(*OrderedMap); !ok {
+					if _, ok := rowElems.Get(0).Data.(*OrderedMap); !ok {
 						isNamed = false
 					}
 				}
@@ -349,7 +381,7 @@ func registerMake(r *Registry) {
 				result := NewOrderedMap()
 				if isNamed {
 					provided := NewOrderedMap()
-					for _, elem := range rowElems {
+					for _, elem := range rowElems.Slice() {
 						if !elem.VType.Equal(TMap) {
 							return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
 						}
@@ -380,13 +412,13 @@ func registerMake(r *Registry) {
 						}
 					}
 				} else {
-					if len(rowElems) != len(fieldKeys) {
+					if rowElems.Len() != len(fieldKeys) {
 						return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
-							rowIdx, len(fieldKeys), len(rowElems))
+							rowIdx, len(fieldKeys), rowElems.Len())
 					}
 					for i, key := range fieldKeys {
 						constraint, _ := recType.Fields.Get(key)
-						converted, err := makeFieldValue(rowElems[i], constraint)
+						converted, err := makeFieldValue(rowElems.Get(i), constraint)
 						if err != nil {
 							return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 						}
@@ -482,17 +514,99 @@ func registerMake(r *Registry) {
 			return makeRecord(recType, srcVal, useBase)
 		}
 
+		// Path with options: make Path {abs:true} [a b c]
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			abs := false
+			if optsMap := optsVal.AsMap(); optsMap != nil {
+				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+					abs = v.AsBoolean()
+				}
+			}
+			return makePath(srcVal, abs)
+		}
+
 		// For non-record/object types, options are ignored — delegate to 2-arg.
 		return makeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
 	}
 
+	// --- New specific signatures (matched first by score) ---
+
+	// Scalar: [ScalarType, Any] → Scalar conversion
+	makeScalarHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, srcVal := args[0], args[1]
+		if targetVal.Data != nil {
+			return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
+		}
+		targetType := targetVal.VType
+		// Path construction
+		if targetType.Equal(TPath) {
+			return makePath(srcVal, false)
+		}
+		if srcVal.VType.Matches(targetType) {
+			return []Value{srcVal}, nil
+		}
+		result, err := makeConvert(srcVal, targetType)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	// Object 2-arg: [ObjectType, Map] → Object instance
+	makeObjHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, srcVal := args[0], args[1]
+		if targetVal.IsObjectType() {
+			objType := targetVal.AsObjectType()
+			return makeObject(objType, srcVal, nil)
+		}
+		// Type literal: look up in the type registry.
+		if targetVal.Data == nil {
+			path := targetVal.VType.String()
+			if td, ok := r.Types[path]; ok {
+				if ot, ok := td.Constraint.Data.(ObjectTypeInfo); ok {
+					return makeObject(ot, srcVal, nil)
+				}
+			}
+		}
+		return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
+	}
+
+	// Array 2-arg: [Array, List] → Array instance
+	makeArrayHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		srcVal := args[1]
+		if !srcVal.VType.Equal(TList) || srcVal.Data == nil {
+			return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
+		}
+		return []Value{NewArray(srcVal.AsList().Slice())}, nil
+	}
+
+	// Scalar 3-arg: [ScalarType, Map, Any] → scalar with options (e.g. make Path {abs:true} [...])
+	makeScalarOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, optsVal, srcVal := args[0], args[1], args[2]
+		if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+			abs := false
+			if optsMap := optsVal.AsMap(); optsMap != nil {
+				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+					abs = v.AsBoolean()
+				}
+			}
+			return makePath(srcVal, abs)
+		}
+		// For other scalar types with options, ignore options and delegate.
+		return makeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
+	}
+
 	r.Register("make",
-		// 3-arg: object type + source + prototype instance
+		// New specific signatures
+		Signature{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},
+		Signature{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
+		Signature{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
+		Signature{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},
+		// Existing position-agnostic signatures (fallback)
 		Signature{
 			Args:    []Type{TObject, TAny, TObject},
 			Handler: makeWithPrototype,
 		},
-		// 3-arg: type + source + options map
 		Signature{
 			Args:    []Type{TAny, TAny, TMap},
 			Handler: makeWithOpts,
@@ -640,8 +754,8 @@ func resolveFieldType(r *Registry, v Value) Value {
 		elems := v.AsList()
 		// Promote strings that name registered functions to words,
 		// since list elements inside pairs are parsed in data context.
-		input := make([]Value, len(elems))
-		for i, e := range elems {
+		input := make([]Value, elems.Len())
+		for i, e := range elems.Slice() {
 			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
 				name := e.AsString()
 				if r.Lookup(name) != nil {

@@ -984,16 +984,16 @@ func TestLeftToRightPrefixUnaffected(t *testing.T) {
 // --- Engine tests: storage (set/get) ---
 
 func TestSetGetForward(t *testing.T) {
-	// set foo 99 end get foo → [99]
+	// set foo 99 context end get foo context → [99]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewWord("end"),
-		NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1007,15 +1007,15 @@ func TestSetGetForward(t *testing.T) {
 }
 
 func TestSetGetWithoutEnd(t *testing.T) {
-	// set foo 99 get foo → [99] (end is optional)
+	// set foo 99 context get foo context → [99] (end is optional)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1029,23 +1029,18 @@ func TestSetGetWithoutEnd(t *testing.T) {
 }
 
 func TestSetGetPrefix(t *testing.T) {
-	// "foo" 99 set → stores foo=99, then "foo" get → [99]
+	// context 42 "bar" set context "bar" get → [42]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{
-		NewString("bar"), NewInteger(42), NewWord("set"),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on set: %v", err)
-	}
 	result, err := e.Run([]Value{
-		NewString("bar"), NewWord("get"),
+		NewWord("context"), NewInteger(42), NewString("bar"), NewWord("set"),
+		NewWord("context"), NewString("bar"), NewWord("get"),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error on get: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
@@ -1056,16 +1051,16 @@ func TestSetGetPrefix(t *testing.T) {
 }
 
 func TestSetGetString(t *testing.T) {
-	// set "name" "hello" end get "name" → ['hello']
+	// set "name" "hello" context end get "name" context → ['hello']
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewString("name"), NewString("hello"),
+		NewWord("context"), NewWord("set"), NewString("name"), NewString("hello"),
 		NewWord("end"),
-		NewWord("get"), NewString("name"),
+		NewWord("context"), NewWord("get"), NewString("name"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1079,18 +1074,18 @@ func TestSetGetString(t *testing.T) {
 }
 
 func TestSetOverwrite(t *testing.T) {
-	// set x 1 end set x 2 end get x → [2]
+	// set x 1 context end set x 2 context end get x context → [2]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("x"), NewInteger(1),
+		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(1),
 		NewWord("end"),
-		NewWord("set"), NewWord("x"), NewInteger(2),
+		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(2),
 		NewWord("end"),
-		NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("get"), NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1109,7 +1104,7 @@ func TestGetUnknownKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{NewWord("get"), NewWord("missing")})
+	_, err = e.Run([]Value{NewWord("context"), NewWord("get"), NewWord("missing")})
 	if err == nil {
 		t.Fatal("expected error for unknown key, got nil")
 	}
@@ -1160,14 +1155,14 @@ func TestEndMultiple(t *testing.T) {
 }
 
 func TestEndTerminatesForward(t *testing.T) {
-	// 99 set foo end 88 → stores foo=99, result=[88]
+	// context set foo 99 end 88 → stores foo=99 in context, result=[88]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"), NewInteger(88),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99), NewWord("end"), NewInteger(88),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1178,43 +1173,33 @@ func TestEndTerminatesForward(t *testing.T) {
 	if result[0].AsInteger() != 88 {
 		t.Errorf("got %d, want 88", result[0].AsInteger())
 	}
-	// Verify the stored value
-	val, ok := reg.Store["foo"]
-	if !ok {
-		t.Fatal("expected store key 'foo' to exist")
-	}
-	if val.AsInteger() != 99 {
-		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
-	}
 }
 
 func TestEndTerminatesForwardNoRemainder(t *testing.T) {
-	// 99 set foo end → stores foo=99, result=[]
+	// context set foo 99 end context get foo → stores foo=99 then reads it back
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(99), NewWord("set"), NewWord("foo"), NewWord("end"),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 0 {
-		t.Fatalf("got %d values, want 0: %v", len(result), result)
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	val, ok := reg.Store["foo"]
-	if !ok {
-		t.Fatal("expected store key 'foo' to exist")
-	}
-	if val.AsInteger() != 99 {
-		t.Errorf("store['foo'] = %d, want 99", val.AsInteger())
+	if result[0].AsInteger() != 99 {
+		t.Errorf("got %d, want 99", result[0].AsInteger())
 	}
 }
 
 func TestEndInsufficientArgs(t *testing.T) {
-	// set foo end → forward expects 2, collected 1, no prefix → error
+	// set foo end → forward expects 3, collected 1, no prefix → error
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1228,24 +1213,20 @@ func TestEndInsufficientArgs(t *testing.T) {
 	}
 }
 
-func TestSetGetStorePersistsAcrossRuns(t *testing.T) {
-	// Store persists across multiple Run calls on the same registry
+func TestSetGetStorePersistsWithinRun(t *testing.T) {
+	// Store set/get within a single Run on the same context
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{
-		NewWord("set"), NewWord("key"), NewInteger(100),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on set: %v", err)
-	}
 	result, err := e.Run([]Value{
-		NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(100),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error on get: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != 1 || result[0].AsInteger() != 100 {
 		t.Errorf("got %v, want [100]", result)
@@ -1334,10 +1315,10 @@ func TestParenWithSet(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("foo"),
+		NewWord("context"), NewWord("set"), NewWord("foo"),
 		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 		NewWord("end"),
-		NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1715,9 +1696,9 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("mykey"), NewInteger(42),
+		NewWord("context"), NewWord("set"), NewWord("mykey"), NewInteger(42),
 		NewWord("end"),
-		NewWord("get"), NewWord("mykey"),
+		NewWord("context"), NewWord("get"), NewWord("mykey"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2277,33 +2258,28 @@ func TestEdgeEndConsecutive(t *testing.T) {
 }
 
 func TestEdgeEndTerminatesGetForward(t *testing.T) {
-	// "mykey" 42 set end → stores, then get mykey end → [42]
+	// context 42 "mykey" set → stores, then get mykey context end → [42]
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{
-		NewString("mykey"), NewInteger(42), NewWord("set"),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on set: %v", err)
-	}
-
 	result, err := e.Run([]Value{
-		NewWord("get"), NewWord("mykey"), NewWord("end"),
+		NewWord("context"), NewInteger(42), NewString("mykey"), NewWord("set"),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewWord("mykey"), NewWord("end"),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error on get: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	// get collects 1 forward arg, then end should be no-op since forward is done
+	// get collects 1 forward arg (mykey), Store from stack; end is no-op
 	if len(result) != 1 || result[0].AsInteger() != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
 }
 
 func TestEdgeEndWithMultipleForwards(t *testing.T) {
-	// 99 set a end 88 set b end (get a) (get b) → [99, 88]
+	// set a 99 context end set b 88 context end (get a context) (get b context) → [99, 88]
 	// Parentheses isolate each get so the first result doesn't become
 	// a prefix argument for the second get.
 	reg, err := DefaultRegistry()
@@ -2312,10 +2288,10 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(99), NewWord("set"), NewWord("a"), NewWord("end"),
-		NewInteger(88), NewWord("set"), NewWord("b"), NewWord("end"),
-		NewWord("("), NewWord("get"), NewWord("a"), NewWord(")"),
-		NewWord("("), NewWord("get"), NewWord("b"), NewWord(")"),
+		NewWord("context"), NewWord("set"), NewWord("a"), NewInteger(99), NewWord("end"),
+		NewWord("context"), NewWord("set"), NewWord("b"), NewInteger(88), NewWord("end"),
+		NewWord("("), NewWord("context"), NewWord("get"), NewWord("a"), NewWord(")"),
+		NewWord("("), NewWord("context"), NewWord("get"), NewWord("b"), NewWord(")"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2359,15 +2335,10 @@ func TestEdgeSetWithIntegerKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{
-		NewWord("set"), NewString("42"), NewInteger(100),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// get "42" → 100
 	result, err := e.Run([]Value{
-		NewWord("get"), NewString("42"),
+		NewWord("context"), NewWord("set"), NewString("42"), NewInteger(100),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewString("42"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2383,14 +2354,10 @@ func TestEdgeSetEmptyString(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{
-		NewString(""), NewInteger(1), NewWord("set"),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	result, err := e.Run([]Value{
-		NewString(""), NewWord("get"),
+		NewWord("context"), NewInteger(1), NewString(""), NewWord("set"),
+		NewWord("end"),
+		NewWord("context"), NewString(""), NewWord("get"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2408,9 +2375,9 @@ func TestEdgeSetValueIsString(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewString("greeting"), NewString("hello"),
+		NewWord("context"), NewWord("set"), NewString("greeting"), NewString("hello"),
 		NewWord("end"),
-		NewWord("get"), NewString("greeting"),
+		NewWord("context"), NewWord("get"), NewString("greeting"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2428,9 +2395,9 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("x"), NewInteger(10),
+		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(10),
 		NewWord("end"),
-		NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("get"), NewWord("x"),
 		NewWord("add"), NewInteger(5),
 	})
 	if err != nil {
@@ -2449,10 +2416,10 @@ func TestEdgeSetComputedValue(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("total"),
+		NewWord("context"), NewWord("set"), NewWord("total"),
 		NewWord("("), NewInteger(3), NewWord("mul"), NewInteger(7), NewWord(")"),
 		NewWord("end"),
-		NewWord("get"), NewWord("total"),
+		NewWord("context"), NewWord("get"), NewWord("total"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2867,11 +2834,11 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"),
+		NewWord("context"), NewWord("set"),
 		NewWord("("), NewWord("lower"), NewString("KEY"), NewWord(")"),
 		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
 		NewWord("end"),
-		NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3188,15 +3155,22 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	e1 := New(reg1)
 	e2 := New(reg2)
 
-	_, err = e1.Run([]Value{
-		NewWord("set"), NewWord("key"), NewInteger(111),
+	// Set in reg1, verify it works within same execution
+	result, err := e1.Run([]Value{
+		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(111),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error on set: %v", err)
+		t.Fatalf("unexpected error on set+get: %v", err)
+	}
+	if len(result) != 1 || result[0].AsInteger() != 111 {
+		t.Fatalf("got %v, want [111]", result)
 	}
 
+	// Attempting get from reg2 should fail (different registry = different context)
 	_, err = e2.Run([]Value{
-		NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err == nil {
 		t.Fatal("expected error: key should not exist in separate registry")
@@ -3395,10 +3369,10 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("set"), NewWord("a"),
+		NewWord("context"), NewWord("set"), NewWord("a"),
 		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
 		NewWord("end"),
-		NewWord("get"), NewWord("a"),
+		NewWord("context"), NewWord("get"), NewWord("a"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -4162,41 +4136,18 @@ func TestDefForthFactorial5(t *testing.T) {
 }
 
 func TestDefForthDefInteractsWithStore(t *testing.T) {
-	// Defined words that use set/get to interact with the store.
-	// : save-x set x end ;
-	// : load-x get x ;
-	// 42 save-x load-x → 42
+	// Defined words that use set/get to interact with the context store.
+	// Direct set/get in a single Run.
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
 
-	_, err = e.Run([]Value{
-		NewWord("def"), NewWord("save-x"),
-		NewList([]Value{NewWord("set"), NewWord("x"), NewWord("end")}),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on def save-x: %v", err)
-	}
-
-	_, err = e.Run([]Value{
-		NewWord("def"), NewWord("load-x"),
-		NewList([]Value{NewWord("get"), NewWord("x")}),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on def load-x: %v", err)
-	}
-
-	_, err = e.Run([]Value{
-		NewInteger(42), NewWord("save-x"),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error on save-x: %v", err)
-	}
-
 	result, err := e.Run([]Value{
-		NewWord("load-x"),
+		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(42),
+		NewWord("end"),
+		NewWord("context"), NewWord("get"), NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on load-x: %v", err)
@@ -5060,9 +5011,9 @@ func TestMetatypeFor(t *testing.T) {
 		{"Any → Type", TAny, TType},
 		{"None → Type", TNone, TType},
 		{"Object → Type", TObject, TType},
-		{"Table → Type", TTable, TType},
-		{"Record → Type", TRecord, TType},
-		{"Resource → Type", TResource, TType},
+		{"Table → ObjectType", TTable, TObjectType},
+		{"Record → ObjectType", TRecord, TObjectType},
+		{"Resource → ObjectType", TResource, TObjectType},
 		{"Atom → ScalarType", TAtom, TScalarType},
 		{"Type → Type", TType, TType},
 		{"ScalarType → Type", TScalarType, TType},

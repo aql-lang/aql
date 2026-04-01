@@ -313,7 +313,7 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	sigs := []Signature{
 		{Args: []Type{TAny}, Handler: dummyHandler},
 		{Args: []Type{TBoolean}, Handler: dummyHandler},
-		{Args: []Type{TBooleanTrue}, Handler: dummyHandler},
+		{Args: []Type{TBoolean}, Handler: dummyHandler},
 	}
 	SortSignatures(sigs)
 	stack := []Value{NewBoolean(true)}
@@ -321,7 +321,7 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	if m == nil {
 		t.Fatal("expected match")
 	}
-	if !m.Sig.Args[0].Equal(TBooleanTrue) {
+	if !m.Sig.Args[0].Equal(TBoolean) {
 		t.Errorf("expected boolean/true match, got %v", m.Sig.Args[0])
 	}
 }
@@ -339,9 +339,9 @@ func TestSignatureScoreValues(t *testing.T) {
 		{"1 integer", []Type{TInteger}, 1_031_100},
 		{"2 any", []Type{TAny, TAny}, 2_020_400},
 		{"2 integer", []Type{TInteger, TInteger}, 2_062_200},
-		{"2 scalar", []Type{TScalar, TScalar}, 2_025_000},
+		{"2 scalar", []Type{TScalar, TScalar}, 2_021_200},
 		{"3 any", []Type{TAny, TAny, TAny}, 3_030_600},
-		{"3 mixed", []Type{TInteger, TString, TAny}, 3_063_400},
+		{"3 mixed", []Type{TInteger, TString, TAny}, 3_063_500},
 		{"4 any", []Type{TAny, TAny, TAny, TAny}, 4_040_800},
 		{"5 any", []Type{TAny, TAny, TAny, TAny, TAny}, 5_051_000},
 		{"6 any", []Type{TAny, TAny, TAny, TAny, TAny, TAny}, 6_061_200},

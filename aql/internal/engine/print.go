@@ -107,8 +107,8 @@ func formatMapJSON(v Value) string {
 // formatListJSON formats a list value as a JSON-like string.
 func formatListJSON(v Value) string {
 	elems := v.AsList()
-	parts := make([]string, len(elems))
-	for i, e := range elems {
+	parts := make([]string, elems.Len())
+	for i, e := range elems.Slice() {
 		parts[i] = formatValueJSON(e)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"

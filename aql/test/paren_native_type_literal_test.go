@@ -87,7 +87,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				items := result[0].AsList()
+				items := result[0].AsList().Slice()
 				if len(items) != 1 {
 					t.Errorf("expected 1 item pair, got %d", len(items))
 				}
@@ -184,7 +184,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				items := result[0].AsList()
+				items := result[0].AsList().Slice()
 				if len(items) != 3 {
 					t.Errorf("expected 3 elements, got %d", len(items))
 				}
@@ -228,7 +228,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		// Accessors
 		{"dot-map-atom", `Map dot a`},
 		{"dot-list-int", `List dot 0`},
-		{"dotr-map-atom", `Map a dotr`},
+		{"getr-map-atom", `Map a getr`},
 
 		// Control
 		{"do-list", `do List`},
@@ -277,7 +277,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 
 		// Additional accessors
 		{"dot-map-no-field", `Map dot`},
-		{"dotr-list", `List 0 dotr`},
+		{"getr-list", `List 0 getr`},
 
 		// Stack ops with type literals
 		{"dup-map", `Map dup`},

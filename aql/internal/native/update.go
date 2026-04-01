@@ -102,7 +102,7 @@ func updateRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // updateHandler finds a record by its "id" field and merges the provided
 // fields into it. Returns the updated table. The map must contain an "id" field.
 func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	patch := args[1].AsMap()
 
 	idVal, ok := patch.Get("id")

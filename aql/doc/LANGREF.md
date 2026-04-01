@@ -1439,48 +1439,61 @@ Rotate the nth item to the top of the stack (0-indexed).
 
 ### Storage Words
 
-#### `set`
-
-Store a value under a key. The key may be a bare word or a string.
-
-*Signatures:*
-- `[string, any] -> []`
-- `[word, any] -> []`
-- `[any, any] -> []`
-
-*Precedence:* forward
-
-```
-set foo 99 end
-set bar "hello" end
-set "key" 42 end
-```
-
-#### `get`
-
-Retrieve a previously stored value by key.
-
-*Signature:* `[any] -> [any]`
-*Precedence:* forward
-
-```
-set foo 99 end get foo      => 99
-set bar "hello" end get bar => 'hello'
-```
-
 #### `context`
 
-Scoped key-value storage. Use `context set key value` to store a
-value and `context get key` to retrieve it. Context values are scoped
-to the current execution context.
+Push the current context Store onto the stack. The context is a
+mutable Store (Object/Store) with prototype chain resolution for
+nested scopes.
 
-*Signature:* `[word] -> []`
+*Signature:* `[] -> [Store]`
+
+```
+context                     => Store
+```
+
+#### `set`
+
+Store a value under a key in an explicit Store. The key may be a bare
+word or a string.
+
+*Signatures:*
+- `[string, any, Store] -> []`
+- `[atom, any, Store] -> []`
+
 *Precedence:* forward
 
 ```
-context set "x" 42 context get "x"        => 42
-context set "a" 10 context get "a"        => 10
-context get "missing"                     => None
+context set foo 99
+context set bar "hello"
+context set "key" 42
+```
+
+#### `get` (alias `.`)
+
+Retrieve a value by key from a Store, Map, List, or Object. For Store
+lookups, key resolution walks the prototype chain. For Maps and
+Objects, returns None if the key is missing. The `.` operator is an
+alias. Dot notation `foo.bar` is expanded by the parser to `get bar`.
+
+*Signatures:*
+- `[string, Store] -> [any]` — Store lookup
+- `[atom, Store] -> [any]`
+- `[atom, Node] -> [any]` — Map property / List index
+- `[string, Node] -> [any]`
+- `[integer, Node] -> [any]`
+- `[atom, Object] -> [any]` — Object field access
+- `[string, Object] -> [any]`
+- `[integer, Object] -> [any]`
+- `[any, None] -> [None]` — None propagation
+
+*Precedence:* forward
+
+```
+context set foo 99 end context get foo    => 99
+{x:1,y:2} get x                          => 1
+{x:1,y:2} . x                            => 1
+[10,20,30] . 1                            => 20
+none . x                                  => none
 ```
 
 ### Type Words
@@ -2154,45 +2167,28 @@ base none              => none
 
 ### Data Access Words
 
-#### `dot` (alias `.`)
+See `get` (alias `.`) under Storage Words above.
 
-Access a key in a map or an index in a list. Null-safe: if the
-target is `none`, returns `none` without error.
+#### `getr` (alias `!.`)
 
-*Signatures:*
-- `[atom, map] -> [any]`
-- `[string, map] -> [any]`
-- `[integer, list] -> [any]`
-- `[integer, map] -> [any]`
-- `[any, none] -> [none]`
-
-*Precedence:* forward
-
-```
-{x:1,y:2} dot x            => 1
-{x:1,y:2} . x              => 1
-[10,20,30] . 1              => 20
-none . x                    => none
-```
-
-#### `dotr` (alias `!.`)
-
-Strict variant of `dot`. Same signatures but errors when the target
-is `none` or when the key/index is missing.
+Strict variant of `get`. Same access patterns but errors when the
+target is `none` or when the key/index is missing. Works on Maps,
+Lists, and Objects.
 
 *Signatures:*
-- `[atom, map] -> [any]`
-- `[string, map] -> [any]`
-- `[integer, list] -> [any]`
-- `[integer, map] -> [any]`
-- `[any, none] -> ERROR`
-
-*Precedence:* forward
+- `[map, atom] -> [any]`
+- `[map, string] -> [any]`
+- `[list, integer] -> [any]`
+- `[map, integer] -> [any]`
+- `[object, atom] -> [any]`
+- `[object, string] -> [any]`
+- `[object, integer] -> [any]`
+- `[none, any] -> ERROR`
 
 ```
-{x:1,y:2} dotr x           => 1
-{x:1,y:2} !. x             => 1
-none !. x                   => ERROR
+{x:1,y:2} x getr           => 1
+{x:1,y:2} x !.             => 1
+none x !.                   => ERROR
 ```
 
 ### Inspection Words

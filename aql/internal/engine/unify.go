@@ -174,17 +174,17 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTyped {
 		// a is typed, b is concrete: each element must unify with the child type.
-		return unifyTypedWithConcrete(a.AsChildType().Child, b.AsList())
+		return unifyTypedWithConcrete(a.AsChildType().Child, b.AsList().Slice())
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each element must unify with the child type.
-		return unifyTypedWithConcrete(b.AsChildType().Child, a.AsList())
+		return unifyTypedWithConcrete(b.AsChildType().Child, a.AsList().Slice())
 	}
 
 	// Both concrete lists: element-by-element unification.
-	aElems := a.AsList()
-	bElems := b.AsList()
+	aElems := a.AsList().Slice()
+	bElems := b.AsList().Slice()
 
 	// Lengths must match.
 	if len(aElems) != len(bElems) {
@@ -333,7 +333,7 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 // unifyTypedMapWithConcrete unifies a child type constraint against each value
 // of a concrete map. Every value must unify with the child type.
-func unifyTypedMapWithConcrete(childType Value, m *OrderedMap) (Value, bool) {
+func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, bool) {
 	result := NewOrderedMap()
 	for _, key := range m.Keys() {
 		val, _ := m.Get(key)
@@ -583,7 +583,7 @@ func valuesEqual(a, b Value) bool {
 		if aOk != bOk {
 			return false
 		}
-		return listsEqual(a.AsList(), b.AsList())
+		return listsEqual(a.AsList().Slice(), b.AsList().Slice())
 	case a.VType.Equal(TMap):
 		aRT, aRec := a.Data.(RecordTypeInfo)
 		bRT, bRec := b.Data.(RecordTypeInfo)
@@ -629,7 +629,7 @@ func listsEqual(a, b []Value) bool {
 }
 
 // mapsEqual compares two map payloads by keys and values.
-func mapsEqual(a, b *OrderedMap) bool {
+func mapsEqual(a, b ReadMap) bool {
 	if a.Len() != b.Len() {
 		return false
 	}
@@ -707,7 +707,7 @@ func resolveWordsDeep(v Value) Value {
 		return resolveWordValue(v)
 	}
 	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		resolved := make([]Value, len(elems))
 		for i, e := range elems {
 			resolved[i] = resolveWordsDeep(e)
