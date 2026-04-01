@@ -220,7 +220,7 @@ func init() {
 		"pow 2 3": "9",
 		"pow 2.25 3.5": "16.755334398375414",
 		"pow 5.25 3.5": "718.3849623303458",
-		"read 'a' {a:1,b:2}": "'b'",
+		"read 'a' {a:1,b:2}": "'file-a-content'",
 		"repeat 'a' 2 {a:1,b:2}": "'aa'",
 		"replace 'a' 'b' 'c' {a:1,b:2}": "'a'",
 		"replace 'd' 'e' 'f'": "'d'",
