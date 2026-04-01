@@ -207,7 +207,7 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 
 		// Literal value: direct type check (metatype-aware).
 		if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
-			if tok.Data == nil && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
+			if tok.Data == nil && tok.VType.Equal(expectedType) && (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
 				break // reject type literals for concrete Map/List
 			}
 			forwardMatched++

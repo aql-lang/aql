@@ -26,9 +26,11 @@ var typeNames = map[string]Type{
 	"Object":   TObject,
 	"Resource":   TResource,
 	"Entity":     TResourceEntity,
+	"Array":      TArray,
 	"Type":       TType,
 	"ScalarType": TScalarType,
 	"NodeType":   TNodeType,
+	"ObjectType": TObjectType,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,

@@ -209,6 +209,14 @@ func sigTypeMatches(v Value, t Type) bool {
 	if v.Data == nil && IsMetaType(t) {
 		return MetatypeFor(v.VType).Matches(t)
 	}
+	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
+		return MetatypeFor(v.VType).Matches(t)
+	}
+	if v.IsRecordType() || v.IsTableType() || v.IsOptionsType() {
+		if IsMetaType(t) {
+			return MetatypeFor(v.VType).Matches(t)
+		}
+	}
 	return false
 }
 

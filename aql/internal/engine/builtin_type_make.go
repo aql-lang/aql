@@ -486,13 +486,63 @@ func registerMake(r *Registry) {
 		return makeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
 	}
 
+	// --- New specific signatures (matched first by score) ---
+
+	// Scalar: [ScalarType, Any] → Scalar conversion
+	makeScalarHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, srcVal := args[0], args[1]
+		if targetVal.Data != nil {
+			return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
+		}
+		targetType := targetVal.VType
+		if srcVal.VType.Matches(targetType) {
+			return []Value{srcVal}, nil
+		}
+		result, err := makeConvert(srcVal, targetType)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
+	}
+
+	// Object 2-arg: [ObjectType, Map] → Object instance
+	makeObjHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		targetVal, srcVal := args[0], args[1]
+		if targetVal.IsObjectType() {
+			objType := targetVal.AsObjectType()
+			return makeObject(objType, srcVal, nil)
+		}
+		// Type literal: look up in the type registry.
+		if targetVal.Data == nil {
+			path := targetVal.VType.String()
+			if td, ok := r.Types[path]; ok {
+				if ot, ok := td.Constraint.Data.(ObjectTypeInfo); ok {
+					return makeObject(ot, srcVal, nil)
+				}
+			}
+		}
+		return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
+	}
+
+	// Array 2-arg: [Array, List] → Array instance
+	makeArrayHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		srcVal := args[1]
+		if !srcVal.VType.Equal(TList) || srcVal.Data == nil {
+			return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
+		}
+		return []Value{NewArray(srcVal.AsList().Slice())}, nil
+	}
+
 	r.Register("make",
-		// 3-arg: object type + source + prototype instance
+		// New specific signatures
+		Signature{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
+		Signature{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
+		Signature{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},
+		// Existing position-agnostic signatures (fallback)
 		Signature{
 			Args:    []Type{TObject, TAny, TObject},
 			Handler: makeWithPrototype,
 		},
-		// 3-arg: type + source + options map
 		Signature{
 			Args:    []Type{TAny, TAny, TMap},
 			Handler: makeWithOpts,
