@@ -677,12 +677,11 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
-		// If the value is a FnDef/TFunction, execute it. Named functions
-		// use their registered signatures; anonymous functions match
-		// against their FnSig params directly.
+		// If the value is a FnDef/TFunction, execute it. Quoted function
+		// values are treated as data (not executed).
 		val := e.stack[valIdx]
 		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
-			val.Data != nil {
+			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
 			}
@@ -959,11 +958,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// For named functions, look up compiled signatures from the registry.
-	// For anonymous functions, build a temporary FnDefInfo for forward planning.
+	// Look up compiled signatures. Named functions use the registry;
+	// anonymous/unregistered functions build signatures from FnSig params.
 	var fn *FnDefInfo
-	isAnonymous := fnDef.Name == ""
-	if !isAnonymous {
+	if fnDef.Name != "" {
 		reg := fnDef.Registry
 		if reg == nil {
 			reg = e.registry
@@ -971,8 +969,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		fn = reg.Lookup(fnDef.Name)
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
-		// Anonymous (or unregistered) function: build temporary signatures
-		// from FnSig params for the forward planner.
 		fn = &FnDefInfo{
 			Name:              fnDef.Name,
 			Signatures:        fnSigsToSignatures(fnDef.Sigs),
@@ -987,7 +983,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Try forward collection using the registered/temporary signatures.
+	// Try forward collection.
 	if e.hasForwardValues(fn) {
 		bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
 		if bestSig != nil {
@@ -996,16 +992,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 			}
 		}
-	}
-
-	// Anonymous functions only auto-execute via forward collection (above)
-	// or stack matching when there are no more tokens to process (i.e., the
-	// function is at the end of the expression and args are already on stack).
-	// This prevents anonymous fns from greedily consuming stack values when
-	// they're about to be passed as arguments to higher-order words.
-	if isAnonymous && e.pointer+1 < len(e.stack) {
-		e.pointer++
-		return nil
 	}
 
 	// Try stack matching against the FnDefInfo's Sigs, then execute
