@@ -256,6 +256,7 @@
   <div id="history-list"></div>
 </div>
 
+<script src="sql-wasm.js"></script>
 <script src="wasm_exec.js"></script>
 <script>
 (function() {
@@ -475,7 +476,7 @@
     renderHistoryList(historySearch.value);
   });
 
-  // --- Load WASM ---
+  // --- Load sql.js then Go WASM ---
   var go = new Go();
 
   window.__aqlReady = function() {
@@ -492,21 +493,60 @@
     input.focus();
   };
 
-  WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
-    .then(function(result) {
-      go.run(result.instance);
-    })
-    .catch(function(err) {
-      fetch('aql.wasm')
-        .then(function(resp) { return resp.arrayBuffer(); })
-        .then(function(bytes) { return WebAssembly.instantiate(bytes, go.importObject); })
-        .then(function(result) { go.run(result.instance); })
-        .catch(function(err2) {
-          status.textContent = 'error';
-          status.className = 'status-error';
-          addLine('line-error', 'Failed to load WASM: ' + err2.message);
+  // --- Helpers for base64-encoded WASM (used in single-file bundle) ---
+  function b64ToArrayBuffer(b64) {
+    var bin = atob(b64);
+    var len = bin.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function loadAqlWasm() {
+    var p;
+    if (typeof window.__aqlWasmB64 === 'string') {
+      // Single-file bundle: decode inline base64.
+      p = WebAssembly.instantiate(b64ToArrayBuffer(window.__aqlWasmB64), go.importObject);
+    } else {
+      // Multi-file: fetch from server.
+      p = WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
+        .catch(function() {
+          return fetch('aql.wasm').then(function(r) { return r.arrayBuffer(); })
+            .then(function(b) { return WebAssembly.instantiate(b, go.importObject); });
         });
+    }
+    p.then(function(result) {
+      go.run(result.instance);
+    }).catch(function(err) {
+      status.textContent = 'error';
+      status.className = 'status-error';
+      addLine('line-error', 'Failed to load AQL WASM: ' + err.message);
     });
+  }
+
+  function initSqlAndStart() {
+    if (typeof initSqlJs !== 'function') {
+      loadAqlWasm();
+      return;
+    }
+    var opts = {};
+    if (typeof window.__sqlWasmB64 === 'string') {
+      // Single-file bundle: provide sql.js WASM from inline base64.
+      opts.wasmBinary = new Uint8Array(b64ToArrayBuffer(window.__sqlWasmB64));
+    } else {
+      // Multi-file: locate sql-wasm.wasm next to this page.
+      opts.locateFile = function(file) { return file; };
+    }
+    initSqlJs(opts).then(function(SQL) {
+      window.__sqlJS = SQL;
+      loadAqlWasm();
+    }).catch(function(err) {
+      addLine('line-info', 'Note: SQLite unavailable (' + err.message + ')');
+      loadAqlWasm();
+    });
+  }
+
+  initSqlAndStart();
 
   function evaluate(code) {
     var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
