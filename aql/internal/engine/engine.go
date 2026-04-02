@@ -329,7 +329,8 @@ func (e *Engine) stepWord(val Value) error {
 			// Not a simple value — fall through to Lookup.
 		default:
 			// For list bodies, expand onto the stack like the fallback handler does.
-			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
+			// Quoted lists are treated as data values (not expanded).
+			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
 				elems := top.AsList()
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())

@@ -647,7 +647,13 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			unnamedCount := 0
 			for i, p := range s.Params {
 				if p.Name != "" {
-					installDef(r, p.Name, args[i])
+					arg := args[i]
+					// Quote list params so they're treated as data values
+					// when referenced in the body, not expanded as code bodies.
+					if arg.VType.Equal(TList) && !arg.Quoted {
+						arg.Quoted = true
+					}
+					installDef(r, p.Name, arg)
 					names = append(names, p.Name)
 				} else {
 					// Unnamed parameter: push value back for the body to use
@@ -751,7 +757,11 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 
 		for i, p := range sig.Params {
 			if p.Name != "" {
-				installDef(r, p.Name, args[i])
+				arg := args[i]
+				if arg.VType.Equal(TList) && !arg.Quoted {
+					arg.Quoted = true
+				}
+				installDef(r, p.Name, arg)
 				names = append(names, p.Name)
 			} else {
 				tokens = append(tokens, args[i])
