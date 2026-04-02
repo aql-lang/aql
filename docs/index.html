@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <title>AQL REPL</title>
 <style>
   :root {
@@ -18,11 +18,13 @@
     --input-bg: #11111b;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
+  html {
     height: 100%;
     overflow: hidden;
   }
   body {
+    height: 100%;
+    overflow: hidden;
     background: var(--bg);
     color: var(--text);
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
@@ -51,12 +53,14 @@
   .status-ready { color: var(--green); }
   .status-error { color: var(--red); }
   #output {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
     padding: 12px 16px;
     white-space: pre-wrap;
     word-break: break-word;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   .line { margin-bottom: 4px; }
   .line-input { color: var(--blue); }
@@ -169,12 +173,37 @@
     ? 'Enter for newline, tap Run to evaluate'
     : 'Shift+Enter for newline, Enter to evaluate';
 
+  // --- Viewport resize handling for mobile keyboards ---
+  function updateLayout() {
+    if (window.visualViewport) {
+      var vh = window.visualViewport.height;
+      document.body.style.height = vh + 'px';
+    } else {
+      document.body.style.height = window.innerHeight + 'px';
+    }
+    scrollOutput();
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateLayout);
+    window.visualViewport.addEventListener('scroll', updateLayout);
+  }
+  window.addEventListener('resize', updateLayout);
+  updateLayout();
+
+  // --- Output helpers ---
+  function scrollOutput() {
+    requestAnimationFrame(function() {
+      output.scrollTop = output.scrollHeight;
+    });
+  }
+
   function addLine(cls, text) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.className = 'line ' + cls;
     div.textContent = text;
     output.appendChild(div);
-    output.scrollTop = output.scrollHeight;
+    scrollOutput();
   }
 
   function clearOutput() {
@@ -183,12 +212,13 @@
 
   function autoResize() {
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + 'px';
+    var maxH = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.3;
+    input.style.height = Math.min(input.scrollHeight, maxH) + 'px';
   }
 
   function submit() {
     if (!ready) return;
-    const code = input.value.trim();
+    var code = input.value.trim();
     if (!code) return;
     history.push(code);
     historyIdx = history.length;
@@ -199,7 +229,7 @@
   }
 
   // Load WASM
-  const go = new Go();
+  var go = new Go();
 
   window.__aqlReady = function() {
     ready = true;
@@ -215,15 +245,15 @@
   };
 
   WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
-    .then(result => {
+    .then(function(result) {
       go.run(result.instance);
     })
-    .catch(err => {
+    .catch(function(err) {
       fetch('aql.wasm')
-        .then(resp => resp.arrayBuffer())
-        .then(bytes => WebAssembly.instantiate(bytes, go.importObject))
-        .then(result => go.run(result.instance))
-        .catch(err2 => {
+        .then(function(resp) { return resp.arrayBuffer(); })
+        .then(function(bytes) { return WebAssembly.instantiate(bytes, go.importObject); })
+        .then(function(result) { go.run(result.instance); })
+        .catch(function(err2) {
           status.textContent = 'error';
           status.className = 'status-error';
           addLine('line-error', 'Failed to load WASM: ' + err2.message);
@@ -231,10 +261,10 @@
     });
 
   function evaluate(code) {
-    const display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
+    var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
     addLine('line-input', '>> ' + display);
     try {
-      const res = aqlEval(code);
+      var res = aqlEval(code);
       if (res.error) {
         addLine('line-error', '  error: ' + res.error);
       } else if (res.result) {
