@@ -439,47 +439,12 @@ func Parse(src string) ([]engine.Value, error) {
 	}
 }
 
-// isDot returns true if item is an unquoted "." text marker (from the . token).
-// Quoted dots (e.g. ".") have Quote != "" and are treated as strings.
-func isDot(item any) bool {
+// isToken checks if item is an unquoted text marker matching the given string.
+// Quoted text (e.g. "." or "!") has Quote != "" and is handled as a string
+// by convertTopLevelValue, so it never reaches the token checks.
+func isToken(item any, tok string) bool {
 	text, ok := item.(jsonic.Text)
-	return ok && text.Str == "." && text.Quote == ""
-}
-
-// isBang returns true if item is an unquoted "!" text marker (from the ! token).
-// Quoted bangs (e.g. "!") have Quote != "" and are treated as strings.
-func isBang(item any) bool {
-	text, ok := item.(jsonic.Text)
-	return ok && text.Str == "!" && text.Quote == ""
-}
-
-// isTextOrNumber returns true if item is an unquoted text token or a number.
-func isTextOrNumber(item any) bool {
-	if text, ok := item.(jsonic.Text); ok {
-		return text.Quote == "" && text.Str != "!" && text.Str != "." && text.Str != "?"
-	}
-	switch item.(type) {
-	case float64, numberVal:
-		return true
-	}
-	return false
-}
-
-// itemToString returns the string representation of an item for error messages.
-func itemToString(item any) string {
-	switch v := item.(type) {
-	case jsonic.Text:
-		return v.Str
-	case float64:
-		if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return fmt.Sprintf("%v", v)
-	case numberVal:
-		return v.Src
-	default:
-		return fmt.Sprintf("%v", v)
-	}
+	return ok && text.Str == tok && text.Quote == ""
 }
 
 // convertTopLevelItems converts a list of jsonic items in word context,
@@ -493,14 +458,14 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 	values := make([]engine.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
 		// "!" followed by "." → getr word.
-		if isBang(items[i]) && i+1 < len(items) && isDot(items[i+1]) {
+		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
 			values = append(values, engine.NewWord("getr"))
 			i++ // skip the dot
 			continue
 		}
 
 		// "." → get word.
-		if isDot(items[i]) {
+		if isToken(items[i], ".") {
 			values = append(values, engine.NewWord("get"))
 			continue
 		}
