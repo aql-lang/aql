@@ -282,6 +282,111 @@ func (e *Engine) resolveOrphanedForwards() error {
 	return nil
 }
 
+// preEvalParens scans forward from the current pointer and evaluates any
+// paren expressions in-place before signature matching. This implements
+// rule 1.5: paren expressions are resolved to their results so that
+// matchSignature sees fully evaluated values.
+//
+// maxFwd is the maximum number of forward values needed (FnDefInfo.MaxForwardArgs).
+// The scan stops after finding maxFwd resolved values or hitting a boundary
+// (function word, pipe, "end", ")").
+func (e *Engine) preEvalParens(maxFwd int) error {
+	if maxFwd <= 0 {
+		return nil
+	}
+	resolved := 0
+	scanIdx := e.pointer + 1
+
+	for resolved < maxFwd && scanIdx < len(e.stack) {
+		tok := e.stack[scanIdx]
+
+		// Boundary conditions: stop scanning.
+		if tok.IsForward() || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
+			tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+			break
+		}
+
+		if tok.IsWord() {
+			ww := tok.AsWord()
+			if ww.Name == "end" || ww.Name == ")" {
+				break
+			}
+
+			// Open paren: evaluate the sub-expression in-place.
+			if ww.Name == "(" {
+				savedPointer := e.pointer
+				e.pointer = scanIdx
+
+				// stepOpenParen converts "(" to OpenParen marker.
+				if err := e.stepOpenParen(); err != nil {
+					e.pointer = savedPointer
+					return err
+				}
+
+				// Step through contents until we reach the matching ")".
+				for limit := 0; limit < 2222; limit++ {
+					if e.pointer >= len(e.stack) {
+						break
+					}
+					v := e.stack[e.pointer]
+
+					// Check if this is the ")" that closes our paren.
+					if v.IsWord() && v.AsWord().Name == ")" {
+						if err := e.stepCloseParen(); err != nil {
+							e.pointer = savedPointer
+							return err
+						}
+						break
+					}
+
+					// Normal evaluation inside paren.
+					switch {
+					case v.IsWord():
+						if err := e.stepWord(v); err != nil {
+							e.pointer = savedPointer
+							return err
+						}
+					case v.IsForward():
+						e.pointer++
+					case v.IsOpenParen():
+						e.pointer++
+					case v.IsReturnCheck():
+						e.pointer++
+					case v.IsDefCleanup():
+						e.stepDefCleanup(v)
+						e.pointer++
+					default:
+						if err := e.stepLiteral(); err != nil {
+							e.pointer = savedPointer
+							return err
+						}
+					}
+				}
+
+				e.pointer = savedPointer
+				// The paren has been collapsed; the result value(s) are now
+				// at scanIdx. Each result counts as a resolved value.
+				// Count how many values replaced the paren expression.
+				// We don't know exactly, but at least one was produced.
+				// Just count the value at scanIdx as one resolved value.
+				resolved++
+				scanIdx++
+				continue
+			}
+
+			// Function word: boundary, stop.
+			if e.registry.Lookup(ww.Name) != nil {
+				break
+			}
+		}
+
+		// Any other token: count as one resolved value.
+		resolved++
+		scanIdx++
+	}
+	return nil
+}
+
 // stepWord handles a word (function reference) at the current pointer.
 func (e *Engine) stepWord(val Value) error {
 	w := val.AsWord()
@@ -363,6 +468,14 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		e.stack[e.pointer] = NewAtom(w.Name)
 		return nil
+	}
+
+	// Pre-evaluate paren expressions in the forward scan range so that
+	// matchSignature sees fully resolved values (rule 1.5).
+	if fn.ForwardPrecedence || w.ForceForward {
+		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+			return err
+		}
 	}
 
 	// Unified signature matching: one path for all words.

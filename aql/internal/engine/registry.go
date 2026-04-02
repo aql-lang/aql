@@ -227,6 +227,7 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 			fnDef.Signatures = append(fnDef.Signatures, sigs...)
 			SortSignatures(fnDef.Signatures)
 			fnDef.ForwardPrecedence = forwardPrec
+			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
 			stack[len(stack)-1].Data = fnDef
 			return
 		}
@@ -238,7 +239,26 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 		ForwardPrecedence: forwardPrec,
 	}
 	SortSignatures(fnDef.Signatures)
+	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
 	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+}
+
+// calcMaxForwardArgs returns the maximum number of forward args needed
+// across all signatures. For sigs with a barrier, only positions before
+// the barrier count. This tells the engine how far ahead to scan and
+// pre-evaluate paren expressions before signature matching.
+func calcMaxForwardArgs(sigs []Signature) int {
+	max := 0
+	for i := range sigs {
+		n := len(sigs[i].Args)
+		if sigs[i].BarrierPos > 0 && sigs[i].BarrierPos < n {
+			n = sigs[i].BarrierPos
+		}
+		if n > max {
+			max = n
+		}
+	}
+	return max
 }
 
 // Lookup returns the top FnDefInfo for a name from DefStacks, or nil.

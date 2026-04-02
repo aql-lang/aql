@@ -187,6 +187,7 @@ type FnDefInfo struct {
 	Sigs              []FnSig     // AQL-defined overloads (nil for Go-implemented words)
 	Signatures        []Signature // compiled dispatch table
 	ForwardPrecedence bool        // true = try forward-first; false = stack-only
+	MaxForwardArgs    int         // longest forward arg count across all sigs (respecting barriers)
 	Registry          *Registry
 }
 

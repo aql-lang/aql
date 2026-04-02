@@ -114,24 +114,10 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 
-					// 1.5: open paren — count as one arg, skip to matching ")".
+					// 1.5: open parens are pre-evaluated by preEvalParens
+					// before matching begins. If one remains, treat as boundary.
 					if ww.Name == "(" {
-						fwd++
-						scanIdx++
-						depth := 1
-						for scanIdx < len(e.stack) && depth > 0 {
-							inner := e.stack[scanIdx]
-							if inner.IsWord() {
-								iw := inner.AsWord()
-								if iw.Name == "(" {
-									depth++
-								} else if iw.Name == ")" {
-									depth--
-								}
-							}
-							scanIdx++
-						}
-						continue
+						break
 					}
 
 					// Sig expects TWord: any word matches directly.
@@ -198,11 +184,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break // unknown word, type mismatch
 				}
 
-				// Open paren value (already an OpenParen marker).
+				// Open paren marker: boundary, stop forward scan.
 				if tok.IsOpenParen() {
-					fwd++
-					scanIdx++
-					continue
+					break
 				}
 
 				// Literal value: direct type check.
