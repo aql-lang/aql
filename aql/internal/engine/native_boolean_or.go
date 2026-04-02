@@ -6,7 +6,7 @@ func registerOr(r *Registry) {
 	// or for non-boolean values: creates a disjunct (union type).
 	// The boolean signature (specificity 202) ties with this (202), but the
 	// boolean signature is registered first, so it wins for boolean args.
-	// Swap: `a or b` means left=a, right=b, so left=args[1], right=args[0].
+	// args[0] = nearest (top/forward), args[1] = farther. `a or b` → args=[b,a].
 	r.Register("or", Signature{
 		Args: []Type{TAny, TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
