@@ -1,10 +1,11 @@
-.PHONY: build test clean install run vet fmt wasm
+.PHONY: build test clean install run vet fmt wasm wasm-bundle
 
 BINARY := bin/aql
 CMD := ./cmd/aql
 VERSION := 0.1.0-dev
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 WASM_DIR := ../docs
+SQLJS_VENDOR := cmd/aqlwasm/vendor
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) $(CMD)
@@ -39,5 +40,34 @@ wasm:
 	else \
 		echo "error: wasm_exec.js not found in GOROOT"; exit 1; \
 	fi
+	cp $(SQLJS_VENDOR)/sql-wasm.js $(WASM_DIR)/
+	cp $(SQLJS_VENDOR)/sql-wasm.wasm $(WASM_DIR)/
+	cp cmd/aqlwasm/index.html $(WASM_DIR)/
 	@echo "Built: $(WASM_DIR)/"
 	@echo "Serve with: cd $(WASM_DIR) && python3 -m http.server 8080"
+
+wasm-bundle: wasm
+	@echo "Bundling into single HTML file..."
+	@WASM_EXEC=$$(cat $(WASM_DIR)/wasm_exec.js); \
+	SQLJS=$$(cat $(WASM_DIR)/sql-wasm.js); \
+	SQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/sql-wasm.wasm); \
+	AQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/aql.wasm); \
+	sed \
+		-e '/<script src="sql-wasm.js"><\/script>/c\<script>'"/* sql.js */"'</script>' \
+		-e '/<script src="wasm_exec.js"><\/script>/c\<script>'"/* wasm_exec.js */"'</script>' \
+		$(WASM_DIR)/index.html > /dev/null 2>&1; \
+	( \
+		sed -n '1,/<script src="sql-wasm.js"><\/script>/{ /<script src="sql-wasm.js"><\/script>/!p }' $(WASM_DIR)/index.html; \
+		echo '<script>'; \
+		cat $(WASM_DIR)/sql-wasm.js; \
+		echo '</script>'; \
+		echo '<script>'; \
+		cat $(WASM_DIR)/wasm_exec.js; \
+		echo '</script>'; \
+		echo '<script>'; \
+		echo "window.__sqlWasmB64 = '$$SQL_WASM_B64';"; \
+		echo "window.__aqlWasmB64 = '$$AQL_WASM_B64';"; \
+		echo '</script>'; \
+		sed -n '/<script src="wasm_exec.js"><\/script>/,$${ /<script src="wasm_exec.js"><\/script>/!p }' $(WASM_DIR)/index.html; \
+	) > $(WASM_DIR)/aql-repl.html
+	@echo "Bundle: $(WASM_DIR)/aql-repl.html ($$(du -h $(WASM_DIR)/aql-repl.html | cut -f1))"
