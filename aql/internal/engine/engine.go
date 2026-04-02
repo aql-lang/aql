@@ -494,33 +494,20 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Immediate execution: all args from stack.
 	n := stkCount
-
-	// Build MatchResult args from the stack BEFORE rearranging.
-	// resolvedIndicesBefore returns indices in ascending order (deepest first).
-	// Forward-prec matched nearest-first (needsRearrange=true):
-	//   Reverse indices so args[0] = nearest — old MatchSignatureReversed convention.
-	// Stack-only matched deepest-first (needsRearrange=false):
-	//   Use ascending indices directly so args[0] = deepest — old MatchSignature convention.
 	match := &MatchResult{Sig: sig}
 	if n > 0 {
 		indices := e.resolvedIndicesBefore(n)
 		match.Args = make([]Value, n)
 		if needsRearrange {
-			// Nearest-first: reverse ascending indices.
 			for i, idx := range indices {
 				match.Args[n-1-i] = e.stack[idx]
 			}
 		} else {
-			// Deepest-first: ascending indices are already correct.
 			for i, idx := range indices {
 				match.Args[i] = e.stack[idx]
 			}
 		}
 	}
-
-	// When matched nearest-first (reversed), physically reverse the top N
-	// values on the stack so that execMatch's splice logic removes the
-	// correct physical positions.
 	if n > 0 && needsRearrange {
 		e.rearrangeForForward(n, 0)
 	}
