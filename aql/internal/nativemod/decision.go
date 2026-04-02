@@ -2,18 +2,35 @@ package nativemod
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 )
 
+// decisionParseCache caches the parsed AQL tokens for the decision module
+// source. The parse is done once on first import and reused thereafter.
+var (
+	decisionParseOnce sync.Once
+	decisionParsed    []engine.Value
+	decisionParseErr  error
+)
+
 // BuildDecisionModule creates the "aql:decision" native module.
-// Builders (cond, make-rule, make-table, etc.) are defined in AQL.
-// Evaluators (eval-cond, eval-pred, eval-table, eval-tree, decide) are
-// implemented in Go to avoid CallAQL nesting limitations.
+// Builder functions are defined in pure AQL. Evaluators are Go-implemented
+// to avoid CallAQL nesting limitations with recursive predicate evaluation.
+// The AQL source is parsed once and cached for reuse across imports.
 func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	if parent.ParseFunc == nil {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: parser not configured")
+	}
+
+	// Parse AQL source once, cache for reuse.
+	decisionParseOnce.Do(func() {
+		decisionParsed, decisionParseErr = parent.ParseFunc(decisionAQL)
+	})
+	if decisionParseErr != nil {
+		return engine.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", decisionParseErr)
 	}
 
 	// Create sub-registry with full builtins + native words.
@@ -24,18 +41,21 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	subReg.ParseFunc = parent.ParseFunc
 	native.Register(subReg)
 
-	// Parse and run AQL source for builders.
-	parsed, err := parent.ParseFunc(decisionBuildersAQL)
-	if err != nil {
-		return engine.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", err)
-	}
+	// Register Go-implemented evaluators in the sub-registry.
+	registerEvalCond(subReg)
+	registerEvalPred(subReg)
+	registerEvalTable(subReg)
+	registerEvalTree(subReg)
+	registerDecide(subReg)
+
+	// Run the cached AQL tokens in the sub-registry (copy to avoid mutation).
 	eng := engine.NewTop(subReg)
-	_, err = eng.Run(parsed)
+	_, err = eng.Run(append([]engine.Value(nil), decisionParsed...))
 	if err != nil {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: execution error: %w", err)
 	}
 
-	// Tag FnDefs from AQL with the sub-registry.
+	// Tag FnDefs from AQL with the sub-registry (closure semantics).
 	for name, stack := range subReg.DefStacks {
 		for i, val := range stack {
 			if fnDef, ok := val.Data.(engine.FnDefInfo); ok && fnDef.Registry == nil {
@@ -44,13 +64,6 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 			}
 		}
 	}
-
-	// Register Go-implemented evaluators in the sub-registry.
-	registerEvalCond(subReg)
-	registerEvalPred(subReg)
-	registerEvalTable(subReg)
-	registerEvalTree(subReg)
-	registerDecide(subReg)
 
 	// Build export map.
 	exports := engine.NewOrderedMap()
@@ -127,7 +140,6 @@ func applyOp(op string, lhs, rhs engine.Value) (bool, error) {
 // --- Go evaluator: eval-cond ---
 
 func registerEvalCond(r *engine.Registry) {
-	// c input eval-cond → args[0]=input (top), args[1]=c (deeper)
 	r.Register("eval-cond", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
@@ -167,7 +179,6 @@ func evalCondMap(c engine.ReadMap, input engine.ReadMap) ([]engine.Value, error)
 // --- Go evaluator: eval-pred ---
 
 func registerEvalPred(r *engine.Registry) {
-	// pred input eval-pred → args[0]=input (top), args[1]=pred (deeper)
 	r.Register("eval-pred", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
@@ -195,7 +206,6 @@ func evalPredMap(pred engine.ReadMap, input engine.ReadMap) (bool, error) {
 		}
 		childrenVal, _ := pred.Get("children")
 		children := childrenVal.AsList()
-		// If children is a single map (auto-eval collapsed list), wrap it
 		singleChild := false
 		if children.IsNil() && childrenVal.AsMap() != nil {
 			singleChild = true
@@ -267,7 +277,6 @@ func evalPredMap(pred engine.ReadMap, input engine.ReadMap) (bool, error) {
 func registerEvalTable(r *engine.Registry) {
 	r.Register("eval-table", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
-		// table input eval-table → args[0]=input (top), args[1]=table (deeper)
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			table := args[1].AsMap()
 			input := args[0].AsMap()
@@ -288,7 +297,6 @@ func evalTableMap(table engine.ReadMap, input engine.ReadMap) ([]engine.Value, e
 		policy = policyVal.AsAtom()
 	}
 
-	// Collect matching rules
 	var matched []engine.Value
 	for i := 0; i < rules.Len(); i++ {
 		rule := rules.Get(i)
@@ -361,7 +369,7 @@ func evalTableMap(table engine.ReadMap, input engine.ReadMap) ([]engine.Value, e
 		thenVal, _ := best.AsMap().Get("then")
 		return []engine.Value{thenVal}, nil
 
-	default: // default to "first"
+	default:
 		if nMatched > 0 {
 			thenVal, _ := matched[0].AsMap().Get("then")
 			return []engine.Value{thenVal}, nil
@@ -382,7 +390,6 @@ func makeErrorMap(errMsg string) *engine.OrderedMap {
 func registerEvalTree(r *engine.Registry) {
 	r.Register("eval-tree", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
-		// tree input eval-tree → args[0]=input (top), args[1]=tree (deeper)
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			tree := args[1].AsMap()
 			input := args[0].AsMap()
@@ -486,7 +493,6 @@ func findNodeByID(id string, nodes engine.ReadList) engine.ReadMap {
 func registerDecide(r *engine.Registry) {
 	r.Register("decide", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
-		// model input decide → args[0]=input (top), args[1]=model (deeper)
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			model := args[1].AsMap()
 			input := args[0].AsMap()
@@ -510,53 +516,33 @@ func registerDecide(r *engine.Registry) {
 	})
 }
 
-// decisionBuildersAQL contains the AQL source for builder functions.
-const decisionBuildersAQL = `
+// decisionAQL contains the AQL source for builder functions.
+// The evaluators are Go-implemented due to CallAQL nesting limitations
+// with recursive predicate evaluation.
+const decisionAQL = `
 
 # ============================================================
 # aql:decision — Builder functions (pure AQL)
 # ============================================================
 
-def cond fn [[field:Atom op:String value:Any] [Map] [
-  do {field: field, op: op, value: value}
-]]
+def cond fn [[field:Atom op:String value:Any] [Map] [do {field: field, op: op, value: value}]]
 
-def all-of fn [[children:List] [Map] [
-  do {kind: "group", op: "all", children: children}
-]]
+def all-of fn [[children:List] [Map] [do {kind: "group", op: "all", children: children}]]
 
-def any-of fn [[children:List] [Map] [
-  do {kind: "group", op: "any", children: children}
-]]
+def any-of fn [[children:List] [Map] [do {kind: "group", op: "any", children: children}]]
 
-def not-of fn [[child:Map] [Map] [
-  do {kind: "group", op: "not", children: child}
-]]
+def not-of fn [[child:Map] [Map] [do {kind: "group", op: "not", children: child}]]
 
-def make-rule fn [[when:Map then:Map] [Map] [
-  do {when: when, then: then}
-]]
+def make-rule fn [[when:Map then:Map] [Map] [do {when: when, then: then}]]
 
-def make-table fn [[rules:List] [Map] [
-  do {kind: "table", rules: rules, hit-policy: "first"}
-]]
+def make-table fn [[rules:List] [Map] [do {kind: "table", rules: rules, hit-policy: "first"}]]
 
-def with-policy fn [[policy:String table:Map] [Map] [
-  def rules (table.rules)
-  def kind (table.kind)
-  do {kind: kind, rules: rules, hit-policy: policy}
-]]
+def with-policy fn [[policy:String table:Map] [Map] [def rules (table.rules) def kind (table.kind) do {kind: kind, rules: rules, hit-policy: policy}]]
 
-def make-branch fn [[id:Atom branches:List] [Map] [
-  do {id: id, kind: "branch", branches: branches}
-]]
+def make-branch fn [[id:Atom branches:List] [Map] [do {id: id, kind: "branch", branches: branches}]]
 
-def make-leaf fn [[id:Atom result:Any] [Map] [
-  do {id: id, kind: "leaf", result: result}
-]]
+def make-leaf fn [[id:Atom result:Any] [Map] [do {id: id, kind: "leaf", result: result}]]
 
-def make-tree fn [[root:Atom nodes:List] [Map] [
-  do {kind: "tree", root: root, nodes: nodes}
-]]
+def make-tree fn [[root:Atom nodes:List] [Map] [do {kind: "tree", root: root, nodes: nodes}]]
 
 `
