@@ -407,7 +407,7 @@ Example:
 
 All existing unary and binary math builtins gain automatic `[matrix] -> [matrix]` or `[matrix matrix] -> [matrix]` overloads. Each applies the scalar operation element-wise to every element of the matrix. No new word names are introduced — these are additional signatures on existing words.
 
-**Implementation:** Extend `registerUnaryNumOp` and `registerBinaryNumOp` in `registry.go` to add a `[TMatrix]` or `[TMatrix, TMatrix]` signature alongside the existing Integer/Decimal ones. This gives all registered unary/binary math ops matrix support with zero changes to individual `builtin_math_*.go` files.
+**Implementation:** Extend `registerUnaryNumOp` and `registerBinaryNumOp` in `registry.go` to add a `[TMatrix]` or `[TMatrix, TMatrix]` signature alongside the existing Integer/Decimal ones. This gives all registered unary/binary math ops matrix support with zero changes to individual `native_math_*.go` files.
 
 #### Unary ops: `[matrix] -> [matrix]` (14 overloads)
 
@@ -1076,27 +1076,27 @@ set means (data mat-col-mean)
 
 ## Files to Create
 
-Following the existing `builtin_*.go` one-file-per-category pattern:
+Following the existing `native_*.go` one-file-per-category pattern:
 
-- `aql/internal/engine/builtin_matrix_construct.go` — matrix, mat-zeros, mat-ones, mat-eye, mat-diag, mat-fill, mat-rand, mat-randn, mat-linspace, mat-range, mat-from-cols, mat-from-table
-- `aql/internal/engine/builtin_matrix_info.go` — mat-rows, mat-cols, mat-shape, mat-size, mat-square?, mat-symmetric?
-- `aql/internal/engine/builtin_matrix_access.go` — mat-at, mat-set, mat-row, mat-col, mat-diag-of, mat-slice, mat-set-row, mat-set-col
-- `aql/internal/engine/builtin_matrix_arithmetic.go` — mat-emul, mat-ediv, plus add/sub/mul/div signature extensions
-- `aql/internal/engine/builtin_matrix_transform.go` — mat-t, mat-reshape, mat-flatten, mat-hstack, mat-vstack, mat-squeeze
-- `aql/internal/engine/builtin_matrix_linalg.go` — mat-det, mat-inv, mat-trace, mat-rank, mat-norm, mat-cond
-- `aql/internal/engine/builtin_matrix_decomp.go` — mat-lu, mat-qr, mat-svd, mat-svd-vals, mat-chol, mat-eigen
-- `aql/internal/engine/builtin_matrix_solve.go` — mat-solve, mat-lstsq, mat-pinv
-- `aql/internal/engine/builtin_matrix_aggregate.go` — mat-sum, mat-mean, mat-min, mat-max, mat-row-sum, mat-col-sum, mat-row-mean, mat-col-mean, mat-row-min, mat-col-max
-- `aql/internal/engine/builtin_matrix_compare.go` — mat-eq?, mat-close?, mat-gt, mat-lt, mat-any?, mat-all?
-- `aql/internal/engine/builtin_matrix_advanced.go` — mat-dot, mat-cross, mat-outer, mat-kron, mat-conv, mat-apply, mat-map-row, mat-map-col
+- `aql/internal/engine/native_matrix_construct.go` — matrix, mat-zeros, mat-ones, mat-eye, mat-diag, mat-fill, mat-rand, mat-randn, mat-linspace, mat-range, mat-from-cols, mat-from-table
+- `aql/internal/engine/native_matrix_info.go` — mat-rows, mat-cols, mat-shape, mat-size, mat-square?, mat-symmetric?
+- `aql/internal/engine/native_matrix_access.go` — mat-at, mat-set, mat-row, mat-col, mat-diag-of, mat-slice, mat-set-row, mat-set-col
+- `aql/internal/engine/native_matrix_arithmetic.go` — mat-emul, mat-ediv, plus add/sub/mul/div signature extensions
+- `aql/internal/engine/native_matrix_transform.go` — mat-t, mat-reshape, mat-flatten, mat-hstack, mat-vstack, mat-squeeze
+- `aql/internal/engine/native_matrix_linalg.go` — mat-det, mat-inv, mat-trace, mat-rank, mat-norm, mat-cond
+- `aql/internal/engine/native_matrix_decomp.go` — mat-lu, mat-qr, mat-svd, mat-svd-vals, mat-chol, mat-eigen
+- `aql/internal/engine/native_matrix_solve.go` — mat-solve, mat-lstsq, mat-pinv
+- `aql/internal/engine/native_matrix_aggregate.go` — mat-sum, mat-mean, mat-min, mat-max, mat-row-sum, mat-col-sum, mat-row-mean, mat-col-mean, mat-row-min, mat-col-max
+- `aql/internal/engine/native_matrix_compare.go` — mat-eq?, mat-close?, mat-gt, mat-lt, mat-any?, mat-all?
+- `aql/internal/engine/native_matrix_advanced.go` — mat-dot, mat-cross, mat-outer, mat-kron, mat-conv, mat-apply, mat-map-row, mat-map-col
 
 ## Files to Modify
 
 - `aql/internal/engine/types.go` — add `"Scalar/Number/Matrix": 38` to `builtinTypeIDs`, add `TMatrix` well-known constant, add `"Matrix": "Scalar/Number/Matrix"` to `typeAncestry`
 - `aql/internal/engine/value.go` — add `MatrixData` struct, `NewMatrix()` constructor, `AsMatrix()` accessor, matrix display in `String()` method
 - `aql/internal/engine/registry.go` — add `registerMatrix*` calls in `registerBuiltins()`; extend `registerUnaryNumOp` to add `[TMatrix] -> [TMatrix]` overload; extend `registerBinaryNumOp` to add `[TMatrix, TMatrix] -> [TMatrix]` and `[TMatrix, TNumber] -> [TMatrix]` overloads
-- `aql/internal/engine/builtin_math_add.go` — extend with `[TMatrix, TMatrix]` and `[TMatrix, TNumber]` signatures
-- `aql/internal/engine/builtin_math_sub.go` — same pattern
-- `aql/internal/engine/builtin_math_mul.go` — extend with matrix multiply `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
-- `aql/internal/engine/builtin_math_div.go` — extend with element-wise `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
+- `aql/internal/engine/native_math_add.go` — extend with `[TMatrix, TMatrix]` and `[TMatrix, TNumber]` signatures
+- `aql/internal/engine/native_math_sub.go` — same pattern
+- `aql/internal/engine/native_math_mul.go` — extend with matrix multiply `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
+- `aql/internal/engine/native_math_div.go` — extend with element-wise `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
 - `aql/go.mod` — add `gonum.org/v1/gonum` dependency

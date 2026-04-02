@@ -1,9 +1,8 @@
 package engine
 
 func registerSub(r *Registry) {
-	// With forward-first matching, args[0] is the forward/top value and
-	// args[1] is the deeper/earlier value. To make `a b sub` = a minus b,
-	// the handler computes args[1] - args[0].
+	// Signature [Integer, Integer]: args[0] = nearest to word (top/forward),
+	// args[1] = farther (deeper/later). `a b sub` → args=[b,a] → a-b.
 	registerBinaryIntOp(r, "sub", func(a, b int64) (int64, error) { return b - a, nil })
 	registerBinaryNumOp(r, "sub", func(a, b float64) (float64, error) { return b - a, nil })
 }

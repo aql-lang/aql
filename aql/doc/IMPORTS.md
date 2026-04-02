@@ -1,7 +1,7 @@
 # The `import` Word
 
 The `import` word brings external definitions into the current AQL engine.
-It is registered in `internal/engine/builtin_module_module.go` alongside the
+It is registered in `internal/engine/native_module_module.go` alongside the
 related `module` and `export` words.
 
 ## Signatures
@@ -127,7 +127,7 @@ stored in SQLite when available.
 
 ## Implementation
 
-The implementation lives in `builtin_module_module.go`:
+The implementation lives in `native_module_module.go`:
 
 | Function | Role |
 |---|---|

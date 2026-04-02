@@ -615,33 +615,33 @@ people merge regions city pick [name city region]
 
 ### Files to create
 Each word (or word family) follows the existing pattern of one file per word:
-- `aql/internal/engine/builtin_table_head.go`
-- `aql/internal/engine/builtin_table_tail.go`
-- `aql/internal/engine/builtin_table_shape.go`
-- `aql/internal/engine/builtin_table_cols.go`
-- `aql/internal/engine/builtin_table_nrow.go`
-- `aql/internal/engine/builtin_table_describe.go`
-- `aql/internal/engine/builtin_table_col.go`
-- `aql/internal/engine/builtin_table_pick.go`
-- `aql/internal/engine/builtin_table_omit.go`
-- `aql/internal/engine/builtin_table_sift.go`
-- `aql/internal/engine/builtin_table_mutate.go`
-- `aql/internal/engine/builtin_table_rename.go`
-- `aql/internal/engine/builtin_table_sortby.go`
-- `aql/internal/engine/builtin_table_aggregate.go` (sum, mean, count, min, max)
-- `aql/internal/engine/builtin_table_groupby.go`
-- `aql/internal/engine/builtin_table_merge.go`
-- `aql/internal/engine/builtin_table_stack.go`
-- `aql/internal/engine/builtin_table_missing.go` (dropna, fillna)
-- `aql/internal/engine/builtin_table_dedup.go` (dedup, dupes)
-- `aql/internal/engine/builtin_table_reshape.go` (melt, pivot)
-- `aql/internal/engine/builtin_table_apply.go`
-- `aql/internal/engine/builtin_table_row.go`
+- `aql/internal/engine/native_table_head.go`
+- `aql/internal/engine/native_table_tail.go`
+- `aql/internal/engine/native_table_shape.go`
+- `aql/internal/engine/native_table_cols.go`
+- `aql/internal/engine/native_table_nrow.go`
+- `aql/internal/engine/native_table_describe.go`
+- `aql/internal/engine/native_table_col.go`
+- `aql/internal/engine/native_table_pick.go`
+- `aql/internal/engine/native_table_omit.go`
+- `aql/internal/engine/native_table_sift.go`
+- `aql/internal/engine/native_table_mutate.go`
+- `aql/internal/engine/native_table_rename.go`
+- `aql/internal/engine/native_table_sortby.go`
+- `aql/internal/engine/native_table_aggregate.go` (sum, mean, count, min, max)
+- `aql/internal/engine/native_table_groupby.go`
+- `aql/internal/engine/native_table_merge.go`
+- `aql/internal/engine/native_table_stack.go`
+- `aql/internal/engine/native_table_missing.go` (dropna, fillna)
+- `aql/internal/engine/native_table_dedup.go` (dedup, dupes)
+- `aql/internal/engine/native_table_reshape.go` (melt, pivot)
+- `aql/internal/engine/native_table_apply.go`
+- `aql/internal/engine/native_table_row.go`
 
 ### Files to modify
 - `aql/internal/engine/registry.go` - register all new words in `NewRegistry()`
-- `aql/internal/engine/builtin_string_slice.go` - extend slice with table signature
-- `aql/internal/engine/builtin_math_*.go` - extend min/max with table-column signatures
+- `aql/internal/engine/native_string_slice.go` - extend slice with table signature
+- `aql/internal/engine/native_math_*.go` - extend min/max with table-column signatures
 
 ### Key existing code to reuse
 - `TableData` struct (`format.go:260`) - for table manipulation
