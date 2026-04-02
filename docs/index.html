@@ -256,6 +256,7 @@
   <div id="history-list"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.11.0/sql-wasm.min.js"></script>
 <script src="wasm_exec.js"></script>
 <script>
 (function() {
@@ -475,7 +476,7 @@
     renderHistoryList(historySearch.value);
   });
 
-  // --- Load WASM ---
+  // --- Load sql.js then Go WASM ---
   var go = new Go();
 
   window.__aqlReady = function() {
@@ -492,21 +493,42 @@
     input.focus();
   };
 
-  WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
-    .then(function(result) {
-      go.run(result.instance);
-    })
-    .catch(function(err) {
-      fetch('aql.wasm')
-        .then(function(resp) { return resp.arrayBuffer(); })
-        .then(function(bytes) { return WebAssembly.instantiate(bytes, go.importObject); })
-        .then(function(result) { go.run(result.instance); })
-        .catch(function(err2) {
-          status.textContent = 'error';
-          status.className = 'status-error';
-          addLine('line-error', 'Failed to load WASM: ' + err2.message);
-        });
+  function loadGoWasm() {
+    WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
+      .then(function(result) {
+        go.run(result.instance);
+      })
+      .catch(function(err) {
+        fetch('aql.wasm')
+          .then(function(resp) { return resp.arrayBuffer(); })
+          .then(function(bytes) { return WebAssembly.instantiate(bytes, go.importObject); })
+          .then(function(result) { go.run(result.instance); })
+          .catch(function(err2) {
+            status.textContent = 'error';
+            status.className = 'status-error';
+            addLine('line-error', 'Failed to load WASM: ' + err2.message);
+          });
+      });
+  }
+
+  // Initialize sql.js first so window.__sqlJS is available when Go starts.
+  if (typeof initSqlJs === 'function') {
+    initSqlJs({
+      locateFile: function(file) {
+        return 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.11.0/' + file;
+      }
+    }).then(function(SQL) {
+      window.__sqlJS = SQL;
+      loadGoWasm();
+    }).catch(function(err) {
+      // sql.js failed — proceed without SQLite support.
+      addLine('line-info', 'Note: SQLite unavailable (' + err.message + ')');
+      loadGoWasm();
     });
+  } else {
+    // sql.js script didn't load — proceed without it.
+    loadGoWasm();
+  }
 
   function evaluate(code) {
     var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
