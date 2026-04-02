@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,6 +18,7 @@ type evalRequest struct {
 
 type evalResponse struct {
 	Result []string `json:"result,omitempty"`
+	Output string   `json:"output,omitempty"`
 	Error  string   `json:"error,omitempty"`
 }
 
@@ -30,6 +32,8 @@ func main() {
 	}
 
 	var mu sync.Mutex
+	var outBuf bytes.Buffer
+	instance.SetOutput(&outBuf)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -49,10 +53,12 @@ func main() {
 		}
 
 		mu.Lock()
+		outBuf.Reset()
 		result, err := instance.Run(req.Code)
+		printed := outBuf.String()
 		mu.Unlock()
 
-		resp := evalResponse{}
+		resp := evalResponse{Output: printed}
 		if err != nil {
 			resp.Error = err.Error()
 		} else {
