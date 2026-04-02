@@ -774,56 +774,18 @@ func (e *Engine) stepLiteral() error {
 	fwd := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
-	// Check if the value matches ANY remaining (uncollected) arg type.
-	// Suffix collection is flexible: the value can satisfy any arg slot,
-	// with final ordering handled by flexibleMatch during stack retry.
+	// Check if the value matches the next expected arg positionally.
+	// Once matchSignature has chosen a signature, args are collected in
+	// order — no permutation or sig switching is permitted.
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
-		matchesAny := false
-		for i := 0; i < len(fwd.Sig.Args); i++ {
-			if sigTypeMatches(val, fwd.Sig.Args[i]) {
-				matchesAny = true
-				break
-			}
-			// /q modifier: Word values match Atom-typed /q slots.
-			if fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[i] &&
-				val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[i]) {
-				matchesAny = true
-				break
-			}
+		nextIdx := fwd.CollectedArgs
+		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
+		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
+			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			matches = true
 		}
-		if !matchesAny {
-			// The forward's chosen sig doesn't accept this value, but
-			// another overload of the same function might. Check all
-			// signatures and switch if we find a compatible one.
-			if fn := e.registry.Lookup(fwd.FuncName); fn != nil {
-				for si := range fn.Signatures {
-					altSig := &fn.Signatures[si]
-					if len(altSig.Args) != len(fwd.Sig.Args) {
-						continue
-					}
-					for ai := range altSig.Args {
-						if sigTypeMatches(val, altSig.Args[ai]) {
-							fwd.Sig = altSig
-							e.stack[fwdIdx] = NewForward(fwd)
-							matchesAny = true
-							break
-						}
-						if altSig.QuoteArgs != nil && altSig.QuoteArgs[ai] &&
-							val.VType.Equal(TWord) && TAtom.Matches(altSig.Args[ai]) {
-							fwd.Sig = altSig
-							e.stack[fwdIdx] = NewForward(fwd)
-							matchesAny = true
-							break
-						}
-					}
-					if matchesAny {
-						break
-					}
-				}
-			}
-		}
-		if !matchesAny {
+		if !matches {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
 		}
