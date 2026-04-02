@@ -49,12 +49,21 @@ func registerGet(r *Registry) {
 
 	// --- Node handlers (Map, List, Options) ---
 
+	// atomKey extracts the key string from a value that is either an Atom
+	// or a Word (when captured via /q modifier).
+	atomKey := func(v Value) string {
+		if v.IsWord() {
+			return v.AsWord().Name
+		}
+		return v.AsAtom()
+	}
+
 	nodeAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		container := args[1]
 		if container.Data == nil {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
-		key := args[0].AsAtom()
+		key := atomKey(args[0])
 		if m := container.AsMap(); m != nil {
 			val, ok := m.Get(key)
 			if !ok {
@@ -112,7 +121,7 @@ func registerGet(r *Registry) {
 		if container.Data == nil {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
-		key := args[0].AsAtom()
+		key := atomKey(args[0])
 		if m, ok := container.Data.(*OrderedMap); ok {
 			val, found := m.Get(key)
 			if !found {
@@ -195,13 +204,17 @@ func registerGet(r *Registry) {
 		{Args: []Type{TString, TStore}, Handler: storeHandler},
 		{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, Handler: storeHandler},
 		// Node containers (Map, List, Options)
-		{Args: []Type{TAtom, TNode}, Handler: nodeAtomHandler},
+		// The /q modifier on atom key positions allows registered word names
+		// (trace, make, at, etc.) to be collected as atom keys instead of
+		// being executed. This fixes dot-notation shadowing (DX-REPORT Issue 4):
+		// matrix.trace now does map lookup instead of executing the trace word.
+		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, Handler: nodeAtomHandler},
 		{Args: []Type{TString, TNode}, Handler: nodeStringHandler},
 		{Args: []Type{TInteger, TNode}, Handler: nodeIntegerHandler},
 		// Array containers (mutable, indexed by integer)
 		{Args: []Type{TInteger, TArray}, Handler: arrayIntegerHandler},
 		// Object containers (Record, Entity, etc.)
-		{Args: []Type{TAtom, TObject}, Handler: objectAtomHandler},
+		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, Handler: objectAtomHandler},
 		{Args: []Type{TString, TObject}, Handler: objectStringHandler},
 		{Args: []Type{TInteger, TObject}, Handler: objectIntegerHandler},
 		// None propagation

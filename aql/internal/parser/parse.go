@@ -577,6 +577,23 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 				}
 				values = append(values, expanded...)
 				i += consumed - 1
+				// Trailing dot before paren group: foo.x.(expr) → get/getr
+				// The dot was consumed by collectDotString but the paren
+				// group is the next item. Emit the accessor word so the
+				// paren result chains as a computed key.
+				if strings.HasSuffix(dotStr, ".") {
+					nextIdx := i + 1
+					if nextIdx < len(items) {
+						if _, ok := items[nextIdx].(parenGroup); ok {
+							accessor := "get"
+							trimmed := strings.TrimSuffix(dotStr, ".")
+							if strings.HasSuffix(trimmed, "!") {
+								accessor = "getr"
+							}
+							values = append(values, engine.NewWord(accessor))
+						}
+					}
+				}
 				continue
 			}
 		}
@@ -956,28 +973,37 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 	var inner []engine.Value
 
 	// First part (before first dot): emit as a plain word.
-	// The engine resolves it naturally — def, registered function, or atom.
+	// Strip trailing "!" — it modifies the dot that follows, not the word.
 	leadingDot := parts[0] == ""
 	if !leadingDot {
-		w, err := parseWord(parts[0])
+		seg := strings.TrimSuffix(parts[0], "!")
+		w, err := parseWord(seg)
 		if err != nil {
 			return nil, err
 		}
 		inner = append(inner, w)
 	}
 
-	// Subsequent parts (after each dot): emit dot then key, so dot
-	// forward-collects the key — identical to standalone "dot a" syntax.
-	for _, part := range parts[1:] {
+	// Subsequent parts (after each dot): emit get/getr then key.
+	// If the previous segment ended with "!", use getr (strict access)
+	// instead of get (lenient access). Strip "!" from current segment too.
+	for idx, part := range parts[1:] {
 		if part == "" {
 			continue
 		}
-		inner = append(inner, engine.NewWord("get"))
+		// Previous segment determines the accessor word.
+		accessor := "get"
+		if strings.HasSuffix(parts[idx], "!") {
+			accessor = "getr"
+		}
+		inner = append(inner, engine.NewWord(accessor))
+		// Strip trailing "!" from current segment (it affects the NEXT dot).
+		key := strings.TrimSuffix(part, "!")
 		// Integer keys for list access.
-		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
+		if n, err := strconv.ParseInt(key, 10, 64); err == nil {
 			inner = append(inner, engine.NewInteger(n))
 		} else {
-			inner = append(inner, engine.NewWord(part))
+			inner = append(inner, engine.NewWord(key))
 		}
 	}
 
