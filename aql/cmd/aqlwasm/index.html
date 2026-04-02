@@ -166,7 +166,7 @@
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   hint.textContent = isMobile
-    ? 'Tap Run to evaluate'
+    ? 'Enter for newline, tap Run to evaluate'
     : 'Shift+Enter for newline, Enter to evaluate';
 
   function addLine(cls, text) {
@@ -248,7 +248,7 @@
   input.addEventListener('input', autoResize);
 
   input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
       e.preventDefault();
       submit();
     } else if (e.key === 'ArrowUp' && input.selectionStart === 0 && !e.shiftKey) {
