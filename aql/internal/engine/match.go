@@ -155,33 +155,39 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 
-					// Unknown word: resolve to Atom, Boolean, or type literal.
-					resolvedType := TAtom
+					// Known literals: true/false → Boolean, type names → type literal.
 					if ww.Name == "true" || ww.Name == "false" {
-						resolvedType = TBoolean
-					} else if tn, isType := typeNames[ww.Name]; isType {
-						typeLit := NewTypeLiteral(tn)
-						if sigTypeMatches(typeLit, expectedType) {
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					} else if tn, isType := ResolveTypePath(ww.Name); isType {
-						typeLit := NewTypeLiteral(tn)
-						if sigTypeMatches(typeLit, expectedType) {
+						if sigTypeMatches(Value{VType: TBoolean}, expectedType) || expectedType.Equal(TAny) {
 							fwd++
 							scanIdx++
 							continue
 						}
 						break
 					}
-					if sigTypeMatches(Value{VType: resolvedType}, expectedType) || expectedType.Equal(TAny) {
+					if tn, isType := typeNames[ww.Name]; isType {
+						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+					if tn, isType := ResolveTypePath(ww.Name); isType {
+						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+
+					// Undefined word: always resolves to Atom.
+					if sigTypeMatches(Value{VType: TAtom}, expectedType) || expectedType.Equal(TAny) {
 						fwd++
 						scanIdx++
 						continue
 					}
-					break // unknown word, type mismatch
+					break // type mismatch
 				}
 
 				// Open paren marker: boundary, stop forward scan.
