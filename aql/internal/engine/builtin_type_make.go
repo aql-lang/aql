@@ -559,15 +559,6 @@ func registerMake(r *Registry) {
 			objType := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
 		}
-		// Type literal: look up in the type registry.
-		if targetVal.Data == nil {
-			path := targetVal.VType.String()
-			if td, ok := r.Types[path]; ok {
-				if ot, ok := td.Constraint.Data.(ObjectTypeInfo); ok {
-					return makeObject(ot, srcVal, nil)
-				}
-			}
-		}
 		return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
 	}
 

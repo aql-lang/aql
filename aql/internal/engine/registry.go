@@ -9,18 +9,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-// TypeDef describes a named complex type in the type registry.
-// The Type field holds the full type path (e.g. Node/Map/Resource/Table).
-// The Constraint holds the type's structure — a record type, disjunct, etc.
-type TypeDef struct {
-	Type       Type  // full type path
-	Constraint Value // structural constraint (RecordTypeInfo, ChildTypeInfo, etc.)
-}
-
 // Registry maps function names to their definitions.
 type Registry struct {
 	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
-	Types             map[string]TypeDef                                 // complex type registry keyed by full type path
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -60,7 +51,6 @@ func NewRegistry() (*Registry, error) {
 
 	r := &Registry{
 		DefStacks:      make(map[string][]Value),
-		Types:          make(map[string]TypeDef),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,
