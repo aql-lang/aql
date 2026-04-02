@@ -429,6 +429,37 @@ func registerBuiltins(r *Registry) {
 	// Module
 	registerModule(r)
 
+	// Array
+	registerIota(r)
+	registerShape(r)
+	registerRank(r)
+	registerLength(r)
+	registerReshape(r)
+	registerArrFlatten(r)
+	registerArrTranspose(r)
+	registerReverse(r)
+	registerTake(r)
+	registerShed(r)
+	registerWhere(r)
+	registerUnique(r)
+	registerGrade(r)
+	registerAt(r)
+	registerSortby(r)
+	registerMember(r)
+	registerArrIndexof(r)
+	registerGroup(r)
+	registerReplicate(r)
+	registerExpand(r)
+	registerWindow(r)
+	registerPairs(r)
+
+	// Array higher-order
+	registerEach(r)
+	registerFold(r)
+	registerScan(r)
+	registerOuter(r)
+	registerInner(r)
+
 	// Help
 	registerHelp(r)
 }

@@ -45,7 +45,7 @@ func TestMatrixModuleExports(t *testing.T) {
 	expected := []string{
 		"create", "zeros", "ones", "eye", "fill",
 		"rows", "cols", "size",
-		"at", "row", "col",
+		"elem", "row", "col",
 		"mat-add", "mat-sub", "mat-mul", "scale", "mat-emul",
 		"transpose", "flatten",
 		"sum", "tr", "det",
@@ -156,7 +156,7 @@ func TestMatrixAt(t *testing.T) {
 	// 2x2 matrix: [[1,2],[3,4]]
 	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	// mat 1 0 matrix.at → element at row 1, col 0 = 3
-	input := append([]engine.Value{mat, engine.NewInteger(1), engine.NewInteger(0)}, matGet("at")...)
+	input := append([]engine.Value{mat, engine.NewInteger(1), engine.NewInteger(0)}, matGet("elem")...)
 	result := runAQL(t, r, input)
 	if result[0].AsNumber() != 3.0 {
 		t.Errorf("at(1,0) = %v, want 3.0", result[0])

@@ -33,7 +33,7 @@ func BuildMatrixModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	exports.Set("size", makeMatrixToIntFnDef("matrix-size", subReg))
 
 	// Access
-	exports.Set("at", makeMatrixIntIntToDecFnDef("matrix-at", subReg))
+	exports.Set("elem", makeMatrixIntIntToDecFnDef("matrix-at", subReg))
 	exports.Set("row", makeMatrixIntToListFnDef("matrix-row", subReg))
 	exports.Set("col", makeMatrixIntToListFnDef("matrix-col", subReg))
 
