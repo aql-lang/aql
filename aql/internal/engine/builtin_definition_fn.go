@@ -71,7 +71,7 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
-		params, err := parseFnParams(r, inputSig)
+		params, barrierPos, err := parseFnParams(r, inputSig)
 		if err != nil {
 			return FnDefInfo{}, err
 		}
@@ -113,9 +113,10 @@ func parseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params:  params,
-			Returns: returns,
-			Body:    bodyElems,
+			Params:     params,
+			Returns:    returns,
+			Body:       bodyElems,
+			BarrierPos: barrierPos,
 		})
 	}
 	return FnDefInfo{Sigs: sigs}, nil
@@ -203,7 +204,7 @@ func parseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
-		params, err := parseFnParams(r, inputSig)
+		params, _, err := parseFnParams(r, inputSig)
 		if err != nil {
 			return FnUndefInfo{}, err
 		}
@@ -257,15 +258,16 @@ func parseFnReturns(outputSig Value) ([]Type, error) {
 // Optional params are detected via:
 //   - Named: key ending with "?" (from pair ? syntax): [x?:Integer]
 //   - Unnamed: "?" word following a type: [Integer?]
-func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
+func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	if !inputSig.VType.Equal(TList) {
-		return nil, fmt.Errorf("function spec: input signature must be a list")
+		return nil, 0, fmt.Errorf("function spec: input signature must be a list")
 	}
 	if inputSig.Data == nil {
-		return nil, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
+		return nil, 0, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
 	}
 	elems := inputSig.AsList()
 	var params []FnParam
+	barrierPos := 0
 
 	for i := 0; i < elems.Len(); i++ {
 		elem := elems.Get(i)
@@ -279,6 +281,14 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 			continue
 		}
 
+		// Check if this element is a "|" marker — record the barrier
+		// position. Forward collection stops here; remaining args
+		// are matched from the stack.
+		if elem.IsWord() && elem.AsWord().Name == "|" {
+			barrierPos = len(params)
+			continue
+		}
+
 		switch {
 		case elem.VType.Equal(TMap) && elem.Data != nil:
 			m := elem.AsMutableMap()
@@ -286,7 +296,7 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 				// Named parameter from implicit pair syntax: [x:Integer]
 				keys := m.Keys()
 				if len(keys) != 1 {
-					return nil, fmt.Errorf("function spec: parameter map must have exactly one key")
+					return nil, 0, fmt.Errorf("function spec: parameter map must have exactly one key")
 				}
 				name := keys[0]
 				optional := false
@@ -332,14 +342,14 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 				}
 				paramType, pattern, err := resolveSigType(r, typeVal)
 				if err != nil {
-					return nil, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
+					return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
 				}
 				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern, Optional: optional})
 			} else {
 				// Explicit map: unnamed parameter with structural pattern
 				paramType, pattern, err := resolveSigType(r, elem)
 				if err != nil {
-					return nil, fmt.Errorf("function spec: invalid map param: %w", err)
+					return nil, 0, fmt.Errorf("function spec: invalid map param: %w", err)
 				}
 				params = append(params, FnParam{Type: paramType, Pattern: pattern})
 			}
@@ -349,7 +359,7 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 			typeName := elem.AsWord().Name
 			paramType, err := resolveTypeName(typeName)
 			if err != nil {
-				return nil, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
+				return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
 			}
 			params = append(params, FnParam{Type: paramType})
 
@@ -370,11 +380,11 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, error) {
 			params = append(params, FnParam{Type: elem.VType})
 
 		default:
-			return nil, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
+			return nil, 0, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
 		}
 	}
 
-	return params, nil
+	return params, barrierPos, nil
 }
 
 // resolveSigType converts a Value (from a pair's value side) to a Type.
@@ -683,7 +693,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			result = append(result, NewWord(")"))
 			return result, nil
 		}
-		registerFn(name, Signature{Args: argTypes, Handler: handler, Patterns: patterns})
+		registerFn(name, Signature{Args: argTypes, Handler: handler, Patterns: patterns, BarrierPos: s.BarrierPos})
 	}
 }
 

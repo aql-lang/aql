@@ -69,7 +69,7 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . ; ? ! as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; ? ! | as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
@@ -77,6 +77,7 @@ func Parse(src string) ([]engine.Value, error) {
 	TinSC := j.Token("#SC", ";")
 	TinQM := j.Token("#QM", "?")
 	TinBG := j.Token("#BG", "!")
+	TinPI := j.Token("#PI", "|")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -107,6 +108,10 @@ func Parse(src string) ([]engine.Value, error) {
 			// Bang: "!" token. The "!" "." sequence becomes getr in convertTopLevelItems.
 			{S: [][]jsonic.Tin{{TinBG}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: "!", Quote: ""}
+			}},
+			// Pipe: "|" token. Used in fn signatures as forward barrier marker.
+			{S: [][]jsonic.Tin{{TinPI}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "|", Quote: ""}
 			}},
 			// Dot: "." token. Becomes get in convertTopLevelItems.
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {

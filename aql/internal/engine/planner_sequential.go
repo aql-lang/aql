@@ -86,6 +86,12 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 	scanIdx := e.pointer + 1
 
 	for forwardMatched < nArgs && scanIdx < len(e.stack) {
+		// Pipe barrier: stop forward collection at this position.
+		// Remaining args are matched from the stack in reverse.
+		if sig.BarrierPos > 0 && forwardMatched >= sig.BarrierPos {
+			break
+		}
+
 		tok := e.stack[scanIdx]
 		expectedType := sig.Args[forwardMatched]
 

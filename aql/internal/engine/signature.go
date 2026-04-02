@@ -47,6 +47,13 @@ type Signature struct {
 	// resolve now.
 	NoEvalArgs map[int]bool
 
+	// BarrierPos is the arg index where forward collection must stop.
+	// Positions before BarrierPos are collected forward; positions from
+	// BarrierPos onward are matched from the stack in reverse. 0 means
+	// no barrier (default, greedy forward). Implements the | syntax in
+	// fn signatures: def f fn [[Integer | String] ...] sets BarrierPos=1.
+	BarrierPos int
+
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
@@ -343,6 +350,9 @@ func typeInherentScore(t Type) int {
 // type score (up to ~9000) as a tiebreaker within the same specificity.
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 1_000_000
+	if sig.BarrierPos > 0 {
+		score += 500_000 // piped signatures sort before non-piped
+	}
 	for _, t := range sig.Args {
 		score += t.Specificity() * 10_000
 		score += typeInherentScore(t)

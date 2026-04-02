@@ -166,9 +166,10 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params  []FnParam
-	Returns []Type // declared return types (nil = unchecked)
-	Body    []Value
+	Params     []FnParam
+	Returns    []Type // declared return types (nil = unchecked)
+	Body       []Value
+	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.

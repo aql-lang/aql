@@ -20,7 +20,7 @@ func TestColorHex2rgbRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("#FF0000" Color.hex2rgb) .r`,
+		`"#FF0000" Color.hex2rgb .r`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestColorRoundTrip(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("#A0B0C0" Color.hex2rgb) Color.rgb2hex`,
+		`"#A0B0C0" Color.hex2rgb Color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestProjectImportInstalledColor(t *testing.T) {
 	projDir := filepath.Join(dir, "project")
 	result, err := runRealFileSteps(t, projDir, []string{
 		`(import "color")`,
-		`("#00FF00" Color.hex2rgb) .g`,
+		`"#00FF00" Color.hex2rgb .g`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -355,7 +355,7 @@ func TestColorChainHex2rgbThenRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("#123456" Color.hex2rgb) Color.rgb2hex`,
+		`"#123456" Color.hex2rgb Color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -486,7 +486,7 @@ func TestColorSchemeOceanSecondaryRoundTrip(t *testing.T) {
 
 	result, err = runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("` + hex + `" Color.hex2rgb) Color.rgb2hex`,
+		`"` + hex + `" Color.hex2rgb Color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)

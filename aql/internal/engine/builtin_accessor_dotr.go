@@ -86,16 +86,16 @@ func registerGetr(r *Registry) {
 	}
 
 	sigs := []Signature{
-		// [Key, Node] — covers Map, List
-		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, Handler: mapHandler},
-		{Args: []Type{TString, TNode}, Handler: mapHandler},
-		{Args: []Type{TInteger, TNode}, Handler: mapHandler},
-		// [Key, Object]
-		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, Handler: objectHandler},
-		{Args: []Type{TString, TObject}, Handler: objectHandler},
-		{Args: []Type{TInteger, TObject}, Handler: objectHandler},
-		// [Key, None]
-		{Args: []Type{TNone, TAny}, Handler: noneHandler},
+		// [Key | Node] — key forward, container from stack
+		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: mapHandler},
+		{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: mapHandler},
+		{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: mapHandler},
+		// [Key | Object]
+		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
+		{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
+		{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
+		// [Key | None]
+		{Args: []Type{TNone, TAny}, BarrierPos: 1, Handler: noneHandler},
 	}
 
 	r.Register("getr", sigs...)
