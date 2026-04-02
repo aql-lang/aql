@@ -69,13 +69,14 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . ; ? as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; ? ! as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
 	TinSC := j.Token("#SC", ";")
 	TinQM := j.Token("#QM", "?")
+	TinBG := j.Token("#BG", "!")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -102,6 +103,20 @@ func Parse(src string) ([]engine.Value, error) {
 			// Question mark produces a "?" marker for optional param syntax.
 			{S: [][]jsonic.Tin{{TinQM}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: "?", Quote: ""}
+			}},
+			// Bang: emitted as text marker so convertTopLevelItems can
+			// recognise "!" before "." for getr (strict access) notation.
+			// Left-adjacent bangs (e.g. p!) use Quote="adj" so the parser
+			// treats them as part of a dotted word. Space-separated bangs
+			// (e.g. " !.") use Quote="" for standalone getr.
+			{S: [][]jsonic.Tin{{TinBG}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				si := r.O0.SI
+				leftAdj := si > 0 && !isWhitespace(src[si-1])
+				if leftAdj {
+					r.Node = jsonic.Text{Str: "!", Quote: "adj"}
+				} else {
+					r.Node = jsonic.Text{Str: "!", Quote: ""}
+				}
 			}},
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				si := r.O0.SI
@@ -457,11 +472,26 @@ func isStandaloneDot(item any) bool {
 	return ok && text.Str == "." && text.Quote == ""
 }
 
+// isBangMarker returns true if item is a left-adjacent "!" marker (part of
+// a dotted word like foo!.bar). Standalone bangs (space-separated) have
+// Quote="" and are handled separately as the getr operator.
+func isBangMarker(item any) bool {
+	text, ok := item.(jsonic.Text)
+	return ok && text.Str == "!" && text.Quote == "adj"
+}
+
+// isStandaloneBang returns true if item is a space-separated "!" marker.
+func isStandaloneBang(item any) bool {
+	text, ok := item.(jsonic.Text)
+	return ok && text.Str == "!" && text.Quote == ""
+}
+
 // isTextOrNumber returns true if item is an unquoted text token or a number,
-// i.e. something that can appear as a segment in a dotted word.
+// i.e. something that can appear as a segment in a dotted word. Bang markers
+// ("!") are excluded — they are handled separately in dot notation.
 func isTextOrNumber(item any) bool {
 	if text, ok := item.(jsonic.Text); ok {
-		return text.Quote == ""
+		return text.Quote == "" && text.Str != "!"
 	}
 	switch item.(type) {
 	case float64, numberVal:
@@ -491,20 +521,27 @@ func itemToString(item any) string {
 // sequence of tokens (text/number separated by dot markers). Returns the
 // joined dotted string and the number of items consumed.
 //
+// The "!" token before a dot is consumed and appended to the segment,
+// producing "!" suffix notation for strict access: p!.x → "p!.x".
+//
 // Examples:
 //
-//	Text"foo", dot, Text"bar"             → "foo.bar", 3
-//	dot, Text"bar"                        → ".bar", 2
-//	Text"!", dot                          → "!.", 2
-//	Text"foo", dot, Number(0), dot, Text"x" → "foo.0.x", 5
+//	Text"foo", dot, Text"bar"                → "foo.bar", 3
+//	dot, Text"bar"                           → ".bar", 2
+//	Text"!", dot                             → "!.", 2
+//	Text"foo", !, dot, Text"bar"             → "foo!.bar", 4
+//	Text"foo", dot, Number(0), dot, Text"x"  → "foo.0.x", 5
 func collectDotString(items []any, start int) (string, int) {
 	var parts []string
 	i := start
 
-	// Handle leading dot.
+	// Handle leading dot or leading !.
 	if isDotMarker(items[i]) {
 		parts = append(parts, "") // empty first part → leading dot
 		i++
+	} else if isBangMarker(items[i]) && i+1 < len(items) && isDotMarker(items[i+1]) {
+		parts = append(parts, "!") // leading !. → strict leading dot
+		i += 2
 	}
 
 	for i < len(items) {
@@ -515,15 +552,19 @@ func collectDotString(items []any, start int) (string, int) {
 		parts = append(parts, itemToString(items[i]))
 		i++
 
-		// Check for trailing dot.
-		if i < len(items) && isDotMarker(items[i]) {
+		// Check for trailing "!" + dot (strict access) or plain dot.
+		if i+1 < len(items) && isBangMarker(items[i]) && isDotMarker(items[i+1]) {
+			// Append "!" to current segment to mark strict access.
+			parts[len(parts)-1] += "!"
+			i += 2 // consume ! and dot
+		} else if i < len(items) && isDotMarker(items[i]) {
 			i++ // consume dot, continue to next part
 		} else {
 			break
 		}
 	}
 
-	// Handle trailing dot (e.g. "!." → parts=["!", ""])
+	// Handle trailing dot (e.g. "foo." when next item is a paren group).
 	if i > start && isDotMarker(items[i-1]) {
 		parts = append(parts, "")
 	}
@@ -560,16 +601,38 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 			continue
 		}
 
-		// Unquoted text potentially followed by an adjacent dot.
-		if text, ok := items[i].(jsonic.Text); ok && text.Quote == "" {
-			if i+1 < len(items) && isDotMarker(items[i+1]) {
-				// "!" followed by adjacent dot with nothing useful after → getr.
-				if text.Str == "!" && (i+2 >= len(items) || !isTextOrNumber(items[i+2])) {
-					values = append(values, engine.NewWord("getr"))
-					i++ // skip the dot marker
-					continue
+		// Adjacent bang marker: "!" (left-adjacent) followed by dot → start of !. sequence.
+		if isBangMarker(items[i]) && i+1 < len(items) && isDotMarker(items[i+1]) {
+			// !. followed by text → start of a bang-dot sequence (e.g. !.x.y).
+			if i+2 < len(items) && isTextOrNumber(items[i+2]) {
+				dotStr, consumed := collectDotString(items, i)
+				expanded, err := expandDottedWord(dotStr)
+				if err != nil {
+					return nil, err
 				}
-				// Regular dotted word: foo.bar, foo.bar.baz, etc.
+				values = append(values, expanded...)
+				i += consumed - 1
+				continue
+			}
+			// Standalone !. (adjacent, nothing useful after) → getr word.
+			values = append(values, engine.NewWord("getr"))
+			i++ // skip the dot marker
+			continue
+		}
+
+		// Standalone bang: space-separated "!" followed by adjacent dot → getr.
+		if isStandaloneBang(items[i]) && i+1 < len(items) && isDotMarker(items[i+1]) {
+			values = append(values, engine.NewWord("getr"))
+			i++ // skip the dot marker
+			continue
+		}
+
+		// Unquoted text potentially followed by an adjacent dot or !.
+		if _, ok := items[i].(jsonic.Text); ok && isTextOrNumber(items[i]) {
+			hasDot := i+1 < len(items) && isDotMarker(items[i+1])
+			hasBangDot := i+2 < len(items) && isBangMarker(items[i+1]) && isDotMarker(items[i+2])
+			if hasDot || hasBangDot {
+				// Regular dotted word: foo.bar, foo!.bar, foo.bar.baz, etc.
 				dotStr, consumed := collectDotString(items, i)
 				expanded, err := expandDottedWord(dotStr)
 				if err != nil {
@@ -974,7 +1037,8 @@ func expandDottedWord(text string) ([]engine.Value, error) {
 
 	// First part (before first dot): emit as a plain word.
 	// Strip trailing "!" — it modifies the dot that follows, not the word.
-	leadingDot := parts[0] == ""
+	// A first part of just "!" means leading !. (strict leading dot).
+	leadingDot := parts[0] == "" || parts[0] == "!"
 	if !leadingDot {
 		seg := strings.TrimSuffix(parts[0], "!")
 		w, err := parseWord(seg)
