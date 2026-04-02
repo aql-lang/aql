@@ -779,7 +779,7 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 			defSnapshot[name] = len(stack)
 		}
 
-		// Evaluate in a sub-engine with higher step limit for complex bodies.
+// Evaluate in a sub-engine with higher step limit for complex bodies.
 		sub := NewTop(r)
 		result, err := sub.Run(tokens)
 
@@ -793,13 +793,23 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 		}
 
 		// Remove defs that were added during body execution.
-		// For each name, pop entries until the stack length matches
-		// the pre-execution snapshot.
-		for name, stack := range r.DefStacks {
-			prevLen := defSnapshot[name] // 0 for names not in snapshot
-			for len(stack) > prevLen {
+		// Collect names first, then clean up outside the range loop
+		// to avoid mutating DefStacks during iteration (uninstallDef
+		// triggers installFnDef → Register → upsertFnDef which can
+		// modify DefStacks entries for other names).
+		var toClean []string
+		for name := range r.DefStacks {
+			if len(r.DefStacks[name]) > defSnapshot[name] {
+				toClean = append(toClean, name)
+			}
+		}
+		for _, name := range toClean {
+			target := defSnapshot[name]
+			// Pop entries down to the snapshot length. Use a bounded
+			// loop to avoid infinite looping if uninstallDef's rebuild
+			// creates new entries.
+			for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
 				uninstallDef(r, name)
-				stack = r.DefStacks[name]
 			}
 		}
 
