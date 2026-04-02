@@ -20,7 +20,7 @@ func TestColorHex2rgbRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#FF0000" Color.hex2rgb .r`,
+		`"#FF0000" color.hex2rgb .r`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestColorHex2rgbComponents(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#FF8800" Color.hex2rgb`,
+		`"#FF8800" color.hex2rgb`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestColorRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`{r:255 g:136 b:0} Color.rgb2hex`,
+		`{r:255 g:136 b:0} color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestColorHex2int(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"FF" Color.hex2int`,
+		`"FF" color.hex2int`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestColorInt2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`255 Color.int2hex`,
+		`255 color.int2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestColorMakeColor(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("#FF8800" Color.make-color) .hex`,
+		`("#FF8800" color.make-color) .hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestColorRoundTrip(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#A0B0C0" Color.hex2rgb Color.rgb2hex`,
+		`"#A0B0C0" color.hex2rgb color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestColorClamp(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`300 Color.clamp`,
+		`300 color.clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestColorClampNegative(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`-10 Color.clamp`,
+		`-10 color.clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestProjectImportInstalledColor(t *testing.T) {
 	projDir := filepath.Join(dir, "project")
 	result, err := runRealFileSteps(t, projDir, []string{
 		`(import "color")`,
-		`"#00FF00" Color.hex2rgb .g`,
+		`"#00FF00" color.hex2rgb .g`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -341,7 +341,7 @@ func TestExportMapWordValues(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"AA" Color.hex2int`,
+		`"AA" color.hex2int`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -355,7 +355,7 @@ func TestColorChainHex2rgbThenRgb2hex(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#123456" Color.hex2rgb Color.rgb2hex`,
+		`"#123456" color.hex2rgb color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +367,7 @@ func TestColorChainMakeColorThenAccessRGB(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`("#AABB00" Color.make-color) .g`,
+		`("#AABB00" color.make-color) .g`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -381,7 +381,7 @@ func TestColorHex2rgbBlack(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#000000" Color.hex2rgb`,
+		`"#000000" color.hex2rgb`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -399,7 +399,7 @@ func TestColorHex2rgbWhite(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#FFFFFF" Color.hex2rgb`,
+		`"#FFFFFF" color.hex2rgb`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -419,7 +419,7 @@ func TestColorClampZero(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`0 Color.clamp`,
+		`0 color.clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -431,7 +431,7 @@ func TestColorClampMax(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`255 Color.clamp`,
+		`255 color.clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -443,7 +443,7 @@ func TestColorClampMiddle(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`128 Color.clamp`,
+		`128 color.clamp`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -486,7 +486,7 @@ func TestColorSchemeOceanSecondaryRoundTrip(t *testing.T) {
 
 	result, err = runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"` + hex + `" Color.hex2rgb Color.rgb2hex`,
+		`"` + hex + `" color.hex2rgb color.rgb2hex`,
 	})
 	if err != nil {
 		t.Fatal(err)

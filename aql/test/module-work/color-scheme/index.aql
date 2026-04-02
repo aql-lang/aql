@@ -1,22 +1,22 @@
 (import "../color")
 
-def accent1 ("#E63946" Color.make-color)
-def light1 ("#F1FAEE" Color.make-color)
-def mid1 ("#A8DADC" Color.make-color)
-def dark1 ("#457B9D" Color.make-color)
-def deep1 ("#1D3557" Color.make-color)
+def accent1 ("#E63946" color.make-color)
+def light1 ("#F1FAEE" color.make-color)
+def mid1 ("#A8DADC" color.make-color)
+def dark1 ("#457B9D" color.make-color)
+def deep1 ("#1D3557" color.make-color)
 
-def earth1 ("#264653" Color.make-color)
-def earth2 ("#2A9D8F" Color.make-color)
-def earth3 ("#E9C46A" Color.make-color)
-def earth4 ("#F4A261" Color.make-color)
-def earth5 ("#E76F51" Color.make-color)
+def earth1 ("#264653" color.make-color)
+def earth2 ("#2A9D8F" color.make-color)
+def earth3 ("#E9C46A" color.make-color)
+def earth4 ("#F4A261" color.make-color)
+def earth5 ("#E76F51" color.make-color)
 
-def neon1 ("#FF006E" Color.make-color)
-def neon2 ("#FB5607" Color.make-color)
-def neon3 ("#FFBE0B" Color.make-color)
-def neon4 ("#8338EC" Color.make-color)
-def neon5 ("#3A86FF" Color.make-color)
+def neon1 ("#FF006E" color.make-color)
+def neon2 ("#FB5607" color.make-color)
+def neon3 ("#FFBE0B" color.make-color)
+def neon4 ("#8338EC" color.make-color)
+def neon5 ("#3A86FF" color.make-color)
 
 def sunset {
   name: "sunset"
