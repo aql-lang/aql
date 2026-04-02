@@ -184,10 +184,9 @@ type FnSig struct {
 // engine tries forward collection before stack matching.
 type FnDefInfo struct {
 	Name              string
-	Sigs              []FnSig     // AQL-defined overloads (nil for Go builtins)
+	Sigs              []FnSig     // AQL-defined overloads (nil for Go-implemented words)
 	Signatures        []Signature // compiled dispatch table
 	ForwardPrecedence bool        // true = try forward-first; false = stack-only
-	Builtin           bool        // true for Go builtins registered during setup
 	Registry          *Registry
 }
 

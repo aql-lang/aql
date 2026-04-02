@@ -67,11 +67,11 @@ func buildInspection(r *Registry, name string) Value {
 		return newValue(TInspect, result)
 	}
 
-	// Determine kind: if there's a DefStacks entry, it's user-defined.
-	if fn.Builtin {
-		result.Set("kind", NewAtom("builtin"))
-	} else {
+	// Determine kind: AQL-defined functions have Sigs, Go-implemented do not.
+	if len(fn.Sigs) > 0 {
 		result.Set("kind", NewAtom("defined"))
+	} else {
+		result.Set("kind", NewAtom("native"))
 	}
 
 	// Add forward_precedence flag.

@@ -2126,8 +2126,8 @@ func TestEngineInspectBuiltin(t *testing.T) {
 
 	// Check kind field.
 	kind, ok := m.Get("kind")
-	if !ok || kind.AsAtom() != "builtin" {
-		t.Errorf("kind = %v, want builtin", kind)
+	if !ok || kind.AsAtom() != "native" {
+		t.Errorf("kind = %v, want native", kind)
 	}
 
 	// Check signatures field is a non-empty list.

@@ -236,7 +236,6 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 		Name:              name,
 		Signatures:        append([]Signature(nil), sigs...),
 		ForwardPrecedence: forwardPrec,
-		Builtin:           !r.ready,
 	}
 	SortSignatures(fnDef.Signatures)
 	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
@@ -318,7 +317,7 @@ func DefaultRegistry() (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	registerBuiltins(r)
+	registerCoreWords(r)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
@@ -334,7 +333,7 @@ func (r *Registry) Err() error {
 	return r.errs[0]
 }
 
-func registerBuiltins(r *Registry) {
+func registerCoreWords(r *Registry) {
 	// String
 	registerUpper(r)
 	registerLower(r)
