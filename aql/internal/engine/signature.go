@@ -66,8 +66,9 @@ func (s *Signature) TotalArgs() int {
 
 // MatchResult holds a matched signature and the positionally matched args.
 type MatchResult struct {
-	Sig  *Signature
-	Args []Value // args matched positionally to Sig.Args types
+	Sig       *Signature
+	Args      []Value // args in signature order
+	Positions []int   // absolute stack indices of each arg (nil for 0-arg)
 }
 
 // MatchSignature finds the first matching signature for a function given the

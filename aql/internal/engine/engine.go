@@ -480,10 +480,21 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Unified signature matching: one path for all words.
 	resolved := e.effectiveResolved()
-	sig, fwdCount, stkCount, needsRearrange := e.matchSignature(fn, w, resolved)
+	sig, positions := e.matchSignature(fn, w, resolved)
 
 	if sig == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
+	}
+
+	// Count forward vs stack args from positions.
+	fwdCount := 0
+	stkCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		} else {
+			stkCount++
+		}
 	}
 
 	// Forward collection needed: defer execution.
@@ -492,24 +503,13 @@ func (e *Engine) stepWord(val Value) error {
 		return e.insertForward(w, sig, fwdCount, stkCount)
 	}
 
-	// Immediate execution: all args from stack.
-	n := stkCount
-	match := &MatchResult{Sig: sig}
-	if n > 0 {
-		indices := e.resolvedIndicesBefore(n)
-		match.Args = make([]Value, n)
-		if needsRearrange {
-			for i, idx := range indices {
-				match.Args[n-1-i] = e.stack[idx]
-			}
-		} else {
-			for i, idx := range indices {
-				match.Args[i] = e.stack[idx]
-			}
+	// Immediate execution: read args from recorded positions.
+	match := &MatchResult{Sig: sig, Positions: positions}
+	if stkCount > 0 {
+		match.Args = make([]Value, stkCount)
+		for i, pos := range positions {
+			match.Args[i] = e.stack[pos]
 		}
-	}
-	if n > 0 && needsRearrange {
-		e.rearrangeForForward(n, 0)
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
@@ -519,8 +519,19 @@ func (e *Engine) stepWord(val Value) error {
 func (e *Engine) execMatch(match *MatchResult) error {
 	n := len(match.Sig.Args)
 
-	// Find the indices of the n resolved values before the pointer.
-	indices := e.resolvedIndicesBefore(n)
+	// Use recorded positions if available, otherwise derive from stack.
+	indices := match.Positions
+	if len(indices) == 0 && n > 0 {
+		indices = e.resolvedIndicesBefore(n)
+	}
+	// Sort indices ascending for splice operations.
+	sortedIndices := make([]int, len(indices))
+	copy(sortedIndices, indices)
+	for i := 1; i < len(sortedIndices); i++ {
+		for j := i; j > 0 && sortedIndices[j] < sortedIndices[j-1]; j-- {
+			sortedIndices[j], sortedIndices[j-1] = sortedIndices[j-1], sortedIndices[j]
+		}
+	}
 
 	// Process consumed arguments:
 	// - Maps with Eval=true: auto-evaluate their values now, so word
@@ -569,7 +580,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		// Collect the full resolved stack before the pointer (from base),
 		// excluding the matched args and forwards.
-		fullStack = e.resolvedStackBeforeFrom(base, indices)
+		fullStack = e.resolvedStackBeforeFrom(base, sortedIndices)
 		results, err := match.Sig.Handler(match.Args, ctx, fullStack, e.registry)
 		if err != nil {
 			return err
@@ -586,13 +597,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return err
 	}
 
-	if len(indices) == n && n > 0 {
-		firstArgIdx := indices[0]
+	if len(sortedIndices) == n && n > 0 {
+		firstArgIdx := sortedIndices[0]
 
 		// Compact: slide non-skip elements over skip elements in
 		// [firstArgIdx..pointer] to preserve internal forwards.
 		skipSet := make(map[int]bool, n+1)
-		for _, idx := range indices {
+		for _, idx := range sortedIndices {
 			skipSet[idx] = true
 		}
 		skipSet[e.pointer] = true // skip the word itself
@@ -998,12 +1009,23 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
 	// Use unified matchSignature for all matching (forward and stack).
-	matchedSig, fwdCount, stkCount, _ := e.matchSignature(fn, w, resolved)
+	matchedSig, positions := e.matchSignature(fn, w, resolved)
 
 	if matchedSig == nil {
 		// No matching signature — just advance (treat as data).
 		e.pointer++
 		return nil
+	}
+
+	// Count forward vs stack args from positions.
+	fwdCount := 0
+	stkCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		} else {
+			stkCount++
+		}
 	}
 
 	if fwdCount > 0 {
@@ -1028,10 +1050,13 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		if !paramsMatch {
 			continue
 		}
-		// Build args from resolved stack (deepest-first for FnDef literals).
+		// Build args from recorded positions.
 		var args []Value
 		if nArgs > 0 {
-			args = resolved[len(resolved)-nArgs:]
+			args = make([]Value, nArgs)
+			for j, pos := range positions {
+				args[j] = e.stack[pos]
+			}
 		}
 		return e.execFnDefSig(valIdx, fs, args, fnDef.Registry)
 	}

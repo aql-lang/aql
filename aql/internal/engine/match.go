@@ -12,8 +12,7 @@ package engine
 //	1.3 Stop if all params matched, or if /N params reached.
 //	1.4 Move to step 2 if you hit a boundary condition:
 //	    a function word, a pipe barrier, or "end".
-//	1.5 If you hit an open paren, resolve the paren expression first
-//	    (count as one forward arg, skip past matching close-paren).
+//	1.5 If you hit an open paren, treat as boundary (pre-evaluated).
 //	2.1 Match the remaining parameters against the stack, working
 //	    backwards (top of stack first).
 //	2.2 Stop once all or /N params reached.
@@ -21,13 +20,11 @@ package engine
 // This is implemented as one outer loop over signatures and one inner
 // loop over parameters. No separate functions are called for matching.
 //
-// Returns: matched signature, forward arg count, stack arg count, needsRearrange.
-// If forwardCount > 0 the caller must insertForward for deferred collection.
-// If forwardCount == 0 all args are on the stack (immediate execution).
-// needsRearrange is true when the stack match used nearest-first order
-// and the caller should call rearrangeForForward to put values in sig order.
-// Returns nil sig if no signature matches.
-func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, int, int, bool) {
+// Returns: matched signature and arg positions (absolute stack indices
+// in signature order). Positions > pointer are forward args that need
+// deferred collection. Positions < pointer are stack args. Returns nil
+// sig if no signature matches.
+func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
 	stackOnly := !fn.ForwardPrecedence && !w.ForceForward
 	skipForward := (stackOnly || w.ForceStack) && !w.ForceForward
 	insideForward := false
@@ -51,12 +48,15 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		}
 	}
 
+	// Build a map from resolved values to their absolute stack indices.
+	// This lets us record exact positions for stack-matched args.
+	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
+
 	// Track the best non-preferred match so that if no preferred sig
 	// matches, we can fall back to it without a second pass.
 	type matchResult struct {
 		sig       *Signature
-		fwd, stk  int
-		rearrange bool
+		positions []int
 	}
 	var bestDeferred *matchResult
 
@@ -84,6 +84,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 		// ── Step 1: forward matching ─────────────────────────────
 
+		positions := make([]int, nArgs)
 		fwd := 0 // number of params matched by forward tokens
 
 		// 1.1: if stack-only and not /f, skip forward scan entirely.
@@ -122,6 +123,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Sig expects TWord: any word matches directly.
 					if TWord.Matches(expectedType) {
+						positions[fwd] = scanIdx
 						fwd++
 						scanIdx++
 						continue
@@ -130,6 +132,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// /q modifier: word treated as Atom.
 					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
 						if TAtom.Matches(expectedType) {
+							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
 							continue
@@ -141,6 +144,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
 						top := ds[len(ds)-1]
 						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
 							continue
@@ -158,6 +162,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// Known literals: true/false → Boolean, type names → type literal.
 					if ww.Name == "true" || ww.Name == "false" {
 						if sigTypeMatches(Value{VType: TBoolean}, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
 							continue
@@ -166,6 +171,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 					if tn, isType := typeNames[ww.Name]; isType {
 						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
 							continue
@@ -174,6 +180,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 					if tn, isType := ResolveTypePath(ww.Name); isType {
 						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
 							continue
@@ -183,6 +190,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Undefined word: always resolves to Atom.
 					if sigTypeMatches(Value{VType: TAtom}, expectedType) || expectedType.Equal(TAny) {
+						positions[fwd] = scanIdx
 						fwd++
 						scanIdx++
 						continue
@@ -201,6 +209,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						(expectedType.Equal(TMap) || expectedType.Equal(TList)) {
 						break // reject type literals for concrete Map/List
 					}
+					positions[fwd] = scanIdx
 					fwd++
 					scanIdx++
 					continue
@@ -214,13 +223,12 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// 1.3: all params matched by forward?
 		if fwd == nArgs {
 			if preferWordSig && !isPreferred {
-				// Defer: a preferred sig might match later.
 				if bestDeferred == nil {
-					bestDeferred = &matchResult{sig, fwd, 0, false}
+					bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
 				}
 				continue
 			}
-			return sig, fwd, 0, false
+			return sig, positions
 		}
 
 		// Inside a pending forward scope: all args must come from
@@ -237,13 +245,18 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 				}
 				if canStack {
+					// Fill remaining positions from stack (nearest first).
+					for j := 0; j < remaining; j++ {
+						ri := len(resolvedIdx) - 1 - j
+						positions[fwd+j] = resolvedIdx[ri]
+					}
 					if preferWordSig && !isPreferred {
 						if bestDeferred == nil {
-							bestDeferred = &matchResult{sig, nArgs, 0, false}
+							bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
 						}
 						continue
 					}
-					return sig, nArgs, 0, false
+					return sig, positions
 				}
 			}
 			continue
@@ -262,26 +275,25 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		}
 
 		// 2.1: match remaining params against the stack.
-		// Forward-precedence words: top of stack first (nearest).
-		// Stack-only words: bottom of resolved first (deepest).
-		reversed := !stackOnly && !w.ForceStack
-		stackBase := len(resolved) - remaining
+		// Forward-prec words: nearest first (top → sig.Args[fwd]).
+		// Stack-only / ForceStack: deepest first.
+		nearestFirst := !stackOnly && !w.ForceStack
 
 		// When forward matched some args (fwd > 0), only nearest-first
-		// is valid for the stack remainder — deepest-first would accept
-		// combos the old code rejected.
-		if fwd > 0 && !reversed {
+		// is valid for the stack remainder.
+		if fwd > 0 && !nearestFirst {
 			continue
 		}
 
 		allMatch := true
 		for j := 0; j < remaining; j++ {
-			var stackVal Value
-			if reversed {
-				stackVal = resolved[len(resolved)-1-j]
+			var ri int
+			if nearestFirst {
+				ri = len(resolvedIdx) - 1 - j
 			} else {
-				stackVal = resolved[stackBase+j]
+				ri = len(resolvedIdx) - remaining + j
 			}
+			stackVal := resolved[ri]
 			sigIdx := fwd + j
 
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
@@ -289,6 +301,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					allMatch = false
 					break
 				}
+				positions[sigIdx] = resolvedIdx[ri]
 				continue
 			}
 			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
@@ -299,6 +312,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				allMatch = false
 				break
 			}
+			positions[sigIdx] = resolvedIdx[ri]
 		}
 		if !allMatch {
 			continue
@@ -311,13 +325,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				if idx < fwd {
 					continue
 				}
-				stackJ := idx - fwd
-				var val Value
-				if reversed {
-					val = resolved[len(resolved)-1-stackJ]
-				} else {
-					val = resolved[stackBase+stackJ]
-				}
+				val := e.stack[positions[idx]]
 				if pattern.VType.Equal(TMap) && val.VType.Equal(TMap) &&
 					pattern.Data != nil && val.Data != nil &&
 					!pattern.IsOptionsType() &&
@@ -341,16 +349,16 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// Full match found.
 		if preferWordSig && !isPreferred {
 			if bestDeferred == nil {
-				bestDeferred = &matchResult{sig, fwd, remaining, reversed}
+				bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
 			}
 			continue
 		}
-		return sig, fwd, remaining, reversed
+		return sig, positions
 	}
 
 	// Return deferred non-preferred match if one was found.
 	if bestDeferred != nil {
-		return bestDeferred.sig, bestDeferred.fwd, bestDeferred.stk, bestDeferred.rearrange
+		return bestDeferred.sig, bestDeferred.positions
 	}
 
 	// Try fallback (0-arg or Fallback handler).
@@ -360,9 +368,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 		if len(sig.Args) == 0 || sig.Fallback {
-			return sig, 0, 0, false
+			return sig, nil
 		}
 	}
 
-	return nil, 0, 0, false
+	return nil, nil
 }
