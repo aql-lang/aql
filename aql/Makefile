@@ -4,7 +4,7 @@ BINARY := bin/aql
 CMD := ./cmd/aql
 VERSION := 0.1.0-dev
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
-WASM_DIR := bin/wasm
+WASM_DIR := ../docs
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) $(CMD)
@@ -39,6 +39,5 @@ wasm:
 	else \
 		echo "error: wasm_exec.js not found in GOROOT"; exit 1; \
 	fi
-	cp cmd/aqlwasm/index.html $(WASM_DIR)/
 	@echo "Built: $(WASM_DIR)/"
 	@echo "Serve with: cd $(WASM_DIR) && python3 -m http.server 8080"
