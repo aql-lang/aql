@@ -48,13 +48,15 @@ func registerDef(r *Registry) {
 
 	r.Register("def",
 		Signature{
-			Args:    []Type{TString, TAny},
-			Handler: defHandler,
+			Args:       []Type{TString, TAny},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    defHandler,
 		},
 		Signature{
-			Args:      []Type{TAtom, TAny},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   defHandler,
+			Args:       []Type{TAtom, TAny},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    defHandler,
 		},
 	)
 }

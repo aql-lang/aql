@@ -37,6 +37,16 @@ type Signature struct {
 	// collection.
 	QuoteArgs map[int]bool
 
+	// NoEvalArgs marks arg positions where list auto-evaluation should be
+	// suppressed in execMatch. Unlike QuoteArgs, this does NOT affect
+	// forward collection or word→atom conversion — it only prevents
+	// autoEvalList from running on consumed list arguments at marked
+	// positions. Map auto-evaluation (autoEvalMap) is NOT affected.
+	// Use this for code-body positions (def body, if branches, for body,
+	// etc.) where the list contains code to execute later, not data to
+	// resolve now.
+	NoEvalArgs map[int]bool
+
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool

@@ -32,9 +32,11 @@ func registerQuote(r *Registry) {
 		},
 		// TAny signature: catches all non-word values (lists, maps,
 		// scalars). Returns the value with Quoted=true to prevent
-		// auto-evaluation at end of execution.
+		// auto-evaluation at end of execution. NoEvalArgs prevents
+		// list auto-evaluation before the handler runs.
 		Signature{
-			Args: []Type{TAny},
+			Args:       []Type{TAny},
+			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				v := args[0]
 				v.Quoted = true

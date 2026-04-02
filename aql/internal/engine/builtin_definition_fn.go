@@ -49,8 +49,9 @@ func registerFn(r *Registry) {
 	}
 
 	r.Register("fn", Signature{
-		Args:    []Type{TList},
-		Handler: fnHandler,
+		Args:       []Type{TList},
+		NoEvalArgs: map[int]bool{0: true},
+		Handler:    fnHandler,
 	})
 }
 

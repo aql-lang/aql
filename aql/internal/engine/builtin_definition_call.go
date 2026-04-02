@@ -10,7 +10,8 @@ import "fmt"
 //	[dup mul] call   => (evaluates "dup mul" on whatever is on the stack)
 func registerCall(r *Registry) {
 	r.Register("call", Signature{
-		Args: []Type{TList},
+		Args:       []Type{TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			body := args[0]
 

@@ -89,7 +89,8 @@ func registerVar(r *Registry) {
 	}
 
 	r.Register("var", Signature{
-		Args:    []Type{TList},
-		Handler: varHandler,
+		Args:       []Type{TList},
+		NoEvalArgs: map[int]bool{0: true},
+		Handler:    varHandler,
 	})
 }

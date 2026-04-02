@@ -7,7 +7,8 @@ import "fmt"
 //   each [dup add] [1 2 3]  →  [2 4 6]
 func registerEach(r *Registry) {
 	r.Register("each", Signature{
-		Args: []Type{TList, TList},
+		Args:       []Type{TList, TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil {
 				return nil, fmt.Errorf("each: expected concrete lists")
@@ -43,7 +44,8 @@ func registerEach(r *Registry) {
 func registerFold(r *Registry) {
 	// With initial value: init body data → result
 	r.Register("fold", Signature{
-		Args: []Type{TAny, TList, TList},
+		Args:       []Type{TAny, TList, TList},
+		NoEvalArgs: map[int]bool{1: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			// args[0]=init, args[1]=body, args[2]=data
 			if args[1].Data == nil || args[2].Data == nil {
@@ -57,7 +59,8 @@ func registerFold(r *Registry) {
 	})
 	// Without initial: body data → result (uses first element as init)
 	r.Register("fold", Signature{
-		Args: []Type{TList, TList},
+		Args:       []Type{TList, TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil {
 				return nil, fmt.Errorf("fold: expected concrete lists")
@@ -107,7 +110,8 @@ func doFold(reg *Registry, acc Value, bodySlice []Value, data ReadList) ([]Value
 //   scan [add] [1 2 3 4]  →  [1 3 6 10]
 func registerScan(r *Registry) {
 	r.Register("scan", Signature{
-		Args: []Type{TList, TList},
+		Args:       []Type{TList, TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil {
 				return nil, fmt.Errorf("scan: expected concrete lists")
@@ -151,7 +155,8 @@ func registerScan(r *Registry) {
 //   outer [add] [1 2] [10 20]  →  [[11 21] [12 22]]
 func registerOuter(r *Registry) {
 	r.Register("outer", Signature{
-		Args: []Type{TList, TList, TList},
+		Args:       []Type{TList, TList, TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil {
 				return nil, fmt.Errorf("outer: expected concrete lists")
@@ -193,7 +198,8 @@ func registerOuter(r *Registry) {
 //   inner [mul] [add] [1 2 3] [4 5 6]  →  32  (dot product)
 func registerInner(r *Registry) {
 	r.Register("inner", Signature{
-		Args: []Type{TList, TList, TList, TList},
+		Args:       []Type{TList, TList, TList, TList},
+		NoEvalArgs: map[int]bool{0: true, 1: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil || args[3].Data == nil {
 				return nil, fmt.Errorf("inner: expected concrete lists")

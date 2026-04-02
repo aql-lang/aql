@@ -30,7 +30,8 @@ import (
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.Register("module", Signature{
-		Args: []Type{TList},
+		Args:       []Type{TList},
+		NoEvalArgs: map[int]bool{0: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if args[0].Data == nil {
 				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
@@ -208,19 +209,22 @@ func registerModule(r *Registry) {
 	// instead of executing it as a function.
 	r.Register("import",
 		Signature{
-			Args:      []Type{TAtom, TList},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   importInlineHandler,
+			Args:       []Type{TAtom, TList},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    importInlineHandler,
 		},
 		Signature{
-			Args:      []Type{TList, TAtom, TList},
-			QuoteArgs: map[int]bool{1: true},
-			Handler:   importInlineRenameHandler,
+			Args:       []Type{TList, TAtom, TList},
+			QuoteArgs:  map[int]bool{1: true},
+			NoEvalArgs: map[int]bool{2: true},
+			Handler:    importInlineRenameHandler,
 		},
 		Signature{
-			Args:      []Type{TAtom, TAtom, TList},
-			QuoteArgs: map[int]bool{1: true},
-			Handler:   importInlineSingleRenameHandler,
+			Args:       []Type{TAtom, TAtom, TList},
+			QuoteArgs:  map[int]bool{1: true},
+			NoEvalArgs: map[int]bool{2: true},
+			Handler:    importInlineSingleRenameHandler,
 		},
 	)
 }

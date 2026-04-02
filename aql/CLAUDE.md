@@ -108,23 +108,40 @@ matching top-of-stack → sig[0].
 ## Quotation System
 
 Lists are **evaluated by default**: `[1 add 2]` → `[3]`. Auto-evaluation
-happens at the end of `Run()` for parser-created lists (`Eval=true`) that
-were not consumed by any word.
+happens in two contexts for parser-created lists (`Eval=true`):
+
+1. **When consumed as a word argument**: `execMatch` (for registered words)
+   and `execFnDefSig` (for FnDef auto-invocation) run `autoEvalList` on
+   list arguments with `Eval=true`, resolving word elements from DefStacks.
+   For example: `def c1 10  def c2 20  [c1 c2] myword` passes `[10, 20]`
+   to `myword`, not `[atom(c1), atom(c2)]`.
+
+2. **When unconsumed on the stack at end of Run()**: `autoEvalStack` runs
+   `autoEvalList` on remaining lists with `Eval=true && !Quoted`.
 
 The `quote` word (forward precedence) prevents evaluation:
 - `quote [1 add 2]` → `[Integer(1), Word(add), Integer(2)]`
 - `quote a` → `Atom(a)` (words become atoms)
 - `quote 99` → `99` (scalars unchanged)
 
-Quotation is **implicit** in well-defined contexts:
-- `def` body: `def double [dup add]` — list consumed by def, not auto-evaluated
+Quotation is **implicit** for code-body positions via `NoEvalArgs`:
+- `def` body: `def double [dup add]` — list is a code body, not data
 - `fn` body: function definition bodies
 - Control words: `if`, `for` branches/bodies
-- Any word that consumes a list via forward/prefix argument collection
+- Higher-order words: `each`, `fold`, `scan`, `outer`, `inner` code-body args
+- `do`, `call`, `module`, `var`: list bodies executed as sub-programs
 
-Implementation: parser sets `Eval=true` on lists. `execMatch` strips `Eval`
-from consumed arguments. `quote` sets `Quoted=true`. End-of-`Run()` only
-auto-evaluates lists with `Eval=true && !Quoted`.
+The `NoEvalArgs` field on `Signature` marks arg positions where list
+auto-evaluation is suppressed. Unlike `QuoteArgs`, it does NOT affect
+forward collection or word→atom conversion — it only prevents
+`autoEvalList` from running in `execMatch`. Map auto-evaluation
+(`autoEvalMap`) is NOT affected by `NoEvalArgs`.
+
+Implementation: parser sets `Eval=true` on lists. `execMatch` runs
+`autoEvalList` on consumed list args unless `NoEvalArgs[i]` is set.
+`quote` sets `Quoted=true` (also suppresses auto-eval). End-of-`Run()`
+auto-evaluates only lists with `Eval=true && !Quoted` that were never
+consumed.
 
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate

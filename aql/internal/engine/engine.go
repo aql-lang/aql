@@ -453,14 +453,29 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Process consumed arguments:
 	// - Maps with Eval=true: auto-evaluate their values now, so word
 	//   handlers receive resolved data (e.g. {base:hex} → {base:atom(hex)}).
-	// - Lists: strip Eval so they're not auto-evaluated later (they may
-	//   be code blocks like def bodies).
+	// - Lists with Eval=true: auto-evaluate their contents now, so word
+	//   handlers receive resolved data (e.g. [c1 c2] → [map1, map2]).
+	//   Lists at QuoteArgs positions are NOT evaluated (code bodies for
+	//   def, if, for, do, etc.).
 	for i := range match.Args {
-		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
-			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
-			evaluated, err := e.autoEvalMap(match.Args[i])
-			if err == nil {
-				match.Args[i] = evaluated
+		if match.Args[i].Eval && !match.Args[i].Quoted {
+			if match.Args[i].VType.Equal(TMap) &&
+				match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
+				evaluated, err := e.autoEvalMap(match.Args[i])
+				if err == nil {
+					match.Args[i] = evaluated
+				}
+			} else if match.Args[i].VType.Equal(TList) &&
+				match.Args[i].Data != nil && !match.Args[i].IsTypedList() && !match.Args[i].IsTableType() {
+				// NoEvalArgs suppresses list auto-evaluation for code-body
+				// positions (def body, if branches, for body, etc.).
+				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalList(match.Args[i])
+					if err == nil {
+						match.Args[i] = evaluated
+					}
+				}
 			}
 		}
 		match.Args[i].Eval = false
@@ -995,6 +1010,28 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
+
+	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
+	// receive resolved data. Maps: {base:hex} → {base:atom(hex)}.
+	// Lists: [c1 c2] → [map1, map2].
+	for i := range args {
+		if args[i].Eval && !args[i].Quoted {
+			if args[i].VType.Equal(TMap) &&
+				args[i].Data != nil && !args[i].IsTypedMap() && !args[i].IsRecordType() && !args[i].IsOptionsType() {
+				evaluated, err := e.autoEvalMap(args[i])
+				if err == nil {
+					args[i] = evaluated
+				}
+			} else if args[i].VType.Equal(TList) &&
+				args[i].Data != nil && !args[i].IsTypedList() && !args[i].IsTableType() {
+				evaluated, err := e.autoEvalList(args[i])
+				if err == nil {
+					args[i] = evaluated
+				}
+			}
+		}
+		args[i].Eval = false
+	}
 
 	if capturedReg != nil {
 		// Execute in the captured module's registry via CallAQL.

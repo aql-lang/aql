@@ -14,7 +14,8 @@ import "fmt"
 //	3 dblcall [add 1]     => 7    (doubles 3→6, then callback: 6 add 1 → 7)
 func registerDblcall(r *Registry) {
 	r.Register("dblcall", Signature{
-		Args: []Type{TInteger, TList},
+		Args:       []Type{TInteger, TList},
+		NoEvalArgs: map[int]bool{1: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			n := args[0].AsInteger()
 			body := args[1]

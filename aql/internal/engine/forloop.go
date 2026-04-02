@@ -46,12 +46,14 @@ func registerFor(r *Registry) {
 
 	r.Register("for",
 		Signature{
-			Args:    []Type{TInteger, TList},
-			Handler: forCountHandler,
+			Args:       []Type{TInteger, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    forCountHandler,
 		},
 		Signature{
-			Args:    []Type{TList, TList},
-			Handler: forRangeHandler,
+			Args:       []Type{TList, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    forRangeHandler,
 		},
 	)
 
