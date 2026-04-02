@@ -16,6 +16,7 @@
     --mauve: #cba6f7;
     --border: #313244;
     --input-bg: #11111b;
+    --hover: #313244;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html {
@@ -52,6 +53,14 @@
   .status-loading { color: #fab387; }
   .status-ready { color: var(--green); }
   .status-error { color: var(--red); }
+
+  /* --- REPL view --- */
+  #repl-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
   #output {
     flex: 1 1 0;
     min-height: 0;
@@ -63,9 +72,12 @@
     overscroll-behavior: contain;
   }
   .line { margin-bottom: 4px; }
-  .line-input { color: var(--blue); }
-  .line-result { color: var(--green); }
-  .line-error { color: var(--red); }
+  .line-input { color: var(--blue); cursor: pointer; }
+  .line-input:active { opacity: 0.7; }
+  .line-result { color: var(--green); cursor: pointer; }
+  .line-result:active { opacity: 0.7; }
+  .line-error { color: var(--red); cursor: pointer; }
+  .line-error:active { opacity: 0.7; }
   .line-info { color: var(--subtext); font-style: italic; }
   #input-area {
     display: flex;
@@ -103,28 +115,97 @@
   }
   #input:focus { border-color: var(--mauve); }
   #input:disabled { opacity: 0.5; }
-  #run-btn {
+  .input-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-self: flex-end;
     flex-shrink: 0;
+  }
+  .btn {
     background: var(--mauve);
     color: var(--bg);
     border: none;
     border-radius: 4px;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    padding: 8px 14px;
+    padding: 6px 12px;
     cursor: pointer;
-    align-self: flex-end;
     line-height: 1.5;
+    white-space: nowrap;
   }
-  #run-btn:active { opacity: 0.8; }
-  #run-btn:disabled { opacity: 0.4; cursor: default; }
+  .btn:active { opacity: 0.8; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn-secondary {
+    background: var(--border);
+    color: var(--text);
+  }
   .hint {
     font-size: 11px;
     color: var(--subtext);
     padding: 4px 16px 0;
     background: var(--surface);
     flex-shrink: 0;
+  }
+
+  /* --- History view --- */
+  #history-view {
+    display: none;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  #history-view.active { display: flex; }
+  #repl-view.hidden { display: none; }
+  #history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  #history-search {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  #history-search:focus { border-color: var(--mauve); }
+  #history-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .history-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--blue);
+    font-size: 13px;
+  }
+  .history-item:active { background: var(--hover); }
+  .history-empty {
+    padding: 24px 16px;
+    color: var(--subtext);
+    text-align: center;
+    font-style: italic;
+  }
+
+  @media (hover: hover) {
+    .line-input:hover, .line-result:hover, .line-error:hover { background: var(--hover); border-radius: 2px; }
+    .history-item:hover { background: var(--hover); }
   }
 
   @media (max-width: 600px) {
@@ -134,8 +215,11 @@
     header .subtitle { display: none; }
     #output { padding: 10px 12px; }
     #input-area { padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-    #input { font-size: 16px; /* prevent iOS zoom */ }
+    #input { font-size: 16px; }
     .hint { padding: 4px 12px 0; }
+    #history-toolbar { padding: 8px 12px; }
+    #history-search { font-size: 16px; }
+    .history-item { padding: 10px 12px; }
   }
 </style>
 </head>
@@ -145,39 +229,139 @@
   <span class="subtitle">concatenative query language</span>
   <span id="status" class="status-loading">loading wasm...</span>
 </header>
-<div id="output">
-  <div class="line line-info">Loading AQL engine...</div>
+
+<div id="repl-view">
+  <div id="output">
+    <div class="line line-info">Loading AQL engine...</div>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div id="input-area">
+    <span class="prompt">&gt;&gt;</span>
+    <textarea id="input" rows="3" disabled autocomplete="off" autocorrect="off"
+              autocapitalize="off" spellcheck="false"
+              placeholder="Loading..."></textarea>
+    <div class="input-btns">
+      <button id="run-btn" class="btn" disabled>Run</button>
+      <button id="history-btn" class="btn btn-secondary" disabled>History</button>
+    </div>
+  </div>
 </div>
-<div class="hint" id="hint"></div>
-<div id="input-area">
-  <span class="prompt">&gt;&gt;</span>
-  <textarea id="input" rows="3" disabled autocomplete="off" autocorrect="off"
-            autocapitalize="off" spellcheck="false"
-            placeholder="Loading..."></textarea>
-  <button id="run-btn" disabled>Run</button>
+
+<div id="history-view">
+  <div id="history-toolbar">
+    <input id="history-search" type="text" placeholder="Search history..."
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="history-back-btn" class="btn btn-secondary">Back</button>
+  </div>
+  <div id="history-list"></div>
 </div>
+
 <script src="wasm_exec.js"></script>
 <script>
 (function() {
-  const output = document.getElementById('output');
-  const input = document.getElementById('input');
-  const status = document.getElementById('status');
-  const runBtn = document.getElementById('run-btn');
-  const hint = document.getElementById('hint');
-  const history = [];
-  let historyIdx = -1;
-  let ready = false;
+  var output = document.getElementById('output');
+  var input = document.getElementById('input');
+  var status = document.getElementById('status');
+  var runBtn = document.getElementById('run-btn');
+  var historyBtn = document.getElementById('history-btn');
+  var hintEl = document.getElementById('hint');
+  var replView = document.getElementById('repl-view');
+  var historyView = document.getElementById('history-view');
+  var historySearch = document.getElementById('history-search');
+  var historyList = document.getElementById('history-list');
+  var historyBackBtn = document.getElementById('history-back-btn');
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  hint.textContent = isMobile
-    ? 'Enter for newline, tap Run to evaluate'
-    : 'Shift+Enter for newline, Enter to evaluate';
+  var sessionHistory = [];
+  var historyIdx = -1;
+  var ready = false;
+  var STORAGE_KEY = 'aql_repl_history';
+  var MAX_HISTORY = 500;
+
+  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  hintEl.textContent = isMobile
+    ? 'Enter for newline, tap Run to evaluate. Tap output to append.'
+    : 'Shift+Enter for newline, Enter to evaluate. Click output to append.';
+
+  // --- LocalStorage history (FIFO, capped) ---
+  function loadHistory() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+  }
+
+  function saveHistory(arr) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    } catch(e) {}
+  }
+
+  function addToHistory(code) {
+    var h = loadHistory();
+    h.push(code);
+    if (h.length > MAX_HISTORY) h = h.slice(h.length - MAX_HISTORY);
+    saveHistory(h);
+  }
+
+  // --- Undo/redo for the input textarea ---
+  var undoStack = [''];
+  var redoStack = [];
+  var undoTimer = null;
+
+  function snapshotUndo() {
+    var val = input.value;
+    if (undoStack[undoStack.length - 1] !== val) {
+      undoStack.push(val);
+      redoStack = [];
+    }
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(snapshotUndo, 400);
+  }
+
+  function undo() {
+    snapshotUndo();
+    if (undoStack.length > 1) {
+      redoStack.push(undoStack.pop());
+      input.value = undoStack[undoStack.length - 1];
+      autoResize();
+    }
+  }
+
+  function redo() {
+    if (redoStack.length > 0) {
+      var val = redoStack.pop();
+      undoStack.push(val);
+      input.value = val;
+      autoResize();
+    }
+  }
+
+  function resetUndoState() {
+    undoStack = [''];
+    redoStack = [];
+  }
+
+  // --- Append text to input ---
+  function appendToInput(text) {
+    var cur = input.value;
+    if (cur.length > 0 && cur[cur.length - 1] !== '\n') {
+      input.value = cur + '\n' + text;
+    } else {
+      input.value = cur + text;
+    }
+    snapshotUndo();
+    autoResize();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
 
   // --- Viewport resize handling for mobile keyboards ---
   function updateLayout() {
     if (window.visualViewport) {
-      var vh = window.visualViewport.height;
-      document.body.style.height = vh + 'px';
+      document.body.style.height = window.visualViewport.height + 'px';
     } else {
       document.body.style.height = window.innerHeight + 'px';
     }
@@ -198,10 +382,17 @@
     });
   }
 
-  function addLine(cls, text) {
+  function addLine(cls, text, rawCode) {
     var div = document.createElement('div');
     div.className = 'line ' + cls;
     div.textContent = text;
+    if (cls !== 'line-info') {
+      div.setAttribute('data-code', rawCode !== undefined ? rawCode : text);
+      div.addEventListener('click', function() {
+        var code = this.getAttribute('data-code');
+        appendToInput(code);
+      });
+    }
     output.appendChild(div);
     scrollOutput();
   }
@@ -220,15 +411,71 @@
     if (!ready) return;
     var code = input.value.trim();
     if (!code) return;
-    history.push(code);
-    historyIdx = history.length;
+    sessionHistory.push(code);
+    historyIdx = sessionHistory.length;
+    addToHistory(code);
     input.value = '';
+    resetUndoState();
     autoResize();
     evaluate(code);
     input.focus();
   }
 
-  // Load WASM
+  // --- History view ---
+  function showHistoryView() {
+    replView.classList.add('hidden');
+    historyView.classList.add('active');
+    historySearch.value = '';
+    renderHistoryList('');
+    historySearch.focus();
+  }
+
+  function hideHistoryView() {
+    historyView.classList.remove('active');
+    replView.classList.remove('hidden');
+    updateLayout();
+    input.focus();
+  }
+
+  function renderHistoryList(filter) {
+    historyList.innerHTML = '';
+    var h = loadHistory();
+    var filtered = h;
+    if (filter) {
+      var lf = filter.toLowerCase();
+      filtered = h.filter(function(item) {
+        return item.toLowerCase().indexOf(lf) !== -1;
+      });
+    }
+    if (filtered.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = filter ? 'No matches' : 'No history yet';
+      historyList.appendChild(empty);
+      return;
+    }
+    // Most recent first
+    for (var i = filtered.length - 1; i >= 0; i--) {
+      var div = document.createElement('div');
+      div.className = 'history-item';
+      div.textContent = filtered[i];
+      div.setAttribute('data-code', filtered[i]);
+      div.addEventListener('click', function() {
+        var code = this.getAttribute('data-code');
+        hideHistoryView();
+        appendToInput(code);
+      });
+      historyList.appendChild(div);
+    }
+  }
+
+  historyBtn.addEventListener('click', showHistoryView);
+  historyBackBtn.addEventListener('click', hideHistoryView);
+  historySearch.addEventListener('input', function() {
+    renderHistoryList(historySearch.value);
+  });
+
+  // --- Load WASM ---
   var go = new Go();
 
   window.__aqlReady = function() {
@@ -240,6 +487,7 @@
     status.className = 'status-ready';
     input.disabled = false;
     runBtn.disabled = false;
+    historyBtn.disabled = false;
     input.placeholder = 'Enter AQL expression...';
     input.focus();
   };
@@ -262,41 +510,53 @@
 
   function evaluate(code) {
     var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
-    addLine('line-input', '>> ' + display);
+    addLine('line-input', '>> ' + display, code);
     try {
       var res = aqlEval(code);
       if (res.error) {
-        addLine('line-error', '  error: ' + res.error);
+        addLine('line-error', '  error: ' + res.error, res.error);
       } else if (res.result) {
-        addLine('line-result', res.result);
+        addLine('line-result', res.result, res.result);
       }
     } catch(e) {
-      addLine('line-error', '  error: ' + e.message);
+      addLine('line-error', '  error: ' + e.message, e.message);
     }
   }
 
-  input.addEventListener('input', autoResize);
+  input.addEventListener('input', function() {
+    scheduleSnapshot();
+    autoResize();
+  });
 
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
       e.preventDefault();
       submit();
+    } else if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    } else if ((e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
+               (e.key === 'y' && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault();
+      redo();
     } else if (e.key === 'ArrowUp' && input.selectionStart === 0 && !e.shiftKey) {
       e.preventDefault();
       if (historyIdx > 0) {
         historyIdx--;
-        input.value = history[historyIdx];
+        input.value = sessionHistory[historyIdx];
+        snapshotUndo();
         autoResize();
       }
     } else if (e.key === 'ArrowDown' && input.selectionStart === input.value.length && !e.shiftKey) {
       e.preventDefault();
-      if (historyIdx < history.length - 1) {
+      if (historyIdx < sessionHistory.length - 1) {
         historyIdx++;
-        input.value = history[historyIdx];
+        input.value = sessionHistory[historyIdx];
       } else {
-        historyIdx = history.length;
+        historyIdx = sessionHistory.length;
         input.value = '';
       }
+      snapshotUndo();
       autoResize();
     }
   });
