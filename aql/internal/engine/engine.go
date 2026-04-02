@@ -677,14 +677,13 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
-		// If the value is a named FnDef/TFunction, execute it using the
-		// normal word execution path (forward collection + stack matching).
-		// Named functions were registered via installFnDef and have their
-		// signatures in the appropriate registry's funcs map.
+		// If the value is a FnDef/TFunction, execute it. Named functions
+		// use their registered signatures; anonymous functions match
+		// against their FnSig params directly.
 		val := e.stack[valIdx]
 		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
 			val.Data != nil {
-			if fnDef, ok := val.Data.(FnDefInfo); ok && fnDef.Name != "" {
+			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
 			}
 		}
@@ -960,14 +959,26 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Look up the function by name in the appropriate registry.
-	// Module functions use their captured registry (closure semantics).
-	// Plain functions use the current engine registry.
-	reg := fnDef.Registry
-	if reg == nil {
-		reg = e.registry
+	// For named functions, look up compiled signatures from the registry.
+	// For anonymous functions, build a temporary FnDefInfo for forward planning.
+	var fn *FnDefInfo
+	isAnonymous := fnDef.Name == ""
+	if !isAnonymous {
+		reg := fnDef.Registry
+		if reg == nil {
+			reg = e.registry
+		}
+		fn = reg.Lookup(fnDef.Name)
 	}
-	fn := reg.Lookup(fnDef.Name)
+	if fn == nil && len(fnDef.Sigs) > 0 {
+		// Anonymous (or unregistered) function: build temporary signatures
+		// from FnSig params for the forward planner.
+		fn = &FnDefInfo{
+			Name:              fnDef.Name,
+			Signatures:        fnSigsToSignatures(fnDef.Sigs),
+			ForwardPrecedence: true,
+		}
+	}
 	if fn == nil {
 		e.pointer++
 		return nil
@@ -976,7 +987,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Try forward collection using the registered signatures.
+	// Try forward collection using the registered/temporary signatures.
 	if e.hasForwardValues(fn) {
 		bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
 		if bestSig != nil {
@@ -987,7 +998,17 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 	}
 
-	// Try stack matching against the FnDefInfo's signatures, then execute
+	// Anonymous functions only auto-execute via forward collection (above)
+	// or stack matching when there are no more tokens to process (i.e., the
+	// function is at the end of the expression and args are already on stack).
+	// This prevents anonymous fns from greedily consuming stack values when
+	// they're about to be passed as arguments to higher-order words.
+	if isAnonymous && e.pointer+1 < len(e.stack) {
+		e.pointer++
+		return nil
+	}
+
+	// Try stack matching against the FnDefInfo's Sigs, then execute
 	// via execFnDefSig which uses CallAQL for module functions.
 	for _, sig := range fnDef.Sigs {
 		nArgs := len(sig.Params)
@@ -1029,6 +1050,28 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// No matching signature — just advance (treat as data).
 	e.pointer++
 	return nil
+}
+
+// fnSigsToSignatures converts FnSig params into Signature objects for the
+// forward planner. Used for anonymous functions that have no registered name.
+func fnSigsToSignatures(sigs []FnSig) []Signature {
+	out := make([]Signature, len(sigs))
+	for i, sig := range sigs {
+		argTypes := make([]Type, len(sig.Params))
+		var patterns map[int]Value
+		for j, p := range sig.Params {
+			argTypes[j] = p.Type
+			if p.Pattern != nil {
+				if patterns == nil {
+					patterns = make(map[int]Value)
+				}
+				patterns[j] = *p.Pattern
+			}
+		}
+		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+	}
+	SortSignatures(out)
+	return out
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
