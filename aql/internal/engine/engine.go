@@ -951,52 +951,54 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Try forward collection via unified matching.
-	sig, fwdCount, stkCount, _ := e.matchSignature(fn, w, resolved)
-	if sig != nil && fwdCount > 0 {
-		return e.insertForward(w, sig, fwdCount, stkCount)
+	// Use unified matchSignature for all matching (forward and stack).
+	matchedSig, fwdCount, stkCount, _ := e.matchSignature(fn, w, resolved)
+
+	if matchedSig == nil {
+		// No matching signature — just advance (treat as data).
+		e.pointer++
+		return nil
 	}
 
-	// Try stack matching against the FnDefInfo's Sigs, then execute
-	// via execFnDefSig which uses CallAQL for module functions.
-	for _, sig := range fnDef.Sigs {
-		nArgs := len(sig.Params)
-		if nArgs == 0 {
-			return e.execFnDefSig(valIdx, &sig, nil, fnDef.Registry)
-		}
-		if len(resolved) < nArgs {
+	if fwdCount > 0 {
+		return e.insertForward(w, matchedSig, fwdCount, stkCount)
+	}
+
+	// Pure stack match. Find the corresponding FnSig to pass to
+	// execFnDefSig (which needs FnSig for named params and CallAQL).
+	nArgs := len(matchedSig.Args)
+	for i := range fnDef.Sigs {
+		fs := &fnDef.Sigs[i]
+		if len(fs.Params) != nArgs {
 			continue
 		}
-		candidate := resolved[len(resolved)-nArgs:]
-		match := true
-		for i, p := range sig.Params {
-			if !candidate[i].VType.Matches(p.Type) {
-				match = false
+		paramsMatch := true
+		for j := range fs.Params {
+			if !fs.Params[j].Type.Equal(matchedSig.Args[j]) {
+				paramsMatch = false
 				break
 			}
-			if p.Pattern != nil {
-				pat := *p.Pattern
-				if pat.VType.Equal(TMap) && candidate[i].VType.Equal(TMap) &&
-					pat.Data != nil && candidate[i].Data != nil &&
-					!pat.IsOptionsType() {
-					if !openUnifyMap(pat, candidate[i]) {
-						match = false
-						break
-					}
-				} else {
-					if _, uOk := Unify(candidate[i], pat); !uOk {
-						match = false
-						break
-					}
-				}
-			}
 		}
-		if match {
-			return e.execFnDefSig(valIdx, &sig, candidate, fnDef.Registry)
+		if !paramsMatch {
+			continue
+		}
+		// Build args from resolved stack (deepest-first for FnDef literals).
+		var args []Value
+		if nArgs > 0 {
+			args = resolved[len(resolved)-nArgs:]
+		}
+		return e.execFnDefSig(valIdx, fs, args, fnDef.Registry)
+	}
+
+	// Matched a 0-arg signature.
+	if nArgs == 0 {
+		for i := range fnDef.Sigs {
+			if len(fnDef.Sigs[i].Params) == 0 {
+				return e.execFnDefSig(valIdx, &fnDef.Sigs[i], nil, fnDef.Registry)
+			}
 		}
 	}
 
-	// No matching signature — just advance (treat as data).
 	e.pointer++
 	return nil
 }
