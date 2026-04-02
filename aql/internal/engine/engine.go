@@ -190,6 +190,10 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsReturnCheck():
 			e.pointer++
 
+		case val.IsDefCleanup():
+			e.stepDefCleanup(val)
+			e.pointer++
+
 		default:
 			if val.VType.Equal(Type{}) {
 				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
@@ -1334,6 +1338,21 @@ func (e *Engine) stepEnd() error {
 }
 
 // stepMark records the mark's ID in the marks hash table and advances.
+// stepDefCleanup removes defs that were created during fn body execution.
+// The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
+// the body ran. Any defs added since are popped via uninstallDef.
+func (e *Engine) stepDefCleanup(val Value) {
+	info := val.AsDefCleanup()
+	reg := info.Registry
+	for name, stack := range reg.DefStacks {
+		prevLen := info.Snapshot[name] // 0 for names not in snapshot
+		for len(stack) > prevLen {
+			uninstallDef(reg, name)
+			stack = reg.DefStacks[name]
+		}
+	}
+}
+
 func (e *Engine) stepMark(val Value) {
 	info := val.AsMark()
 	if e.marks == nil {
@@ -1658,6 +1677,9 @@ func (e *Engine) stepCloseParen() error {
 						e.pointer++
 					case val.IsReturnCheck():
 						e.pointer++
+					case val.IsDefCleanup():
+						e.stepDefCleanup(val)
+						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil {
 							return err
@@ -1682,6 +1704,16 @@ func (e *Engine) stepCloseParen() error {
 			fwd := e.stack[i].AsForward()
 			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d forward args)",
 				fwd.FuncName, fwd.ExpectedArgs)
+		}
+	}
+
+	// Remove any surviving def-cleanup markers.
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if e.stack[i].IsDefCleanup() {
+			e.stepDefCleanup(e.stack[i])
+			e.stackRemove(i)
+			closeIdx--
+			i--
 		}
 	}
 

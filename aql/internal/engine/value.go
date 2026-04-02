@@ -690,6 +690,19 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 	return newValue(TReturnCheck, info)
 }
 
+// DefCleanupInfo holds a snapshot of DefStacks lengths taken before fn body
+// execution. When the engine encounters a DefCleanup marker, it pops any
+// defs that were added during body execution back to the snapshot state.
+type DefCleanupInfo struct {
+	Snapshot map[string]int
+	Registry *Registry
+}
+
+// NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
+func NewDefCleanup(info DefCleanupInfo) Value {
+	return newValue(TDefCleanup, info)
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
@@ -885,6 +898,16 @@ func (v Value) IsReturnCheck() bool {
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
 func (v Value) AsReturnCheck() ReturnCheckInfo {
 	return v.Data.(ReturnCheckInfo)
+}
+
+// IsDefCleanup reports whether this value is a def-cleanup marker.
+func (v Value) IsDefCleanup() bool {
+	return v.VType.Equal(TDefCleanup)
+}
+
+// AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
+func (v Value) AsDefCleanup() DefCleanupInfo {
+	return v.Data.(DefCleanupInfo)
 }
 
 // IsDisjunct reports whether this value is a disjunction type.
@@ -1188,6 +1211,8 @@ func (v Value) String() string {
 	case v.IsReturnCheck():
 		rc := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsDefCleanup():
+		return "__dc"
 	case v.IsModule():
 		md := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)

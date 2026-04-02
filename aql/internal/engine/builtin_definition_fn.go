@@ -645,10 +645,23 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					unnamedCount++
 				}
 			}
+			// Snapshot DefStacks lengths after installing named params
+			// so we can clean up any defs created during body execution
+			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
+			defSnapshot := make(map[string]int, len(r.DefStacks))
+			for dname, dstack := range r.DefStacks {
+				defSnapshot[dname] = len(dstack)
+			}
+
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
 			result = append(result, body...)
-			// Pop the args stack to restore the previous args (for nesting).
+			// Clean up defs created during body execution, then pop
+			// the args stack to restore the previous args (for nesting).
+			result = append(result, NewDefCleanup(DefCleanupInfo{
+				Snapshot: defSnapshot,
+				Registry: r,
+			}))
 			result = append(result, NewWord("__pa"))
 			for i := len(names) - 1; i >= 0; i-- {
 				// Force forward so undef takes the name word that follows,
@@ -738,16 +751,36 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 		copy(body, sig.Body)
 		tokens = append(tokens, body...)
 
+		// Snapshot DefStacks lengths before body execution so we can
+		// clean up any defs created during body execution (Issue 2
+		// from AQL-DX-REPORT: def leakage from fn bodies).
+		defSnapshot := make(map[string]int, len(r.DefStacks))
+		for name, stack := range r.DefStacks {
+			defSnapshot[name] = len(stack)
+		}
+
 		// Evaluate in a sub-engine with higher step limit for complex bodies.
 		sub := NewTop(r)
 		result, err := sub.Run(tokens)
 
-		// Cleanup: pop args stack, undef named params.
+		// Cleanup: pop args stack, undef named params, then clean up
+		// any defs that were created during body execution.
 		if len(r.argsStack) > 0 {
 			r.argsStack = r.argsStack[:len(r.argsStack)-1]
 		}
 		for i := len(names) - 1; i >= 0; i-- {
 			uninstallDef(r, names[i])
+		}
+
+		// Remove defs that were added during body execution.
+		// For each name, pop entries until the stack length matches
+		// the pre-execution snapshot.
+		for name, stack := range r.DefStacks {
+			prevLen := defSnapshot[name] // 0 for names not in snapshot
+			for len(stack) > prevLen {
+				uninstallDef(r, name)
+				stack = r.DefStacks[name]
+			}
 		}
 
 		if err != nil {
