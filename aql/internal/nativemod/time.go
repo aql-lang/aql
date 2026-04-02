@@ -53,7 +53,6 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"time": exports},
 	}
-	parent.Modules[modID] = desc
 	return desc, nil
 }
 

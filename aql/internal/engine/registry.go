@@ -28,7 +28,6 @@ type Registry struct {
 	ErrOutput         io.Writer                                          // error output writer for stderr
 	Input             io.Reader                                          // input reader for stdin
 	SQLite            *SQLiteStore                                       // in-memory SQLite store for table data
-	Modules           map[string]ModuleDesc                              // child modules keyed by generated ID
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
@@ -68,7 +67,6 @@ func NewRegistry() (*Registry, error) {
 		ErrOutput:      os.Stderr,
 		Input:          os.Stdin,
 		SQLite:         sqlStore,
-		Modules:        make(map[string]ModuleDesc),
 		KnownTypeParts: builtinTypeParts(),
 		SDKCache:       make(map[string]any),
 	}

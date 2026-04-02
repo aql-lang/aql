@@ -307,7 +307,6 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		ID:      modID,
 		Exports: exports,
 	}
-	parent.Modules[modID] = desc
 	return desc, nil
 }
 

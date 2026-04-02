@@ -61,7 +61,6 @@ func BuildMatrixModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"matrix": exports},
 	}
-	parent.Modules[modID] = desc
 	return desc, nil
 }
 

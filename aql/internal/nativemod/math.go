@@ -51,7 +51,6 @@ func BuildMathModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"math": exports},
 	}
-	parent.Modules[modID] = desc
 	return desc, nil
 }
 
