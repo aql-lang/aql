@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"syscall/js"
@@ -20,22 +21,29 @@ func main() {
 	}
 	instance.SetFileOps(aql.NewMemFileOps())
 
+	var outBuf bytes.Buffer
+	instance.SetOutput(&outBuf)
+
 	js.Global().Set("aqlEval", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 1 {
 			return map[string]any{"error": "missing code argument"}
 		}
 		code := args[0].String()
 
+		outBuf.Reset()
 		result, err := instance.Run(code)
+
+		printed := outBuf.String()
+
 		if err != nil {
-			return map[string]any{"error": err.Error()}
+			return map[string]any{"error": err.Error(), "output": printed}
 		}
 
 		parts := make([]string, len(result))
 		for i, v := range result {
 			parts[i] = fmt.Sprintf("%v", v)
 		}
-		return map[string]any{"result": strings.Join(parts, " ")}
+		return map[string]any{"result": strings.Join(parts, " "), "output": printed}
 	}))
 
 	// Signal that the WASM module is ready.
