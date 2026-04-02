@@ -876,100 +876,8 @@ func TestParseSemicolonAdjacentToWord(t *testing.T) {
 	})
 }
 
-// --- expandDottedWord direct tests ---
-
-func assertExpand(t *testing.T, text string, want []engine.Value) {
-	t.Helper()
-	got, err := expandDottedWord(text)
-	if err != nil {
-		t.Fatalf("expandDottedWord(%q) error: %v", text, err)
-	}
-	if len(got) != len(want) {
-		t.Fatalf("expandDottedWord(%q) got %d values, want %d\n  got:  %v\n  want: %v",
-			text, len(got), len(want), got, want)
-	}
-	for i := range got {
-		if !valuesEqual(got[i], want[i]) {
-			t.Errorf("expandDottedWord(%q)[%d] = %s, want %s", text, i, got[i], want[i])
-		}
-	}
-}
-
-func TestExpandDotStandalone(t *testing.T) {
-	assertExpand(t, ".", []engine.Value{engine.NewWord("get")})
-}
-
-func TestExpandBangDotStandalone(t *testing.T) {
-	assertExpand(t, "!.", []engine.Value{engine.NewWord("getr")})
-}
-
-func TestExpandDottedSimple(t *testing.T) {
-	assertExpand(t, "foo.bar", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("get"),
-		engine.NewWord("bar"),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedChain(t *testing.T) {
-	assertExpand(t, "foo.a.b", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("get"),
-		engine.NewWord("a"),
-		engine.NewWord("get"),
-		engine.NewWord("b"),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedLeading(t *testing.T) {
-	assertExpand(t, ".a.b", []engine.Value{
-		engine.NewWord("get"),
-		engine.NewWord("a"),
-		engine.NewWord("get"),
-		engine.NewWord("b"),
-	})
-}
-
-func TestExpandDottedIntegerKey(t *testing.T) {
-	assertExpand(t, "foo.0", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("get"),
-		engine.NewInteger(0),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedTrailingDot(t *testing.T) {
-	assertExpand(t, "foo.", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedEmptyMiddle(t *testing.T) {
-	// "foo..bar" → empty segment skipped
-	assertExpand(t, "foo..bar", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("get"),
-		engine.NewWord("bar"),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedLeadingSingle(t *testing.T) {
-	// ".x" → leading dot, just dot x
-	assertExpand(t, ".x", []engine.Value{
-		engine.NewWord("get"),
-		engine.NewWord("x"),
-	})
-}
+// (expandDottedWord tests removed — dot notation is now handled by
+// simple token conversion: . → get, ! . → getr)
 
 // --- Boolean and nil as top-level values ---
 
@@ -1162,7 +1070,7 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with dotted word expansion in word context
+	// [foo.bar] → list with foo get bar (3 elements)
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1171,9 +1079,8 @@ func TestParseListWithDottedWord(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	elems := got[0].AsList().Slice()
-	// ( foo dot bar ) = 5 elements
-	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements (( foo dot bar )), got %d", len(elems))
+	if len(elems) != 3 {
+		t.Fatalf("expected 3 elements (foo get bar), got %d", len(elems))
 	}
 }
 
@@ -1251,19 +1158,6 @@ func TestParseDataMapWithTypedMap(t *testing.T) {
 	}
 }
 
-// --- Args expansion ---
-
-func TestExpandDottedArgs(t *testing.T) {
-	// args.x → resolves "args" as a word directly (not via get), wrapped in parens
-	assertExpand(t, "args.x", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("args"),
-		engine.NewWord("get"),
-		engine.NewWord("x"),
-		engine.NewWord(")"),
-	})
-}
-
 // --- Top-level dotted expansion ---
 
 func TestParseDottedWordTopLevel(t *testing.T) {
@@ -1279,14 +1173,13 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → triggers dotted expansion in convertTopLevel, wrapped in parens
+	// 1 foo.bar → 1 foo get bar = 4 values
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	// 1 ( foo dot bar ) = 6 values
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo dot bar )), got %d", len(got))
+	if len(got) != 4 {
+		t.Fatalf("expected 4 values (1 foo get bar), got %d: %v", len(got), got)
 	}
 }
 
@@ -1563,17 +1456,6 @@ func TestResolveTextValueTypes(t *testing.T) {
 		if !tt.check(v) {
 			t.Errorf("resolveTextValue(%q) = %s, unexpected", tt.input, v)
 		}
-	}
-}
-
-func TestExpandDottedWordModifier(t *testing.T) {
-	// foo/1.bar → first part has modifier, should work
-	got, err := expandDottedWord("foo/1.bar")
-	if err != nil {
-		t.Fatalf("expandDottedWord error: %v", err)
-	}
-	if len(got) < 3 {
-		t.Fatalf("expected at least 3 values, got %d", len(got))
 	}
 }
 

@@ -104,7 +104,7 @@ func TestDecisionEvalCondEq(t *testing.T) {
 func TestDecisionEvalPredAllOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
+		([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)
 		{age:25,score:80}
 		decision.eval-pred
 	`)
@@ -116,7 +116,7 @@ func TestDecisionEvalPredAllOf(t *testing.T) {
 func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
+		([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)
 		{age:25,score:30}
 		decision.eval-pred
 	`)
@@ -128,7 +128,7 @@ func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 func TestDecisionEvalPredAnyOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.any-of
+		([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.any-of)
 		{age:10,score:80}
 		decision.eval-pred
 	`)
@@ -140,7 +140,7 @@ func TestDecisionEvalPredAnyOf(t *testing.T) {
 func TestDecisionEvalPredNotOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		{field:age,op:"lt",value:18} decision.not-of
+		({field:age,op:"lt",value:18} decision.not-of)
 		{age:25}
 		decision.eval-pred
 	`)

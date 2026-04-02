@@ -4571,7 +4571,7 @@ func TestModuleImportDotAccess(t *testing.T) {
 	// dot with "inc" gives [add 1]
 	// do [add 1] with 2 on stack should give 3
 	// Actually let's test just Foo . inc to get the value
-	result := runAQL(t, r, []Value{NewWord("Foo"), NewWord("inc"), NewWord(".")})
+	result := runAQL(t, r, []Value{NewWord("Foo"), NewWord("inc"), NewWord("get")})
 	if len(result) != 1 {
 		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
 	}

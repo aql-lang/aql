@@ -839,7 +839,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("key"), NewWord(".")})
+	result := runAQL(t, r, []Value{NewMap(m), NewWord("key"), NewWord("get")})
 	if len(result) != 1 || result[0].AsInteger() != 99 {
 		t.Errorf("expected 99 via . alias, got %v", result)
 	}
@@ -851,7 +851,7 @@ func TestDotAliasListAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewString("a"), NewString("b")})
-	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord(".")})
+	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord("get")})
 	if len(result) != 1 || result[0].AsString() != "a" {
 		t.Errorf("expected 'a' via . alias, got %v", result)
 	}
