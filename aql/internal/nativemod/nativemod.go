@@ -20,9 +20,10 @@ import (
 // Each builder creates a sub-registry with the module's words and returns
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
 var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error){
-	"math":   BuildMathModule,
-	"time":   BuildTimeModule,
-	"matrix": BuildMatrixModule,
+	"math":     BuildMathModule,
+	"time":     BuildTimeModule,
+	"matrix":   BuildMatrixModule,
+	"decision": BuildDecisionModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -65,6 +66,18 @@ func InstallTimeExports(r *engine.Registry) error {
 // InstallMatrixExports builds the matrix module and installs its exports as defs.
 func InstallMatrixExports(r *engine.Registry) error {
 	desc, err := BuildMatrixModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallDecisionExports builds the decision module and installs its exports as defs.
+func InstallDecisionExports(r *engine.Registry) error {
+	desc, err := BuildDecisionModule(r)
 	if err != nil {
 		return err
 	}
