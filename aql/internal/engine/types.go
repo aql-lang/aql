@@ -64,6 +64,8 @@ var typeAncestry = map[string]string{
 	"ScalarType":  "Type/ScalarType",
 	"NodeType":    "Type/NodeType",
 	"ObjectType": "Type/ObjectType",
+	"Date":      "Scalar/Time/Date",
+	"Matrix":    "Scalar/Number/Matrix",
 }
 
 // Well-known types.
@@ -115,6 +117,8 @@ var (
 	TScalarType    = mustType("Type/ScalarType")
 	TNodeType      = mustType("Type/NodeType")
 	TObjectType    = mustType("Type/ObjectType")
+	TDate   = mustType("Scalar/Time/Date")
+	TMatrix = mustType("Scalar/Number/Matrix")
 
 )
 
@@ -168,6 +172,9 @@ var builtinTypeIDs = map[string]int{
 	"Type/ScalarType":          40,
 	"Type/NodeType":            41,
 	"Type/ObjectType":          46,
+	"Scalar/Time":             48,
+	"Scalar/Time/Date":        49,
+	"Scalar/Number/Matrix":    50,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -288,6 +295,7 @@ var builtinTypeList = []Type{
 	TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
 	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
+	TDate, TMatrix,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -370,6 +378,7 @@ func builtinTypeParts() map[string]bool {
 		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 		TType, TScalarType, TNodeType, TObjectType,
+		TDate, TMatrix,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {

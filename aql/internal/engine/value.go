@@ -771,6 +771,39 @@ func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
 }
 
+// MatrixData holds a dense matrix as a flat float64 slice in row-major order.
+type MatrixData struct {
+	Data []float64
+	Rows int
+	Cols int
+}
+
+// NewDate creates a Date value from a time.Time.
+func NewDate(t time.Time) Value {
+	return newValue(TDate, t)
+}
+
+// AsDate returns the time.Time for a Date value.
+func (v Value) AsDate() time.Time {
+	if t, ok := v.Data.(time.Time); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+// NewMatrix creates a Matrix value from a MatrixData.
+func NewMatrix(m MatrixData) Value {
+	return newValue(TMatrix, m)
+}
+
+// AsMatrix returns the MatrixData for a Matrix value.
+func (v Value) AsMatrix() MatrixData {
+	if m, ok := v.Data.(MatrixData); ok {
+		return m
+	}
+	return MatrixData{}
+}
+
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {
 	Message string // the error description
@@ -1176,6 +1209,16 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
+	case v.VType.Matches(TDate):
+		if t, ok := v.Data.(time.Time); ok {
+			return t.Format("2006-01-02")
+		}
+		return "Date(nil)"
+	case v.VType.Matches(TMatrix):
+		if m, ok := v.Data.(MatrixData); ok {
+			return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
+		}
+		return "Matrix(nil)"
 	case v.IsPath():
 		return v.AsPath().String()
 	case v.VType.Equal(TList):

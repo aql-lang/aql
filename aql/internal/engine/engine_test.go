@@ -555,74 +555,7 @@ func TestRoll0(t *testing.T) {
 	}
 }
 
-func TestAbs(t *testing.T) {
-	reg, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := New(reg)
-	// -5 abs → 5
-	result, err := e.Run([]Value{NewInteger(-5), NewWord("abs")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != 5 {
-		t.Errorf("got %v, want [5]", result)
-	}
-	// 3 abs → 3
-	result, err = e.Run([]Value{NewInteger(3), NewWord("abs")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != 3 {
-		t.Errorf("got %v, want [3]", result)
-	}
-}
-
-func TestNegate(t *testing.T) {
-	reg, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(5), NewWord("negate")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != -5 {
-		t.Errorf("got %v, want [-5]", result)
-	}
-}
-
-func TestMin(t *testing.T) {
-	reg, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("min")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != 3 {
-		t.Errorf("got %v, want [3]", result)
-	}
-}
-
-func TestMax(t *testing.T) {
-	reg, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(3), NewInteger(7), NewWord("max")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 || result[0].AsInteger() != 7 {
-		t.Errorf("got %v, want [7]", result)
-	}
-}
+// TestAbs, TestNegate, TestMin, TestMax moved to internal/nativemod/ (aql:math module).
 
 // --- Engine tests: modifier forcing ---
 

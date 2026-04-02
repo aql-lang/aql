@@ -26,28 +26,30 @@ type TypeDef struct {
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	funcs          map[string]*Function
-	DefStacks      map[string][]Value            // stacked bodies for def-defined words
-	Types          map[string]TypeDef            // complex type registry keyed by full type path
-	FileOps        fileops.FileOps               // file operations for read/write words (OS-backed default)
-	MemOps         *fileops.MemFileOps           // in-memory file ops (used when __sys.fs.mem = true)
-	Formats        map[string]Format             // format registry for read/write (keyed by name)
-	Output         io.Writer                     // output writer for print/printstr and stdout
-	ErrOutput      io.Writer                     // error output writer for stderr
-	Input          io.Reader                     // input reader for stdin
-	SQLite         *SQLiteStore                  // in-memory SQLite store for table data
-	Modules        map[string]ModuleDesc         // child modules keyed by generated ID
-	moduleSeq      int                           // counter for generating module IDs
-	ParseFunc      func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
-	ctxStack       []*StoreInstanceInfo           // scoped context stack; top = current engine's context Store
-	argsStack      []Value                       // stack of args lists for nested fn calls
-	KnownTypeParts map[string]bool               // set of all type path parts (for uniqueness enforcement)
-	Manager        any                           // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache       map[string]any                // cached SDK instances keyed by spec name
-	BaseDir        string                        // base directory for resolving relative file paths (set by loadFileModule)
-	errs           []error                       // registration errors accumulated during setup
-	ready          bool                          // true after initial setup; triggers dynamic help generation
-	OnRegisterHook func(name string)             // called when a function is registered after startup
+	funcs             map[string]*Function
+	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	Types             map[string]TypeDef                                 // complex type registry keyed by full type path
+	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
+	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
+	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
+	Output            io.Writer                                          // output writer for print/printstr and stdout
+	ErrOutput         io.Writer                                          // error output writer for stderr
+	Input             io.Reader                                          // input reader for stdin
+	SQLite            *SQLiteStore                                       // in-memory SQLite store for table data
+	Modules           map[string]ModuleDesc                              // child modules keyed by generated ID
+	moduleSeq         int                                                // counter for generating module IDs
+	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
+	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
+	argsStack         []Value                                            // stack of args lists for nested fn calls
+	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
+	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
+	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
+	errs              []error                                            // registration errors accumulated during setup
+	ready             bool                                               // true after initial setup; triggers dynamic help generation
+	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
+	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
+	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 }
 
 // NewRegistry creates an empty registry.
@@ -351,45 +353,16 @@ func registerBuiltins(r *Registry) {
 	registerRoll(r)
 	registerStackCollect(r)
 
-	// Math: arithmetic
+	// Math: basic arithmetic (always available)
 	registerAdd(r)
 	registerSub(r)
 	registerMul(r)
 	registerDiv(r)
 	registerMod(r)
-	registerAbs(r)
-	registerNegate(r)
-	registerMin(r)
-	registerMax(r)
 	registerPow(r)
-	registerSign(r)
 
-	// Math: rounding
-	registerCeil(r)
-	registerFloor(r)
-	registerRound(r)
-	registerTrunc(r)
-
-	// Math: roots, exp/log
-	registerSqrt(r)
-	registerCbrt(r)
-	registerExp(r)
-	registerLog(r)
-	registerLog2(r)
-	registerLog10(r)
-
-	// Math: trigonometry
-	registerSin(r)
-	registerCos(r)
-	registerTan(r)
-	registerAsin(r)
-	registerAcos(r)
-	registerAtan(r)
-	registerAtan2(r)
-	registerHypot(r)
-
-	// Math: constants
-	registerMathConstants(r)
+	// Math: extended operations are in the "aql:math" native module.
+	// Use: "aql:math" import
 
 	// Boolean
 	registerOr(r)
@@ -456,11 +429,76 @@ func registerBuiltins(r *Registry) {
 	// Module
 	registerModule(r)
 
+	// Array
+	registerIota(r)
+	registerShape(r)
+	registerRank(r)
+	registerLength(r)
+	registerReshape(r)
+	registerArrFlatten(r)
+	registerArrTranspose(r)
+	registerReverse(r)
+	registerTake(r)
+	registerShed(r)
+	registerWhere(r)
+	registerUnique(r)
+	registerGrade(r)
+	registerAt(r)
+	registerSortby(r)
+	registerMember(r)
+	registerArrIndexof(r)
+	registerGroup(r)
+	registerReplicate(r)
+	registerExpand(r)
+	registerWindow(r)
+	registerPairs(r)
+
+	// Array higher-order
+	registerEach(r)
+	registerFold(r)
+	registerScan(r)
+	registerOuter(r)
+	registerInner(r)
+
 	// Help
 	registerHelp(r)
 }
 
+// IsNativeModLoaded returns true if the named native module has already been loaded.
+func (r *Registry) IsNativeModLoaded(name string) bool {
+	if r.loadedNativeMods == nil {
+		return false
+	}
+	return r.loadedNativeMods[name]
+}
+
+// MarkNativeModLoaded records that the named native module has been loaded.
+func (r *Registry) MarkNativeModLoaded(name string) {
+	if r.loadedNativeMods == nil {
+		r.loadedNativeMods = make(map[string]bool)
+	}
+	r.loadedNativeMods[name] = true
+}
+
 // --- Shared helpers used by multiple builtin files ---
+
+// RegisterBinaryIntOp registers a binary integer operation with a single
+// signature Args:[int, int] and forward precedence.
+func RegisterBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
+	registerBinaryIntOp(r, name, op)
+}
+
+// RegisterBinaryNumOp registers a binary numeric operation with three
+// overloads: [decimal, decimal], [number, decimal], and [decimal, number].
+func RegisterBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
+	registerBinaryNumOp(r, name, op)
+}
+
+// RegisterUnaryNumOp registers a unary numeric operation with two overloads:
+// [integer] -> [decimal] and [decimal] -> [decimal].
+func RegisterUnaryNumOp(r *Registry, name string, op func(float64) float64) {
+	registerUnaryNumOp(r, name, op)
+}
 
 // registerBinaryIntOp registers a binary integer operation with a single
 // signature Args:[int, int] and forward precedence.

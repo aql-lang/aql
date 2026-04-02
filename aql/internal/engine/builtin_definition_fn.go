@@ -737,8 +737,8 @@ func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
 		copy(body, sig.Body)
 		tokens = append(tokens, body...)
 
-		// Evaluate in a sub-engine.
-		sub := New(r)
+		// Evaluate in a sub-engine with higher step limit for complex bodies.
+		sub := NewTop(r)
 		result, err := sub.Run(tokens)
 
 		// Cleanup: pop args stack, undef named params.

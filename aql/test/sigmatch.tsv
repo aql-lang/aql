@@ -6,9 +6,9 @@
 
 # --- Basic prefix matching (args from stack) ---
 
-# 1-arg: integer on stack, prefix
-1 abs	1
--3 abs	3
+# 1-arg: integer on stack, prefix (via math module)
+1 math.abs	1
+-3 math.abs	3
 
 # 2-arg prefix: both args from stack
 1 2 add	3

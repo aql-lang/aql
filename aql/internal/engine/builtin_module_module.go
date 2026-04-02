@@ -65,13 +65,18 @@ func registerModule(r *Registry) {
 		return nil, installSingleRename(r, desc, newName)
 	}
 
-	// import: [string] -> [] or [value] — import from a file path or bare module name.
+	// import: [string] -> [] or [value] — import from a file path, bare module name,
+	// or native module (aql:<name>).
+	// Native modules: strings starting with "aql:" resolve via NativeModResolver.
 	// File paths start with "/", "./" or "../".
 	// Bare names (e.g. "foo") resolve via .aql/foo/index.aql walking up directories.
 	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := args[0].AsString()
+		if isNativeModImport(path) {
+			return nil, resolveNativeMod(r, path)
+		}
 		if !isFilePath(path) {
 			resolved, err := resolveBareModule(r, path)
 			if err != nil {
@@ -583,6 +588,37 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		return val
 	}
 	return v
+}
+
+// isNativeModImport returns true if the path looks like a native module
+// import (starts with "aql:").
+func isNativeModImport(path string) bool {
+	return strings.HasPrefix(path, "aql:")
+}
+
+// resolveNativeMod resolves a native module import (e.g. "aql:math").
+// The module name is extracted from the "aql:" prefix and resolved via the
+// registry's NativeModResolver callback. The resolver returns a ModuleDesc
+// whose exports are installed as defs, just like file-based modules.
+// Each native module is loaded at most once per registry.
+func resolveNativeMod(r *Registry, path string) error {
+	name := strings.TrimPrefix(path, "aql:")
+	if name == "" {
+		return fmt.Errorf("import: empty native module name in %q", path)
+	}
+	if r.IsNativeModLoaded(name) {
+		return nil // already loaded
+	}
+	if r.NativeModResolver == nil {
+		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)
+	}
+	desc, err := r.NativeModResolver(name, r)
+	if err != nil {
+		return fmt.Errorf("import: %w", err)
+	}
+	installExports(r, desc, nil)
+	r.MarkNativeModLoaded(name)
+	return nil
 }
 
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.
