@@ -351,7 +351,9 @@ func typeInherentScore(t Type) int {
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 1_000_000
 	if sig.BarrierPos > 0 {
-		score += 500_000 // piped signatures sort before non-piped
+		// Piped signatures sort before non-piped. Barriers closer to the
+		// start (lower BarrierPos) are more constrained and score higher.
+		score += 500_000 + (MaxArgs-sig.BarrierPos)*10_000
 	}
 	for _, t := range sig.Args {
 		score += t.Specificity() * 10_000
