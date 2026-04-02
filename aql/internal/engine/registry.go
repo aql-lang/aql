@@ -9,13 +9,6 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-// Function groups all signatures for a named function.
-type Function struct {
-	Name              string
-	Signatures        []Signature
-	ForwardPrecedence bool // true = engine tries forward-first; false = stack-only
-}
-
 // TypeDef describes a named complex type in the type registry.
 // The Type field holds the full type path (e.g. Node/Map/Resource/Table).
 // The Constraint holds the type's structure — a record type, disjunct, etc.
@@ -26,7 +19,6 @@ type TypeDef struct {
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	funcs             map[string]*Function
 	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
 	Types             map[string]TypeDef                                 // complex type registry keyed by full type path
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
@@ -68,7 +60,6 @@ func NewRegistry() (*Registry, error) {
 	}
 
 	r := &Registry{
-		funcs:          make(map[string]*Function),
 		DefStacks:      make(map[string][]Value),
 		Types:          make(map[string]TypeDef),
 		FileOps:        ops,
@@ -207,6 +198,7 @@ func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
 }
 
 // Register adds one or more signatures to a named function with forward precedence.
+// Signatures are stored in a FnDefInfo entry in DefStacks.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -214,19 +206,14 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
-	fn, ok := r.funcs[name]
-	if !ok {
-		fn = &Function{Name: name, ForwardPrecedence: true}
-		r.funcs[name] = fn
-	}
-	fn.Signatures = append(fn.Signatures, sigs...)
-	SortSignatures(fn.Signatures)
+	r.upsertFnDef(name, true, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
 
 // RegisterStackOnly adds signatures to a named function without forward precedence.
+// Signatures are stored in a FnDefInfo entry in DefStacks.
 func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -234,31 +221,72 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 			return
 		}
 	}
-	fn, ok := r.funcs[name]
-	if !ok {
-		fn = &Function{Name: name, ForwardPrecedence: false}
-		r.funcs[name] = fn
-	}
-	fn.Signatures = append(fn.Signatures, sigs...)
-	SortSignatures(fn.Signatures)
+	r.upsertFnDef(name, false, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
 
-// Lookup returns the Function for a name, or nil.
-func (r *Registry) Lookup(name string) *Function {
-	return r.funcs[name]
+// upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
+// and appends the given compiled signatures. If the top entry is already a
+// FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
+// is pushed.
+func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
+	stack := r.DefStacks[name]
+	// If the top of the stack is already a FnDefInfo, update it in place.
+	if len(stack) > 0 {
+		if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+			fnDef.Signatures = append(fnDef.Signatures, sigs...)
+			SortSignatures(fnDef.Signatures)
+			fnDef.ForwardPrecedence = forwardPrec
+			stack[len(stack)-1].Data = fnDef
+			return
+		}
+	}
+	// No existing FnDefInfo on top — push a new one.
+	fnDef := FnDefInfo{
+		Name:              name,
+		Signatures:        append([]Signature(nil), sigs...),
+		ForwardPrecedence: forwardPrec,
+		Builtin:           !r.ready,
+	}
+	SortSignatures(fnDef.Signatures)
+	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+}
+
+// Lookup returns the top FnDefInfo for a name from DefStacks, or nil.
+func (r *Registry) Lookup(name string) *FnDefInfo {
+	stack := r.DefStacks[name]
+	for i := len(stack) - 1; i >= 0; i-- {
+		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+			return &fnDef
+		}
+	}
+	return nil
 }
 
 // Match finds the best matching signature for a function name given the
 // resolved stack state and word modifiers.
-func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchResult {
-	fn := r.funcs[name]
-	if fn == nil {
+func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *MatchResult {
+	fnDef := r.Lookup(name)
+	if fnDef == nil {
 		return nil
 	}
-	return MatchSignature(fn.Signatures, stack, modifiers)
+	return MatchSignature(fnDef.Signatures, resolved, modifiers)
+}
+
+// clearSigsKeepFallback resets the Signatures on the top FnDefInfo in
+// DefStacks[name] to only the Fallback entries (if any). Used during
+// rebuild after overlap filtering or undef.
+func (r *Registry) clearSigsKeepFallback(name string) {
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return
+	}
+	if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+		fnDef.Signatures = KeepFallback(fnDef.Signatures)
+		stack[len(stack)-1].Data = fnDef
+	}
 }
 
 // InitRootContext initializes the root context Store with the __sys key.

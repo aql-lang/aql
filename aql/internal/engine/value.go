@@ -176,10 +176,19 @@ type FnSig struct {
 // Name is the function's registered name (set by installDef). If Registry is
 // non-nil, the function was defined in a module and should execute in that
 // registry's context (closure semantics).
+//
+// Signatures is the compiled dispatch table (typed args + Go handlers).
+// For Go builtins, Sigs is nil and Signatures holds the native handlers.
+// For AQL fn defs, installFnDef converts Sigs into Signatures with handler
+// closures that splice body tokens. ForwardPrecedence controls whether the
+// engine tries forward collection before stack matching.
 type FnDefInfo struct {
-	Name     string
-	Sigs     []FnSig
-	Registry *Registry
+	Name              string
+	Sigs              []FnSig     // AQL-defined overloads (nil for Go builtins)
+	Signatures        []Signature // compiled dispatch table
+	ForwardPrecedence bool        // true = try forward-first; false = stack-only
+	Builtin           bool        // true for Go builtins registered during setup
+	Registry          *Registry
 }
 
 // FnSigSpec describes a signature specification without a body, used for

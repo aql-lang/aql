@@ -68,10 +68,10 @@ func buildInspection(r *Registry, name string) Value {
 	}
 
 	// Determine kind: if there's a DefStacks entry, it's user-defined.
-	if len(r.DefStacks[name]) > 0 {
-		result.Set("kind", NewAtom("defined"))
-	} else {
+	if fn.Builtin {
 		result.Set("kind", NewAtom("builtin"))
+	} else {
+		result.Set("kind", NewAtom("defined"))
 	}
 
 	// Add forward_precedence flag.

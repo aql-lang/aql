@@ -1872,7 +1872,7 @@ func (e *Engine) isInsidePendingForward() bool {
 // words are not directly collectible (they execute via stepWord), so they
 // don't count — unless the function has signatures expecting TWord arguments
 // (e.g., def needs to collect word names).
-func (e *Engine) hasForwardValues(fn *Function) bool {
+func (e *Engine) hasForwardValues(fn *FnDefInfo) bool {
 	if e.pointer+1 >= len(e.stack) {
 		return false
 	}
