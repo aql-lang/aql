@@ -365,86 +365,53 @@ func (e *Engine) stepWord(val Value) error {
 		return nil
 	}
 
-	if w.ForceStack {
-		resolved := e.effectiveResolved()
-		match := MatchSignature(fn.Signatures, resolved, w)
-		if match == nil {
-			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
-		}
-		e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
-		return e.execMatch(match)
-	}
-
-	if w.ForceForward {
-		// Force forward: skip stack match attempt, collect all args from forward.
-		resolved := e.effectiveResolved()
-		bestSig, _ := e.plannerSequentialForward(fn, w, resolved)
-		if bestSig == nil {
-			return fmt.Errorf("signature error: no matching signature for %s", w.Name)
-		}
-		e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-		return e.insertForward(w, bestSig, len(bestSig.Args))
-	}
-
-	if fn.ForwardPrecedence {
-		resolved := e.effectiveResolved()
-
-		// Check if we're inside an outer forward's scope. If so, this
-		// function must collect all args from forward tokens only (no
-		// stack args) — it acts like a sub-expression.
-		insideForward := e.isInsidePendingForward()
-
-		// Forward precedence: match forward tokens first (from sigArgs[0]),
-		// then fill remaining args from the stack in reverse order (top →
-		// first remaining sig arg).
-		if e.hasForwardValues(fn) {
-			bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
-			if insideForward {
-				stackCount = 0
-			}
-			if bestSig != nil {
-				forwardNeeded := len(bestSig.Args) - stackCount
-				if insideForward {
-					forwardNeeded = len(bestSig.Args)
-				}
-				if forwardNeeded > 0 {
-					e.traceNote = "forward→ " + traceSigStr(w.Name, bestSig)
-					return e.insertForward(w, bestSig, forwardNeeded, stackCount)
-				}
-			}
-		}
-
-		if !insideForward {
-			// No forward tokens or no forward match — try reversed stack match
-			// (top of stack → sigArgs[0]).
-			match := MatchSignatureReversed(fn.Signatures, resolved, w)
-			if match != nil && len(match.Sig.Args) > 0 {
-				// Physically reverse the top N values so execMatch sees them
-				// in signature order.
-				n := len(match.Sig.Args)
-				e.rearrangeForForward(n, 0)
-				e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
-				return e.execMatch(match)
-			}
-		}
-
-		// Fall back to 0-arg match (generic def handler).
-		match0 := MatchSignature(fn.Signatures, resolved, w)
-		if match0 != nil {
-			e.traceNote = "stack " + traceSigStr(w.Name, match0.Sig)
-			return e.execMatch(match0)
-		}
-
-		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
-	}
-
-	// Stack-only function (dup, swap, drop).
+	// Unified signature matching: one path for all words.
 	resolved := e.effectiveResolved()
-	match := MatchSignature(fn.Signatures, resolved, w)
-	if match == nil {
+	sig, fwdCount, stkCount, needsRearrange := e.matchSignature(fn, w, resolved)
+
+	if sig == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
-	e.traceNote = "stack " + traceSigStr(w.Name, match.Sig)
+
+	// Forward collection needed: defer execution.
+	if fwdCount > 0 {
+		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
+		return e.insertForward(w, sig, fwdCount, stkCount)
+	}
+
+	// Immediate execution: all args from stack.
+	n := stkCount
+
+	// Build MatchResult args from the stack BEFORE rearranging.
+	// resolvedIndicesBefore returns indices in ascending order (deepest first).
+	// Forward-prec matched nearest-first (needsRearrange=true):
+	//   Reverse indices so args[0] = nearest — old MatchSignatureReversed convention.
+	// Stack-only matched deepest-first (needsRearrange=false):
+	//   Use ascending indices directly so args[0] = deepest — old MatchSignature convention.
+	match := &MatchResult{Sig: sig}
+	if n > 0 {
+		indices := e.resolvedIndicesBefore(n)
+		match.Args = make([]Value, n)
+		if needsRearrange {
+			// Nearest-first: reverse ascending indices.
+			for i, idx := range indices {
+				match.Args[n-1-i] = e.stack[idx]
+			}
+		} else {
+			// Deepest-first: ascending indices are already correct.
+			for i, idx := range indices {
+				match.Args[i] = e.stack[idx]
+			}
+		}
+	}
+
+	// When matched nearest-first (reversed), physically reverse the top N
+	// values on the stack so that execMatch's splice logic removes the
+	// correct physical positions.
+	if n > 0 && needsRearrange {
+		e.rearrangeForForward(n, 0)
+	}
+	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
 }
 
@@ -984,15 +951,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Try forward collection.
-	if e.hasForwardValues(fn) {
-		bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
-		if bestSig != nil {
-			forwardNeeded := len(bestSig.Args) - stackCount
-			if forwardNeeded > 0 {
-				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
-			}
-		}
+	// Try forward collection via unified matching.
+	sig, fwdCount, stkCount, _ := e.matchSignature(fn, w, resolved)
+	if sig != nil && fwdCount > 0 {
+		return e.insertForward(w, sig, fwdCount, stkCount)
 	}
 
 	// Try stack matching against the FnDefInfo's Sigs, then execute
@@ -1897,74 +1859,6 @@ func (e *Engine) isInsidePendingForward() bool {
 	return false
 }
 
-// hasForwardValues checks whether there are collectible value tokens after the
-// current pointer. Literals and unknown words are collectible. Known function
-// words are not directly collectible (they execute via stepWord), so they
-// don't count — unless the function has signatures expecting TWord arguments
-// (e.g., def needs to collect word names).
-func (e *Engine) hasForwardValues(fn *FnDefInfo) bool {
-	if e.pointer+1 >= len(e.stack) {
-		return false
-	}
-	next := e.stack[e.pointer+1]
-	if next.IsForward() || next.IsOpenParen() {
-		return false
-	}
-	if next.IsWord() {
-		nw := next.AsWord()
-		if nw.Name == ")" || nw.Name == "end" {
-			return false
-		}
-		// If any signature expects TWord or has /q for this position,
-		// the unresolved word itself is collectible (e.g. inspect captures names).
-		// Check this BEFORE resolving defs, since def expansion may execute code.
-		for si := range fn.Signatures {
-			for ai, argType := range fn.Signatures[si].Args {
-				if argType.Equal(TWord) {
-					return true
-				}
-				if fn.Signatures[si].QuoteArgs != nil && fn.Signatures[si].QuoteArgs[ai] {
-					return true
-				}
-			}
-		}
-		// Def'd parameters resolve to concrete values (Integer, String, etc.)
-		// and should be forward-collectible if they type-match.
-		if ds := e.registry.DefStacks[nw.Name]; len(ds) > 0 {
-			resolved := ds[len(ds)-1]
-			for si := range fn.Signatures {
-				for _, argType := range fn.Signatures[si].Args {
-					if resolved.VType.Matches(argType) {
-						return true
-					}
-				}
-			}
-		}
-		if knownFn := e.registry.Lookup(nw.Name); knownFn != nil {
-			// Forward-precedence functions act like sub-expressions:
-			// they will execute, collect their own forward args, and
-			// produce a result value for the outer forward.
-			if knownFn.ForwardPrecedence {
-				return true
-			}
-			// Stack-only functions: only collectible if fn expects TWord,
-			// TFunction, or /q args (which capture words as atoms).
-			for si := range fn.Signatures {
-				sig := &fn.Signatures[si]
-				for ai, argType := range sig.Args {
-					if argType.Equal(TWord) || argType.Equal(TFunction) {
-						return true
-					}
-					if sig.QuoteArgs != nil && sig.QuoteArgs[ai] {
-						return true
-					}
-				}
-			}
-			return false
-		}
-	}
-	return true
-}
 
 // peekForwardValue returns a value representing what the next stack element
 // would resolve to, for use in speculative signature matching. Unknown words
