@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>AQL REPL</title>
 <style>
   :root {
@@ -18,29 +18,34 @@
     --input-bg: #11111b;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
     font-size: 14px;
-    height: 100vh;
     display: flex;
     flex-direction: column;
   }
   header {
-    padding: 12px 20px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    flex-shrink: 0;
   }
   header h1 { font-size: 16px; font-weight: 600; color: var(--mauve); }
-  header span { font-size: 12px; color: var(--subtext); }
+  header .subtitle { font-size: 12px; color: var(--subtext); }
   #status {
     margin-left: auto;
     font-size: 12px;
     padding: 2px 8px;
     border-radius: 4px;
+    flex-shrink: 0;
   }
   .status-loading { color: #fab387; }
   .status-ready { color: var(--green); }
@@ -48,28 +53,33 @@
   #output {
     flex: 1;
     overflow-y: auto;
-    padding: 16px 20px;
+    padding: 12px 16px;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
+    -webkit-overflow-scrolling: touch;
   }
   .line { margin-bottom: 4px; }
   .line-input { color: var(--blue); }
   .line-result { color: var(--green); }
   .line-error { color: var(--red); }
   .line-info { color: var(--subtext); font-style: italic; }
-  #input-row {
+  #input-area {
     display: flex;
-    align-items: center;
-    padding: 8px 20px 12px;
+    align-items: flex-start;
+    padding: 8px 16px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: var(--surface);
+    flex-shrink: 0;
+    gap: 8px;
   }
-  #input-row .prompt {
+  #input-area .prompt {
     color: var(--mauve);
-    margin-right: 8px;
     font-size: 14px;
     flex-shrink: 0;
     user-select: none;
+    line-height: 1.5;
+    padding-top: 8px;
   }
   #input {
     flex: 1;
@@ -81,24 +91,66 @@
     font-size: 14px;
     padding: 8px 12px;
     outline: none;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.5;
+    min-height: calc(1.5em + 18px);
+    max-height: 40vh;
   }
   #input:focus { border-color: var(--mauve); }
   #input:disabled { opacity: 0.5; }
+  #run-btn {
+    flex-shrink: 0;
+    background: var(--mauve);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 14px;
+    cursor: pointer;
+    align-self: flex-end;
+    line-height: 1.5;
+  }
+  #run-btn:active { opacity: 0.8; }
+  #run-btn:disabled { opacity: 0.4; cursor: default; }
+  .hint {
+    font-size: 11px;
+    color: var(--subtext);
+    padding: 4px 16px 0;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 600px) {
+    body { font-size: 13px; }
+    header { padding: 8px 12px; gap: 6px; }
+    header h1 { font-size: 15px; }
+    header .subtitle { display: none; }
+    #output { padding: 10px 12px; }
+    #input-area { padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    #input { font-size: 16px; /* prevent iOS zoom */ }
+    .hint { padding: 4px 12px 0; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>AQL REPL</h1>
-  <span>concatenative query language</span>
+  <span class="subtitle">concatenative query language</span>
   <span id="status" class="status-loading">loading wasm...</span>
 </header>
 <div id="output">
   <div class="line line-info">Loading AQL engine...</div>
 </div>
-<div id="input-row">
+<div class="hint" id="hint"></div>
+<div id="input-area">
   <span class="prompt">&gt;&gt;</span>
-  <input id="input" type="text" disabled autocomplete="off" spellcheck="false"
-         placeholder="Loading...">
+  <textarea id="input" rows="3" disabled autocomplete="off" autocorrect="off"
+            autocapitalize="off" spellcheck="false"
+            placeholder="Loading..."></textarea>
+  <button id="run-btn" disabled>Run</button>
 </div>
 <script src="wasm_exec.js"></script>
 <script>
@@ -106,8 +158,16 @@
   const output = document.getElementById('output');
   const input = document.getElementById('input');
   const status = document.getElementById('status');
+  const runBtn = document.getElementById('run-btn');
+  const hint = document.getElementById('hint');
   const history = [];
   let historyIdx = -1;
+  let ready = false;
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  hint.textContent = isMobile
+    ? 'Tap Run to evaluate'
+    : 'Shift+Enter for newline, Enter to evaluate';
 
   function addLine(cls, text) {
     const div = document.createElement('div');
@@ -121,16 +181,35 @@
     output.innerHTML = '';
   }
 
+  function autoResize() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + 'px';
+  }
+
+  function submit() {
+    if (!ready) return;
+    const code = input.value.trim();
+    if (!code) return;
+    history.push(code);
+    historyIdx = history.length;
+    input.value = '';
+    autoResize();
+    evaluate(code);
+    input.focus();
+  }
+
   // Load WASM
   const go = new Go();
 
   window.__aqlReady = function() {
+    ready = true;
     clearOutput();
     addLine('line-info', 'AQL Web REPL ready. Type expressions and press Enter.');
     addLine('line-info', 'Examples: 1 add 2  |  "hello" upper  |  def double [dup add]  |  5 double');
     status.textContent = 'ready';
     status.className = 'status-ready';
     input.disabled = false;
+    runBtn.disabled = false;
     input.placeholder = 'Enter AQL expression...';
     input.focus();
   };
@@ -140,7 +219,6 @@
       go.run(result.instance);
     })
     .catch(err => {
-      // Fallback for servers that don't serve .wasm with correct MIME type
       fetch('aql.wasm')
         .then(resp => resp.arrayBuffer())
         .then(bytes => WebAssembly.instantiate(bytes, go.importObject))
@@ -153,7 +231,8 @@
     });
 
   function evaluate(code) {
-    addLine('line-input', '>> ' + code);
+    const display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
+    addLine('line-input', '>> ' + display);
     try {
       const res = aqlEval(code);
       if (res.error) {
@@ -166,21 +245,20 @@
     }
   }
 
+  input.addEventListener('input', autoResize);
+
   input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      const code = input.value.trim();
-      if (!code) return;
-      history.push(code);
-      historyIdx = history.length;
-      input.value = '';
-      evaluate(code);
-    } else if (e.key === 'ArrowUp') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    } else if (e.key === 'ArrowUp' && input.selectionStart === 0 && !e.shiftKey) {
       e.preventDefault();
       if (historyIdx > 0) {
         historyIdx--;
         input.value = history[historyIdx];
+        autoResize();
       }
-    } else if (e.key === 'ArrowDown') {
+    } else if (e.key === 'ArrowDown' && input.selectionStart === input.value.length && !e.shiftKey) {
       e.preventDefault();
       if (historyIdx < history.length - 1) {
         historyIdx++;
@@ -189,8 +267,11 @@
         historyIdx = history.length;
         input.value = '';
       }
+      autoResize();
     }
   });
+
+  runBtn.addEventListener('click', submit);
 })();
 </script>
 </body>
