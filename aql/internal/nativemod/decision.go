@@ -86,6 +86,7 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 
 func makeFnDef(wordName string, params []engine.FnParam, returns []engine.Type, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{
+		Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  params,
 			Returns: returns,

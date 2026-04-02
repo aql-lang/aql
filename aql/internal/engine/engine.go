@@ -677,15 +677,14 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
-		// If the value is a FnDef/TFunction with a captured module registry
-		// (closure), execute it using preceding stack values as arguments.
-		// Only module-exported functions auto-execute; anonymous fn values
-		// (no captured registry) are treated as data so they can be passed
-		// as arguments to higher-order words like walk, map, filter, etc.
+		// If the value is a named FnDef/TFunction, execute it using the
+		// normal word execution path (forward collection + stack matching).
+		// Named functions were registered via installFnDef and have their
+		// signatures in the appropriate registry's funcs map.
 		val := e.stack[valIdx]
 		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
 			val.Data != nil {
-			if fnDef, ok := val.Data.(FnDefInfo); ok && fnDef.Registry != nil {
+			if fnDef, ok := val.Data.(FnDefInfo); ok && fnDef.Name != "" {
 				return e.execFnDefLiteral(valIdx)
 			}
 		}
@@ -961,43 +960,35 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Collect resolved values before the pointer for signature matching.
-	resolved := e.effectiveResolved()
-
-	// Step 1: Try forward collection (like a registered word).
-	// Build temporary Function/Signatures from FnSig params so the
-	// standard forward planner can find matches. This allows module
-	// functions like color.make-color to forward-collect their args.
-	tmpSigs := make([]Signature, len(fnDef.Sigs))
-	for i, sig := range fnDef.Sigs {
-		argTypes := make([]Type, len(sig.Params))
-		var patterns map[int]Value
-		for j, p := range sig.Params {
-			argTypes[j] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[j] = *p.Pattern
-			}
-		}
-		tmpSigs[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+	// Look up the function by name in the appropriate registry.
+	// Module functions use their captured registry (closure semantics).
+	// Plain functions use the current engine registry.
+	reg := fnDef.Registry
+	if reg == nil {
+		reg = e.registry
 	}
-	SortSignatures(tmpSigs)
-	tmpFn := &Function{Signatures: tmpSigs, ForwardPrecedence: true}
-	tmpWord := WordInfo{Name: "__fnlit", ArgCount: -1}
+	fn := reg.Lookup(fnDef.Name)
+	if fn == nil {
+		e.pointer++
+		return nil
+	}
 
-	if e.hasForwardValues(tmpFn) {
-		bestSig, stackCount := e.plannerSequentialForward(tmpFn, tmpWord, resolved)
+	resolved := e.effectiveResolved()
+	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+
+	// Try forward collection using the registered signatures.
+	if e.hasForwardValues(fn) {
+		bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
 		if bestSig != nil {
 			forwardNeeded := len(bestSig.Args) - stackCount
 			if forwardNeeded > 0 {
-				return e.insertForward(tmpWord, bestSig, forwardNeeded, stackCount)
+				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
 			}
 		}
 	}
 
-	// Step 2: Try stack matching (existing logic).
+	// Try stack matching against the FnDefInfo's signatures, then execute
+	// via execFnDefSig which uses CallAQL for module functions.
 	for _, sig := range fnDef.Sigs {
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
@@ -1006,7 +997,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		if len(resolved) < nArgs {
 			continue
 		}
-		// Check if the last nArgs resolved values match the signature types.
 		candidate := resolved[len(resolved)-nArgs:]
 		match := true
 		for i, p := range sig.Params {

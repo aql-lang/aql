@@ -59,6 +59,7 @@ func BuildMathModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 // Uses unnamed params so args are pushed directly onto the stack.
 func makeUnaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	fnDef := engine.FnDefInfo{
+		Name: wordName,
 		Sigs: []engine.FnSig{
 			{
 				Params:  []engine.FnParam{{Type: engine.TNumber}},
@@ -75,6 +76,7 @@ func makeUnaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 // Uses unnamed params so args are pushed directly onto the stack.
 func makeBinaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	fnDef := engine.FnDefInfo{
+		Name: wordName,
 		Sigs: []engine.FnSig{
 			{
 				Params: []engine.FnParam{
@@ -93,6 +95,7 @@ func makeBinaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 // makeConstFnDef creates a FnDef value that wraps a zero-arg constant word.
 func makeConstFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	fnDef := engine.FnDefInfo{
+		Name: wordName,
 		Sigs: []engine.FnSig{
 			{
 				Params:  []engine.FnParam{},

@@ -82,6 +82,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		if !ok {
 			return
 		}
+		fnDef.Name = name
 
 		// Register a fallback handler on first fn-based definition of this name.
 		// This handles 0-arg invocations of fn-defined words.

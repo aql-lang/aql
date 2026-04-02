@@ -173,9 +173,11 @@ type FnSig struct {
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
-// If Registry is non-nil, the function was defined in a module and should
-// execute in that registry's context (closure semantics).
+// Name is the function's registered name (set by installDef). If Registry is
+// non-nil, the function was defined in a module and should execute in that
+// registry's context (closure semantics).
 type FnDefInfo struct {
+	Name     string
 	Sigs     []FnSig
 	Registry *Registry
 }

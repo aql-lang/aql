@@ -60,6 +60,7 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 // makeTimeFnDef creates a FnDef value with the given params, returns, and word name.
 func makeTimeFnDef(wordName string, params []engine.FnParam, returns []engine.Type, subReg *engine.Registry) engine.Value {
 	fnDef := engine.FnDefInfo{
+		Name: wordName,
 		Sigs: []engine.FnSig{
 			{
 				Params:  params,
