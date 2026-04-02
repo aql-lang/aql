@@ -83,7 +83,8 @@ func registerDo(r *Registry) {
 
 	r.Register("do",
 		Signature{
-			Args: []Type{TList},
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				if args[0].Data == nil {
 					return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")

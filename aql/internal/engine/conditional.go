@@ -111,12 +111,14 @@ func registerIf(r *Registry) {
 
 	r.Register("if",
 		Signature{
-			Args:    []Type{TAny, TAny, TAny},
-			Handler: if3Handler,
+			Args:       []Type{TAny, TAny, TAny},
+			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+			Handler:    if3Handler,
 		},
 		Signature{
-			Args:    []Type{TAny, TAny},
-			Handler: if2Handler,
+			Args:       []Type{TAny, TAny},
+			NoEvalArgs: map[int]bool{0: true, 1: true},
+			Handler:    if2Handler,
 		},
 	)
 }

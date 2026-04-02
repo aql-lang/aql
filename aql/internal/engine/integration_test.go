@@ -2126,8 +2126,8 @@ func TestEngineInspectBuiltin(t *testing.T) {
 
 	// Check kind field.
 	kind, ok := m.Get("kind")
-	if !ok || kind.AsAtom() != "builtin" {
-		t.Errorf("kind = %v, want builtin", kind)
+	if !ok || kind.AsAtom() != "native" {
+		t.Errorf("kind = %v, want native", kind)
 	}
 
 	// Check signatures field is a non-empty list.
@@ -2205,7 +2205,7 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	// inspect upper .name => 'upper'
 	result := runAQL(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
-		NewWord("."), NewWord("name"),
+		NewWord("get"), NewWord("name"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -2298,7 +2298,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("type"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
-		NewWord("."), NewWord("kind"),
+		NewWord("get"), NewWord("kind"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))

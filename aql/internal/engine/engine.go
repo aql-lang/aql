@@ -190,6 +190,10 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		case val.IsReturnCheck():
 			e.pointer++
 
+		case val.IsDefCleanup():
+			e.stepDefCleanup(val)
+			e.pointer++
+
 		default:
 			if val.VType.Equal(Type{}) {
 				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
@@ -325,7 +329,8 @@ func (e *Engine) stepWord(val Value) error {
 			// Not a simple value — fall through to Lookup.
 		default:
 			// For list bodies, expand onto the stack like the fallback handler does.
-			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() {
+			// Quoted lists are treated as data values (not expanded).
+			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
 				elems := top.AsList()
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
@@ -453,14 +458,29 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Process consumed arguments:
 	// - Maps with Eval=true: auto-evaluate their values now, so word
 	//   handlers receive resolved data (e.g. {base:hex} → {base:atom(hex)}).
-	// - Lists: strip Eval so they're not auto-evaluated later (they may
-	//   be code blocks like def bodies).
+	// - Lists with Eval=true: auto-evaluate their contents now, so word
+	//   handlers receive resolved data (e.g. [c1 c2] → [map1, map2]).
+	//   Lists at QuoteArgs positions are NOT evaluated (code bodies for
+	//   def, if, for, do, etc.).
 	for i := range match.Args {
-		if match.Args[i].Eval && match.Args[i].VType.Equal(TMap) &&
-			match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
-			evaluated, err := e.autoEvalMap(match.Args[i])
-			if err == nil {
-				match.Args[i] = evaluated
+		if match.Args[i].Eval && !match.Args[i].Quoted {
+			if match.Args[i].VType.Equal(TMap) &&
+				match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
+				evaluated, err := e.autoEvalMap(match.Args[i])
+				if err == nil {
+					match.Args[i] = evaluated
+				}
+			} else if match.Args[i].VType.Equal(TList) &&
+				match.Args[i].Data != nil && !match.Args[i].IsTypedList() && !match.Args[i].IsTableType() {
+				// NoEvalArgs suppresses list auto-evaluation for code-body
+				// positions (def body, if branches, for body, etc.).
+				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalList(match.Args[i])
+					if err == nil {
+						match.Args[i] = evaluated
+					}
+				}
 			}
 		}
 		match.Args[i].Eval = false
@@ -658,15 +678,12 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
-		// If the value is a FnDef/TFunction with a captured module registry
-		// (closure), execute it using preceding stack values as arguments.
-		// Only module-exported functions auto-execute; anonymous fn values
-		// (no captured registry) are treated as data so they can be passed
-		// as arguments to higher-order words like walk, map, filter, etc.
+		// If the value is a FnDef/TFunction, execute it. Quoted function
+		// values are treated as data (not executed).
 		val := e.stack[valIdx]
 		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
-			val.Data != nil {
-			if fnDef, ok := val.Data.(FnDefInfo); ok && fnDef.Registry != nil {
+			val.Data != nil && !val.Quoted {
+			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
 			}
 		}
@@ -942,10 +959,44 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Collect resolved values before the pointer for signature matching.
-	resolved := e.effectiveResolved()
+	// Look up compiled signatures. Named functions use the registry;
+	// anonymous/unregistered functions build signatures from FnSig params.
+	var fn *FnDefInfo
+	if fnDef.Name != "" {
+		reg := fnDef.Registry
+		if reg == nil {
+			reg = e.registry
+		}
+		fn = reg.Lookup(fnDef.Name)
+	}
+	if fn == nil && len(fnDef.Sigs) > 0 {
+		fn = &FnDefInfo{
+			Name:              fnDef.Name,
+			Signatures:        fnSigsToSignatures(fnDef.Sigs),
+			ForwardPrecedence: true,
+		}
+	}
+	if fn == nil {
+		e.pointer++
+		return nil
+	}
 
-	// Try each signature to find one that matches the available stack args.
+	resolved := e.effectiveResolved()
+	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+
+	// Try forward collection.
+	if e.hasForwardValues(fn) {
+		bestSig, stackCount := e.plannerSequentialForward(fn, w, resolved)
+		if bestSig != nil {
+			forwardNeeded := len(bestSig.Args) - stackCount
+			if forwardNeeded > 0 {
+				return e.insertForward(w, bestSig, forwardNeeded, stackCount)
+			}
+		}
+	}
+
+	// Try stack matching against the FnDefInfo's Sigs, then execute
+	// via execFnDefSig which uses CallAQL for module functions.
 	for _, sig := range fnDef.Sigs {
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
@@ -954,7 +1005,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		if len(resolved) < nArgs {
 			continue
 		}
-		// Check if the last nArgs resolved values match the signature types.
 		candidate := resolved[len(resolved)-nArgs:]
 		match := true
 		for i, p := range sig.Params {
@@ -989,12 +1039,56 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	return nil
 }
 
+// fnSigsToSignatures converts FnSig params into Signature objects for the
+// forward planner. Used for anonymous functions that have no registered name.
+func fnSigsToSignatures(sigs []FnSig) []Signature {
+	out := make([]Signature, len(sigs))
+	for i, sig := range sigs {
+		argTypes := make([]Type, len(sig.Params))
+		var patterns map[int]Value
+		for j, p := range sig.Params {
+			argTypes[j] = p.Type
+			if p.Pattern != nil {
+				if patterns == nil {
+					patterns = make(map[int]Value)
+				}
+				patterns[j] = *p.Pattern
+			}
+		}
+		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+	}
+	SortSignatures(out)
+	return out
+}
+
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
 func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
+
+	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
+	// receive resolved data. Maps: {base:hex} → {base:atom(hex)}.
+	// Lists: [c1 c2] → [map1, map2].
+	for i := range args {
+		if args[i].Eval && !args[i].Quoted {
+			if args[i].VType.Equal(TMap) &&
+				args[i].Data != nil && !args[i].IsTypedMap() && !args[i].IsRecordType() && !args[i].IsOptionsType() {
+				evaluated, err := e.autoEvalMap(args[i])
+				if err == nil {
+					args[i] = evaluated
+				}
+			} else if args[i].VType.Equal(TList) &&
+				args[i].Data != nil && !args[i].IsTypedList() && !args[i].IsTableType() {
+				evaluated, err := e.autoEvalList(args[i])
+				if err == nil {
+					args[i] = evaluated
+				}
+			}
+		}
+		args[i].Eval = false
+	}
 
 	if capturedReg != nil {
 		// Execute in the captured module's registry via CallAQL.
@@ -1297,6 +1391,21 @@ func (e *Engine) stepEnd() error {
 }
 
 // stepMark records the mark's ID in the marks hash table and advances.
+// stepDefCleanup removes defs that were created during fn body execution.
+// The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
+// the body ran. Any defs added since are popped via uninstallDef.
+func (e *Engine) stepDefCleanup(val Value) {
+	info := val.AsDefCleanup()
+	reg := info.Registry
+	for name, stack := range reg.DefStacks {
+		prevLen := info.Snapshot[name] // 0 for names not in snapshot
+		for len(stack) > prevLen {
+			uninstallDef(reg, name)
+			stack = reg.DefStacks[name]
+		}
+	}
+}
+
 func (e *Engine) stepMark(val Value) {
 	info := val.AsMark()
 	if e.marks == nil {
@@ -1621,6 +1730,9 @@ func (e *Engine) stepCloseParen() error {
 						e.pointer++
 					case val.IsReturnCheck():
 						e.pointer++
+					case val.IsDefCleanup():
+						e.stepDefCleanup(val)
+						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil {
 							return err
@@ -1645,6 +1757,16 @@ func (e *Engine) stepCloseParen() error {
 			fwd := e.stack[i].AsForward()
 			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d forward args)",
 				fwd.FuncName, fwd.ExpectedArgs)
+		}
+	}
+
+	// Remove any surviving def-cleanup markers.
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if e.stack[i].IsDefCleanup() {
+			e.stepDefCleanup(e.stack[i])
+			e.stackRemove(i)
+			closeIdx--
+			i--
 		}
 	}
 
@@ -1780,7 +1902,7 @@ func (e *Engine) isInsidePendingForward() bool {
 // words are not directly collectible (they execute via stepWord), so they
 // don't count — unless the function has signatures expecting TWord arguments
 // (e.g., def needs to collect word names).
-func (e *Engine) hasForwardValues(fn *Function) bool {
+func (e *Engine) hasForwardValues(fn *FnDefInfo) bool {
 	if e.pointer+1 >= len(e.stack) {
 		return false
 	}

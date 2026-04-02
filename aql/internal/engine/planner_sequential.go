@@ -21,7 +21,7 @@ package engine
 //   - Defined word: resolve to its def type for matching
 //   - Unknown word: becomes Atom (or Boolean for true/false)
 //   - Type name: if expected type is a metatype, collect as forward arg
-func (e *Engine) plannerSequentialForward(fn *Function, w WordInfo, resolved []Value) (*Signature, int) {
+func (e *Engine) plannerSequentialForward(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, int) {
 	// If the next forward token is a word with a DefStack entry, prefer
 	// signatures that accept TWord at position 0 — this allows inspect and
 	// similar words to capture the name without executing the def body.
@@ -86,6 +86,12 @@ func (e *Engine) trySequentialMatch(sig *Signature, resolved []Value, forceForwa
 	scanIdx := e.pointer + 1
 
 	for forwardMatched < nArgs && scanIdx < len(e.stack) {
+		// Pipe barrier: stop forward collection at this position.
+		// Remaining args are matched from the stack in reverse.
+		if sig.BarrierPos > 0 && forwardMatched >= sig.BarrierPos {
+			break
+		}
+
 		tok := e.stack[scanIdx]
 		expectedType := sig.Args[forwardMatched]
 

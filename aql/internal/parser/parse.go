@@ -69,13 +69,15 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
-	// Register ( ) . ; ? as separate fixed tokens so jsonic lexes them
+	// Register ( ) . ; ? ! | as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
 	TinCP := j.Token("#CP", ")")
 	TinDT := j.Token("#DT", ".")
 	TinSC := j.Token("#SC", ";")
 	TinQM := j.Token("#QM", "?")
+	TinBG := j.Token("#BG", "!")
+	TinPI := j.Token("#PI", "|")
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -103,17 +105,17 @@ func Parse(src string) ([]engine.Value, error) {
 			{S: [][]jsonic.Tin{{TinQM}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: "?", Quote: ""}
 			}},
+			// Bang: "!" token. The "!" "." sequence becomes getr in convertTopLevelItems.
+			{S: [][]jsonic.Tin{{TinBG}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "!", Quote: ""}
+			}},
+			// Pipe: "|" token. Used in fn signatures as forward barrier marker.
+			{S: [][]jsonic.Tin{{TinPI}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "|", Quote: ""}
+			}},
+			// Dot: "." token. Becomes get in convertTopLevelItems.
 			{S: [][]jsonic.Tin{{TinDT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				si := r.O0.SI
-				leftAdj := si > 0 && !isWhitespace(src[si-1])
-				rightAdj := si+1 < len(src) && !isWhitespace(src[si+1])
-				if leftAdj || rightAdj {
-					// Adjacent dot: part of a dotted word (e.g. foo.bar, .bar, foo.)
-					r.Node = jsonic.Text{Str: ".", Quote: "adj"}
-				} else {
-					// Standalone dot: the dot operator with spaces around it
-					r.Node = jsonic.Text{Str: ".", Quote: ""}
-				}
+				r.Node = jsonic.Text{Str: ".", Quote: ""}
 			}},
 		}, rs.Open...)
 	})
@@ -442,143 +444,35 @@ func Parse(src string) ([]engine.Value, error) {
 	}
 }
 
-// isDotMarker returns true if item is an adjacent dot marker (part of a
-// dotted word like foo.bar). Standalone dots (with spaces) have Quote=""
-// and are handled separately.
-func isDotMarker(item any) bool {
+// isToken checks if item is an unquoted text marker matching the given string.
+// Quoted text (e.g. "." or "!") has Quote != "" and is handled as a string
+// by convertTopLevelValue, so it never reaches the token checks.
+func isToken(item any, tok string) bool {
 	text, ok := item.(jsonic.Text)
-	return ok && text.Str == "." && text.Quote == "adj"
-}
-
-// isStandaloneDot returns true if item is a standalone dot operator
-// (space-separated, e.g. "foo . bar" or just ".").
-func isStandaloneDot(item any) bool {
-	text, ok := item.(jsonic.Text)
-	return ok && text.Str == "." && text.Quote == ""
-}
-
-// isTextOrNumber returns true if item is an unquoted text token or a number,
-// i.e. something that can appear as a segment in a dotted word.
-func isTextOrNumber(item any) bool {
-	if text, ok := item.(jsonic.Text); ok {
-		return text.Quote == ""
-	}
-	switch item.(type) {
-	case float64, numberVal:
-		return true
-	}
-	return false
-}
-
-// itemToString returns the string representation of a dot segment item.
-func itemToString(item any) string {
-	switch v := item.(type) {
-	case jsonic.Text:
-		return v.Str
-	case float64:
-		if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return fmt.Sprintf("%v", v)
-	case numberVal:
-		return v.Src
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
-
-// collectDotString scans items starting at start, collecting a dot-separated
-// sequence of tokens (text/number separated by dot markers). Returns the
-// joined dotted string and the number of items consumed.
-//
-// Examples:
-//
-//	Text"foo", dot, Text"bar"             → "foo.bar", 3
-//	dot, Text"bar"                        → ".bar", 2
-//	Text"!", dot                          → "!.", 2
-//	Text"foo", dot, Number(0), dot, Text"x" → "foo.0.x", 5
-func collectDotString(items []any, start int) (string, int) {
-	var parts []string
-	i := start
-
-	// Handle leading dot.
-	if isDotMarker(items[i]) {
-		parts = append(parts, "") // empty first part → leading dot
-		i++
-	}
-
-	for i < len(items) {
-		// Expect text or number.
-		if !isTextOrNumber(items[i]) {
-			break
-		}
-		parts = append(parts, itemToString(items[i]))
-		i++
-
-		// Check for trailing dot.
-		if i < len(items) && isDotMarker(items[i]) {
-			i++ // consume dot, continue to next part
-		} else {
-			break
-		}
-	}
-
-	// Handle trailing dot (e.g. "!." → parts=["!", ""])
-	if i > start && isDotMarker(items[i-1]) {
-		parts = append(parts, "")
-	}
-
-	return strings.Join(parts, "."), i - start
+	return ok && text.Str == tok && text.Quote == ""
 }
 
 // convertTopLevelItems converts a list of jsonic items in word context,
-// handling dot-separated sequences and parenthesis markers. This is the
-// shared implementation for both convertTopLevel and convertWordList.
+// handling parenthesis markers and token sequences. The . and ! tokens
+// are converted to "get" and "getr" words respectively:
+//   - "." → get
+//   - "!" "." → getr (the ! is consumed together with the following .)
+//
+// All other items are converted to engine values directly.
 func convertTopLevelItems(items []any) ([]engine.Value, error) {
 	values := make([]engine.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
-		// Standalone dot (space-separated) → the dot word.
-		if isStandaloneDot(items[i]) {
-			values = append(values, engine.NewWord("get"))
+		// "!" followed by "." → getr word.
+		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
+			values = append(values, engine.NewWord("getr"))
+			i++ // skip the dot
 			continue
 		}
 
-		// Adjacent dot marker: start of a leading-dot sequence (.bar, .bar.baz).
-		if isDotMarker(items[i]) {
-			if i+1 < len(items) && isTextOrNumber(items[i+1]) {
-				dotStr, consumed := collectDotString(items, i)
-				expanded, err := expandDottedWord(dotStr)
-				if err != nil {
-					return nil, err
-				}
-				values = append(values, expanded...)
-				i += consumed - 1
-				continue
-			}
-			// Adjacent dot with nothing after → treat as dot word.
+		// "." → get word.
+		if isToken(items[i], ".") {
 			values = append(values, engine.NewWord("get"))
 			continue
-		}
-
-		// Unquoted text potentially followed by an adjacent dot.
-		if text, ok := items[i].(jsonic.Text); ok && text.Quote == "" {
-			if i+1 < len(items) && isDotMarker(items[i+1]) {
-				// "!" followed by adjacent dot with nothing useful after → getr.
-				if text.Str == "!" && (i+2 >= len(items) || !isTextOrNumber(items[i+2])) {
-					values = append(values, engine.NewWord("getr"))
-					i++ // skip the dot marker
-					continue
-				}
-				// Regular dotted word: foo.bar, foo.bar.baz, etc.
-				dotStr, consumed := collectDotString(items, i)
-				expanded, err := expandDottedWord(dotStr)
-				if err != nil {
-					return nil, err
-				}
-				values = append(values, expanded...)
-				i += consumed - 1
-				continue
-			}
 		}
 
 		// Unclosed paren: error at parse time.
@@ -926,73 +820,6 @@ func parseWord(text string) (engine.Value, error) {
 	}
 
 	return engine.NewWord(name), nil
-}
-
-// expandDottedWord expands dot notation like "foo.a.b" into a sequence of
-// engine values: [( foo dot a dot b )]. The first segment is emitted as a
-// plain word, resolved by the engine (def lookup, registered function, or
-// atom). Each subsequent segment emits "get" followed by the key, so that
-// dot forward-collects the key in the same way as standalone "dot a".
-// A standalone "." becomes the "get" word.
-// Leading dot (e.g. ".a.b") omits the first word and emits [dot a dot b],
-// operating on whatever value is already on the stack (no paren wrapping).
-//
-// The entire multi-token expansion is wrapped in parentheses so that it
-// evaluates as a single sub-expression. This gives dot very high binding,
-// letting forward-precedence words like "list" consume the result:
-// list foo.a → list ( foo dot a ).
-func expandDottedWord(text string) ([]engine.Value, error) {
-	// Standalone "." → just the dot word.
-	if text == "." {
-		return []engine.Value{engine.NewWord("get")}, nil
-	}
-
-	// Standalone "!." → just the getr word.
-	if text == "!." {
-		return []engine.Value{engine.NewWord("getr")}, nil
-	}
-
-	parts := strings.Split(text, ".")
-	var inner []engine.Value
-
-	// First part (before first dot): emit as a plain word.
-	// The engine resolves it naturally — def, registered function, or atom.
-	leadingDot := parts[0] == ""
-	if !leadingDot {
-		w, err := parseWord(parts[0])
-		if err != nil {
-			return nil, err
-		}
-		inner = append(inner, w)
-	}
-
-	// Subsequent parts (after each dot): emit dot then key, so dot
-	// forward-collects the key — identical to standalone "dot a" syntax.
-	for _, part := range parts[1:] {
-		if part == "" {
-			continue
-		}
-		inner = append(inner, engine.NewWord("get"))
-		// Integer keys for list access.
-		if n, err := strconv.ParseInt(part, 10, 64); err == nil {
-			inner = append(inner, engine.NewInteger(n))
-		} else {
-			inner = append(inner, engine.NewWord(part))
-		}
-	}
-
-	// Leading dot operates on whatever is already on the stack,
-	// so don't wrap in parens (it needs the stack value).
-	if leadingDot {
-		return inner, nil
-	}
-
-	// Wrap in parentheses so the expression evaluates as a unit.
-	result := make([]engine.Value, 0, len(inner)+2)
-	result = append(result, engine.NewOpenParen())
-	result = append(result, inner...)
-	result = append(result, engine.NewWord(")"))
-	return result, nil
 }
 
 // numberVal wraps a float64 with source text so we can distinguish

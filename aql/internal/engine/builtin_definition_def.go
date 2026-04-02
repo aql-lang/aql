@@ -48,13 +48,15 @@ func registerDef(r *Registry) {
 
 	r.Register("def",
 		Signature{
-			Args:    []Type{TString, TAny},
-			Handler: defHandler,
+			Args:       []Type{TString, TAny},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    defHandler,
 		},
 		Signature{
-			Args:      []Type{TAtom, TAny},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   defHandler,
+			Args:       []Type{TAtom, TAny},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    defHandler,
 		},
 	)
 }
@@ -68,10 +70,7 @@ func registerDef(r *Registry) {
 // literal substitution.
 func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	registerFn := r.Register
-	if isStackOnly {
-		registerFn = r.RegisterStackOnly
-	}
+	_ = isStackOnly // used by installFnDef below
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
@@ -80,11 +79,21 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		if !ok {
 			return
 		}
+		fnDef.Name = name
 
-		// Register a fallback handler on first fn-based definition of this name.
+		// Add a fallback handler (0-arg catch-all) if none exists yet.
 		// This handles 0-arg invocations of fn-defined words.
-		if r.funcs[name] == nil {
-			registerFn(name, Signature{
+		hasFallback := false
+		if prev := r.Lookup(name); prev != nil {
+			for _, sig := range prev.Signatures {
+				if sig.Fallback {
+					hasFallback = true
+					break
+				}
+			}
+		}
+		if !hasFallback {
+			fnDef.Signatures = append(fnDef.Signatures, Signature{
 				Fallback: true,
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					stack := r.DefStacks[name]
@@ -132,10 +141,10 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			}
 			if changed {
 				r.DefStacks[name] = filtered
-				// Rebuild typed signatures from remaining DefStack entries.
-				fn := r.funcs[name]
-				if fn != nil && len(fn.Signatures) > 0 {
-					fn.Signatures = KeepFallback(fn.Signatures)
+				// Rebuild: clear Signatures on the top FnDefInfo (keep fallback),
+				// then re-register from remaining DefStack entries.
+				if top := r.Lookup(name); top != nil {
+					r.clearSigsKeepFallback(name)
 				}
 				for _, entry := range filtered {
 					if fd, ok := entry.Data.(FnDefInfo); ok {
@@ -145,9 +154,16 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			}
 		}
 
-		installFnDef(r, name, fnDef, isStackOnly)
-		// Store as TFnDef on the stack so uninstallDef handles it uniformly.
+		// Carry forward existing compiled Signatures (from previous defs
+		// of the same name) so overloading works across stacked defs.
+		if prev := r.Lookup(name); prev != nil {
+			fnDef.Signatures = append([]Signature(nil), prev.Signatures...)
+			fnDef.ForwardPrecedence = prev.ForwardPrecedence
+		}
+		// Push the FnDefInfo to DefStacks first, then installFnDef→Register→
+		// upsertFnDef will update its Signatures in place.
 		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+		installFnDef(r, name, fnDef, isStackOnly)
 		return
 	}
 
@@ -218,31 +234,24 @@ func uninstallDef(r *Registry, name string) {
 	top := stack[len(stack)-1]
 	r.DefStacks[name] = stack[:len(stack)-1]
 
-	// Count typed signatures to remove (function defs register N typed sigs).
-	sigsToRemove := 0
-	if fnDef, ok := top.Data.(FnDefInfo); ok {
-		sigsToRemove = len(fnDef.Sigs)
-	}
-
-	fn := r.funcs[name]
-	if fn == nil {
-		return
-	}
-
-	// If DefStacks is now empty, remove the function entirely.
+	// If DefStacks is now empty, clean up entirely.
 	if len(r.DefStacks[name]) == 0 {
-		delete(r.funcs, name)
 		delete(r.DefStacks, name)
 		return
 	}
 
-	// Rebuild: keep fallback, re-register from remaining DefStack entries.
-	if sigsToRemove > 0 {
-		fn.Signatures = KeepFallback(fn.Signatures)
-		for _, entry := range r.DefStacks[name] {
-			if fd, ok := entry.Data.(FnDefInfo); ok {
-				installFnDef(r, name, fd)
-			}
+	// Count typed signatures to remove (function defs register N typed sigs).
+	_, isFnDef := top.Data.(FnDefInfo)
+	if !isFnDef {
+		return
+	}
+
+	// Rebuild: clear Signatures on the (now-top) entry, keep fallback,
+	// then re-register from remaining DefStack entries.
+	r.clearSigsKeepFallback(name)
+	for _, entry := range r.DefStacks[name] {
+		if fd, ok := entry.Data.(FnDefInfo); ok {
+			installFnDef(r, name, fd)
 		}
 	}
 }

@@ -2,44 +2,98 @@ package engine
 
 import (
 	"fmt"
-	"strconv"
 )
 
-// registerGet registers "get" and its "." alias for value access.
+// registerGet registers "get" for value access.
 //
 // get retrieves values from a Store, Node (Map/List), or Object.
-// Forward precedence: key collected forward, container from stack.
 //
-// Signatures:
+// Signature: [Key, Container] where Key is String|Integer|Atom|Word/q
+// and Container is Node|Object|Store|Array|None.
 //
-//	[TAtom/q, TStore]   – get key store (Store lookup, prototype chain)
-//	[TString, TStore]   – get "key" store
-//	[TAtom, TNode]      – get key {a:1}  (Map property access)
-//	[TString, TNode]    – get "key" {a:1}
-//	[TInteger, TNode]   – get 0 [10 20]  (List index access)
-//	[TAtom, TObject]    – get key obj    (Object field access)
-//	[TString, TObject]  – get "key" obj
-//	[TInteger, TObject] – get 0 obj
-//	[TAny, TNone]       – get key none   (None propagation)
+// The /q modifier on atom/word key positions allows registered word names
+// to be used as keys without being executed first (fixes dot-notation
+// shadowing: matrix.trace does map lookup, not trace execution).
 //
-// Usage:
+// All argument orderings work via standard AQL arg matching:
 //
-//	context get foo              – Store lookup
-//	{a:1} get a                  – Map property
-//	{a:1} . a                    – same, dot alias
-//	{a:{b:1}} . a . b            – chained
-//	[10 20 30] get 1             – List index
-//	def m {x:42} m.x             – dot notation (parser expands to . x)
+//	get a {a:1}        → 1   (forward key, stack container)
+//	{a:1} get a        → 1   (stack container, forward key)
+//	a {a:1} get        → 1   (all stack)
+//	{a:{b:1}} get a get b → 1 (chained: get cannot pass get, matches stack)
 func registerGet(r *Registry) {
+	// getKey extracts the key string from any key-typed value.
+	getKey := func(v Value) string {
+		if v.IsWord() {
+			return v.AsWord().Name
+		}
+		if v.VType.Matches(TString) {
+			return v.AsString()
+		}
+		if v.IsAtom() {
+			return v.AsAtom()
+		}
+		return fmt.Sprintf("%v", v.Data)
+	}
 
-	// --- Store handlers ---
+	nodeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		key := args[0]
+		container := args[1]
+		if container.Data == nil {
+			return nil, fmt.Errorf("get: cannot access property on type literal")
+		}
+		// Integer key: list index access.
+		if key.VType.Matches(TInteger) {
+			idx := key.AsInteger()
+			if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
+				i := int(idx)
+				if i < 0 || i >= list.Len() {
+					return []Value{NewTypeLiteral(TNone)}, nil
+				}
+				return []Value{list.Get(i)}, nil
+			}
+			// Fall through to map lookup with stringified key.
+		}
+		// String/atom/word key: map property access.
+		k := getKey(key)
+		if m := container.AsMap(); m != nil {
+			val, ok := m.Get(k)
+			if !ok {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+
+	objectHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		key := args[0]
+		container := args[1]
+		if container.Data == nil {
+			return nil, fmt.Errorf("get: cannot access property on type literal")
+		}
+		k := getKey(key)
+		if m, ok := container.Data.(*OrderedMap); ok {
+			val, found := m.Get(k)
+			if !found {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{val}, nil
+		}
+		oi := container.AsObjectInstance()
+		val, ok := oi.GetField(k)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
 
 	storeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		store := args[1].AsStore()
 		if store == nil {
 			return nil, fmt.Errorf("get: expected a Store, got %s", args[1].VType.String())
 		}
-		key := storeKey(args[0])
+		key := getKey(args[0])
 		val, ok := store.Get(key)
 		if !ok {
 			return nil, fmt.Errorf("unknown key: %s", key)
@@ -47,132 +101,7 @@ func registerGet(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	// --- Node handlers (Map, List, Options) ---
-
-	nodeAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		key := args[0].AsAtom()
-		if m := container.AsMap(); m != nil {
-			val, ok := m.Get(key)
-			if !ok {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-
-	nodeStringHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		key := args[0].AsString()
-		if m := container.AsMap(); m != nil {
-			val, ok := m.Get(key)
-			if !ok {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-
-	nodeIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		idx := args[0].AsInteger()
-		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
-			i := int(idx)
-			if i < 0 || i >= list.Len() {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{list.Get(i)}, nil
-		}
-		if m := container.AsMap(); m != nil {
-			key := strconv.FormatInt(idx, 10)
-			val, ok := m.Get(key)
-			if !ok {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-
-	// --- Object handlers (Record, Entity, etc.) ---
-
-	objectAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		key := args[0].AsAtom()
-		if m, ok := container.Data.(*OrderedMap); ok {
-			val, found := m.Get(key)
-			if !found {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		oi := container.AsObjectInstance()
-		val, ok := oi.GetField(key)
-		if !ok {
-			return []Value{NewTypeLiteral(TNone)}, nil
-		}
-		return []Value{val}, nil
-	}
-
-	objectStringHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		key := args[0].AsString()
-		if m, ok := container.Data.(*OrderedMap); ok {
-			val, found := m.Get(key)
-			if !found {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		oi := container.AsObjectInstance()
-		val, ok := oi.GetField(key)
-		if !ok {
-			return []Value{NewTypeLiteral(TNone)}, nil
-		}
-		return []Value{val}, nil
-	}
-
-	objectIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		container := args[1]
-		if container.Data == nil {
-			return nil, fmt.Errorf("get: cannot access property on type literal")
-		}
-		key := strconv.FormatInt(args[0].AsInteger(), 10)
-		if m, ok := container.Data.(*OrderedMap); ok {
-			val, found := m.Get(key)
-			if !found {
-				return []Value{NewTypeLiteral(TNone)}, nil
-			}
-			return []Value{val}, nil
-		}
-		oi := container.AsObjectInstance()
-		val, ok := oi.GetField(key)
-		if !ok {
-			return []Value{NewTypeLiteral(TNone)}, nil
-		}
-		return []Value{val}, nil
-	}
-
-	// --- Array handler ---
-
-	arrayIntegerHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	arrayHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		arr := args[1].AsArray()
 		if arr == nil {
 			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
@@ -184,30 +113,27 @@ func registerGet(r *Registry) {
 		return []Value{val}, nil
 	}
 
-	// --- None handler ---
-
 	noneHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 
 	sigs := []Signature{
-		// Store containers
-		{Args: []Type{TString, TStore}, Handler: storeHandler},
-		{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, Handler: storeHandler},
-		// Node containers (Map, List, Options)
-		{Args: []Type{TAtom, TNode}, Handler: nodeAtomHandler},
-		{Args: []Type{TString, TNode}, Handler: nodeStringHandler},
-		{Args: []Type{TInteger, TNode}, Handler: nodeIntegerHandler},
-		// Array containers (mutable, indexed by integer)
-		{Args: []Type{TInteger, TArray}, Handler: arrayIntegerHandler},
-		// Object containers (Record, Entity, etc.)
-		{Args: []Type{TAtom, TObject}, Handler: objectAtomHandler},
-		{Args: []Type{TString, TObject}, Handler: objectStringHandler},
-		{Args: []Type{TInteger, TObject}, Handler: objectIntegerHandler},
-		// None propagation
-		{Args: []Type{TAny, TNone}, Handler: noneHandler},
+		// [Key | Store] — key forward, container from stack
+		{Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler},
+		{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler},
+		// [Key | Node] — covers Map, List, Options
+		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: nodeHandler},
+		{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: nodeHandler},
+		{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: nodeHandler},
+		// [Key | Array]
+		{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: arrayHandler},
+		// [Key | Object]
+		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
+		{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
+		{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
+		// [Key | None]
+		{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
 	}
 
 	r.Register("get", sigs...)
-	r.Register(".", sigs...)
 }

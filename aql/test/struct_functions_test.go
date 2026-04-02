@@ -2,6 +2,10 @@ package test
 
 import (
 	"testing"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
 // --- merge ---
@@ -404,12 +408,36 @@ func TestWalkNested(t *testing.T) {
 // --- walk with before callback ---
 
 func TestWalkBeforeIdentity(t *testing.T) {
-	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk
 	// Before callback returns m.value (identity) — tree is preserved unchanged.
-	// The before callback is called pre-order on every node; returning m.value
-	// leaves each node as-is, so the walk produces the original structure.
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk`,
+	// walk is stack-only [TAny, TFunction] so it needs both values on the
+	// stack. We pass the fn as a Go-constructed TFunction value directly
+	// in the engine stack to prevent auto-execution.
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+		}},
+	}
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewInteger(1))
+	om.Set("b", engine.NewInteger(2))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	// Push the fn as a Quoted function value so it doesn't auto-execute
+	// before walk can consume it from the stack.
+	fnVal := engine.NewFunction(fnDef)
+	fnVal.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -429,20 +457,46 @@ func TestWalkBeforeIdentity(t *testing.T) {
 }
 
 func TestWalkBeforeIdentityNested(t *testing.T) {
-	// AQL: {a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) walk
 	// Identity before callback on a nested structure — entire tree preserved.
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) walk`,
+	// walk is stack-only [TAny, TFunction], so we push the fn as a Quoted
+	// value to prevent auto-execution before walk consumes it.
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+		}},
+	}
+	inner := engine.NewOrderedMap()
+	inner.Set("x", engine.NewInteger(1))
+	inner.Set("y", engine.NewInteger(2))
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewMap(inner))
+	om.Set("b", engine.NewInteger(3))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal := engine.NewFunction(fnDef)
+	fnVal.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
-	inner, _ := m.Get("a")
-	im := inner.AsMap()
-	x, _ := im.Get("x")
-	y, _ := im.Get("y")
-	b, _ := m.Get("b")
+	rm := result[0].AsMap()
+	aVal, _ := rm.Get("a")
+	aim := aVal.AsMap()
+	x, _ := aim.Get("x")
+	y, _ := aim.Get("y")
+	b, _ := rm.Get("b")
 	if x.AsInteger() != 1 {
 		t.Errorf("expected x=1, got %v", x)
 	}
@@ -460,8 +514,30 @@ func TestWalkBeforeReplace(t *testing.T) {
 	// Since 99 is not a map/list, walk does NOT descend into children.
 	// This demonstrates that the before callback controls traversal:
 	// replacing a node with a scalar stops descent into that subtree.
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:Map] [Any] [99]]) walk`,
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewInteger(99)},
+		}},
+	}
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewInteger(1))
+	om.Set("b", engine.NewInteger(2))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal := engine.NewFunction(fnDef)
+	fnVal.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -479,8 +555,30 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	// Before callback returns the path string for every node.
 	// The root path is "" (empty string), which replaces the root map.
 	// Since a string is not a node, descent stops — result is "".
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:Map] [Any] [m.path]]) walk`,
+	fnDef := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("path")},
+		}},
+	}
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewInteger(1))
+	om.Set("b", engine.NewInteger(2))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal := engine.NewFunction(fnDef)
+	fnVal.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -498,8 +596,40 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 func TestWalkBeforeAfterIdentity(t *testing.T) {
 	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
 	// Both before and after return m.value (identity) — tree is preserved.
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk`,
+	identityBody := []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")}
+	fnDef1 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    identityBody,
+		}},
+	}
+	fnDef2 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    identityBody,
+		}},
+	}
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewInteger(1))
+	om.Set("b", engine.NewInteger(2))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1.Quoted = true
+	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -529,8 +659,39 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	//   5. after(b=2) → 99
 	//   6. after(root={a:99 b:99}) → 99
 	// Final result: 99
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [99]]) walk`,
+	fnDef1 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+		}},
+	}
+	fnDef2 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    []engine.Value{engine.NewInteger(99)},
+		}},
+	}
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewInteger(1))
+	om.Set("b", engine.NewInteger(2))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1.Quoted = true
+	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -548,8 +709,43 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	//        (fn [[m:Map] [Any] [m.value]])
 	//        (fn [[m:Map] [Any] [m.value]]) walk
 	// Both callbacks are identity — nested tree preserved through full traversal.
-	result, err := runNativeSteps(t, nil, []string{
-		`{a:{x:1 y:2} b:3} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk`,
+	identityBody := []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")}
+	fnDef1 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    identityBody,
+		}},
+	}
+	fnDef2 := engine.FnDefInfo{
+		Sigs: []engine.FnSig{{
+			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
+			Returns: []engine.Type{engine.TAny},
+			Body:    identityBody,
+		}},
+	}
+	innerMap := engine.NewOrderedMap()
+	innerMap.Set("x", engine.NewInteger(1))
+	innerMap.Set("y", engine.NewInteger(2))
+	om := engine.NewOrderedMap()
+	om.Set("a", engine.NewMap(innerMap))
+	om.Set("b", engine.NewInteger(3))
+
+	reg, err := engine.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	native.Register(reg)
+
+	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1.Quoted = true
+	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2.Quoted = true
+
+	eng := engine.NewTop(reg)
+	result, err := eng.Run([]engine.Value{
+		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)

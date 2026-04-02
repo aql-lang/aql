@@ -97,6 +97,7 @@ var (
 	TFnDef        = mustType("Word/__FN")
 	TFnUndef      = mustType("Word/__UF")
 	TReturnCheck  = mustType("Word/__RC")
+	TDefCleanup   = mustType("Word/__DC")
 	TDisjunct     = mustType("Word/__DJ")
 	TMark         = mustType("Word/__MK")
 	TMove         = mustType("Word/__MV")
@@ -373,7 +374,7 @@ func builtinTypeParts() map[string]bool {
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
-		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
+		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
 		TMove, TModule, TInternal, TInspect, TObject,
 		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,

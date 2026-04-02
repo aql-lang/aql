@@ -37,6 +37,23 @@ type Signature struct {
 	// collection.
 	QuoteArgs map[int]bool
 
+	// NoEvalArgs marks arg positions where list auto-evaluation should be
+	// suppressed in execMatch. Unlike QuoteArgs, this does NOT affect
+	// forward collection or word→atom conversion — it only prevents
+	// autoEvalList from running on consumed list arguments at marked
+	// positions. Map auto-evaluation (autoEvalMap) is NOT affected.
+	// Use this for code-body positions (def body, if branches, for body,
+	// etc.) where the list contains code to execute later, not data to
+	// resolve now.
+	NoEvalArgs map[int]bool
+
+	// BarrierPos is the arg index where forward collection must stop.
+	// Positions before BarrierPos are collected forward; positions from
+	// BarrierPos onward are matched from the stack in reverse. 0 means
+	// no barrier (default, greedy forward). Implements the | syntax in
+	// fn signatures: def f fn [[Integer | String] ...] sets BarrierPos=1.
+	BarrierPos int
+
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
@@ -333,6 +350,11 @@ func typeInherentScore(t Type) int {
 // type score (up to ~9000) as a tiebreaker within the same specificity.
 func signatureScore(sig *Signature) int {
 	score := sig.TotalArgs() * 1_000_000
+	if sig.BarrierPos > 0 {
+		// Piped signatures sort before non-piped. Barriers closer to the
+		// start (lower BarrierPos) are more constrained and score higher.
+		score += 500_000 + (MaxArgs-sig.BarrierPos)*10_000
+	}
 	for _, t := range sig.Args {
 		score += t.Specificity() * 10_000
 		score += typeInherentScore(t)

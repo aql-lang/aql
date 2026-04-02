@@ -166,17 +166,28 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params  []FnParam
-	Returns []Type // declared return types (nil = unchecked)
-	Body    []Value
+	Params     []FnParam
+	Returns    []Type // declared return types (nil = unchecked)
+	Body       []Value
+	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
-// If Registry is non-nil, the function was defined in a module and should
-// execute in that registry's context (closure semantics).
+// Name is the function's registered name (set by installDef). If Registry is
+// non-nil, the function was defined in a module and should execute in that
+// registry's context (closure semantics).
+//
+// Signatures is the compiled dispatch table (typed args + Go handlers).
+// For Go builtins, Sigs is nil and Signatures holds the native handlers.
+// For AQL fn defs, installFnDef converts Sigs into Signatures with handler
+// closures that splice body tokens. ForwardPrecedence controls whether the
+// engine tries forward collection before stack matching.
 type FnDefInfo struct {
-	Sigs     []FnSig
-	Registry *Registry
+	Name              string
+	Sigs              []FnSig     // AQL-defined overloads (nil for Go-implemented words)
+	Signatures        []Signature // compiled dispatch table
+	ForwardPrecedence bool        // true = try forward-first; false = stack-only
+	Registry          *Registry
 }
 
 // FnSigSpec describes a signature specification without a body, used for
@@ -690,6 +701,19 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 	return newValue(TReturnCheck, info)
 }
 
+// DefCleanupInfo holds a snapshot of DefStacks lengths taken before fn body
+// execution. When the engine encounters a DefCleanup marker, it pops any
+// defs that were added during body execution back to the snapshot state.
+type DefCleanupInfo struct {
+	Snapshot map[string]int
+	Registry *Registry
+}
+
+// NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
+func NewDefCleanup(info DefCleanupInfo) Value {
+	return newValue(TDefCleanup, info)
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
@@ -885,6 +909,16 @@ func (v Value) IsReturnCheck() bool {
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
 func (v Value) AsReturnCheck() ReturnCheckInfo {
 	return v.Data.(ReturnCheckInfo)
+}
+
+// IsDefCleanup reports whether this value is a def-cleanup marker.
+func (v Value) IsDefCleanup() bool {
+	return v.VType.Equal(TDefCleanup)
+}
+
+// AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
+func (v Value) AsDefCleanup() DefCleanupInfo {
+	return v.Data.(DefCleanupInfo)
 }
 
 // IsDisjunct reports whether this value is a disjunction type.
@@ -1188,6 +1222,8 @@ func (v Value) String() string {
 	case v.IsReturnCheck():
 		rc := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsDefCleanup():
+		return "__dc"
 	case v.IsModule():
 		md := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)

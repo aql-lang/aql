@@ -61,14 +61,13 @@ func BuildMatrixModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"matrix": exports},
 	}
-	parent.Modules[modID] = desc
 	return desc, nil
 }
 
 // --- FnDef helpers ---
 
 func makeListToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TList}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -79,7 +78,7 @@ func makeListToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Valu
 }
 
 func makeIntIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -90,7 +89,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Va
 }
 
 func makeIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -101,7 +100,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value
 }
 
 func makeIntIntNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}, {Type: engine.TNumber}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -112,7 +111,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine
 }
 
 func makeMatrixToIntFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}},
 			Returns: []engine.Type{engine.TInteger},
@@ -123,7 +122,7 @@ func makeMatrixToIntFnDef(wordName string, subReg *engine.Registry) engine.Value
 }
 
 func makeMatrixIntIntToDecFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TInteger}, {Type: engine.TInteger}},
 			Returns: []engine.Type{engine.TDecimal},
@@ -134,7 +133,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *engine.Registry) engine
 }
 
 func makeMatrixIntToListFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TInteger}},
 			Returns: []engine.Type{engine.TList},
@@ -145,7 +144,7 @@ func makeMatrixIntToListFnDef(wordName string, subReg *engine.Registry) engine.V
 }
 
 func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TMatrix}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -156,7 +155,7 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *engine.Registry) eng
 }
 
 func makeMatrixNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TNumber}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -167,7 +166,7 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine
 }
 
 func makeUnaryMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}},
 			Returns: []engine.Type{engine.TMatrix},
@@ -178,7 +177,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value
 }
 
 func makeMatrixToListFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}},
 			Returns: []engine.Type{engine.TList},
@@ -189,7 +188,7 @@ func makeMatrixToListFnDef(wordName string, subReg *engine.Registry) engine.Valu
 }
 
 func makeMatrixToDecFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}},
 			Returns: []engine.Type{engine.TDecimal},
@@ -200,7 +199,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *engine.Registry) engine.Value
 }
 
 func makeListListToDecFnDef(wordName string, subReg *engine.Registry) engine.Value {
-	return engine.NewFnDef(engine.FnDefInfo{
+	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TList}, {Type: engine.TList}},
 			Returns: []engine.Type{engine.TDecimal},
