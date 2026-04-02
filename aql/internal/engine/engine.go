@@ -964,7 +964,40 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Collect resolved values before the pointer for signature matching.
 	resolved := e.effectiveResolved()
 
-	// Try each signature to find one that matches the available stack args.
+	// Step 1: Try forward collection (like a registered word).
+	// Build temporary Function/Signatures from FnSig params so the
+	// standard forward planner can find matches. This allows module
+	// functions like color.make-color to forward-collect their args.
+	tmpSigs := make([]Signature, len(fnDef.Sigs))
+	for i, sig := range fnDef.Sigs {
+		argTypes := make([]Type, len(sig.Params))
+		var patterns map[int]Value
+		for j, p := range sig.Params {
+			argTypes[j] = p.Type
+			if p.Pattern != nil {
+				if patterns == nil {
+					patterns = make(map[int]Value)
+				}
+				patterns[j] = *p.Pattern
+			}
+		}
+		tmpSigs[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+	}
+	SortSignatures(tmpSigs)
+	tmpFn := &Function{Signatures: tmpSigs, ForwardPrecedence: true}
+	tmpWord := WordInfo{Name: "__fnlit", ArgCount: -1}
+
+	if e.hasForwardValues(tmpFn) {
+		bestSig, stackCount := e.plannerSequentialForward(tmpFn, tmpWord, resolved)
+		if bestSig != nil {
+			forwardNeeded := len(bestSig.Args) - stackCount
+			if forwardNeeded > 0 {
+				return e.insertForward(tmpWord, bestSig, forwardNeeded, stackCount)
+			}
+		}
+	}
+
+	// Step 2: Try stack matching (existing logic).
 	for _, sig := range fnDef.Sigs {
 		nArgs := len(sig.Params)
 		if nArgs == 0 {

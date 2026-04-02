@@ -140,7 +140,7 @@ func TestDecisionEvalPredAnyOf(t *testing.T) {
 func TestDecisionEvalPredNotOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		{field:age,op:"lt",value:18} decision.not-of
+		({field:age,op:"lt",value:18} decision.not-of)
 		{age:25}
 		decision.eval-pred
 	`)
