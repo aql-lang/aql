@@ -316,44 +316,6 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			}
 			positions[sigIdx] = resolvedIdx[ri]
 		}
-		if !allMatch && fwd > 0 && !w.ForceForward {
-			// Forward+stack failed. Retry as pure stack match:
-			// all args from the resolved stack (e.g. planet get → both
-			// key and container from stack when forward key isn't a container).
-			retryRemaining := nArgs
-			if len(resolved) >= retryRemaining {
-				positions = make([]int, nArgs)
-				allMatch = true
-				fwd = 0
-				for j := 0; j < retryRemaining; j++ {
-					var ri int
-					if nearestFirst {
-						ri = len(resolvedIdx) - 1 - j
-					} else {
-						ri = len(resolvedIdx) - retryRemaining + j
-					}
-					stackVal := resolved[ri]
-
-					if sig.QuoteArgs != nil && sig.QuoteArgs[j] && stackVal.VType.Equal(TWord) {
-						if !TAtom.Matches(sig.Args[j]) {
-							allMatch = false
-							break
-						}
-						positions[j] = resolvedIdx[ri]
-						continue
-					}
-					if !sigTypeMatches(stackVal, sig.Args[j]) {
-						allMatch = false
-						break
-					}
-					if stackVal.Data == nil && (sig.Args[j].Equal(TMap) || sig.Args[j].Equal(TList)) {
-						allMatch = false
-						break
-					}
-					positions[j] = resolvedIdx[ri]
-				}
-			}
-		}
 		if !allMatch {
 			continue
 		}
