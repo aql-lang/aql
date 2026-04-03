@@ -314,6 +314,12 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"convert-map-string", `Map convert String`},
 		{"convert-list-string", `List convert String`},
 
+		// List mutation ops with type literals
+		{"pop-list", `List pop`},
+		{"push-list", `1 push List`},
+		{"shift-list", `List shift`},
+		{"unshift-list", `1 unshift List`},
+
 		// Metatype type literals
 		{"typeof-type", `Type typeof`},
 		{"typeof-scalartype", `ScalarType typeof`},

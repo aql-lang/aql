@@ -7,18 +7,17 @@ import (
 )
 
 // pushFunc returns the "push" native function definition.
-// push appends element(s) to the end of a list, returning a new list.
-// If the element is a list, its elements are spread (like JS args spread).
+// push appends a single element to the end of a list, returning a new list.
 //
-//	push [a,b] c     → [a,b,c]
-//	push [a,b] [c,d] → [a,b,c,d]
+//	push 99 [1,2,3] → [1,2,3,99]
+//	[1,2,3] 99 push → [1,2,3,99]
 func pushFunc() NativeFunc {
 	return NativeFunc{
-		Name:             "push",
+		Name:              "push",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []engine.Type{engine.TList, engine.TAny},
+				Args:    []engine.Type{engine.TAny, engine.TList},
 				Handler: pushHandler,
 			},
 		},
@@ -26,23 +25,15 @@ func pushFunc() NativeFunc {
 }
 
 func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList().Slice()
+	newElem := args[0]
+	list := args[1].AsList().Slice()
 	if list == nil {
 		return nil, fmt.Errorf("push: expected concrete list")
 	}
-	elem := args[1]
 
-	result := make([]engine.Value, len(list))
+	result := make([]engine.Value, len(list)+1)
 	copy(result, list)
-
-	// If element is a list, spread its elements.
-	if elem.VType.Equal(engine.TList) && elem.Data != nil {
-		if elems := elem.AsList().Slice(); elems != nil {
-			result = append(result, elems...)
-		}
-	} else {
-		result = append(result, elem)
-	}
+	result[len(list)] = newElem
 
 	return []engine.Value{engine.NewList(result)}, nil
 }
@@ -52,9 +43,10 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 // and the removed element.
 //
 //	pop [a,b,c] → [a,b] c
+//	[a,b,c] pop → [a,b] c
 func popFunc() NativeFunc {
 	return NativeFunc{
-		Name:             "pop",
+		Name:              "pop",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -79,18 +71,17 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 }
 
 // unshiftFunc returns the "unshift" native function definition.
-// unshift prepends element(s) to the beginning of a list, returning a new list.
-// If the element is a list, its elements are spread.
+// unshift prepends a single element to the beginning of a list, returning a new list.
 //
-//	unshift [a,b] c     → [c,a,b]
-//	unshift [a,b] [c,d] → [c,d,a,b]
+//	unshift 99 [1,2,3] → [99,1,2,3]
+//	[1,2,3] 99 unshift → [99,1,2,3]
 func unshiftFunc() NativeFunc {
 	return NativeFunc{
-		Name:             "unshift",
+		Name:              "unshift",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []engine.Type{engine.TList, engine.TAny},
+				Args:    []engine.Type{engine.TAny, engine.TList},
 				Handler: unshiftHandler,
 			},
 		},
@@ -98,25 +89,15 @@ func unshiftFunc() NativeFunc {
 }
 
 func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList().Slice()
+	newElem := args[0]
+	list := args[1].AsList().Slice()
 	if list == nil {
 		return nil, fmt.Errorf("unshift: expected concrete list")
 	}
-	elem := args[1]
 
-	var prefix []engine.Value
-	// If element is a list, spread its elements.
-	if elem.VType.Equal(engine.TList) && elem.Data != nil {
-		if elems := elem.AsList().Slice(); elems != nil {
-			prefix = elems
-		}
-	} else {
-		prefix = []engine.Value{elem}
-	}
-
-	result := make([]engine.Value, 0, len(prefix)+len(list))
-	result = append(result, prefix...)
-	result = append(result, list...)
+	result := make([]engine.Value, len(list)+1)
+	result[0] = newElem
+	copy(result[1:], list)
 
 	return []engine.Value{engine.NewList(result)}, nil
 }
@@ -126,9 +107,10 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // and the removed element.
 //
 //	shift [a,b,c] → [b,c] a
+//	[a,b,c] shift → [b,c] a
 func shiftFunc() NativeFunc {
 	return NativeFunc{
-		Name:             "shift",
+		Name:              "shift",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{

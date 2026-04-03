@@ -126,7 +126,7 @@ func TestMergeMapListIgnoreNonInt(t *testing.T) {
 
 func TestPush(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`push ["a","b"] "c"`,
+		`push "c" ["a","b"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,16 +138,16 @@ func TestPush(t *testing.T) {
 	}
 }
 
-func TestPushSpread(t *testing.T) {
+func TestPushSingleElement(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`push ["a","b"] ["c","d"]`,
+		`push ["c","d"] ["a","b"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	list := result[0].AsList().Slice()
-	if len(list) != 4 {
-		t.Errorf("expected 4 elements, got %d", len(list))
+	if len(list) != 3 {
+		t.Errorf("expected 3 elements (list added as single element), got %d", len(list))
 	}
 }
 
@@ -173,7 +173,7 @@ func TestPop(t *testing.T) {
 
 func TestUnshift(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`unshift ["a","b"] "c"`,
+		`unshift "c" ["a","b"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -185,18 +185,16 @@ func TestUnshift(t *testing.T) {
 	}
 }
 
-func TestUnshiftSpread(t *testing.T) {
+func TestUnshiftSingleElement(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`unshift ["a","b"] ["c","d"]`,
+		`unshift ["c","d"] ["a","b"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	list := result[0].AsList().Slice()
-	lu0, _ := list[0].AsString()
-	lu1, _ := list[1].AsString()
-	if len(list) != 4 || lu0 != "c" || lu1 != "d" {
-		t.Errorf("expected [c,d,a,b], got %v", result[0].String())
+	if len(list) != 3 {
+		t.Errorf("expected 3 elements (list added as single element), got %d", len(list))
 	}
 }
 
