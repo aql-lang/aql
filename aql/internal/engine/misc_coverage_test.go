@@ -326,8 +326,9 @@ func TestReadWriteLines(t *testing.T) {
 	// Write lines format
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewString("out.txt"), NewString("hello\nworld"), NewMap(opts), NewWord("write"),
+		NewMap(opts), NewString("hello\nworld"), NewString("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -385,8 +386,9 @@ func TestWriteAppendMode(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewString("out.txt"), NewString("second"), NewMap(opts), NewWord("write"),
+		NewMap(opts), NewString("second"), NewString("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))

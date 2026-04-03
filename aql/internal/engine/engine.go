@@ -496,7 +496,6 @@ func (e *Engine) stepWord(val Value) error {
 			stkCount++
 		}
 	}
-
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
 		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)

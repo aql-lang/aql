@@ -430,7 +430,8 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	runAQL(t, r, []Value{NewString("out.json"), NewMap(m), NewMap(opts), NewWord("write")})
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
+	runAQL(t, r, []Value{NewMap(opts), NewMap(m), NewString("out.json"), NewWord("write")})
 	content := string(mem.Files["out.json"])
 	if content == "" {
 		t.Errorf("file was not written")
@@ -892,9 +893,10 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
+	// All prefix: nearest→sig[0]=Integer, next→sig[1]=String
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
-		NewInteger(1), NewString("a"), NewWord("catter"),
+		NewString("a"), NewInteger(1), NewWord("catter"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
 		t.Errorf("1 'a' catter = %v, want string result", result)
@@ -1048,14 +1050,15 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		NewWord("def"), NewWord("mix4"), NewWord("fn"), fnBody, NewWord("end"),
 	}
 
-	// "X" 7 true "Z" mix4 -> "X7trueZ"
+	// All prefix: nearest→sig[0]=String, next→sig[1]=Integer, next→sig[2]=Boolean, deepest→sig[3]=String
+	// Stack bottom-to-top: "Z" true 7 "X" mix4
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"), NewWord("mix4"),
+			NewString("Z"), NewBoolean(true), NewInteger(7), NewString("X"), NewWord("mix4"),
 		))
 		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
 			t.Errorf(`all-prefix mix4 = %v, want ["X7trueZ"]`, result)
@@ -1122,14 +1125,15 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		NewWord("def"), NewWord("mix5"), NewWord("fn"), fnBody, NewWord("end"),
 	}
 
-	// "a" 3 1.5 false "z" mix5 -> "a31.5falsez"
+	// All prefix: nearest→sig[0]=String, ..., deepest→sig[4]=String
+	// Stack bottom-to-top: "z" false 1.5 3 "a" mix5
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("a"), NewInteger(3), NewDecimal(1.5), NewBoolean(false), NewString("z"),
+			NewString("z"), NewBoolean(false), NewDecimal(1.5), NewInteger(3), NewString("a"),
 			NewWord("mix5"),
 		))
 		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
@@ -1183,20 +1187,25 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	defTokens := []Value{
 		NewWord("def"), NewWord("mix7"), NewWord("fn"), fnBody, NewWord("end"),
 	}
-	// Expected: "p1" 2 3.5 true "q4" 56 "r7" -> "p123.5trueq456r7"
+	// Expected concat in sig order: "p123.5trueq456r7"
 	want := "p123.5trueq456r7"
 	argVals := []Value{
 		NewString("p1"), NewInteger(2), NewDecimal(3.5),
 		NewBoolean(true), NewString("q4"), NewInteger(56), NewString("r7"),
 	}
 
-	// All prefix
+	// All prefix: stack bottom-to-top reversed from sig order (nearest→sig[0])
+	// sig[6]=String, sig[5]=Integer, sig[4]=String, sig[3]=Boolean, sig[2]=Decimal, sig[1]=Integer, sig[0]=String
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
-		tokens := append(append([]Value{}, defTokens...), argVals...)
+		argValsReversed := []Value{
+			NewString("r7"), NewInteger(56), NewString("q4"),
+			NewBoolean(true), NewDecimal(3.5), NewInteger(2), NewString("p1"),
+		}
+		tokens := append(append([]Value{}, defTokens...), argValsReversed...)
 		tokens = append(tokens, NewWord("mix7"))
 		result := runAQL(t, r, tokens)
 		if len(result) != 1 || result[0].AsString() != want {

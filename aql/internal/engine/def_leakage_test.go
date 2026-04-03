@@ -62,7 +62,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TString)}),
 		NewList([]Value{
 			NewWord("def"), NewWord("op"),
-			NewOpenParen(), NewWord("m"), NewWord("get"), NewWord("op"), NewWord(")"),
+			NewWord("("), NewWord("m"), NewWord("get"), NewWord("op"), NewWord(")"),
 			NewWord("end"),
 			NewWord("op"),
 		}),
@@ -113,7 +113,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TInteger)}),
 		NewList([]Value{
 			NewWord("def"), NewWord("tmp"),
-			NewOpenParen(), NewWord("n"), NewWord("add"), NewInteger(1), NewWord(")"),
+			NewWord("("), NewWord("n"), NewWord("add"), NewInteger(1), NewWord(")"),
 			NewWord("end"),
 			NewWord("tmp"),
 		}),

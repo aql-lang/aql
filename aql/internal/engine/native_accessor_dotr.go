@@ -95,7 +95,7 @@ func registerGetr(r *Registry) {
 		{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
 		{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
 		// [Key | None]
-		{Args: []Type{TNone, TAny}, BarrierPos: 1, Handler: noneHandler},
+		{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
 	}
 
 	r.Register("getr", sigs...)

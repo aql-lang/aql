@@ -755,11 +755,12 @@ func TestDotNestedMapChain(t *testing.T) {
 	mid.Set("b", NewMap(inner))
 	outer := NewOrderedMap()
 	outer.Set("a", NewMap(mid))
+	// Chained forward gets: map get a get b get c
 	result := runAQL(t, r, []Value{
 		NewMap(outer),
-		NewWord("a"), NewWord("get"),
-		NewWord("b"), NewWord("get"),
-		NewWord("c"), NewWord("get"),
+		NewWord("get"), NewWord("a"),
+		NewWord("get"), NewWord("b"),
+		NewWord("get"), NewWord("c"),
 	})
 	if len(result) != 1 || result[0].AsInteger() != 1 {
 		t.Errorf("expected 1, got %v", result)
