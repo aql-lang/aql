@@ -948,3 +948,9 @@ def x 1 {a:x}	{a:1}
 def x 1 ; a:x	{a:1}
 def x 1 ; a:x b:x	{a:1} {b:1}
 def x 1 def y 2 ; a:x b:y	{a:1} {b:2}
+def x 1 [{a:x}]	[{a:1}]
+def x 1 def y 2 {a:x, b:y}	{a:1,b:2}
+{a:(1 add 2)}	{a:3}
+def x 1 {a:(x add 1)}	{a:2}
+def x 1 {a:{b:x}}	{a:{b:1}}
+def x 1 def f [do {a:x}] f	{a:1}
