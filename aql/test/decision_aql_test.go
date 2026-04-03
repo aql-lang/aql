@@ -48,8 +48,11 @@ func runDecAQL(t *testing.T, r *engine.Registry, src string) []engine.Value {
 
 func TestAQLDecisionCond(t *testing.T) {
 	r := decisionAQLRegistry(t)
-	result := runDecAQL(t, r, `age "gte" 18 decision.cond`)
+	result := runDecAQL(t, r, `18 "gte" age decision.cond`)
 	m := result[0].AsMap()
+	if m == nil {
+		t.Fatalf("expected map, got %s", result[0].VType.String())
+	}
 	field, _ := m.Get("field")
 	if field.String() != "age" {
 		t.Errorf("field = %v, want age", field)
@@ -99,11 +102,11 @@ func TestAQLDecisionEvalPredNotOf(t *testing.T) {
 func TestAQLDecisionTableFirst(t *testing.T) {
 	r := decisionAQLRegistry(t)
 	result := runDecAQL(t, r, `
-		def table ([
+		def tbl ([
 			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)
-		table {age:25} decision.eval-table
+		tbl {age:25} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")

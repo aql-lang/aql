@@ -62,7 +62,7 @@ func TestDecisionModuleExports(t *testing.T) {
 
 func TestDecisionCond(t *testing.T) {
 	r := decisionRegistry(t)
-	result := runDecisionAQL(t, r, `age "gte" 18 decision.cond`)
+	result := runDecisionAQL(t, r, `18 "gte" age decision.cond`)
 	m := result[0].AsMap()
 	if m == nil {
 		t.Fatalf("expected map, got %s", result[0].VType.String())
@@ -154,11 +154,11 @@ func TestDecisionEvalPredNotOf(t *testing.T) {
 func TestDecisionTableFirst(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ([
+		def tbl ([
 			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)
-		table {age:25} decision.eval-table
+		tbl {age:25} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
@@ -170,11 +170,11 @@ func TestDecisionTableFirst(t *testing.T) {
 func TestDecisionTableFirstMinor(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ([
+		def tbl ([
 			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)
-		table {age:12} decision.eval-table
+		tbl {age:12} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
@@ -186,11 +186,12 @@ func TestDecisionTableFirstMinor(t *testing.T) {
 func TestDecisionTableUnique(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ("unique" ([
+		def rawtbl ([
 			{when:{field:score,op:"lt",value:50}, then:{grade:"fail"}}
 			{when:{field:score,op:"gte",value:50}, then:{grade:"pass"}}
-		] decision.make-table) decision.with-policy)
-		table {score:75} decision.eval-table
+		] decision.make-table)
+		def tbl (rawtbl "unique" decision.with-policy)
+		tbl {score:75} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	grade, _ := m.Get("grade")
@@ -202,11 +203,12 @@ func TestDecisionTableUnique(t *testing.T) {
 func TestDecisionTableCollect(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ("collect" ([
+		def rawtbl ([
 			{when:{field:age,op:"gte",value:18}, then:{perk:"vote"}}
 			{when:{field:age,op:"gte",value:21}, then:{perk:"drink"}}
-		] decision.make-table) decision.with-policy)
-		table {age:25} decision.eval-table
+		] decision.make-table)
+		def tbl (rawtbl "collect" decision.with-policy)
+		tbl {age:25} decision.eval-table
 	`)
 	list := result[0].AsList()
 	if list.Len() != 2 {
@@ -217,8 +219,8 @@ func TestDecisionTableCollect(t *testing.T) {
 func TestDecisionTableNoMatch(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ([{when:{field:age,op:"gt",value:100}, then:{x:1}}] decision.make-table)
-		table {age:25} decision.eval-table
+		def tbl ([{when:{field:age,op:"gt",value:100}, then:{x:1}}] decision.make-table)
+		tbl {age:25} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	errVal, _ := m.Get("error")
@@ -230,11 +232,11 @@ func TestDecisionTableNoMatch(t *testing.T) {
 func TestDecisionTableCompound(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def table ({kind:"table", hit-policy:"first", rules:[
+		def tbl ({kind:"table", hit-policy:"first", rules:[
 			{when:{kind:"group",op:"all",children:[{field:age,op:"lt",value:30} {field:score,op:"gte",value:90}]}, then:{tier:"premium"}}
 			{when:{field:score,op:"gte",value:50}, then:{tier:"standard"}}
 		]})
-		table {age:25,score:95} decision.eval-table
+		tbl {age:25,score:95} decision.eval-table
 	`)
 	m := result[0].AsMap()
 	tier, _ := m.Get("tier")

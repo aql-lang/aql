@@ -97,12 +97,25 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 }
 
 func makeFnDef(wordName string, params []engine.FnParam, returns []engine.Type, subReg *engine.Registry) engine.Value {
+	// Give params names so CallAQL installs them as defs rather than
+	// pushing unnamed tokens.  The body then pushes them in reverse order
+	// so that the inner registered word's nearest-first matching sees
+	// them in the original sig order (counteracts double reversal).
+	named := make([]engine.FnParam, len(params))
+	for i, p := range params {
+		named[i] = engine.FnParam{Name: fmt.Sprintf("__p%d", i), Type: p.Type}
+	}
+	var body []engine.Value
+	for i := len(named) - 1; i >= 0; i-- {
+		body = append(body, engine.NewWord(named[i].Name))
+	}
+	body = append(body, engine.NewWord(wordName))
 	return engine.NewFnDef(engine.FnDefInfo{
 		Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  params,
+			Params:  named,
 			Returns: returns,
-			Body:    []engine.Value{engine.NewWord(wordName)},
+			Body:    body,
 		}},
 		Registry: subReg,
 	})
