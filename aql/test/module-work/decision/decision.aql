@@ -52,7 +52,9 @@ def make-tree fn [[root:Atom nodes:List] [Map] [
   make DTree {kind:"tree" root:root nodes:nodes}
 ]]
 
-
+# ============================================================
+# aql:decision — Evaluators
+# ============================================================
 
 # --- apply-op ---
 
@@ -83,9 +85,13 @@ def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false
 
 def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
 
+def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
+
+def eval-table-priority fn [[rules:List input:Map] [Any] [def best (do {ok: false, error: "no-match"}) def best-pri 0 def found false for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
+
 # --- eval-table ---
 
-def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]]]
+def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [if (policy "collect" eq) [input rules eval-table-collect] [if (policy "priority" eq) [input rules eval-table-priority] [input rules eval-table-first]]]]]]
 
 # --- eval-tree helpers ---
 
@@ -99,7 +105,7 @@ def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes")
 
 # --- decide ---
 
-def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [def rules quote (model get "rules") def policy (model get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]] [if ((model get "kind") "tree" eq) [def nodes quote (model get "nodes") def current (nodes (model get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result] [do {ok: false, error: "unknown-model-kind"}]]]]
+def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [input model eval-table] [if ((model get "kind") "tree" eq) [input model eval-tree] [do {ok: false, error: "unknown-model-kind"}]]]]
 
 
 export decision {

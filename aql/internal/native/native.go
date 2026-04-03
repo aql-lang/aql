@@ -5,9 +5,16 @@ import (
 )
 
 // Register installs all built-in native functions into the given registry.
+// It also sets ModuleInitFunc so that module sub-registries automatically
+// get the same native words.
 func Register(r *engine.Registry) {
 	for _, fn := range All() {
 		r.RegisterNativeFunc(fn)
+	}
+	r.ModuleInitFunc = func(child *engine.Registry) {
+		for _, fn := range All() {
+			child.RegisterNativeFunc(fn)
+		}
 	}
 }
 

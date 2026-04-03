@@ -32,6 +32,7 @@ type Registry struct {
 	ready             bool                                               // true after initial setup; triggers dynamic help generation
 	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
 	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
+	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
 	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 }
 

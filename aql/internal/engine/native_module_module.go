@@ -250,6 +250,14 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 
+	// Let the native package (or other extension packages) register
+	// their words in the module's sub-registry. Propagate the hook
+	// so nested modules also get these words.
+	if parent.ModuleInitFunc != nil {
+		parent.ModuleInitFunc(modReg)
+		modReg.ModuleInitFunc = parent.ModuleInitFunc
+	}
+
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
 	if parentCtx := parent.ContextStore(); parentCtx != nil {

@@ -7,63 +7,10 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
-
-// decisionEvalAQL contains the pure-AQL evaluator functions.
-// These are used only by the file-based and module [...] AQL versions.
-// The native Go module uses Go-implemented evaluators instead.
-const decisionEvalAQL = `
-
-# --- apply-op ---
-
-def apply-op fn [[rhs:Any op:String lhs:Any] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "neq" eq) [lhs rhs neq] [if (op "lt" eq) [lhs rhs lt] [if (op "lte" eq) [lhs rhs lte] [if (op "gt" eq) [lhs rhs gt] [if (op "gte" eq) [lhs rhs gte] [false]]]]]]]]
-
-def apply-op fn [[rhs:Any op:String] [Boolean] [if (op "is_true" eq) [rhs] [if (op "is_false" eq) [rhs not] [if (op "is_null" eq) [false] [if (op "is_not_null" eq) [true] [false]]]]]]
-
-# --- eval-cond ---
-
-def eval-cond fn [[c:Map input:Map] [Boolean] [input.((c.field convert String)) c.op c.value apply-op]]
-
-# --- eval-pred helpers ---
-
-def eval-pred-all fn [[children:List input:Map] [Boolean] [def result true for (children length) [def idx i if (input (children idx get) eval-pred not) [def result false] []] end result]]
-
-def eval-pred-any fn [[children:List input:Map] [Boolean] [def result false for (children length) [def idx i if (input (children idx get) eval-pred) [def result true] []] end result]]
-
-def eval-pred-not fn [[children:Map input:Map] [Boolean] [input children eval-cond not]]
-def eval-pred-not fn [[children:List input:Map] [Boolean] [input (children 0 get) eval-pred not]]
-
-# --- eval-pred ---
-
-def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote (pred get "children") if (group-op "all" eq) [input children eval-pred-all] [if (group-op "any" eq) [input children eval-pred-any] [if (group-op "not" eq) [input children eval-pred-not] [false]]])] [input pred eval-cond]]]
-
-# --- eval-table helpers ---
-
-def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules length) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
-
-def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
-
-# --- eval-table ---
-
-def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]]]
-
-# --- eval-tree helpers ---
-
-def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes length) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
-
-def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches length) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
-
-# --- eval-tree ---
-
-def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result]]
-
-# --- decide ---
-
-def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [def rules quote (model get "rules") def policy (model get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]] [if ((model get "kind") "tree" eq) [def nodes quote (model get "nodes") def current (nodes (model get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result] [do {ok: false, error: "unknown-model-kind"}]]]]
-
-`
 
 // decisionExportAQL is the export block listing all functions.
 const decisionExportAQL = `
@@ -95,16 +42,16 @@ export decision {
 `
 
 // buildDecisionFileAQL generates the full decision.aql file content
-// deterministically from the native module's builder AQL (source of truth)
-// plus the pure-AQL evaluators and export block.
+// deterministically from the native module's AQL (source of truth)
+// plus the export block.
 func buildDecisionFileAQL() string {
-	return nativemod.DecisionBuilderAQL() + decisionEvalAQL + decisionExportAQL
+	return nativemod.DecisionAQL() + decisionExportAQL
 }
 
 // buildDecisionModuleAQL generates the module [...] inline version
-// from the same sources.
+// from the same source.
 func buildDecisionModuleAQL() string {
-	return "module [\n" + nativemod.DecisionBuilderAQL() + decisionEvalAQL +
+	return "module [\n" + nativemod.DecisionAQL() +
 		decisionExportAQL + "\n]\n"
 }
 
@@ -112,7 +59,7 @@ func buildDecisionModuleAQL() string {
 
 // decisionTestCase defines a single test for the decision module.
 type decisionTestCase struct {
-	name  string
+	name string
 	// setup runs before expr if intermediate defs are needed (persistent engine).
 	setup string
 	// expr is the AQL expression to evaluate.
@@ -167,8 +114,7 @@ func checkCollectLen(want int) func(t *testing.T, result []engine.Value) {
 }
 
 // Shared test cases for the decision module. Each test case runs against
-// both the native Go module and the pure AQL file module.
-// Tests that require collect hit-policy are marked and skipped for AQL.
+// the native module, inline AQL module, and file module.
 var decisionTests = []decisionTestCase{
 	// --- cond builder ---
 	{
@@ -206,13 +152,13 @@ var decisionTests = []decisionTestCase{
 
 	// --- eval-pred ---
 	{
-		name: "EvalPredAllOf",
+		name:  "EvalPredAllOf",
 		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)`,
 		expr:  `{age:25,score:80} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
-		name: "EvalPredAllOfFalse",
+		name:  "EvalPredAllOfFalse",
 		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)`,
 		expr:  `{age:25,score:30} pred decision.eval-pred`,
 		check: checkBool(false),
@@ -260,7 +206,7 @@ var decisionTests = []decisionTestCase{
 		check: checkMapField("grade", "pass"),
 	},
 	{
-		name: "TableNoMatch",
+		name:  "TableNoMatch",
 		setup: `def tbl ([{when:{field:age,op:"gt",value:100}, then:{x:1}}] decision.make-table)`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("error", "no-match"),
@@ -273,6 +219,26 @@ var decisionTests = []decisionTestCase{
 		]})`,
 		expr:  `{age:25,score:95} tbl decision.eval-table`,
 		check: checkMapField("tier", "premium"),
+	},
+	{
+		name: "TableCollect",
+		setup: `def rawtbl ([
+			{when:{field:age,op:"gte",value:18}, then:{perk:"vote"}}
+			{when:{field:age,op:"gte",value:21}, then:{perk:"drink"}}
+		] decision.make-table)
+		def tbl (rawtbl "collect" decision.with-policy)`,
+		expr:  `{age:25} tbl decision.eval-table`,
+		check: checkCollectLen(2),
+	},
+	{
+		name: "TablePriority",
+		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
+			{when:{field:age,op:"gte",value:18}, then:{tier:"adult"}, priority:1}
+			{when:{field:age,op:"gte",value:21}, then:{tier:"senior"}, priority:10}
+			{when:{field:age,op:"gte",value:0}, then:{tier:"any"}, priority:0}
+		]})`,
+		expr:  `{age:25} tbl decision.eval-table`,
+		check: checkMapField("tier", "senior"),
 	},
 
 	// --- eval-tree ---
@@ -346,20 +312,6 @@ var decisionTests = []decisionTestCase{
 	},
 }
 
-// Native-only tests (features only available with Go evaluators).
-var decisionNativeOnlyTests = []decisionTestCase{
-	{
-		name: "TableCollect",
-		setup: `def rawtbl ([
-			{when:{field:age,op:"gte",value:18}, then:{perk:"vote"}}
-			{when:{field:age,op:"gte",value:21}, then:{perk:"drink"}}
-		] decision.make-table)
-		def tbl (rawtbl "collect" decision.with-policy)`,
-		expr:  `{age:25} tbl decision.eval-table`,
-		check: checkCollectLen(2),
-	},
-}
-
 // --- Runner helper ---
 
 // runDecisionTest runs a single test case against an initialized registry
@@ -414,15 +366,6 @@ func TestNativeDecision(t *testing.T) {
 	}
 }
 
-func TestNativeDecisionCollect(t *testing.T) {
-	for _, tc := range decisionNativeOnlyTests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := nativeDecisionRegistry(t)
-			runDecisionTest(t, tc, r)
-		})
-	}
-}
-
 // --- module [...] inline AQL tests ---
 
 func inlineDecisionRegistry(t *testing.T) *engine.Registry {
@@ -432,6 +375,7 @@ func inlineDecisionRegistry(t *testing.T) *engine.Registry {
 		t.Fatal(err)
 	}
 	r.SetParseFunc(parser.Parse)
+	native.Register(r)
 
 	src := buildDecisionModuleAQL() + "\nimport decision\n"
 	vals, err := parser.Parse(src)
@@ -458,7 +402,7 @@ func TestInlineDecision(t *testing.T) {
 
 func TestGenerateDecisionAQL(t *testing.T) {
 	// Generate decision.aql deterministically from the native module's
-	// builder AQL (source of truth) + pure AQL evaluators + export block.
+	// AQL (source of truth) + export block.
 	path := filepath.Join(moduleWorkDir(t), "decision", "decision.aql")
 	content := buildDecisionFileAQL()
 
@@ -510,12 +454,11 @@ func TestFileDecision(t *testing.T) {
 // --- Verify file content is deterministic ---
 
 func TestDecisionAQLDeterministic(t *testing.T) {
-	// Verify that the builder portion of the generated file exactly matches
-	// the native module's builder AQL (single source of truth).
+	// Verify that the generated file exactly matches the expected content.
 	content := buildDecisionFileAQL()
-	builderAQL := nativemod.DecisionBuilderAQL()
+	aql := nativemod.DecisionAQL()
 
-	if !strings.Contains(content, strings.TrimSpace(builderAQL)) {
-		t.Error("generated decision.aql does not contain the native module's builder AQL")
+	if !strings.Contains(content, strings.TrimSpace(aql)) {
+		t.Error("generated decision.aql does not contain the native module's AQL")
 	}
 }
