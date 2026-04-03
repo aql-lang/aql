@@ -61,7 +61,7 @@ func TestAQLDecisionCond(t *testing.T) {
 
 func TestAQLDecisionEvalCondTrue(t *testing.T) {
 	r := decisionAQLRegistry(t)
-	result := runDecAQL(t, r, `{field:age,op:"gte",value:18} {age:25} decision.eval-cond`)
+	result := runDecAQL(t, r, `{age:25} {field:age,op:"gte",value:18} decision.eval-cond`)
 	if !result[0].AsBoolean() {
 		t.Error("expected true for age=25 gte 18")
 	}
@@ -69,7 +69,7 @@ func TestAQLDecisionEvalCondTrue(t *testing.T) {
 
 func TestAQLDecisionEvalCondFalse(t *testing.T) {
 	r := decisionAQLRegistry(t)
-	result := runDecAQL(t, r, `{field:age,op:"gte",value:18} {age:15} decision.eval-cond`)
+	result := runDecAQL(t, r, `{age:15} {field:age,op:"gte",value:18} decision.eval-cond`)
 	if result[0].AsBoolean() {
 		t.Error("expected false for age=15 gte 18")
 	}
@@ -78,8 +78,8 @@ func TestAQLDecisionEvalCondFalse(t *testing.T) {
 func TestAQLDecisionEvalPredAllOf(t *testing.T) {
 	r := decisionAQLRegistry(t)
 	result := runDecAQL(t, r, `
-		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
 		{age:25,score:80}
+		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
 		decision.eval-pred
 	`)
 	if !result[0].AsBoolean() {
@@ -90,8 +90,8 @@ func TestAQLDecisionEvalPredAllOf(t *testing.T) {
 func TestAQLDecisionEvalPredNotOf(t *testing.T) {
 	r := decisionAQLRegistry(t)
 	result := runDecAQL(t, r, `
-		({field:age,op:"lt",value:18} decision.not-of)
 		{age:25}
+		({field:age,op:"lt",value:18} decision.not-of)
 		decision.eval-pred
 	`)
 	if !result[0].AsBoolean() {
@@ -106,7 +106,7 @@ func TestAQLDecisionTableFirst(t *testing.T) {
 			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)
-		tbl {age:25} decision.eval-table
+		{age:25} tbl decision.eval-table
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
@@ -126,7 +126,7 @@ func TestAQLDecisionTree(t *testing.T) {
 			{id:minor, kind:"leaf", result:{category:"minor"}}
 			{id:adult, kind:"leaf", result:{category:"adult"}}
 		]})
-		tree {age:25} decision.eval-tree
+		{age:25} tree decision.eval-tree
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
@@ -142,7 +142,7 @@ func TestAQLDecisionDecide(t *testing.T) {
 			{when:{field:x,op:"gt",value:0}, then:{sign:"positive"}}
 			{when:{field:x,op:"lt",value:0}, then:{sign:"negative"}}
 		]})
-		model {x:5} decision.decide
+		{x:5} model decision.decide
 	`)
 	m := result[0].AsMap()
 	sign, _ := m.Get("sign")
@@ -189,40 +189,40 @@ def eval-cond fn [[c:Map input:Map] [Boolean] [input.((c.field convert String)) 
 
 # --- eval-pred helpers ---
 
-def eval-pred-all fn [[children:List input:Map] [Boolean] [def result true for (children length) [def idx i if ((children idx get) input eval-pred not) [def result false] []] end result]]
+def eval-pred-all fn [[children:List input:Map] [Boolean] [def result true for (children length) [def idx i if (input (children idx get) eval-pred not) [def result false] []] end result]]
 
-def eval-pred-any fn [[children:List input:Map] [Boolean] [def result false for (children length) [def idx i if ((children idx get) input eval-pred) [def result true] []] end result]]
+def eval-pred-any fn [[children:List input:Map] [Boolean] [def result false for (children length) [def idx i if (input (children idx get) eval-pred) [def result true] []] end result]]
 
-def eval-pred-not fn [[children:Map input:Map] [Boolean] [children input eval-cond not]]
-def eval-pred-not fn [[children:List input:Map] [Boolean] [(children 0 get) input eval-pred not]]
+def eval-pred-not fn [[children:Map input:Map] [Boolean] [input children eval-cond not]]
+def eval-pred-not fn [[children:List input:Map] [Boolean] [input (children 0 get) eval-pred not]]
 
 # --- eval-pred ---
 
-def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote (pred get "children") if (group-op "all" eq) [children input eval-pred-all] [if (group-op "any" eq) [children input eval-pred-any] [if (group-op "not" eq) [children input eval-pred-not] [false]]])] [pred input eval-cond]]]
+def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote (pred get "children") if (group-op "all" eq) [input children eval-pred-all] [if (group-op "any" eq) [input children eval-pred-any] [if (group-op "not" eq) [input children eval-pred-not] [false]]])] [input pred eval-cond]]]
 
 # --- eval-table helpers ---
 
-def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules length) [def idx i def rule (rules idx get) if (found not) [if ((rule get "when") input eval-pred) [def result (rule get "then") def found true] []] []] end result]]
+def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules length) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
 
-def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if ((rule get "when") input eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
+def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
 
 # --- eval-table ---
 
-def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [rules input eval-table-first] [if (policy "unique" eq) [rules input eval-table-unique] [rules input eval-table-first]]]]
+def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]]]
 
 # --- eval-tree helpers ---
 
 def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes length) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
 
-def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches length) [def idx i def br (branches idx get) if ((br get "when") input eval-pred) [def next-id (br get "next")] []] end next-id]]
+def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches length) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
 
 # --- eval-tree ---
 
-def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current ((tree get "root") nodes find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (quote (current get "branches") input find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (next-id nodes find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result]]
+def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result]]
 
 # --- decide ---
 
-def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [def rules quote (model get "rules") def policy (model get "hit-policy") if (policy "first" eq) [rules input eval-table-first] [if (policy "unique" eq) [rules input eval-table-unique] [rules input eval-table-first]]] [if ((model get "kind") "tree" eq) [def nodes quote (model get "nodes") def current ((model get "root") nodes find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (quote (current get "branches") input find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (next-id nodes find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result] [do {ok: false, error: "unknown-model-kind"}]]]]
+def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [def rules quote (model get "rules") def policy (model get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [input rules eval-table-first]]] [if ((model get "kind") "tree" eq) [def nodes quote (model get "nodes") def current (nodes (model get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result] [do {ok: false, error: "unknown-model-kind"}]]]]
 
 # --- exports ---
 

@@ -340,6 +340,12 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 						e.pointer++
 						continue
 					}
+					// Also catch word("(") not yet converted to OpenParen.
+					if v.IsWord() && v.AsWord().Name == "(" {
+						depth++
+						e.stepOpenParen() // converts to OpenParen and advances pointer
+						continue
+					}
 					if v.IsWord() && v.AsWord().Name == ")" {
 						depth--
 						if depth == 0 {
@@ -362,6 +368,13 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 					switch {
 					case v.IsWord():
 						if err := e.stepWord(v); err != nil {
+							e.pointer = savedPointer
+							return err
+						}
+					case v.IsMark():
+						e.stepMark(v)
+					case v.IsMove():
+						if err := e.stepMove(v); err != nil {
 							e.pointer = savedPointer
 							return err
 						}
@@ -391,9 +404,14 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 				continue
 			}
 
-			// Function word: boundary, stop.
+			// Function word: count as resolved (may be captured by
+			// QuoteArgs/TWord matching). Don't stop — continue scanning
+			// so that parens beyond function words are pre-evaluated
+			// (e.g. undef foo (fn [...]) needs the paren evaluated).
 			if e.registry.Lookup(ww.Name) != nil {
-				break
+				resolved++
+				scanIdx++
+				continue
 			}
 		}
 
@@ -489,7 +507,10 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Pre-evaluate paren expressions in the forward scan range so that
 	// matchSignature sees fully resolved values (rule 1.5).
-	if fn.ForwardPrecedence || w.ForceForward {
+	// Skip when ForceStack is set (all args come from the stack, no
+	// forward scan will happen) — premature paren evaluation can resolve
+	// names that haven't been defined yet by a pending outer forward.
+	if (fn.ForwardPrecedence && !w.ForceStack) || w.ForceForward {
 		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
 			return err
 		}

@@ -94,7 +94,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// One inner loop over parameters, matching forward tokens.
 			for fwd < nArgs && scanIdx < len(e.stack) {
 				// 1.3: stop at /N limit (encoded as BarrierPos).
-				if sig.BarrierPos > 0 && fwd >= sig.BarrierPos {
+				// Only apply when stack args exist; in pure prefix
+				// position, allow collecting all args forward.
+				if sig.BarrierPos > 0 && fwd >= sig.BarrierPos && len(resolved) > 0 {
 					break
 				}
 
@@ -313,6 +315,44 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				break
 			}
 			positions[sigIdx] = resolvedIdx[ri]
+		}
+		if !allMatch && fwd > 0 && !w.ForceForward {
+			// Forward+stack failed. Retry as pure stack match:
+			// all args from the resolved stack (e.g. planet get → both
+			// key and container from stack when forward key isn't a container).
+			retryRemaining := nArgs
+			if len(resolved) >= retryRemaining {
+				positions = make([]int, nArgs)
+				allMatch = true
+				fwd = 0
+				for j := 0; j < retryRemaining; j++ {
+					var ri int
+					if nearestFirst {
+						ri = len(resolvedIdx) - 1 - j
+					} else {
+						ri = len(resolvedIdx) - retryRemaining + j
+					}
+					stackVal := resolved[ri]
+
+					if sig.QuoteArgs != nil && sig.QuoteArgs[j] && stackVal.VType.Equal(TWord) {
+						if !TAtom.Matches(sig.Args[j]) {
+							allMatch = false
+							break
+						}
+						positions[j] = resolvedIdx[ri]
+						continue
+					}
+					if !sigTypeMatches(stackVal, sig.Args[j]) {
+						allMatch = false
+						break
+					}
+					if stackVal.Data == nil && (sig.Args[j].Equal(TMap) || sig.Args[j].Equal(TList)) {
+						allMatch = false
+						break
+					}
+					positions[j] = resolvedIdx[ri]
+				}
+			}
 		}
 		if !allMatch {
 			continue

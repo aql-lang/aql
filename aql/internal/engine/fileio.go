@@ -280,6 +280,12 @@ func registerFileIO(r *Registry) {
 		return []Value{returnPath(args[0], path)}, nil
 	}
 
+	// Reversed handler for stack-first usage: "path" {opts} read
+	// In nearest-first stack matching, opts (top) maps to sig[0], path to sig[1].
+	readOptsRevHandler := func(args []Value, ctx map[string]Value, stack []Value, reg *Registry) ([]Value, error) {
+		return readOptsHandler([]Value{args[1], args[0]}, ctx, stack, reg)
+	}
+
 	r.Register("read",
 		// Path signatures
 		Signature{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
@@ -287,6 +293,9 @@ func registerFileIO(r *Registry) {
 		// String signatures (backward compatible)
 		Signature{Args: []Type{TString, TMap}, Handler: readOptsHandler},
 		Signature{Args: []Type{TString}, Handler: readHandler},
+		// Reversed signatures for stack-first: "path" {opts} read
+		Signature{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler},
+		Signature{Args: []Type{TMap, TString}, Handler: readOptsRevHandler},
 	)
 
 	r.Register("write",

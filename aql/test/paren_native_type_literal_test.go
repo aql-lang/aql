@@ -479,7 +479,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-size",
-			def:  `def f fn [[m:Map] [Integer] [m merge {x:1} size]]`,
+			def:  `def f fn [[m:Map] [Integer] [(m merge {x:1}) size]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
@@ -488,7 +488,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-jsonify",
-			def:  `def f fn [[m:Map] [String] [m merge {b:2} jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [(m merge {b:2}) jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
