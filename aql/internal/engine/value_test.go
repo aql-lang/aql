@@ -114,7 +114,7 @@ func TestNewDisjunct(t *testing.T) {
 	if !v.IsDisjunct() {
 		t.Error("expected IsDisjunct to be true")
 	}
-	di := v.AsDisjunct()
+	di, _ := v.AsDisjunct()
 	if len(di.Alternatives) != 1 {
 		t.Errorf("expected 1 alternative, got %d", len(di.Alternatives))
 	}
@@ -136,7 +136,7 @@ func TestAsTableType(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	v := NewTableType(RecordTypeInfo{Fields: fields})
-	tt := v.AsTableType()
+	tt, _ := v.AsTableType()
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("expected 1 field, got %d", tt.Record.Fields.Len())
 	}
@@ -144,7 +144,7 @@ func TestAsTableType(t *testing.T) {
 
 func TestAsChildType(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
-	ct := v.AsChildType()
+	ct, _ := v.AsChildType()
 	if !ct.Child.VType.Equal(TString) {
 		t.Errorf("expected string child, got %s", ct.Child.VType)
 	}

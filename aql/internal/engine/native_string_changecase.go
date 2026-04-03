@@ -8,7 +8,8 @@ import (
 func registerChangeCase(r *Registry) {
 	// changecase: [string] -> [string] (default: lower)
 	changeCaseHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doChangeCase(args[0].AsString(), strOpts{style: "lower"})
+		_as0, _ := args[0].AsString()
+		return doChangeCase(_as0, strOpts{style: "lower"})
 	}
 
 	// changecase: [string, map] -> [string]
@@ -17,7 +18,8 @@ func registerChangeCase(r *Registry) {
 		if opts.style == "" {
 			opts.style = "lower"
 		}
-		return doChangeCase(args[0].AsString(), opts)
+		_as1, _ := args[0].AsString()
+		return doChangeCase(_as1, opts)
 	}
 
 	r.Register("changecase",

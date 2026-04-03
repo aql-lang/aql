@@ -105,7 +105,8 @@ func (r *Registry) EffectiveFileOps() fileops.FileOps {
 	if !ok {
 		return r.FileOps
 	}
-	if memVal.VType.Matches(TBoolean) && memVal.AsBoolean() {
+	_as0, _ := memVal.AsBoolean()
+	if memVal.VType.Matches(TBoolean) && _as0 {
 		if r.MemOps == nil {
 			r.MemOps = fileops.NewMem()
 		}
@@ -539,7 +540,9 @@ func RegisterUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[int, int] and forward precedence.
 func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		result, err := op(args[0].AsInteger(), args[1].AsInteger())
+		_as2, _ := args[0].AsInteger()
+		_as1, _ := args[1].AsInteger()
+		result, err := op(_as2, _as1)
 		if err != nil {
 			return nil, err
 		}
@@ -555,7 +558,9 @@ func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, e
 // overloads: [decimal, decimal], [number, decimal], and [decimal, number].
 func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		result, err := op(args[0].AsNumber(), args[1].AsNumber())
+		_as4, _ := args[0].AsNumber()
+		_as3, _ := args[1].AsNumber()
+		result, err := op(_as4, _as3)
 		if err != nil {
 			return nil, err
 		}
@@ -579,7 +584,8 @@ func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float6
 // [integer] -> [decimal] and [decimal] -> [decimal].
 func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewDecimal(op(args[0].AsNumber()))}, nil
+		_as5, _ := args[0].AsNumber()
+		return []Value{NewDecimal(op(_as5))}, nil
 	}
 	r.Register(name, Signature{
 		Args:    []Type{TInteger},
@@ -595,7 +601,9 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[boolean, boolean] and forward precedence.
 func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil
+		_as7, _ := args[0].AsBoolean()
+		_as6, _ := args[1].AsBoolean()
+		return []Value{NewBoolean(op(_as7, _as6))}, nil
 	}
 	r.Register(name, Signature{
 		Args:    []Type{TBoolean, TBoolean},
@@ -610,22 +618,29 @@ func valToString(v Value) string {
 	}
 	switch {
 	case v.VType.Matches(TString):
-		return v.AsString()
+		_as8, _ := v.AsString()
+		return _as8
 	case v.IsAtom():
-		return v.AsAtom()
+		_as9, _ := v.AsAtom()
+		return _as9
 	case v.VType.Matches(TDecimal):
-		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
+		_as10, _ := v.AsDecimal()
+		return strconv.FormatFloat(_as10, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
-		return strconv.FormatInt(v.AsInteger(), 10)
+		_as11, _ := v.AsInteger()
+		return strconv.FormatInt(_as11, 10)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as12, _ := v.AsBoolean()
+		if _as12 {
 			return "true"
 		}
 		return "false"
 	case v.IsPath():
-		return v.AsPath().String()
+		_as13, _ := v.AsPath()
+		return _as13.String()
 	case v.IsWord():
-		return v.AsWord().Name
+		_as14, _ := v.AsWord()
+		return _as14.Name
 	default:
 		return v.String()
 	}
@@ -658,13 +673,16 @@ func storeKey(v Value) string {
 		return v.VType.String()
 	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as15, _ := v.AsWord()
+		return _as15.Name
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as16, _ := v.AsString()
+		return _as16
 	}
 	if v.IsAtom() {
-		return v.AsAtom()
+		_as17, _ := v.AsAtom()
+		return _as17
 	}
 	return fmt.Sprintf("%v", v.Data)
 }

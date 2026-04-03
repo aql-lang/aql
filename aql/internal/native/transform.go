@@ -50,13 +50,17 @@ func valueToAny(v engine.Value) any {
 	}
 	switch {
 	case v.VType.Matches(engine.TInteger):
-		return float64(v.AsInteger())
+		i, _ := v.AsInteger()
+		return float64(i)
 	case v.VType.Matches(engine.TString):
-		return v.AsString()
+		s, _ := v.AsString()
+		return s
 	case v.VType.Matches(engine.TBoolean):
-		return v.AsBoolean()
+		b, _ := v.AsBoolean()
+		return b
 	case v.VType.Equal(engine.TAtom):
-		return v.AsAtom()
+		a, _ := v.AsAtom()
+		return a
 	case v.VType.Equal(engine.TNone):
 		return nil
 	case v.VType.Matches(engine.TMap):

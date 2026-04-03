@@ -429,7 +429,7 @@ func TestRegisterForwardWord(t *testing.T) {
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(n * 2)}, nil
 		},
 	})
@@ -452,7 +452,7 @@ func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(n * 2)}, nil
 		},
 	})
@@ -475,7 +475,7 @@ func TestRegisterStackOnlyWord(t *testing.T) {
 	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(-n)}, nil
 		},
 	})
@@ -497,7 +497,7 @@ func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(-n)}, nil
 		},
 	})
@@ -520,14 +520,14 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 		aql.Signature{
 			Args: []aql.Type{aql.TInteger},
 			Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-				n := args[0].AsInteger()
+				n, _ := args[0].AsInteger()
 				return []aql.Value{aql.NewInteger(n * n)}, nil
 			},
 		},
 		aql.Signature{
 			Args: []aql.Type{aql.TString},
 			Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-				s := args[0].AsString()
+				s, _ := args[0].AsString()
 				return []aql.Value{aql.NewString(s + s)}, nil
 			},
 		},
@@ -561,13 +561,17 @@ func TestRegisterLeftToRight(t *testing.T) {
 	a.Register("myadd", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + args[1].AsInteger())}, nil
+			a0, _ := args[0].AsInteger()
+			a1, _ := args[1].AsInteger()
+			return []aql.Value{aql.NewInteger(a0 + a1)}, nil
 		},
 	})
 	a.Register("mymul", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() * args[1].AsInteger())}, nil
+			m0, _ := args[0].AsInteger()
+			m1, _ := args[1].AsInteger()
+			return []aql.Value{aql.NewInteger(m0 * m1)}, nil
 		},
 	})
 
@@ -591,7 +595,8 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 	a.Register("divmod", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			a, b := args[1].AsInteger(), args[0].AsInteger()
+			a, _ := args[1].AsInteger()
+			b, _ := args[0].AsInteger()
 			if b == 0 {
 				return nil, fmt.Errorf("division by zero")
 			}
@@ -637,7 +642,8 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 	a.Register("triple", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() * 3)}, nil
+			t0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(t0 * 3)}, nil
 		},
 	})
 
@@ -664,7 +670,8 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 	a.Register("custom", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + 100)}, nil
+			c0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(c0 + 100)}, nil
 		},
 	})
 
@@ -696,7 +703,7 @@ func TestRegisterStringHandler(t *testing.T) {
 	a.Register("shout", aql.Signature{
 		Args: []aql.Type{aql.TString},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			s := args[0].AsString()
+			s, _ := args[0].AsString()
 			return []aql.Value{aql.NewString(strings.ToUpper(s) + "!")}, nil
 		},
 	})
@@ -743,7 +750,8 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	a.Register("upper", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
 		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + 1000)}, nil
+			u0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(u0 + 1000)}, nil
 		},
 	})
 

@@ -8,13 +8,15 @@ import (
 func registerTrim(r *Registry) {
 	// trim: [string] -> [string]
 	trimHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewString(strings.TrimSpace(args[0].AsString()))}, nil
+		_as0, _ := args[0].AsString()
+		return []Value{NewString(strings.TrimSpace(_as0))}, nil
 	}
 
 	// trim: [string, map] -> [string]
 	trimOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
-		return doTrim(args[0].AsString(), opts)
+		_as1, _ := args[0].AsString()
+		return doTrim(_as1, opts)
 	}
 
 	r.Register("trim",

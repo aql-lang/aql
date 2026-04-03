@@ -58,7 +58,8 @@ func TestListAllFromCSV(t *testing.T) {
 	for _, row := range rows {
 		m := row.AsMap()
 		v, _ := m.Get("name")
-		names[v.AsString()] = true
+		vs, _ := v.AsString()
+		names[vs] = true
 	}
 	for _, want := range []string{"Alice", "Bob", "Charlie"} {
 		if !names[want] {
@@ -90,8 +91,9 @@ func TestListFilterFromCSV(t *testing.T) {
 	for _, row := range rows {
 		m := row.AsMap()
 		cityVal, _ := m.Get("city")
-		if cityVal.AsString() != "London" {
-			t.Errorf("expected city London, got %s", cityVal.AsString())
+		cityStr, _ := cityVal.AsString()
+		if cityStr != "London" {
+			t.Errorf("expected city London, got %s", cityStr)
 		}
 	}
 }
@@ -135,7 +137,8 @@ func TestListFilterMultipleFields(t *testing.T) {
 	for i, row := range rows {
 		m := row.AsMap()
 		v, _ := m.Get("name")
-		names[i] = v.AsString()
+		vs, _ := v.AsString()
+		names[i] = vs
 	}
 	got := strings.Join(names, ",")
 	if got != "Alice,Charlie" {

@@ -8,7 +8,8 @@ func registerTable(r *Registry) {
 		if !target.IsRecordType() {
 			return nil, fmt.Errorf("table: argument must be a record type, got %s", target.String())
 		}
-		return []Value{NewTableType(target.AsRecordType())}, nil
+		_as0, _ := target.AsRecordType()
+		return []Value{NewTableType(_as0)}, nil
 	}
 
 	r.Register("table", Signature{

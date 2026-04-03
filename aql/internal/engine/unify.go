@@ -30,10 +30,12 @@ func Unify(a, b Value) (Value, bool) {
 	// Disjunct unification first: try each alternative, succeed on first match.
 	// Must come before none/any checks so that disjuncts containing none work.
 	if a.IsDisjunct() {
-		return unifyDisjunct(a.AsDisjunct(), b)
+		_as0, _ := a.AsDisjunct()
+		return unifyDisjunct(_as0, b)
 	}
 	if b.IsDisjunct() {
-		return unifyDisjunct(b.AsDisjunct(), a)
+		_as1, _ := b.AsDisjunct()
+		return unifyDisjunct(_as1, a)
 	}
 
 	// "none" only unifies with "none".
@@ -145,11 +147,14 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTable && bTable {
 		// Both table types: unify their record schemas.
-		unified, ok := unifyRecordTypes(a.AsTableType().Record, b.AsTableType().Record)
+		_as3, _ := a.AsTableType()
+		_as2, _ := b.AsTableType()
+		unified, ok := unifyRecordTypes(_as3.Record, _as2.Record)
 		if !ok {
 			return Value{}, false
 		}
-		return NewTableType(unified.AsRecordType()), true
+		_as4, _ := unified.AsRecordType()
+		return NewTableType(_as4), true
 	}
 
 	if aTable || bTable {
@@ -163,8 +168,10 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTyped && bTyped {
 		// Both typed lists: unify child types.
-		aChild := a.AsChildType().Child
-		bChild := b.AsChildType().Child
+		_as5, _ := a.AsChildType()
+		aChild := _as5.Child
+		_as6, _ := b.AsChildType()
+		bChild := _as6.Child
 		unified, ok := Unify(aChild, bChild)
 		if !ok {
 			return Value{}, false
@@ -174,12 +181,14 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTyped {
 		// a is typed, b is concrete: each element must unify with the child type.
-		return unifyTypedWithConcrete(a.AsChildType().Child, b.AsList().Slice())
+		_as7, _ := a.AsChildType()
+		return unifyTypedWithConcrete(_as7.Child, b.AsList().Slice())
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each element must unify with the child type.
-		return unifyTypedWithConcrete(b.AsChildType().Child, a.AsList().Slice())
+		_as8, _ := b.AsChildType()
+		return unifyTypedWithConcrete(_as8.Child, a.AsList().Slice())
 	}
 
 	// Both concrete lists: element-by-element unification.
@@ -247,7 +256,9 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aRecord && bRecord {
 		// Both record types: unify field schemas with order enforcement.
-		return unifyRecordTypes(a.AsRecordType(), b.AsRecordType())
+		_as10, _ := a.AsRecordType()
+		_as9, _ := b.AsRecordType()
+		return unifyRecordTypes(_as10, _as9)
 	}
 
 	if aRecord || bRecord {
@@ -268,8 +279,10 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aTyped && bTyped {
 		// Both typed maps: unify child types.
-		aChild := a.AsChildType().Child
-		bChild := b.AsChildType().Child
+		_as11, _ := a.AsChildType()
+		aChild := _as11.Child
+		_as12, _ := b.AsChildType()
+		bChild := _as12.Child
 		unified, ok := Unify(aChild, bChild)
 		if !ok {
 			return Value{}, false
@@ -279,12 +292,14 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aTyped {
 		// a is typed, b is concrete: each value must unify with the child type.
-		return unifyTypedMapWithConcrete(a.AsChildType().Child, b.AsMap())
+		_as13, _ := a.AsChildType()
+		return unifyTypedMapWithConcrete(_as13.Child, b.AsMap())
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each value must unify with the child type.
-		return unifyTypedMapWithConcrete(b.AsChildType().Child, a.AsMap())
+		_as14, _ := b.AsChildType()
+		return unifyTypedMapWithConcrete(_as14.Child, a.AsMap())
 	}
 
 	// Both concrete maps: key-by-key unification.
@@ -381,17 +396,19 @@ func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
 // unifyOptions handles unification when at least one side is an options type.
 func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bool) {
 	if aIsOptions && bIsOptions {
-		return unifyOptionsPair(a.AsOptionsType(), b.AsOptionsType())
+		_as16, _ := a.AsOptionsType()
+		_as15, _ := b.AsOptionsType()
+		return unifyOptionsPair(_as16, _as15)
 	}
 
 	// Normalize: opts is the Options side, concrete is the other.
 	var opts OptionsTypeInfo
 	var concrete Value
 	if aIsOptions {
-		opts = a.AsOptionsType()
+		opts, _ = a.AsOptionsType()
 		concrete = b
 	} else {
-		opts = b.AsOptionsType()
+		opts, _ = b.AsOptionsType()
 		concrete = a
 	}
 
@@ -448,7 +465,8 @@ func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bo
 // - Disjunct → None if present, else first concrete alternative, else fail
 func optionsDefault(v Value) (Value, bool) {
 	if v.IsDisjunct() {
-		alts := v.AsDisjunct().Alternatives
+		_as17, _ := v.AsDisjunct()
+		alts := _as17.Alternatives
 		// Check for None first.
 		for _, alt := range alts {
 			if alt.VType.Equal(TNone) {
@@ -484,7 +502,8 @@ func optionsDefault(v Value) (Value, bool) {
 // - Disjunct: apply rules to each term
 func unifyOptionsField(optVal, cVal Value) (Value, bool) {
 	if optVal.IsDisjunct() {
-		for _, alt := range optVal.AsDisjunct().Alternatives {
+		_as18, _ := optVal.AsDisjunct()
+		for _, alt := range _as18.Alternatives {
 			if unified, ok := unifyOptionsField(alt, cVal); ok {
 				return unified, true
 			}
@@ -561,11 +580,17 @@ func valuesEqual(a, b Value) bool {
 	}
 	switch {
 	case a.VType.Matches(TString):
-		return a.AsString() == b.AsString()
+		_as20, _ := a.AsString()
+		_as19, _ := b.AsString()
+		return _as20 == _as19
 	case a.VType.Matches(TInteger):
-		return a.AsInteger() == b.AsInteger()
+		_as22, _ := a.AsInteger()
+		_as21, _ := b.AsInteger()
+		return _as22 == _as21
 	case a.VType.Matches(TBoolean):
-		return a.AsBoolean() == b.AsBoolean()
+		_as24, _ := a.AsBoolean()
+		_as23, _ := b.AsBoolean()
+		return _as24 == _as23
 	case a.VType.Equal(TList):
 		aTT, aTbl := a.Data.(TableTypeInfo)
 		bTT, bTbl := b.Data.(TableTypeInfo)

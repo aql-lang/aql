@@ -8,13 +8,17 @@ import (
 func registerRepeat(r *Registry) {
 	// repeat: [string, integer] -> [string]
 	repeatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doRepeat(args[0].AsString(), args[1].AsInteger(), strOpts{})
+		_as1, _ := args[0].AsString()
+		_as0, _ := args[1].AsInteger()
+		return doRepeat(_as1, _as0, strOpts{})
 	}
 
 	// repeat: [string, integer, map] -> [string]
 	repeatOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
-		return doRepeat(args[0].AsString(), args[1].AsInteger(), opts)
+		_as3, _ := args[0].AsString()
+		_as2, _ := args[1].AsInteger()
+		return doRepeat(_as3, _as2, opts)
 	}
 
 	r.Register("repeat",

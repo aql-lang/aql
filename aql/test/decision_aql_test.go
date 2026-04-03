@@ -62,7 +62,8 @@ func TestAQLDecisionCond(t *testing.T) {
 func TestAQLDecisionEvalCondTrue(t *testing.T) {
 	r := decisionAQLRegistry(t)
 	result := runDecAQL(t, r, `{age:25} {field:age,op:"gte",value:18} decision.eval-cond`)
-	if !result[0].AsBoolean() {
+	b0, _ := result[0].AsBoolean()
+	if !b0 {
 		t.Error("expected true for age=25 gte 18")
 	}
 }
@@ -70,7 +71,8 @@ func TestAQLDecisionEvalCondTrue(t *testing.T) {
 func TestAQLDecisionEvalCondFalse(t *testing.T) {
 	r := decisionAQLRegistry(t)
 	result := runDecAQL(t, r, `{age:15} {field:age,op:"gte",value:18} decision.eval-cond`)
-	if result[0].AsBoolean() {
+	b1, _ := result[0].AsBoolean()
+	if b1 {
 		t.Error("expected false for age=15 gte 18")
 	}
 }
@@ -82,7 +84,8 @@ func TestAQLDecisionEvalPredAllOf(t *testing.T) {
 		[{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
 		decision.eval-pred
 	`)
-	if !result[0].AsBoolean() {
+	b2, _ := result[0].AsBoolean()
+	if !b2 {
 		t.Error("expected all-of true")
 	}
 }
@@ -94,7 +97,8 @@ func TestAQLDecisionEvalPredNotOf(t *testing.T) {
 		({field:age,op:"lt",value:18} decision.not-of)
 		decision.eval-pred
 	`)
-	if !result[0].AsBoolean() {
+	b3, _ := result[0].AsBoolean()
+	if !b3 {
 		t.Error("expected not-of true for age=25")
 	}
 }
@@ -110,7 +114,8 @@ func TestAQLDecisionTableFirst(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
-	if cat.AsString() != "adult" {
+	cats1, _ := cat.AsString()
+	if cats1 != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
 }
@@ -130,7 +135,8 @@ func TestAQLDecisionTree(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
-	if cat.AsString() != "adult" {
+	cats2, _ := cat.AsString()
+	if cats2 != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
 }
@@ -146,7 +152,8 @@ func TestAQLDecisionDecide(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	sign, _ := m.Get("sign")
-	if sign.AsString() != "positive" {
+	signs, _ := sign.AsString()
+	if signs != "positive" {
 		t.Errorf("expected positive, got %v", sign)
 	}
 }

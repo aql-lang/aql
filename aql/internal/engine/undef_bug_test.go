@@ -31,7 +31,8 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bug confirmed: %v", err)
 	}
-	if len(result) != 1 || result[0].AsString() != "CBA" {
+	_as0, _ := result[0].AsString()
+	if len(result) != 1 || _as0 != "CBA" {
 		t.Errorf("got %v, want [CBA]", result)
 	}
 }

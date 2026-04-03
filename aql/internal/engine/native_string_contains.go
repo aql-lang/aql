@@ -5,13 +5,17 @@ import "strings"
 func registerContains(r *Registry) {
 	// contains: [string, string] -> [boolean]
 	containsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doContains(args[0].AsString(), args[1].AsString(), strOpts{cs: "sensitive", mode: "literal"})
+		_as1, _ := args[0].AsString()
+		_as0, _ := args[1].AsString()
+		return doContains(_as1, _as0, strOpts{cs: "sensitive", mode: "literal"})
 	}
 
 	// contains: [string, string, map] -> [boolean]
 	containsOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
-		return doContains(args[0].AsString(), args[1].AsString(), opts)
+		_as3, _ := args[0].AsString()
+		_as2, _ := args[1].AsString()
+		return doContains(_as3, _as2, opts)
 	}
 
 	r.Register("contains",

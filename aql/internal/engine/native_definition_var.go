@@ -43,7 +43,8 @@ func registerVar(r *Registry) {
 			switch {
 			case decl.IsWord():
 				// Bare word: take value from stack.
-				name := decl.AsWord().Name
+				_as0, _ := decl.AsWord()
+				name := _as0.Name
 				varNames = append(varNames, name)
 				result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
 
@@ -55,9 +56,10 @@ func registerVar(r *Registry) {
 				}
 				var name string
 				if declElems.Get(0).IsWord() {
-					name = declElems.Get(0).AsWord().Name
+					_as1, _ := declElems.Get(0).AsWord()
+					name = _as1.Name
 				} else if declElems.Get(0).VType.Matches(TString) {
-					name = declElems.Get(0).AsString()
+					name, _ = declElems.Get(0).AsString()
 				} else {
 					return nil, fmt.Errorf("var: declaration name must be a word or string")
 				}
@@ -68,7 +70,7 @@ func registerVar(r *Registry) {
 
 			case decl.VType.Matches(TString):
 				// String name: take value from stack.
-				name := decl.AsString()
+				name, _ := decl.AsString()
 				varNames = append(varNames, name)
 				result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
 

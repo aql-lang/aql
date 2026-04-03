@@ -168,7 +168,7 @@ func TestExtraStringInteger(t *testing.T) {
 
 func TestExtraAsNumberInteger(t *testing.T) {
 	v := NewInteger(42)
-	n := v.AsNumber()
+	n, _ := v.AsNumber()
 	if n != 42.0 {
 		t.Errorf("AsNumber() on integer = %f, want 42.0", n)
 	}
@@ -176,7 +176,7 @@ func TestExtraAsNumberInteger(t *testing.T) {
 
 func TestExtraAsNumberDecimal(t *testing.T) {
 	v := NewDecimal(3.14)
-	n := v.AsNumber()
+	n, _ := v.AsNumber()
 	if n != 3.14 {
 		t.Errorf("AsNumber() on decimal = %f, want 3.14", n)
 	}
@@ -206,7 +206,7 @@ func TestExtraAsTableTypeTableData(t *testing.T) {
 	rec := RecordTypeInfo{Fields: fields}
 	td := TableData{Record: rec, Rows: []Value{}}
 	v := Value{VType: TList, Data: td}
-	tt := v.AsTableType()
+	tt, _ := v.AsTableType()
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableData: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -217,7 +217,7 @@ func TestExtraAsTableTypeTableTypeInfo(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TString))
 	tti := TableTypeInfo{Record: RecordTypeInfo{Fields: fields}}
 	v := Value{VType: TList, Data: tti}
-	tt := v.AsTableType()
+	tt, _ := v.AsTableType()
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableTypeInfo: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -426,7 +426,8 @@ func TestExtraUnifyMapsSuccess(t *testing.T) {
 	}
 	m := result.AsMap()
 	v, _ := m.Get("x")
-	if v.AsNumber() != 1.0 {
+	_as0, _ := v.AsNumber()
+	if _as0 != 1.0 {
 		t.Errorf("unified map x = %v, want 1", v)
 	}
 }
@@ -726,7 +727,8 @@ func TestExtraStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("end")})
-	if len(result) != 1 || result[0].AsNumber() != 1.0 {
+	_as1, _ := result[0].AsNumber()
+	if len(result) != 1 || _as1 != 1.0 {
 		t.Errorf("end with no forward: got %v, want [1]", result)
 	}
 }
@@ -740,7 +742,8 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("end"),
 	})
-	if len(result) != 1 || result[0].AsNumber() != 3.0 {
+	_as2, _ := result[0].AsNumber()
+	if len(result) != 1 || _as2 != 3.0 {
 		t.Errorf("1 add 2 end: got %v, want [3]", result)
 	}
 }
@@ -941,7 +944,8 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 		t.Fatalf("unify: got %d results", len(result))
 	}
 	// Should succeed (subtype relationship)
-	if !result[1].AsBoolean() {
+	_as3, _ := result[1].AsBoolean()
+	if !_as3 {
 		t.Error("integer type literal should unify with concrete integer")
 	}
 }
@@ -960,7 +964,8 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 	}
 	// Different decimals should fail to unify (same type, different values)
 	// valuesEqual falls through to default fmt.Sprintf comparison
-	if result[1].AsBoolean() {
+	_as4, _ := result[1].AsBoolean()
+	if _as4 {
 		t.Error("different decimals should not unify")
 	}
 }
@@ -1000,7 +1005,8 @@ func TestExtraUnifyDisjunct(t *testing.T) {
 	if !ok {
 		t.Fatal("disjunct should unify with matching alternative")
 	}
-	if result.AsNumber() != 2.0 {
+	_as5, _ := result.AsNumber()
+	if _as5 != 2.0 {
 		t.Errorf("unified value = %v, want 2", result)
 	}
 }
@@ -1019,7 +1025,8 @@ func TestExtraUnifyDisjunctReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("value should unify with disjunct containing it")
 	}
-	if result.AsString() != "b" {
+	_as6, _ := result.AsString()
+	if _as6 != "b" {
 		t.Errorf("unified value = %v, want 'b'", result)
 	}
 }

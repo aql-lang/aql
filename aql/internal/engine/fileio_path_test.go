@@ -35,8 +35,10 @@ func TestWriteWithPath(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	if result[0].AsPath().String() != "data/test.txt" {
-		t.Errorf("got %q, want %q", result[0].AsPath().String(), "data/test.txt")
+	_as0, _ := result[0].AsPath()
+	if _as0.String() != "data/test.txt" {
+		_as1, _ := result[0].AsPath()
+		t.Errorf("got %q, want %q", _as1.String(), "data/test.txt")
 	}
 	// Verify content in mem FS
 	resolved, _ := mem.ResolvePath("data/test.txt")
@@ -72,7 +74,8 @@ func TestReadWithPath(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path,
 	})
-	if len(result) != 1 || result[0].AsString() != "hello" {
+	_as2, _ := result[0].AsString()
+	if len(result) != 1 || _as2 != "hello" {
 		t.Fatalf("got %v, want 'hello'", result)
 	}
 }
@@ -86,7 +89,8 @@ func TestReadWithAbsPath(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path,
 	})
-	if len(result) != 1 || result[0].AsString() != "key=val" {
+	_as3, _ := result[0].AsString()
+	if len(result) != 1 || _as3 != "key=val" {
 		t.Fatalf("got %v, want 'key=val'", result)
 	}
 }
@@ -104,7 +108,8 @@ func TestWriteReadRoundtripPath(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path,
 	})
-	if len(result) != 1 || result[0].AsString() != "round and round" {
+	_as4, _ := result[0].AsString()
+	if len(result) != 1 || _as4 != "round and round" {
 		t.Fatalf("got %v, want 'round and round'", result)
 	}
 }
@@ -143,7 +148,8 @@ func TestReadWithPathAndOptions(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path, NewMap(opts),
 	})
-	if len(result) != 1 || result[0].AsString() != "content here" {
+	_as5, _ := result[0].AsString()
+	if len(result) != 1 || _as5 != "content here" {
 		t.Fatalf("got %v, want 'content here'", result)
 	}
 }
@@ -157,7 +163,8 @@ func TestWriteStringPathStillWorks(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("write"), NewString("old.txt"), NewString("old style"),
 	})
-	if len(result) != 1 || result[0].AsString() != "old.txt" {
+	_as6, _ := result[0].AsString()
+	if len(result) != 1 || _as6 != "old.txt" {
 		t.Fatalf("got %v, want 'old.txt'", result)
 	}
 	resolved, _ := mem.ResolvePath("old.txt")
@@ -174,7 +181,8 @@ func TestReadStringPathStillWorks(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("compat.txt"),
 	})
-	if len(result) != 1 || result[0].AsString() != "compat" {
+	_as7, _ := result[0].AsString()
+	if len(result) != 1 || _as7 != "compat" {
 		t.Fatalf("got %v, want 'compat'", result)
 	}
 }

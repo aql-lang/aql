@@ -22,7 +22,7 @@ func registerDo(r *Registry) {
 	// handles edge cases and backward compatibility.
 	promoteToWord := func(v Value) Value {
 		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-			name := v.AsString()
+			name, _ := v.AsString()
 			if r.Lookup(name) != nil {
 				return NewWord(name)
 			}

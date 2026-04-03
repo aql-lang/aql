@@ -22,7 +22,7 @@ func registerResource(r *Registry) {
 
 	// Retrieve the installed Resource type so Entity can reference it as parent.
 	resourceVal := r.DefStacks["Resource"][len(r.DefStacks["Resource"])-1]
-	installedResource := resourceVal.AsObjectType()
+	installedResource, _ := resourceVal.AsObjectType()
 
 	// --- Entity: {spec:String, entity:String} inherits Resource ---
 	entityFields := NewOrderedMap()

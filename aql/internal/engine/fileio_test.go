@@ -126,7 +126,8 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.AsBoolean() {
+	_as0, _ := v.AsBoolean()
+	if !_as0 {
 		t.Error("expected true")
 	}
 
@@ -135,8 +136,10 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	_as1, _ := v.AsInteger()
+	if _as1 != 42 {
+		_as2, _ := v.AsInteger()
+		t.Errorf("expected 42, got %d", _as2)
 	}
 
 	// string
@@ -144,8 +147,10 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsString() != "hello" {
-		t.Errorf("expected hello, got %s", v.AsString())
+	_as3, _ := v.AsString()
+	if _as3 != "hello" {
+		_as4, _ := v.AsString()
+		t.Errorf("expected hello, got %s", _as4)
 	}
 
 	// list

@@ -76,7 +76,8 @@ func TestTimeYear(t *testing.T) {
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("date"), engine.NewWord(")"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("year"), engine.NewWord(")"),
 	})
-	if result[0].AsInteger() != 2024 {
+	v, _ := result[0].AsInteger()
+	if v != 2024 {
 		t.Errorf("year = %v, want 2024", result[0])
 	}
 }
@@ -88,7 +89,8 @@ func TestTimeMonth(t *testing.T) {
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("date"), engine.NewWord(")"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("month"), engine.NewWord(")"),
 	})
-	if result[0].AsInteger() != 3 {
+	v, _ := result[0].AsInteger()
+	if v != 3 {
 		t.Errorf("month = %v, want 3", result[0])
 	}
 }
@@ -100,7 +102,8 @@ func TestTimeDay(t *testing.T) {
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("date"), engine.NewWord(")"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("day"), engine.NewWord(")"),
 	})
-	if result[0].AsInteger() != 15 {
+	v, _ := result[0].AsInteger()
+	if v != 15 {
 		t.Errorf("day = %v, want 15", result[0])
 	}
 }
@@ -113,7 +116,8 @@ func TestTimeWeekday(t *testing.T) {
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("date"), engine.NewWord(")"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("weekday"), engine.NewWord(")"),
 	})
-	if result[0].AsInteger() != 5 {
+	v, _ := result[0].AsInteger()
+	if v != 5 {
 		t.Errorf("weekday = %v, want 5 (Friday)", result[0])
 	}
 }
@@ -126,7 +130,8 @@ func TestTimeYearDay(t *testing.T) {
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("date"), engine.NewWord(")"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("year-day"), engine.NewWord(")"),
 	})
-	if result[0].AsInteger() != 75 {
+	v, _ := result[0].AsInteger()
+	if v != 75 {
 		t.Errorf("year-day = %v, want 75", result[0])
 	}
 }
@@ -143,7 +148,8 @@ func TestTimeBeforeAfter(t *testing.T) {
 		d1, d2,
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("before?"), engine.NewWord(")"),
 	})
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected 2024-01-01 before? 2024-12-31 = true")
 	}
 
@@ -152,7 +158,8 @@ func TestTimeBeforeAfter(t *testing.T) {
 		d1, d2,
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("after?"), engine.NewWord(")"),
 	})
-	if result[0].AsBoolean() {
+	b, _ = result[0].AsBoolean()
+	if b {
 		t.Error("expected 2024-01-01 after? 2024-12-31 = false")
 	}
 }
@@ -164,7 +171,8 @@ func TestTimeEqual(t *testing.T) {
 		d, d,
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("equal?"), engine.NewWord(")"),
 	})
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected same date equal? = true")
 	}
 }
@@ -178,8 +186,9 @@ func TestTimeToString(t *testing.T) {
 		d,
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("to-string"), engine.NewWord(")"),
 	})
-	if result[0].AsString() != "2024-03-15" {
-		t.Errorf("to-string = %q, want %q", result[0].AsString(), "2024-03-15")
+	s, _ := result[0].AsString()
+	if s != "2024-03-15" {
+		t.Errorf("to-string = %q, want %q", s, "2024-03-15")
 	}
 }
 
@@ -190,8 +199,9 @@ func TestTimeFormat(t *testing.T) {
 		d, engine.NewString("02 Jan 2006"),
 		engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("format"), engine.NewWord(")"),
 	})
-	if result[0].AsString() != "15 Mar 2024" {
-		t.Errorf("format = %q, want %q", result[0].AsString(), "15 Mar 2024")
+	s, _ := result[0].AsString()
+	if s != "15 Mar 2024" {
+		t.Errorf("format = %q, want %q", s, "15 Mar 2024")
 	}
 }
 
@@ -260,8 +270,9 @@ func TestTimeDaysInMonth(t *testing.T) {
 			d,
 			engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("days-in-month"), engine.NewWord(")"),
 		})
-		if result[0].AsInteger() != tt.want {
-			t.Errorf("days-in-month(%s) = %d, want %d", tt.date, result[0].AsInteger(), tt.want)
+		v, _ := result[0].AsInteger()
+		if v != tt.want {
+			t.Errorf("days-in-month(%s) = %d, want %d", tt.date, v, tt.want)
 		}
 	}
 }
@@ -283,8 +294,9 @@ func TestTimeLeapYear(t *testing.T) {
 			d,
 			engine.NewWord("("), engine.NewWord("time"), engine.NewWord("get"), engine.NewWord("leap-year?"), engine.NewWord(")"),
 		})
-		if result[0].AsBoolean() != tt.want {
-			t.Errorf("leap-year?(%s) = %v, want %v", tt.date, result[0].AsBoolean(), tt.want)
+		b, _ := result[0].AsBoolean()
+		if b != tt.want {
+			t.Errorf("leap-year?(%s) = %v, want %v", tt.date, b, tt.want)
 		}
 	}
 }

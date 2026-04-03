@@ -10,7 +10,8 @@ func registerIota(r *Registry) {
 	r.Register("iota", Signature{
 		Args: []Type{TInteger},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			n := int(args[0].AsInteger())
+			_as0, _ := args[0].AsInteger()
+			n := int(_as0)
 			if n < 0 {
 				return nil, fmt.Errorf("iota: negative count %d", n)
 			}
@@ -107,7 +108,8 @@ func registerReshape(r *Registry) {
 			shapeList := args[0].AsList()
 			dims := make([]int, shapeList.Len())
 			for i := 0; i < shapeList.Len(); i++ {
-				dims[i] = int(shapeList.Get(i).AsInteger())
+				_as1, _ := shapeList.Get(i).AsInteger()
+				dims[i] = int(_as1)
 				if dims[i] < 0 {
 					return nil, fmt.Errorf("reshape: negative dimension %d", dims[i])
 				}
@@ -246,7 +248,8 @@ func registerTake(r *Registry) {
 			if args[1].Data == nil {
 				return nil, fmt.Errorf("take: expected concrete list")
 			}
-			n := int(args[0].AsInteger())
+			_as2, _ := args[0].AsInteger()
+			n := int(_as2)
 			list := args[1].AsList()
 			length := list.Len()
 			var start, end int
@@ -282,7 +285,8 @@ func registerShed(r *Registry) {
 			if args[1].Data == nil {
 				return nil, fmt.Errorf("shed: expected concrete list")
 			}
-			n := int(args[0].AsInteger())
+			_as3, _ := args[0].AsInteger()
+			n := int(_as3)
 			list := args[1].AsList()
 			length := list.Len()
 			var start, end int
@@ -423,7 +427,8 @@ func registerAt(r *Registry) {
 			dataLen := data.Len()
 			result := make([]Value, indices.Len())
 			for i := 0; i < indices.Len(); i++ {
-				idx := int(indices.Get(i).AsInteger())
+				_as4, _ := indices.Get(i).AsInteger()
+				idx := int(_as4)
 				if idx < 0 || idx >= dataLen {
 					return nil, fmt.Errorf("at: index %d out of bounds (length %d)", idx, dataLen)
 				}
@@ -612,7 +617,8 @@ func registerReplicate(r *Registry) {
 			}
 			var result []Value
 			for i := 0; i < counts.Len(); i++ {
-				c := int(counts.Get(i).AsInteger())
+				_as5, _ := counts.Get(i).AsInteger()
+				c := int(_as5)
 				if c < 0 {
 					return nil, fmt.Errorf("replicate: negative count %d at index %d", c, i)
 				}
@@ -670,7 +676,8 @@ func registerWindow(r *Registry) {
 			if args[1].Data == nil {
 				return nil, fmt.Errorf("window: expected concrete list")
 			}
-			size := int(args[0].AsInteger())
+			_as6, _ := args[0].AsInteger()
+			size := int(_as6)
 			list := args[1].AsList()
 			length := list.Len()
 			if size <= 0 {

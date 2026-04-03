@@ -211,9 +211,11 @@ func (a *AQL) Run(src string) ([]any, error) {
 	for i, v := range result {
 		switch {
 		case v.VType.Matches(engine.TInteger):
-			out[i] = v.AsInteger()
+			n, _ := v.AsInteger()
+			out[i] = n
 		case v.VType.Matches(engine.TString):
-			out[i] = v.AsString()
+			s, _ := v.AsString()
+			out[i] = s
 		default:
 			out[i] = v.String()
 		}

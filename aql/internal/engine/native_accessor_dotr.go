@@ -20,13 +20,16 @@ import (
 func registerGetr(r *Registry) {
 	getKey := func(v Value) string {
 		if v.IsWord() {
-			return v.AsWord().Name
+			_as0, _ := v.AsWord()
+			return _as0.Name
 		}
 		if v.VType.Matches(TString) {
-			return v.AsString()
+			_as1, _ := v.AsString()
+			return _as1
 		}
 		if v.IsAtom() {
-			return v.AsAtom()
+			_as2, _ := v.AsAtom()
+			return _as2
 		}
 		return fmt.Sprintf("%v", v.Data)
 	}
@@ -40,7 +43,8 @@ func registerGetr(r *Registry) {
 		// Integer key on list.
 		if key.VType.Matches(TInteger) {
 			if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
-				idx := int(key.AsInteger())
+				_as3, _ := key.AsInteger()
+				idx := int(_as3)
 				if idx < 0 || idx >= list.Len() {
 					return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, list.Len())
 				}
@@ -73,7 +77,7 @@ func registerGetr(r *Registry) {
 			}
 			return []Value{val}, nil
 		}
-		oi := container.AsObjectInstance()
+		oi, _ := container.AsObjectInstance()
 		val, ok := oi.GetField(k)
 		if !ok {
 			return nil, fmt.Errorf("getr: field %q not found in object", k)

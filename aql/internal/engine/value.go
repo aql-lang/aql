@@ -845,8 +845,12 @@ func (v Value) IsError() bool {
 }
 
 // AsError returns the ErrorInfo for an error value.
-func (v Value) AsError() ErrorInfo {
-	return v.Data.(ErrorInfo)
+func (v Value) AsError() (ErrorInfo, error) {
+	info, ok := v.Data.(ErrorInfo)
+	if !ok {
+		return ErrorInfo{}, fmt.Errorf("AsError: not an error value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -888,8 +892,12 @@ func (v Value) IsMark() bool {
 }
 
 // AsMark returns the MarkInfo, panics if not a mark.
-func (v Value) AsMark() MarkInfo {
-	return v.Data.(MarkInfo)
+func (v Value) AsMark() (MarkInfo, error) {
+	info, ok := v.Data.(MarkInfo)
+	if !ok {
+		return MarkInfo{}, fmt.Errorf("AsMark: not a mark value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsMove reports whether this value is a move.
@@ -898,8 +906,12 @@ func (v Value) IsMove() bool {
 }
 
 // AsMove returns the MoveInfo, panics if not a move.
-func (v Value) AsMove() MoveInfo {
-	return v.Data.(MoveInfo)
+func (v Value) AsMove() (MoveInfo, error) {
+	info, ok := v.Data.(MoveInfo)
+	if !ok {
+		return MoveInfo{}, fmt.Errorf("AsMove: not a move value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsReturnCheck reports whether this value is a return-check marker.
@@ -908,8 +920,12 @@ func (v Value) IsReturnCheck() bool {
 }
 
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
-func (v Value) AsReturnCheck() ReturnCheckInfo {
-	return v.Data.(ReturnCheckInfo)
+func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
+	info, ok := v.Data.(ReturnCheckInfo)
+	if !ok {
+		return ReturnCheckInfo{}, fmt.Errorf("AsReturnCheck: not a return-check value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsDefCleanup reports whether this value is a def-cleanup marker.
@@ -918,8 +934,12 @@ func (v Value) IsDefCleanup() bool {
 }
 
 // AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
-func (v Value) AsDefCleanup() DefCleanupInfo {
-	return v.Data.(DefCleanupInfo)
+func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
+	info, ok := v.Data.(DefCleanupInfo)
+	if !ok {
+		return DefCleanupInfo{}, fmt.Errorf("AsDefCleanup: not a def-cleanup value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsDisjunct reports whether this value is a disjunction type.
@@ -929,8 +949,12 @@ func (v Value) IsDisjunct() bool {
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
-func (v Value) AsDisjunct() DisjunctInfo {
-	return v.Data.(DisjunctInfo)
+func (v Value) AsDisjunct() (DisjunctInfo, error) {
+	info, ok := v.Data.(DisjunctInfo)
+	if !ok {
+		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsObjectType reports whether this value is an object type definition.
@@ -940,8 +964,12 @@ func (v Value) IsObjectType() bool {
 }
 
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func (v Value) AsObjectType() ObjectTypeInfo {
-	return v.Data.(ObjectTypeInfo)
+func (v Value) AsObjectType() (ObjectTypeInfo, error) {
+	info, ok := v.Data.(ObjectTypeInfo)
+	if !ok {
+		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsStore reports whether this value is a Store instance.
@@ -981,8 +1009,12 @@ func (v Value) IsObjectInstance() bool {
 }
 
 // AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func (v Value) AsObjectInstance() ObjectInstanceInfo {
-	return v.Data.(ObjectInstanceInfo)
+func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
+	info, ok := v.Data.(ObjectInstanceInfo)
+	if !ok {
+		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsModule reports whether this value is a module descriptor.
@@ -991,8 +1023,12 @@ func (v Value) IsModule() bool {
 }
 
 // AsModule returns the ModuleDesc, panics if not a module.
-func (v Value) AsModule() ModuleDesc {
-	return v.Data.(ModuleDesc)
+func (v Value) AsModule() (ModuleDesc, error) {
+	info, ok := v.Data.(ModuleDesc)
+	if !ok {
+		return ModuleDesc{}, fmt.Errorf("AsModule: not a module value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsAtom reports whether this value is an atom.
@@ -1003,8 +1039,12 @@ func (v Value) IsPath() bool {
 }
 
 // AsPath returns the PathInfo. Panics if not a path.
-func (v Value) AsPath() PathInfo {
-	return v.Data.(PathInfo)
+func (v Value) AsPath() (PathInfo, error) {
+	info, ok := v.Data.(PathInfo)
+	if !ok {
+		return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 func (v Value) IsAtom() bool {
@@ -1012,11 +1052,15 @@ func (v Value) IsAtom() bool {
 }
 
 // AsAtom returns the string payload. Returns "" if Data is nil.
-func (v Value) AsAtom() string {
+func (v Value) AsAtom() (string, error) {
 	if v.Data == nil {
-		return ""
+		return "", fmt.Errorf("AsAtom: nil data")
 	}
-	return v.Data.(string)
+	s, ok := v.Data.(string)
+	if !ok {
+		return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
+	}
+	return s, nil
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
@@ -1038,8 +1082,12 @@ func (v Value) IsRecordType() bool {
 }
 
 // AsRecordType returns the RecordTypeInfo, panics if not a record type.
-func (v Value) AsRecordType() RecordTypeInfo {
-	return v.Data.(RecordTypeInfo)
+func (v Value) AsRecordType() (RecordTypeInfo, error) {
+	info, ok := v.Data.(RecordTypeInfo)
+	if !ok {
+		return RecordTypeInfo{}, fmt.Errorf("AsRecordType: not a record type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsOptionsType reports whether this value is an options type (map with defaults/constraints).
@@ -1049,8 +1097,12 @@ func (v Value) IsOptionsType() bool {
 }
 
 // AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
-func (v Value) AsOptionsType() OptionsTypeInfo {
-	return v.Data.(OptionsTypeInfo)
+func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
+	info, ok := v.Data.(OptionsTypeInfo)
+	if !ok {
+		return OptionsTypeInfo{}, fmt.Errorf("AsOptionsType: not an options type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsTableType reports whether this value is a table type (list with record schema).
@@ -1070,70 +1122,104 @@ func (v Value) IsTableType() bool {
 }
 
 // AsTableType returns the TableTypeInfo, panics if not a table type.
-func (v Value) AsTableType() TableTypeInfo {
+func (v Value) AsTableType() (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
-		return TableTypeInfo{Record: td.Record}
+		return TableTypeInfo{Record: td.Record}, nil
 	}
 	if qb, ok := v.Data.(QueryBuilder); ok {
-		return TableTypeInfo{Record: qb.Source.Record}
+		return TableTypeInfo{Record: qb.Source.Record}, nil
 	}
-	return v.Data.(TableTypeInfo)
+	info, ok := v.Data.(TableTypeInfo)
+	if !ok {
+		return TableTypeInfo{}, fmt.Errorf("AsTableType: not a table type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
-func (v Value) AsChildType() ChildTypeInfo {
-	return v.Data.(ChildTypeInfo)
+func (v Value) AsChildType() (ChildTypeInfo, error) {
+	info, ok := v.Data.(ChildTypeInfo)
+	if !ok {
+		return ChildTypeInfo{}, fmt.Errorf("AsChildType: not a child type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsWord returns the WordInfo, panics if not a word.
-func (v Value) AsWord() WordInfo {
-	return v.Data.(WordInfo)
+func (v Value) AsWord() (WordInfo, error) {
+	info, ok := v.Data.(WordInfo)
+	if !ok {
+		return WordInfo{}, fmt.Errorf("AsWord: not a word value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsForward returns the ForwardInfo, panics if not a forward.
-func (v Value) AsForward() ForwardInfo {
-	return v.Data.(ForwardInfo)
+func (v Value) AsForward() (ForwardInfo, error) {
+	info, ok := v.Data.(ForwardInfo)
+	if !ok {
+		return ForwardInfo{}, fmt.Errorf("AsForward: not a forward value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsString returns the string payload. Returns "" if Data is nil (type literal).
-func (v Value) AsString() string {
+func (v Value) AsString() (string, error) {
 	if v.Data == nil {
-		return ""
+		return "", fmt.Errorf("AsString: nil data")
 	}
-	return v.Data.(string)
+	s, ok := v.Data.(string)
+	if !ok {
+		return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
+	}
+	return s, nil
 }
 
 // AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
-func (v Value) AsInteger() int64 {
+func (v Value) AsInteger() (int64, error) {
 	if v.Data == nil {
-		return 0
+		return 0, fmt.Errorf("AsInteger: nil data")
 	}
-	return v.Data.(int64)
+	n, ok := v.Data.(int64)
+	if !ok {
+		return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
+	}
+	return n, nil
 }
 
 // AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
-func (v Value) AsDecimal() float64 {
+func (v Value) AsDecimal() (float64, error) {
 	if v.Data == nil {
-		return 0.0
+		return 0.0, fmt.Errorf("AsDecimal: nil data")
 	}
-	return v.Data.(float64)
+	f, ok := v.Data.(float64)
+	if !ok {
+		return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
+	}
+	return f, nil
 }
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
-func (v Value) AsNumber() float64 {
+func (v Value) AsNumber() (float64, error) {
 	if v.VType.Matches(TDecimal) {
-		return v.AsDecimal()
+		f, err := v.AsDecimal()
+		return f, err
 	}
-	return float64(v.AsInteger())
+	n, err := v.AsInteger()
+	return float64(n), err
 }
 
 // AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
-func (v Value) AsBoolean() bool {
+func (v Value) AsBoolean() (bool, error) {
 	if v.Data == nil {
-		return false
+		return false, fmt.Errorf("AsBoolean: nil data")
 	}
-	return v.Data.(bool)
+	b, ok := v.Data.(bool)
+	if !ok {
+		return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
+	}
+	return b, nil
 }
 
 // AsList returns the []Value payload, or nil if the data is not a []Value.
@@ -1206,30 +1292,32 @@ func (v Value) AsMutableMap() *OrderedMap {
 func (v Value) String() string {
 	switch {
 	case v.IsWord():
-		w := v.AsWord()
+		w, _ := v.AsWord()
 		return fmt.Sprintf("word(%s)", w.Name)
 	case v.IsForward():
-		f := v.AsForward()
+		f, _ := v.AsForward()
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
 	case v.IsParenExpr():
 		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
 	case v.IsMark():
-		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
+		_as2, _ := v.AsMark()
+		return fmt.Sprintf("mark(%s)", _as2.ID)
 	case v.IsMove():
-		m := v.AsMove()
+		m, _ := v.AsMove()
 		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
 	case v.IsReturnCheck():
-		rc := v.AsReturnCheck()
+		rc, _ := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
 	case v.IsDefCleanup():
 		return "__dc"
 	case v.IsModule():
-		md := v.AsModule()
+		md, _ := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)
 	case v.IsError():
-		return fmt.Sprintf("error(%s)", v.AsError().Message)
+		_as3, _ := v.AsError()
+		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()
@@ -1238,11 +1326,13 @@ func (v Value) String() string {
 	case v.VType.Equal(TAtom):
 		return v.Data.(string)
 	case v.VType.Matches(TDecimal):
-		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
+		_as4, _ := v.AsDecimal()
+		return strconv.FormatFloat(_as4, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as5, _ := v.AsBoolean()
+		if _as5 {
 			return "true"
 		}
 		return "false"
@@ -1257,7 +1347,8 @@ func (v Value) String() string {
 		}
 		return "Matrix(nil)"
 	case v.IsPath():
-		return v.AsPath().String()
+		_as6, _ := v.AsPath()
+		return _as6.String()
 	case v.VType.Equal(TList):
 		if tt, ok := v.Data.(TableTypeInfo); ok {
 			parts := make([]string, 0, tt.Record.Fields.Len())
@@ -1305,7 +1396,7 @@ func (v Value) String() string {
 		}
 		return "Array[" + strings.Join(parts, ",") + "]"
 	case v.IsObjectInstance():
-		oi := v.AsObjectInstance()
+		oi, _ := v.AsObjectInstance()
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1318,7 +1409,7 @@ func (v Value) String() string {
 		}
 		return name + "{" + strings.Join(parts, ",") + "}"
 	case v.IsObjectType():
-		ot := v.AsObjectType()
+		ot, _ := v.AsObjectType()
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1331,7 +1422,7 @@ func (v Value) String() string {
 		}
 		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
 	case v.IsDisjunct():
-		di := v.AsDisjunct()
+		di, _ := v.AsDisjunct()
 		parts := make([]string, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()

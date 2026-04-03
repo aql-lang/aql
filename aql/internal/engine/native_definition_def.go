@@ -8,16 +8,19 @@ import (
 // defName extracts a word name from a Value that is either a word or a string.
 func defName(v Value) string {
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as0, _ := v.AsWord()
+		return _as0.Name
 	}
-	return v.AsString()
+	_as1, _ := v.AsString()
+	return _as1
 }
 
 // defStackOnly returns true if the name word carries the /s modifier,
 // indicating the defined word should be stack-only (not forward precedence).
 func defStackOnly(v Value) bool {
 	if v.IsWord() {
-		return v.AsWord().ForceStack
+		_as2, _ := v.AsWord()
+		return _as2.ForceStack
 	}
 	return false
 }
@@ -179,7 +182,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 
 	// ObjectTypeInfo body: set the proper name in the type hierarchy.
 	if body.IsObjectType() {
-		info := body.AsObjectType()
+		info, _ := body.AsObjectType()
 		if info.Parent != nil {
 			// Child type: full name is Parent/Name (e.g. Object/Foo/Bar)
 			info.Name = info.Parent.Name + "/" + name

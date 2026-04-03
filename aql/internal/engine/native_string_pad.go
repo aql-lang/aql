@@ -10,7 +10,9 @@ func registerPad(r *Registry) {
 	// Forward-first: args[0]=width (forward), args[1]=string (stack).
 	// Usage: "ab" pad 5 → "ab   "
 	padHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doPad(args[1].AsString(), args[0].AsInteger(), strOpts{side: "right", fill: " "})
+		_as1, _ := args[1].AsString()
+		_as0, _ := args[0].AsInteger()
+		return doPad(_as1, _as0, strOpts{side: "right", fill: " "})
 	}
 
 	// pad: [integer, map, string] -> [string]
@@ -30,7 +32,9 @@ func registerPad(r *Registry) {
 				opts.side = "right"
 			}
 		}
-		return doPad(args[2].AsString(), args[0].AsInteger(), opts)
+		_as3, _ := args[2].AsString()
+		_as2, _ := args[0].AsInteger()
+		return doPad(_as3, _as2, opts)
 	}
 
 	r.Register("pad",

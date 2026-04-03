@@ -46,14 +46,14 @@ func registerModule(r *Registry) {
 
 	// import: [module-desc] -> [] — import all exports as defs
 	importAllHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		desc := args[0].AsModule()
+		desc, _ := args[0].AsModule()
 		installExports(r, desc, nil)
 		return nil, nil
 	}
 
 	// import: [list module-desc] -> [] — rename imports via list
 	importRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		desc := args[1].AsModule()
+		desc, _ := args[1].AsModule()
 		if args[0].Data == nil {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 		}
@@ -62,7 +62,7 @@ func registerModule(r *Registry) {
 
 	// import: [word/atom module-desc] -> [] — rename single export
 	importSingleRenameHandler := func(newName string, args []Value) ([]Value, error) {
-		desc := args[1].AsModule()
+		desc, _ := args[1].AsModule()
 		return nil, installSingleRename(r, desc, newName)
 	}
 
@@ -74,7 +74,7 @@ func registerModule(r *Registry) {
 	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[0].AsString()
+		path, _ := args[0].AsString()
 		if isNativeModImport(path) {
 			return nil, resolveNativeMod(r, path)
 		}
@@ -103,7 +103,7 @@ func registerModule(r *Registry) {
 
 	// import: [list string] -> [] — import from file or bare module with renaming.
 	importFileRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := args[1].AsString()
+		path, _ := args[1].AsString()
 		if !isFilePath(path) {
 			resolved, err := resolveBareModule(r, path)
 			if err != nil {
@@ -192,7 +192,8 @@ func registerModule(r *Registry) {
 		Signature{
 			Args: []Type{TAtom, TModule},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return importSingleRenameHandler(args[0].AsAtom(), args)
+				_as0, _ := args[0].AsAtom()
+				return importSingleRenameHandler(_as0, args)
 			},
 		},
 		Signature{
@@ -267,7 +268,8 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			if eargs[1].Data == nil {
 				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 			}
-			exportHandler(eargs[0].AsAtom(), eargs[1].AsMap())
+			_as1, _ := eargs[0].AsAtom()
+			exportHandler(_as1, eargs[1].AsMap())
 			return nil, nil
 		},
 	}, Signature{
@@ -276,7 +278,8 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			if eargs[1].Data == nil {
 				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 			}
-			exportHandler(eargs[0].AsString(), eargs[1].AsMap())
+			_as2, _ := eargs[0].AsString()
+			exportHandler(_as2, eargs[1].AsMap())
 			return nil, nil
 		},
 	})
@@ -284,7 +287,7 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// Promote strings to words for code evaluation inside module.
 	promoteToWord := func(v Value) Value {
 		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-			name := v.AsString()
+			name, _ := v.AsString()
 			if modReg.Lookup(name) != nil {
 				return NewWord(name)
 			}
@@ -566,11 +569,12 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 func resolveModuleExport(modReg *Registry, v Value) Value {
 	var name string
 	if v.IsWord() {
-		name = v.AsWord().Name
+		_as3, _ := v.AsWord()
+		name = _as3.Name
 	} else if v.VType.Matches(TString) {
-		name = v.AsString()
+		name, _ = v.AsString()
 	} else if v.IsAtom() {
-		name = v.AsAtom()
+		name, _ = v.AsAtom()
 	} else {
 		return v
 	}
@@ -627,13 +631,16 @@ func resolveNativeMod(r *Registry, path string) error {
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.
 func valToAtomOrString(v Value) string {
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as4, _ := v.AsWord()
+		return _as4.Name
 	}
 	if v.IsAtom() {
-		return v.AsAtom()
+		_as5, _ := v.AsAtom()
+		return _as5
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as6, _ := v.AsString()
+		return _as6
 	}
 	return v.String()
 }

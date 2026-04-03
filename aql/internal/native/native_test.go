@@ -65,12 +65,14 @@ func TestCloneHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("a")
-	if v.AsInteger() != 1 {
-		t.Errorf("expected 1, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 1 {
+		t.Errorf("expected 1, got %d", vi)
 	}
 	v, _ = m.Get("b")
-	if v.AsString() != "hello" {
-		t.Errorf("expected hello, got %s", v.AsString())
+	vs, _ := v.AsString()
+	if vs != "hello" {
+		t.Errorf("expected hello, got %s", vs)
 	}
 }
 
@@ -127,8 +129,9 @@ func TestGetpathHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 42 {
+		t.Errorf("expected 42, got %d", ri)
 	}
 }
 
@@ -138,8 +141,9 @@ func TestGetpathHandlerTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsString() != "hello" {
-		t.Errorf("expected hello, got %s", result[0].AsString())
+	rs, _ := result[0].AsString()
+	if rs != "hello" {
+		t.Errorf("expected hello, got %s", rs)
 	}
 }
 
@@ -156,8 +160,9 @@ func TestSetpathHandler(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'b'")
 	}
-	if v.AsInteger() != 2 {
-		t.Errorf("expected 2, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 2 {
+		t.Errorf("expected 2, got %d", vi)
 	}
 }
 
@@ -172,8 +177,9 @@ func TestSetpathHandlerNewKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if check[0].AsString() != "new" {
-		t.Errorf("expected new, got %s", check[0].AsString())
+	cs, _ := check[0].AsString()
+	if cs != "new" {
+		t.Errorf("expected new, got %s", cs)
 	}
 }
 
@@ -188,8 +194,9 @@ func TestInjectHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("greeting")
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs, _ := v.AsString()
+	if vs != "Alice" {
+		t.Errorf("expected Alice, got %s", vs)
 	}
 }
 
@@ -220,7 +227,7 @@ func TestJoinDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s != "a,b,c" {
 		t.Errorf("expected a,b,c got %s", s)
 	}
@@ -232,7 +239,7 @@ func TestJoinSepHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s != "a-b" {
 		t.Errorf("expected a-b got %s", s)
 	}
@@ -246,7 +253,7 @@ func TestJsonifyDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s == "" {
 		t.Error("expected non-empty JSON string")
 	}
@@ -259,7 +266,7 @@ func TestJsonifyFlagsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s == "" {
 		t.Error("expected non-empty JSON string")
 	}
@@ -276,11 +283,13 @@ func TestMergeHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, ok := m.Get("x")
-	if !ok || v.AsInteger() != 1 {
+	vi, _ := v.AsInteger()
+	if !ok || vi != 1 {
 		t.Error("expected x=1")
 	}
 	v, ok = m.Get("y")
-	if !ok || v.AsInteger() != 2 {
+	vi, _ = v.AsInteger()
+	if !ok || vi != 2 {
 		t.Error("expected y=2")
 	}
 }
@@ -294,8 +303,9 @@ func TestMergeHandlerOverwrite(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("x")
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 99 {
+		t.Errorf("expected 99, got %d", vi)
 	}
 }
 
@@ -306,7 +316,7 @@ func TestPadDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if len(s) == 0 {
 		t.Error("expected non-empty padded string")
 	}
@@ -317,7 +327,7 @@ func TestPadWidthHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if len(s) < 10 {
 		t.Errorf("expected at least 10 chars, got %d", len(s))
 	}
@@ -348,8 +358,9 @@ func TestSizeHandlerList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 3 {
-		t.Errorf("expected 3, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 3 {
+		t.Errorf("expected 3, got %d", ri)
 	}
 }
 
@@ -359,8 +370,9 @@ func TestSizeHandlerMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 2 {
-		t.Errorf("expected 2, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 2 {
+		t.Errorf("expected 2, got %d", ri)
 	}
 }
 
@@ -369,8 +381,9 @@ func TestSizeHandlerString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 5 {
-		t.Errorf("expected 5, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 5 {
+		t.Errorf("expected 5, got %d", ri)
 	}
 }
 
@@ -528,8 +541,9 @@ func TestWrapSafetyCheck(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1, got %d", len(result))
 	}
-	if result[0].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 42 {
+		t.Errorf("expected 42, got %d", ri)
 	}
 }
 

@@ -24,14 +24,17 @@ func TestMergeMaps(t *testing.T) {
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
 	c, _ := m.Get("c")
-	if a.AsInteger() != 1 {
-		t.Errorf("expected a=1, got %d", a.AsInteger())
+	ai1, _ := a.AsInteger()
+	bi1, _ := b.AsInteger()
+	ci1, _ := c.AsInteger()
+	if ai1 != 1 {
+		t.Errorf("expected a=1, got %d", ai1)
 	}
-	if b.AsInteger() != 3 {
-		t.Errorf("expected b=3 (overridden), got %d", b.AsInteger())
+	if bi1 != 3 {
+		t.Errorf("expected b=3 (overridden), got %d", bi1)
 	}
-	if c.AsInteger() != 4 {
-		t.Errorf("expected c=4, got %d", c.AsInteger())
+	if ci1 != 4 {
+		t.Errorf("expected c=4, got %d", ci1)
 	}
 }
 
@@ -48,14 +51,17 @@ func TestMergeNested(t *testing.T) {
 	x, _ := im.Get("x")
 	y, _ := im.Get("y")
 	z, _ := im.Get("z")
-	if x.AsInteger() != 1 {
-		t.Errorf("expected x=1, got %d", x.AsInteger())
+	xi1, _ := x.AsInteger()
+	yi1, _ := y.AsInteger()
+	zi1, _ := z.AsInteger()
+	if xi1 != 1 {
+		t.Errorf("expected x=1, got %d", xi1)
 	}
-	if y.AsInteger() != 3 {
-		t.Errorf("expected y=3 (overridden), got %d", y.AsInteger())
+	if yi1 != 3 {
+		t.Errorf("expected y=3 (overridden), got %d", yi1)
 	}
-	if z.AsInteger() != 4 {
-		t.Errorf("expected z=4, got %d", z.AsInteger())
+	if zi1 != 4 {
+		t.Errorf("expected z=4, got %d", zi1)
 	}
 }
 
@@ -72,14 +78,17 @@ func TestMergeListMap(t *testing.T) {
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
-	if list[0].AsString() != "a" {
-		t.Errorf("expected [0]=a, got %s", list[0].AsString())
+	l0s, _ := list[0].AsString()
+	l1s, _ := list[1].AsString()
+	l2s, _ := list[2].AsString()
+	if l0s != "a" {
+		t.Errorf("expected [0]=a, got %s", l0s)
 	}
-	if list[1].AsString() != "d" {
-		t.Errorf("expected [1]=d, got %s", list[1].AsString())
+	if l1s != "d" {
+		t.Errorf("expected [1]=d, got %s", l1s)
 	}
-	if list[2].AsString() != "c" {
-		t.Errorf("expected [2]=c, got %s", list[2].AsString())
+	if l2s != "c" {
+		t.Errorf("expected [2]=c, got %s", l2s)
 	}
 }
 
@@ -94,8 +103,9 @@ func TestMergeMapList(t *testing.T) {
 	if len(list) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(list))
 	}
-	if list[3].AsString() != "d" {
-		t.Errorf("expected [3]=d, got %s", list[3].AsString())
+	l3s, _ := list[3].AsString()
+	if l3s != "d" {
+		t.Errorf("expected [3]=d, got %s", l3s)
 	}
 }
 
@@ -122,7 +132,8 @@ func TestPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := result[0].AsList().Slice()
-	if len(list) != 3 || list[2].AsString() != "c" {
+	l2push, _ := list[2].AsString()
+	if len(list) != 3 || l2push != "c" {
 		t.Errorf("expected [a,b,c], got %v", result[0].String())
 	}
 }
@@ -154,8 +165,9 @@ func TestPop(t *testing.T) {
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
-	if result[1].AsString() != "c" {
-		t.Errorf("expected popped 'c', got %s", result[1].AsString())
+	r1pop, _ := result[1].AsString()
+	if r1pop != "c" {
+		t.Errorf("expected popped 'c', got %s", r1pop)
 	}
 }
 
@@ -167,7 +179,8 @@ func TestUnshift(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := result[0].AsList().Slice()
-	if len(list) != 3 || list[0].AsString() != "c" {
+	l0unshift, _ := list[0].AsString()
+	if len(list) != 3 || l0unshift != "c" {
 		t.Errorf("expected [c,a,b], got %v", result[0].String())
 	}
 }
@@ -180,7 +193,9 @@ func TestUnshiftSpread(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := result[0].AsList().Slice()
-	if len(list) != 4 || list[0].AsString() != "c" || list[1].AsString() != "d" {
+	lu0, _ := list[0].AsString()
+	lu1, _ := list[1].AsString()
+	if len(list) != 4 || lu0 != "c" || lu1 != "d" {
 		t.Errorf("expected [c,d,a,b], got %v", result[0].String())
 	}
 }
@@ -199,8 +214,9 @@ func TestShift(t *testing.T) {
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
-	if result[1].AsString() != "a" {
-		t.Errorf("expected shifted 'a', got %s", result[1].AsString())
+	r1shift, _ := result[1].AsString()
+	if r1shift != "a" {
+		t.Errorf("expected shifted 'a', got %s", r1shift)
 	}
 }
 
@@ -216,8 +232,9 @@ func TestGetpathSimple(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[0].AsInteger())
+	r0i1, _ := result[0].AsInteger()
+	if r0i1 != 42 {
+		t.Errorf("expected 42, got %d", r0i1)
 	}
 }
 
@@ -228,8 +245,9 @@ func TestGetpathTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", result[0].AsString())
+	r0s1, _ := result[0].AsString()
+	if r0s1 != "Alice" {
+		t.Errorf("expected Alice, got %s", r0s1)
 	}
 }
 
@@ -248,11 +266,13 @@ func TestSetpathSimple(t *testing.T) {
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	if a.AsInteger() != 1 {
-		t.Errorf("expected a=1, got %d", a.AsInteger())
+	ai2, _ := a.AsInteger()
+	bi2, _ := b.AsInteger()
+	if ai2 != 1 {
+		t.Errorf("expected a=1, got %d", ai2)
 	}
-	if b.AsInteger() != 99 {
-		t.Errorf("expected b=99, got %d", b.AsInteger())
+	if bi2 != 99 {
+		t.Errorf("expected b=99, got %d", bi2)
 	}
 }
 
@@ -266,11 +286,13 @@ func TestSetpathNewKey(t *testing.T) {
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	if a.AsInteger() != 1 {
-		t.Errorf("expected a=1, got %d", a.AsInteger())
+	ai5, _ := a.AsInteger()
+	bi5, _ := b.AsInteger()
+	if ai5 != 1 {
+		t.Errorf("expected a=1, got %d", ai5)
 	}
-	if b.AsInteger() != 2 {
-		t.Errorf("expected b=2, got %d", b.AsInteger())
+	if bi5 != 2 {
+		t.Errorf("expected b=2, got %d", bi5)
 	}
 }
 
@@ -289,11 +311,13 @@ func TestCloneMap(t *testing.T) {
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	if a.AsInteger() != 1 {
-		t.Errorf("expected a=1, got %d", a.AsInteger())
+	ai3, _ := a.AsInteger()
+	bi3, _ := b.AsInteger()
+	if ai3 != 1 {
+		t.Errorf("expected a=1, got %d", ai3)
 	}
-	if b.AsInteger() != 2 {
-		t.Errorf("expected b=2, got %d", b.AsInteger())
+	if bi3 != 2 {
+		t.Errorf("expected b=2, got %d", bi3)
 	}
 }
 
@@ -314,8 +338,9 @@ func TestInjectPaths(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs2, _ := v.AsString()
+	if vs2 != "Alice" {
+		t.Errorf("expected Alice, got %s", vs2)
 	}
 }
 
@@ -336,15 +361,17 @@ func TestValidateReturnsSpec(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'name' in result")
 	}
-	if name.AsString() != "$STRING" {
-		t.Errorf("expected $STRING, got %s", name.AsString())
+	nameS, _ := name.AsString()
+	if nameS != "$STRING" {
+		t.Errorf("expected $STRING, got %s", nameS)
 	}
 	age, ok := m.Get("age")
 	if !ok {
 		t.Fatal("expected key 'age' in result")
 	}
-	if age.AsString() != "$NUMBER" {
-		t.Errorf("expected $NUMBER, got %s", age.AsString())
+	ageS, _ := age.AsString()
+	if ageS != "$NUMBER" {
+		t.Errorf("expected $NUMBER, got %s", ageS)
 	}
 }
 
@@ -370,7 +397,8 @@ func TestWalkFlat(t *testing.T) {
 		m := leaf.AsMap()
 		p, _ := m.Get("path")
 		v, _ := m.Get("value")
-		paths[p.AsString()] = v.String()
+		ps1, _ := p.AsString()
+		paths[ps1] = v.String()
 	}
 	if _, ok := paths["a"]; !ok {
 		t.Error("missing path 'a'")
@@ -396,7 +424,8 @@ func TestWalkNested(t *testing.T) {
 	for _, leaf := range leaves {
 		m := leaf.AsMap()
 		p, _ := m.Get("path")
-		paths[p.AsString()] = true
+		ps2, _ := p.AsString()
+		paths[ps2] = true
 	}
 	for _, want := range []string{"a.x", "a.y", "b"} {
 		if !paths[want] {
@@ -448,10 +477,12 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	if a.AsInteger() != 1 {
+	ai6, _ := a.AsInteger()
+	bi6, _ := b.AsInteger()
+	if ai6 != 1 {
 		t.Errorf("expected a=1, got %v", a)
 	}
-	if b.AsInteger() != 2 {
+	if bi6 != 2 {
 		t.Errorf("expected b=2, got %v", b)
 	}
 }
@@ -497,13 +528,16 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	x, _ := aim.Get("x")
 	y, _ := aim.Get("y")
 	b, _ := rm.Get("b")
-	if x.AsInteger() != 1 {
+	xi2, _ := x.AsInteger()
+	yi2, _ := y.AsInteger()
+	bi7, _ := b.AsInteger()
+	if xi2 != 1 {
 		t.Errorf("expected x=1, got %v", x)
 	}
-	if y.AsInteger() != 2 {
+	if yi2 != 2 {
 		t.Errorf("expected y=2, got %v", y)
 	}
-	if b.AsInteger() != 3 {
+	if bi7 != 3 {
 		t.Errorf("expected b=3, got %v", b)
 	}
 }
@@ -545,7 +579,8 @@ func TestWalkBeforeReplace(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsInteger() != 99 {
+	r0i2, _ := result[0].AsInteger()
+	if r0i2 != 99 {
 		t.Errorf("expected 99, got %v", result[0])
 	}
 }
@@ -586,8 +621,9 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsString() != "" {
-		t.Errorf("expected empty string (root path), got %q", result[0].AsString())
+	r0s2, _ := result[0].AsString()
+	if r0s2 != "" {
+		t.Errorf("expected empty string (root path), got %q", r0s2)
 	}
 }
 
@@ -640,10 +676,12 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	m := result[0].AsMap()
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	if a.AsInteger() != 1 {
+	ai7, _ := a.AsInteger()
+	bi8, _ := b.AsInteger()
+	if ai7 != 1 {
 		t.Errorf("expected a=1, got %v", a)
 	}
-	if b.AsInteger() != 2 {
+	if bi8 != 2 {
 		t.Errorf("expected b=2, got %v", b)
 	}
 }
@@ -699,7 +737,8 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsInteger() != 99 {
+	r0i3, _ := result[0].AsInteger()
+	if r0i3 != 99 {
 		t.Errorf("expected 99 (after replaces all), got %v", result[0])
 	}
 }
@@ -756,13 +795,16 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	x, _ := im.Get("x")
 	y, _ := im.Get("y")
 	b, _ := m.Get("b")
-	if x.AsInteger() != 1 {
+	xi3, _ := x.AsInteger()
+	yi3, _ := y.AsInteger()
+	bi9, _ := b.AsInteger()
+	if xi3 != 1 {
 		t.Errorf("expected x=1, got %v", x)
 	}
-	if y.AsInteger() != 2 {
+	if yi3 != 2 {
 		t.Errorf("expected y=2, got %v", y)
 	}
-	if b.AsInteger() != 3 {
+	if bi9 != 3 {
 		t.Errorf("expected b=3, got %v", b)
 	}
 }

@@ -2,7 +2,8 @@ package engine
 
 func registerInspect(r *Registry) {
 	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := args[0].AsWord().Name
+		_as0, _ := args[0].AsWord()
+		name := _as0.Name
 
 		// If the word names a user-defined type, return a type inspection.
 		if stack := r.DefStacks[name]; len(stack) > 0 {
@@ -23,7 +24,7 @@ func registerInspect(r *Registry) {
 	r.Register("inspect", Signature{
 		Args: []Type{TAtom},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			name := args[0].AsAtom()
+			name, _ := args[0].AsAtom()
 			if stack := r.DefStacks[name]; len(stack) > 0 {
 				top := stack[len(stack)-1]
 				if isTypeValue(top) {
@@ -114,7 +115,7 @@ func buildTypeInspection(name string, tv Value) Value {
 	switch {
 	case tv.IsRecordType():
 		result.Set("kind", NewAtom("record"))
-		rt := tv.AsRecordType()
+		rt, _ := tv.AsRecordType()
 		fields := NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
@@ -124,7 +125,7 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	case tv.IsTableType():
 		result.Set("kind", NewAtom("table"))
-		tt := tv.AsTableType()
+		tt, _ := tv.AsTableType()
 		fields := NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
@@ -134,7 +135,7 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	case tv.IsDisjunct():
 		result.Set("kind", NewAtom("disjunct"))
-		di := tv.AsDisjunct()
+		di, _ := tv.AsDisjunct()
 		alts := make([]Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			alts[i] = NewString(alt.VType.String())
@@ -143,12 +144,14 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	case tv.IsTypedList():
 		result.Set("kind", NewAtom("typed_list"))
-		child := tv.AsChildType().Child
+		_as1, _ := tv.AsChildType()
+		child := _as1.Child
 		result.Set("child", NewString(child.VType.String()))
 
 	case tv.IsTypedMap():
 		result.Set("kind", NewAtom("typed_map"))
-		child := tv.AsChildType().Child
+		_as2, _ := tv.AsChildType()
+		child := _as2.Child
 		result.Set("child", NewString(child.VType.String()))
 
 	default:

@@ -41,7 +41,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	if !skipForward && e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
 		if next.IsWord() {
-			nw := next.AsWord()
+			nw, _ := next.AsWord()
 			if len(e.registry.DefStacks[nw.Name]) > 0 {
 				preferWordSig = true
 			}
@@ -110,7 +110,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				if tok.IsWord() {
-					ww := tok.AsWord()
+					ww, _ := tok.AsWord()
 
 					// 1.4: "end", ")" — boundary, stop.
 					if ww.Name == "end" || ww.Name == ")" {

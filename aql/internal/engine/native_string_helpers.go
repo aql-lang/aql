@@ -74,11 +74,13 @@ func parseStrOpts(v Value) strOpts {
 	m := v.AsMap()
 
 	if val, ok := m.Get("u"); ok && val.VType.Matches(TBoolean) {
-		o.u = val.AsBoolean()
+		_as0, _ := val.AsBoolean()
+		o.u = _as0
 	}
 	if val, ok := m.Get("norm"); ok {
 		if val.VType.Matches(TBoolean) {
-			if val.AsBoolean() {
+			_as1, _ := val.AsBoolean()
+			if _as1 {
 				o.normForm = "NFC"
 			}
 		} else if val.VType.Matches(TString) || val.IsAtom() {
@@ -123,37 +125,46 @@ func parseStrOpts(v Value) strOpts {
 		o.occ = valToString(val)
 	}
 	if val, ok := m.Get("from"); ok && val.VType.Matches(TInteger) {
-		o.from = val.AsInteger()
+		_as2, _ := val.AsInteger()
+		o.from = _as2
 		o.hasFrom = true
 	}
 	if val, ok := m.Get("count"); ok && val.VType.Matches(TInteger) {
-		o.count = val.AsInteger()
+		_as3, _ := val.AsInteger()
+		o.count = _as3
 		o.hasCount = true
 	}
 	if val, ok := m.Get("lim"); ok && val.VType.Matches(TInteger) {
-		o.lim = val.AsInteger()
+		_as4, _ := val.AsInteger()
+		o.lim = _as4
 		o.hasLim = true
 	}
 
 	// boolean flags
 	if val, ok := m.Get("skipEmpty"); ok && val.VType.Matches(TBoolean) {
-		o.skipEmpty = val.AsBoolean()
+		_as5, _ := val.AsBoolean()
+		o.skipEmpty = _as5
 	}
 	if val, ok := m.Get("skipNullish"); ok && val.VType.Matches(TBoolean) {
-		o.skipNullish = val.AsBoolean()
+		_as6, _ := val.AsBoolean()
+		o.skipNullish = _as6
 	}
 	if val, ok := m.Get("keepEmpty"); ok && val.VType.Matches(TBoolean) {
-		o.keepEmpty = val.AsBoolean()
+		_as7, _ := val.AsBoolean()
+		o.keepEmpty = _as7
 	}
 	if val, ok := m.Get("trimParts"); ok && val.VType.Matches(TBoolean) {
-		o.trimParts = val.AsBoolean()
+		_as8, _ := val.AsBoolean()
+		o.trimParts = _as8
 	}
 	if val, ok := m.Get("wholeWord"); ok && val.VType.Matches(TBoolean) {
-		o.wholeWord = val.AsBoolean()
+		_as9, _ := val.AsBoolean()
+		o.wholeWord = _as9
 	}
 	if val, ok := m.Get("anchored"); ok {
 		if val.VType.Matches(TBoolean) {
-			if val.AsBoolean() {
+			_as10, _ := val.AsBoolean()
+			if _as10 {
 				o.anchored = "both"
 			}
 		} else {
@@ -161,21 +172,26 @@ func parseStrOpts(v Value) strOpts {
 		}
 	}
 	if val, ok := m.Get("fromEnd"); ok && val.VType.Matches(TBoolean) {
-		o.fromEnd = val.AsBoolean()
+		_as11, _ := val.AsBoolean()
+		o.fromEnd = _as11
 	}
 	if val, ok := m.Get("trunc"); ok && val.VType.Matches(TBoolean) {
-		o.trunc = val.AsBoolean()
+		_as12, _ := val.AsBoolean()
+		o.trunc = _as12
 	}
 	if val, ok := m.Get("litRepl"); ok && val.VType.Matches(TBoolean) {
-		o.litRepl = val.AsBoolean()
+		_as13, _ := val.AsBoolean()
+		o.litRepl = _as13
 	}
 
 	// normalize-specific
 	if val, ok := m.Get("trim"); ok && val.VType.Matches(TBoolean) {
-		o.trim = val.AsBoolean()
+		_as14, _ := val.AsBoolean()
+		o.trim = _as14
 	}
 	if val, ok := m.Get("collapseWs"); ok && val.VType.Matches(TBoolean) {
-		o.collapseWs = val.AsBoolean()
+		_as15, _ := val.AsBoolean()
+		o.collapseWs = _as15
 	}
 	if val, ok := m.Get("eol"); ok {
 		o.eol = valToString(val)
@@ -187,7 +203,8 @@ func parseStrOpts(v Value) strOpts {
 	// groups for match
 	if val, ok := m.Get("groups"); ok {
 		if val.VType.Matches(TBoolean) {
-			o.groupBool = val.AsBoolean()
+			_as16, _ := val.AsBoolean()
+			o.groupBool = _as16
 		} else {
 			o.groups = valToString(val)
 		}

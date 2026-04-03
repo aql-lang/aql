@@ -243,7 +243,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 			return nil
 		}
 
-		fwd := e.stack[fwdIdx].AsForward()
+		fwd, _ := e.stack[fwdIdx].AsForward()
 		funcIdx := fwd.FuncIndex
 		collectedCount := fwd.CollectedArgs
 		stackArgCount := fwd.StackArgs
@@ -307,7 +307,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		}
 
 		if tok.IsWord() {
-			ww := tok.AsWord()
+			ww, _ := tok.AsWord()
 			if ww.Name == "end" || ww.Name == ")" {
 				break
 			}
@@ -341,12 +341,14 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 						continue
 					}
 					// Also catch word("(") not yet converted to OpenParen.
-					if v.IsWord() && v.AsWord().Name == "(" {
+					_as0, _ := v.AsWord()
+					if v.IsWord() && _as0.Name == "(" {
 						depth++
 						e.stepOpenParen() // converts to OpenParen and advances pointer
 						continue
 					}
-					if v.IsWord() && v.AsWord().Name == ")" {
+					_as1, _ := v.AsWord()
+					if v.IsWord() && _as1.Name == ")" {
 						depth--
 						if depth == 0 {
 							// This is the matching ")" for our paren.
@@ -424,7 +426,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 
 // stepWord handles a word (function reference) at the current pointer.
 func (e *Engine) stepWord(val Value) error {
-	w := val.AsWord()
+	w, _ := val.AsWord()
 
 	if w.Name == "end" {
 		return e.stepEnd()
@@ -806,7 +808,7 @@ func (e *Engine) stepLiteral() error {
 		return nil
 	}
 
-	fwd := e.stack[fwdIdx].AsForward()
+	fwd, _ := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
 	// Check if the value matches the next expected arg positionally.
@@ -866,7 +868,7 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-			w := e.stack[funcIdx].AsWord()
+			w, _ := e.stack[funcIdx].AsWord()
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
@@ -963,9 +965,9 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			}
 			if len(keyResult) == 1 {
 				if keyResult[0].VType.Matches(TString) {
-					resolvedKey = keyResult[0].AsString()
+					resolvedKey, _ = keyResult[0].AsString()
 				} else if keyResult[0].IsAtom() {
-					resolvedKey = keyResult[0].AsAtom()
+					resolvedKey, _ = keyResult[0].AsAtom()
 				} else {
 					resolvedKey = valToString(keyResult[0])
 				}
@@ -1290,7 +1292,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
 func (e *Engine) implicitEnd(fwdIdx int) error {
-	fwd := e.stack[fwdIdx].AsForward()
+	fwd, _ := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 	collectedCount := fwd.CollectedArgs
 	stackArgCount := fwd.StackArgs
@@ -1325,7 +1327,7 @@ func (e *Engine) stepEnd() error {
 		return nil
 	}
 
-	fwd := e.stack[fwdIdx].AsForward()
+	fwd, _ := e.stack[fwdIdx].AsForward()
 	funcIdx := fwd.FuncIndex
 
 	// Remove forward and end from the stack.
@@ -1361,7 +1363,7 @@ func (e *Engine) stepEnd() error {
 // The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
 // the body ran. Any defs added since are popped via uninstallDef.
 func (e *Engine) stepDefCleanup(val Value) {
-	info := val.AsDefCleanup()
+	info, _ := val.AsDefCleanup()
 	reg := info.Registry
 	for name, stack := range reg.DefStacks {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
@@ -1373,7 +1375,7 @@ func (e *Engine) stepDefCleanup(val Value) {
 }
 
 func (e *Engine) stepMark(val Value) {
-	info := val.AsMark()
+	info, _ := val.AsMark()
 	if e.marks == nil {
 		e.marks = make(map[string]bool)
 	}
@@ -1390,7 +1392,7 @@ func (e *Engine) stepMark(val Value) {
 // When the move carries a ForCont (for-loop continuation), stepMoveCont is
 // called instead of the basic one-shot replay.
 func (e *Engine) stepMove(val Value) error {
-	info := val.AsMove()
+	info, _ := val.AsMove()
 	moveIdx := e.pointer
 
 	if e.marks == nil || !e.marks[info.To] {
@@ -1400,7 +1402,8 @@ func (e *Engine) stepMove(val Value) error {
 	// Scan the stack to find the mark's current position.
 	markIdx := -1
 	for i := 0; i < len(e.stack); i++ {
-		if e.stack[i].IsMark() && e.stack[i].AsMark().ID == info.To {
+		_as2, _ := e.stack[i].AsMark()
+		if e.stack[i].IsMark() && _as2.ID == info.To {
 			markIdx = i
 			break
 		}
@@ -1425,7 +1428,7 @@ func (e *Engine) stepMove(val Value) error {
 	}
 
 	// Get the saved body from the mark.
-	markInfo := e.stack[markIdx].AsMark()
+	markInfo, _ := e.stack[markIdx].AsMark()
 
 	// Remove from hash table.
 	delete(e.marks, info.To)
@@ -1547,12 +1550,13 @@ func (e *Engine) handleLoopBreak() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
 		if e.stack[i].IsMove() {
-			info := e.stack[i].AsMove()
+			info, _ := e.stack[i].AsMove()
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+					_as3, _ := e.stack[j].AsMark()
+					if e.stack[j].IsMark() && _as3.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -1582,12 +1586,13 @@ func (e *Engine) handleLoopContinue() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
 		if e.stack[i].IsMove() {
-			info := e.stack[i].AsMove()
+			info, _ := e.stack[i].AsMove()
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					if e.stack[j].IsMark() && e.stack[j].AsMark().ID == info.To {
+					_as4, _ := e.stack[j].AsMark()
+					if e.stack[j].IsMark() && _as4.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -1656,7 +1661,7 @@ func (e *Engine) stepCloseParen() error {
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if e.stack[i].IsForward() {
 				hasFwd = true
-				fwd := e.stack[i].AsForward()
+				fwd, _ := e.stack[i].AsForward()
 				funcIdx := fwd.FuncIndex
 				collectedCount := fwd.CollectedArgs
 				stackArgCount := fwd.StackArgs
@@ -1720,7 +1725,7 @@ func (e *Engine) stepCloseParen() error {
 	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsForward() {
-			fwd := e.stack[i].AsForward()
+			fwd, _ := e.stack[i].AsForward()
 			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d forward args)",
 				fwd.FuncName, fwd.ExpectedArgs)
 		}
@@ -1739,7 +1744,7 @@ func (e *Engine) stepCloseParen() error {
 	// Check for return type validation.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsReturnCheck() {
-			rc := e.stack[i].AsReturnCheck()
+			rc, _ := e.stack[i].AsReturnCheck()
 			e.stackRemove(i)
 			closeIdx--
 
@@ -1795,11 +1800,14 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 	for i := openIdx + 1; i < len(e.stack); i++ {
 		if e.stack[i].IsOpenParen() {
 			depth++
-		} else if e.stack[i].IsWord() && e.stack[i].AsWord().Name == ")" {
-			if depth == 0 {
-				return i
+		} else if e.stack[i].IsWord() {
+			sw, _ := e.stack[i].AsWord()
+			if sw.Name == ")" {
+				if depth == 0 {
+					return i
+				}
+				depth--
 			}
-			depth--
 		}
 	}
 	return -1
@@ -1818,7 +1826,7 @@ func (e *Engine) effectiveResolved() []Value {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd := e.stack[i].AsForward()
+			fwd, _ := e.stack[i].AsForward()
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -1873,7 +1881,7 @@ func (e *Engine) peekForwardValue() Value {
 	}
 	next := e.stack[e.pointer+1]
 	if next.IsWord() {
-		nw := next.AsWord()
+		nw, _ := next.AsWord()
 		switch nw.Name {
 		case "true":
 			return NewBoolean(true)
@@ -1911,7 +1919,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		return
 	}
 
-	w := e.stack[funcIdx].AsWord()
+	w, _ := e.stack[funcIdx].AsWord()
 	fn := e.registry.Lookup(w.Name)
 
 	// Check if stack match exists with current resolved values.
@@ -1928,7 +1936,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 				break
 			}
 			if e.stack[i].IsForward() {
-				fwd := e.stack[i].AsForward()
+				fwd, _ := e.stack[i].AsForward()
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
 				// Exclude collected forward args (before function word).
@@ -2024,7 +2032,7 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd := e.stack[i].AsForward()
+			fwd, _ := e.stack[i].AsForward()
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
@@ -2052,7 +2060,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd := e.stack[i].AsForward()
+			fwd, _ := e.stack[i].AsForward()
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {

@@ -25,7 +25,7 @@ import "fmt"
 func registerFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
 	forCountHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		n := args[0].AsInteger()
+		n, _ := args[0].AsInteger()
 		body := args[1]
 		return runForLoop(r, 0, n, 1, "i", body)
 	}
@@ -146,17 +146,23 @@ func parseRange(elems []Value) (start, end, step int64, err error) {
 		if !elems[0].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].VType)
 		}
-		return 0, elems[0].AsInteger(), 1, nil
+		_as0, _ := elems[0].AsInteger()
+		return 0, _as0, 1, nil
 	case 2:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		return elems[0].AsInteger(), elems[1].AsInteger(), 1, nil
+		_as2, _ := elems[0].AsInteger()
+		_as1, _ := elems[1].AsInteger()
+		return _as2, _as1, 1, nil
 	case 3:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) || !elems[2].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		return elems[0].AsInteger(), elems[1].AsInteger(), elems[2].AsInteger(), nil
+		_as5, _ := elems[0].AsInteger()
+		_as4, _ := elems[1].AsInteger()
+		_as3, _ := elems[2].AsInteger()
+		return _as5, _as4, _as3, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("range: expected 1-3 elements, got %d", len(elems))
 	}

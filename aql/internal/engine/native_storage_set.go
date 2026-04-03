@@ -52,7 +52,8 @@ func registerSet(r *Registry) {
 		if arr == nil {
 			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
 		}
-		idx := int(args[0].AsInteger())
+		_as0, _ := args[0].AsInteger()
+		idx := int(_as0)
 		if !arr.Set(idx, args[1]) {
 			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
 		}

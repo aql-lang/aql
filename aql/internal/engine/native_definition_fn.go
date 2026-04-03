@@ -158,7 +158,8 @@ func isSigTypeValue(v Value) bool {
 	}
 	// Word that is a type name (from token-based API).
 	if v.IsWord() {
-		name := v.AsWord().Name
+		_as0, _ := v.AsWord()
+		name := _as0.Name
 		if _, ok := typeNames[name]; ok {
 			return true
 		}
@@ -169,7 +170,7 @@ func isSigTypeValue(v Value) bool {
 	}
 	// Atom or String that is a type name.
 	if v.VType.Matches(TAtom) || v.VType.Matches(TString) {
-		name := v.AsString()
+		name, _ := v.AsString()
 		if _, ok := typeNames[name]; ok {
 			return true
 		}
@@ -274,7 +275,8 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 
 		// Check if this element is a "?" marker — skip it but mark
 		// the previous param as optional.
-		if elem.IsWord() && elem.AsWord().Name == "?" {
+		_as1, _ := elem.AsWord()
+		if elem.IsWord() && _as1.Name == "?" {
 			if len(params) > 0 {
 				params[len(params)-1].Optional = true
 			}
@@ -284,7 +286,8 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		// Check if this element is a "|" marker — record the barrier
 		// position. Forward collection stops here; remaining args
 		// are matched from the stack.
-		if elem.IsWord() && elem.AsWord().Name == "|" {
+		_as2, _ := elem.AsWord()
+		if elem.IsWord() && _as2.Name == "|" {
 			barrierPos = len(params)
 			continue
 		}
@@ -323,7 +326,8 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				// Detect optional from disjunct containing None:
 				// either from ? syntax (key?) or explicit (Integer or None).
 				if typeVal.IsDisjunct() {
-					alts := typeVal.AsDisjunct().Alternatives
+					_as3, _ := typeVal.AsDisjunct()
+					alts := _as3.Alternatives
 					for _, alt := range alts {
 						if alt.VType.Equal(TNone) {
 							optional = true
@@ -356,7 +360,8 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 
 		case elem.IsWord():
 			// Unnamed parameter: bare word is a type name
-			typeName := elem.AsWord().Name
+			_as4, _ := elem.AsWord()
+			typeName := _as4.Name
 			paramType, err := resolveTypeName(typeName)
 			if err != nil {
 				return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
@@ -397,7 +402,8 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 		return v.VType, nil, nil
 	}
 	if v.IsWord() {
-		name := v.AsWord().Name
+		_as5, _ := v.AsWord()
+		name := _as5.Name
 		if defVal := lookupDefType(r, name); defVal != nil {
 			return resolveDefType(*defVal)
 		}
@@ -405,7 +411,7 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.VType.Matches(TString) {
-		name := v.AsString()
+		name, _ := v.AsString()
 		if defVal := lookupDefType(r, name); defVal != nil {
 			return resolveDefType(*defVal)
 		}
@@ -414,7 +420,7 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 	}
 	// Atoms (unquoted text in data context) may be type names.
 	if v.VType.Matches(TAtom) {
-		name := v.AsString()
+		name, _ := v.AsString()
 		if defVal := lookupDefType(r, name); defVal != nil {
 			return resolveDefType(*defVal)
 		}
@@ -458,12 +464,13 @@ func lookupDefType(r *Registry, name string) *Value {
 // with matching fields satisfy the signature.
 func resolveDefType(v Value) (Type, *Value, error) {
 	if v.IsRecordType() {
-		rt := v.AsRecordType()
+		rt, _ := v.AsRecordType()
 		pat := NewMap(rt.Fields)
 		return TMap, &pat, nil
 	}
 	if v.IsOptionsType() {
-		pat := NewOptionsType(v.AsOptionsType().Fields)
+		_as6, _ := v.AsOptionsType()
+		pat := NewOptionsType(_as6.Fields)
 		return TMap, &pat, nil
 	}
 	// Other type values (disjuncts, type literals, etc.) use their type directly.

@@ -19,7 +19,7 @@ func registerConvert(r *Registry) {
 			if !src.VType.Matches(TInteger) {
 				return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 			}
-			n := src.AsInteger()
+			n, _ := src.AsInteger()
 			var s string
 			switch base {
 			case "hex":
@@ -77,7 +77,8 @@ func registerConvert(r *Registry) {
 			case src.VType.Matches(TBoolean):
 				return src, nil
 			case src.VType.Matches(TNumber):
-				return NewBoolean(src.AsNumber() != 0), nil
+				_as0, _ := src.AsNumber()
+				return NewBoolean(_as0 != 0), nil
 			default:
 				text := valToString(src)
 				switch text {

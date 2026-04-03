@@ -47,13 +47,16 @@ func TestMarkMoveBasic(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 values on stack, got %d: %v", len(result), result)
 	}
-	if !result[0].VType.Matches(TInteger) || result[0].AsInteger() != 11 {
+	_as0, _ := result[0].AsInteger()
+	if !result[0].VType.Matches(TInteger) || _as0 != 11 {
 		t.Errorf("result[0] = %v, want 11", result[0])
 	}
-	if !result[1].VType.Matches(TInteger) || result[1].AsInteger() != 22 {
+	_as1, _ := result[1].AsInteger()
+	if !result[1].VType.Matches(TInteger) || _as1 != 22 {
 		t.Errorf("result[1] = %v, want 22", result[1])
 	}
-	if !result[2].VType.Matches(TInteger) || result[2].AsInteger() != 33 {
+	_as2, _ := result[2].AsInteger()
+	if !result[2].VType.Matches(TInteger) || _as2 != 33 {
 		t.Errorf("result[2] = %v, want 33", result[2])
 	}
 }
@@ -199,10 +202,12 @@ func TestMarkMoveWithLiterals(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 values, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 1 {
+	_as3, _ := result[0].AsInteger()
+	if _as3 != 1 {
 		t.Errorf("result[0] = %v, want 1", result[0])
 	}
-	if result[1].AsInteger() != 5 {
+	_as4, _ := result[1].AsInteger()
+	if _as4 != 5 {
 		t.Errorf("result[1] = %v, want 5", result[1])
 	}
 }

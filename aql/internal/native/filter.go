@@ -62,7 +62,8 @@ func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			return false
 		}
 		if len(cbResult) > 0 && cbResult[0].VType.Matches(engine.TBoolean) {
-			return cbResult[0].AsBoolean()
+			b, _ := cbResult[0].AsBoolean()
+			return b
 		}
 		return false
 	})

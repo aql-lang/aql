@@ -13,7 +13,8 @@ func valuesEqual(a, b engine.Value) bool {
 	}
 	switch {
 	case a.IsWord():
-		aw, bw := a.AsWord(), b.AsWord()
+		aw, _ := a.AsWord()
+		bw, _ := b.AsWord()
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
 			aw.ForceStack == bw.ForceStack &&
@@ -21,9 +22,13 @@ func valuesEqual(a, b engine.Value) bool {
 	case a.IsOpenParen():
 		return true
 	case a.VType.Matches(engine.TString):
-		return a.AsString() == b.AsString()
+		as, _ := a.AsString()
+		bs, _ := b.AsString()
+		return as == bs
 	case a.VType.Matches(engine.TInteger):
-		return a.AsInteger() == b.AsInteger()
+		an, _ := a.AsInteger()
+		bn, _ := b.AsInteger()
+		return an == bn
 	default:
 		return a.String() == b.String()
 	}
@@ -556,7 +561,8 @@ func TestParseTypedListMap(t *testing.T) {
 	if !got[0].IsTypedList() {
 		t.Fatalf("expected typed list, got %s", got[0])
 	}
-	child := got[0].AsChildType().Child
+	ct0a, _ := got[0].AsChildType()
+	child := ct0a.Child
 	if !child.VType.Equal(engine.TMap) {
 		t.Errorf("expected child type map, got %s", child.VType)
 	}
@@ -601,8 +607,9 @@ func TestParseTypedListMapChild(t *testing.T) {
 	if len(got) != 1 || !got[0].IsTypedList() {
 		t.Fatalf("expected 1 typed list, got %v", got)
 	}
-	child := got[0].AsChildType().Child
-	m := child.AsMap()
+	ct0b, _ := got[0].AsChildType()
+	child0b := ct0b.Child
+	m := child0b.AsMap()
 	if m.Len() != 2 {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
@@ -674,11 +681,12 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if len(got) != 1 || !got[0].IsTypedMap() {
 		t.Fatalf("expected 1 typed map, got %v", got)
 	}
-	child := got[0].AsChildType().Child
-	if !child.VType.Equal(engine.TMap) {
-		t.Errorf("expected child type map, got %s", child.VType)
+	ct0c, _ := got[0].AsChildType()
+	child0c := ct0c.Child
+	if !child0c.VType.Equal(engine.TMap) {
+		t.Errorf("expected child type map, got %s", child0c.VType)
 	}
-	m := child.AsMap()
+	m := child0c.AsMap()
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
@@ -762,11 +770,13 @@ func TestParseMapWithBooleans(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	aVal, _ := m.Get("a")
-	if !aVal.IsWord() || aVal.AsWord().Name != "true" {
+	aw, _ := aVal.AsWord()
+	if !aVal.IsWord() || aw.Name != "true" {
 		t.Errorf("expected word(true), got %s", aVal)
 	}
 	bVal, _ := m.Get("b")
-	if !bVal.IsWord() || bVal.AsWord().Name != "false" {
+	bw, _ := bVal.AsWord()
+	if !bVal.IsWord() || bw.Name != "false" {
 		t.Errorf("expected word(false), got %s", bVal)
 	}
 }
@@ -908,12 +918,14 @@ func TestParseDataMapWithNil(t *testing.T) {
 	m := got[0].AsMap()
 	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
-	if !bVal.IsWord() || bVal.AsWord().Name != "true" {
+	bw2, _ := bVal.AsWord()
+	if !bVal.IsWord() || bw2.Name != "true" {
 		t.Errorf("expected word(true), got %s", bVal)
 	}
 	// c should be word "false" (word context)
 	cVal, _ := m.Get("c")
-	if !cVal.IsWord() || cVal.AsWord().Name != "false" {
+	cw2, _ := cVal.AsWord()
+	if !cVal.IsWord() || cw2.Name != "false" {
 		t.Errorf("expected word(false), got %s", cVal)
 	}
 }
@@ -973,13 +985,16 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 	// With word context in lists, true/false become words (resolved at runtime),
 	// and null becomes a word (resolved to atom at runtime).
-	if !elems[0].IsWord() || elems[0].AsWord().Name != "true" {
+	ew0, _ := elems[0].AsWord()
+	ew1, _ := elems[1].AsWord()
+	ew2, _ := elems[2].AsWord()
+	if !elems[0].IsWord() || ew0.Name != "true" {
 		t.Errorf("expected word(true), got %s", elems[0])
 	}
-	if !elems[1].IsWord() || elems[1].AsWord().Name != "false" {
+	if !elems[1].IsWord() || ew1.Name != "false" {
 		t.Errorf("expected word(false), got %s", elems[1])
 	}
-	if !elems[2].IsWord() || elems[2].AsWord().Name != "null" {
+	if !elems[2].IsWord() || ew2.Name != "null" {
 		t.Errorf("expected word(null), got %s", elems[2])
 	}
 }
@@ -1237,7 +1252,8 @@ func TestParseMapWithStringValues(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Matches(engine.TString) || xVal.AsString() != "hello" {
+	xValS, _ := xVal.AsString()
+	if !xVal.VType.Matches(engine.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1445,11 +1461,11 @@ func TestResolveTextValueTypes(t *testing.T) {
 		input string
 		check func(engine.Value) bool
 	}{
-		{"true", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && v.AsBoolean() }},
-		{"false", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && !v.AsBoolean() }},
+		{"true", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && b }},
+		{"false", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && !b }},
 		{"Number", func(v engine.Value) bool { return v.VType.Equal(engine.TNumber) }},
 		{"String", func(v engine.Value) bool { return v.VType.Equal(engine.TString) }},
-		{"hello", func(v engine.Value) bool { return v.VType.Matches(engine.TAtom) && v.AsString() == "hello" }},
+		{"hello", func(v engine.Value) bool { s, _ := v.AsString(); return v.VType.Matches(engine.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -1466,14 +1482,16 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+	b1, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || v.AsBoolean() {
+	b2, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -1500,7 +1518,8 @@ func TestConvertDataValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+	b3, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }
@@ -1584,8 +1603,11 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		} else if !tt.ok && err == nil {
 			t.Errorf("parseWord(%q) expected error", tt.input)
 		}
-		if tt.ok && v.AsWord().Name != tt.name {
-			t.Errorf("parseWord(%q) name = %q, want %q", tt.input, v.AsWord().Name, tt.name)
+		if tt.ok {
+			vw, _ := v.AsWord()
+			if vw.Name != tt.name {
+				t.Errorf("parseWord(%q) name = %q, want %q", tt.input, vw.Name, tt.name)
+			}
 		}
 	}
 }
@@ -1686,7 +1708,8 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if !val.IsDisjunct() {
 		t.Fatalf("expected disjunct for optional field, got %s", val.String())
 	}
-	alts := val.AsDisjunct().Alternatives
+	dj, _ := val.AsDisjunct()
+	alts := dj.Alternatives
 	if len(alts) != 2 {
 		t.Fatalf("expected 2 alternatives, got %d", len(alts))
 	}

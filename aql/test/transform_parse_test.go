@@ -20,8 +20,9 @@ func TestTransformInject(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	if v.AsString() != "hello" {
-		t.Errorf("expected hello, got %s", v.AsString())
+	vs1, _ := v.AsString()
+	if vs1 != "hello" {
+		t.Errorf("expected hello, got %s", vs1)
 	}
 }
 
@@ -35,8 +36,9 @@ func TestTransformPassthrough(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("x")
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi1, _ := v.AsInteger()
+	if vi1 != 99 {
+		t.Errorf("expected 99, got %d", vi1)
 	}
 }
 
@@ -50,8 +52,9 @@ func TestTransformNestedPath(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("val")
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	vi2, _ := v.AsInteger()
+	if vi2 != 42 {
+		t.Errorf("expected 42, got %d", vi2)
 	}
 }
 
@@ -71,7 +74,8 @@ func TestDefTransformWithLoad(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs2, _ := v.AsString()
+	if vs2 != "Alice" {
+		t.Errorf("expected Alice, got %s", vs2)
 	}
 }

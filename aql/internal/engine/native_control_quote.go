@@ -24,7 +24,7 @@ func registerQuote(r *Registry) {
 		Signature{
 			Args: []Type{TWord},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				w := args[0].AsWord()
+				w, _ := args[0].AsWord()
 				v := NewAtom(w.Name)
 				v.Quoted = true
 				return []Value{v}, nil

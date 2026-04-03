@@ -25,7 +25,7 @@ const (
 func traceColorize(v Value) string {
 	switch {
 	case v.IsWord():
-		w := v.AsWord()
+		w, _ := v.AsWord()
 		if w.ForceStack {
 			return cYellow + w.Name + "/s" + cReset
 		}
@@ -34,7 +34,7 @@ func traceColorize(v Value) string {
 		}
 		return cYellow + w.Name + cReset
 	case v.IsForward():
-		f := v.AsForward()
+		f, _ := v.AsForward()
 		return cMagenta + fmt.Sprintf("→%s(%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs) + cReset
 	case v.IsOpenParen():
 		return cDim + "(" + cReset
@@ -46,7 +46,8 @@ func traceColorize(v Value) string {
 	case v.VType.Matches(TInteger):
 		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as0, _ := v.AsBoolean()
+		if _as0 {
 			return cCyan + "true" + cReset
 		}
 		return cCyan + "false" + cReset

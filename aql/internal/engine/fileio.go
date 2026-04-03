@@ -83,17 +83,17 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	m := opts.AsMap()
 
 	if v, ok := m.Get("enc"); ok && v.VType.Matches(TString) {
-		enc = v.AsString()
+		enc, _ = v.AsString()
 	}
 	if v, ok := m.Get("fmt"); ok && v.VType.Matches(TString) {
-		format = v.AsString()
+		format, _ = v.AsString()
 		fmtExplicit = true
 	}
 	if v, ok := m.Get("mode"); ok && v.VType.Matches(TString) {
-		mode = v.AsString()
+		mode, _ = v.AsString()
 	}
 	if v, ok := m.Get("nl"); ok && v.VType.Matches(TString) {
-		nl = v.AsString()
+		nl, _ = v.AsString()
 	}
 
 	return
@@ -163,20 +163,25 @@ func sortedMapKeys(m map[string]any) []string {
 func valueToJsonic(v Value) string {
 	switch {
 	case v.VType.Matches(TString):
-		return fmt.Sprintf("%q", v.AsString())
+		_as0, _ := v.AsString()
+		return fmt.Sprintf("%q", _as0)
 	case v.VType.Matches(TDecimal):
-		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
+		_as1, _ := v.AsDecimal()
+		return strconv.FormatFloat(_as1, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.AsInteger())
+		_as2, _ := v.AsInteger()
+		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as3, _ := v.AsBoolean()
+		if _as3 {
 			return "true"
 		}
 		return "false"
 	case v.VType.Equal(TNone):
 		return "null"
 	case v.VType.Equal(TAtom):
-		return fmt.Sprintf("%q", v.AsAtom())
+		_as4, _ := v.AsAtom()
+		return fmt.Sprintf("%q", _as4)
 	case v.VType.Equal(TList):
 		if _, ok := v.Data.([]Value); ok {
 			elems := v.AsList()
@@ -207,9 +212,11 @@ func registerFileIO(r *Registry) {
 	// extractPath returns the path string from a String or Path value.
 	extractPath := func(v Value) string {
 		if v.IsPath() {
-			return v.AsPath().String()
+			_as5, _ := v.AsPath()
+			return _as5.String()
 		}
-		return v.AsString()
+		_as6, _ := v.AsString()
+		return _as6
 	}
 
 	// returnPath wraps the result path: if input was a Path, return Path; else String.
@@ -245,7 +252,7 @@ func registerFileIO(r *Registry) {
 	// write: [path/string, string] -> [path/string]
 	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content := args[1].AsString()
+		content, _ := args[1].AsString()
 		result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
 		if err != nil {
 			return result, err
@@ -256,7 +263,7 @@ func registerFileIO(r *Registry) {
 	// write: [path/string, string, map] -> [path/string]
 	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content := args[1].AsString()
+		content, _ := args[1].AsString()
 		enc, format, mode, nl, _ := parseFileOpts(args[2])
 		result, err := doWrite(r, path, content, enc, format, mode, nl)
 		if err != nil {

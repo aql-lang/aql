@@ -47,7 +47,10 @@ func sliceAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 // sliceStartHandler calls voxgigstruct.Slice with a start index.
 // With forward-first matching: args[0]=start (forward), args[1]=data (stack).
 func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	start := args[0].AsInteger()
+	start, err := args[0].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: start: %w", err)
+	}
 	data := valueToAny(args[1])
 	result := voxgigstruct.Slice(data, int(start))
 	val, err := anyToValue(result)
@@ -61,8 +64,14 @@ func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // With forward-first matching: args[0]=start (forward), args[1]=end (forward),
 // args[2]=data (stack).
 func sliceStartEndHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	start := args[0].AsInteger()
-	end := args[1].AsInteger()
+	start, err := args[0].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: start: %w", err)
+	}
+	end, err := args[1].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: end: %w", err)
+	}
 	data := valueToAny(args[2])
 	result := voxgigstruct.Slice(data, int(start), int(end))
 	val, err := anyToValue(result)

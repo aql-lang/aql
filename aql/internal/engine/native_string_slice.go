@@ -19,8 +19,10 @@ func registerSlice(r *Registry) {
 	// 3-arg: slice start end data
 	// Forward-first: args[0]=start, args[1]=end, args[2]=data (stack).
 	sliceStartEndHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		start := int(args[0].AsInteger())
-		end := int(args[1].AsInteger())
+		_as0, _ := args[0].AsInteger()
+		start := int(_as0)
+		_as1, _ := args[1].AsInteger()
+		end := int(_as1)
 		data := valueToSliceArg(args[2])
 		result := voxgigstruct.Slice(data, start, end)
 		return sliceResult(result)
@@ -29,7 +31,8 @@ func registerSlice(r *Registry) {
 	// 2-arg: slice start data
 	// Forward-first: args[0]=start, args[1]=data (stack).
 	sliceStartHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		start := int(args[0].AsInteger())
+		_as2, _ := args[0].AsInteger()
+		start := int(_as2)
 		data := valueToSliceArg(args[1])
 		result := voxgigstruct.Slice(data, start)
 		return sliceResult(result)
@@ -55,7 +58,8 @@ func registerSlice(r *Registry) {
 // valueToSliceArg converts a Value to the interface{} expected by voxgigstruct.Slice.
 func valueToSliceArg(v Value) interface{} {
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as3, _ := v.AsString()
+		return _as3
 	}
 	if v.VType.Matches(TList) {
 		list := v.AsList()

@@ -5,14 +5,20 @@ import "strings"
 func registerReplace(r *Registry) {
 	// replace: [string, string, string] -> [string]
 	replaceHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return doReplace(args[0].AsString(), args[1].AsString(), args[2].AsString(),
+		_as2, _ := args[0].AsString()
+		_as1, _ := args[1].AsString()
+		_as0, _ := args[2].AsString()
+		return doReplace(_as2, _as1, _as0,
 			strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 	}
 
 	// replace: [string, string, string, map] -> [string]
 	replaceOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[3])
-		return doReplace(args[0].AsString(), args[1].AsString(), args[2].AsString(), opts)
+		_as5, _ := args[0].AsString()
+		_as4, _ := args[1].AsString()
+		_as3, _ := args[2].AsString()
+		return doReplace(_as5, _as4, _as3, opts)
 	}
 
 	r.Register("replace",

@@ -51,7 +51,7 @@ func baseValue(t Type) (Value, error) {
 // non-none alternative.
 func baseValueForConstraint(constraint Value) (Value, error) {
 	if constraint.IsDisjunct() {
-		di := constraint.AsDisjunct()
+		di, _ := constraint.AsDisjunct()
 		for _, alt := range di.Alternatives {
 			if alt.Data == nil && !alt.VType.Equal(TNone) {
 				return baseValue(alt.VType)

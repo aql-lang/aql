@@ -25,13 +25,16 @@ func registerGet(r *Registry) {
 	// getKey extracts the key string from any key-typed value.
 	getKey := func(v Value) string {
 		if v.IsWord() {
-			return v.AsWord().Name
+			_as0, _ := v.AsWord()
+			return _as0.Name
 		}
 		if v.VType.Matches(TString) {
-			return v.AsString()
+			_as1, _ := v.AsString()
+			return _as1
 		}
 		if v.IsAtom() {
-			return v.AsAtom()
+			_as2, _ := v.AsAtom()
+			return _as2
 		}
 		return fmt.Sprintf("%v", v.Data)
 	}
@@ -44,7 +47,7 @@ func registerGet(r *Registry) {
 		}
 		// Integer key: list index access.
 		if key.VType.Matches(TInteger) {
-			idx := key.AsInteger()
+			idx, _ := key.AsInteger()
 			if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
 				i := int(idx)
 				if i < 0 || i >= list.Len() {
@@ -80,7 +83,7 @@ func registerGet(r *Registry) {
 			}
 			return []Value{val}, nil
 		}
-		oi := container.AsObjectInstance()
+		oi, _ := container.AsObjectInstance()
 		val, ok := oi.GetField(k)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -106,7 +109,8 @@ func registerGet(r *Registry) {
 		if arr == nil {
 			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
 		}
-		val, ok := arr.Get(int(args[0].AsInteger()))
+		_as3, _ := args[0].AsInteger()
+		val, ok := arr.Get(int(_as3))
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}

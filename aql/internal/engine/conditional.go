@@ -10,9 +10,11 @@ package engine
 func isTruthy(v Value) bool {
 	switch {
 	case v.VType.Matches(TBoolean):
-		return v.AsBoolean()
+		_as0, _ := v.AsBoolean()
+		return _as0
 	case v.VType.Matches(TInteger):
-		return v.AsInteger() != 0
+		_as1, _ := v.AsInteger()
+		return _as1 != 0
 	case v.VType.Equal(TNone):
 		return false
 	case v.VType.Equal(TList):

@@ -78,7 +78,8 @@ func TestDecisionCond(t *testing.T) {
 func TestDecisionEvalCondTrue(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{field:age,op:"gte",value:18} {age:25} decision.eval-cond`)
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected true for age=25 gte 18")
 	}
 }
@@ -86,7 +87,8 @@ func TestDecisionEvalCondTrue(t *testing.T) {
 func TestDecisionEvalCondFalse(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{field:age,op:"gte",value:18} {age:15} decision.eval-cond`)
-	if result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if b {
 		t.Error("expected false for age=15 gte 18")
 	}
 }
@@ -94,7 +96,8 @@ func TestDecisionEvalCondFalse(t *testing.T) {
 func TestDecisionEvalCondEq(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{field:status,op:"eq",value:"active"} {status:"active"} decision.eval-cond`)
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected true for status eq active")
 	}
 }
@@ -108,7 +111,8 @@ func TestDecisionEvalPredAllOf(t *testing.T) {
 		{age:25,score:80}
 		decision.eval-pred
 	`)
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected all-of true for age=25,score=80")
 	}
 }
@@ -120,7 +124,8 @@ func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 		{age:25,score:30}
 		decision.eval-pred
 	`)
-	if result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if b {
 		t.Error("expected all-of false for age=25,score=30")
 	}
 }
@@ -132,7 +137,8 @@ func TestDecisionEvalPredAnyOf(t *testing.T) {
 		{age:10,score:80}
 		decision.eval-pred
 	`)
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected any-of true for age=10,score=80")
 	}
 }
@@ -144,7 +150,8 @@ func TestDecisionEvalPredNotOf(t *testing.T) {
 		{age:25}
 		decision.eval-pred
 	`)
-	if !result[0].AsBoolean() {
+	b, _ := result[0].AsBoolean()
+	if !b {
 		t.Error("expected not-of(age lt 18) true for age=25")
 	}
 }
@@ -162,7 +169,8 @@ func TestDecisionTableFirst(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
-	if cat.AsString() != "adult" {
+	s, _ := cat.AsString()
+	if s != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
 }
@@ -178,7 +186,8 @@ func TestDecisionTableFirstMinor(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
-	if cat.AsString() != "minor" {
+	s, _ := cat.AsString()
+	if s != "minor" {
 		t.Errorf("expected minor, got %v", cat)
 	}
 }
@@ -195,7 +204,8 @@ func TestDecisionTableUnique(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	grade, _ := m.Get("grade")
-	if grade.AsString() != "pass" {
+	s, _ := grade.AsString()
+	if s != "pass" {
 		t.Errorf("expected pass, got %v", grade)
 	}
 }
@@ -224,7 +234,8 @@ func TestDecisionTableNoMatch(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	errVal, _ := m.Get("error")
-	if errVal.AsString() != "no-match" {
+	s, _ := errVal.AsString()
+	if s != "no-match" {
 		t.Errorf("expected no-match error, got %v", result[0])
 	}
 }
@@ -240,7 +251,8 @@ func TestDecisionTableCompound(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	tier, _ := m.Get("tier")
-	if tier.AsString() != "premium" {
+	s, _ := tier.AsString()
+	if s != "premium" {
 		t.Errorf("expected premium, got %v", tier)
 	}
 }
@@ -262,7 +274,8 @@ func TestDecisionTree(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	cat, _ := m.Get("category")
-	if cat.AsString() != "adult" {
+	s, _ := cat.AsString()
+	if s != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
 }
@@ -280,7 +293,8 @@ func TestDecisionTreeMinor(t *testing.T) {
 		]})
 		tree {age:12} decision.eval-tree
 	`)
-	if result[0].AsString() != "too-young" {
+	s, _ := result[0].AsString()
+	if s != "too-young" {
 		t.Errorf("expected too-young, got %v", result[0])
 	}
 }
@@ -303,7 +317,8 @@ func TestDecisionTreeMultiLevel(t *testing.T) {
 		]})
 		tree {age:25,score:90} decision.eval-tree
 	`)
-	if result[0].AsString() != "approved" {
+	s, _ := result[0].AsString()
+	if s != "approved" {
 		t.Errorf("expected approved, got %v", result[0])
 	}
 }
@@ -321,7 +336,8 @@ func TestDecideTable(t *testing.T) {
 	`)
 	m := result[0].AsMap()
 	sign, _ := m.Get("sign")
-	if sign.AsString() != "positive" {
+	s, _ := sign.AsString()
+	if s != "positive" {
 		t.Errorf("expected positive, got %v", sign)
 	}
 }
@@ -339,7 +355,8 @@ func TestDecideTree(t *testing.T) {
 		]})
 		model {temp:35} decision.decide
 	`)
-	if result[0].AsString() != "hot" {
+	s, _ := result[0].AsString()
+	if s != "hot" {
 		t.Errorf("expected hot, got %v", result[0])
 	}
 }

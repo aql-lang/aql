@@ -295,7 +295,7 @@ func registerMake(r *Registry) {
 			}
 			return []Value{NewPath(parts, abs)}, nil
 		case srcVal.VType.Matches(TString) && srcVal.Data != nil:
-			s := srcVal.AsString()
+			s, _ := srcVal.AsString()
 			if len(s) > 0 && s[0] == '/' {
 				abs = true
 				s = s[1:]
@@ -319,7 +319,7 @@ func registerMake(r *Registry) {
 
 		// Object type instance creation.
 		if targetVal.IsObjectType() {
-			objType := targetVal.AsObjectType()
+			objType, _ := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
 		}
 
@@ -342,13 +342,13 @@ func registerMake(r *Registry) {
 
 		// Record type instance creation.
 		if targetVal.IsRecordType() {
-			recType := targetVal.AsRecordType()
+			recType, _ := targetVal.AsRecordType()
 			return makeRecord(recType, srcVal, false)
 		}
 
 		// Table type instance creation.
 		if targetVal.IsTableType() {
-			tableType := targetVal.AsTableType()
+			tableType, _ := targetVal.AsTableType()
 			recType := tableType.Record
 
 			if !srcVal.VType.Equal(TList) {
@@ -471,8 +471,8 @@ func registerMake(r *Registry) {
 			return nil, fmt.Errorf("make: prototype must be an object instance, got %s", protoVal.String())
 		}
 
-		objType := targetVal.AsObjectType()
-		protoInfo := protoVal.AsObjectInstance()
+		objType, _ := targetVal.AsObjectType()
+		protoInfo, _ := protoVal.AsObjectInstance()
 		return makeObject(objType, srcVal, &protoInfo)
 	}
 
@@ -505,12 +505,12 @@ func registerMake(r *Registry) {
 		}
 
 		if targetVal.IsObjectType() {
-			objType := targetVal.AsObjectType()
+			objType, _ := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
 		}
 
 		if targetVal.IsRecordType() {
-			recType := targetVal.AsRecordType()
+			recType, _ := targetVal.AsRecordType()
 			return makeRecord(recType, srcVal, useBase)
 		}
 
@@ -519,7 +519,7 @@ func registerMake(r *Registry) {
 			abs := false
 			if optsMap := optsVal.AsMap(); optsMap != nil {
 				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
-					abs = v.AsBoolean()
+					abs, _ = v.AsBoolean()
 				}
 			}
 			return makePath(srcVal, abs)
@@ -556,7 +556,7 @@ func registerMake(r *Registry) {
 	makeObjHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
 		if targetVal.IsObjectType() {
-			objType := targetVal.AsObjectType()
+			objType, _ := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)
 		}
 		return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
@@ -578,7 +578,7 @@ func registerMake(r *Registry) {
 			abs := false
 			if optsMap := optsVal.AsMap(); optsMap != nil {
 				if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
-					abs = v.AsBoolean()
+					abs, _ = v.AsBoolean()
 				}
 			}
 			return makePath(srcVal, abs)
@@ -641,7 +641,8 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 		case src.VType.Matches(TBoolean):
 			return src, nil
 		case src.VType.Matches(TNumber):
-			return NewBoolean(src.AsNumber() != 0), nil
+			_as0, _ := src.AsNumber()
+			return NewBoolean(_as0 != 0), nil
 		default:
 			text := valToString(src)
 			switch text {
@@ -693,7 +694,8 @@ func resolveWordValue(v Value) Value {
 	if !v.IsWord() {
 		return v
 	}
-	name := v.AsWord().Name
+	_as1, _ := v.AsWord()
+	name := _as1.Name
 	switch name {
 	case "true":
 		return NewBoolean(true)
@@ -726,9 +728,10 @@ func resolveFieldType(r *Registry, v Value) Value {
 	if v.Data != nil && (v.VType.Matches(TString) || v.VType.Matches(TAtom) || v.IsWord()) {
 		var name string
 		if v.IsWord() {
-			name = v.AsWord().Name
+			_as2, _ := v.AsWord()
+			name = _as2.Name
 		} else {
-			name = v.AsString()
+			name, _ = v.AsString()
 		}
 		stack := r.DefStacks[name]
 		if len(stack) > 0 {
@@ -748,7 +751,7 @@ func resolveFieldType(r *Registry, v Value) Value {
 		input := make([]Value, elems.Len())
 		for i, e := range elems.Slice() {
 			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
-				name := e.AsString()
+				name, _ := e.AsString()
 				if r.Lookup(name) != nil {
 					input[i] = NewWord(name)
 					continue

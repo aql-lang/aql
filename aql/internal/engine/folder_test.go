@@ -35,8 +35,10 @@ func TestFolderCreatesDir(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	if result[0].AsPath().String() != "a/b/c" {
-		t.Errorf("got %q, want %q", result[0].AsPath().String(), "a/b/c")
+	_as0, _ := result[0].AsPath()
+	if _as0.String() != "a/b/c" {
+		_as1, _ := result[0].AsPath()
+		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 	// Check that the directory was created in mem FS
 	resolved, _ := mem.ResolvePath("a/b/c")
@@ -55,8 +57,10 @@ func TestFolderAbsolutePath(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	if result[0].AsPath().String() != "/tmp/data" {
-		t.Errorf("got %q, want %q", result[0].AsPath().String(), "/tmp/data")
+	_as2, _ := result[0].AsPath()
+	if _as2.String() != "/tmp/data" {
+		_as3, _ := result[0].AsPath()
+		t.Errorf("got %q, want %q", _as3.String(), "/tmp/data")
 	}
 	if !mem.Dirs["/tmp/data"] {
 		t.Errorf("absolute dir not created; dirs=%v", mem.Dirs)

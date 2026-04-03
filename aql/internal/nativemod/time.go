@@ -104,7 +104,10 @@ func registerDate(r *engine.Registry) {
 	r.Register("date", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s := args[0].AsString()
+			s, err := args[0].AsString()
+			if err != nil {
+				return nil, err
+			}
 			t, err := time.Parse("2006-01-02", s)
 			if err != nil {
 				return nil, fmt.Errorf("date: invalid ISO 8601 date string: %q", s)
@@ -243,7 +246,10 @@ func registerFormat(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := args[0].AsDate()
-			layout := args[1].AsString()
+			layout, err := args[1].AsString()
+			if err != nil {
+				return nil, err
+			}
 			return []engine.Value{engine.NewString(t.Format(layout))}, nil
 		},
 	})
@@ -256,8 +262,11 @@ func registerAddDays(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := args[0].AsDate()
-			n := int(args[1].AsInteger())
-			return []engine.Value{engine.NewDate(t.AddDate(0, 0, n))}, nil
+			n64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDate(t.AddDate(0, 0, int(n64)))}, nil
 		},
 	})
 }
@@ -267,8 +276,11 @@ func registerAddMonths(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := args[0].AsDate()
-			n := int(args[1].AsInteger())
-			return []engine.Value{engine.NewDate(t.AddDate(0, n, 0))}, nil
+			n64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDate(t.AddDate(0, int(n64), 0))}, nil
 		},
 	})
 }
@@ -278,8 +290,11 @@ func registerAddYears(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := args[0].AsDate()
-			n := int(args[1].AsInteger())
-			return []engine.Value{engine.NewDate(t.AddDate(n, 0, 0))}, nil
+			n64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDate(t.AddDate(int(n64), 0, 0))}, nil
 		},
 	})
 }

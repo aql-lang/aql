@@ -126,7 +126,8 @@ func TestForBodyAccumulates(t *testing.T) {
 		t.Fatalf("expected 3 results, got %d: %v", len(result), result)
 	}
 	for idx, want := range []int64{0, 1, 2} {
-		if result[idx].AsInteger() != want {
+		_as0, _ := result[idx].AsInteger()
+		if _as0 != want {
 			t.Errorf("result[%d] = %v, want %d", idx, result[idx], want)
 		}
 	}

@@ -55,7 +55,7 @@ func registerObject(r *Registry) {
 		if !parentVal.IsObjectType() {
 			return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
 		}
-		parentInfo := parentVal.AsObjectType()
+		parentInfo, _ := parentVal.AsObjectType()
 
 		fields := parseObjectFields(m)
 

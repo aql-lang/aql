@@ -40,8 +40,10 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys.fs.mem not found")
 	}
-	if memVal.AsBoolean() != false {
-		t.Errorf("__sys.fs.mem = %v, want false", memVal.AsBoolean())
+	_as0, _ := memVal.AsBoolean()
+	if _as0 != false {
+		_as1, _ := memVal.AsBoolean()
+		t.Errorf("__sys.fs.mem = %v, want false", _as1)
 	}
 
 	// __sys.fs.impl = None
@@ -174,7 +176,8 @@ func TestSysValStoreSetGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error getting __val.x: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as2, _ := result[0].AsInteger()
+	if len(result) != 1 || _as2 != 42 {
 		t.Fatalf("got %v, want [42]", result)
 	}
 }

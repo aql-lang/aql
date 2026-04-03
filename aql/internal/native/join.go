@@ -46,7 +46,10 @@ func joinSepHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if !ok {
 		return nil, fmt.Errorf("join: expected list, got %T", data)
 	}
-	sep := args[1].AsString()
+	sep, err := args[1].AsString()
+	if err != nil {
+		return nil, fmt.Errorf("join: separator: %w", err)
+	}
 	result := voxgigstruct.Join(arr, sep)
 	return []engine.Value{engine.NewString(result)}, nil
 }

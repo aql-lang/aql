@@ -45,10 +45,11 @@ func registerFolder(r *Registry) {
 		parents := true
 		if optsMap := optsVal.AsMap(); optsMap != nil {
 			if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(TBoolean) {
-				parents = v.AsBoolean()
+				parents, _ = v.AsBoolean()
 			}
 		}
-		return doFolder(pathVal.AsPath(), parents, reg)
+		_as0, _ := pathVal.AsPath()
+		return doFolder(_as0, parents, reg)
 	}
 
 	folderHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -56,7 +57,8 @@ func registerFolder(r *Registry) {
 		if !pathVal.IsPath() {
 			return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 		}
-		return doFolder(pathVal.AsPath(), true, reg)
+		_as1, _ := pathVal.AsPath()
+		return doFolder(_as1, true, reg)
 	}
 
 	r.Register("folder",
