@@ -11,8 +11,10 @@ require (
 )
 
 require (
-	github.com/jsonicjs/multisource/go v0.1.1
-	golang.org/x/text v0.24.0
+	github.com/jsonicjs/directive/go v0.1.0 // indirect
+	github.com/jsonicjs/multisource/go v0.1.1 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
 )
 
 require github.com/jsonicjs/directive/go v0.1.0 // indirect

@@ -37,7 +37,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -78,6 +78,21 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "install" subcommand: aql install <name>-x.y.z [-r <url>]
 	if len(args) > 0 && args[0] == "install" {
 		return runInstall(args[1:], stdout, stderr)
+	}
+
+	// Handle "register" subcommand: aql register [-r <url>]
+	if len(args) > 0 && args[0] == "register" {
+		return runRegister(args[1:], stdin, stdout, stderr)
+	}
+
+	// Handle "login" subcommand: aql login [-r <url>]
+	if len(args) > 0 && args[0] == "login" {
+		return runLogin(args[1:], stdin, stdout, stderr)
+	}
+
+	// Handle "publish" subcommand: aql publish [-r <url>] [dir]
+	if len(args) > 0 && args[0] == "publish" {
+		return runPublish(args[1:], stdin, stdout, stderr)
 	}
 
 	// Handle "clean" subcommand: aql clean [dir]

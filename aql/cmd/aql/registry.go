@@ -20,6 +20,8 @@ import (
 // POST /api/publish accepts a module zip, validates it, and stores it.
 func registryHandler(registryDir string) http.Handler {
 	mux := http.NewServeMux()
+	store := NewUserStore(registryDir)
+
 	mux.HandleFunc("/module/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -45,11 +47,32 @@ func registryHandler(registryDir string) http.Handler {
 		w.Write(data)
 	})
 
+	mux.HandleFunc("/api/register", func(w http.ResponseWriter, r *http.Request) {
+		handleRegister(store, w, r)
+	})
+
+	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
+		handleLogin(store, w, r)
+	})
+
 	mux.HandleFunc("/api/publish", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		// Validate auth token.
+		auth := r.Header.Get("Authorization")
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token == "" || token == auth {
+			http.Error(w, "authorization required", http.StatusUnauthorized)
+			return
+		}
+		if _, err := store.ValidateToken(token); err != nil {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+
 		handlePublish(registryDir, w, r)
 	})
 
