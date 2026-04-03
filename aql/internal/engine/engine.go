@@ -1033,23 +1033,44 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Pure stack match. Find the corresponding FnSig to pass to
 	// execFnDefSig (which needs FnSig for named params and CallAQL).
+	// Try exact match first, then fall back to subtype matching
+	// (e.g. registered sig has TInteger, FnSig wrapper has TNumber).
 	nArgs := len(matchedSig.Args)
-	for i := range fnDef.Sigs {
-		fs := &fnDef.Sigs[i]
-		if len(fs.Params) != nArgs {
-			continue
-		}
-		paramsMatch := true
-		for j := range fs.Params {
-			if !fs.Params[j].Type.Equal(matchedSig.Args[j]) {
-				paramsMatch = false
-				break
+
+	findFnSig := func(useMatches bool) *FnSig {
+		for i := range fnDef.Sigs {
+			fs := &fnDef.Sigs[i]
+			if len(fs.Params) != nArgs {
+				continue
+			}
+			paramsMatch := true
+			for j := range fs.Params {
+				if useMatches {
+					// Allow subtype matching (e.g. TInteger matches TNumber)
+					// but skip TAny params — those should only match via exact Equal.
+					if fs.Params[j].Type.Equal(TAny) || !matchedSig.Args[j].Matches(fs.Params[j].Type) {
+						paramsMatch = false
+						break
+					}
+				} else {
+					if !fs.Params[j].Type.Equal(matchedSig.Args[j]) {
+						paramsMatch = false
+						break
+					}
+				}
+			}
+			if paramsMatch {
+				return fs
 			}
 		}
-		if !paramsMatch {
-			continue
-		}
-		// Build args from recorded positions.
+		return nil
+	}
+
+	fs := findFnSig(false)
+	if fs == nil {
+		fs = findFnSig(true)
+	}
+	if fs != nil {
 		var args []Value
 		if nArgs > 0 {
 			args = make([]Value, nArgs)
