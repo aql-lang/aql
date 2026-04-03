@@ -71,13 +71,10 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
-  .line { margin-bottom: 4px; }
+  .line { margin-bottom: 4px; user-select: text; }
   .line-input { color: var(--blue); cursor: pointer; }
-  .line-input:active { opacity: 0.7; }
   .line-result { color: var(--green); cursor: pointer; }
-  .line-result:active { opacity: 0.7; }
   .line-error { color: var(--red); cursor: pointer; }
-  .line-error:active { opacity: 0.7; }
   .line-info { color: var(--subtext); font-style: italic; }
   #input-area {
     display: flex;
@@ -390,6 +387,8 @@
     if (cls !== 'line-info') {
       div.setAttribute('data-code', rawCode !== undefined ? rawCode : text);
       div.addEventListener('click', function() {
+        var sel = window.getSelection();
+        if (sel && sel.toString().length > 0) return;
         var code = this.getAttribute('data-code');
         appendToInput(code);
       });
