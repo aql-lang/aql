@@ -20,12 +20,15 @@ func registerPrint(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("print",
-		Signature{
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "print",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handler,
-		},
-	)
+		}},
+	})
 
 	handlerStr := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
@@ -34,12 +37,15 @@ func registerPrint(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("printstr",
-		Signature{
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "printstr",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handlerStr,
-		},
-	)
+		}},
+	})
 }
 
 // formatForPrint returns the print representation of a value.

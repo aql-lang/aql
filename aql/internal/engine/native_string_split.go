@@ -18,10 +18,14 @@ func registerSplit(r *Registry) {
 		return doSplit(_as3, _as2, opts)
 	}
 
-	r.Register("split",
-		Signature{Args: []Type{TString, TString, TMap}, Handler: splitOptsHandler},
-		Signature{Args: []Type{TString, TString}, Handler: splitHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "split",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TString, TMap}, Handler: splitOptsHandler},
+			{Args: []Type{TString, TString}, Handler: splitHandler},
+		},
+	})
 }
 
 func doSplit(input, sep string, o strOpts) ([]Value, error) {

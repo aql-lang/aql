@@ -483,7 +483,7 @@ func TestWalkHandlerEmpty(t *testing.T) {
 func TestFuncDefinitions(t *testing.T) {
 	tests := []struct {
 		name string
-		fn   func() NativeFunc
+		fn   func() engine.NativeFunc
 	}{
 		{"clone", cloneFunc},
 		{"create", createFunc},
@@ -532,7 +532,7 @@ func TestWrapSafetyCheck(t *testing.T) {
 	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return []engine.Value{engine.NewInteger(42)}, nil
 	}
-	handler := wrapSafetyCheck(inner)
+	handler := engine.WrapSafetyCheck(inner)
 
 	result, herr := handler([]engine.Value{engine.NewString("hello")}, nil, nil, nil)
 	if herr != nil {
@@ -551,7 +551,7 @@ func TestWrapSafetyCheckRejectsTypeLiteral(t *testing.T) {
 	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return []engine.Value{engine.NewInteger(1)}, nil
 	}
-	handler := wrapSafetyCheck(inner)
+	handler := engine.WrapSafetyCheck(inner)
 
 	// Type literal has Data==nil — should be rejected.
 	_, herr := handler([]engine.Value{engine.NewTypeLiteral(engine.TMap)}, nil, nil, nil)
@@ -564,7 +564,7 @@ func TestWrapSafetyCheckError(t *testing.T) {
 	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return nil, fmt.Errorf("test error")
 	}
-	handler := wrapSafetyCheck(inner)
+	handler := engine.WrapSafetyCheck(inner)
 
 	_, herr := handler(nil, nil, nil, nil)
 	if herr == nil {

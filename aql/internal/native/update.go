@@ -11,15 +11,15 @@ import (
 //   - [map(kind:"api")] — updates an entity via the SDK
 //   - [table, map]      — finds a record by "id" and merges the map's fields into it
 //   - [map, map]        — record type + patch: returns empty table
-func updateFunc() NativeFunc {
+func updateFunc() engine.NativeFunc {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return NativeFunc{
+	return engine.NativeFunc{
 		Name:             "update",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			// Entity object signatures (highest priority).
 			{
 				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},

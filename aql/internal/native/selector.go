@@ -10,11 +10,11 @@ import (
 // selectorFunc returns the "selector" native function definition.
 // selector has forward precedence and one signature:
 //   - [any, map] — selects children matching the query map using voxgig struct Select
-func selectorFunc() NativeFunc {
-	return NativeFunc{
+func selectorFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "selector",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TMap},
 				Handler: selectorHandler,

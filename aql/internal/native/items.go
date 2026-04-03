@@ -10,11 +10,11 @@ import (
 // itemsFunc returns the "items" native function definition.
 // items has forward precedence and one signature:
 //   - [any] — returns key-value pairs as a list of [key, value] lists
-func itemsFunc() NativeFunc {
-	return NativeFunc{
+func itemsFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "items",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},
 				Handler: itemsHandler,

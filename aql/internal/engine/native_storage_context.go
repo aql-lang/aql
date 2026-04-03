@@ -8,8 +8,11 @@ import "fmt"
 // The context is a Store (Object/Store), allowing get/set to operate on it
 // directly and prototype chain resolution for nested scopes.
 func registerContext(r *Registry) {
-	r.Register("context",
-		Signature{
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "context",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				store := reg.ContextStore()
@@ -18,6 +21,6 @@ func registerContext(r *Registry) {
 				}
 				return []Value{NewStoreValue(store)}, nil
 			},
-		},
-	)
+		}},
+	})
 }

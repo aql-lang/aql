@@ -32,17 +32,22 @@ func registerTypeDef(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("type",
-		Signature{
-			Args:    []Type{TString, TAny},
-			Handler: typeHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "type",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TString, TAny},
+				Handler: typeHandler,
+			},
+			{
+				Args:      []Type{TAtom, TAny},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   typeHandler,
+			},
 		},
-		Signature{
-			Args:      []Type{TAtom, TAny},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   typeHandler,
-		},
-	)
+	})
 }
 
 // isTypeValue reports whether a value is a valid type definition body.

@@ -8,13 +8,15 @@ import (
 func registerPow(r *Registry) {
 	// Signature [Integer, Integer]: args[0] = nearest to word (top/forward),
 	// args[1] = farther (deeper/later). `a b pow` → args=[b,a] → a^b.
-	registerBinaryIntOp(r, "pow", func(a, b int64) (int64, error) {
-		if a < 0 {
-			return 0, fmt.Errorf("pow: negative exponent %d", a)
+	intHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as2, _ := args[0].AsInteger()
+		_as1, _ := args[1].AsInteger()
+		if _as2 < 0 {
+			return nil, fmt.Errorf("pow: negative exponent %d", _as2)
 		}
 		result := int64(1)
-		base := b
-		exp := a
+		base := _as1
+		exp := _as2
 		for exp > 0 {
 			if exp%2 == 1 {
 				result *= base
@@ -22,10 +24,37 @@ func registerPow(r *Registry) {
 			base *= base
 			exp /= 2
 		}
-		return result, nil
-	})
+		return []Value{NewInteger(result)}, nil
+	}
+
 	// pow: decimal exponentiation
-	registerBinaryNumOp(r, "pow", func(a, b float64) (float64, error) {
-		return math.Pow(b, a), nil
+	numHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as4, _ := args[0].AsNumber()
+		_as3, _ := args[1].AsNumber()
+		return []Value{NewDecimal(math.Pow(_as3, _as4))}, nil
+	}
+
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "pow",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TInteger, TInteger},
+				Handler: intHandler,
+			},
+			{
+				Args:    []Type{TDecimal, TDecimal},
+				Handler: numHandler,
+			},
+			{
+				Args:    []Type{TNumber, TDecimal},
+				Handler: numHandler,
+			},
+			{
+				Args:    []Type{TDecimal, TNumber},
+				Handler: numHandler,
+			},
+		},
 	})
 }

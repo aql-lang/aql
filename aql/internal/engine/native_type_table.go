@@ -12,8 +12,13 @@ func registerTable(r *Registry) {
 		return []Value{NewTableType(_as0)}, nil
 	}
 
-	r.Register("table", Signature{
-		Args:    []Type{TAny},
-		Handler: tableHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "table",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TAny},
+			Handler: tableHandler,
+		}},
 	})
 }

@@ -19,10 +19,14 @@ func registerNormalize(r *Registry) {
 		return doNormalize(_as1, opts)
 	}
 
-	r.Register("normalize",
-		Signature{Args: []Type{TString, TMap}, Handler: normalizeOptsHandler},
-		Signature{Args: []Type{TString}, Handler: normalizeHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "normalize",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TMap}, Handler: normalizeOptsHandler},
+			{Args: []Type{TString}, Handler: normalizeHandler},
+		},
+	})
 }
 
 func doNormalize(input string, o strOpts) ([]Value, error) {

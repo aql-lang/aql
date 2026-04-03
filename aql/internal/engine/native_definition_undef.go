@@ -19,18 +19,6 @@ func registerUndef(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("undef",
-		Signature{
-			Args:    []Type{TString},
-			Handler: undefHandler,
-		},
-		Signature{
-			Args:      []Type{TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   undefHandler,
-		},
-	)
-
 	// Targeted undef: undef foo fn [[number] [number]]
 	undefFnHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
@@ -38,17 +26,32 @@ func registerUndef(r *Registry) {
 		uninstallFnSigs(r, name, undefInfo)
 		return nil, nil
 	}
-	r.Register("undef",
-		Signature{
-			Args:    []Type{TString, TFnUndef},
-			Handler: undefFnHandler,
+
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "undef",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TString},
+				Handler: undefHandler,
+			},
+			{
+				Args:      []Type{TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   undefHandler,
+			},
+			{
+				Args:    []Type{TString, TFnUndef},
+				Handler: undefFnHandler,
+			},
+			{
+				Args:      []Type{TAtom, TFnUndef},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   undefFnHandler,
+			},
 		},
-		Signature{
-			Args:      []Type{TAtom, TFnUndef},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   undefFnHandler,
-		},
-	)
+	})
 }
 
 // fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec

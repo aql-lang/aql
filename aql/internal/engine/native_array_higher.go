@@ -6,35 +6,39 @@ import "fmt"
 // each applies a quoted code body to each element of a data list, collecting results.
 //   each [dup add] [1 2 3]  →  [2 4 6]
 func registerEach(r *Registry) {
-	r.Register("each", Signature{
-		Args:       []Type{TList, TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if args[0].Data == nil || args[1].Data == nil {
-				return nil, fmt.Errorf("each: expected concrete lists")
-			}
-			bodySlice := args[0].AsList().Slice()
-			dataList := args[1].AsList()
-
-			results := make([]Value, dataList.Len())
-			for i := 0; i < dataList.Len(); i++ {
-				elem := dataList.Get(i)
-				input := make([]Value, len(bodySlice)+1)
-				input[0] = elem
-				copy(input[1:], bodySlice)
-
-				sub := New(reg)
-				res, err := sub.Run(input)
-				if err != nil {
-					return nil, fmt.Errorf("each: element %d: %w", i, err)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "each",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList, TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				if args[0].Data == nil || args[1].Data == nil {
+					return nil, fmt.Errorf("each: expected concrete lists")
 				}
-				if len(res) == 0 {
-					return nil, fmt.Errorf("each: element %d: body produced no result", i)
+				bodySlice := args[0].AsList().Slice()
+				dataList := args[1].AsList()
+
+				results := make([]Value, dataList.Len())
+				for i := 0; i < dataList.Len(); i++ {
+					elem := dataList.Get(i)
+					input := make([]Value, len(bodySlice)+1)
+					input[0] = elem
+					copy(input[1:], bodySlice)
+
+					sub := New(reg)
+					res, err := sub.Run(input)
+					if err != nil {
+						return nil, fmt.Errorf("each: element %d: %w", i, err)
+					}
+					if len(res) == 0 {
+						return nil, fmt.Errorf("each: element %d: body produced no result", i)
+					}
+					results[i] = res[len(res)-1] // take top of stack
 				}
-				results[i] = res[len(res)-1] // take top of stack
-			}
-			return []Value{NewList(results)}, nil
-		},
+				return []Value{NewList(results)}, nil
+			},
+		}},
 	})
 }
 
@@ -42,42 +46,48 @@ func registerEach(r *Registry) {
 // With initial value:  0 fold [add] [1 2 3]  →  6
 // Without initial:     fold [add] [1 2 3]    →  6  (uses first element as init)
 func registerFold(r *Registry) {
-	// With initial value: init body data → result
-	r.Register("fold", Signature{
-		Args:       []Type{TAny, TList, TList},
-		NoEvalArgs: map[int]bool{1: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			// args[0]=init, args[1]=body, args[2]=data
-			if args[1].Data == nil || args[2].Data == nil {
-				return nil, fmt.Errorf("fold: expected concrete lists")
-			}
-			init := args[0]
-			bodySlice := args[1].AsList().Slice()
-			dataList := args[2].AsList()
-			return doFold(reg, init, bodySlice, dataList)
-		},
-	})
-	// Without initial: body data → result (uses first element as init)
-	r.Register("fold", Signature{
-		Args:       []Type{TList, TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if args[0].Data == nil || args[1].Data == nil {
-				return nil, fmt.Errorf("fold: expected concrete lists")
-			}
-			bodySlice := args[0].AsList().Slice()
-			dataList := args[1].AsList()
-			if dataList.Len() == 0 {
-				return nil, fmt.Errorf("fold: empty list with no initial value")
-			}
-			init := dataList.Get(0)
-			// Create a sub-list from element 1 onwards
-			rest := make([]Value, dataList.Len()-1)
-			for i := 1; i < dataList.Len(); i++ {
-				rest[i-1] = dataList.Get(i)
-			}
-			restList := ReadList{elems: rest}
-			return doFold(reg, init, bodySlice, restList)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fold",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				// With initial value: init body data → result
+				Args:       []Type{TAny, TList, TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+					// args[0]=init, args[1]=body, args[2]=data
+					if args[1].Data == nil || args[2].Data == nil {
+						return nil, fmt.Errorf("fold: expected concrete lists")
+					}
+					init := args[0]
+					bodySlice := args[1].AsList().Slice()
+					dataList := args[2].AsList()
+					return doFold(reg, init, bodySlice, dataList)
+				},
+			},
+			{
+				// Without initial: body data → result (uses first element as init)
+				Args:       []Type{TList, TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+					if args[0].Data == nil || args[1].Data == nil {
+						return nil, fmt.Errorf("fold: expected concrete lists")
+					}
+					bodySlice := args[0].AsList().Slice()
+					dataList := args[1].AsList()
+					if dataList.Len() == 0 {
+						return nil, fmt.Errorf("fold: empty list with no initial value")
+					}
+					init := dataList.Get(0)
+					// Create a sub-list from element 1 onwards
+					rest := make([]Value, dataList.Len()-1)
+					for i := 1; i < dataList.Len(); i++ {
+						rest[i-1] = dataList.Get(i)
+					}
+					restList := ReadList{elems: rest}
+					return doFold(reg, init, bodySlice, restList)
+				},
+			},
 		},
 	})
 }
@@ -109,43 +119,47 @@ func doFold(reg *Registry, acc Value, bodySlice []Value, data ReadList) ([]Value
 // each step produces an intermediate result.
 //   scan [add] [1 2 3 4]  →  [1 3 6 10]
 func registerScan(r *Registry) {
-	r.Register("scan", Signature{
-		Args:       []Type{TList, TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if args[0].Data == nil || args[1].Data == nil {
-				return nil, fmt.Errorf("scan: expected concrete lists")
-			}
-			bodySlice := args[0].AsList().Slice()
-			dataList := args[1].AsList()
-			if dataList.Len() == 0 {
-				return []Value{NewList(nil)}, nil
-			}
-
-			results := make([]Value, dataList.Len())
-			acc := dataList.Get(0)
-			results[0] = acc
-
-			for i := 1; i < dataList.Len(); i++ {
-				elem := dataList.Get(i)
-				input := make([]Value, len(bodySlice)+2)
-				input[0] = acc
-				input[1] = elem
-				copy(input[2:], bodySlice)
-
-				sub := New(reg)
-				res, err := sub.Run(input)
-				if err != nil {
-					return nil, fmt.Errorf("scan: step %d: %w", i, err)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "scan",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList, TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				if args[0].Data == nil || args[1].Data == nil {
+					return nil, fmt.Errorf("scan: expected concrete lists")
 				}
-				if len(res) == 0 {
-					return nil, fmt.Errorf("scan: step %d: body produced no result", i)
+				bodySlice := args[0].AsList().Slice()
+				dataList := args[1].AsList()
+				if dataList.Len() == 0 {
+					return []Value{NewList(nil)}, nil
 				}
-				acc = res[len(res)-1]
-				results[i] = acc
-			}
-			return []Value{NewList(results)}, nil
-		},
+
+				results := make([]Value, dataList.Len())
+				acc := dataList.Get(0)
+				results[0] = acc
+
+				for i := 1; i < dataList.Len(); i++ {
+					elem := dataList.Get(i)
+					input := make([]Value, len(bodySlice)+2)
+					input[0] = acc
+					input[1] = elem
+					copy(input[2:], bodySlice)
+
+					sub := New(reg)
+					res, err := sub.Run(input)
+					if err != nil {
+						return nil, fmt.Errorf("scan: step %d: %w", i, err)
+					}
+					if len(res) == 0 {
+						return nil, fmt.Errorf("scan: step %d: body produced no result", i)
+					}
+					acc = res[len(res)-1]
+					results[i] = acc
+				}
+				return []Value{NewList(results)}, nil
+			},
+		}},
 	})
 }
 
@@ -154,10 +168,13 @@ func registerScan(r *Registry) {
 // producing a 2D nested list.
 //   outer [add] [1 2] [10 20]  →  [[11 21] [12 22]]
 func registerOuter(r *Registry) {
-	r.Register("outer", Signature{
-		Args:       []Type{TList, TList, TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "outer",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList, TList, TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil {
 				return nil, fmt.Errorf("outer: expected concrete lists")
 			}
@@ -187,7 +204,8 @@ func registerOuter(r *Registry) {
 				rows[i] = NewList(row)
 			}
 			return []Value{NewList(rows)}, nil
-		},
+			},
+		}},
 	})
 }
 
@@ -197,10 +215,13 @@ func registerOuter(r *Registry) {
 // For 2D matrices: matrix inner product (left rows × right columns).
 //   inner [mul] [add] [1 2 3] [4 5 6]  →  32  (dot product)
 func registerInner(r *Registry) {
-	r.Register("inner", Signature{
-		Args:       []Type{TList, TList, TList, TList},
-		NoEvalArgs: map[int]bool{0: true, 1: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "inner",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList, TList, TList, TList},
+			NoEvalArgs: map[int]bool{0: true, 1: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil || args[3].Data == nil {
 				return nil, fmt.Errorf("inner: expected concrete lists")
 			}
@@ -303,7 +324,8 @@ func registerInner(r *Registry) {
 				rows[i] = NewList(cols)
 			}
 			return []Value{NewList(rows)}, nil
-		},
+			},
+		}},
 	})
 }
 

@@ -11,11 +11,11 @@ import (
 //
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
-func pushFunc() NativeFunc {
-	return NativeFunc{
+func pushFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:              "push",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TList},
 				Handler: pushHandler,
@@ -44,11 +44,11 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 //
 //	pop [a,b,c] → [a,b] c
 //	[a,b,c] pop → [a,b] c
-func popFunc() NativeFunc {
-	return NativeFunc{
+func popFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:              "pop",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TList},
 				Handler: popHandler,
@@ -75,11 +75,11 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 //
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
-func unshiftFunc() NativeFunc {
-	return NativeFunc{
+func unshiftFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:              "unshift",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TList},
 				Handler: unshiftHandler,
@@ -108,11 +108,11 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 //
 //	shift [a,b,c] → [b,c] a
 //	[a,b,c] shift → [b,c] a
-func shiftFunc() NativeFunc {
-	return NativeFunc{
+func shiftFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:              "shift",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TList},
 				Handler: shiftHandler,

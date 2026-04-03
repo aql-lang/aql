@@ -90,9 +90,14 @@ func registerVar(r *Registry) {
 		return result, nil
 	}
 
-	r.Register("var", Signature{
-		Args:       []Type{TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler:    varHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "var",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    varHandler,
+		}},
 	})
 }

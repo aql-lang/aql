@@ -44,31 +44,46 @@ func registerFor(r *Registry) {
 		return runForLoop(r, start, end, step, "i", body)
 	}
 
-	r.Register("for",
-		Signature{
-			Args:       []Type{TInteger, TList},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    forCountHandler,
-		},
-		Signature{
-			Args:       []Type{TList, TList},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    forRangeHandler,
-		},
-	)
-
-	// break: stops the current for loop iteration and exits the loop.
-	r.RegisterStackOnly("break", Signature{
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return nil, errBreak
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "for",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args:       []Type{TInteger, TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    forCountHandler,
+			},
+			{
+				Args:       []Type{TList, TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    forRangeHandler,
+			},
 		},
 	})
 
+	// break: stops the current for loop iteration and exits the loop.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "break",
+		ForwardPrecedence: false,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return nil, errBreak
+			},
+		}},
+	})
+
 	// continue: stops the current iteration and moves to the next.
-	r.RegisterStackOnly("continue", Signature{
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return nil, errContinue
-		},
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "continue",
+		ForwardPrecedence: false,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return nil, errContinue
+			},
+		}},
 	})
 }
 

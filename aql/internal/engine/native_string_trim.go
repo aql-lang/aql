@@ -19,12 +19,16 @@ func registerTrim(r *Registry) {
 		return doTrim(_as1, opts)
 	}
 
-	r.Register("trim",
-		Signature{Args: []Type{TString, TMap}, Handler: trimOptsHandler},
-		Signature{Args: []Type{TString}, Handler: trimHandler},
-		Signature{Args: []Type{TAtom, TMap}, Handler: trimOptsHandler},
-		Signature{Args: []Type{TAtom}, Handler: trimHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "trim",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TMap}, Handler: trimOptsHandler},
+			{Args: []Type{TString}, Handler: trimHandler},
+			{Args: []Type{TAtom, TMap}, Handler: trimOptsHandler},
+			{Args: []Type{TAtom}, Handler: trimHandler},
+		},
+	})
 }
 
 func doTrim(input string, o strOpts) ([]Value, error) {

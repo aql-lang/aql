@@ -19,10 +19,14 @@ func registerMatch(r *Registry) {
 		return doMatch(_as3, _as2, opts)
 	}
 
-	r.Register("match",
-		Signature{Args: []Type{TString, TString, TMap}, Handler: matchOptsHandler},
-		Signature{Args: []Type{TString, TString}, Handler: matchHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "match",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TString, TMap}, Handler: matchOptsHandler},
+			{Args: []Type{TString, TString}, Handler: matchHandler},
+		},
+	})
 }
 
 func doMatch(input, pattern string, o strOpts) ([]Value, error) {

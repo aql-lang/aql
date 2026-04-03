@@ -89,18 +89,21 @@ func registerGetr(r *Registry) {
 		return nil, fmt.Errorf("getr: parent is None")
 	}
 
-	sigs := []Signature{
-		// [Key | Node] — key forward, container from stack
-		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: mapHandler},
-		{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: mapHandler},
-		{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: mapHandler},
-		// [Key | Object]
-		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
-		{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
-		{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
-		// [Key | None]
-		{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
-	}
-
-	r.Register("getr", sigs...)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "getr",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			// [Key | Node] — key forward, container from stack
+			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: mapHandler},
+			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: mapHandler},
+			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: mapHandler},
+			// [Key | Object]
+			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
+			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
+			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
+			// [Key | None]
+			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
+		},
+	})
 }

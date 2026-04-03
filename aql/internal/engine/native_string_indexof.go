@@ -18,10 +18,14 @@ func registerIndexOf(r *Registry) {
 		return doIndexOf(_as3, _as2, opts)
 	}
 
-	r.Register("indexof",
-		Signature{Args: []Type{TString, TString, TMap}, Handler: indexOfOptsHandler},
-		Signature{Args: []Type{TString, TString}, Handler: indexOfHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "indexof",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TString, TMap}, Handler: indexOfOptsHandler},
+			{Args: []Type{TString, TString}, Handler: indexOfHandler},
+		},
+	})
 }
 
 func doIndexOf(input, search string, o strOpts) ([]Value, error) {

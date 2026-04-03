@@ -13,11 +13,11 @@ import (
 //	data transform {spec}   — spec (Map) forward-collected → args[0], data from stack → args[1]
 //
 // The spec (transform template) is always the Map at sig[0].
-func transformFunc() NativeFunc {
-	return NativeFunc{
+func transformFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "transform",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TMap, engine.TAny},
 				Handler: transformHandler,

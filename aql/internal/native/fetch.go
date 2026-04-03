@@ -19,11 +19,11 @@ const defaultFetchTimeout = 30 * time.Second
 //   - [string, map] — URL string plus options map (method, headers, body, timeout)
 //   - [map]         — full request map containing at least a "url" field
 //   - [string]      — simple GET by URL string
-func fetchFunc() NativeFunc {
-	return NativeFunc{
+func fetchFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "fetch",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TString, engine.TMap},
 				Handler: fetchStringMapHandler,

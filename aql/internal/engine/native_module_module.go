@@ -29,19 +29,24 @@ import (
 // and walking up parent directories (CommonJS-style resolution).
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
-	r.Register("module", Signature{
-		Args:       []Type{TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if args[0].Data == nil {
-				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
-			}
-			desc, err := runModuleBody(r, args[0].AsList().Slice())
-			if err != nil {
-				return nil, fmt.Errorf("module: %w", err)
-			}
-			return []Value{NewModule(desc)}, nil
-		},
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "module",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				if args[0].Data == nil {
+					return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
+				}
+				desc, err := runModuleBody(r, args[0].AsList().Slice())
+				if err != nil {
+					return nil, fmt.Errorf("module: %w", err)
+				}
+				return []Value{NewModule(desc)}, nil
+			},
+		}},
 	})
 
 	// import: [module-desc] -> [] — import all exports as defs
@@ -179,55 +184,57 @@ func registerModule(r *Registry) {
 		return nil, installSingleRename(r, desc, defName(args[0]))
 	}
 
-	// Standard signatures used by both scoring and sequential planners.
-	r.Register("import",
-		Signature{
-			Args:    []Type{TModule},
-			Handler: importAllHandler,
-		},
-		Signature{
-			Args:    []Type{TList, TModule},
-			Handler: importRenameHandler,
-		},
-		Signature{
-			Args: []Type{TAtom, TModule},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				_as0, _ := args[0].AsAtom()
-				return importSingleRenameHandler(_as0, args)
+	// Standard signatures and inline module forms combined.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "import",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TModule},
+				Handler: importAllHandler,
+			},
+			{
+				Args:    []Type{TList, TModule},
+				Handler: importRenameHandler,
+			},
+			{
+				Args: []Type{TAtom, TModule},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					_as0, _ := args[0].AsAtom()
+					return importSingleRenameHandler(_as0, args)
+				},
+			},
+			{
+				Args:    []Type{TString},
+				Handler: importFileHandler,
+			},
+			{
+				Args:    []Type{TList, TString},
+				Handler: importFileRenameHandler,
+			},
+			// Inline module forms: use /q to capture "module" as a quoted word
+			// instead of executing it as a function.
+			{
+				Args:       []Type{TAtom, TList},
+				QuoteArgs:  map[int]bool{0: true},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    importInlineHandler,
+			},
+			{
+				Args:       []Type{TList, TAtom, TList},
+				QuoteArgs:  map[int]bool{1: true},
+				NoEvalArgs: map[int]bool{2: true},
+				Handler:    importInlineRenameHandler,
+			},
+			{
+				Args:       []Type{TAtom, TAtom, TList},
+				QuoteArgs:  map[int]bool{1: true},
+				NoEvalArgs: map[int]bool{2: true},
+				Handler:    importInlineSingleRenameHandler,
 			},
 		},
-		Signature{
-			Args:    []Type{TString},
-			Handler: importFileHandler,
-		},
-		Signature{
-			Args:    []Type{TList, TString},
-			Handler: importFileRenameHandler,
-		},
-	)
-
-	// Inline module forms: use /q to capture "module" as a quoted word
-	// instead of executing it as a function.
-	r.Register("import",
-		Signature{
-			Args:       []Type{TAtom, TList},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    importInlineHandler,
-		},
-		Signature{
-			Args:       []Type{TList, TAtom, TList},
-			QuoteArgs:  map[int]bool{1: true},
-			NoEvalArgs: map[int]bool{2: true},
-			Handler:    importInlineRenameHandler,
-		},
-		Signature{
-			Args:       []Type{TAtom, TAtom, TList},
-			QuoteArgs:  map[int]bool{1: true},
-			NoEvalArgs: map[int]bool{2: true},
-			Handler:    importInlineSingleRenameHandler,
-		},
-	)
+	})
 }
 
 // runModuleBody creates an isolated module engine, runs the given values,
@@ -262,25 +269,33 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		exports[name] = resolved
 	}
 
-	modReg.Register("export", Signature{
-		Args: []Type{TAtom, TMap},
-		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if eargs[1].Data == nil {
-				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
-			}
-			_as1, _ := eargs[0].AsAtom()
-			exportHandler(_as1, eargs[1].AsMap())
-			return nil, nil
-		},
-	}, Signature{
-		Args: []Type{TString, TMap},
-		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if eargs[1].Data == nil {
-				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
-			}
-			_as2, _ := eargs[0].AsString()
-			exportHandler(_as2, eargs[1].AsMap())
-			return nil, nil
+	modReg.RegisterNativeFunc(NativeFunc{
+		Name:              "export",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TAtom, TMap},
+				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if eargs[1].Data == nil {
+						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+					}
+					_as1, _ := eargs[0].AsAtom()
+					exportHandler(_as1, eargs[1].AsMap())
+					return nil, nil
+				},
+			},
+			{
+				Args: []Type{TString, TMap},
+				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if eargs[1].Data == nil {
+						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+					}
+					_as2, _ := eargs[0].AsString()
+					exportHandler(_as2, eargs[1].AsMap())
+					return nil, nil
+				},
+			},
 		},
 	})
 

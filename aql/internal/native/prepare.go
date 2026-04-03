@@ -9,15 +9,15 @@ import (
 // prepareFunc returns the "prepare" native function definition.
 // prepare has forward precedence and one signature:
 //   - [map(kind:"api")] — prepares a fetch definition via the SDK
-func prepareFunc() NativeFunc {
+func prepareFunc() engine.NativeFunc {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return NativeFunc{
+	return engine.NativeFunc{
 		Name:             "prepare",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:     []engine.Type{engine.TMap},
 				Handler:  prepareAPIHandler,

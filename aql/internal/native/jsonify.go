@@ -11,11 +11,11 @@ import (
 // jsonify has forward precedence and two signatures:
 //   - [any, map] — converts the value to a JSON string with flags (indent, offset)
 //   - [any]      — converts the value to a JSON string with defaults
-func jsonifyFunc() NativeFunc {
-	return NativeFunc{
+func jsonifyFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "jsonify",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TMap},
 				Handler: jsonifyFlagsHandler,

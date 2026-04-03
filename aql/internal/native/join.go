@@ -11,11 +11,11 @@ import (
 // join has forward precedence and two signatures:
 //   - [list, string] — joins the list elements with the given separator
 //   - [list]         — joins the list elements with a comma
-func joinFunc() NativeFunc {
-	return NativeFunc{
+func joinFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "join",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TString},
 				Handler: joinSepHandler,

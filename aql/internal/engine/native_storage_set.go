@@ -60,33 +60,38 @@ func registerSet(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("set",
-		// Store (copy-on-write)
-		Signature{
-			Args:    []Type{TString, TAny, TStore},
-			Handler: storeHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "set",
+		ForwardPrecedence: true,
+		SkipSafetyCheck:   true,
+		Signatures: []NativeSig{
+			// Store (copy-on-write)
+			{
+				Args:    []Type{TString, TAny, TStore},
+				Handler: storeHandler,
+			},
+			{
+				Args:      []Type{TAtom, TAny, TStore},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   storeHandler,
+			},
+			// Array (indexed by integer)
+			{
+				Args:    []Type{TInteger, TAny, TArray},
+				Handler: arrayHandler,
+			},
+			// Object
+			{
+				Args:    []Type{TString, TAny, TObject},
+				Handler: objectHandler,
+			},
+			{
+				Args:      []Type{TAtom, TAny, TObject},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   objectHandler,
+			},
 		},
-		Signature{
-			Args:      []Type{TAtom, TAny, TStore},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   storeHandler,
-		},
-		// Array (indexed by integer)
-		Signature{
-			Args:    []Type{TInteger, TAny, TArray},
-			Handler: arrayHandler,
-		},
-		// Object
-		Signature{
-			Args:    []Type{TString, TAny, TObject},
-			Handler: objectHandler,
-		},
-		Signature{
-			Args:      []Type{TAtom, TAny, TObject},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   objectHandler,
-		},
-	)
+	})
 }
 
 // cowSet performs a copy-on-write set on a Store. It creates a new Store
