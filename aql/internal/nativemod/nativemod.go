@@ -96,3 +96,10 @@ func Names() []string {
 	}
 	return names
 }
+
+// DecisionBuilderAQL returns the AQL source for record types and builder
+// functions. This is the single source of truth — the pure-AQL file module
+// and module [...] inline tests compose this with evaluator AQL.
+func DecisionBuilderAQL() string {
+	return decisionAQL
+}

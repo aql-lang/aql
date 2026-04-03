@@ -196,8 +196,8 @@ func registerEvalCond(r *engine.Registry) {
 	r.Register("eval-cond", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			c := args[1].AsMap()
-			input := args[0].AsMap()
+			c := args[0].AsMap()
+			input := args[1].AsMap()
 			if c == nil || input == nil {
 				return nil, fmt.Errorf("eval-cond: expected concrete maps")
 			}
@@ -246,8 +246,8 @@ func registerEvalPred(r *engine.Registry) {
 	r.Register("eval-pred", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			pred := args[1].AsMap()
-			input := args[0].AsMap()
+			pred := args[0].AsMap()
+			input := args[1].AsMap()
 			if pred == nil || input == nil {
 				return nil, fmt.Errorf("eval-pred: expected concrete maps")
 			}
@@ -360,8 +360,8 @@ func registerEvalTable(r *engine.Registry) {
 	r.Register("eval-table", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			table := args[1].AsMap()
-			input := args[0].AsMap()
+			table := args[0].AsMap()
+			input := args[1].AsMap()
 			if table == nil || input == nil {
 				return nil, fmt.Errorf("eval-table: expected concrete maps")
 			}
@@ -490,8 +490,8 @@ func registerEvalTree(r *engine.Registry) {
 	r.Register("eval-tree", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			tree := args[1].AsMap()
-			input := args[0].AsMap()
+			tree := args[0].AsMap()
+			input := args[1].AsMap()
 			if tree == nil || input == nil {
 				return nil, fmt.Errorf("eval-tree: expected concrete maps")
 			}
@@ -609,8 +609,8 @@ func registerDecide(r *engine.Registry) {
 	r.Register("decide", engine.Signature{
 		Args: []engine.Type{engine.TMap, engine.TMap},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			model := args[1].AsMap()
-			input := args[0].AsMap()
+			model := args[0].AsMap()
+			input := args[1].AsMap()
 			if model == nil || input == nil {
 				return nil, fmt.Errorf("decide: expected concrete maps")
 			}
@@ -638,9 +638,12 @@ func registerDecide(r *engine.Registry) {
 	})
 }
 
-// decisionAQL contains the AQL source for builder functions.
+// decisionAQL contains the AQL source for record types and builder functions.
 // The evaluators are Go-implemented due to CallAQL nesting limitations
 // with recursive predicate evaluation.
+//
+// This is the single source of truth for decision module builder AQL.
+// The pure-AQL file module and module [...] tests are generated from this.
 const decisionAQL = `
 
 # ============================================================
