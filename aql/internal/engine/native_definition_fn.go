@@ -703,121 +703,124 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	}
 }
 
-// CallAQL invokes an AQL function value (FnDefInfo) with the given arguments
-// in a sub-engine. This allows native Go code to call AQL callbacks.
+// CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
+// signature and arguments in a sub-engine. The caller is responsible for
+// signature matching — use MatchFnSig to find the matching sig.
 //
-//	result, err := r.CallAQL(callbackValue, []Value{someArg})
-func (r *Registry) CallAQL(fn Value, args []Value) ([]Value, error) {
-	fnDef, ok := fn.Data.(FnDefInfo)
-	if !ok {
-		return nil, fmt.Errorf("CallAQL: value is not a function")
+//	sig := MatchFnSig(fn, args)
+//	result, err := r.CallAQL(sig, args)
+func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
+	// Build token sequence (same as installFnDef handler).
+	var tokens []Value
+	var names []string
+
+	// Push args list onto the args stack.
+	argsCopy := make([]Value, len(args))
+	copy(argsCopy, args)
+	argsList := NewList(argsCopy)
+	r.argsStack = append(r.argsStack, argsList)
+
+	for i, p := range sig.Params {
+		if p.Name != "" {
+			arg := args[i]
+			if arg.VType.Equal(TList) && !arg.Quoted {
+				arg.Quoted = true
+			}
+			installDef(r, p.Name, arg)
+			names = append(names, p.Name)
+		} else {
+			tokens = append(tokens, args[i])
+		}
+	}
+	body := make([]Value, len(sig.Body))
+	copy(body, sig.Body)
+	tokens = append(tokens, body...)
+
+	// Snapshot DefStacks lengths before body execution so we can
+	// clean up any defs created during body execution (Issue 2
+	// from AQL-DX-REPORT: def leakage from fn bodies).
+	defSnapshot := make(map[string]int, len(r.DefStacks))
+	for name, stack := range r.DefStacks {
+		defSnapshot[name] = len(stack)
 	}
 
-	// Find matching signature.
-	for _, sig := range fnDef.Sigs {
+	// Evaluate in a sub-engine with higher step limit for complex bodies.
+	sub := NewTop(r)
+	result, err := sub.Run(tokens)
+
+	// Cleanup: pop args stack, undef named params, then clean up
+	// any defs that were created during body execution.
+	if len(r.argsStack) > 0 {
+		r.argsStack = r.argsStack[:len(r.argsStack)-1]
+	}
+	for i := len(names) - 1; i >= 0; i-- {
+		uninstallDef(r, names[i])
+	}
+
+	// Remove defs that were added during body execution.
+	// Collect names first, then clean up outside the range loop
+	// to avoid mutating DefStacks during iteration (uninstallDef
+	// triggers installFnDef → Register → upsertFnDef which can
+	// modify DefStacks entries for other names).
+	var toClean []string
+	for name := range r.DefStacks {
+		if len(r.DefStacks[name]) > defSnapshot[name] {
+			toClean = append(toClean, name)
+		}
+	}
+	for _, name := range toClean {
+		target := defSnapshot[name]
+		// Pop entries down to the snapshot length. Use a bounded
+		// loop to avoid infinite looping if uninstallDef's rebuild
+		// creates new entries.
+		for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
+			uninstallDef(r, name)
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("CallAQL: %w", err)
+	}
+	return result, nil
+}
+
+// MatchFnSig finds the first FnSig in a FnDef value whose params match the
+// given args. Returns nil if no signature matches.
+func MatchFnSig(fn Value, args []Value) *FnSig {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		return nil
+	}
+	for i := range fnDef.Sigs {
+		sig := &fnDef.Sigs[i]
 		if len(sig.Params) != len(args) {
 			continue
 		}
 		match := true
-		for i, p := range sig.Params {
-			if !args[i].VType.Matches(p.Type) {
+		for j, p := range sig.Params {
+			if !args[j].VType.Matches(p.Type) {
 				match = false
 				break
 			}
-			// Check structural pattern (e.g. map literal).
 			if p.Pattern != nil {
 				pat := *p.Pattern
-				if pat.VType.Equal(TMap) && args[i].VType.Equal(TMap) &&
-					pat.Data != nil && args[i].Data != nil {
-					if !openUnifyMap(pat, args[i]) {
+				if pat.VType.Equal(TMap) && args[j].VType.Equal(TMap) &&
+					pat.Data != nil && args[j].Data != nil {
+					if !openUnifyMap(pat, args[j]) {
 						match = false
 						break
 					}
 				} else {
-					if _, uOk := Unify(args[i], pat); !uOk {
+					if _, uOk := Unify(args[j], pat); !uOk {
 						match = false
 						break
 					}
 				}
 			}
 		}
-		if !match {
-			continue
+		if match {
+			return sig
 		}
-
-		// Build token sequence (same as installFnDef handler).
-		var tokens []Value
-		var names []string
-
-		// Push args list onto the args stack.
-		argsCopy := make([]Value, len(args))
-		copy(argsCopy, args)
-		argsList := NewList(argsCopy)
-		r.argsStack = append(r.argsStack, argsList)
-
-		for i, p := range sig.Params {
-			if p.Name != "" {
-				arg := args[i]
-				if arg.VType.Equal(TList) && !arg.Quoted {
-					arg.Quoted = true
-				}
-				installDef(r, p.Name, arg)
-				names = append(names, p.Name)
-			} else {
-				tokens = append(tokens, args[i])
-			}
-		}
-		body := make([]Value, len(sig.Body))
-		copy(body, sig.Body)
-		tokens = append(tokens, body...)
-
-		// Snapshot DefStacks lengths before body execution so we can
-		// clean up any defs created during body execution (Issue 2
-		// from AQL-DX-REPORT: def leakage from fn bodies).
-		defSnapshot := make(map[string]int, len(r.DefStacks))
-		for name, stack := range r.DefStacks {
-			defSnapshot[name] = len(stack)
-		}
-
-// Evaluate in a sub-engine with higher step limit for complex bodies.
-		sub := NewTop(r)
-		result, err := sub.Run(tokens)
-
-		// Cleanup: pop args stack, undef named params, then clean up
-		// any defs that were created during body execution.
-		if len(r.argsStack) > 0 {
-			r.argsStack = r.argsStack[:len(r.argsStack)-1]
-		}
-		for i := len(names) - 1; i >= 0; i-- {
-			uninstallDef(r, names[i])
-		}
-
-		// Remove defs that were added during body execution.
-		// Collect names first, then clean up outside the range loop
-		// to avoid mutating DefStacks during iteration (uninstallDef
-		// triggers installFnDef → Register → upsertFnDef which can
-		// modify DefStacks entries for other names).
-		var toClean []string
-		for name := range r.DefStacks {
-			if len(r.DefStacks[name]) > defSnapshot[name] {
-				toClean = append(toClean, name)
-			}
-		}
-		for _, name := range toClean {
-			target := defSnapshot[name]
-			// Pop entries down to the snapshot length. Use a bounded
-			// loop to avoid infinite looping if uninstallDef's rebuild
-			// creates new entries.
-			for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
-				uninstallDef(r, name)
-			}
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("CallAQL: %w", err)
-		}
-		return result, nil
 	}
-
-	return nil, fmt.Errorf("CallAQL: no matching signature for arguments")
+	return nil
 }

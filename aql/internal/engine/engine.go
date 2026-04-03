@@ -1147,8 +1147,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	if capturedReg != nil {
 		// Execute in the captured module's registry via CallAQL.
-		fnVal := e.stack[valIdx]
-		result, err := capturedReg.CallAQL(fnVal, args)
+		result, err := capturedReg.CallAQL(sig, args)
 		if err != nil {
 			return err
 		}

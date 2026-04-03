@@ -3921,7 +3921,12 @@ func TestCallAQLBasic(t *testing.T) {
 	}
 	fnVal := fnStack[len(fnStack)-1]
 
-	result, err := r.CallAQL(fnVal, []Value{NewInteger(5)})
+	args := []Value{NewInteger(5)}
+	sig := MatchFnSig(fnVal, args)
+	if sig == nil {
+		t.Fatal("no matching signature")
+	}
+	result, err := r.CallAQL(sig, args)
 	if err != nil {
 		t.Fatalf("CallAQL error: %v", err)
 	}
@@ -3931,13 +3936,9 @@ func TestCallAQLBasic(t *testing.T) {
 }
 
 func TestCallAQLNotAFunction(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = r.CallAQL(NewInteger(42), []Value{})
-	if err == nil {
-		t.Error("expected error for non-function value")
+	sig := MatchFnSig(NewInteger(42), []Value{})
+	if sig != nil {
+		t.Error("expected nil sig for non-function value")
 	}
 }
 
@@ -3961,10 +3962,10 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 
 	fnVal := r.DefStacks["inc"][len(r.DefStacks["inc"])-1]
 
-	// Call with wrong type
-	_, err = r.CallAQL(fnVal, []Value{NewString("hello")})
-	if err == nil {
-		t.Error("expected error for mismatched argument types")
+	// Call with wrong type — MatchFnSig returns nil
+	sig := MatchFnSig(fnVal, []Value{NewString("hello")})
+	if sig != nil {
+		t.Error("expected nil sig for mismatched argument types")
 	}
 }
 
@@ -4401,7 +4402,12 @@ func TestCallAQLMapPattern(t *testing.T) {
 	// Matching call: {k:1}
 	argMap := NewOrderedMap()
 	argMap.Set("k", NewInteger(1))
-	result, callErr := r.CallAQL(fnVal, []Value{NewMap(argMap)})
+	matchArgs := []Value{NewMap(argMap)}
+	matchSig := MatchFnSig(fnVal, matchArgs)
+	if matchSig == nil {
+		t.Fatal("expected matching signature")
+	}
+	result, callErr := r.CallAQL(matchSig, matchArgs)
 	if callErr != nil {
 		t.Fatalf("expected match, got error: %v", callErr)
 	}
@@ -4412,9 +4418,9 @@ func TestCallAQLMapPattern(t *testing.T) {
 	// Non-matching call: {k:2}
 	noArgMap := NewOrderedMap()
 	noArgMap.Set("k", NewInteger(2))
-	_, callErr = r.CallAQL(fnVal, []Value{NewMap(noArgMap)})
-	if callErr == nil {
-		t.Error("expected no matching signature error for {k:2}")
+	noMatchSig := MatchFnSig(fnVal, []Value{NewMap(noArgMap)})
+	if noMatchSig != nil {
+		t.Error("expected nil sig for non-matching pattern {k:2}")
 	}
 }
 
