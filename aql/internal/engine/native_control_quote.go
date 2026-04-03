@@ -23,7 +23,6 @@ func registerQuote(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "quote",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args: []Type{TWord},

@@ -26,7 +26,6 @@ func registerAdd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "add",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

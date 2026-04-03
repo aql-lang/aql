@@ -1,7 +1,6 @@
 package native
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -523,52 +522,6 @@ func TestFuncDefinitions(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// --- wrapSafetyCheck ---
-
-func TestWrapSafetyCheck(t *testing.T) {
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-		return []engine.Value{engine.NewInteger(42)}, nil
-	}
-	handler := engine.WrapSafetyCheck(inner)
-
-	result, herr := handler([]engine.Value{engine.NewString("hello")}, nil, nil, nil)
-	if herr != nil {
-		t.Fatal(herr)
-	}
-	if len(result) != 1 {
-		t.Fatalf("expected 1, got %d", len(result))
-	}
-	ri, _ := result[0].AsInteger()
-	if ri != 42 {
-		t.Errorf("expected 42, got %d", ri)
-	}
-}
-
-func TestWrapSafetyCheckRejectsTypeLiteral(t *testing.T) {
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-		return []engine.Value{engine.NewInteger(1)}, nil
-	}
-	handler := engine.WrapSafetyCheck(inner)
-
-	// Type literal has Data==nil — should be rejected.
-	_, herr := handler([]engine.Value{engine.NewTypeLiteral(engine.TMap)}, nil, nil, nil)
-	if herr == nil {
-		t.Fatal("expected error for type literal")
-	}
-}
-
-func TestWrapSafetyCheckError(t *testing.T) {
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-		return nil, fmt.Errorf("test error")
-	}
-	handler := engine.WrapSafetyCheck(inner)
-
-	_, herr := handler(nil, nil, nil, nil)
-	if herr == nil {
-		t.Fatal("expected error")
 	}
 }
 

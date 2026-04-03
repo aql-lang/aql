@@ -1,14 +1,11 @@
 package engine
 
-import "fmt"
-
 // NativeFunc describes a built-in native function with its name, signatures,
 // and configuration. All predefined words (core and extension) use this
 // type for registration.
 type NativeFunc struct {
 	Name              string
 	ForwardPrecedence bool
-	SkipSafetyCheck   bool // when true, bypass safety check (for type-inspecting words)
 	Signatures        []NativeSig
 }
 
@@ -39,18 +36,13 @@ type NativeSig struct {
 	Fallback bool
 }
 
-// RegisterNativeFunc installs a NativeFunc into the registry. It applies
-// safety checking (unless SkipSafetyCheck is set), converts NativeSig to
-// Signature, and registers with the appropriate precedence.
+// RegisterNativeFunc installs a NativeFunc into the registry, converts
+// NativeSig to Signature, and registers with the appropriate precedence.
 func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 	for _, sig := range fn.Signatures {
-		handler := sig.Handler
-		if !fn.SkipSafetyCheck {
-			handler = WrapSafetyCheck(handler)
-		}
 		s := Signature{
 			Args:       sig.Args,
-			Handler:    handler,
+			Handler:    sig.Handler,
 			FullStack:  sig.FullStack,
 			Patterns:   sig.Patterns,
 			QuoteArgs:  sig.QuoteArgs,
@@ -63,22 +55,5 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		} else {
 			r.RegisterStackOnly(fn.Name, s)
 		}
-	}
-}
-
-// wrapSafetyCheck wraps a Handler to reject type literals and Options types
-// before the handler runs. This prevents nil pointer dereferences in native
-// handlers that expect concrete data.
-func WrapSafetyCheck(h Handler) Handler {
-	return func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-		for _, arg := range args {
-			if arg.Data == nil && !arg.VType.Equal(TNone) {
-				return nil, fmt.Errorf("expected a concrete value, got type literal %s", arg.VType)
-			}
-			if arg.IsOptionsType() {
-				return nil, fmt.Errorf("expected a concrete map, got options type %s", arg.String())
-			}
-		}
-		return h(args, ctx, stack, r)
 	}
 }

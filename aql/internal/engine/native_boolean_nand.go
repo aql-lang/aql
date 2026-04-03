@@ -10,7 +10,6 @@ func registerNand(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "nand",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TBoolean, TBoolean},
 			Handler: handler,

@@ -20,7 +20,6 @@ func registerSub(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "sub",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

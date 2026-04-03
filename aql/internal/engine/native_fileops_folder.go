@@ -64,7 +64,6 @@ func registerFolder(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "folder",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TOptions, TPath},

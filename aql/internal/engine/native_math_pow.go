@@ -37,7 +37,6 @@ func registerPow(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "pow",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

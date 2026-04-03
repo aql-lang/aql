@@ -364,7 +364,6 @@ func registerHelp(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "help",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{Args: []Type{TString}, Handler: wordHandler},
 			{Args: []Type{TAtom}, Handler: wordHandler},

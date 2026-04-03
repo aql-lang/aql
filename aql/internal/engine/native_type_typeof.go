@@ -33,7 +33,6 @@ func registerTypeof(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "typeof",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: typeofHandler,
@@ -65,7 +64,6 @@ func registerFullTypeof(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fulltypeof",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: fulltypeofHandler,

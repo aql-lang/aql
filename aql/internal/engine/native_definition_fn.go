@@ -51,7 +51,6 @@ func registerFn(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -710,7 +709,6 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		r.RegisterNativeFunc(NativeFunc{
 			Name:              name,
 			ForwardPrecedence: !isStackOnly,
-			SkipSafetyCheck:   true,
 			Signatures: []NativeSig{{
 				Args:       argTypes,
 				Handler:    handler,

@@ -296,7 +296,6 @@ func registerFileIO(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "read",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// Path signatures
 			{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
@@ -313,7 +312,6 @@ func registerFileIO(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "write",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// Path signatures
 			{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler},
@@ -330,7 +328,6 @@ func registerFileIO(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "stdin",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -341,7 +338,6 @@ func registerFileIO(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "stdout",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -352,7 +348,6 @@ func registerFileIO(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "stderr",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

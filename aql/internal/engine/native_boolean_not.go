@@ -4,7 +4,6 @@ func registerNot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "not",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TBoolean},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

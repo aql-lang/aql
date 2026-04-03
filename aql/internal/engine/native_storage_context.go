@@ -11,7 +11,6 @@ func registerContext(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "context",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {

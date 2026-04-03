@@ -84,7 +84,6 @@ func registerDo(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "do",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:       []Type{TList},

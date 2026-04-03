@@ -107,7 +107,6 @@ func registerTrace(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "trace",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

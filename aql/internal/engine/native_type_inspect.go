@@ -35,7 +35,6 @@ func registerInspect(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "inspect",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TWord},

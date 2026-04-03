@@ -11,7 +11,6 @@ func istypeFunc() engine.NativeFunc {
 	return engine.NativeFunc{
 		Name:              "istype",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},

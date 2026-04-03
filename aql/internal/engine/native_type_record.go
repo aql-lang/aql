@@ -36,7 +36,6 @@ func registerRecord(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "record",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TList},
 			Handler: recordHandler,

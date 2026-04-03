@@ -91,7 +91,6 @@ func registerObject(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "object",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// 2-arg: map + parent object type
 			{

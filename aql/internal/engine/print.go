@@ -23,7 +23,6 @@ func registerPrint(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "print",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handler,
@@ -40,7 +39,6 @@ func registerPrint(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "printstr",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handlerStr,

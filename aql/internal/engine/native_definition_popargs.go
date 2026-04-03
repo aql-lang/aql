@@ -6,7 +6,6 @@ func registerPopArgs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "__pa",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				if len(r.argsStack) > 0 {

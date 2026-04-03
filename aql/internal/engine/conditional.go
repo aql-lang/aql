@@ -114,7 +114,6 @@ func registerIf(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "if",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:       []Type{TAny, TAny, TAny},

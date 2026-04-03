@@ -32,7 +32,6 @@ func registerModule(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "module",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -188,7 +187,6 @@ func registerModule(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "import",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TModule},
@@ -272,7 +270,6 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.RegisterNativeFunc(NativeFunc{
 		Name:              "export",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args: []Type{TAtom, TMap},

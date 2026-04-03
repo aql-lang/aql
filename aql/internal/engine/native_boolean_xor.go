@@ -10,7 +10,6 @@ func registerXor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "xor",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TBoolean, TBoolean},
 			Handler: handler,

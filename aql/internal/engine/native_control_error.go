@@ -38,7 +38,6 @@ func registerError(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "error",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TError, TList},

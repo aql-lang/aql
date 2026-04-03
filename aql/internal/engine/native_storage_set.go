@@ -63,7 +63,6 @@ func registerSet(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "set",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// Store (copy-on-write)
 			{

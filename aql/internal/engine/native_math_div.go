@@ -26,7 +26,6 @@ func registerDiv(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "div",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

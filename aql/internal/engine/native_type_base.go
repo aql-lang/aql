@@ -16,7 +16,6 @@ func registerBase(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "base",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: baseHandler,

@@ -18,7 +18,6 @@ func registerMul(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "mul",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

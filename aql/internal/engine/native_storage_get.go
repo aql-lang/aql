@@ -124,7 +124,6 @@ func registerGet(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "get",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// [Key | Store] — key forward, container from stack
 			{Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler},

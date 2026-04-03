@@ -8,7 +8,6 @@ func registerArgs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "args",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				if len(r.argsStack) == 0 {

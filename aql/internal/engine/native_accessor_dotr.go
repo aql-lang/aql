@@ -92,7 +92,6 @@ func registerGetr(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "getr",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// [Key | Node] — key forward, container from stack
 			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: mapHandler},

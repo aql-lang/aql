@@ -30,7 +30,6 @@ func registerUndef(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "undef",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TString},

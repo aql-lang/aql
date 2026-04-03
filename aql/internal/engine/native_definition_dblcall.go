@@ -16,7 +16,6 @@ func registerDblcall(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "dblcall",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TInteger, TList},
 			NoEvalArgs: map[int]bool{1: true},

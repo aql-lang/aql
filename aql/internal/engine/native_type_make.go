@@ -590,7 +590,6 @@ func registerMake(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "make",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// New specific signatures
 			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},

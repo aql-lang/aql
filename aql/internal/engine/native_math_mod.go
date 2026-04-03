@@ -29,7 +29,6 @@ func registerMod(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "mod",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TInteger, TInteger},

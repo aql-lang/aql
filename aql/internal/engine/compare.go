@@ -198,7 +198,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lt",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -215,7 +214,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gt",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -232,7 +230,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lte",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -249,7 +246,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gte",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -266,7 +262,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "eq",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -279,7 +274,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "neq",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -292,7 +286,6 @@ func registerComparison(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "deq",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

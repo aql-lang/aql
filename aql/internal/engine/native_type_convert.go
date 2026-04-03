@@ -149,7 +149,6 @@ func registerConvert(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "convert",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			// 3-arg variant registered first (higher score from more args)
 			{

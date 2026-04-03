@@ -34,7 +34,6 @@ func registerOr(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "or",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:       []Type{TBoolean, TBoolean},

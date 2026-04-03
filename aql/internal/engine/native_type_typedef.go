@@ -35,7 +35,6 @@ func registerTypeDef(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "type",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:    []Type{TString, TAny},

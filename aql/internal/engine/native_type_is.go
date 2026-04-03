@@ -8,7 +8,6 @@ func registerIs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "is",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

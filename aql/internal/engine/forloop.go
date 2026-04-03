@@ -47,7 +47,6 @@ func registerFor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "for",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{
 			{
 				Args:       []Type{TInteger, TList},
@@ -66,7 +65,6 @@ func registerFor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "break",
 		ForwardPrecedence: false,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errBreak
@@ -78,7 +76,6 @@ func registerFor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "continue",
 		ForwardPrecedence: false,
-		SkipSafetyCheck:   true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errContinue
