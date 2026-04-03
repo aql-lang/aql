@@ -954,3 +954,4 @@ def x 1 def y 2 {a:x, b:y}	{a:1,b:2}
 def x 1 {a:(x add 1)}	{a:2}
 def x 1 {a:{b:x}}	{a:{b:1}}
 def x 1 def f [do {a:x}] f	{a:1}
+def x 1 ; x:x	{x:1}

@@ -427,6 +427,11 @@ func Parse(src string) ([]engine.Value, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Top-level implicit maps (e.g. entire input is "a:x") must be
+		// auto-evaluated so expressions in values resolve.
+		if val.Implicit && !mv.Eval {
+			mv.Eval = true
+		}
 		return []engine.Value{mv}, nil
 	case unclosedParen:
 		return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
