@@ -16,11 +16,11 @@ import (
 //     returning the transformed tree
 //   - [any] — walks the value and collects all leaf nodes
 //     as a list of {path, value} maps
-func walkFunc() NativeFunc {
-	return NativeFunc{
+func walkFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "walk",
 		ForwardPrecedence: false,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TFunction, engine.TFunction},
 				Handler: walkBeforeAfterHandler,

@@ -9,11 +9,11 @@ import (
 // pad has forward precedence and two signatures:
 //   - [any, integer] — pads the string representation to the given width
 //   - [any]          — pads the string representation to the default width
-func padFunc() NativeFunc {
-	return NativeFunc{
+func padFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "pad",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TInteger},
 				Handler: padWidthHandler,

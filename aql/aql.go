@@ -208,7 +208,9 @@ func (a *AQL) Run(src string) ([]any, error) {
 		return nil, err
 	}
 
+	a.registry.Source = src
 	eng := engine.NewTop(a.registry)
+	eng.SetSource(src)
 	result, err := eng.Run(values)
 	if err != nil {
 		return nil, err

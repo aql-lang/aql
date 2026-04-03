@@ -11,11 +11,11 @@ import (
 // inject has forward precedence and one signature:
 //   - [any, any] — resolves backtick-escaped path references in the first value
 //     using the second value as the store
-func injectFunc() NativeFunc {
-	return NativeFunc{
+func injectFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "inject",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TAny},
 				Handler: injectHandler,

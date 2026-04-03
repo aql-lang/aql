@@ -7,8 +7,12 @@ func registerUpper(r *Registry) {
 		s := args[0].Data.(string)
 		return []Value{NewString(strings.ToUpper(s))}, nil
 	}
-	r.Register("upper",
-		Signature{Args: []Type{TString}, Handler: upperHandler},
-		Signature{Args: []Type{TAtom}, Handler: upperHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "upper",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString}, Handler: upperHandler},
+			{Args: []Type{TAtom}, Handler: upperHandler},
+		},
+	})
 }

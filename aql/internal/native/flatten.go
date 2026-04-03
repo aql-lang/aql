@@ -11,11 +11,11 @@ import (
 // flatten has forward precedence and two signatures:
 //   - [list, integer] — flattens the list to the given depth
 //   - [list]          — flattens the list by one level
-func flattenFunc() NativeFunc {
-	return NativeFunc{
+func flattenFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "flatten",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TInteger},
 				Handler: flattenDepthHandler,

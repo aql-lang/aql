@@ -48,10 +48,14 @@ func registerFn(r *Registry) {
 		return nil, fmt.Errorf("fn: list length must be a multiple of 3 (def) or 2 (undef spec)")
 	}
 
-	r.Register("fn", Signature{
-		Args:       []Type{TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler:    fnHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fn",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    fnHandler,
+		}},
 	})
 }
 
@@ -613,10 +617,6 @@ func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
 // via installDef, returns body tokens, and appends undef cleanup.
 func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	registerFn := r.Register
-	if isStackOnly {
-		registerFn = r.RegisterStackOnly
-	}
 	// Expand optional parameters into additional signatures.
 	fnDef.Sigs = expandOptionalSigs(name, fnDef.Sigs)
 	for _, sig := range fnDef.Sigs {
@@ -706,7 +706,16 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			result = append(result, NewWord(")"))
 			return result, nil
 		}
-		registerFn(name, Signature{Args: argTypes, Handler: handler, Patterns: patterns, BarrierPos: s.BarrierPos})
+		r.RegisterNativeFunc(NativeFunc{
+			Name:              name,
+			ForwardPrecedence: !isStackOnly,
+			Signatures: []NativeSig{{
+				Args:       argTypes,
+				Handler:    handler,
+				Patterns:   patterns,
+				BarrierPos: s.BarrierPos,
+			}},
+		})
 	}
 }
 

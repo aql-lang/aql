@@ -293,54 +293,68 @@ func registerFileIO(r *Registry) {
 		return readOptsHandler([]Value{args[1], args[0]}, ctx, stack, reg)
 	}
 
-	r.Register("read",
-		// Path signatures
-		Signature{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
-		Signature{Args: []Type{TPath}, Handler: readHandler},
-		// String signatures (backward compatible)
-		Signature{Args: []Type{TString, TMap}, Handler: readOptsHandler},
-		Signature{Args: []Type{TString}, Handler: readHandler},
-		// Reversed signatures for stack-first: "path" {opts} read
-		Signature{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler},
-		Signature{Args: []Type{TMap, TString}, Handler: readOptsRevHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "read",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// Path signatures
+			{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
+			{Args: []Type{TPath}, Handler: readHandler},
+			// String signatures (backward compatible)
+			{Args: []Type{TString, TMap}, Handler: readOptsHandler},
+			{Args: []Type{TString}, Handler: readHandler},
+			// Reversed signatures for stack-first: "path" {opts} read
+			{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler},
+			{Args: []Type{TMap, TString}, Handler: readOptsRevHandler},
+		},
+	})
 
-	r.Register("write",
-		// Path signatures
-		Signature{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler},
-		Signature{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler},
-		Signature{Args: []Type{TPath, TString}, Handler: writeHandler},
-		// String signatures (backward compatible)
-		Signature{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler},
-		Signature{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler},
-		Signature{Args: []Type{TString, TString}, Handler: writeHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "write",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// Path signatures
+			{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler},
+			{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler},
+			{Args: []Type{TPath, TString}, Handler: writeHandler},
+			// String signatures (backward compatible)
+			{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler},
+			{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler},
+			{Args: []Type{TString, TString}, Handler: writeHandler},
+		},
+	})
 
 	// stdin, stdout, stderr push special path strings for use with read/write.
-	r.Register("stdin",
-		Signature{
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "stdin",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStdin)}, nil
 			},
-		},
-	)
-	r.Register("stdout",
-		Signature{
+		}},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "stdout",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStdout)}, nil
 			},
-		},
-	)
-	r.Register("stderr",
-		Signature{
+		}},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "stderr",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStderr)}, nil
 			},
-		},
-	)
+		}},
+	})
 }
 
 func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {

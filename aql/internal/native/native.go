@@ -1,69 +1,26 @@
 package native
 
 import (
-	"fmt"
-
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// NativeFunc describes a built-in native function with its name, signatures,
-// and whether it uses forward precedence.
-type NativeFunc struct {
-	Name              string
-	ForwardPrecedence bool
-	SkipSafetyCheck   bool // when true, bypass wrapSafetyCheck (for type-inspecting words)
-	Signatures        []NativeSig
-}
-
-// NativeSig describes one overload of a native function.
-type NativeSig struct {
-	Args     []engine.Type
-	Handler  engine.Handler
-	Patterns map[int]engine.Value // optional structural patterns for args
-}
-
 // Register installs all built-in native functions into the given registry.
+// It also sets ModuleInitFunc so that module sub-registries automatically
+// get the same native words.
 func Register(r *engine.Registry) {
 	for _, fn := range All() {
-		for _, sig := range fn.Signatures {
-			handler := sig.Handler
-			if !fn.SkipSafetyCheck {
-				handler = wrapSafetyCheck(handler)
-			}
-			s := engine.Signature{
-				Args:     sig.Args,
-				Handler:  handler,
-				Patterns: sig.Patterns,
-			}
-			if fn.ForwardPrecedence {
-				r.Register(fn.Name, s)
-			} else {
-				r.RegisterStackOnly(fn.Name, s)
-			}
-		}
+		r.RegisterNativeFunc(fn)
 	}
-}
-
-// wrapSafetyCheck wraps a Handler to reject type literals and Options types
-// before the handler runs. This prevents nil pointer dereferences in native
-// handlers that expect concrete data.
-func wrapSafetyCheck(h engine.Handler) engine.Handler {
-	return func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-		for _, arg := range args {
-			if arg.Data == nil && !arg.VType.Equal(engine.TNone) {
-				return nil, fmt.Errorf("expected a concrete value, got type literal %s", arg.VType)
-			}
-			if arg.IsOptionsType() {
-				return nil, fmt.Errorf("expected a concrete map, got options type %s", arg.String())
-			}
+	r.ModuleInitFunc = func(child *engine.Registry) {
+		for _, fn := range All() {
+			child.RegisterNativeFunc(fn)
 		}
-		return h(args, ctx, stack, r)
 	}
 }
 
 // All returns all built-in native functions.
-func All() []NativeFunc {
-	return []NativeFunc{
+func All() []engine.NativeFunc {
+	return []engine.NativeFunc{
 		listFunc(),
 		createFunc(),
 		loadFunc(),

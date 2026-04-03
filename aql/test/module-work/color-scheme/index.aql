@@ -46,7 +46,7 @@ def neon {
 }
 
 export Schemes {
-  sunset: sunset
-  ocean: ocean
-  neon: neon
+  sunset:  sunset
+  ocean:   ocean
+  neon:    neon
 }

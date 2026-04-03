@@ -12,11 +12,11 @@ import (
 // Signatures use [Integer, Integer, Any] ordering so that forward-first
 // rearrangement (forward args at positions 0..F-1, stack data last) aligns
 // with positional matching.
-func sliceFunc() NativeFunc {
-	return NativeFunc{
+func sliceFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "slice",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TInteger, engine.TInteger, engine.TAny},
 				Handler: sliceStartEndHandler,

@@ -20,28 +20,32 @@ func registerQuote(r *Registry) {
 	// TWord signature: captures words as literals via
 	// hasPendingForwardExpectingWord(), preventing execution.
 	// Converts the word to an atom.
-	r.Register("quote",
-		Signature{
-			Args: []Type{TWord},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				w, _ := args[0].AsWord()
-				v := NewAtom(w.Name)
-				v.Quoted = true
-				return []Value{v}, nil
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "quote",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TWord},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					w, _ := args[0].AsWord()
+					v := NewAtom(w.Name)
+					v.Quoted = true
+					return []Value{v}, nil
+				},
+			},
+			// TAny signature: catches all non-word values (lists, maps,
+			// scalars). Returns the value with Quoted=true to prevent
+			// auto-evaluation at end of execution. NoEvalArgs prevents
+			// list auto-evaluation before the handler runs.
+			{
+				Args:       []Type{TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					v := args[0]
+					v.Quoted = true
+					return []Value{v}, nil
+				},
 			},
 		},
-		// TAny signature: catches all non-word values (lists, maps,
-		// scalars). Returns the value with Quoted=true to prevent
-		// auto-evaluation at end of execution. NoEvalArgs prevents
-		// list auto-evaluation before the handler runs.
-		Signature{
-			Args:       []Type{TAny},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				v := args[0]
-				v.Quoted = true
-				return []Value{v}, nil
-			},
-		},
-	)
+	})
 }

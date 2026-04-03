@@ -10,11 +10,11 @@ import (
 // filterFunc returns the "filter" native function definition.
 // filter has forward precedence and one signature:
 //   - [any, function] — filters the value using the callback as predicate
-func filterFunc() NativeFunc {
-	return NativeFunc{
+func filterFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "filter",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TFunction},
 				Handler: filterHandler,

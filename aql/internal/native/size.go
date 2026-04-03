@@ -8,11 +8,11 @@ import (
 // sizeFunc returns the "size" native function definition.
 // size has forward precedence and one signature:
 //   - [any] — returns the size/length of the value
-func sizeFunc() NativeFunc {
-	return NativeFunc{
+func sizeFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "size",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},
 				Handler: sizeHandler,

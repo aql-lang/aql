@@ -88,16 +88,20 @@ func registerObject(r *Registry) {
 		return []Value{NewObjectType(info)}, nil
 	}
 
-	r.Register("object",
-		// 2-arg: map + parent object type
-		Signature{
-			Args:    []Type{TMap, TObject},
-			Handler: objectWithParentHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "object",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// 2-arg: map + parent object type
+			{
+				Args:    []Type{TMap, TObject},
+				Handler: objectWithParentHandler,
+			},
+			// 1-arg: map only (no parent)
+			{
+				Args:    []Type{TMap},
+				Handler: objectHandler,
+			},
 		},
-		// 1-arg: map only (no parent)
-		Signature{
-			Args:    []Type{TMap},
-			Handler: objectHandler,
-		},
-	)
+	})
 }

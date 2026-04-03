@@ -427,9 +427,14 @@ func Parse(src string) ([]engine.Value, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Top-level implicit maps (e.g. entire input is "a:x") must be
+		// auto-evaluated so expressions in values resolve.
+		if val.Implicit && !mv.Eval {
+			mv.Eval = true
+		}
 		return []engine.Value{mv}, nil
 	case unclosedParen:
-		return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		return nil, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", src, "")
 
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
@@ -478,7 +483,7 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 		// Unclosed paren: error at parse time.
 		if up, ok := items[i].(unclosedParen); ok {
 			_ = up
-			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+			return nil, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
 		// Paren group: expand to engine paren markers at top level.
@@ -528,7 +533,16 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit, val.Meta)
+		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
+		if err != nil {
+			return mv, err
+		}
+		// In word context (top level), implicit maps from pair syntax
+		// (e.g. a:x) must be auto-evaluated so expressions resolve.
+		if val.Implicit && !mv.Eval {
+			mv.Eval = true
+		}
+		return mv, nil
 
 	case map[string]any:
 		// Raw map from list.pair syntax (e.g., [x:number] produces
@@ -536,7 +550,14 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val) {
 			return convertTypedMap(val)
 		}
-		return convertMapData(val, true)
+		mv, err := convertMapData(val, true)
+		if err != nil {
+			return mv, err
+		}
+		// In word context (top level), implicit maps from pair syntax
+		// must be auto-evaluated so expressions resolve.
+		mv.Eval = true
+		return mv, nil
 
 	case jsonic.ListRef:
 		if val.Child != nil {
@@ -657,7 +678,7 @@ func convertDataValue(v any) (engine.Value, error) {
 		return convertDataList(val.Val)
 
 	case unclosedParen:
-		return engine.Value{}, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		return engine.Value{}, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 
 	case parenGroup:
 		// Paren group in data context: convert items in word context

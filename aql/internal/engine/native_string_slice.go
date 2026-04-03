@@ -45,14 +45,18 @@ func registerSlice(r *Registry) {
 		return sliceResult(result)
 	}
 
-	r.Register("slice",
-		Signature{Args: []Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler},
-		Signature{Args: []Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler},
-		Signature{Args: []Type{TInteger, TString}, Handler: sliceStartHandler},
-		Signature{Args: []Type{TInteger, TList}, Handler: sliceStartHandler},
-		Signature{Args: []Type{TString}, Handler: sliceAllHandler},
-		Signature{Args: []Type{TList}, Handler: sliceAllHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "slice",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler},
+			{Args: []Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler},
+			{Args: []Type{TInteger, TString}, Handler: sliceStartHandler},
+			{Args: []Type{TInteger, TList}, Handler: sliceStartHandler},
+			{Args: []Type{TString}, Handler: sliceAllHandler},
+			{Args: []Type{TList}, Handler: sliceAllHandler},
+		},
+	})
 }
 
 // valueToSliceArg converts a Value to the interface{} expected by voxgigstruct.Slice.

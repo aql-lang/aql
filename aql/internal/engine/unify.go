@@ -762,8 +762,12 @@ func registerUnify(r *Registry) {
 	}
 
 	// unify: [any, any] -> [any, boolean]
-	r.Register("unify", Signature{
-		Args:    []Type{TAny, TAny},
-		Handler: unifyHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "unify",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TAny, TAny},
+			Handler: unifyHandler,
+		}},
 	})
 }

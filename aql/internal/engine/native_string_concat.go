@@ -17,10 +17,14 @@ func registerConcat(r *Registry) {
 		return doConcat(args[0], opts)
 	}
 
-	r.Register("concat",
-		Signature{Args: []Type{TList, TMap}, Handler: concatOptsHandler},
-		Signature{Args: []Type{TList}, Handler: concatHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "concat",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TList, TMap}, Handler: concatOptsHandler},
+			{Args: []Type{TList}, Handler: concatHandler},
+		},
+	})
 }
 
 func doConcat(listVal Value, o strOpts) ([]Value, error) {

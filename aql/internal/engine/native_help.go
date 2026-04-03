@@ -361,14 +361,18 @@ func registerHelp(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("help",
-		Signature{Args: []Type{TString}, Handler: wordHandler},
-		Signature{Args: []Type{TAtom}, Handler: wordHandler},
-		Signature{
-			Args:      []Type{TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler:   wordHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "help",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString}, Handler: wordHandler},
+			{Args: []Type{TAtom}, Handler: wordHandler},
+			{
+				Args:      []Type{TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   wordHandler,
+			},
+			{Args: []Type{}, Handler: selfHandler},
 		},
-		Signature{Args: []Type{}, Handler: selfHandler},
-	)
+	})
 }

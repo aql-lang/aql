@@ -49,19 +49,23 @@ func registerDef(r *Registry) {
 		return nil, nil
 	}
 
-	r.Register("def",
-		Signature{
-			Args:       []Type{TString, TAny},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    defHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "def",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:       []Type{TString, TAny},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    defHandler,
+			},
+			{
+				Args:       []Type{TAtom, TAny},
+				QuoteArgs:  map[int]bool{0: true},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    defHandler,
+			},
 		},
-		Signature{
-			Args:       []Type{TAtom, TAny},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    defHandler,
-		},
-	)
+	})
 }
 
 // installDef registers a new word as a literal substitution or a typed
@@ -117,12 +121,12 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 								}
 							}
 						}
-						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 					}
 					if top.VType.Equal(TFunction) {
-						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 					}
-					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+					return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 				},
 			})
 		}

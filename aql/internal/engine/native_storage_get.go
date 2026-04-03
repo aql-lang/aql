@@ -121,23 +121,25 @@ func registerGet(r *Registry) {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 
-	sigs := []Signature{
-		// [Key | Store] — key forward, container from stack
-		{Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler},
-		{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler},
-		// [Key | Node] — covers Map, List, Options
-		{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: nodeHandler},
-		{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: nodeHandler},
-		{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: nodeHandler},
-		// [Key | Array]
-		{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: arrayHandler},
-		// [Key | Object]
-		{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
-		{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
-		{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
-		// [Key | None]
-		{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
-	}
-
-	r.Register("get", sigs...)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "get",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// [Key | Store] — key forward, container from stack
+			{Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler},
+			{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler},
+			// [Key | Node] — covers Map, List, Options
+			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: nodeHandler},
+			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: nodeHandler},
+			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: nodeHandler},
+			// [Key | Array]
+			{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: arrayHandler},
+			// [Key | Object]
+			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
+			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
+			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
+			// [Key | None]
+			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
+		},
+	})
 }

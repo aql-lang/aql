@@ -30,9 +30,14 @@ func registerTypeof(r *Registry) {
 		return []Value{NewAtom(result)}, nil
 	}
 
-	r.Register("typeof",
-		Signature{Args: []Type{TAny}, Handler: typeofHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "typeof",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TAny},
+			Handler: typeofHandler,
+		}},
+	})
 }
 
 func registerFullTypeof(r *Registry) {
@@ -56,7 +61,12 @@ func registerFullTypeof(r *Registry) {
 		return []Value{NewAtom(strings.Join(parts, "/"))}, nil
 	}
 
-	r.Register("fulltypeof",
-		Signature{Args: []Type{TAny}, Handler: fulltypeofHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fulltypeof",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TAny},
+			Handler: fulltypeofHandler,
+		}},
+	})
 }

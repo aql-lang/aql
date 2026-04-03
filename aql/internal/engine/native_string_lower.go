@@ -7,8 +7,12 @@ func registerLower(r *Registry) {
 		s := args[0].Data.(string)
 		return []Value{NewString(strings.ToLower(s))}, nil
 	}
-	r.Register("lower",
-		Signature{Args: []Type{TString}, Handler: lowerHandler},
-		Signature{Args: []Type{TAtom}, Handler: lowerHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "lower",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString}, Handler: lowerHandler},
+			{Args: []Type{TAtom}, Handler: lowerHandler},
+		},
+	})
 }

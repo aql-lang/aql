@@ -35,14 +35,18 @@ func registerError(r *Registry) {
 		return sub.Run(body)
 	}
 
-	r.Register("error",
-		Signature{
-			Args:    []Type{TError, TList},
-			Handler: listHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "error",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TError, TList},
+				Handler: listHandler,
+			},
+			{
+				Args:    []Type{TError},
+				Handler: simpleHandler,
+			},
 		},
-		Signature{
-			Args:    []Type{TError},
-			Handler: simpleHandler,
-		},
-	)
+	})
 }

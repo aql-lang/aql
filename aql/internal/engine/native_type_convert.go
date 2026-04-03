@@ -146,16 +146,20 @@ func registerConvert(r *Registry) {
 	baseOpts.Set("base", NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)}))
 	optsPattern := NewOptionsType(baseOpts)
 
-	r.Register("convert",
-		// 3-arg variant registered first (higher score from more args)
-		Signature{
-			Args:     []Type{TScalarType, TMap, TScalar},
-			Patterns: map[int]Value{1: optsPattern},
-			Handler:  convert3Handler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "convert",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// 3-arg variant registered first (higher score from more args)
+			{
+				Args:     []Type{TScalarType, TMap, TScalar},
+				Patterns: map[int]Value{1: optsPattern},
+				Handler:  convert3Handler,
+			},
+			{
+				Args:    []Type{TScalarType, TScalar},
+				Handler: convert2Handler,
+			},
 		},
-		Signature{
-			Args:    []Type{TScalarType, TScalar},
-			Handler: convert2Handler,
-		},
-	)
+	})
 }

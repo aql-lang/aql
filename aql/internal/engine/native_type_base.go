@@ -13,9 +13,14 @@ func registerBase(r *Registry) {
 		return []Value{result}, nil
 	}
 
-	r.Register("base",
-		Signature{Args: []Type{TAny}, Handler: baseHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "base",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TAny},
+			Handler: baseHandler,
+		}},
+	})
 }
 
 // baseValue returns the zero/default value for a given type, similar to Go's

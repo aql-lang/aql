@@ -539,3 +539,237 @@ func TestDoMapMixedWordAndListValues(t *testing.T) {
 		t.Errorf("c = %v, want literal", cv)
 	}
 }
+
+// --- Color type: make Color produces validated record maps ---
+
+func TestColorMakeColorTypeFields(t *testing.T) {
+	// make Color validates field types (Integer)
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#1A2B3C" color.hex2rgb`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	for _, key := range []string{"r", "g", "b"} {
+		v, ok := m.Get(key)
+		if !ok {
+			t.Errorf("missing field %s in Color record", key)
+			continue
+		}
+		_, err := v.AsInteger()
+		if err != nil {
+			t.Errorf("Color field %s should be Integer, got %s", key, v.String())
+		}
+	}
+}
+
+func TestColorHex2rgbUsesColorRecord(t *testing.T) {
+	// hex2rgb uses make Color internally; result is accepted by rgb2hex (which expects Color param)
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#AABBCC" color.hex2rgb color.rgb2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#AABBCC'")
+}
+
+func TestColorMakeColorTypeHasHex(t *testing.T) {
+	// make-color returns ColorHex record with all 4 fields
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`"#DEADBE" color.make-color`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	for _, key := range []string{"hex", "r", "g", "b"} {
+		if _, ok := m.Get(key); !ok {
+			t.Errorf("missing field %s in ColorHex record", key)
+		}
+	}
+	hexv, _ := m.Get("hex")
+	s, _ := hexv.AsString()
+	if s != "#DEADBE" {
+		t.Errorf("hex = %q, want #DEADBE", s)
+	}
+}
+
+func TestColorClampRgbEvaluatedMapValues(t *testing.T) {
+	// clamp-rgb uses make Color with paren expressions as map values
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`{r:300 g:-10 b:128} color.clamp-rgb`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	rv, _ := m.Get("r")
+	gv, _ := m.Get("g")
+	bv, _ := m.Get("b")
+	rvi, _ := rv.AsInteger()
+	gvi, _ := gv.AsInteger()
+	bvi, _ := bv.AsInteger()
+	if rvi != 255 {
+		t.Errorf("r = %d, want 255", rvi)
+	}
+	if gvi != 0 {
+		t.Errorf("g = %d, want 0", gvi)
+	}
+	if bvi != 128 {
+		t.Errorf("b = %d, want 128", bvi)
+	}
+}
+
+func TestColorClampRgbRoundTrip(t *testing.T) {
+	// clamp-rgb output feeds into rgb2hex (Color type accepted)
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`def clamped ({r:300 g:0 b:255} color.clamp-rgb)`,
+		`clamped color.rgb2hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#FF00FF'")
+}
+
+// --- Color-scheme: evaluated map values in scheme definitions ---
+
+func TestColorSchemeMapValuesEvaluated(t *testing.T) {
+	// Scheme maps use evaluated word values (primary:accent1 etc.)
+	// Verify that nested access resolves color values through def'd words.
+	dir := moduleWorkDir(t)
+
+	// Access the primary color's red component
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color-scheme")`,
+		`Schemes.sunset.primary.r`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "230") // #E6 = 230
+
+	// Access accent hex field (make-color returns ColorHex with hex)
+	result, err = runRealFileSteps(t, dir, []string{
+		`(import "./color-scheme")`,
+		`Schemes.ocean.accent.hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#E9C46A'")
+}
+
+func TestColorSchemeEachSchemeHasColorFields(t *testing.T) {
+	// All color fields in every scheme should be integers (from make Color)
+	dir := moduleWorkDir(t)
+	schemes := []string{"sunset", "ocean", "neon"}
+	colorFields := []string{"primary", "secondary", "accent", "dark", "background"}
+	rgbComponents := []string{"r", "g", "b"}
+
+	for _, scheme := range schemes {
+		for _, field := range colorFields {
+			for _, comp := range rgbComponents {
+				result, err := runRealFileSteps(t, dir, []string{
+					`(import "./color-scheme")`,
+					`Schemes.` + scheme + `.` + field + `.` + comp,
+				})
+				if err != nil {
+					t.Errorf("Schemes.%s.%s.%s: %v", scheme, field, comp, err)
+					continue
+				}
+				v, ierr := result[0].AsInteger()
+				if ierr != nil {
+					t.Errorf("Schemes.%s.%s.%s: expected Integer, got %s", scheme, field, comp, result[0].String())
+				}
+				if v < 0 || v > 255 {
+					t.Errorf("Schemes.%s.%s.%s: %d not in 0-255", scheme, field, comp, v)
+				}
+			}
+		}
+	}
+}
+
+func TestColorSchemeHexFieldPresent(t *testing.T) {
+	// make-color returns ColorHex, so schemes have hex field on each color
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color-scheme")`,
+		`Schemes.neon.accent.hex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "'#FFBE0B'")
+}
+
+// --- Color type with def and evaluated map values ---
+
+func TestColorDefAndMapExpr(t *testing.T) {
+	// Use def'd Color values inside evaluated map expressions
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`def red (color.hex2rgb "#FF0000")`,
+		`def blue (color.hex2rgb "#0000FF")`,
+		`{r1:(red .r) b2:(blue .b)}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := result[0].AsMap()
+	r1, _ := m.Get("r1")
+	b2, _ := m.Get("b2")
+	r1i, _ := r1.AsInteger()
+	b2i, _ := b2.AsInteger()
+	if r1i != 255 {
+		t.Errorf("r1 = %d, want 255", r1i)
+	}
+	if b2i != 255 {
+		t.Errorf("b2 = %d, want 255", b2i)
+	}
+}
+
+func TestColorExportedTypeUsableDirectly(t *testing.T) {
+	// The exported Color type can be accessed and used
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`color.Color`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := formatStack(result)
+	if got != "record{r:Scalar/Number/Integer,g:Scalar/Number/Integer,b:Scalar/Number/Integer}" {
+		t.Errorf("Color type = %s", got)
+	}
+}
+
+func TestColorExportedColorHexType(t *testing.T) {
+	// ColorHex type is exported with hex, r, g, b fields
+	dir := moduleWorkDir(t)
+	result, err := runRealFileSteps(t, dir, []string{
+		`(import "./color")`,
+		`color.ColorHex`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := formatStack(result)
+	if got != "record{hex:Scalar/String,r:Scalar/Number/Integer,g:Scalar/Number/Integer,b:Scalar/Number/Integer}" {
+		t.Errorf("ColorHex type = %s", got)
+	}
+}

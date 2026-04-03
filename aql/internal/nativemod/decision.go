@@ -17,9 +17,9 @@ var (
 )
 
 // BuildDecisionModule creates the "aql:decision" native module.
-// Builder functions are defined in pure AQL. Evaluators are Go-implemented
-// to avoid CallAQL nesting limitations with recursive predicate evaluation.
-// The AQL source is parsed once and cached for reuse across imports.
+// All functionality is implemented in pure AQL — record types, builders,
+// evaluators, and exports. The AQL source is parsed once and cached;
+// execution and export collection are handled by RunModuleBody.
 func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	if parent.ParseFunc == nil {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: parser not configured")
@@ -33,638 +33,157 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", decisionParseErr)
 	}
 
-	// Create sub-registry with full builtins + native words.
-	subReg, err := engine.DefaultRegistry()
-	if err != nil {
-		return engine.ModuleDesc{}, err
-	}
-	subReg.ParseFunc = parent.ParseFunc
-	native.Register(subReg)
-
-	// Register Go-implemented evaluators in the sub-registry.
-	registerEvalCond(subReg)
-	registerEvalPred(subReg)
-	registerEvalTable(subReg)
-	registerEvalTree(subReg)
-	registerDecide(subReg)
-
-	// Run the cached AQL tokens in the sub-registry (copy to avoid mutation).
-	eng := engine.NewTop(subReg)
-	_, err = eng.Run(append([]engine.Value(nil), decisionParsed...))
-	if err != nil {
-		return engine.ModuleDesc{}, fmt.Errorf("decision: execution error: %w", err)
+	// Ensure native words (push, etc.) are available inside the module.
+	if parent.ModuleInitFunc == nil {
+		native.Register(parent)
 	}
 
-	// Tag FnDefs from AQL with the sub-registry (closure semantics).
-	for name, stack := range subReg.DefStacks {
-		for i, val := range stack {
-			if fnDef, ok := val.Data.(engine.FnDefInfo); ok && fnDef.Registry == nil {
-				fnDef.Registry = subReg
-				subReg.DefStacks[name][i] = engine.NewFnDef(fnDef)
-			}
-		}
-	}
-
-	// Build export map.
-	exports := engine.NewOrderedMap()
-
-	// AQL-defined builders
-	aqlExports := []string{
-		"cond", "all-of", "any-of", "not-of",
-		"make-rule", "make-table", "make-tree", "make-branch", "make-leaf",
-		"with-policy",
-	}
-	for _, name := range aqlExports {
-		stack := subReg.DefStacks[name]
-		if len(stack) > 0 {
-			exports.Set(name, stack[len(stack)-1])
-		}
-	}
-
-	// Go-implemented evaluators as FnDef wrappers
-	exports.Set("eval-cond", makeFnDef("eval-cond", []engine.FnParam{{Type: engine.TMap}, {Type: engine.TMap}}, []engine.Type{engine.TBoolean}, subReg))
-	exports.Set("eval-pred", makeFnDef("eval-pred", []engine.FnParam{{Type: engine.TMap}, {Type: engine.TMap}}, []engine.Type{engine.TBoolean}, subReg))
-	exports.Set("eval-table", makeFnDef("eval-table", []engine.FnParam{{Type: engine.TMap}, {Type: engine.TMap}}, []engine.Type{engine.TAny}, subReg))
-	exports.Set("eval-tree", makeFnDef("eval-tree", []engine.FnParam{{Type: engine.TMap}, {Type: engine.TMap}}, []engine.Type{engine.TAny}, subReg))
-	exports.Set("decide", makeFnDef("decide", []engine.FnParam{{Type: engine.TMap}, {Type: engine.TMap}}, []engine.Type{engine.TAny}, subReg))
-
-	modID := parent.NextModuleID()
-	desc := engine.ModuleDesc{
-		ID:      modID,
-		Exports: map[string]*engine.OrderedMap{"decision": exports},
-	}
-	return desc, nil
+	// Copy tokens to avoid mutation, then let RunModuleBody handle
+	// registry setup, execution, export collection, and FnDef tagging.
+	tokens := append([]engine.Value(nil), decisionParsed...)
+	return engine.RunModuleBody(parent, tokens)
 }
 
-func makeFnDef(wordName string, params []engine.FnParam, returns []engine.Type, subReg *engine.Registry) engine.Value {
-	// Give params names so CallAQL installs them as defs rather than
-	// pushing unnamed tokens.  The body then pushes them in reverse order
-	// so that the inner registered word's nearest-first matching sees
-	// them in the original sig order (counteracts double reversal).
-	named := make([]engine.FnParam, len(params))
-	for i, p := range params {
-		named[i] = engine.FnParam{Name: fmt.Sprintf("__p%d", i), Type: p.Type}
-	}
-	var body []engine.Value
-	for i := len(named) - 1; i >= 0; i-- {
-		body = append(body, engine.NewWord(named[i].Name))
-	}
-	body = append(body, engine.NewWord(wordName))
-	return engine.NewFnDef(engine.FnDefInfo{
-		Name: wordName,
-		Sigs: []engine.FnSig{{
-			Params:  named,
-			Returns: returns,
-			Body:    body,
-		}},
-		Registry: subReg,
-	})
-}
-
-// --- Go evaluator: apply-op ---
-
-func applyOp(op string, lhs, rhs engine.Value) (bool, error) {
-	switch op {
-	case "eq":
-		return lhs.String() == rhs.String(), nil
-	case "neq":
-		return lhs.String() != rhs.String(), nil
-	case "lt":
-		lhsN, err := lhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		rhsN, err := rhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		return lhsN < rhsN, nil
-	case "lte":
-		lhsN, err := lhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		rhsN, err := rhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		return lhsN <= rhsN, nil
-	case "gt":
-		lhsN, err := lhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		rhsN, err := rhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		return lhsN > rhsN, nil
-	case "gte":
-		lhsN, err := lhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		rhsN, err := rhs.AsNumber()
-		if err != nil {
-			return false, err
-		}
-		return lhsN >= rhsN, nil
-	case "is_true":
-		b, err := lhs.AsBoolean()
-		if err != nil {
-			return false, err
-		}
-		return b, nil
-	case "is_false":
-		b, err := lhs.AsBoolean()
-		if err != nil {
-			return false, err
-		}
-		return !b, nil
-	case "is_null":
-		return lhs.VType.Equal(engine.TNone), nil
-	case "is_not_null":
-		return !lhs.VType.Equal(engine.TNone), nil
-	default:
-		return false, fmt.Errorf("unsupported operator: %s", op)
-	}
-}
-
-// --- Go evaluator: eval-cond ---
-
-func registerEvalCond(r *engine.Registry) {
-	r.Register("eval-cond", engine.Signature{
-		Args: []engine.Type{engine.TMap, engine.TMap},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			c := args[1].AsMap()
-			input := args[0].AsMap()
-			if c == nil || input == nil {
-				return nil, fmt.Errorf("eval-cond: expected concrete maps")
-			}
-			return evalCondMap(c, input)
-		},
-	})
-}
-
-func evalCondMap(c engine.ReadMap, input engine.ReadMap) ([]engine.Value, error) {
-	fieldVal, _ := c.Get("field")
-	opVal, _ := c.Get("op")
-	valueVal, _ := c.Get("value")
-
-	fieldName := fieldVal.String()
-	if fieldVal.IsAtom() {
-		a, err := fieldVal.AsAtom()
-		if err != nil {
-			return nil, fmt.Errorf("eval-cond: field: %w", err)
-		}
-		fieldName = a
-	}
-
-	lhs, _ := input.Get(fieldName)
-	op, err := opVal.AsString()
-	if err != nil {
-		return nil, fmt.Errorf("eval-cond: op: %w", err)
-	}
-	if opVal.IsAtom() {
-		a, err := opVal.AsAtom()
-		if err != nil {
-			return nil, fmt.Errorf("eval-cond: op: %w", err)
-		}
-		op = a
-	}
-
-	result, err := applyOp(op, lhs, valueVal)
-	if err != nil {
-		return nil, fmt.Errorf("eval-cond: %w", err)
-	}
-	return []engine.Value{engine.NewBoolean(result)}, nil
-}
-
-// --- Go evaluator: eval-pred ---
-
-func registerEvalPred(r *engine.Registry) {
-	r.Register("eval-pred", engine.Signature{
-		Args: []engine.Type{engine.TMap, engine.TMap},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			pred := args[1].AsMap()
-			input := args[0].AsMap()
-			if pred == nil || input == nil {
-				return nil, fmt.Errorf("eval-pred: expected concrete maps")
-			}
-			result, err := evalPredMap(pred, input)
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewBoolean(result)}, nil
-		},
-	})
-}
-
-func evalPredMap(pred engine.ReadMap, input engine.ReadMap) (bool, error) {
-	kindVal, hasKind := pred.Get("kind")
-	if hasKind {
-		kindStr, err := kindVal.AsString()
-		if err != nil {
-			return false, fmt.Errorf("eval-pred: kind: %w", err)
-		}
-		hasKind = kindStr == "group"
-	}
-	if hasKind {
-		opVal, _ := pred.Get("op")
-		op, err := opVal.AsString()
-		if err != nil {
-			return false, fmt.Errorf("eval-pred: op: %w", err)
-		}
-		if opVal.IsAtom() {
-			a, err := opVal.AsAtom()
-			if err != nil {
-				return false, fmt.Errorf("eval-pred: op: %w", err)
-			}
-			op = a
-		}
-		childrenVal, _ := pred.Get("children")
-		children := childrenVal.AsList()
-		singleChild := false
-		if children.IsNil() && childrenVal.AsMap() != nil {
-			singleChild = true
-		}
-
-		switch op {
-		case "all":
-			for i := 0; i < children.Len(); i++ {
-				child := children.Get(i)
-				childMap := child.AsMap()
-				if childMap == nil {
-					return false, fmt.Errorf("eval-pred: child %d is not a map", i)
-				}
-				r, err := evalPredMap(childMap, input)
-				if err != nil {
-					return false, err
-				}
-				if !r {
-					return false, nil
-				}
-			}
-			return true, nil
-		case "any":
-			for i := 0; i < children.Len(); i++ {
-				child := children.Get(i)
-				childMap := child.AsMap()
-				if childMap == nil {
-					return false, fmt.Errorf("eval-pred: child %d is not a map", i)
-				}
-				r, err := evalPredMap(childMap, input)
-				if err != nil {
-					return false, err
-				}
-				if r {
-					return true, nil
-				}
-			}
-			return false, nil
-		case "not":
-			var childMap engine.ReadMap
-			if singleChild {
-				childMap = childrenVal.AsMap()
-			} else if children.Len() > 0 {
-				childMap = children.Get(0).AsMap()
-			}
-			if childMap == nil {
-				return false, fmt.Errorf("eval-pred: child is not a map")
-			}
-			r, err := evalPredMap(childMap, input)
-			if err != nil {
-				return false, err
-			}
-			return !r, nil
-		default:
-			return false, fmt.Errorf("eval-pred: unknown group operator %q", op)
-		}
-	}
-
-	// Atomic condition
-	res, err := evalCondMap(pred, input)
-	if err != nil {
-		return false, err
-	}
-	b, err := res[0].AsBoolean()
-	if err != nil {
-		return false, err
-	}
-	return b, nil
-}
-
-// --- Go evaluator: eval-table ---
-
-func registerEvalTable(r *engine.Registry) {
-	r.Register("eval-table", engine.Signature{
-		Args: []engine.Type{engine.TMap, engine.TMap},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			table := args[1].AsMap()
-			input := args[0].AsMap()
-			if table == nil || input == nil {
-				return nil, fmt.Errorf("eval-table: expected concrete maps")
-			}
-			return evalTableMap(table, input)
-		},
-	})
-}
-
-func evalTableMap(table engine.ReadMap, input engine.ReadMap) ([]engine.Value, error) {
-	rulesVal, _ := table.Get("rules")
-	rules := rulesVal.AsList()
-	policyVal, _ := table.Get("hit-policy")
-	policy, err := policyVal.AsString()
-	if err != nil {
-		return nil, fmt.Errorf("eval-table: hit-policy: %w", err)
-	}
-	if policyVal.IsAtom() {
-		a, err := policyVal.AsAtom()
-		if err != nil {
-			return nil, fmt.Errorf("eval-table: hit-policy: %w", err)
-		}
-		policy = a
-	}
-
-	var matched []engine.Value
-	for i := 0; i < rules.Len(); i++ {
-		rule := rules.Get(i)
-		ruleMap := rule.AsMap()
-		if ruleMap == nil {
-			continue
-		}
-		whenVal, _ := ruleMap.Get("when")
-		whenMap := whenVal.AsMap()
-		if whenMap == nil {
-			continue
-		}
-		match, err := evalPredMap(whenMap, input)
-		if err != nil {
-			return nil, fmt.Errorf("eval-table: rule %d: %w", i, err)
-		}
-		if match {
-			matched = append(matched, rule)
-		}
-	}
-
-	nMatched := len(matched)
-	noMatch := engine.NewMap(makeErrorMap("no-match"))
-
-	switch policy {
-	case "first":
-		if nMatched > 0 {
-			thenVal, _ := matched[0].AsMap().Get("then")
-			return []engine.Value{thenVal}, nil
-		}
-		return []engine.Value{noMatch}, nil
-
-	case "unique":
-		if nMatched == 1 {
-			thenVal, _ := matched[0].AsMap().Get("then")
-			return []engine.Value{thenVal}, nil
-		}
-		if nMatched == 0 {
-			return []engine.Value{noMatch}, nil
-		}
-		return []engine.Value{engine.NewMap(makeErrorMap("multiple-matches"))}, nil
-
-	case "collect":
-		results := make([]engine.Value, nMatched)
-		for i, m := range matched {
-			thenVal, _ := m.AsMap().Get("then")
-			results[i] = thenVal
-		}
-		return []engine.Value{engine.NewList(results)}, nil
-
-	case "priority":
-		if nMatched == 0 {
-			return []engine.Value{noMatch}, nil
-		}
-		best := matched[0]
-		bestPri := int64(0)
-		if m := best.AsMap(); m != nil {
-			if p, ok := m.Get("priority"); ok {
-				v, err := p.AsInteger()
-				if err != nil {
-					return nil, fmt.Errorf("eval-table: priority: %w", err)
-				}
-				bestPri = v
-			}
-		}
-		for _, m := range matched[1:] {
-			if mm := m.AsMap(); mm != nil {
-				if p, ok := mm.Get("priority"); ok {
-					v, err := p.AsInteger()
-					if err != nil {
-						return nil, fmt.Errorf("eval-table: priority: %w", err)
-					}
-					if v > bestPri {
-						best = m
-						bestPri = v
-					}
-				}
-			}
-		}
-		thenVal, _ := best.AsMap().Get("then")
-		return []engine.Value{thenVal}, nil
-
-	default:
-		if nMatched > 0 {
-			thenVal, _ := matched[0].AsMap().Get("then")
-			return []engine.Value{thenVal}, nil
-		}
-		return []engine.Value{noMatch}, nil
-	}
-}
-
-func makeErrorMap(errMsg string) *engine.OrderedMap {
-	m := engine.NewOrderedMap()
-	m.Set("ok", engine.NewBoolean(false))
-	m.Set("error", engine.NewString(errMsg))
-	return m
-}
-
-// --- Go evaluator: eval-tree ---
-
-func registerEvalTree(r *engine.Registry) {
-	r.Register("eval-tree", engine.Signature{
-		Args: []engine.Type{engine.TMap, engine.TMap},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			tree := args[1].AsMap()
-			input := args[0].AsMap()
-			if tree == nil || input == nil {
-				return nil, fmt.Errorf("eval-tree: expected concrete maps")
-			}
-			return evalTreeMap(tree, input)
-		},
-	})
-}
-
-func evalTreeMap(tree engine.ReadMap, input engine.ReadMap) ([]engine.Value, error) {
-	rootVal, _ := tree.Get("root")
-	nodesVal, _ := tree.Get("nodes")
-	nodes := nodesVal.AsList()
-
-	rootID := rootVal.String()
-	if rootVal.IsAtom() {
-		a, err := rootVal.AsAtom()
-		if err != nil {
-			return nil, fmt.Errorf("eval-tree: root: %w", err)
-		}
-		rootID = a
-	}
-
-	currentID := rootID
-	for depth := 0; depth < 100; depth++ {
-		node := findNodeByID(currentID, nodes)
-		if node == nil {
-			return []engine.Value{engine.NewMap(makeErrorMap("node-not-found"))}, nil
-		}
-
-		kindVal, _ := node.Get("kind")
-		kind, err := kindVal.AsString()
-		if err != nil {
-			return nil, fmt.Errorf("eval-tree: kind: %w", err)
-		}
-		if kindVal.IsAtom() {
-			a, err := kindVal.AsAtom()
-			if err != nil {
-				return nil, fmt.Errorf("eval-tree: kind: %w", err)
-			}
-			kind = a
-		}
-
-		switch kind {
-		case "leaf":
-			resultVal, _ := node.Get("result")
-			return []engine.Value{resultVal}, nil
-
-		case "branch":
-			branchesVal, _ := node.Get("branches")
-			branches := branchesVal.AsList()
-			nextID := ""
-			for i := 0; i < branches.Len(); i++ {
-				br := branches.Get(i)
-				brMap := br.AsMap()
-				if brMap == nil {
-					continue
-				}
-				whenVal, _ := brMap.Get("when")
-				whenMap := whenVal.AsMap()
-				if whenMap == nil {
-					continue
-				}
-				match, err := evalPredMap(whenMap, input)
-				if err != nil {
-					return nil, fmt.Errorf("eval-tree: branch %d: %w", i, err)
-				}
-				if match {
-					nextVal, _ := brMap.Get("next")
-					nextID = nextVal.String()
-					if nextVal.IsAtom() {
-						a, err := nextVal.AsAtom()
-						if err != nil {
-							return nil, fmt.Errorf("eval-tree: next: %w", err)
-						}
-						nextID = a
-					}
-					break
-				}
-			}
-			if nextID == "" {
-				return []engine.Value{engine.NewMap(makeErrorMap("no-branch-match"))}, nil
-			}
-			currentID = nextID
-
-		default:
-			return []engine.Value{engine.NewMap(makeErrorMap("unknown-node-kind"))}, nil
-		}
-	}
-	return []engine.Value{engine.NewMap(makeErrorMap("max-depth-exceeded"))}, nil
-}
-
-func findNodeByID(id string, nodes engine.ReadList) engine.ReadMap {
-	for i := 0; i < nodes.Len(); i++ {
-		node := nodes.Get(i)
-		nodeMap := node.AsMap()
-		if nodeMap == nil {
-			continue
-		}
-		idVal, _ := nodeMap.Get("id")
-		nodeID := idVal.String()
-		if idVal.IsAtom() {
-			a, _ := idVal.AsAtom()
-			nodeID = a
-		}
-		if nodeID == id {
-			return nodeMap
-		}
-	}
-	return nil
-}
-
-// --- Go evaluator: decide ---
-
-func registerDecide(r *engine.Registry) {
-	r.Register("decide", engine.Signature{
-		Args: []engine.Type{engine.TMap, engine.TMap},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			model := args[1].AsMap()
-			input := args[0].AsMap()
-			if model == nil || input == nil {
-				return nil, fmt.Errorf("decide: expected concrete maps")
-			}
-			kindVal, _ := model.Get("kind")
-			kind, err := kindVal.AsString()
-			if err != nil {
-				return nil, fmt.Errorf("decide: kind: %w", err)
-			}
-			if kindVal.IsAtom() {
-				a, err := kindVal.AsAtom()
-				if err != nil {
-					return nil, fmt.Errorf("decide: kind: %w", err)
-				}
-				kind = a
-			}
-			switch kind {
-			case "table":
-				return evalTableMap(model, input)
-			case "tree":
-				return evalTreeMap(model, input)
-			default:
-				return []engine.Value{engine.NewMap(makeErrorMap("unknown-model-kind"))}, nil
-			}
-		},
-	})
-}
-
-// decisionAQL contains the AQL source for builder functions.
-// The evaluators are Go-implemented due to CallAQL nesting limitations
-// with recursive predicate evaluation.
+// decisionAQL contains the complete AQL source for the decision module.
+// This is the single source of truth — the pure-AQL file module and
+// module [...] inline tests are generated from this.
 const decisionAQL = `
 
 # ============================================================
-# aql:decision — Builder functions (pure AQL)
+# aql:decision — Record types and builder functions
 # ============================================================
 
-def cond fn [[field:Atom op:String value:Any] [Map] [do {field: field, op: op, value: value}]]
+type Cond record [field:Atom op:String value:Any]
+type Pred record [kind:String op:String children:Any]
+type Rule record [when:Map then:Map]
+type DTable record [kind:String rules:List hit-policy:String]
+type BranchNode record [id:Atom kind:String branches:List]
+type LeafNode record [id:Atom kind:String result:Any]
+type DTree record [kind:String root:Atom nodes:List]
 
-def all-of fn [[children:List] [Map] [do {kind: "group", op: "all", children: children}]]
+def cond fn [[field:Atom op:String value:Any] [Map] [
+  make Cond {field:field op:op value:value}
+]]
 
-def any-of fn [[children:List] [Map] [do {kind: "group", op: "any", children: children}]]
+def all-of fn [[children:List] [Map] [
+  make Pred {kind:"group" op:"all" children:children}
+]]
 
-def not-of fn [[child:Map] [Map] [do {kind: "group", op: "not", children: child}]]
+def any-of fn [[children:List] [Map] [
+  make Pred {kind:"group" op:"any" children:children}
+]]
 
-def make-rule fn [[when:Map then:Map] [Map] [do {when: when, then: then}]]
+def not-of fn [[child:Map] [Map] [
+  make Pred {kind:"group" op:"not" children:child}
+]]
 
-def make-table fn [[rules:List] [Map] [do {kind: "table", rules: rules, hit-policy: "first"}]]
+def make-rule fn [[when:Map then:Map] [Map] [
+  make Rule {when:when then:then}
+]]
 
-def with-policy fn [[policy:String table:Map] [Map] [def rules (table.rules) def kind (table.kind) do {kind: kind, rules: rules, hit-policy: policy}]]
+def make-table fn [[rules:List] [Map] [
+  make DTable {kind:"table" rules:rules hit-policy:"first"}
+]]
 
-def make-branch fn [[id:Atom branches:List] [Map] [do {id: id, kind: "branch", branches: branches}]]
+def with-policy fn [[policy:String table:Map] [Map] [
+  make DTable {kind:(table.kind) rules:(table.rules) hit-policy:policy}
+]]
 
-def make-leaf fn [[id:Atom result:Any] [Map] [do {id: id, kind: "leaf", result: result}]]
+def make-branch fn [[id:Atom branches:List] [Map] [
+  make BranchNode {id:id kind:"branch" branches:branches}
+]]
 
-def make-tree fn [[root:Atom nodes:List] [Map] [do {kind: "tree", root: root, nodes: nodes}]]
+def make-leaf fn [[id:Atom result:Any] [Map] [
+  make LeafNode {id:id kind:"leaf" result:result}
+]]
+
+def make-tree fn [[root:Atom nodes:List] [Map] [
+  make DTree {kind:"tree" root:root nodes:nodes}
+]]
+
+# ============================================================
+# aql:decision — Evaluators
+# ============================================================
+
+# --- apply-op ---
+
+def apply-op fn [[rhs:Any op:String lhs:Any] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "neq" eq) [lhs rhs neq] [if (op "lt" eq) [lhs rhs lt] [if (op "lte" eq) [lhs rhs lte] [if (op "gt" eq) [lhs rhs gt] [if (op "gte" eq) [lhs rhs gte] [false]]]]]]]]
+
+def apply-op fn [[rhs:Any op:String] [Boolean] [if (op "is_true" eq) [rhs] [if (op "is_false" eq) [rhs not] [if (op "is_null" eq) [false] [if (op "is_not_null" eq) [true] [false]]]]]]
+
+# --- eval-cond ---
+
+def eval-cond fn [[c:Map input:Map] [Boolean] [input.((c.field convert String)) c.op c.value apply-op]]
+
+# --- eval-pred helpers ---
+
+def eval-pred-all fn [[children:List input:Map] [Boolean] [def result true for (children length) [def idx i if (input (children idx get) eval-pred not) [def result false] []] end result]]
+
+def eval-pred-any fn [[children:List input:Map] [Boolean] [def result false for (children length) [def idx i if (input (children idx get) eval-pred) [def result true] []] end result]]
+
+def eval-pred-not fn [[children:Map input:Map] [Boolean] [input children eval-cond not]]
+def eval-pred-not fn [[children:List input:Map] [Boolean] [input (children 0 get) eval-pred not]]
+
+# --- eval-pred ---
+
+def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" eq) [(def group-op (pred get "op") def children quote (pred get "children") if (group-op "all" eq) [input children eval-pred-all] [if (group-op "any" eq) [input children eval-pred-any] [if (group-op "not" eq) [input children eval-pred-not] [false]]])] [input pred eval-cond]]]
+
+# --- eval-table helpers ---
+
+def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules length) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
+
+def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
+
+def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
+
+def eval-table-priority fn [[rules:List input:Map] [Any] [def best (do {ok: false, error: "no-match"}) def best-pri 0 def found false for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
+
+# --- eval-table ---
+
+def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rules") def policy (table get "hit-policy") if (policy "first" eq) [input rules eval-table-first] [if (policy "unique" eq) [input rules eval-table-unique] [if (policy "collect" eq) [input rules eval-table-collect] [if (policy "priority" eq) [input rules eval-table-priority] [input rules eval-table-first]]]]]]
+
+# --- eval-tree helpers ---
+
+def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes length) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
+
+def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches length) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
+
+# --- eval-tree ---
+
+def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes") def current (nodes (tree get "root") find-node) def done false def result (do {ok: false, error: "max-depth-exceeded"}) for 100 [def _i i if (done not) [if ((current get "kind") "leaf" eq) [def result (current get "result") def done true] [if ((current get "kind") "branch" eq) [(def next-id (input quote (current get "branches") find-branch-next) if (next-id None eq) [def result (do {ok: false, error: "no-branch-match"}) def done true] [def current (nodes next-id find-node) if (current None eq) [def result (do {ok: false, error: "node-not-found"}) def done true] []])] [def result (do {ok: false, error: "unknown-node-kind"}) def done true]]] []] end result]]
+
+# --- decide ---
+
+def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [input model eval-table] [if ((model get "kind") "tree" eq) [input model eval-tree] [do {ok: false, error: "unknown-model-kind"}]]]]
+
+# ============================================================
+# aql:decision — Exports
+# ============================================================
+
+export decision {
+  Cond:        Cond
+  Pred:        Pred
+  Rule:        Rule
+  DTable:      DTable
+  BranchNode:  BranchNode
+  LeafNode:    LeafNode
+  DTree:       DTree
+  cond:        cond
+  all-of:      all-of
+  any-of:      any-of
+  not-of:      not-of
+  make-rule:   make-rule
+  make-table:  make-table
+  with-policy: with-policy
+  make-branch: make-branch
+  make-leaf:   make-leaf
+  make-tree:   make-tree
+  apply-op:    apply-op
+  eval-cond:   eval-cond
+  eval-pred:   eval-pred
+  eval-table:  eval-table
+  eval-tree:   eval-tree
+  decide:      decide
+}
 
 `

@@ -21,10 +21,14 @@ func registerReplace(r *Registry) {
 		return doReplace(_as5, _as4, _as3, opts)
 	}
 
-	r.Register("replace",
-		Signature{Args: []Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler},
-		Signature{Args: []Type{TString, TString, TString}, Handler: replaceHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "replace",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler},
+			{Args: []Type{TString, TString, TString}, Handler: replaceHandler},
+		},
+	})
 }
 
 func doReplace(input, search, repl string, o strOpts) ([]Value, error) {

@@ -18,10 +18,14 @@ func registerContains(r *Registry) {
 		return doContains(_as3, _as2, opts)
 	}
 
-	r.Register("contains",
-		Signature{Args: []Type{TString, TString, TMap}, Handler: containsOptsHandler},
-		Signature{Args: []Type{TString, TString}, Handler: containsHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "contains",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TString, TMap}, Handler: containsOptsHandler},
+			{Args: []Type{TString, TString}, Handler: containsHandler},
+		},
+	})
 }
 
 func doContains(input, search string, o strOpts) ([]Value, error) {

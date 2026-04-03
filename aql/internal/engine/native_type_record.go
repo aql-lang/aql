@@ -33,8 +33,12 @@ func registerRecord(r *Registry) {
 		return []Value{NewRecordType(fields)}, nil
 	}
 
-	r.Register("record", Signature{
-		Args:    []Type{TList},
-		Handler: recordHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "record",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TList},
+			Handler: recordHandler,
+		}},
 	})
 }

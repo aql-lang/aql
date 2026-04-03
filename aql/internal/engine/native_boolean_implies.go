@@ -8,8 +8,13 @@ func registerImplies(r *Registry) {
 		right, _ := args[0].AsBoolean()
 		return []Value{NewBoolean(!left || right)}, nil
 	}
-	r.Register("implies", Signature{
-		Args:    []Type{TBoolean, TBoolean},
-		Handler: handler,
+
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "implies",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TBoolean, TBoolean},
+			Handler: handler,
+		}},
 	})
 }

@@ -9,13 +9,13 @@
 def Opts (make Options {x:Integer y:String}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Options with type constraints — missing required type field rejects
-def Opts (make Options {x:Integer y:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	ERROR:signature error
+def Opts (make Options {x:Integer y:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	ERROR:signature_error
 
 # Options with type constraints — wrong type for field rejects
-def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature_error
 
 # Options with type constraints — extra keys rejected (closed matching)
-def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature error
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature_error
 
 # --- Options with concrete default values ---
 
@@ -26,7 +26,7 @@ def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	{x:1
 def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:10 y:20}	{x:10,y:20}
 
 # Concrete defaults — wrong type rejects
-def Opts (make Options {x:1}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
+def Opts (make Options {x:1}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature_error
 
 # Concrete defaults — absent field uses default (match succeeds)
 def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {x:10}	{x:10}
@@ -43,7 +43,7 @@ def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f 
 def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	{x:'hi'}
 
 # Disjunct field — boolean value does not match
-def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:true}	ERROR:signature error
+def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:true}	ERROR:signature_error
 
 # Disjunct with None — integer value matches
 def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
@@ -68,7 +68,7 @@ def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x
 def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {}	{}
 
 # Empty Options — extra keys rejected
-def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature error
+def Opts (make Options {}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:2}	ERROR:signature_error
 
 # --- Accessing fields from Options-matched parameter in fn body ---
 
@@ -125,7 +125,7 @@ def Opts (make Options {x:Scalar}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	{x:'
 def Opts (make Options {x:Scalar}) def f fn [[m:Opts] [Map] [m]] f {x:99}	{x:99}
 
 # Integer field rejects string
-def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature error
+def Opts (make Options {x:Integer}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	ERROR:signature_error
 
 # =====================================================================
 # Optional Options parameters

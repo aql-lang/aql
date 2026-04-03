@@ -61,14 +61,18 @@ func registerFolder(r *Registry) {
 		return doFolder(_as1, true, reg)
 	}
 
-	r.Register("folder",
-		Signature{
-			Args:    []Type{TOptions, TPath},
-			Handler: folderOptsHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "folder",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TOptions, TPath},
+				Handler: folderOptsHandler,
+			},
+			{
+				Args:    []Type{TPath},
+				Handler: folderHandler,
+			},
 		},
-		Signature{
-			Args:    []Type{TPath},
-			Handler: folderHandler,
-		},
-	)
+	})
 }

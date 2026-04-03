@@ -14,11 +14,11 @@ import (
 //   - [any, string, any] — "setpath data path newVal" (all forward, data first)
 //
 // The handler is position-agnostic: it finds the string arg as the path.
-func setpathFunc() NativeFunc {
-	return NativeFunc{
+func setpathFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:             "setpath",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TString, engine.TAny, engine.TAny},
 				Handler: setpathHandler,

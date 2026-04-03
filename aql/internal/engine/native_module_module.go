@@ -29,19 +29,23 @@ import (
 // and walking up parent directories (CommonJS-style resolution).
 func registerModule(r *Registry) {
 	// module: [list] -> [module-desc]
-	r.Register("module", Signature{
-		Args:       []Type{TList},
-		NoEvalArgs: map[int]bool{0: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if args[0].Data == nil {
-				return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
-			}
-			desc, err := runModuleBody(r, args[0].AsList().Slice())
-			if err != nil {
-				return nil, fmt.Errorf("module: %w", err)
-			}
-			return []Value{NewModule(desc)}, nil
-		},
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "module",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				if args[0].Data == nil {
+					return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
+				}
+				desc, err := RunModuleBody(r, args[0].AsList().Slice())
+				if err != nil {
+					return nil, fmt.Errorf("module: %w", err)
+				}
+				return []Value{NewModule(desc)}, nil
+			},
+		}},
 	})
 
 	// import: [module-desc] -> [] — import all exports as defs
@@ -136,7 +140,7 @@ func registerModule(r *Registry) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[1].AsList().Slice())
+		desc, err := RunModuleBody(r, args[1].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -156,7 +160,7 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList().Slice())
+		desc, err := RunModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -172,67 +176,68 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList().Slice())
+		desc, err := RunModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
 		return nil, installSingleRename(r, desc, defName(args[0]))
 	}
 
-	// Standard signatures used by both scoring and sequential planners.
-	r.Register("import",
-		Signature{
-			Args:    []Type{TModule},
-			Handler: importAllHandler,
-		},
-		Signature{
-			Args:    []Type{TList, TModule},
-			Handler: importRenameHandler,
-		},
-		Signature{
-			Args: []Type{TAtom, TModule},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				_as0, _ := args[0].AsAtom()
-				return importSingleRenameHandler(_as0, args)
+	// Standard signatures and inline module forms combined.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "import",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TModule},
+				Handler: importAllHandler,
+			},
+			{
+				Args:    []Type{TList, TModule},
+				Handler: importRenameHandler,
+			},
+			{
+				Args: []Type{TAtom, TModule},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					_as0, _ := args[0].AsAtom()
+					return importSingleRenameHandler(_as0, args)
+				},
+			},
+			{
+				Args:    []Type{TString},
+				Handler: importFileHandler,
+			},
+			{
+				Args:    []Type{TList, TString},
+				Handler: importFileRenameHandler,
+			},
+			// Inline module forms: use /q to capture "module" as a quoted word
+			// instead of executing it as a function.
+			{
+				Args:       []Type{TAtom, TList},
+				QuoteArgs:  map[int]bool{0: true},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    importInlineHandler,
+			},
+			{
+				Args:       []Type{TList, TAtom, TList},
+				QuoteArgs:  map[int]bool{1: true},
+				NoEvalArgs: map[int]bool{2: true},
+				Handler:    importInlineRenameHandler,
+			},
+			{
+				Args:       []Type{TAtom, TAtom, TList},
+				QuoteArgs:  map[int]bool{1: true},
+				NoEvalArgs: map[int]bool{2: true},
+				Handler:    importInlineSingleRenameHandler,
 			},
 		},
-		Signature{
-			Args:    []Type{TString},
-			Handler: importFileHandler,
-		},
-		Signature{
-			Args:    []Type{TList, TString},
-			Handler: importFileRenameHandler,
-		},
-	)
-
-	// Inline module forms: use /q to capture "module" as a quoted word
-	// instead of executing it as a function.
-	r.Register("import",
-		Signature{
-			Args:       []Type{TAtom, TList},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    importInlineHandler,
-		},
-		Signature{
-			Args:       []Type{TList, TAtom, TList},
-			QuoteArgs:  map[int]bool{1: true},
-			NoEvalArgs: map[int]bool{2: true},
-			Handler:    importInlineRenameHandler,
-		},
-		Signature{
-			Args:       []Type{TAtom, TAtom, TList},
-			QuoteArgs:  map[int]bool{1: true},
-			NoEvalArgs: map[int]bool{2: true},
-			Handler:    importInlineSingleRenameHandler,
-		},
-	)
+	})
 }
 
-// runModuleBody creates an isolated module engine, runs the given values,
+// RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
-func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
+func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg, err := DefaultRegistry()
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
@@ -244,6 +249,14 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.MemOps = parent.MemOps
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
+
+	// Let the native package (or other extension packages) register
+	// their words in the module's sub-registry. Propagate the hook
+	// so nested modules also get these words.
+	if parent.ModuleInitFunc != nil {
+		parent.ModuleInitFunc(modReg)
+		modReg.ModuleInitFunc = parent.ModuleInitFunc
+	}
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
@@ -262,25 +275,32 @@ func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		exports[name] = resolved
 	}
 
-	modReg.Register("export", Signature{
-		Args: []Type{TAtom, TMap},
-		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if eargs[1].Data == nil {
-				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
-			}
-			_as1, _ := eargs[0].AsAtom()
-			exportHandler(_as1, eargs[1].AsMap())
-			return nil, nil
-		},
-	}, Signature{
-		Args: []Type{TString, TMap},
-		Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if eargs[1].Data == nil {
-				return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
-			}
-			_as2, _ := eargs[0].AsString()
-			exportHandler(_as2, eargs[1].AsMap())
-			return nil, nil
+	modReg.RegisterNativeFunc(NativeFunc{
+		Name:              "export",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TAtom, TMap},
+				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if eargs[1].Data == nil {
+						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+					}
+					_as1, _ := eargs[0].AsAtom()
+					exportHandler(_as1, eargs[1].AsMap())
+					return nil, nil
+				},
+			},
+			{
+				Args: []Type{TString, TMap},
+				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if eargs[1].Data == nil {
+						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+					}
+					_as2, _ := eargs[0].AsString()
+					exportHandler(_as2, eargs[1].AsMap())
+					return nil, nil
+				},
+			},
 		},
 	})
 
@@ -435,11 +455,11 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	}
 
 	// Temporarily set parent BaseDir so the child module inherits the
-	// loaded file's directory (runModuleBody copies BaseDir).
+	// loaded file's directory (RunModuleBody copies BaseDir).
 	modDir := filepath.Dir(resolved)
 	saved := parent.BaseDir
 	parent.BaseDir = modDir
-	desc, err := runModuleBody(parent, parsed)
+	desc, err := RunModuleBody(parent, parsed)
 	parent.BaseDir = saved
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)

@@ -104,15 +104,19 @@ func traceVisibleLen(s string) int {
 //
 //	trace [1 add 2 mul 3]
 func registerTrace(r *Registry) {
-	r.Register("trace", Signature{
-		Args: []Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			if args[0].Data == nil {
-				return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
-			}
-			elems := args[0].AsList().Slice()
-			return runTrace(r, elems, r.Output)
-		},
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "trace",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TList},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				if args[0].Data == nil {
+					return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
+				}
+				elems := args[0].AsList().Slice()
+				return runTrace(r, elems, r.Output)
+			},
+		}},
 	})
 }
 

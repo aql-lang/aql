@@ -7,6 +7,7 @@ import (
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
@@ -43,6 +44,7 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value,
 	if err != nil {
 		t.Fatal(err)
 	}
+	native.Register(reg)
 	reg.SetFileOps(fileops.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	reg.BaseDir = absDir

@@ -14,8 +14,8 @@ import (
 // errorPatterns maps error codes used in syntax.tsv to substrings that must
 // appear in the actual error message.
 var errorPatterns = map[string]string{
-	"syntax_error":    "syntax error",
-	"signature_error": "signature error",
+	"syntax_error":    "syntax_error",
+	"signature_error": "signature_error",
 	"division_by_zero": "division by zero",
 	"modulo_by_zero":  "modulo by zero",
 }

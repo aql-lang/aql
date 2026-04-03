@@ -16,10 +16,14 @@ func registerEscape(r *Registry) {
 		return doEscape(_as1, opts)
 	}
 
-	r.Register("escape",
-		Signature{Args: []Type{TString, TMap}, Handler: escapeOptsHandler},
-		Signature{Args: []Type{TString}, Handler: escapeHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "escape",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TMap}, Handler: escapeOptsHandler},
+			{Args: []Type{TString}, Handler: escapeHandler},
+		},
+	})
 }
 
 func doEscape(input string, o strOpts) ([]Value, error) {

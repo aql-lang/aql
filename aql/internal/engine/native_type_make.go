@@ -587,26 +587,30 @@ func registerMake(r *Registry) {
 		return makeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
 	}
 
-	r.Register("make",
-		// New specific signatures
-		Signature{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},
-		Signature{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
-		Signature{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
-		Signature{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},
-		// Existing position-agnostic signatures (fallback)
-		Signature{
-			Args:    []Type{TObject, TAny, TObject},
-			Handler: makeWithPrototype,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "make",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			// New specific signatures
+			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},
+			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
+			{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
+			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},
+			// Existing position-agnostic signatures (fallback)
+			{
+				Args:    []Type{TObject, TAny, TObject},
+				Handler: makeWithPrototype,
+			},
+			{
+				Args:    []Type{TAny, TAny, TMap},
+				Handler: makeWithOpts,
+			},
+			{
+				Args:    []Type{TAny, TAny},
+				Handler: makeHandler,
+			},
 		},
-		Signature{
-			Args:    []Type{TAny, TAny, TMap},
-			Handler: makeWithOpts,
-		},
-		Signature{
-			Args:    []Type{TAny, TAny},
-			Handler: makeHandler,
-		},
-	)
+	})
 }
 
 // makeConvert converts a source value to a target scalar type for the make word.

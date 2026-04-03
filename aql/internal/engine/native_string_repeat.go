@@ -21,10 +21,14 @@ func registerRepeat(r *Registry) {
 		return doRepeat(_as3, _as2, opts)
 	}
 
-	r.Register("repeat",
-		Signature{Args: []Type{TString, TInteger, TMap}, Handler: repeatOptsHandler},
-		Signature{Args: []Type{TString, TInteger}, Handler: repeatHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "repeat",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TInteger, TMap}, Handler: repeatOptsHandler},
+			{Args: []Type{TString, TInteger}, Handler: repeatHandler},
+		},
+	})
 }
 
 func doRepeat(input string, count int64, o strOpts) ([]Value, error) {

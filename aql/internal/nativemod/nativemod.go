@@ -96,3 +96,10 @@ func Names() []string {
 	}
 	return names
 }
+
+// DecisionAQL returns the complete AQL source for the decision module.
+// This is the single source of truth — the pure-AQL file module and
+// module [...] inline tests are generated from this.
+func DecisionAQL() string {
+	return decisionAQL
+}

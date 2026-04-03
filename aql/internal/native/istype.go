@@ -7,12 +7,11 @@ import (
 // istypeFunc returns the "istype" native function definition.
 // istype checks whether a value is a type literal, an Options instance,
 // or a Node (List/Map) containing a leaf that is a type.
-func istypeFunc() NativeFunc {
-	return NativeFunc{
+func istypeFunc() engine.NativeFunc {
+	return engine.NativeFunc{
 		Name:              "istype",
 		ForwardPrecedence: true,
-		SkipSafetyCheck:   true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},
 				Handler: istypeHandler,

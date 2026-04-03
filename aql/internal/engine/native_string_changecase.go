@@ -22,12 +22,16 @@ func registerChangeCase(r *Registry) {
 		return doChangeCase(_as1, opts)
 	}
 
-	r.Register("changecase",
-		Signature{Args: []Type{TString, TMap}, Handler: changeCaseOptsHandler},
-		Signature{Args: []Type{TString}, Handler: changeCaseHandler},
-		Signature{Args: []Type{TAtom, TMap}, Handler: changeCaseOptsHandler},
-		Signature{Args: []Type{TAtom}, Handler: changeCaseHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "changecase",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TString, TMap}, Handler: changeCaseOptsHandler},
+			{Args: []Type{TString}, Handler: changeCaseHandler},
+			{Args: []Type{TAtom, TMap}, Handler: changeCaseOptsHandler},
+			{Args: []Type{TAtom}, Handler: changeCaseHandler},
+		},
+	})
 }
 
 func doChangeCase(input string, o strOpts) ([]Value, error) {

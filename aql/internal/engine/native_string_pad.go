@@ -37,10 +37,14 @@ func registerPad(r *Registry) {
 		return doPad(_as3, _as2, opts)
 	}
 
-	r.Register("pad",
-		Signature{Args: []Type{TInteger, TMap, TString}, Handler: padOptsHandler},
-		Signature{Args: []Type{TInteger, TString}, Handler: padHandler},
-	)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "pad",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TInteger, TMap, TString}, Handler: padOptsHandler},
+			{Args: []Type{TInteger, TString}, Handler: padHandler},
+		},
+	})
 }
 
 func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {

@@ -15,38 +15,44 @@ func registerInspect(r *Registry) {
 
 		return []Value{buildInspection(r, name)}, nil
 	}
-	r.Register("inspect", Signature{
-		Args:    []Type{TWord},
-		Handler: wordHandler,
-	})
-
 	// Atom (now Scalar/Atom): inspect by name, same as words.
-	r.Register("inspect", Signature{
-		Args: []Type{TAtom},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			name, _ := args[0].AsAtom()
-			if stack := r.DefStacks[name]; len(stack) > 0 {
-				top := stack[len(stack)-1]
-				if isTypeValue(top) {
-					return []Value{buildTypeInspection(name, top)}, nil
-				}
+	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		name, _ := args[0].AsAtom()
+		if stack := r.DefStacks[name]; len(stack) > 0 {
+			top := stack[len(stack)-1]
+			if isTypeValue(top) {
+				return []Value{buildTypeInspection(name, top)}, nil
 			}
-			return []Value{buildInspection(r, name)}, nil
-		},
-	})
+		}
+		return []Value{buildInspection(r, name)}, nil
+	}
 
 	// Type literal (Data==nil): inspect number, inspect string, etc.
 	typeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{buildTypeInspection("", args[0])}, nil
 	}
 
-	r.Register("inspect", Signature{
-		Args:    []Type{TNode},
-		Handler: typeHandler,
-	})
-	r.Register("inspect", Signature{
-		Args:    []Type{TScalar},
-		Handler: typeHandler,
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "inspect",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:    []Type{TWord},
+				Handler: wordHandler,
+			},
+			{
+				Args:    []Type{TAtom},
+				Handler: atomHandler,
+			},
+			{
+				Args:    []Type{TNode},
+				Handler: typeHandler,
+			},
+			{
+				Args:    []Type{TScalar},
+				Handler: typeHandler,
+			},
+		},
 	})
 }
 

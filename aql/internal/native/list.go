@@ -12,16 +12,16 @@ import (
 //   - [table]       — returns all records from the table
 //   - [map, map]    — record type + filter: returns empty table
 //   - [map]         — record type: returns empty table
-func listFunc() NativeFunc {
+func listFunc() engine.NativeFunc {
 	// Pattern for {kind:"api", ...} — matches maps where kind is literal "api".
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return NativeFunc{
+	return engine.NativeFunc{
 		Name:             "list",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			// Entity object signatures (highest priority).
 			{
 				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},

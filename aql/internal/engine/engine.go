@@ -52,6 +52,7 @@ type Engine struct {
 	traceNote string          // annotation set during execution for the next trace call
 	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	source    string          // original source text for error reporting
 }
 
 // New creates an Engine with the given function registry.
@@ -64,6 +65,80 @@ func New(registry *Registry) *Engine {
 // NewTop creates a top-level Engine with the maximum step limit (22222).
 func NewTop(registry *Registry) *Engine {
 	return &Engine{registry: registry, stepLimit: 22222}
+}
+
+// SetSource sets the original source text for error reporting.
+// When set, AqlErrors include source extracts showing the error location.
+func (e *Engine) SetSource(src string) {
+	e.source = src
+}
+
+// effectiveSource returns the source text for error reporting.
+// Prefers the engine's own source; falls back to the registry's.
+func (e *Engine) effectiveSource() string {
+	if e.source != "" {
+		return e.source
+	}
+	return e.registry.Source
+}
+
+// sigError builds a detailed AqlError for a signature mismatch.
+// It includes the word name, available signatures, and the actual
+// types found on the stack near the word.
+func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
+	detail := "no matching signature for " + name
+
+	// Build hint with available signatures and actual stack types.
+	var hint strings.Builder
+	if fn != nil && len(fn.Signatures) > 0 {
+		hint.WriteString("expected: " + name + " " + describeAllSigs(fn))
+	}
+	if len(e.stack) > 0 {
+		if hint.Len() > 0 {
+			hint.WriteString("\n  = ")
+		}
+		hint.WriteString("stack: " + describeStackTypes(e.stack, e.pointer))
+	}
+
+	src := e.effectiveSource()
+	return makeAqlError("signature_error", detail, name, src, hint.String())
+}
+
+// insufficientArgsError builds a detailed AqlError for forward argument
+// collection failure (not enough arguments after the word).
+func (e *Engine) insufficientArgsError(name string, expected int) *AqlError {
+	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
+	hint := "stack: " + describeStackTypes(e.stack, e.pointer)
+	src := e.effectiveSource()
+	return makeAqlError("signature_error", detail, name, src, hint)
+}
+
+// returnCountError builds a detailed AqlError for wrong number of return values.
+func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError {
+	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
+	src := e.effectiveSource()
+	return makeAqlError("type_error", detail, funcName, src, "")
+}
+
+// returnTypeError builds a detailed AqlError for a return type mismatch.
+func (e *Engine) returnTypeError(funcName string, index int, expected Type, got Value) *AqlError {
+	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
+		funcName, index, expected, got.VType)
+	hint := "value: " + valToString(got)
+	src := e.effectiveSource()
+	return makeAqlError("type_error", detail, funcName, src, hint)
+}
+
+// syntaxError builds a detailed AqlError for a syntax error.
+func (e *Engine) syntaxError(msg, token string) *AqlError {
+	src := e.effectiveSource()
+	return makeAqlError("syntax_error", msg, token, src, "")
+}
+
+// runtimeError builds a detailed AqlError for a runtime error.
+func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
+	src := e.effectiveSource()
+	return makeAqlError(code, detail, word, src, hint)
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -196,7 +271,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 		default:
 			if val.VType.Equal(Type{}) {
-				return nil, fmt.Errorf("halt: undefined stack entry at position %d", e.pointer)
+				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {
 				return nil, err
@@ -211,7 +286,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 	for _, v := range e.stack {
 		if v.IsOpenParen() {
-			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+			return nil, e.syntaxError("unmatched opening parenthesis", "(")
 		}
 	}
 
@@ -532,7 +607,7 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	if sig == nil {
-		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
+		return e.sigError(w.Name, fn)
 	}
 
 	// Count forward vs stack args from positions.
@@ -1435,7 +1510,7 @@ func (e *Engine) stepMove(val Value) error {
 	moveIdx := e.pointer
 
 	if e.marks == nil || !e.marks[info.To] {
-		return fmt.Errorf("move error: mark %q not found (%s)", info.To, info.Reason)
+		return e.runtimeError("move_error", fmt.Sprintf("mark %q not found (%s)", info.To, info.Reason), info.To, "")
 	}
 
 	// Scan the stack to find the mark's current position.
@@ -1562,7 +1637,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	if condResult.VType.Parts == nil {
 		e.stackSplice(markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
-		return fmt.Errorf("if: condition produced no value")
+		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
 	}
 
 	// Evaluate truthiness and choose branch.
@@ -1690,7 +1765,7 @@ func (e *Engine) stepCloseParen() error {
 	}
 
 	if openIdx < 0 {
-		return fmt.Errorf("syntax error: unmatched closing parenthesis")
+		return e.syntaxError("unmatched closing parenthesis", ")")
 	}
 
 	// Resolve any forwards inside the paren scope via implicit end.
@@ -1718,7 +1793,7 @@ func (e *Engine) stepCloseParen() error {
 				// Recalculate closeIdx after potential stack changes.
 				closeIdx = e.findCloseParenAfter(openIdx)
 				if closeIdx < 0 {
-					return fmt.Errorf("syntax error: unmatched closing parenthesis")
+					return e.syntaxError("unmatched closing parenthesis", ")")
 				}
 
 				// Re-evaluate from current pointer up to closeIdx.
@@ -1732,7 +1807,7 @@ func (e *Engine) stepCloseParen() error {
 						// Recalculate closeIdx: stack may have changed.
 						closeIdx = e.findCloseParenAfter(openIdx)
 						if closeIdx < 0 {
-							return fmt.Errorf("syntax error: unmatched closing parenthesis")
+							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					case val.IsForward():
 						e.pointer++
@@ -1749,7 +1824,7 @@ func (e *Engine) stepCloseParen() error {
 						}
 						closeIdx = e.findCloseParenAfter(openIdx)
 						if closeIdx < 0 {
-							return fmt.Errorf("syntax error: unmatched closing parenthesis")
+							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					}
 				}
@@ -1765,8 +1840,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsForward() {
 			fwd, _ := e.stack[i].AsForward()
-			return fmt.Errorf("signature error: insufficient arguments for %s (expected %d forward args)",
-				fwd.FuncName, fwd.ExpectedArgs)
+			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs)
 		}
 	}
 
@@ -1798,20 +1872,17 @@ func (e *Engine) stepCloseParen() error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return fmt.Errorf("%s: expected %d return value(s), got %d",
-					rc.FuncName, nret, len(results))
+				return e.returnCountError(rc.FuncName, nret, len(results))
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return fmt.Errorf("%s: expected %d return value(s), got %d",
-					rc.FuncName, nret, len(results)-rc.UnnamedCount)
+				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount)
 			}
 
 			// Validate the top nret values match declared return types.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].VType.Matches(exp) {
-					return fmt.Errorf("%s: return value %d: expected %s, got %s",
-						rc.FuncName, k+1, exp, results[extra+k].VType)
+					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
 				}
 			}
 

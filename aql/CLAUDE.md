@@ -176,10 +176,6 @@ Key patterns to follow:
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
   `internal/native/transform.go` have nil-Data guards. If you add new
   conversion helpers, include the same guard.
-- **Native function safety.** `wrapSafetyCheck()` in
-  `internal/native/native.go` rejects type literals and Options types
-  centrally before any native handler runs. If you bypass this wrapper,
-  add your own guard.
 - **Engine builtin handlers.** Check `args[N].Data == nil` before calling
   `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
   signatures. See `native_accessor_dotr.go` for the canonical pattern.
