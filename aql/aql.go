@@ -1,6 +1,8 @@
 package aql
 
 import (
+	"io"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
@@ -137,6 +139,11 @@ func (a *AQL) Options() Options {
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
 	a.registry.SetFileOps(ops)
+}
+
+// SetOutput replaces the writer used by print, help, and other output words.
+func (a *AQL) SetOutput(w io.Writer) {
+	a.registry.Output = w
 }
 
 // RegisterFormat adds or replaces a format in the format registry.

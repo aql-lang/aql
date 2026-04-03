@@ -553,6 +553,9 @@
     addLine('line-input', '>> ' + display, code);
     try {
       var res = aqlEval(code);
+      if (res.output) {
+        addLine('line-result', res.output.trimEnd(), res.output.trimEnd());
+      }
       if (res.error) {
         addLine('line-error', '  error: ' + res.error, res.error);
       } else if (res.result) {

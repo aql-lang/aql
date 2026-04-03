@@ -20,10 +20,11 @@ import (
 // Each builder creates a sub-registry with the module's words and returns
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
 var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error){
-	"math":     BuildMathModule,
-	"time":     BuildTimeModule,
-	"matrix":   BuildMatrixModule,
-	"decision": BuildDecisionModule,
+	"math":      BuildMathModule,
+	"time":      BuildTimeModule,
+	"matrix":    BuildMatrixModule,
+	"decision":  BuildDecisionModule,
+	"solardemo": BuildSolarDemoModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
