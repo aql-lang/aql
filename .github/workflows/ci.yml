@@ -28,3 +28,12 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: Build WASM
+        run: make wasm
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aql-wasm
+          path: docs/index.html
