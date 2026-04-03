@@ -644,27 +644,55 @@ func registerDecide(r *engine.Registry) {
 const decisionAQL = `
 
 # ============================================================
-# aql:decision — Builder functions (pure AQL)
+# aql:decision — Record types and builder functions
 # ============================================================
 
-def cond fn [[field:Atom op:String value:Any] [Map] [do {field: field, op: op, value: value}]]
+type Cond record [field:Atom op:String value:Any]
+type Pred record [kind:String op:String children:Any]
+type Rule record [when:Map then:Map]
+type DTable record [kind:String rules:List hit-policy:String]
+type BranchNode record [id:Atom kind:String branches:List]
+type LeafNode record [id:Atom kind:String result:Any]
+type DTree record [kind:String root:Atom nodes:List]
 
-def all-of fn [[children:List] [Map] [do {kind: "group", op: "all", children: children}]]
+def cond fn [[field:Atom op:String value:Any] [Map] [
+  make Cond {field:field op:op value:value}
+]]
 
-def any-of fn [[children:List] [Map] [do {kind: "group", op: "any", children: children}]]
+def all-of fn [[children:List] [Map] [
+  make Pred {kind:"group" op:"all" children:children}
+]]
 
-def not-of fn [[child:Map] [Map] [do {kind: "group", op: "not", children: child}]]
+def any-of fn [[children:List] [Map] [
+  make Pred {kind:"group" op:"any" children:children}
+]]
 
-def make-rule fn [[when:Map then:Map] [Map] [do {when: when, then: then}]]
+def not-of fn [[child:Map] [Map] [
+  make Pred {kind:"group" op:"not" children:child}
+]]
 
-def make-table fn [[rules:List] [Map] [do {kind: "table", rules: rules, hit-policy: "first"}]]
+def make-rule fn [[when:Map then:Map] [Map] [
+  make Rule {when:when then:then}
+]]
 
-def with-policy fn [[policy:String table:Map] [Map] [def rules (table.rules) def kind (table.kind) do {kind: kind, rules: rules, hit-policy: policy}]]
+def make-table fn [[rules:List] [Map] [
+  make DTable {kind:"table" rules:rules hit-policy:"first"}
+]]
 
-def make-branch fn [[id:Atom branches:List] [Map] [do {id: id, kind: "branch", branches: branches}]]
+def with-policy fn [[policy:String table:Map] [Map] [
+  make DTable {kind:(table.kind) rules:(table.rules) hit-policy:policy}
+]]
 
-def make-leaf fn [[id:Atom result:Any] [Map] [do {id: id, kind: "leaf", result: result}]]
+def make-branch fn [[id:Atom branches:List] [Map] [
+  make BranchNode {id:id kind:"branch" branches:branches}
+]]
 
-def make-tree fn [[root:Atom nodes:List] [Map] [do {kind: "tree", root: root, nodes: nodes}]]
+def make-leaf fn [[id:Atom result:Any] [Map] [
+  make LeafNode {id:id kind:"leaf" result:result}
+]]
+
+def make-tree fn [[root:Atom nodes:List] [Map] [
+  make DTree {kind:"tree" root:root nodes:nodes}
+]]
 
 `

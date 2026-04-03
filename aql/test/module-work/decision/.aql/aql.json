@@ -1,0 +1,10 @@
+{
+  "files": [
+    "decision.aql"
+  ],
+  "main": "decision.aql",
+  "major": 0,
+  "minor": 1,
+  "name": "decision",
+  "patch": 0
+}
