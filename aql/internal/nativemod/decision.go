@@ -18,7 +18,8 @@ var (
 
 // BuildDecisionModule creates the "aql:decision" native module.
 // All functionality is implemented in pure AQL — record types, builders,
-// and evaluators. The AQL source is parsed once and cached for reuse.
+// evaluators, and exports. The AQL source is parsed once and cached;
+// execution and export collection are handled by RunModuleBody.
 func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	if parent.ParseFunc == nil {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: parser not configured")
@@ -32,54 +33,15 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		return engine.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", decisionParseErr)
 	}
 
-	// Create sub-registry with full builtins + native words.
-	subReg, err := engine.DefaultRegistry()
-	if err != nil {
-		return engine.ModuleDesc{}, err
-	}
-	subReg.ParseFunc = parent.ParseFunc
-	native.Register(subReg)
-
-	// Run the cached AQL tokens in the sub-registry (copy to avoid mutation).
-	eng := engine.NewTop(subReg)
-	_, err = eng.Run(append([]engine.Value(nil), decisionParsed...))
-	if err != nil {
-		return engine.ModuleDesc{}, fmt.Errorf("decision: execution error: %w", err)
+	// Ensure native words (push, etc.) are available inside the module.
+	if parent.ModuleInitFunc == nil {
+		native.Register(parent)
 	}
 
-	// Tag FnDefs from AQL with the sub-registry (closure semantics).
-	for name, stack := range subReg.DefStacks {
-		for i, val := range stack {
-			if fnDef, ok := val.Data.(engine.FnDefInfo); ok && fnDef.Registry == nil {
-				fnDef.Registry = subReg
-				subReg.DefStacks[name][i] = engine.NewFnDef(fnDef)
-			}
-		}
-	}
-
-	// Build export map from AQL-defined functions.
-	exports := engine.NewOrderedMap()
-	exportNames := []string{
-		// builders
-		"cond", "all-of", "any-of", "not-of",
-		"make-rule", "make-table", "make-tree", "make-branch", "make-leaf",
-		"with-policy",
-		// evaluators
-		"eval-cond", "eval-pred", "eval-table", "eval-tree", "decide",
-	}
-	for _, name := range exportNames {
-		stack := subReg.DefStacks[name]
-		if len(stack) > 0 {
-			exports.Set(name, stack[len(stack)-1])
-		}
-	}
-
-	modID := parent.NextModuleID()
-	desc := engine.ModuleDesc{
-		ID:      modID,
-		Exports: map[string]*engine.OrderedMap{"decision": exports},
-	}
-	return desc, nil
+	// Copy tokens to avoid mutation, then let RunModuleBody handle
+	// registry setup, execution, export collection, and FnDef tagging.
+	tokens := append([]engine.Value(nil), decisionParsed...)
+	return engine.RunModuleBody(parent, tokens)
 }
 
 // decisionAQL contains the complete AQL source for the decision module.
@@ -193,5 +155,35 @@ def eval-tree fn [[tree:Map input:Map] [Any] [def nodes quote (tree get "nodes")
 # --- decide ---
 
 def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [input model eval-table] [if ((model get "kind") "tree" eq) [input model eval-tree] [do {ok: false, error: "unknown-model-kind"}]]]]
+
+# ============================================================
+# aql:decision — Exports
+# ============================================================
+
+export decision {
+  Cond:        Cond
+  Pred:        Pred
+  Rule:        Rule
+  DTable:      DTable
+  BranchNode:  BranchNode
+  LeafNode:    LeafNode
+  DTree:       DTree
+  cond:        cond
+  all-of:      all-of
+  any-of:      any-of
+  not-of:      not-of
+  make-rule:   make-rule
+  make-table:  make-table
+  with-policy: with-policy
+  make-branch: make-branch
+  make-leaf:   make-leaf
+  make-tree:   make-tree
+  apply-op:    apply-op
+  eval-cond:   eval-cond
+  eval-pred:   eval-pred
+  eval-table:  eval-table
+  eval-tree:   eval-tree
+  decide:      decide
+}
 
 `

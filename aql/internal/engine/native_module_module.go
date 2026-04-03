@@ -39,7 +39,7 @@ func registerModule(r *Registry) {
 				if args[0].Data == nil {
 					return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 				}
-				desc, err := runModuleBody(r, args[0].AsList().Slice())
+				desc, err := RunModuleBody(r, args[0].AsList().Slice())
 				if err != nil {
 					return nil, fmt.Errorf("module: %w", err)
 				}
@@ -140,7 +140,7 @@ func registerModule(r *Registry) {
 		if args[1].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[1].AsList().Slice())
+		desc, err := RunModuleBody(r, args[1].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -160,7 +160,7 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList().Slice())
+		desc, err := RunModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -176,7 +176,7 @@ func registerModule(r *Registry) {
 		if args[2].Data == nil {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
-		desc, err := runModuleBody(r, args[2].AsList().Slice())
+		desc, err := RunModuleBody(r, args[2].AsList().Slice())
 		if err != nil {
 			return nil, fmt.Errorf("import module: %w", err)
 		}
@@ -235,9 +235,9 @@ func registerModule(r *Registry) {
 	})
 }
 
-// runModuleBody creates an isolated module engine, runs the given values,
+// RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
-func runModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
+func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg, err := DefaultRegistry()
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
@@ -455,11 +455,11 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	}
 
 	// Temporarily set parent BaseDir so the child module inherits the
-	// loaded file's directory (runModuleBody copies BaseDir).
+	// loaded file's directory (RunModuleBody copies BaseDir).
 	modDir := filepath.Dir(resolved)
 	saved := parent.BaseDir
 	parent.BaseDir = modDir
-	desc, err := runModuleBody(parent, parsed)
+	desc, err := RunModuleBody(parent, parsed)
 	parent.BaseDir = saved
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)

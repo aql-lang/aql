@@ -12,47 +12,15 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
-// decisionExportAQL is the export block listing all functions.
-const decisionExportAQL = `
-export decision {
-  Cond:        Cond
-  Pred:        Pred
-  Rule:        Rule
-  DTable:      DTable
-  BranchNode:  BranchNode
-  LeafNode:    LeafNode
-  DTree:       DTree
-  cond:        cond
-  all-of:      all-of
-  any-of:      any-of
-  not-of:      not-of
-  make-rule:   make-rule
-  make-table:  make-table
-  with-policy: with-policy
-  make-branch: make-branch
-  make-leaf:   make-leaf
-  make-tree:   make-tree
-  apply-op:    apply-op
-  eval-cond:   eval-cond
-  eval-pred:   eval-pred
-  eval-table:  eval-table
-  eval-tree:   eval-tree
-  decide:      decide
-}
-`
-
-// buildDecisionFileAQL generates the full decision.aql file content
-// deterministically from the native module's AQL (source of truth)
-// plus the export block.
+// buildDecisionFileAQL generates the full decision.aql file content.
+// The AQL source already includes the export block.
 func buildDecisionFileAQL() string {
-	return nativemod.DecisionAQL() + decisionExportAQL
+	return nativemod.DecisionAQL()
 }
 
-// buildDecisionModuleAQL generates the module [...] inline version
-// from the same source.
+// buildDecisionModuleAQL generates the module [...] inline version.
 func buildDecisionModuleAQL() string {
-	return "module [\n" + nativemod.DecisionAQL() +
-		decisionExportAQL + "\n]\n"
+	return "module [\n" + nativemod.DecisionAQL() + "\n]\n"
 }
 
 // --- Test infrastructure ---
