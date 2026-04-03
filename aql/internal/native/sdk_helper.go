@@ -17,11 +17,17 @@ func getSDK(apiMap engine.ReadMap, opName string, r *engine.Registry) (*udk.Univ
 		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
 	}
 
-	spec := specVal.AsString()
+	spec, err := specVal.AsString()
+	if err != nil {
+		return nil, "", fmt.Errorf("%s: spec: %w", opName, err)
+	}
 
 	var entityName string
 	if entityVal, ok := apiMap.Get("entity"); ok {
-		entityName = entityVal.AsString()
+		entityName, err = entityVal.AsString()
+		if err != nil {
+			return nil, "", fmt.Errorf("%s: entity: %w", opName, err)
+		}
 	}
 
 	// Strip .json extension if present.
@@ -51,7 +57,7 @@ func entityToAPIMap(v engine.Value) *engine.OrderedMap {
 	if v.Data == nil {
 		return m
 	}
-	inst := v.AsObjectInstance()
+	inst, _ := v.AsObjectInstance()
 	if kind, ok := inst.GetField("kind"); ok {
 		m.Set("kind", kind)
 	}

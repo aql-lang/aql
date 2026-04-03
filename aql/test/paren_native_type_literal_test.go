@@ -37,10 +37,12 @@ func TestNativeFnInFnBody(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				x, _ := m.Get("x")
-				if a.AsInteger() != 1 {
+				ai1, _ := a.AsInteger()
+				xi1, _ := x.AsInteger()
+				if ai1 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
-				if x.AsInteger() != 1 {
+				if xi1 != 1 {
 					t.Errorf("expected x=1, got %v", x)
 				}
 			},
@@ -72,7 +74,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s := result[0].AsString()
+				s, _ := result[0].AsString()
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -138,10 +140,12 @@ func TestNativeInExplicitParens(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				b, _ := m.Get("b")
-				if a.AsInteger() != 1 {
+				ai2, _ := a.AsInteger()
+				bi2, _ := b.AsInteger()
+				if ai2 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
-				if b.AsInteger() != 2 {
+				if bi2 != 2 {
 					t.Errorf("expected b=2, got %v", b)
 				}
 			},
@@ -170,7 +174,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s := result[0].AsString()
+				s, _ := result[0].AsString()
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -469,17 +473,19 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				e, _ := m.Get("extra")
-				if a.AsInteger() != 1 {
+				ai3, _ := a.AsInteger()
+				ei3, _ := e.AsInteger()
+				if ai3 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
-				if e.AsInteger() != 1 {
+				if ei3 != 1 {
 					t.Errorf("expected extra=1, got %v", e)
 				}
 			},
 		},
 		{
 			name: "merge-then-size",
-			def:  `def f fn [[m:Map] [Integer] [m merge {x:1} size]]`,
+			def:  `def f fn [[m:Map] [Integer] [(m merge {x:1}) size]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
@@ -488,14 +494,14 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-jsonify",
-			def:  `def f fn [[m:Map] [String] [m merge {b:2} jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [(m merge {b:2}) jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s := result[0].AsString()
+				s, _ := result[0].AsString()
 				if !strings.Contains(s, "a") || !strings.Contains(s, "b") {
 					t.Errorf("expected JSON with 'a' and 'b', got %q", s)
 				}

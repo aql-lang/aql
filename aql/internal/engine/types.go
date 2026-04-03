@@ -97,7 +97,7 @@ var (
 	TFnDef        = mustType("Word/__FN")
 	TFnUndef      = mustType("Word/__UF")
 	TReturnCheck  = mustType("Word/__RC")
-	TDefCleanup   = mustType("Word/__DC")
+	TDefCleanup   = mustType("Word/__IN/__DC")
 	TDisjunct     = mustType("Word/__DJ")
 	TMark         = mustType("Word/__MK")
 	TMove         = mustType("Word/__MV")
@@ -148,6 +148,7 @@ var builtinTypeIDs = map[string]int{
 	"Scalar/Atom":              18,
 	"Word/Function":            19,
 	"Word/__IN":                20,
+	"Word/__IN/__DC":           20,
 	"Word/__FW":                21,
 	"Word/__OP":                22,
 	"Word/__FN":                23,

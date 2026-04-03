@@ -28,3 +28,6 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: Build WASM
+        run: make wasm

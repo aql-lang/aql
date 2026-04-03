@@ -57,7 +57,8 @@ func TestIfListConditionMarkMove(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), condList, NewInteger(10), NewInteger(20),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as0, _ := result[0].AsInteger()
+	if len(result) != 1 || _as0 != 10 {
 		t.Errorf("if [1 add 2 gt 2] 10 20 = %v, want [10]", result)
 	}
 }
@@ -72,7 +73,8 @@ func TestIfListConditionFalseMarkMove(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), condList, NewInteger(10), NewInteger(20),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 20 {
+	_as1, _ := result[0].AsInteger()
+	if len(result) != 1 || _as1 != 20 {
 		t.Errorf("if [1 gt 2] 10 20 = %v, want [20]", result)
 	}
 }
@@ -86,7 +88,8 @@ func TestIfScalar2ArgTrue(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as2, _ := result[0].AsInteger()
+	if len(result) != 1 || _as2 != 42 {
 		t.Errorf("if true 42 = %v, want [42]", result)
 	}
 }
@@ -117,7 +120,8 @@ func TestIfConditionSharesContext(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewString("flag"), NewBoolean(true),
 		NewWord("if"), condList, NewString("yes"), NewString("no"),
 	})
-	if len(result) != 1 || result[0].AsString() != "yes" {
+	_as3, _ := result[0].AsString()
+	if len(result) != 1 || _as3 != "yes" {
 		t.Errorf("if [context get flag] should see parent context, got %v", result)
 	}
 }
@@ -143,10 +147,12 @@ func TestIfConditionCanSetContext(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 1 {
+	_as4, _ := result[0].AsInteger()
+	if _as4 != 1 {
 		t.Errorf("if branch result = %v, want 1", result[0])
 	}
-	if !result[1].AsBoolean() {
+	_as5, _ := result[1].AsBoolean()
+	if !_as5 {
 		t.Errorf("context set during condition should persist, got %v", result[1])
 	}
 }

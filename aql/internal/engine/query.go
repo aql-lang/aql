@@ -364,7 +364,7 @@ func registerQuery(r *Registry) {
 
 	// from: [atom] -> [query-builder]
 	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := args[0].AsAtom()
+		name, _ := args[0].AsAtom()
 		val, ok := contextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
@@ -393,7 +393,7 @@ func registerQuery(r *Registry) {
 	// Usage: from people as p
 	asHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		alias := args[1].AsAtom()
+		alias, _ := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -417,8 +417,10 @@ func registerQuery(r *Registry) {
 		table := args[0]
 		colSpec := args[1]
 
-		if colSpec.AsAtom() != "*" {
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
+		_as0, _ := colSpec.AsAtom()
+		if _as0 != "*" {
+			_as1, _ := colSpec.AsAtom()
+			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as1)
 		}
 
 		return doSelect(r, nil, table)
@@ -429,8 +431,10 @@ func registerQuery(r *Registry) {
 		colSpec := args[0]
 		table := args[1]
 
-		if colSpec.AsAtom() != "*" {
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
+		_as2, _ := colSpec.AsAtom()
+		if _as2 != "*" {
+			_as3, _ := colSpec.AsAtom()
+			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as3)
 		}
 
 		return doSelect(r, nil, table)
@@ -528,7 +532,8 @@ func registerQuery(r *Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("order: %w", err)
 		}
-		qb.OrderBy = quoteIdent(col.AsAtom())
+		_as4, _ := col.AsAtom()
+		qb.OrderBy = quoteIdent(_as4)
 		return []Value{newValue(TList, qb)}, nil
 	}
 
@@ -562,7 +567,7 @@ func registerQuery(r *Registry) {
 	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
 	limitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n := args[1].AsInteger()
+		n, _ := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -582,7 +587,7 @@ func registerQuery(r *Registry) {
 	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
 	offsetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n := args[1].AsInteger()
+		n, _ := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -647,7 +652,8 @@ func registerQuery(r *Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("group: %w", err)
 		}
-		qb.GroupBy = quoteIdent(col.AsAtom())
+		_as5, _ := col.AsAtom()
+		qb.GroupBy = quoteIdent(_as5)
 		return []Value{newValue(TList, qb)}, nil
 	}
 
@@ -781,7 +787,7 @@ func registerQuery(r *Registry) {
 func registerJoinWord(r *Registry, name string, joinType string) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		tableName := args[1].AsAtom()
+		tableName, _ := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -863,13 +869,16 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 	for _, e := range elems {
 		switch {
 		case e.VType.Equal(TAtom):
-			cols = append(cols, columnSpec{Name: e.AsAtom()})
+			_as6, _ := e.AsAtom()
+			cols = append(cols, columnSpec{Name: _as6})
 		case e.VType.Matches(TString):
-			cols = append(cols, columnSpec{Name: e.AsString()})
+			_as7, _ := e.AsString()
+			cols = append(cols, columnSpec{Name: _as7})
 		case e.IsWord():
 			// A word that appears in the column list without evaluation
 			// is treated as a column name OR as an aggregate function name.
-			wname := e.AsWord().Name
+			_as8, _ := e.AsWord()
+			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
 			pair := e.AsList().Slice()
@@ -938,13 +947,16 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 // Unlike valueToColName, this also recognizes unevaluated word values.
 func nameFromValue(v Value) string {
 	if v.VType.Equal(TAtom) {
-		return v.AsAtom()
+		_as9, _ := v.AsAtom()
+		return _as9
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as10, _ := v.AsString()
+		return _as10
 	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as11, _ := v.AsWord()
+		return _as11.Name
 	}
 	return ""
 }
@@ -1041,13 +1053,16 @@ func sqlTypeToAQLType(sqlType string) Type {
 // valueToColName extracts the string content from an atom, string, or word value.
 func valueToColName(v Value) string {
 	if v.VType.Equal(TAtom) {
-		return v.AsAtom()
+		_as12, _ := v.AsAtom()
+		return _as12
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as13, _ := v.AsString()
+		return _as13
 	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as14, _ := v.AsWord()
+		return _as14.Name
 	}
 	return ""
 }
@@ -1145,7 +1160,8 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	// Check for paren tokens at this level.
 	hasParen := false
 	for _, e := range result {
-		if e.IsWord() && e.AsWord().Name == "(" {
+		_as15, _ := e.AsWord()
+		if e.IsWord() && _as15.Name == "(" {
 			hasParen = true
 			break
 		}
@@ -1158,14 +1174,18 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	var out []Value
 	idx := 0
 	for idx < len(result) {
-		if result[idx].IsWord() && result[idx].AsWord().Name == "(" {
+		_as16, _ := result[idx].AsWord()
+		if result[idx].IsWord() && _as16.Name == "(" {
 			depth := 1
 			j := idx + 1
 			for j < len(result) && depth > 0 {
-				if result[j].IsWord() && result[j].AsWord().Name == "(" {
-					depth++
-				} else if result[j].IsWord() && result[j].AsWord().Name == ")" {
-					depth--
+				if result[j].IsWord() {
+					wj, _ := result[j].AsWord()
+					if wj.Name == "(" {
+						depth++
+					} else if wj.Name == ")" {
+						depth--
+					}
 				}
 				j++
 			}
@@ -1207,7 +1227,8 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	// Quick scan: any open-paren words?
 	hasParen := false
 	for _, e := range elems {
-		if e.IsWord() && e.AsWord().Name == "(" {
+		_as19, _ := e.AsWord()
+		if e.IsWord() && _as19.Name == "(" {
 			hasParen = true
 			break
 		}
@@ -1237,15 +1258,19 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	var result []Value
 	i := 0
 	for i < len(elems) {
-		if elems[i].IsWord() && elems[i].AsWord().Name == "(" {
+		_as20, _ := elems[i].AsWord()
+		if elems[i].IsWord() && _as20.Name == "(" {
 			// Find the matching close paren.
 			depth := 1
 			j := i + 1
 			for j < len(elems) && depth > 0 {
-				if elems[j].IsWord() && elems[j].AsWord().Name == "(" {
-					depth++
-				} else if elems[j].IsWord() && elems[j].AsWord().Name == ")" {
-					depth--
+				if elems[j].IsWord() {
+					wj2, _ := elems[j].AsWord()
+					if wj2.Name == "(" {
+						depth++
+					} else if wj2.Name == ")" {
+						depth--
+					}
 				}
 				j++
 			}
@@ -1654,20 +1679,25 @@ func resolveScalarValue(v Value) (Value, error) {
 func valueToSQL(v Value) (string, error) {
 	switch {
 	case v.VType.Matches(TString):
-		return "'" + strings.ReplaceAll(v.AsString(), "'", "''") + "'", nil
+		_as23, _ := v.AsString()
+		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.AsInteger()), nil
+		_as24, _ := v.AsInteger()
+		return fmt.Sprintf("%d", _as24), nil
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as25, _ := v.AsBoolean()
+		if _as25 {
 			return "'true'", nil
 		}
 		return "'false'", nil
 	case v.VType.Equal(TAtom):
-		return "'" + strings.ReplaceAll(v.AsAtom(), "'", "''") + "'", nil
+		_as26, _ := v.AsAtom()
+		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
 	case v.VType.Equal(TWord):
-		return "'" + strings.ReplaceAll(v.AsWord().Name, "'", "''") + "'", nil
+		_as27, _ := v.AsWord()
+		return "'" + strings.ReplaceAll(_as27.Name, "'", "''") + "'", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
 	}
@@ -1795,7 +1825,8 @@ func buildOrderClause(colList Value) (string, error) {
 		e := elems[i]
 
 		if e.VType.Matches(TInteger) {
-			parts = append(parts, fmt.Sprintf("%d", e.AsInteger()))
+			_as28, _ := e.AsInteger()
+			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++
 			continue
 		}

@@ -275,7 +275,11 @@ func registerMatrixMake(r *engine.Registry) {
 					return nil, fmt.Errorf("make: row %d has %d elements, expected %d", i, row.Len(), cols)
 				}
 				for j := 0; j < cols; j++ {
-					data = append(data, row.Get(j).AsNumber())
+					n, err := row.Get(j).AsNumber()
+					if err != nil {
+						return nil, err
+					}
+					data = append(data, n)
 				}
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
@@ -288,8 +292,15 @@ func registerMatrixZeros(r *engine.Registry) {
 	r.Register("matrix-zeros", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			rows := int(args[1].AsInteger())
-			cols := int(args[0].AsInteger())
+			r64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			c64, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			rows, cols := int(r64), int(c64)
 			data := make([]float64, rows*cols)
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 		},
@@ -301,8 +312,15 @@ func registerMatrixOnes(r *engine.Registry) {
 	r.Register("matrix-ones", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			rows := int(args[1].AsInteger())
-			cols := int(args[0].AsInteger())
+			r64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			c64, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			rows, cols := int(r64), int(c64)
 			data := make([]float64, rows*cols)
 			for i := range data {
 				data[i] = 1.0
@@ -316,7 +334,11 @@ func registerMatrixEye(r *engine.Registry) {
 	r.Register("matrix-eye", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n := int(args[0].AsInteger())
+			n64, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			n := int(n64)
 			data := make([]float64, n*n)
 			for i := 0; i < n; i++ {
 				data[i*n+i] = 1.0
@@ -330,9 +352,19 @@ func registerMatrixFill(r *engine.Registry) {
 	r.Register("matrix-fill", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TNumber},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			rows := int(args[0].AsInteger())
-			cols := int(args[1].AsInteger())
-			val := args[2].AsNumber()
+			r64, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			c64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			val, err := args[2].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			rows, cols := int(r64), int(c64)
 			data := make([]float64, rows*cols)
 			for i := range data {
 				data[i] = val
@@ -381,8 +413,15 @@ func registerMatrixAt(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			row := int(args[1].AsInteger())
-			col := int(args[2].AsInteger())
+			r64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			c64, err := args[2].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			row, col := int(r64), int(c64)
 			if row < 0 || row >= m.Rows || col < 0 || col >= m.Cols {
 				return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows, m.Cols)
 			}
@@ -396,7 +435,11 @@ func registerMatrixRow(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			row := int(args[1].AsInteger())
+			r64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			row := int(r64)
 			if row < 0 || row >= m.Rows {
 				return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows)
 			}
@@ -414,7 +457,11 @@ func registerMatrixCol(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			col := int(args[1].AsInteger())
+			c64, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			col := int(c64)
 			if col < 0 || col >= m.Cols {
 				return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols)
 			}
@@ -487,7 +534,10 @@ func registerMatrixScale(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TNumber},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			s := args[1].AsNumber()
+			s, err := args[1].AsNumber()
+			if err != nil {
+				return nil, err
+			}
 			data := make([]float64, len(m.Data))
 			for i := range data {
 				data[i] = m.Data[i] * s
@@ -610,7 +660,15 @@ func registerMatrixDot(r *engine.Registry) {
 			}
 			s := 0.0
 			for i := 0; i < a.Len(); i++ {
-				s += a.Get(i).AsNumber() * b.Get(i).AsNumber()
+				av, err := a.Get(i).AsNumber()
+				if err != nil {
+					return nil, err
+				}
+				bv, err := b.Get(i).AsNumber()
+				if err != nil {
+					return nil, err
+				}
+				s += av * bv
 			}
 			return []engine.Value{engine.NewDecimal(s)}, nil
 		},

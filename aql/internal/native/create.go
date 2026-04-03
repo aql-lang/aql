@@ -110,7 +110,10 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if !ok {
 		return nil, fmt.Errorf("create: record must contain an \"id\" field")
 	}
-	id := idVal.AsString()
+	id, err := idVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("create: id: %w", err)
+	}
 
 	// Check for duplicate id.
 	for _, row := range rows {
@@ -118,8 +121,11 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			continue
 		}
 		m := row.AsMap()
-		if existing, ok := m.Get("id"); ok && existing.AsString() == id {
-			return nil, fmt.Errorf("create: record with id %q already exists", id)
+		if existing, ok := m.Get("id"); ok {
+			existingStr, _ := existing.AsString()
+			if existingStr == id {
+				return nil, fmt.Errorf("create: record with id %q already exists", id)
+			}
 		}
 	}
 

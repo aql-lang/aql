@@ -68,7 +68,8 @@ func formatForPrint(v Value) string {
 
 	// String: printed as-is (no quotes).
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as0, _ := v.AsString()
+		return _as0
 	}
 
 	// Options type: use String() representation.
@@ -124,11 +125,14 @@ func formatValueJSON(v Value) string {
 	}
 	switch {
 	case v.VType.Matches(TString):
-		return fmt.Sprintf("%q", v.AsString())
+		_as1, _ := v.AsString()
+		return fmt.Sprintf("%q", _as1)
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.AsInteger())
+		_as2, _ := v.AsInteger()
+		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as3, _ := v.AsBoolean()
+		if _as3 {
 			return "true"
 		}
 		return "false"

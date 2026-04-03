@@ -97,12 +97,25 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 }
 
 func makeFnDef(wordName string, params []engine.FnParam, returns []engine.Type, subReg *engine.Registry) engine.Value {
+	// Give params names so CallAQL installs them as defs rather than
+	// pushing unnamed tokens.  The body then pushes them in reverse order
+	// so that the inner registered word's nearest-first matching sees
+	// them in the original sig order (counteracts double reversal).
+	named := make([]engine.FnParam, len(params))
+	for i, p := range params {
+		named[i] = engine.FnParam{Name: fmt.Sprintf("__p%d", i), Type: p.Type}
+	}
+	var body []engine.Value
+	for i := len(named) - 1; i >= 0; i-- {
+		body = append(body, engine.NewWord(named[i].Name))
+	}
+	body = append(body, engine.NewWord(wordName))
 	return engine.NewFnDef(engine.FnDefInfo{
 		Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  params,
+			Params:  named,
 			Returns: returns,
-			Body:    []engine.Value{engine.NewWord(wordName)},
+			Body:    body,
 		}},
 		Registry: subReg,
 	})
@@ -117,17 +130,57 @@ func applyOp(op string, lhs, rhs engine.Value) (bool, error) {
 	case "neq":
 		return lhs.String() != rhs.String(), nil
 	case "lt":
-		return lhs.AsNumber() < rhs.AsNumber(), nil
+		lhsN, err := lhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		rhsN, err := rhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		return lhsN < rhsN, nil
 	case "lte":
-		return lhs.AsNumber() <= rhs.AsNumber(), nil
+		lhsN, err := lhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		rhsN, err := rhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		return lhsN <= rhsN, nil
 	case "gt":
-		return lhs.AsNumber() > rhs.AsNumber(), nil
+		lhsN, err := lhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		rhsN, err := rhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		return lhsN > rhsN, nil
 	case "gte":
-		return lhs.AsNumber() >= rhs.AsNumber(), nil
+		lhsN, err := lhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		rhsN, err := rhs.AsNumber()
+		if err != nil {
+			return false, err
+		}
+		return lhsN >= rhsN, nil
 	case "is_true":
-		return lhs.AsBoolean(), nil
+		b, err := lhs.AsBoolean()
+		if err != nil {
+			return false, err
+		}
+		return b, nil
 	case "is_false":
-		return !lhs.AsBoolean(), nil
+		b, err := lhs.AsBoolean()
+		if err != nil {
+			return false, err
+		}
+		return !b, nil
 	case "is_null":
 		return lhs.VType.Equal(engine.TNone), nil
 	case "is_not_null":
@@ -160,13 +213,24 @@ func evalCondMap(c engine.ReadMap, input engine.ReadMap) ([]engine.Value, error)
 
 	fieldName := fieldVal.String()
 	if fieldVal.IsAtom() {
-		fieldName = fieldVal.AsAtom()
+		a, err := fieldVal.AsAtom()
+		if err != nil {
+			return nil, fmt.Errorf("eval-cond: field: %w", err)
+		}
+		fieldName = a
 	}
 
 	lhs, _ := input.Get(fieldName)
-	op := opVal.AsString()
+	op, err := opVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("eval-cond: op: %w", err)
+	}
 	if opVal.IsAtom() {
-		op = opVal.AsAtom()
+		a, err := opVal.AsAtom()
+		if err != nil {
+			return nil, fmt.Errorf("eval-cond: op: %w", err)
+		}
+		op = a
 	}
 
 	result, err := applyOp(op, lhs, valueVal)
@@ -198,11 +262,25 @@ func registerEvalPred(r *engine.Registry) {
 
 func evalPredMap(pred engine.ReadMap, input engine.ReadMap) (bool, error) {
 	kindVal, hasKind := pred.Get("kind")
-	if hasKind && kindVal.AsString() == "group" {
+	if hasKind {
+		kindStr, err := kindVal.AsString()
+		if err != nil {
+			return false, fmt.Errorf("eval-pred: kind: %w", err)
+		}
+		hasKind = kindStr == "group"
+	}
+	if hasKind {
 		opVal, _ := pred.Get("op")
-		op := opVal.AsString()
+		op, err := opVal.AsString()
+		if err != nil {
+			return false, fmt.Errorf("eval-pred: op: %w", err)
+		}
 		if opVal.IsAtom() {
-			op = opVal.AsAtom()
+			a, err := opVal.AsAtom()
+			if err != nil {
+				return false, fmt.Errorf("eval-pred: op: %w", err)
+			}
+			op = a
 		}
 		childrenVal, _ := pred.Get("children")
 		children := childrenVal.AsList()
@@ -269,7 +347,11 @@ func evalPredMap(pred engine.ReadMap, input engine.ReadMap) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return res[0].AsBoolean(), nil
+	b, err := res[0].AsBoolean()
+	if err != nil {
+		return false, err
+	}
+	return b, nil
 }
 
 // --- Go evaluator: eval-table ---
@@ -292,9 +374,16 @@ func evalTableMap(table engine.ReadMap, input engine.ReadMap) ([]engine.Value, e
 	rulesVal, _ := table.Get("rules")
 	rules := rulesVal.AsList()
 	policyVal, _ := table.Get("hit-policy")
-	policy := policyVal.AsString()
+	policy, err := policyVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("eval-table: hit-policy: %w", err)
+	}
 	if policyVal.IsAtom() {
-		policy = policyVal.AsAtom()
+		a, err := policyVal.AsAtom()
+		if err != nil {
+			return nil, fmt.Errorf("eval-table: hit-policy: %w", err)
+		}
+		policy = a
 	}
 
 	var matched []engine.Value
@@ -355,14 +444,24 @@ func evalTableMap(table engine.ReadMap, input engine.ReadMap) ([]engine.Value, e
 		bestPri := int64(0)
 		if m := best.AsMap(); m != nil {
 			if p, ok := m.Get("priority"); ok {
-				bestPri = p.AsInteger()
+				v, err := p.AsInteger()
+				if err != nil {
+					return nil, fmt.Errorf("eval-table: priority: %w", err)
+				}
+				bestPri = v
 			}
 		}
 		for _, m := range matched[1:] {
 			if mm := m.AsMap(); mm != nil {
-				if p, ok := mm.Get("priority"); ok && p.AsInteger() > bestPri {
-					best = m
-					bestPri = p.AsInteger()
+				if p, ok := mm.Get("priority"); ok {
+					v, err := p.AsInteger()
+					if err != nil {
+						return nil, fmt.Errorf("eval-table: priority: %w", err)
+					}
+					if v > bestPri {
+						best = m
+						bestPri = v
+					}
 				}
 			}
 		}
@@ -408,7 +507,11 @@ func evalTreeMap(tree engine.ReadMap, input engine.ReadMap) ([]engine.Value, err
 
 	rootID := rootVal.String()
 	if rootVal.IsAtom() {
-		rootID = rootVal.AsAtom()
+		a, err := rootVal.AsAtom()
+		if err != nil {
+			return nil, fmt.Errorf("eval-tree: root: %w", err)
+		}
+		rootID = a
 	}
 
 	currentID := rootID
@@ -419,9 +522,16 @@ func evalTreeMap(tree engine.ReadMap, input engine.ReadMap) ([]engine.Value, err
 		}
 
 		kindVal, _ := node.Get("kind")
-		kind := kindVal.AsString()
+		kind, err := kindVal.AsString()
+		if err != nil {
+			return nil, fmt.Errorf("eval-tree: kind: %w", err)
+		}
 		if kindVal.IsAtom() {
-			kind = kindVal.AsAtom()
+			a, err := kindVal.AsAtom()
+			if err != nil {
+				return nil, fmt.Errorf("eval-tree: kind: %w", err)
+			}
+			kind = a
 		}
 
 		switch kind {
@@ -452,7 +562,11 @@ func evalTreeMap(tree engine.ReadMap, input engine.ReadMap) ([]engine.Value, err
 					nextVal, _ := brMap.Get("next")
 					nextID = nextVal.String()
 					if nextVal.IsAtom() {
-						nextID = nextVal.AsAtom()
+						a, err := nextVal.AsAtom()
+						if err != nil {
+							return nil, fmt.Errorf("eval-tree: next: %w", err)
+						}
+						nextID = a
 					}
 					break
 				}
@@ -479,7 +593,8 @@ func findNodeByID(id string, nodes engine.ReadList) engine.ReadMap {
 		idVal, _ := nodeMap.Get("id")
 		nodeID := idVal.String()
 		if idVal.IsAtom() {
-			nodeID = idVal.AsAtom()
+			a, _ := idVal.AsAtom()
+			nodeID = a
 		}
 		if nodeID == id {
 			return nodeMap
@@ -500,9 +615,16 @@ func registerDecide(r *engine.Registry) {
 				return nil, fmt.Errorf("decide: expected concrete maps")
 			}
 			kindVal, _ := model.Get("kind")
-			kind := kindVal.AsString()
+			kind, err := kindVal.AsString()
+			if err != nil {
+				return nil, fmt.Errorf("decide: kind: %w", err)
+			}
 			if kindVal.IsAtom() {
-				kind = kindVal.AsAtom()
+				a, err := kindVal.AsAtom()
+				if err != nil {
+					return nil, fmt.Errorf("decide: kind: %w", err)
+				}
+				kind = a
 			}
 			switch kind {
 			case "table":

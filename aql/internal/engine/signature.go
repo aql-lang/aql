@@ -66,8 +66,9 @@ func (s *Signature) TotalArgs() int {
 
 // MatchResult holds a matched signature and the positionally matched args.
 type MatchResult struct {
-	Sig  *Signature
-	Args []Value // args matched positionally to Sig.Args types
+	Sig       *Signature
+	Args      []Value // args in signature order
+	Positions []int   // absolute stack indices of each arg (nil for 0-arg)
 }
 
 // MatchSignature finds the first matching signature for a function given the
@@ -137,68 +138,6 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	return nil
 }
 
-// MatchSignatureReversed is like MatchSignature but reads the stack in reverse
-// order: the top of the stack maps to sigArgs[0], the next deeper value maps
-// to sigArgs[1], etc. This is used for forward-precedence functions when all
-// arguments come from the stack (zero forward tokens).
-//
-// Signatures are assumed to be pre-sorted. The first match wins.
-func MatchSignatureReversed(sigs []Signature, stack []Value, modifiers WordInfo) *MatchResult {
-	for i := range sigs {
-		sig := &sigs[i]
-
-		if modifiers.ArgCount >= 0 && sig.TotalArgs() != modifiers.ArgCount {
-			continue
-		}
-
-		n := len(sig.Args)
-		if len(stack) < n {
-			continue
-		}
-
-		// Extract top n values from the stack in reversed order.
-		reversed := make([]Value, n)
-		for j := 0; j < n; j++ {
-			reversed[j] = stack[len(stack)-1-j]
-		}
-
-		// Try positional match on the reversed values.
-		ordered, ok := flexibleMatch(reversed, sig)
-		if !ok {
-			continue
-		}
-
-		// Check structural patterns.
-		if sig.Patterns != nil {
-			patternOk := true
-			for idx, pattern := range sig.Patterns {
-				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
-					pattern.Data != nil && ordered[idx].Data != nil &&
-					!pattern.IsOptionsType() &&
-					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
-					if !openUnifyMap(pattern, ordered[idx]) {
-						patternOk = false
-						break
-					}
-				} else {
-					if _, uOk := Unify(ordered[idx], pattern); !uOk {
-						patternOk = false
-						break
-					}
-				}
-			}
-			if !patternOk {
-				continue
-			}
-		}
-
-		args := make([]Value, n)
-		copy(args, ordered)
-		return &MatchResult{Sig: sig, Args: args}
-	}
-
-	return nil
-}
 
 // flexibleMatch checks whether values match the given signature positionally.
 // Arguments are never permuted — values[i] must match sig.Args[i].
@@ -284,7 +223,8 @@ var typeInherentScores = map[string]int{
 	"Word/__DJ": 100,
 	"Word/__FN": 200,
 	"Word/__FW": 300,
-	"Word/__IN": 400,
+	"Word/__IN":      400,
+	"Word/__IN/__DC": 400,
 	"Word/__MK": 500,
 	"Word/__MD": 600,
 	"Word/__MV": 700,

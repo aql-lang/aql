@@ -13,7 +13,9 @@ import "fmt"
 func compareValues(a, b Value) (int, error) {
 	// Numeric comparisons: both operands are some form of Number.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		af, bf := a.AsNumber(), b.AsNumber()
+		_as1, _ := a.AsNumber()
+		_as0, _ := b.AsNumber()
+		af, bf := _as1, _as0
 		if af < bf {
 			return -1, nil
 		}
@@ -24,7 +26,9 @@ func compareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		as, bs := a.AsString(), b.AsString()
+		_as3, _ := a.AsString()
+		_as2, _ := b.AsString()
+		as, bs := _as3, _as2
 		if as < bs {
 			return -1, nil
 		}
@@ -35,7 +39,9 @@ func compareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		ab, bb := a.AsBoolean(), b.AsBoolean()
+		_as5, _ := a.AsBoolean()
+		_as4, _ := b.AsBoolean()
+		ab, bb := _as5, _as4
 		if ab == bb {
 			return 0, nil
 		}
@@ -46,7 +52,9 @@ func compareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		as, bs := a.AsAtom(), b.AsAtom()
+		_as7, _ := a.AsAtom()
+		_as6, _ := b.AsAtom()
+		as, bs := _as7, _as6
 		if as < bs {
 			return -1, nil
 		}
@@ -76,16 +84,24 @@ func exactEqual(a, b Value) bool {
 
 	// Scalars: compare by value.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		return a.AsNumber() == b.AsNumber()
+		_as9, _ := a.AsNumber()
+		_as8, _ := b.AsNumber()
+		return _as9 == _as8
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		return a.AsString() == b.AsString()
+		_as11, _ := a.AsString()
+		_as10, _ := b.AsString()
+		return _as11 == _as10
 	}
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		return a.AsBoolean() == b.AsBoolean()
+		_as13, _ := a.AsBoolean()
+		_as12, _ := b.AsBoolean()
+		return _as13 == _as12
 	}
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		return a.AsAtom() == b.AsAtom()
+		_as15, _ := a.AsAtom()
+		_as14, _ := b.AsAtom()
+		return _as15 == _as14
 	}
 
 	// Non-scalars: identity comparison (same pointer).
@@ -109,16 +125,24 @@ func deepEqual(a, b Value) bool {
 
 	// Scalars.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		return a.AsNumber() == b.AsNumber()
+		_as17, _ := a.AsNumber()
+		_as16, _ := b.AsNumber()
+		return _as17 == _as16
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		return a.AsString() == b.AsString()
+		_as19, _ := a.AsString()
+		_as18, _ := b.AsString()
+		return _as19 == _as18
 	}
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		return a.AsBoolean() == b.AsBoolean()
+		_as21, _ := a.AsBoolean()
+		_as20, _ := b.AsBoolean()
+		return _as21 == _as20
 	}
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		return a.AsAtom() == b.AsAtom()
+		_as23, _ := a.AsAtom()
+		_as22, _ := b.AsAtom()
+		return _as23 == _as22
 	}
 
 	// Lists: same length, each element deeply equal.

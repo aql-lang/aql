@@ -95,7 +95,13 @@ func makeWalkApply(cb engine.Value, r *engine.Registry, callErr *error) func(*st
 		}
 		leaf.Set("value", v)
 
-		cbResult, err := r.CallAQL(cb, []engine.Value{engine.NewMap(leaf)})
+		cbArgs := []engine.Value{engine.NewMap(leaf)}
+		cbSig := engine.MatchFnSig(cb, cbArgs)
+		if cbSig == nil {
+			*callErr = fmt.Errorf("walk: no matching callback signature")
+			return val
+		}
+		cbResult, err := r.CallAQL(cbSig, cbArgs)
 		if err != nil {
 			*callErr = err
 			return val

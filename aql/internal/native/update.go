@@ -109,7 +109,10 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if !ok {
 		return nil, fmt.Errorf("update: record must contain an \"id\" field")
 	}
-	id := idVal.AsString()
+	id, err := idVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("update: id: %w", err)
+	}
 
 	found := false
 	result := make([]engine.Value, len(rows))
@@ -120,7 +123,12 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		}
 		rec := row.AsMap()
 		existing, ok := rec.Get("id")
-		if !ok || existing.AsString() != id {
+		if !ok {
+			result[i] = row
+			continue
+		}
+		existingStr, _ := existing.AsString()
+		if existingStr != id {
 			result[i] = row
 			continue
 		}

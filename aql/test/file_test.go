@@ -66,7 +66,7 @@ func TestFileReadCSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti := v.AsTableType()
+	ti, _ := v.AsTableType()
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -171,7 +171,7 @@ func TestFileReadTSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti := v.AsTableType()
+	ti, _ := v.AsTableType()
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -194,7 +194,7 @@ func TestFileReadCSVWithTextOverride(t *testing.T) {
 	if v.IsTableType() {
 		t.Fatal("expected plain string with text override, got table")
 	}
-	s := v.AsString()
+	s, _ := v.AsString()
 	if !strings.Contains(s, "x,y") {
 		t.Errorf("expected raw CSV content, got %q", s)
 	}
@@ -291,7 +291,7 @@ func assertField(t *testing.T, om engine.ReadMap, key, want string) {
 		t.Errorf("missing field %q", key)
 		return
 	}
-	got := val.AsString()
+	got, _ := val.AsString()
 	if got != want {
 		t.Errorf("field %q = %q, want %q", key, got, want)
 	}

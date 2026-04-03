@@ -222,15 +222,18 @@ func aqlValueToJSParam(v Value, colType Type) any {
 	switch {
 	case colType.Matches(TInteger):
 		if v.VType.Matches(TInteger) {
-			return v.AsInteger()
+			_as0, _ := v.AsInteger()
+			return _as0
 		}
 		if v.VType.Matches(TString) {
-			if n, err := strconv.ParseInt(v.AsString(), 10, 64); err == nil {
+			_as1, _ := v.AsString()
+			if n, err := strconv.ParseInt(_as1, 10, 64); err == nil {
 				return n
 			}
 		}
 		if v.VType.Matches(TBoolean) {
-			if v.AsBoolean() {
+			_as2, _ := v.AsBoolean()
+			if _as2 {
 				return 1
 			}
 			return 0
@@ -238,26 +241,31 @@ func aqlValueToJSParam(v Value, colType Type) any {
 		return valToString(v)
 	case colType.Matches(TNumber):
 		if v.VType.Matches(TDecimal) {
-			return v.AsDecimal()
+			_as3, _ := v.AsDecimal()
+			return _as3
 		}
 		if v.VType.Matches(TInteger) {
-			return float64(v.AsInteger())
+			_as4, _ := v.AsInteger()
+			return float64(_as4)
 		}
 		if v.VType.Matches(TString) {
-			if f, err := strconv.ParseFloat(v.AsString(), 64); err == nil {
+			_as5, _ := v.AsString()
+			if f, err := strconv.ParseFloat(_as5, 64); err == nil {
 				return f
 			}
 		}
 		return valToString(v)
 	case colType.Matches(TBoolean):
 		if v.VType.Matches(TBoolean) {
-			if v.AsBoolean() {
+			_as6, _ := v.AsBoolean()
+			if _as6 {
 				return 1
 			}
 			return 0
 		}
 		if v.VType.Matches(TString) {
-			if v.AsString() == "true" {
+			_as7, _ := v.AsString()
+			if _as7 == "true" {
 				return 1
 			}
 			return 0
@@ -265,7 +273,8 @@ func aqlValueToJSParam(v Value, colType Type) any {
 		return valToString(v)
 	default:
 		if v.VType.Matches(TString) {
-			return v.AsString()
+			_as8, _ := v.AsString()
+			return _as8
 		}
 		return valToString(v)
 	}

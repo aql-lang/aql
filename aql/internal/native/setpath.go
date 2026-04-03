@@ -46,7 +46,10 @@ func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if pathIdx < 0 {
 		return nil, fmt.Errorf("setpath: path argument must be a string")
 	}
-	path := args[pathIdx].AsString()
+	path, err := args[pathIdx].AsString()
+	if err != nil {
+		return nil, fmt.Errorf("setpath: path: %w", err)
+	}
 
 	// Collect the two non-path args.
 	var others [2]int

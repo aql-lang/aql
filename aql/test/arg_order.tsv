@@ -9,8 +9,8 @@
 #   d c b f a     — 3 prefix, 1 forward
 #   d c b a f     — all prefix
 #
-# Prefix args fill sig slots from deepest on stack (Args[0]).
-# Suffix args continue filling from where prefix left off.
+# Nearest to word = sig[0]. Forward args fill sig[0] left-to-right.
+# Stack args fill remaining slots nearest-first (top of stack first).
 # Same-type args preserve positional order (sub 10 3 = 7).
 
 # =====================================================================
@@ -23,8 +23,8 @@ def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m .
 # All forward (was 1 prefix + 1 forward, changed for sequential planner)
 def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
 
-# All prefix: stack=[{x:4}, 3]. {x:4}→Opts, 3→Integer
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] {x:4} 3 f	7
+# All prefix: nearest=sig[0]=Opts, next=sig[1]=Integer
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 3 {x:4} f	7
 
 # =====================================================================
 # 2-param: [Integer String] — distinct scalar types
@@ -36,17 +36,17 @@ def g fn [[n:Integer s:String] [String] [s add n]] g 5 "val:"	'val:5'
 # All forward (was 1 prefix + 1 forward, changed for sequential planner)
 def g fn [[n:Integer s:String] [String] [s add n]] g 5 "val:"	'val:5'
 
-# All prefix: stack=[5, "val:"]. 5→Integer, "val:"→String
-def g fn [[n:Integer s:String] [String] [s add n]] 5 "val:" g	'val:5'
+# All prefix: nearest=sig[0]=Integer, next=sig[1]=String
+def g fn [[n:Integer s:String] [String] [s add n]] "val:" 5 g	'val:5'
 
 # =====================================================================
 # 2-param: [Integer Integer] — same types preserve order
 # =====================================================================
 
-# sub uses forward-first matching: forward args fill sigArgs[0] first.
-# 10 sub 3: forward=[3]→args[0], stack=[10]→args[1], result: args[1]-args[0]=10-3=7
-# 10 3 sub: reversed stack, args[0]=3, args[1]=10, result: 10-3=7
-# sub 10 3: forward=[10,3]→args[0]=10,args[1]=3, result: 3-10=-7
+# sub: sig[0]=Number, sig[1]=Number. Handler: args[1]-args[0].
+# 10 sub 3: fwd=[3]→sig[0], stack=[10]→sig[1]. 10-3=7
+# 10 3 sub: nearest=3→sig[0], next=10→sig[1]. 10-3=7
+# sub 10 3: fwd=[10,3]→sig[0]=10, sig[1]=3. 3-10=-7
 10 3 sub	7
 10 sub 3	7
 sub 10 3	-7
@@ -64,8 +64,8 @@ def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [Strin
 # All forward (was 2 prefix + 1 forward, changed for sequential planner)
 def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
 
-# All prefix
-def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] {x:10} 5 "!" h	'15!'
+# All prefix: nearest=sig[0]=Opts, then sig[1]=Integer, then sig[2]=String
+def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] "!" 5 {x:10} h	'15!'
 
 # =====================================================================
 # Optional Options with ordering
@@ -88,7 +88,7 @@ def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f 5	5
 # =====================================================================
 
 # Extra value before args, not consumed
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 99 {x:4} 3 f	99 7
+def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 99 3 {x:4} f	99 7
 
 # =====================================================================
 # Boolean + Integer — distinct scalar subtypes
@@ -100,5 +100,5 @@ def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] p true 5	5
 # All forward (was 1 prefix + 1 forward, changed for sequential planner)
 def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] p true 5	5
 
-# All prefix
-def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] true 5 p	5
+# All prefix: nearest=sig[0]=Boolean, next=sig[1]=Integer
+def p fn [[b:Boolean n:Integer] [Integer] [if b [n] [0]]] 5 true p	5

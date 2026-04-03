@@ -480,8 +480,8 @@ func TestAliasDblcall(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "dblcall",
 		defStep:   "def mydbl [dblcall]",
-		origSteps: []string{"5 [dup mul] dblcall"},
-		aliaSteps: []string{"5 [dup mul] mydbl"},
+		origSteps: []string{"[dup mul] 5 dblcall"},
+		aliaSteps: []string{"[dup mul] 5 mydbl"},
 	})
 }
 

@@ -33,7 +33,8 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		instanceVal, NewWord("get"), NewWord("name"),
 	})
-	if len(result) != 1 || result[0].AsString() != "Alice" {
+	_as0, _ := result[0].AsString()
+	if len(result) != 1 || _as0 != "Alice" {
 		t.Fatalf("initial: got %v, want Alice", result)
 	}
 
@@ -46,7 +47,8 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		instanceVal, NewWord("get"), NewWord("name"),
 	})
-	if len(result) != 1 || result[0].AsString() != "Bob" {
+	_as1, _ := result[0].AsString()
+	if len(result) != 1 || _as1 != "Bob" {
 		t.Fatalf("after set: got %v, want Bob", result)
 	}
 }
@@ -83,7 +85,8 @@ func TestObjectSetFieldString(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		instanceVal, NewWord("get"), NewString("x"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 99 {
+	_as2, _ := result[0].AsInteger()
+	if len(result) != 1 || _as2 != 99 {
 		t.Fatalf("got %v, want 99", result)
 	}
 }
@@ -119,7 +122,8 @@ func TestObjectSetAddsNewField(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		instanceVal, NewWord("get"), NewWord("b"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 2 {
+	_as3, _ := result[0].AsInteger()
+	if len(result) != 1 || _as3 != 2 {
 		t.Fatalf("got %v, want 2", result)
 	}
 }
@@ -156,7 +160,8 @@ func TestObjectMutationSharedReference(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		ref2, NewWord("get"), NewWord("v"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as4, _ := result[0].AsInteger()
+	if len(result) != 1 || _as4 != 42 {
 		t.Fatalf("ref2 got %v, want 42 (shared mutation)", result)
 	}
 }
@@ -204,7 +209,8 @@ func TestNodeMapUnchangedAfterObjectSet(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		mapVal, NewWord("get"), NewWord("x"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 1 {
+	_as5, _ := result[0].AsInteger()
+	if len(result) != 1 || _as5 != 1 {
 		t.Fatalf("map x: got %v, want 1", result)
 	}
 }
@@ -225,7 +231,8 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 
 	// ReadMap supports Get, Keys, SortedKeys, Len
 	v, ok := rm.Get("x")
-	if !ok || v.AsInteger() != 1 {
+	_as6, _ := v.AsInteger()
+	if !ok || _as6 != 1 {
 		t.Fatalf("Get x: got %v, want 1", v)
 	}
 	if rm.Len() != 1 {
@@ -244,7 +251,8 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	// *OrderedMap supports Set (for internal construction paths)
 	om.Set("y", NewInteger(2))
 	v2, ok2 := om.Get("y")
-	if !ok2 || v2.AsInteger() != 2 {
+	_as7, _ := v2.AsInteger()
+	if !ok2 || _as7 != 2 {
 		t.Fatalf("after mutation: got %v, want 2", v2)
 	}
 
@@ -268,7 +276,8 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	oi := inst.Data.(ObjectInstanceInfo)
 	oi.Fields.Set("v", NewInteger(42))
 	v3, _ := oi.Fields.Get("v")
-	if v3.AsInteger() != 42 {
+	_as8, _ := v3.AsInteger()
+	if _as8 != 42 {
 		t.Fatalf("object field mutation: got %v, want 42", v3)
 	}
 }
@@ -287,17 +296,20 @@ func TestAsListReturnsReadList(t *testing.T) {
 	if rl.Len() != 3 {
 		t.Fatalf("Len: got %d, want 3", rl.Len())
 	}
-	if rl.Get(0).AsInteger() != 1 {
+	_as9, _ := rl.Get(0).AsInteger()
+	if _as9 != 1 {
 		t.Fatalf("Get(0): got %v, want 1", rl.Get(0))
 	}
-	if rl.Get(2).AsInteger() != 3 {
+	_as10, _ := rl.Get(2).AsInteger()
+	if _as10 != 3 {
 		t.Fatalf("Get(2): got %v, want 3", rl.Get(2))
 	}
 
 	// Slice returns a copy — mutating the copy doesn't affect the original
 	sliceCopy := rl.Slice()
 	sliceCopy[0] = NewInteger(99)
-	if rl.Get(0).AsInteger() != 1 {
+	_as11, _ := rl.Get(0).AsInteger()
+	if _as11 != 1 {
 		t.Fatal("mutating Slice() copy should not affect ReadList")
 	}
 }
@@ -311,7 +323,8 @@ func TestArrayGetByIndex(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		arr, NewWord("get"), NewInteger(1),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 20 {
+	_as12, _ := result[0].AsInteger()
+	if len(result) != 1 || _as12 != 20 {
 		t.Fatalf("got %v, want 20", result)
 	}
 }
@@ -341,7 +354,8 @@ func TestArraySetByIndex(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		arr, NewWord("get"), NewInteger(0),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 99 {
+	_as13, _ := result[0].AsInteger()
+	if len(result) != 1 || _as13 != 99 {
 		t.Fatalf("after set: got %v, want 99", result)
 	}
 }
@@ -372,7 +386,8 @@ func TestArrayMutationSharedReference(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		ref2, NewWord("get"), NewInteger(0),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as14, _ := result[0].AsInteger()
+	if len(result) != 1 || _as14 != 42 {
 		t.Fatalf("ref2 got %v, want 42 (shared mutation)", result)
 	}
 }
@@ -414,7 +429,8 @@ func TestStoreCOWBasic(t *testing.T) {
 		NewWord("end"),
 		NewWord("context"), NewWord("get"), NewWord("k"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 7 {
+	_as15, _ := result[0].AsInteger()
+	if len(result) != 1 || _as15 != 7 {
 		t.Fatalf("got %v, want 7", result)
 	}
 }
@@ -446,7 +462,8 @@ func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
 		t.Fatal("COW violated: original store was mutated")
 	}
 	// Original "x" is still 1
-	if store.Data["x"].AsInteger() != 1 {
+	_as16, _ := store.Data["x"].AsInteger()
+	if _as16 != 1 {
 		t.Fatal("original store's x was changed")
 	}
 }
@@ -485,12 +502,14 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as17, _ := result[0].AsInteger()
+	if len(result) != 1 || _as17 != 42 {
 		t.Fatalf("got %v, want 42 (COW propagated through parent)", result)
 	}
 
 	// Original child store should be unchanged
-	if child.Data["val"].AsInteger() != 10 {
+	_as18, _ := child.Data["val"].AsInteger()
+	if _as18 != 10 {
 		t.Fatal("COW violated: original child was mutated")
 	}
 }
@@ -530,10 +549,12 @@ func TestStoreCOWPrototypeResolution(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d results, want 2", len(result))
 	}
-	if result[0].AsInteger() != 99 {
+	_as19, _ := result[0].AsInteger()
+	if _as19 != 99 {
 		t.Errorf("a = %v, want 99 (from COW layer)", result[0])
 	}
-	if result[1].AsInteger() != 2 {
+	_as20, _ := result[1].AsInteger()
+	if _as20 != 2 {
 		t.Errorf("b = %v, want 2 (from prototype)", result[1])
 	}
 }

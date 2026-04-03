@@ -32,7 +32,8 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 
 	// Call the fn: 1 myfn → 100
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("myfn")})
-	if len(result) != 1 || result[0].AsNumber() != 100 {
+	_as0, _ := result[0].AsNumber()
+	if len(result) != 1 || _as0 != 100 {
 		t.Errorf("1 myfn = %v, want 100", result)
 	}
 
@@ -62,7 +63,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TString)}),
 		NewList([]Value{
 			NewWord("def"), NewWord("op"),
-			NewOpenParen(), NewWord("m"), NewWord("get"), NewWord("op"), NewWord(")"),
+			NewWord("("), NewWord("m"), NewWord("get"), NewWord("op"), NewWord(")"),
 			NewWord("end"),
 			NewWord("op"),
 		}),
@@ -76,7 +77,8 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("op", NewString("add"))
 	result := runAQL(t, r, []Value{NewMap(m), NewWord("process")})
-	if len(result) != 1 || result[0].AsString() != "add" {
+	_as1, _ := result[0].AsString()
+	if len(result) != 1 || _as1 != "add" {
 		t.Errorf("{op:'add'} process = %v, want 'add'", result)
 	}
 
@@ -92,7 +94,8 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	result2 := runAQL(t, r, []Value{
 		NewMap(m2), NewWord("get"), NewWord("op"),
 	})
-	if len(result2) != 1 || result2[0].AsString() != "mul" {
+	_as2, _ := result2[0].AsString()
+	if len(result2) != 1 || _as2 != "mul" {
 		t.Errorf("{op:'mul'} get op = %v, want 'mul'", result2)
 	}
 }
@@ -113,7 +116,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TInteger)}),
 		NewList([]Value{
 			NewWord("def"), NewWord("tmp"),
-			NewOpenParen(), NewWord("n"), NewWord("add"), NewInteger(1), NewWord(")"),
+			NewWord("("), NewWord("n"), NewWord("add"), NewInteger(1), NewWord(")"),
 			NewWord("end"),
 			NewWord("tmp"),
 		}),
@@ -127,7 +130,8 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		result := runAQL(t, r, []Value{NewInteger(int64(i)), NewWord("counter")})
 		expected := int64(i + 1)
-		if len(result) != 1 || result[0].AsNumber() != float64(expected) {
+		_as3, _ := result[0].AsNumber()
+		if len(result) != 1 || _as3 != float64(expected) {
 			t.Errorf("call %d: counter(%d) = %v, want %d", i, i, result, expected)
 		}
 	}

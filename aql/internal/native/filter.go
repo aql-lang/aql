@@ -50,13 +50,20 @@ func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		}
 		item.Set("value", valVal)
 
-		cbResult, err := r.CallAQL(cb, []engine.Value{engine.NewMap(item)})
+		cbArgs := []engine.Value{engine.NewMap(item)}
+		cbSig := engine.MatchFnSig(cb, cbArgs)
+		if cbSig == nil {
+			callErr = fmt.Errorf("filter: no matching callback signature")
+			return false
+		}
+		cbResult, err := r.CallAQL(cbSig, cbArgs)
 		if err != nil {
 			callErr = err
 			return false
 		}
 		if len(cbResult) > 0 && cbResult[0].VType.Matches(engine.TBoolean) {
-			return cbResult[0].AsBoolean()
+			b, _ := cbResult[0].AsBoolean()
+			return b
 		}
 		return false
 	})

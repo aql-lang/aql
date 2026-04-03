@@ -33,7 +33,8 @@ func TestEngineLt(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as0, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as0 {
 		t.Errorf("1 lt 2 = %v, want true", result)
 	}
 }
@@ -44,7 +45,8 @@ func TestEngineGt(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(3), NewWord("gt"), NewInteger(1)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as1, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as1 {
 		t.Errorf("3 gt 1 = %v, want true", result)
 	}
 }
@@ -55,7 +57,8 @@ func TestEngineLte(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lte"), NewInteger(1)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as2, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as2 {
 		t.Errorf("1 lte 1 = %v, want true", result)
 	}
 }
@@ -66,7 +69,8 @@ func TestEngineGte(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("gte"), NewInteger(1)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as3, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as3 {
 		t.Errorf("2 gte 1 = %v, want true", result)
 	}
 }
@@ -77,7 +81,8 @@ func TestEngineEq(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("eq"), NewInteger(5)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as4, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as4 {
 		t.Errorf("5 eq 5 = %v, want true", result)
 	}
 }
@@ -88,11 +93,13 @@ func TestEngineNeq(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(3)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as5, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as5 {
 		t.Errorf("5 neq 3 = %v, want true", result)
 	}
 	result = runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(5)})
-	if len(result) != 1 || result[0].AsBoolean() {
+	_as6, _ := result[0].AsBoolean()
+	if len(result) != 1 || _as6 {
 		t.Errorf("5 neq 5 = %v, want false", result)
 	}
 }
@@ -103,7 +110,8 @@ func TestEngineDeq(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewString("a"), NewWord("deq"), NewString("a")})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as7, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as7 {
 		t.Errorf("'a' deq 'a' = %v, want true", result)
 	}
 }
@@ -129,7 +137,8 @@ func TestEngineIf3True(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(1), NewInteger(2),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 1 {
+	_as8, _ := result[0].AsInteger()
+	if len(result) != 1 || _as8 != 1 {
 		t.Errorf("if true 1 2 = %v, want 1", result)
 	}
 }
@@ -142,7 +151,8 @@ func TestEngineIf3False(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(1), NewInteger(2),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 2 {
+	_as9, _ := result[0].AsInteger()
+	if len(result) != 1 || _as9 != 2 {
 		t.Errorf("if false 1 2 = %v, want 2", result)
 	}
 }
@@ -155,7 +165,8 @@ func TestEngineIf2True(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as10, _ := result[0].AsInteger()
+	if len(result) != 1 || _as10 != 42 {
 		t.Errorf("if true 42 = %v, want 42", result)
 	}
 }
@@ -183,7 +194,8 @@ func TestEngineIfListCondition(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), condList, NewInteger(10), NewInteger(20),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as11, _ := result[0].AsInteger()
+	if len(result) != 1 || _as11 != 10 {
 		t.Errorf("if [1 lt 2] 10 20 = %v, want 10", result)
 	}
 }
@@ -199,7 +211,8 @@ func TestEngineIfListBranch(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), thenList, elseList,
 	})
-	if len(result) != 1 || result[0].AsInteger() != 3 {
+	_as12, _ := result[0].AsInteger()
+	if len(result) != 1 || _as12 != 3 {
 		t.Errorf("if true [1 add 2] [3 add 4] = %v, want 3", result)
 	}
 }
@@ -230,7 +243,8 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	if callCount != 1 {
 		t.Errorf("expected side-effect called once, got %d", callCount)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 1 {
+	_as13, _ := result[0].AsInteger()
+	if len(result) != 1 || _as13 != 1 {
 		t.Errorf("expected [1], got %v", result)
 	}
 
@@ -242,7 +256,8 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	if callCount != 1 {
 		t.Errorf("expected side-effect called once, got %d", callCount)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 2 {
+	_as14, _ := result[0].AsInteger()
+	if len(result) != 1 || _as14 != 2 {
 		t.Errorf("expected [2], got %v", result)
 	}
 }
@@ -256,7 +271,8 @@ func TestEngineIfFalsy(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewInteger(0), NewInteger(1), NewInteger(2),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 2 {
+	_as15, _ := result[0].AsInteger()
+	if len(result) != 1 || _as15 != 2 {
 		t.Errorf("if 0 1 2 = %v, want 2", result)
 	}
 }
@@ -273,7 +289,8 @@ func TestEngineReadBasic(t *testing.T) {
 	r.SetFileOps(mem)
 
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("test.txt")})
-	if len(result) != 1 || result[0].AsString() != "hello world" {
+	_as16, _ := result[0].AsString()
+	if len(result) != 1 || _as16 != "hello world" {
 		t.Errorf("read 'test.txt' = %v, want 'hello world'", result)
 	}
 }
@@ -356,7 +373,8 @@ func TestEngineWriteBasic(t *testing.T) {
 	r.SetFileOps(mem)
 
 	result := runAQL(t, r, []Value{NewWord("write"), NewString("out.txt"), NewString("hello")})
-	if len(result) != 1 || result[0].AsString() != "out.txt" {
+	_as17, _ := result[0].AsString()
+	if len(result) != 1 || _as17 != "out.txt" {
 		t.Errorf("write result = %v, want 'out.txt'", result)
 	}
 	if string(mem.Files["out.txt"]) != "hello" {
@@ -430,7 +448,8 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	runAQL(t, r, []Value{NewString("out.json"), NewMap(m), NewMap(opts), NewWord("write")})
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
+	runAQL(t, r, []Value{NewMap(opts), NewMap(m), NewString("out.json"), NewWord("write")})
 	content := string(mem.Files["out.json"])
 	if content == "" {
 		t.Errorf("file was not written")
@@ -448,16 +467,20 @@ func TestEngineReadLineEndings(t *testing.T) {
 
 	// Default nl:"lf" normalizes \r\n to \n
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("crlf.txt")})
-	if result[0].AsString() != "a\nb\nc" {
-		t.Errorf("got %q, want %q", result[0].AsString(), "a\nb\nc")
+	_as18, _ := result[0].AsString()
+	if _as18 != "a\nb\nc" {
+		_as19, _ := result[0].AsString()
+		t.Errorf("got %q, want %q", _as19, "a\nb\nc")
 	}
 
 	// nl:"raw" preserves original
 	opts := NewOrderedMap()
 	opts.Set("nl", NewString("raw"))
 	result = runAQL(t, r, []Value{NewWord("read"), NewString("crlf.txt"), NewMap(opts)})
-	if result[0].AsString() != "a\r\nb\r\nc" {
-		t.Errorf("raw got %q, want %q", result[0].AsString(), "a\r\nb\r\nc")
+	_as20, _ := result[0].AsString()
+	if _as20 != "a\r\nb\r\nc" {
+		_as21, _ := result[0].AsString()
+		t.Errorf("raw got %q, want %q", _as21, "a\r\nb\r\nc")
 	}
 }
 
@@ -497,7 +520,8 @@ func TestEngineConvert(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(99), NewWord("convert"), NewWord("String"),
 	})
-	if len(result) != 1 || result[0].AsString() != "99" {
+	_as22, _ := result[0].AsString()
+	if len(result) != 1 || _as22 != "99" {
 		t.Errorf("convert 99 string = %v, want '99'", result)
 	}
 }
@@ -519,7 +543,8 @@ func TestEngineBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
-	if len(result) != 1 || result[0].AsInteger() != 0 {
+	_as23, _ := result[0].AsInteger()
+	if len(result) != 1 || _as23 != 0 {
 		t.Errorf("base integer = %v, want 0", result)
 	}
 }
@@ -535,7 +560,8 @@ func TestEngineDef(t *testing.T) {
 		NewWord("def"), NewWord("inc"), body, NewWord("end"),
 		NewInteger(5), NewWord("inc"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 6 {
+	_as24, _ := result[0].AsInteger()
+	if len(result) != 1 || _as24 != 6 {
 		t.Errorf("def inc [1 add]; 5 inc = %v, want 6", result)
 	}
 }
@@ -556,7 +582,8 @@ func TestEngineUndef(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 42 {
+	_as25, _ := result[0].AsInteger()
+	if _as25 != 42 {
 		t.Errorf("first foo = %v, want 42", result[0])
 	}
 }
@@ -610,7 +637,8 @@ func TestEngineUnify(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
 	}
-	if result[1].AsBoolean() != true {
+	_as26, _ := result[1].AsBoolean()
+	if _as26 != true {
 		t.Errorf("1 unify number = %v, want true", result[1])
 	}
 }
@@ -622,7 +650,8 @@ func TestEngineDo(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	result := runAQL(t, r, []Value{NewWord("do"), list})
-	if len(result) != 1 || result[0].AsInteger() != 3 {
+	_as27, _ := result[0].AsInteger()
+	if len(result) != 1 || _as27 != 3 {
 		t.Errorf("do [1 add 2] = %v, want 3", result)
 	}
 }
@@ -646,7 +675,8 @@ func TestEngineOr(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as28, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as28 {
 		t.Errorf("true or false = %v, want true", result)
 	}
 }
@@ -657,7 +687,8 @@ func TestEngineAnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
-	if len(result) != 1 || result[0].AsBoolean() {
+	_as29, _ := result[0].AsBoolean()
+	if len(result) != 1 || _as29 {
 		t.Errorf("true and false = %v, want false", result)
 	}
 }
@@ -668,7 +699,8 @@ func TestEngineNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("not")})
-	if len(result) != 1 || result[0].AsBoolean() {
+	_as30, _ := result[0].AsBoolean()
+	if len(result) != 1 || _as30 {
 		t.Errorf("true not = %v, want false", result)
 	}
 }
@@ -691,7 +723,8 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
-	if len(result) != 1 || result[0].AsString() != "a" {
+	_as31, _ := result[0].AsString()
+	if len(result) != 1 || _as31 != "a" {
 		t.Errorf("10 convert String {base:hex} = %v, want 'a'", result)
 	}
 
@@ -699,7 +732,8 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(HEXOpts),
 	})
-	if len(result) != 1 || result[0].AsString() != "FF" {
+	_as32, _ := result[0].AsString()
+	if len(result) != 1 || _as32 != "FF" {
 		t.Errorf("255 convert String {base:HEX} = %v, want 'FF'", result)
 	}
 
@@ -707,7 +741,8 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
-	if len(result) != 1 || result[0].AsString() != "1010" {
+	_as33, _ := result[0].AsString()
+	if len(result) != 1 || _as33 != "1010" {
 		t.Errorf("10 convert String {base:bin} = %v, want '1010'", result)
 	}
 
@@ -715,7 +750,8 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
-	if len(result) != 1 || result[0].AsString() != "10" {
+	_as34, _ := result[0].AsString()
+	if len(result) != 1 || _as34 != "10" {
 		t.Errorf("8 convert String {base:oct} = %v, want '10'", result)
 	}
 }
@@ -729,7 +765,8 @@ func TestEngineConvertToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("42"), NewWord("convert"), NewWord("Number"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as35, _ := result[0].AsInteger()
+	if len(result) != 1 || _as35 != 42 {
 		t.Errorf("'42' convert Number = %v, want 42", result)
 	}
 
@@ -744,7 +781,8 @@ func TestEngineConvertToNumber(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("ff"), NewWord("convert"), NewWord("Number"), NewMap(hexOpts),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 255 {
+	_as36, _ := result[0].AsInteger()
+	if len(result) != 1 || _as36 != 255 {
 		t.Errorf("'ff' convert Number {base:hex} = %v, want 255", result)
 	}
 
@@ -752,7 +790,8 @@ func TestEngineConvertToNumber(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("1010"), NewWord("convert"), NewWord("Number"), NewMap(binOpts),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as37, _ := result[0].AsInteger()
+	if len(result) != 1 || _as37 != 10 {
 		t.Errorf("'1010' convert Number {base:bin} = %v, want 10", result)
 	}
 
@@ -760,7 +799,8 @@ func TestEngineConvertToNumber(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("10"), NewWord("convert"), NewWord("Number"), NewMap(octOpts),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 8 {
+	_as38, _ := result[0].AsInteger()
+	if len(result) != 1 || _as38 != 8 {
 		t.Errorf("'10' convert Number {base:oct} = %v, want 8", result)
 	}
 }
@@ -774,7 +814,8 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as39, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as39 {
 		t.Errorf("1 convert Boolean = %v, want true", result)
 	}
 
@@ -782,7 +823,8 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
-	if len(result) != 1 || result[0].AsBoolean() {
+	_as40, _ := result[0].AsBoolean()
+	if len(result) != 1 || _as40 {
 		t.Errorf("0 convert Boolean = %v, want false", result)
 	}
 
@@ -790,7 +832,8 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as41, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as41 {
 		t.Errorf("'true' convert Boolean = %v, want true", result)
 	}
 
@@ -798,7 +841,8 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString(""), NewWord("convert"), NewWord("Boolean"),
 	})
-	if len(result) != 1 || result[0].AsBoolean() {
+	_as42, _ := result[0].AsBoolean()
+	if len(result) != 1 || _as42 {
 		t.Errorf("'' convert Boolean = %v, want false", result)
 	}
 
@@ -806,7 +850,8 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewWord("Boolean"),
 	})
-	if len(result) != 1 || !result[0].AsBoolean() {
+	_as43, _ := result[0].AsBoolean()
+	if len(result) != 1 || !_as43 {
 		t.Errorf("true convert Boolean = %v, want true", result)
 	}
 }
@@ -853,7 +898,8 @@ func TestEngineFn(t *testing.T) {
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(7), NewWord("double"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 14 {
+	_as44, _ := result[0].AsInteger()
+	if len(result) != 1 || _as44 != 14 {
 		t.Errorf("def double fn; 7 double = %v, want 14", result)
 	}
 }
@@ -875,7 +921,8 @@ func TestEngineFnNamed(t *testing.T) {
 		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("square"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 25 {
+	_as45, _ := result[0].AsInteger()
+	if len(result) != 1 || _as45 != 25 {
 		t.Errorf("def square fn; 5 square = %v, want 25", result)
 	}
 }
@@ -892,9 +939,10 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
+	// All prefix: nearest→sig[0]=Integer, next→sig[1]=String
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
-		NewInteger(1), NewString("a"), NewWord("catter"),
+		NewString("a"), NewInteger(1), NewWord("catter"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
 		t.Errorf("1 'a' catter = %v, want string result", result)
@@ -970,7 +1018,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "CBA" {
+		_as46, _ := result[0].AsString()
+		if len(result) != 1 || _as46 != "CBA" {
 			t.Errorf(`"A" "B" "C" joiner = %v, want ["CBA"]`, result)
 		}
 	})
@@ -986,7 +1035,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewWord("joiner"), NewString("B"), NewString("C"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "BCA" {
+		_as47, _ := result[0].AsString()
+		if len(result) != 1 || _as47 != "BCA" {
 			t.Errorf(`"A" joiner "B" "C" = %v, want ["BCA"]`, result)
 		}
 	})
@@ -1002,7 +1052,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewString("A"), NewString("B"), NewWord("joiner"), NewString("C"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "CBA" {
+		_as48, _ := result[0].AsString()
+		if len(result) != 1 || _as48 != "CBA" {
 			t.Errorf(`"A" "B" joiner "C" = %v, want ["CBA"]`, result)
 		}
 	})
@@ -1018,7 +1069,8 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 			NewWord("joiner"), NewString("A"), NewString("B"), NewString("C"),
 		)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != "ABC" {
+		_as49, _ := result[0].AsString()
+		if len(result) != 1 || _as49 != "ABC" {
 			t.Errorf(`joiner "A" "B" "C" = %v, want ["ABC"]`, result)
 		}
 	})
@@ -1048,16 +1100,18 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		NewWord("def"), NewWord("mix4"), NewWord("fn"), fnBody, NewWord("end"),
 	}
 
-	// "X" 7 true "Z" mix4 -> "X7trueZ"
+	// All prefix: nearest→sig[0]=String, next→sig[1]=Integer, next→sig[2]=Boolean, deepest→sig[3]=String
+	// Stack bottom-to-top: "Z" true 7 "X" mix4
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"), NewWord("mix4"),
+			NewString("Z"), NewBoolean(true), NewInteger(7), NewString("X"), NewWord("mix4"),
 		))
-		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+		_as50, _ := result[0].AsString()
+		if len(result) != 1 || _as50 != "X7trueZ" {
 			t.Errorf(`all-prefix mix4 = %v, want ["X7trueZ"]`, result)
 		}
 	})
@@ -1072,7 +1126,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
 			NewString("Z"), NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true),
 		))
-		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+		_as51, _ := result[0].AsString()
+		if len(result) != 1 || _as51 != "X7trueZ" {
 			t.Errorf(`1+3 mix4 = %v, want ["X7trueZ"]`, result)
 		}
 	})
@@ -1086,7 +1141,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
-		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+		_as52, _ := result[0].AsString()
+		if len(result) != 1 || _as52 != "X7trueZ" {
 			t.Errorf(`mix4 all-forward = %v, want ["X7trueZ"]`, result)
 		}
 	})
@@ -1100,7 +1156,8 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
-		if len(result) != 1 || result[0].AsString() != "X7trueZ" {
+		_as53, _ := result[0].AsString()
+		if len(result) != 1 || _as53 != "X7trueZ" {
 			t.Errorf(`all-forward mix4 = %v, want ["X7trueZ"]`, result)
 		}
 	})
@@ -1122,17 +1179,19 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		NewWord("def"), NewWord("mix5"), NewWord("fn"), fnBody, NewWord("end"),
 	}
 
-	// "a" 3 1.5 false "z" mix5 -> "a31.5falsez"
+	// All prefix: nearest→sig[0]=String, ..., deepest→sig[4]=String
+	// Stack bottom-to-top: "z" false 1.5 3 "a" mix5
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("a"), NewInteger(3), NewDecimal(1.5), NewBoolean(false), NewString("z"),
+			NewString("z"), NewBoolean(false), NewDecimal(1.5), NewInteger(3), NewString("a"),
 			NewWord("mix5"),
 		))
-		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+		_as54, _ := result[0].AsString()
+		if len(result) != 1 || _as54 != "a31.5falsez" {
 			t.Errorf(`all-prefix mix5 = %v, want ["a31.5falsez"]`, result)
 		}
 	})
@@ -1147,7 +1206,8 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 			NewWord("mix5"), NewString("a"), NewInteger(3),
 			NewDecimal(1.5), NewBoolean(false), NewString("z"),
 		))
-		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+		_as55, _ := result[0].AsString()
+		if len(result) != 1 || _as55 != "a31.5falsez" {
 			t.Errorf(`2+3 mix5 = %v, want ["a31.5falsez"]`, result)
 		}
 	})
@@ -1162,7 +1222,8 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 			NewWord("mix5"), NewString("a"), NewInteger(3),
 			NewDecimal(1.5), NewBoolean(false), NewString("z"),
 		))
-		if len(result) != 1 || result[0].AsString() != "a31.5falsez" {
+		_as56, _ := result[0].AsString()
+		if len(result) != 1 || _as56 != "a31.5falsez" {
 			t.Errorf(`all-forward mix5 = %v, want ["a31.5falsez"]`, result)
 		}
 	})
@@ -1183,23 +1244,29 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	defTokens := []Value{
 		NewWord("def"), NewWord("mix7"), NewWord("fn"), fnBody, NewWord("end"),
 	}
-	// Expected: "p1" 2 3.5 true "q4" 56 "r7" -> "p123.5trueq456r7"
+	// Expected concat in sig order: "p123.5trueq456r7"
 	want := "p123.5trueq456r7"
 	argVals := []Value{
 		NewString("p1"), NewInteger(2), NewDecimal(3.5),
 		NewBoolean(true), NewString("q4"), NewInteger(56), NewString("r7"),
 	}
 
-	// All prefix
+	// All prefix: stack bottom-to-top reversed from sig order (nearest→sig[0])
+	// sig[6]=String, sig[5]=Integer, sig[4]=String, sig[3]=Boolean, sig[2]=Decimal, sig[1]=Integer, sig[0]=String
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		if err != nil {
 			t.Fatal(err)
 		}
-		tokens := append(append([]Value{}, defTokens...), argVals...)
+		argValsReversed := []Value{
+			NewString("r7"), NewInteger(56), NewString("q4"),
+			NewBoolean(true), NewDecimal(3.5), NewInteger(2), NewString("p1"),
+		}
+		tokens := append(append([]Value{}, defTokens...), argValsReversed...)
 		tokens = append(tokens, NewWord("mix7"))
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != want {
+		_as57, _ := result[0].AsString()
+		if len(result) != 1 || _as57 != want {
 			t.Errorf("all-prefix mix7 = %v, want [%q]", result, want)
 		}
 	})
@@ -1213,7 +1280,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
 		tokens = append(tokens, argVals...)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != want {
+		_as58, _ := result[0].AsString()
+		if len(result) != 1 || _as58 != want {
 			t.Errorf("mix7 all-forward = %v, want [%q]", result, want)
 		}
 	})
@@ -1229,7 +1297,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		tokens = append(tokens, NewWord("mix7"))
 		tokens = append(tokens, argVals[:6]...) // "p1" 2 3.5 true "q4" 56 forward
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != want {
+		_as59, _ := result[0].AsString()
+		if len(result) != 1 || _as59 != want {
 			t.Errorf("1+6 mix7 = %v, want [%q]", result, want)
 		}
 	})
@@ -1243,7 +1312,8 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
 		tokens = append(tokens, argVals...)
 		result := runAQL(t, r, tokens)
-		if len(result) != 1 || result[0].AsString() != want {
+		_as60, _ := result[0].AsString()
+		if len(result) != 1 || _as60 != want {
 			t.Errorf("all-forward mix7 = %v, want [%q]", result, want)
 		}
 	})
@@ -1289,10 +1359,13 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("cat3 A B C end trailing: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "ABC" {
-			t.Errorf("cat3 result = %q, want %q", result[0].AsString(), "ABC")
+		_as61, _ := result[0].AsString()
+		if _as61 != "ABC" {
+			_as62, _ := result[0].AsString()
+			t.Errorf("cat3 result = %q, want %q", _as62, "ABC")
 		}
-		if result[1].AsString() != "trailing" {
+		_as63, _ := result[1].AsString()
+		if _as63 != "trailing" {
 			t.Errorf("trailing = %v, want 'trailing'", result[1])
 		}
 	})
@@ -1312,10 +1385,13 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("Z cat4 X 7 true end after: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "X7trueZ" {
-			t.Errorf("cat4 result = %q, want %q", result[0].AsString(), "X7trueZ")
+		_as64, _ := result[0].AsString()
+		if _as64 != "X7trueZ" {
+			_as65, _ := result[0].AsString()
+			t.Errorf("cat4 result = %q, want %q", _as65, "X7trueZ")
 		}
-		if result[1].AsString() != "after" {
+		_as66, _ := result[1].AsString()
+		if _as66 != "after" {
 			t.Errorf("trailing = %v, want 'after'", result[1])
 		}
 	})
@@ -1339,11 +1415,15 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("two cat3 calls: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "ABC" {
-			t.Errorf("first cat3 = %q, want %q", result[0].AsString(), "ABC")
+		_as67, _ := result[0].AsString()
+		if _as67 != "ABC" {
+			_as68, _ := result[0].AsString()
+			t.Errorf("first cat3 = %q, want %q", _as68, "ABC")
 		}
-		if result[1].AsString() != "DEF" {
-			t.Errorf("second cat3 = %q, want %q", result[1].AsString(), "DEF")
+		_as69, _ := result[1].AsString()
+		if _as69 != "DEF" {
+			_as70, _ := result[1].AsString()
+			t.Errorf("second cat3 = %q, want %q", _as70, "DEF")
 		}
 	})
 
@@ -1369,11 +1449,15 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("cat4+cat3 with end: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "m9falsen" {
-			t.Errorf("cat4 = %q, want %q", result[0].AsString(), "m9falsen")
+		_as71, _ := result[0].AsString()
+		if _as71 != "m9falsen" {
+			_as72, _ := result[0].AsString()
+			t.Errorf("cat4 = %q, want %q", _as72, "m9falsen")
 		}
-		if result[1].AsString() != "xyz" {
-			t.Errorf("cat3 = %q, want %q", result[1].AsString(), "xyz")
+		_as73, _ := result[1].AsString()
+		if _as73 != "xyz" {
+			_as74, _ := result[1].AsString()
+			t.Errorf("cat3 = %q, want %q", _as74, "xyz")
 		}
 	})
 
@@ -1393,10 +1477,13 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		if len(result) != 2 {
 			t.Fatalf("P Q cat3 R end extra: got %d results, want 2: %v", len(result), result)
 		}
-		if result[0].AsString() != "RQP" {
-			t.Errorf("cat3 = %q, want %q", result[0].AsString(), "RQP")
+		_as75, _ := result[0].AsString()
+		if _as75 != "RQP" {
+			_as76, _ := result[0].AsString()
+			t.Errorf("cat3 = %q, want %q", _as76, "RQP")
 		}
-		if result[1].AsString() != "extra" {
+		_as77, _ := result[1].AsString()
+		if _as77 != "extra" {
 			t.Errorf("trailing = %v, want 'extra'", result[1])
 		}
 	})
@@ -1439,7 +1526,8 @@ func TestEngineFnLiteralType(t *testing.T) {
 		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(0), NewWord("adder"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 2 {
+	_as78, _ := result[0].AsInteger()
+	if len(result) != 1 || _as78 != 2 {
 		t.Errorf("0 adder = %v, want 2", result)
 	}
 }
@@ -1484,14 +1572,16 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(0), NewWord("handler"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as79, _ := result[0].AsInteger()
+	if len(result) != 1 || _as79 != 10 {
 		t.Errorf("0 handler = %v, want 10", result)
 	}
 
 	result = runAQL(t, r, []Value{
 		NewInteger(1), NewWord("handler"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 21 {
+	_as80, _ := result[0].AsInteger()
+	if len(result) != 1 || _as80 != 21 {
 		t.Errorf("1 handler = %v, want 21", result)
 	}
 }
@@ -1518,7 +1608,8 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("doubler"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as81, _ := result[0].AsInteger()
+	if len(result) != 1 || _as81 != 10 {
 		t.Errorf("5 doubler = %v, want 10", result)
 	}
 }
@@ -1549,7 +1640,8 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(5), NewWord("doubler"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as82, _ := result[0].AsInteger()
+	if len(result) != 1 || _as82 != 10 {
 		t.Errorf("5 doubler = %v, want 10", result)
 	}
 }
@@ -1588,7 +1680,8 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewString("x"), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsString() != "xQ" {
+	_as83, _ := result[0].AsString()
+	if len(result) != 1 || _as83 != "xQ" {
 		t.Errorf("foo \"x\" = %v, want \"xQ\"", result)
 	}
 
@@ -1597,7 +1690,8 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(1), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsString() != "1P" {
+	_as84, _ := result[0].AsString()
+	if len(result) != 1 || _as84 != "1P" {
 		t.Errorf("foo 1 = %v, want \"1P\"", result)
 	}
 
@@ -1606,7 +1700,8 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(99), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsString() != "NN" {
+	_as85, _ := result[0].AsString()
+	if len(result) != 1 || _as85 != "NN" {
 		t.Errorf("foo 99 = %v, want \"NN\"", result)
 	}
 
@@ -1628,7 +1723,8 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(7), NewWord("double"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 14 {
+	_as86, _ := result[0].AsInteger()
+	if len(result) != 1 || _as86 != 14 {
 		t.Errorf("double 7 = %v, want 14", result)
 	}
 }
@@ -1672,7 +1768,8 @@ func TestEngineFnFactorial(t *testing.T) {
 			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 			NewInteger(tc.input), NewWord("fact"),
 		})
-		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+		_as87, _ := result[0].AsInteger()
+		if len(result) != 1 || _as87 != tc.expected {
 			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
 		}
 	}
@@ -1741,7 +1838,8 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 				allPass = false
 				break
 			}
-			if len(result) != 1 || result[0].AsInteger() != tc.expected {
+			_as88, _ := result[0].AsInteger()
+			if len(result) != 1 || _as88 != tc.expected {
 				t.Logf("FAIL body=%q: fact %d = %v, want %d", b.name, tc.input, result, tc.expected)
 				allPass = false
 			}
@@ -1797,7 +1895,8 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
 			NewInteger(tc.input), NewWord("fact"),
 		})
-		if len(result) != 1 || result[0].AsInteger() != tc.expected {
+		_as89, _ := result[0].AsInteger()
+		if len(result) != 1 || _as89 != tc.expected {
 			t.Errorf("fact %d = %v, want %d", tc.input, result, tc.expected)
 		}
 	}
@@ -1844,7 +1943,8 @@ func TestEngineMakeRecord(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	xVal, _ := m.Get("x")
-	if xVal.AsInteger() != 1 {
+	_as90, _ := xVal.AsInteger()
+	if _as90 != 1 {
 		t.Errorf("x = %v, want 1", xVal)
 	}
 }
@@ -1860,7 +1960,8 @@ func TestEngineUnifyMaps(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m1), NewMap(m2), NewWord("unify")})
-	if len(result) != 2 || !result[1].AsBoolean() {
+	_as91, _ := result[1].AsBoolean()
+	if len(result) != 2 || !_as91 {
 		t.Errorf("{x:1} unify {x:1} = %v, want true", result)
 	}
 }
@@ -1873,7 +1974,8 @@ func TestEngineUnifyLists(t *testing.T) {
 	l1 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	l2 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{l1, l2, NewWord("unify")})
-	if len(result) != 2 || !result[1].AsBoolean() {
+	_as92, _ := result[1].AsBoolean()
+	if len(result) != 2 || !_as92 {
 		t.Errorf("[1,2] unify [1,2] = %v, want true", result)
 	}
 }
@@ -1884,7 +1986,8 @@ func TestEngineUnifyFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
-	if len(result) != 2 || result[1].AsBoolean() {
+	_as93, _ := result[1].AsBoolean()
+	if len(result) != 2 || _as93 {
 		t.Errorf("1 unify 'a' = %v, want false", result)
 	}
 }
@@ -1897,7 +2000,8 @@ func TestEngineUnifyTypedList(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TNumber))
 	cl := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{tl, cl, NewWord("unify")})
-	if len(result) != 2 || !result[1].AsBoolean() {
+	_as94, _ := result[1].AsBoolean()
+	if len(result) != 2 || !_as94 {
 		t.Errorf("[:number] unify [1,2] = %v, want true", result)
 	}
 }
@@ -1912,7 +2016,8 @@ func TestEngineUnifyTypedMap(t *testing.T) {
 	cm.Set("a", NewInteger(1))
 	cm.Set("b", NewInteger(2))
 	result := runAQL(t, r, []Value{tm, NewMap(cm), NewWord("unify")})
-	if len(result) != 2 || !result[1].AsBoolean() {
+	_as95, _ := result[1].AsBoolean()
+	if len(result) != 2 || !_as95 {
 		t.Errorf("{:number} unify {a:1,b:2} = %v, want true", result)
 	}
 }
@@ -1944,7 +2049,8 @@ func TestEngineVar(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(5), NewWord("var"), varBody,
 	})
-	if len(result) != 1 || result[0].AsInteger() != 25 {
+	_as96, _ := result[0].AsInteger()
+	if len(result) != 1 || _as96 != 25 {
 		t.Errorf("5 var [[x] x mul x] = %v, want 25", result)
 	}
 }
@@ -1955,7 +2061,8 @@ func TestEngineAddStrings(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
-	if len(result) != 1 || result[0].AsString() != "hello world" {
+	_as97, _ := result[0].AsString()
+	if len(result) != 1 || _as97 != "hello world" {
 		t.Errorf("'hello' add ' world' = %v, want 'hello world'", result)
 	}
 }
@@ -2009,8 +2116,10 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'name' key")
 	}
-	if nameVal.AsString() != "Alice" {
-		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	_as98, _ := nameVal.AsString()
+	if _as98 != "Alice" {
+		_as99, _ := nameVal.AsString()
+		t.Errorf("name = %q, want %q", _as99, "Alice")
 	}
 }
 
@@ -2077,8 +2186,10 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 	if result[0].IsTableType() {
 		t.Error("expected non-table type with text format override")
 	}
-	if result[0].AsString() != "hello,world" {
-		t.Errorf("got %q, want %q", result[0].AsString(), "hello,world")
+	_as100, _ := result[0].AsString()
+	if _as100 != "hello,world" {
+		_as101, _ := result[0].AsString()
+		t.Errorf("got %q, want %q", _as101, "hello,world")
 	}
 }
 
@@ -2120,13 +2231,15 @@ func TestEngineInspectBuiltin(t *testing.T) {
 
 	// Check name field.
 	name, ok := m.Get("name")
-	if !ok || name.AsString() != "add" {
+	_as102, _ := name.AsString()
+	if !ok || _as102 != "add" {
 		t.Errorf("name = %v, want 'add'", name)
 	}
 
 	// Check kind field.
 	kind, ok := m.Get("kind")
-	if !ok || kind.AsAtom() != "native" {
+	_as103, _ := kind.AsAtom()
+	if !ok || _as103 != "native" {
 		t.Errorf("kind = %v, want native", kind)
 	}
 
@@ -2165,12 +2278,14 @@ func TestEngineInspectUserDefined(t *testing.T) {
 	m := result[0].AsMap()
 
 	kind, _ := m.Get("kind")
-	if kind.AsAtom() != "defined" {
+	_as104, _ := kind.AsAtom()
+	if _as104 != "defined" {
 		t.Errorf("kind = %v, want defined", kind)
 	}
 
 	name, _ := m.Get("name")
-	if name.AsString() != "double" {
+	_as105, _ := name.AsString()
+	if _as105 != "double" {
 		t.Errorf("name = %v, want 'double'", name)
 	}
 }
@@ -2187,7 +2302,8 @@ func TestEngineInspectUnknown(t *testing.T) {
 	m := result[0].AsMap()
 
 	kind, _ := m.Get("kind")
-	if kind.AsAtom() != "unknown" {
+	_as106, _ := kind.AsAtom()
+	if _as106 != "unknown" {
 		t.Errorf("kind = %v, want unknown", kind)
 	}
 
@@ -2210,7 +2326,8 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	if result[0].AsString() != "upper" {
+	_as107, _ := result[0].AsString()
+	if _as107 != "upper" {
 		t.Errorf("inspect upper .name = %v, want 'upper'", result[0])
 	}
 }
@@ -2235,15 +2352,18 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	m := v.AsMap()
 
 	name, _ := m.Get("name")
-	if name.AsString() != "Qty" {
+	_as108, _ := name.AsString()
+	if _as108 != "Qty" {
 		t.Errorf("name = %v, want 'Qty'", name)
 	}
 	kind, _ := m.Get("kind")
-	if kind.AsAtom() != "literal" {
+	_as109, _ := kind.AsAtom()
+	if _as109 != "literal" {
 		t.Errorf("kind = %v, want literal", kind)
 	}
 	typ, _ := m.Get("type")
-	if typ.AsString() != "Scalar/Number" {
+	_as110, _ := typ.AsString()
+	if _as110 != "Scalar/Number" {
 		t.Errorf("type = %v, want 'Scalar/Number'", typ)
 	}
 }
@@ -2267,11 +2387,13 @@ func TestEngineInspectRecordType(t *testing.T) {
 	m := result[0].AsMap()
 
 	name, _ := m.Get("name")
-	if name.AsString() != "Pos" {
+	_as111, _ := name.AsString()
+	if _as111 != "Pos" {
 		t.Errorf("name = %v, want 'Pos'", name)
 	}
 	kind, _ := m.Get("kind")
-	if kind.AsAtom() != "record" {
+	_as112, _ := kind.AsAtom()
+	if _as112 != "record" {
 		t.Errorf("kind = %v, want record", kind)
 	}
 	flds, ok := m.Get("fields")
@@ -2280,11 +2402,13 @@ func TestEngineInspectRecordType(t *testing.T) {
 	}
 	fm := flds.AsMap()
 	xType, _ := fm.Get("x")
-	if xType.AsString() != "Scalar/Number" {
+	_as113, _ := xType.AsString()
+	if _as113 != "Scalar/Number" {
 		t.Errorf("fields.x = %v, want 'Scalar/Number'", xType)
 	}
 	yType, _ := fm.Get("y")
-	if yType.AsString() != "Scalar/Number" {
+	_as114, _ := yType.AsString()
+	if _as114 != "Scalar/Number" {
 		t.Errorf("fields.y = %v, want 'Scalar/Number'", yType)
 	}
 }
@@ -2303,7 +2427,8 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	if result[0].AsAtom() != "literal" {
+	_as115, _ := result[0].AsAtom()
+	if _as115 != "literal" {
 		t.Errorf("inspect Qty .kind = %v, want literal", result[0])
 	}
 }
@@ -2349,7 +2474,8 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("double"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 10 {
+	_as116, _ := result[0].AsInteger()
+	if len(result) != 1 || _as116 != 10 {
 		t.Errorf("5 double = %v, want 10", result)
 	}
 }
@@ -2396,7 +2522,8 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(5), NewWord("toomany"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 5 {
+	_as117, _ := result[0].AsInteger()
+	if len(result) != 1 || _as117 != 5 {
 		t.Errorf("expected [5], got %v", result)
 	}
 
@@ -2435,7 +2562,8 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(42), NewWord("identity"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 42 {
+	_as118, _ := result[0].AsInteger()
+	if len(result) != 1 || _as118 != 42 {
 		t.Errorf("42 identity = %v, want 42", result)
 	}
 }
@@ -2456,7 +2584,8 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(7), NewWord("dbl"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 14 {
+	_as119, _ := result[0].AsInteger()
+	if len(result) != 1 || _as119 != 14 {
 		t.Errorf("7 dbl = %v, want 14", result)
 	}
 }
@@ -2477,7 +2606,9 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(3), NewWord("dup2"),
 	})
-	if len(result) != 2 || result[0].AsInteger() != 3 || result[1].AsInteger() != 3 {
+	_as121, _ := result[0].AsInteger()
+	_as120, _ := result[1].AsInteger()
+	if len(result) != 2 || _as121 != 3 || _as120 != 3 {
 		t.Errorf("3 dup2 = %v, want [3 3]", result)
 	}
 }
@@ -2499,7 +2630,8 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(6), NewWord("square"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 36 {
+	_as122, _ := result[0].AsInteger()
+	if len(result) != 1 || _as122 != 36 {
 		t.Errorf("6 square = %v, want 36", result)
 	}
 }
@@ -2549,14 +2681,16 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewWord("end"),
 		NewInteger(10), NewWord("add1"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 11 {
+	_as123, _ := result[0].AsInteger()
+	if len(result) != 1 || _as123 != 11 {
 		t.Errorf("10 add1 = %v, want 11", result)
 	}
 	// Test string overload
 	result = runAQL(t, r, []Value{
 		NewString("hello"), NewWord("add1"),
 	})
-	if len(result) != 1 || result[0].AsString() != "hello1" {
+	_as124, _ := result[0].AsString()
+	if len(result) != 1 || _as124 != "hello1" {
 		t.Errorf("'hello' add1 = %v, want 'hello1'", result)
 	}
 }
@@ -2589,7 +2723,8 @@ func TestPiecemealDef(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 9 {
+	_as125, _ := result[0].AsInteger()
+	if len(result) != 1 || _as125 != 9 {
 		t.Errorf("3 foo = %v, want 9", result)
 	}
 
@@ -2597,7 +2732,8 @@ func TestPiecemealDef(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsString() != "hihi" {
+	_as126, _ := result[0].AsString()
+	if len(result) != 1 || _as126 != "hihi" {
 		t.Errorf("\"hi\" foo = %v, want \"hihi\"", result)
 	}
 }
@@ -2629,7 +2765,8 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 9 {
+	_as127, _ := result[0].AsInteger()
+	if _as127 != 9 {
 		t.Errorf("3 foo after undef = %v, want 9", result[0])
 	}
 }
@@ -2669,7 +2806,8 @@ func TestFnUndefTargeted(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsString() != "hihi" {
+	_as128, _ := result[0].AsString()
+	if _as128 != "hihi" {
 		t.Errorf("\"hi\" foo after targeted undef = %v, want \"hihi\"", result[0])
 	}
 }
@@ -2708,7 +2846,8 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 9 {
+	_as129, _ := result[0].AsInteger()
+	if _as129 != 9 {
 		t.Errorf("3 foo after targeted undef string = %v, want 9", result[0])
 	}
 }
@@ -2741,7 +2880,8 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsInteger() != 9 {
+	_as130, _ := result[0].AsInteger()
+	if _as130 != 9 {
 		t.Errorf("3 foo after no-op undef = %v, want 9", result[0])
 	}
 }
@@ -2773,7 +2913,8 @@ func TestFnUndefRemovesAll(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsString() != "foo" {
+	_as131, _ := result[0].AsString()
+	if _as131 != "foo" {
 		t.Errorf("foo after removing all sigs = %v, want atom \"foo\"", result[0])
 	}
 }
@@ -2806,13 +2947,15 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 9 {
+	_as132, _ := result[0].AsInteger()
+	if len(result) != 1 || _as132 != 9 {
 		t.Fatalf("3 foo = %v, want 9", result)
 	}
 	result = runAQL(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsString() != "hihi" {
+	_as133, _ := result[0].AsString()
+	if len(result) != 1 || _as133 != "hihi" {
 		t.Fatalf("\"hi\" foo = %v, want \"hihi\"", result)
 	}
 
@@ -2823,7 +2966,8 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
-	if len(result) != 1 || result[0].AsInteger() != 9 {
+	_as134, _ := result[0].AsInteger()
+	if len(result) != 1 || _as134 != 9 {
 		t.Fatalf("3 foo after undef B = %v, want 9", result)
 	}
 }
@@ -2869,7 +3013,7 @@ func TestTypeofMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			got := result[0].AsString()
+			got, _ := result[0].AsString()
 			if got != tt.wantType {
 				t.Errorf("typeof %s = %q, want %q", tt.name, got, tt.wantType)
 			}
@@ -2879,7 +3023,7 @@ func TestTypeofMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			got := result[0].AsString()
+			got, _ := result[0].AsString()
 			if got != tt.wantFull {
 				t.Errorf("fulltypeof %s = %q, want %q", tt.name, got, tt.wantFull)
 			}
@@ -2889,13 +3033,15 @@ func TestTypeofMetatypes(t *testing.T) {
 	// Concrete values unchanged.
 	t.Run("typeof-concrete-integer", func(t *testing.T) {
 		result := runAQL(t, r, []Value{NewInteger(42), NewWord("typeof")})
-		if len(result) != 1 || result[0].AsString() != "Number" {
+		_as135, _ := result[0].AsString()
+		if len(result) != 1 || _as135 != "Number" {
 			t.Errorf("typeof 42 = %v, want Number", result)
 		}
 	})
 	t.Run("typeof-concrete-boolean", func(t *testing.T) {
 		result := runAQL(t, r, []Value{NewBoolean(true), NewWord("typeof")})
-		if len(result) != 1 || result[0].AsString() != "Boolean" {
+		_as136, _ := result[0].AsString()
+		if len(result) != 1 || _as136 != "Boolean" {
 			t.Errorf("typeof true = %v, want Boolean", result)
 		}
 	})
@@ -2951,7 +3097,7 @@ func TestIsMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			got := result[0].AsBoolean()
+			got, _ := result[0].AsBoolean()
 			if got != tt.want {
 				t.Errorf("%s = %v, want %v", tt.name, got, tt.want)
 			}

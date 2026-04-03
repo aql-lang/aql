@@ -344,26 +344,26 @@ raw-data apply date_str [auto-date]
 
 ## Files to Create
 
-Following the existing `builtin_*.go` pattern:
+Following the existing `native_*.go` pattern:
 
-- `aql/internal/engine/builtin_temporal_construct.go` — date, datetime, instant, time-of-day, unix
-- `aql/internal/engine/builtin_temporal_now.go` — now, now-local, today, today-utc, elapsed
-- `aql/internal/engine/builtin_temporal_extract.go` — year, month, day, hour, minute, second, weekday, etc.
-- `aql/internal/engine/builtin_temporal_duration.go` — years, months, days, hours, etc., duration extraction
-- `aql/internal/engine/builtin_temporal_arithmetic.go` — add/sub signatures, until, since, diff
-- `aql/internal/engine/builtin_temporal_compare.go` — before?, after?, between?, earliest, latest
-- `aql/internal/engine/builtin_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
-- `aql/internal/engine/builtin_temporal_round.go` — round, truncate, start-of, end-of
-- `aql/internal/engine/builtin_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
-- `aql/internal/engine/builtin_temporal_parse.go` — parse-date, parse-datetime, auto-date
+- `aql/internal/engine/native_temporal_construct.go` — date, datetime, instant, time-of-day, unix
+- `aql/internal/engine/native_temporal_now.go` — now, now-local, today, today-utc, elapsed
+- `aql/internal/engine/native_temporal_extract.go` — year, month, day, hour, minute, second, weekday, etc.
+- `aql/internal/engine/native_temporal_duration.go` — years, months, days, hours, etc., duration extraction
+- `aql/internal/engine/native_temporal_arithmetic.go` — add/sub signatures, until, since, diff
+- `aql/internal/engine/native_temporal_compare.go` — before?, after?, between?, earliest, latest
+- `aql/internal/engine/native_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
+- `aql/internal/engine/native_temporal_round.go` — round, truncate, start-of, end-of
+- `aql/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
+- `aql/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date
 
 ## Files to Modify
 
 - `aql/internal/engine/types.go` — add `Scalar/Time/*` type paths and IDs (lines 36-59, 112-150)
 - `aql/internal/engine/value.go` — add `NewDate()`, `NewDateTime()`, `NewInstant()`, etc. constructors
 - `aql/internal/engine/registry.go` — register all new words in `registerBuiltins()`
-- `aql/internal/engine/builtin_math_add.go` — extend `add` with temporal signatures
-- `aql/internal/engine/builtin_math_sub.go` — extend `sub` with temporal signatures
+- `aql/internal/engine/native_math_add.go` — extend `add` with temporal signatures
+- `aql/internal/engine/native_math_sub.go` — extend `sub` with temporal signatures
 
 ## Verification
 

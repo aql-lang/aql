@@ -182,7 +182,7 @@ Key patterns to follow:
   add your own guard.
 - **Engine builtin handlers.** Check `args[N].Data == nil` before calling
   `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
-  signatures. See `builtin_accessor_dot.go` for the canonical pattern.
+  signatures. See `native_accessor_dotr.go` for the canonical pattern.
 - **Prefer `val, ok := v.Data.(Type)` over `v.Data.(Type)`.** The
   two-value form never panics; the single-value form panics on mismatch.
 - **Write tests that use `recover()`.** For any new word or native

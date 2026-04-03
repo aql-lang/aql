@@ -88,7 +88,8 @@ func TestJsonicToValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.AsBoolean() {
+	_as0, _ := v.AsBoolean()
+	if !_as0 {
 		t.Error("expected true")
 	}
 }
@@ -98,8 +99,10 @@ func TestJsonicToValueFloat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsNumber() != 3.14 {
-		t.Errorf("expected 3.14, got %f", v.AsNumber())
+	_as1, _ := v.AsNumber()
+	if _as1 != 3.14 {
+		_as2, _ := v.AsNumber()
+		t.Errorf("expected 3.14, got %f", _as2)
 	}
 }
 
@@ -108,8 +111,10 @@ func TestJsonicToValueIntegerFloat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	_as3, _ := v.AsInteger()
+	if _as3 != 42 {
+		_as4, _ := v.AsInteger()
+		t.Errorf("expected 42, got %d", _as4)
 	}
 }
 
@@ -223,7 +228,8 @@ func TestTraceCoverage(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsNumber() != 3 {
+	_as5, _ := result[0].AsNumber()
+	if _as5 != 3 {
 		t.Errorf("expected 3, got %v", result[0])
 	}
 	output := buf.String()
@@ -293,8 +299,10 @@ func TestReadWriteJsonic(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'a'")
 	}
-	if v.AsInteger() != 1 {
-		t.Errorf("expected 1, got %d", v.AsInteger())
+	_as6, _ := v.AsInteger()
+	if _as6 != 1 {
+		_as7, _ := v.AsInteger()
+		t.Errorf("expected 1, got %d", _as7)
 	}
 }
 
@@ -326,8 +334,9 @@ func TestReadWriteLines(t *testing.T) {
 	// Write lines format
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewString("out.txt"), NewString("hello\nworld"), NewMap(opts), NewWord("write"),
+		NewMap(opts), NewString("hello\nworld"), NewString("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -349,8 +358,10 @@ func TestReadWriteText(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if result[0].AsString() != "hello world" {
-		t.Errorf("expected hello world, got %s", result[0].AsString())
+	_as8, _ := result[0].AsString()
+	if _as8 != "hello world" {
+		_as9, _ := result[0].AsString()
+		t.Errorf("expected hello world, got %s", _as9)
 	}
 }
 
@@ -385,8 +396,9 @@ func TestWriteAppendMode(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
+	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewString("out.txt"), NewString("second"), NewMap(opts), NewWord("write"),
+		NewMap(opts), NewString("second"), NewString("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -767,8 +779,10 @@ func TestMakeConvertDecimalToString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TString), NewDecimal(3.14),
 	})
-	if result[0].AsString() != "3.14" {
-		t.Errorf("expected '3.14', got %s", result[0].AsString())
+	_as10, _ := result[0].AsString()
+	if _as10 != "3.14" {
+		_as11, _ := result[0].AsString()
+		t.Errorf("expected '3.14', got %s", _as11)
 	}
 }
 
@@ -780,13 +794,15 @@ func TestMakeConvertBoolFromNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(1),
 	})
-	if !result[0].AsBoolean() {
+	_as12, _ := result[0].AsBoolean()
+	if !_as12 {
 		t.Error("expected true from 1")
 	}
 	result = runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(0),
 	})
-	if result[0].AsBoolean() {
+	_as13, _ := result[0].AsBoolean()
+	if _as13 {
 		t.Error("expected false from 0")
 	}
 }
@@ -799,13 +815,15 @@ func TestMakeConvertBoolFromNonBoolString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("hello"),
 	})
-	if !result[0].AsBoolean() {
+	_as14, _ := result[0].AsBoolean()
+	if !_as14 {
 		t.Error("expected true from non-empty string")
 	}
 	result = runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString(""),
 	})
-	if result[0].AsBoolean() {
+	_as15, _ := result[0].AsBoolean()
+	if _as15 {
 		t.Error("expected false from empty string")
 	}
 }
@@ -818,7 +836,8 @@ func TestMakeConvertToAtomFromString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TAtom), NewString("hello"),
 	})
-	if result[0].AsAtom() != "hello" {
+	_as16, _ := result[0].AsAtom()
+	if _as16 != "hello" {
 		t.Errorf("expected hello atom, got %v", result[0])
 	}
 }
@@ -832,7 +851,9 @@ func TestMakeConvertFloatStringToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("3.14"),
 	})
-	if result[0].AsInteger() != 3 {
-		t.Errorf("expected 3, got %d", result[0].AsInteger())
+	_as17, _ := result[0].AsInteger()
+	if _as17 != 3 {
+		_as18, _ := result[0].AsInteger()
+		t.Errorf("expected 3, got %d", _as18)
 	}
 }

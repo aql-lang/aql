@@ -41,14 +41,17 @@ func TestColorHex2rgbComponents(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	if rv.AsInteger() != 255 {
-		t.Errorf("r = %d, want 255", rv.AsInteger())
+	rvi, _ := rv.AsInteger()
+	gvi, _ := gv.AsInteger()
+	bvi, _ := bv.AsInteger()
+	if rvi != 255 {
+		t.Errorf("r = %d, want 255", rvi)
 	}
-	if gv.AsInteger() != 136 {
-		t.Errorf("g = %d, want 136", gv.AsInteger())
+	if gvi != 136 {
+		t.Errorf("g = %d, want 136", gvi)
 	}
-	if bv.AsInteger() != 0 {
-		t.Errorf("b = %d, want 0", bv.AsInteger())
+	if bvi != 0 {
+		t.Errorf("b = %d, want 0", bvi)
 	}
 }
 
@@ -232,7 +235,7 @@ func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sunset.%s.hex: %v", field, err)
 		}
-		s := result[0].AsString()
+		s, _ := result[0].AsString()
 		if len(s) != 7 || s[0] != '#' {
 			t.Errorf("sunset.%s.hex = %q, want #XXXXXX format", field, s)
 		}
@@ -244,7 +247,7 @@ func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sunset.%s.r: %v", field, err)
 		}
-		r := result[0].AsInteger()
+		r, _ := result[0].AsInteger()
 		if r < 0 || r > 255 {
 			t.Errorf("sunset.%s.r = %d, want 0-255", field, r)
 		}
@@ -282,14 +285,17 @@ func TestDoMapWordValuesResolve(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	if rv.AsInteger() != 100 {
-		t.Errorf("r = %d, want 100", rv.AsInteger())
+	rvi2, _ := rv.AsInteger()
+	gvi2, _ := gv.AsInteger()
+	bvi2, _ := bv.AsInteger()
+	if rvi2 != 100 {
+		t.Errorf("r = %d, want 100", rvi2)
 	}
-	if gv.AsInteger() != 200 {
-		t.Errorf("g = %d, want 200", gv.AsInteger())
+	if gvi2 != 200 {
+		t.Errorf("g = %d, want 200", gvi2)
 	}
-	if bv.AsInteger() != 50 {
-		t.Errorf("b = %d, want 50", bv.AsInteger())
+	if bvi2 != 50 {
+		t.Errorf("b = %d, want 50", bvi2)
 	}
 }
 
@@ -305,13 +311,16 @@ func TestDoMapLiteralValues(t *testing.T) {
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
 	zv, _ := m.Get("z")
-	if xv.AsInteger() != 1 {
+	xvi, _ := xv.AsInteger()
+	yvs, _ := yv.AsString()
+	zvb, _ := zv.AsBoolean()
+	if xvi != 1 {
 		t.Errorf("x = %v, want 1", xv)
 	}
-	if yv.AsString() != "hello" {
+	if yvs != "hello" {
 		t.Errorf("y = %v, want hello", yv)
 	}
-	if !zv.AsBoolean() {
+	if !zvb {
 		t.Errorf("z = %v, want true", zv)
 	}
 }
@@ -327,10 +336,12 @@ func TestDoMapListValuesStillWork(t *testing.T) {
 	m := result[0].AsMap()
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
-	if xv.AsInteger() != 7 {
+	xvi2, _ := xv.AsInteger()
+	if xvi2 != 7 {
 		t.Errorf("x = %v, want 7", xv)
 	}
-	if yv.AsString() != "A" {
+	yvs2, _ := yv.AsString()
+	if yvs2 != "A" {
 		t.Errorf("y = %v, want A", yv)
 	}
 }
@@ -390,8 +401,11 @@ func TestColorHex2rgbBlack(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	if rv.AsInteger() != 0 || gv.AsInteger() != 0 || bv.AsInteger() != 0 {
-		t.Errorf("want {r:0 g:0 b:0}, got {r:%d g:%d b:%d}", rv.AsInteger(), gv.AsInteger(), bv.AsInteger())
+	rvb, _ := rv.AsInteger()
+	gvb, _ := gv.AsInteger()
+	bvb, _ := bv.AsInteger()
+	if rvb != 0 || gvb != 0 || bvb != 0 {
+		t.Errorf("want {r:0 g:0 b:0}, got {r:%d g:%d b:%d}", rvb, gvb, bvb)
 	}
 }
 
@@ -408,8 +422,11 @@ func TestColorHex2rgbWhite(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	if rv.AsInteger() != 255 || gv.AsInteger() != 255 || bv.AsInteger() != 255 {
-		t.Errorf("want {r:255 g:255 b:255}, got {r:%d g:%d b:%d}", rv.AsInteger(), gv.AsInteger(), bv.AsInteger())
+	rvw, _ := rv.AsInteger()
+	gvw, _ := gv.AsInteger()
+	bvw, _ := bv.AsInteger()
+	if rvw != 255 || gvw != 255 || bvw != 255 {
+		t.Errorf("want {r:255 g:255 b:255}, got {r:%d g:%d b:%d}", rvw, gvw, bvw)
 	}
 }
 
@@ -482,7 +499,7 @@ func TestColorSchemeOceanSecondaryRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hex := result[0].AsString()
+	hex, _ := result[0].AsString()
 
 	result, err = runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
@@ -509,13 +526,16 @@ func TestDoMapMixedWordAndListValues(t *testing.T) {
 	av, _ := m.Get("a")
 	bv, _ := m.Get("b")
 	cv, _ := m.Get("c")
-	if av.AsInteger() != 10 {
-		t.Errorf("a = %d, want 10", av.AsInteger())
+	avi, _ := av.AsInteger()
+	bvi3, _ := bv.AsInteger()
+	cvs, _ := cv.AsString()
+	if avi != 10 {
+		t.Errorf("a = %d, want 10", avi)
 	}
-	if bv.AsInteger() != 15 {
-		t.Errorf("b = %d, want 15", bv.AsInteger())
+	if bvi3 != 15 {
+		t.Errorf("b = %d, want 15", bvi3)
 	}
-	if cv.AsString() != "literal" {
+	if cvs != "literal" {
 		t.Errorf("c = %v, want literal", cv)
 	}
 }

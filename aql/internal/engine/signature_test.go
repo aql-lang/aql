@@ -12,7 +12,8 @@ func TestFlexibleMatchPositional(t *testing.T) {
 	if !ok {
 		t.Fatal("expected positional match")
 	}
-	if ordered[0].AsAtom() != "x" {
+	_as0, _ := ordered[0].AsAtom()
+	if _as0 != "x" {
 		t.Errorf("expected atom x at [0], got %v", ordered[0])
 	}
 }
@@ -45,11 +46,15 @@ func TestFlexibleMatchPrefersLeastDisplacement(t *testing.T) {
 		t.Fatal("expected match")
 	}
 	// Positional match: atoms should stay in original order.
-	if ordered[0].AsAtom() != "a" {
-		t.Errorf("[0] expected atom a, got %s", ordered[0].AsAtom())
+	_as1, _ := ordered[0].AsAtom()
+	if _as1 != "a" {
+		_as2, _ := ordered[0].AsAtom()
+		t.Errorf("[0] expected atom a, got %s", _as2)
 	}
-	if ordered[1].AsAtom() != "b" {
-		t.Errorf("[1] expected atom b, got %s", ordered[1].AsAtom())
+	_as3, _ := ordered[1].AsAtom()
+	if _as3 != "b" {
+		_as4, _ := ordered[1].AsAtom()
+		t.Errorf("[1] expected atom b, got %s", _as4)
 	}
 }
 
@@ -302,7 +307,8 @@ func TestMatchSignatureExtraStackIgnored(t *testing.T) {
 	if m == nil {
 		t.Fatal("should match top-of-stack integer")
 	}
-	if m.Args[0].AsInteger() != 42 {
+	_as5, _ := m.Args[0].AsInteger()
+	if _as5 != 42 {
 		t.Errorf("expected arg 42, got %v", m.Args[0])
 	}
 }

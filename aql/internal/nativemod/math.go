@@ -146,7 +146,10 @@ func registerAbs(r *engine.Registry) {
 	r.Register("abs", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v := args[0].AsInteger()
+			v, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
 			if v < 0 {
 				v = -v
 			}
@@ -156,7 +159,11 @@ func registerAbs(r *engine.Registry) {
 	r.Register("abs", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(math.Abs(args[0].AsDecimal()))}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDecimal(math.Abs(d))}, nil
 		},
 	})
 }
@@ -165,13 +172,21 @@ func registerNegate(r *engine.Registry) {
 	r.Register("negate", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewInteger(-args[0].AsInteger())}, nil
+			v, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewInteger(-v)}, nil
 		},
 	})
 	r.Register("negate", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(-args[0].AsDecimal())}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDecimal(-d)}, nil
 		},
 	})
 }
@@ -180,7 +195,10 @@ func registerSign(r *engine.Registry) {
 	r.Register("sign", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v := args[0].AsInteger()
+			v, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
 			switch {
 			case v < 0:
 				return []engine.Value{engine.NewInteger(-1)}, nil
@@ -194,7 +212,10 @@ func registerSign(r *engine.Registry) {
 	r.Register("sign", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v := args[0].AsDecimal()
+			v, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
 			switch {
 			case v < 0:
 				return []engine.Value{engine.NewInteger(-1)}, nil
@@ -241,7 +262,11 @@ func registerCeil(r *engine.Registry) {
 	r.Register("ceil", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewInteger(int64(math.Ceil(args[0].AsDecimal())))}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewInteger(int64(math.Ceil(d)))}, nil
 		},
 	})
 }
@@ -250,7 +275,11 @@ func registerFloor(r *engine.Registry) {
 	r.Register("floor", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewInteger(int64(math.Floor(args[0].AsDecimal())))}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewInteger(int64(math.Floor(d)))}, nil
 		},
 	})
 }
@@ -259,7 +288,11 @@ func registerRound(r *engine.Registry) {
 	r.Register("round", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewInteger(int64(math.Round(args[0].AsDecimal())))}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewInteger(int64(math.Round(d)))}, nil
 		},
 	})
 }
@@ -268,7 +301,11 @@ func registerTrunc(r *engine.Registry) {
 	r.Register("trunc", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewInteger(int64(math.Trunc(args[0].AsDecimal())))}, nil
+			d, err := args[0].AsDecimal()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewInteger(int64(math.Trunc(d)))}, nil
 		},
 	})
 }
@@ -293,7 +330,15 @@ func registerAtan2(r *engine.Registry) {
 	r.Register("atan2", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(math.Atan2(float64(args[1].AsInteger()), float64(args[0].AsInteger())))}, nil
+			a0, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			a1, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
 		},
 	})
 }
@@ -305,7 +350,15 @@ func registerHypot(r *engine.Registry) {
 	r.Register("hypot", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(math.Hypot(float64(args[0].AsInteger()), float64(args[1].AsInteger())))}, nil
+			a0, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			a1, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewDecimal(math.Hypot(float64(a0), float64(a1)))}, nil
 		},
 	})
 }

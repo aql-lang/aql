@@ -38,10 +38,12 @@ func TestListEvalAsArg(t *testing.T) {
 	if lst.Len() != 2 {
 		t.Fatalf("expected list of 2, got %d", lst.Len())
 	}
-	if lst.Get(0).AsNumber() != 10 {
+	_as0, _ := lst.Get(0).AsNumber()
+	if _as0 != 10 {
 		t.Errorf("element 0 = %v, want 10", lst.Get(0))
 	}
-	if lst.Get(1).AsNumber() != 20 {
+	_as1, _ := lst.Get(1).AsNumber()
+	if _as1 != 20 {
 		t.Errorf("element 1 = %v, want 20", lst.Get(1))
 	}
 }
@@ -70,7 +72,8 @@ func TestListEvalArithmetic(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
 	lst := result[0].AsList()
-	if lst.Len() != 1 || lst.Get(0).AsNumber() != 3 {
+	_as2, _ := lst.Get(0).AsNumber()
+	if lst.Len() != 1 || _as2 != 3 {
 		t.Errorf("list = %v, want [3]", result[0])
 	}
 }
@@ -121,7 +124,8 @@ func TestListEvalNoEvalArgsPreservesCodeBody(t *testing.T) {
 		NewWord("end"),
 		NewInteger(5), NewWord("double"),
 	})
-	if len(result) != 1 || result[0].AsNumber() != 10 {
+	_as3, _ := result[0].AsNumber()
+	if len(result) != 1 || _as3 != 10 {
 		t.Errorf("5 double = %v, want 10", result)
 	}
 }
@@ -157,7 +161,8 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if result[0].AsNumber() != 2 {
+	_as4, _ := result[0].AsNumber()
+	if _as4 != 2 {
 		t.Errorf("listlen = %v, want 2", result[0])
 	}
 }

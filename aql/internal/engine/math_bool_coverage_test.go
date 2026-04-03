@@ -17,12 +17,14 @@ func TestMathPow(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Integer pow
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("pow"), NewInteger(3)})
-	if result[0].AsInteger() != 8 {
+	_as0, _ := result[0].AsInteger()
+	if _as0 != 8 {
 		t.Errorf("2 pow 3 = %v, want 8", result[0])
 	}
 	// Integer pow with 0 exponent
 	result = runAQL(t, r, []Value{NewInteger(5), NewWord("pow"), NewInteger(0)})
-	if result[0].AsInteger() != 1 {
+	_as1, _ := result[0].AsInteger()
+	if _as1 != 1 {
 		t.Errorf("5 pow 0 = %v, want 1", result[0])
 	}
 	// Negative exponent should error
@@ -32,7 +34,8 @@ func TestMathPow(t *testing.T) {
 	}
 	// Decimal pow
 	result = runAQL(t, r, []Value{NewDecimal(2), NewWord("pow"), NewDecimal(0.5)})
-	if math.Abs(result[0].AsNumber()-math.Sqrt(2)) > 0.0001 {
+	_as2, _ := result[0].AsNumber()
+	if math.Abs(_as2-math.Sqrt(2)) > 0.0001 {
 		t.Errorf("2 pow 0.5 = %v, want sqrt(2)", result[0])
 	}
 }
@@ -41,12 +44,14 @@ func TestMathDiv(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Integer div
 	result := runAQL(t, r, []Value{NewInteger(10), NewWord("div"), NewInteger(3)})
-	if result[0].AsInteger() != 3 {
+	_as3, _ := result[0].AsInteger()
+	if _as3 != 3 {
 		t.Errorf("10 div 3 = %v, want 3", result[0])
 	}
 	// Decimal div
 	result = runAQL(t, r, []Value{NewDecimal(10), NewWord("div"), NewDecimal(4)})
-	if result[0].AsNumber() != 2.5 {
+	_as4, _ := result[0].AsNumber()
+	if _as4 != 2.5 {
 		t.Errorf("10.0 div 4.0 = %v, want 2.5", result[0])
 	}
 	// Decimal div by zero
@@ -60,12 +65,14 @@ func TestMathMod(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Integer mod
 	result := runAQL(t, r, []Value{NewInteger(10), NewWord("mod"), NewInteger(3)})
-	if result[0].AsInteger() != 1 {
+	_as5, _ := result[0].AsInteger()
+	if _as5 != 1 {
 		t.Errorf("10 mod 3 = %v, want 1", result[0])
 	}
 	// Decimal mod
 	result = runAQL(t, r, []Value{NewDecimal(10.5), NewWord("mod"), NewDecimal(3)})
-	if math.Abs(result[0].AsNumber()-1.5) > 0.0001 {
+	_as6, _ := result[0].AsNumber()
+	if math.Abs(_as6-1.5) > 0.0001 {
 		t.Errorf("10.5 mod 3.0 = %v, want 1.5", result[0])
 	}
 	// Decimal mod by zero
@@ -78,7 +85,8 @@ func TestMathMod(t *testing.T) {
 func TestMathMulDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewDecimal(2.5), NewWord("mul"), NewDecimal(4)})
-	if result[0].AsNumber() != 10.0 {
+	_as7, _ := result[0].AsNumber()
+	if _as7 != 10.0 {
 		t.Errorf("2.5 mul 4.0 = %v, want 10.0", result[0])
 	}
 }
@@ -86,7 +94,8 @@ func TestMathMulDecimal(t *testing.T) {
 func TestMathSubDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewDecimal(5.5), NewWord("sub"), NewDecimal(2.5)})
-	if result[0].AsNumber() != 3.0 {
+	_as8, _ := result[0].AsNumber()
+	if _as8 != 3.0 {
 		t.Errorf("5.5 sub 2.5 = %v, want 3.0", result[0])
 	}
 }
@@ -94,7 +103,8 @@ func TestMathSubDecimal(t *testing.T) {
 func TestMathAddDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewDecimal(1.5), NewWord("add"), NewDecimal(2.5)})
-	if result[0].AsNumber() != 4.0 {
+	_as9, _ := result[0].AsNumber()
+	if _as9 != 4.0 {
 		t.Errorf("1.5 add 2.5 = %v, want 4.0", result[0])
 	}
 }
@@ -114,8 +124,10 @@ func TestBoolXor(t *testing.T) {
 	}
 	for _, tt := range tests {
 		result := runAQL(t, r, []Value{NewBoolean(tt.a), NewWord("xor"), NewBoolean(tt.b)})
-		if result[0].AsBoolean() != tt.want {
-			t.Errorf("%v xor %v = %v, want %v", tt.a, tt.b, result[0].AsBoolean(), tt.want)
+		_as10, _ := result[0].AsBoolean()
+		if _as10 != tt.want {
+			_as11, _ := result[0].AsBoolean()
+			t.Errorf("%v xor %v = %v, want %v", tt.a, tt.b, _as11, tt.want)
 		}
 	}
 }
@@ -123,11 +135,13 @@ func TestBoolXor(t *testing.T) {
 func TestBoolNand(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("nand"), NewBoolean(true)})
-	if result[0].AsBoolean() != false {
+	_as12, _ := result[0].AsBoolean()
+	if _as12 != false {
 		t.Errorf("true nand true = %v, want false", result[0])
 	}
 	result = runAQL(t, r, []Value{NewBoolean(true), NewWord("nand"), NewBoolean(false)})
-	if result[0].AsBoolean() != true {
+	_as13, _ := result[0].AsBoolean()
+	if _as13 != true {
 		t.Errorf("true nand false = %v, want true", result[0])
 	}
 }
@@ -135,11 +149,13 @@ func TestBoolNand(t *testing.T) {
 func TestBoolImplies(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("implies"), NewBoolean(false)})
-	if result[0].AsBoolean() != false {
+	_as14, _ := result[0].AsBoolean()
+	if _as14 != false {
 		t.Errorf("true implies false = %v, want false", result[0])
 	}
 	result = runAQL(t, r, []Value{NewBoolean(false), NewWord("implies"), NewBoolean(false)})
-	if result[0].AsBoolean() != true {
+	_as15, _ := result[0].AsBoolean()
+	if _as15 != true {
 		t.Errorf("false implies false = %v, want true", result[0])
 	}
 }
@@ -160,11 +176,13 @@ func TestBoolOrNonBoolean(t *testing.T) {
 func TestMathAddMixed(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewDecimal(2.5)})
-	if result[0].AsNumber() != 3.5 {
+	_as16, _ := result[0].AsNumber()
+	if _as16 != 3.5 {
 		t.Errorf("1 add 2.5 = %v, want 3.5", result[0])
 	}
 	result = runAQL(t, r, []Value{NewDecimal(1.5), NewWord("add"), NewInteger(2)})
-	if result[0].AsNumber() != 3.5 {
+	_as17, _ := result[0].AsNumber()
+	if _as17 != 3.5 {
 		t.Errorf("1.5 add 2 = %v, want 3.5", result[0])
 	}
 }
@@ -174,7 +192,8 @@ func TestMathAddMixed(t *testing.T) {
 func TestStringAdd(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
-	if result[0].AsString() != "hello world" {
+	_as18, _ := result[0].AsString()
+	if _as18 != "hello world" {
 		t.Errorf("expected 'hello world', got %s", result[0])
 	}
 }

@@ -582,8 +582,8 @@ def add5 [add 5] end def add5_twice [add5 add5] 10 add5_twice	20
 {a:1} get a	1
 {a:1,b:2} get b	2
 
-# Dot - nested map access (prefix form)
-{a:{b:1}} a get b get	1
+# Dot - nested map access (chained forward form)
+{a:{b:1}} get a get b	1
 
 # Dot - missing key returns none
 {a:1} b get	None
