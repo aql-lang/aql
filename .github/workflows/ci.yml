@@ -20,8 +20,8 @@ jobs:
         with:
           go-version-file: aql/go.mod
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Tidy modules
+        run: go mod tidy
 
       - name: Build
         run: make build
