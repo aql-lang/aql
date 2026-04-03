@@ -528,7 +528,16 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val.Val) {
 			return convertTypedMap(val.Val)
 		}
-		return convertMapData(val.Val, val.Implicit, val.Meta)
+		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
+		if err != nil {
+			return mv, err
+		}
+		// In word context (top level), implicit maps from pair syntax
+		// (e.g. a:x) must be auto-evaluated so expressions resolve.
+		if val.Implicit && !mv.Eval {
+			mv.Eval = true
+		}
+		return mv, nil
 
 	case map[string]any:
 		// Raw map from list.pair syntax (e.g., [x:number] produces
@@ -536,7 +545,14 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if hasMapChild(val) {
 			return convertTypedMap(val)
 		}
-		return convertMapData(val, true)
+		mv, err := convertMapData(val, true)
+		if err != nil {
+			return mv, err
+		}
+		// In word context (top level), implicit maps from pair syntax
+		// must be auto-evaluated so expressions resolve.
+		mv.Eval = true
+		return mv, nil
 
 	case jsonic.ListRef:
 		if val.Child != nil {

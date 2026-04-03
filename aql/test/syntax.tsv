@@ -942,3 +942,9 @@ def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 100 fa
 def fa2m fn [[a:Integer b:String] Integer [a]] fa2m 42 "hello"	42
 def fa2m fn [[a:Integer b:String] Integer [a]] "hello" fa2m 42	42
 def fa2m fn [[a:Integer b:String] Integer [a]] "hello" 42 fa2m	42
+
+# === Map value expressions ===
+def x 1 {a:x}	{a:1}
+def x 1 ; a:x	{a:1}
+def x 1 ; a:x b:x	{a:1} {b:1}
+def x 1 def y 2 ; a:x b:y	{a:1} {b:2}
