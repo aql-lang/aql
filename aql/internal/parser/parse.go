@@ -434,7 +434,7 @@ func Parse(src string) ([]engine.Value, error) {
 		}
 		return []engine.Value{mv}, nil
 	case unclosedParen:
-		return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		return nil, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", src, "")
 
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
@@ -483,7 +483,7 @@ func convertTopLevelItems(items []any) ([]engine.Value, error) {
 		// Unclosed paren: error at parse time.
 		if up, ok := items[i].(unclosedParen); ok {
 			_ = up
-			return nil, fmt.Errorf("syntax error: unmatched opening parenthesis")
+			return nil, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
 		// Paren group: expand to engine paren markers at top level.
@@ -678,7 +678,7 @@ func convertDataValue(v any) (engine.Value, error) {
 		return convertDataList(val.Val)
 
 	case unclosedParen:
-		return engine.Value{}, fmt.Errorf("syntax error: unmatched opening parenthesis")
+		return engine.Value{}, engine.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 
 	case parenGroup:
 		// Paren group in data context: convert items in word context

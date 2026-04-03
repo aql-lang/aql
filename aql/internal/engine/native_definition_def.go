@@ -117,12 +117,12 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 								}
 							}
 						}
-						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 					}
 					if top.VType.Equal(TFunction) {
-						return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 					}
-					return nil, fmt.Errorf("signature error: no matching signature for %s", name)
+					return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
 				},
 			})
 		}

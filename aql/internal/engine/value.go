@@ -463,6 +463,7 @@ type Value struct {
 	Data    interface{}
 	Quoted  bool // true when value was produced by the quote word; prevents auto-evaluation
 	Eval    bool // true for parser-created lists that should auto-evaluate at end of Run
+	Pos     SrcPos // source position for error reporting (zero value = unknown)
 }
 
 // idRand is the package-level RNG used for ID generation.

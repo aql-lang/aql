@@ -27,6 +27,7 @@ type Registry struct {
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
 	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
+	Source            string                                             // most recent source text for error reporting
 	errs              []error                                            // registration errors accumulated during setup
 	ready             bool                                               // true after initial setup; triggers dynamic help generation
 	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
