@@ -29,6 +29,7 @@ var typeRoots = map[string]bool{
 	"Object": true,
 	"Any":    true,
 	"None":   true,
+	"Type":   true,
 }
 
 // typeAncestry maps short (legacy) first-part names to their full ancestry
@@ -39,23 +40,32 @@ var typeAncestry = map[string]string{
 	"Integer":     "Scalar/Number/Integer",
 	"Decimal":     "Scalar/Number/Decimal",
 	"Boolean":     "Scalar/Boolean",
-	"Atom":        "Word/Atom",
+	"Path":        "Scalar/Path",
+	"Atom":        "Scalar/Atom",
 	"List":        "Node/List",
 	"Map":         "Node/Map",
 	"Table":       "Object/Table",
 	"Record":      "Object/Record",
-	"Mark":        "Word/Internal/Mark",
-	"Move":        "Word/Internal/Move",
-	"Forward":     "Word/Internal/Forward",
-	"Paren":       "Word/Internal/Paren",
-	"Fndef":       "Word/Internal/Fndef",
-	"Fnundef":     "Word/Internal/Fnundef",
+	"Store":       "Object/Store",
+	"Array":       "Object/Array",
+	"Mark":        "Word/__MK",
+	"Move":        "Word/__MV",
+	"Forward":     "Word/__FW",
+	"Paren":       "Word/__OP",
+	"Fndef":       "Word/__FN",
+	"Fnundef":     "Word/__UF",
 	"Function":    "Word/Function",
-	"Returncheck": "Word/Internal/Return",
-	"Disjunct":    "Word/Internal/Disjunct",
-	"Module":      "Word/Internal/Module",
+	"Returncheck": "Word/__RC",
+	"Disjunct":    "Word/__DJ",
+	"Module":      "Word/__MD",
+	"Error":       "Object/Error",
 	"Resource":    "Object/Resource",
 	"Entity":      "Object/Resource/Entity",
+	"ScalarType":  "Type/ScalarType",
+	"NodeType":    "Type/NodeType",
+	"ObjectType": "Type/ObjectType",
+	"Date":      "Scalar/Time/Date",
+	"Matrix":    "Scalar/Number/Matrix",
 }
 
 // Well-known types.
@@ -70,40 +80,47 @@ var (
 	TInteger      = mustType("Scalar/Number/Integer")
 	TDecimal      = mustType("Scalar/Number/Decimal")
 	TBoolean      = mustType("Scalar/Boolean")
+	TPath         = mustType("Scalar/Path")
 	TNode         = mustType("Node")
 	TList         = mustType("Node/List")
 	TListArgs     = mustType("Node/List/Args")
 	TMap          = mustType("Node/Map")
+	TOptions      = mustType("Node/Map/Options")
 	TTable        = mustType("Object/Table")
 	TRecord       = mustType("Object/Record")
-	TAtom         = mustType("Word/Atom")
+	TAtom         = mustType("Scalar/Atom")
 	TWord         = mustType("Word")
 	TFunction     = mustType("Word/Function")
-	TForward      = mustType("Word/Internal/Forward")
-	TOpenParen    = mustType("Word/Internal/Paren")
-	TParenExpr    = mustType("Word/Internal/ParenExpr")
-	TFnDef        = mustType("Word/Internal/Fndef")
-	TFnUndef      = mustType("Word/Internal/Fnundef")
-	TReturnCheck  = mustType("Word/Internal/Return")
-	TDisjunct     = mustType("Word/Internal/Disjunct")
-	TMark         = mustType("Word/Internal/Mark")
-	TMove         = mustType("Word/Internal/Move")
-	TModule       = mustType("Word/Internal/Module")
-	TInternal     = mustType("Word/Internal")
-	TWordInspect  = mustType("Node/Map/Word/Inspect")
-	TTypeInspect  = mustType("Node/Map/Type/Inspect")
+	TForward      = mustType("Word/__FW")
+	TOpenParen    = mustType("Word/__OP")
+	TParenExpr    = mustType("Word/__PE")
+	TFnDef        = mustType("Word/__FN")
+	TFnUndef      = mustType("Word/__UF")
+	TReturnCheck  = mustType("Word/__RC")
+	TDefCleanup   = mustType("Word/__IN/__DC")
+	TDisjunct     = mustType("Word/__DJ")
+	TMark         = mustType("Word/__MK")
+	TMove         = mustType("Word/__MV")
+	TModule       = mustType("Word/__MD")
+	TInternal     = mustType("Word/__IN")
+	TInspect      = mustType("Node/Map/Inspect")
 	TObject         = mustType("Object")
+	TStore          = mustType("Object/Store")
+	TStoreSystem    = mustType("Object/Store/System")
+	TArray          = mustType("Object/Array")
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
-	TFetchFunction  = mustType("Word/Function/Fetch")
-	TFetchRequest  = mustType("Node/Map/Fetch/Request")
-	TFetchResponse = mustType("Node/Map/Fetch/Response")
-	TError         = mustType("Node/Error")
+	TFetchFunction  = mustType("Object/Fetch")
+	TFetchRequest  = mustType("Object/Fetch/Request")
+	TFetchResponse = mustType("Object/Fetch/Response")
+	TError         = mustType("Object/Error")
+	TType          = mustType("Type")
+	TScalarType    = mustType("Type/ScalarType")
+	TNodeType      = mustType("Type/NodeType")
+	TObjectType    = mustType("Type/ObjectType")
+	TDate   = mustType("Scalar/Time/Date")
+	TMatrix = mustType("Scalar/Number/Matrix")
 
-	// Deprecated aliases — kept temporarily for migration.
-	TBooleanTrue    = TBoolean
-	TBooleanFalse   = TBoolean
-	TWordInspection = TWordInspect
 )
 
 // builtinTypeIDs maps fully-qualified builtin type paths to their fixed
@@ -120,6 +137,7 @@ var builtinTypeIDs = map[string]int{
 	"Scalar/Number/Integer":    8,
 	"Scalar/Number/Decimal":    9,
 	"Scalar/Boolean":           10,
+	"Scalar/Path":              47,
 	"Node":                     11,
 	"Node/List":                12,
 	"Node/List/Args":           13,
@@ -127,26 +145,38 @@ var builtinTypeIDs = map[string]int{
 	"Object/Table":             15,
 	"Object/Record":            16,
 	"Word":                     17,
-	"Word/Atom":                18,
+	"Scalar/Atom":              18,
 	"Word/Function":            19,
-	"Word/Internal":            20,
-	"Word/Internal/Forward":    21,
-	"Word/Internal/Paren":      22,
-	"Word/Internal/Fndef":      23,
-	"Word/Internal/Fnundef":    24,
-	"Word/Internal/Return":     25,
-	"Word/Internal/Disjunct":   26,
-	"Word/Internal/Mark":       27,
-	"Word/Internal/Move":       28,
-	"Word/Internal/Module":     29,
+	"Word/__IN":                20,
+	"Word/__IN/__DC":           20,
+	"Word/__FW":                21,
+	"Word/__OP":                22,
+	"Word/__FN":                23,
+	"Word/__UF":                24,
+	"Word/__RC":                25,
+	"Word/__DJ":                26,
+	"Word/__MK":                27,
+	"Word/__MV":                28,
+	"Word/__MD":                29,
+	"Node/Map/Options":         38,
 	"Object":                   30,
-	"Node/Map/Word/Inspect":    31,
-	"Node/Map/Type/Inspect":    32,
-	"Word/Function/Fetch":      33,
-	"Node/Map/Fetch/Request":   34,
-	"Node/Map/Fetch/Response":  35,
+	"Node/Map/Inspect":         31,
+	"Object/Fetch":             33,
+	"Object/Fetch/Request":     34,
+	"Object/Fetch/Response":    35,
+	"Object/Store":             42,
+	"Object/Store/System":      43,
+	"Object/Array":             44,
+	"Object/Error":             45,
 	"Object/Resource":          36,
 	"Object/Resource/Entity":   37,
+	"Type":                     39,
+	"Type/ScalarType":          40,
+	"Type/NodeType":            41,
+	"Type/ObjectType":          46,
+	"Scalar/Time":             48,
+	"Scalar/Time/Date":        49,
+	"Scalar/Number/Matrix":    50,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -170,6 +200,8 @@ func IDPrefixForParts(parts []string) string {
 	case "Word":
 		return "W_"
 	case "Object":
+		return "T_"
+	case "Type":
 		return "T_"
 	default:
 		return "T_"
@@ -195,7 +227,7 @@ func mustType(path string) Type {
 // NewType creates a Type from a slash-separated path, e.g. "String/Proper".
 // Short names are auto-expanded to their full hierarchy path: "String/Proper"
 // becomes "Scalar/String/Proper", "Map/Fetch/Request" becomes
-// "Node/Map/Fetch/Request", etc.
+// "Object/Fetch/Request", etc.
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
 func NewType(path string) (Type, error) {
@@ -220,6 +252,52 @@ func NewType(path string) (Type, error) {
 	}
 
 	return Type{Parts: parts}, nil
+}
+
+// ResolveTypePath attempts to resolve a name (possibly slash-separated) to a
+// known Type. Returns the Type and true if the name is a valid type path that
+// is a prefix of (or equal to) a known builtin type. Returns zero Type and
+// false otherwise.
+func ResolveTypePath(name string) (Type, bool) {
+	// Fast path: single-part names handled by the existing typeAncestry or typeRoots.
+	if !strings.Contains(name, "/") {
+		return Type{}, false
+	}
+
+	t, err := NewType(name)
+	if err != nil {
+		return Type{}, false
+	}
+
+	// Validate that the resolved path is a prefix of a known builtin type.
+	for _, bt := range builtinTypeList {
+		if bt.hasPrefix(t) {
+			return t, true
+		}
+	}
+	return Type{}, false
+}
+
+// hasPrefix reports whether t starts with the parts of prefix.
+func (t Type) hasPrefix(prefix Type) bool {
+	if len(t.Parts) < len(prefix.Parts) {
+		return false
+	}
+	for i, p := range prefix.Parts {
+		if t.Parts[i] != p {
+			return false
+		}
+	}
+	return true
+}
+
+// builtinTypeList is the set of all known builtin types for path validation.
+var builtinTypeList = []Type{
+	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
+	TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
+	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
+	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
+	TDate, TMatrix,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -253,7 +331,7 @@ func (t Type) String() string {
 }
 
 // Leaf returns the last part of the type path.
-// For example, "Node/Map/Fetch/Request" returns "Request".
+// For example, "Object/Fetch/Request" returns "Request".
 func (t Type) Leaf() string {
 	if len(t.Parts) == 0 {
 		return ""
@@ -295,11 +373,14 @@ func builtinTypeParts() map[string]bool {
 	parts := make(map[string]bool)
 	builtins := []Type{
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
-		TNumber, TInteger, TDecimal, TBoolean, TNode, TList, TListArgs,
-		TMap, TTable, TRecord, TAtom, TWord, TFunction, TForward,
-		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDisjunct, TMark,
-		TMove, TModule, TInternal, TWordInspect, TTypeInspect, TObject,
+		TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
+		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
+		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
+		TMove, TModule, TInternal, TInspect, TObject,
+		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
+		TType, TScalarType, TNodeType, TObjectType,
+		TDate, TMatrix,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {
@@ -307,6 +388,29 @@ func builtinTypeParts() map[string]bool {
 		}
 	}
 	return parts
+}
+
+// MetatypeFor returns the metatype for a given type.
+// Scalar subtypes (len>1) → TScalarType, Node subtypes (len>1) → TNodeType,
+// Object subtypes (len>1) → TObjectType,
+// everything else (including roots themselves) → TType.
+func MetatypeFor(t Type) Type {
+	if len(t.Parts) > 1 {
+		switch t.Parts[0] {
+		case "Scalar":
+			return TScalarType
+		case "Node":
+			return TNodeType
+		case "Object":
+			return TObjectType
+		}
+	}
+	return TType
+}
+
+// IsMetaType reports whether t is in the Type/* metatype hierarchy.
+func IsMetaType(t Type) bool {
+	return len(t.Parts) > 0 && t.Parts[0] == "Type"
 }
 
 // ValidateTypeNameParts checks that a type name (slash-separated) does not

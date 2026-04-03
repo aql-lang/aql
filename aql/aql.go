@@ -1,9 +1,12 @@
 package aql
 
 import (
+	"io"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"github.com/metsitaba/voxgig-exp/aql/internal/nativemod"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 
 	udk "voxgiguniversalsdk"
@@ -26,25 +29,24 @@ type Value = engine.Value
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for prefix matching).
 //
-// Precedence controls binding strength for suffix-precedence words;
-// higher values bind tighter (0 = default).
-//
-// Handler receives the matched args and returns replacement values for the stack.
+// Handler receives the matched args, the current context map, the resolved
+// stack (only for FullStack signatures), and the registry. Most handlers
+// only use the first parameter and ignore the rest with _.
 type Signature = engine.Signature
 
 // Well-known AQL types for use in Signature definitions.
 var (
-	TAny     = engine.TAny
-	TScalar  = engine.TScalar
-	TString  = engine.TString
-	TNumber  = engine.TNumber
-	TInteger = engine.TInteger
-	TDecimal = engine.TDecimal
-	TBoolean = engine.TBoolean
-	TNode    = engine.TNode
-	TAtom    = engine.TAtom
-	TList    = engine.TList
-	TMap     = engine.TMap
+	TAny            = engine.TAny
+	TScalar         = engine.TScalar
+	TString         = engine.TString
+	TNumber         = engine.TNumber
+	TInteger        = engine.TInteger
+	TDecimal        = engine.TDecimal
+	TBoolean        = engine.TBoolean
+	TNode           = engine.TNode
+	TAtom           = engine.TAtom
+	TList           = engine.TList
+	TMap            = engine.TMap
 	TTable          = engine.TTable
 	TRecord         = engine.TRecord
 	TResource       = engine.TResource
@@ -113,6 +115,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
+	reg.NativeModResolver = nativemod.Resolve
 	native.Register(reg)
 
 	um := udk.NewUniversalManager(map[string]any{
@@ -120,6 +123,10 @@ func New(opts ...Options) (*AQL, error) {
 	})
 
 	reg.Manager = um
+
+	// Enable dynamic help generation for functions registered after this point.
+	engine.EnableDynamicHelp(reg)
+	reg.MarkReady()
 
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
@@ -134,6 +141,11 @@ func (a *AQL) SetFileOps(ops FileOps) {
 	a.registry.SetFileOps(ops)
 }
 
+// SetOutput replaces the writer used by print, help, and other output words.
+func (a *AQL) SetOutput(w io.Writer) {
+	a.registry.Output = w
+}
+
 // RegisterFormat adds or replaces a format in the format registry.
 // Formats are used by read/write words via the {fmt:"name"} option.
 func (a *AQL) RegisterFormat(name string, f Format) {
@@ -141,40 +153,38 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 }
 
 // Register adds a named word with one or more signatures.
-// Registered words use suffix precedence: the engine tries to collect
+// Registered words use forward precedence: the engine tries to collect
 // arguments from after the word before falling back to prefix matching.
 //
-// Example — register a word "double" that doubles an integer:
+// Example — register a word "double" that doubles an integer
+// (extra handler params are context, stack, and registry — use _ to ignore):
 //
 //	a.Register("double", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
-//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 //	        n := args[0].AsInteger()
 //	        return []aql.Value{aql.NewInteger(n * 2)}, nil
 //	    },
 //	})
-//
-// Use the Precedence field on Signature to control binding strength
-// for suffix argument collection (higher binds tighter, 0 = default).
 func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
-// RegisterPrefixOnly adds a named word with one or more signatures that
+// RegisterStackOnly adds a named word with one or more signatures that
 // only match prefix arguments (values already on the stack before the word).
-// No suffix argument collection is attempted.
+// No forward argument collection is attempted.
 //
-// Example — register a prefix-only word "neg" that negates an integer:
+// Example — register a stack-only word "neg" that negates an integer:
 //
-//	a.RegisterPrefixOnly("neg", aql.Signature{
+//	a.RegisterStackOnly("neg", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
-//	    Handler: func(args []aql.Value) ([]aql.Value, error) {
+//	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 //	        n := args[0].AsInteger()
 //	        return []aql.Value{aql.NewInteger(-n)}, nil
 //	    },
 //	})
-func (a *AQL) RegisterPrefixOnly(name string, sigs ...Signature) {
-	a.registry.RegisterPrefixOnly(name, sigs...)
+func (a *AQL) RegisterStackOnly(name string, sigs ...Signature) {
+	a.registry.RegisterStackOnly(name, sigs...)
 }
 
 // SetSDK injects an SDK instance for the given spec name.
@@ -208,9 +218,11 @@ func (a *AQL) Run(src string) ([]any, error) {
 	for i, v := range result {
 		switch {
 		case v.VType.Matches(engine.TInteger):
-			out[i] = v.AsInteger()
+			n, _ := v.AsInteger()
+			out[i] = n
 		case v.VType.Matches(engine.TString):
-			out[i] = v.AsString()
+			s, _ := v.AsString()
+			out[i] = s
 		default:
 			out[i] = v.String()
 		}

@@ -1,3 +1,6 @@
+//go:build query
+// +build query
+
 package engine
 
 import (
@@ -37,7 +40,7 @@ func makeProductsTable(r *Registry) {
 			mkRow(5, "Thingamajig", 5, "misc"),
 		},
 	}
-	r.Store["products"] = Value{VType: TList, Data: td}
+	r.ContextSet("products", Value{VType: TList, Data: td})
 }
 
 // makeOrdersTable creates an "orders" table with order_id, product_id, qty.
@@ -65,7 +68,7 @@ func makeOrdersTable(r *Registry) {
 			mkRow(103, 1, 2),
 		},
 	}
-	r.Store["orders"] = Value{VType: TList, Data: td}
+	r.ContextSet("orders", Value{VType: TList, Data: td})
 }
 
 // makeCitiesTable creates a "cities" table with city, country.
@@ -90,7 +93,7 @@ func makeCitiesTable(r *Registry) {
 			mkRow("Berlin", "Germany"),
 		},
 	}
-	r.Store["cities"] = Value{VType: TList, Data: td}
+	r.ContextSet("cities", Value{VType: TList, Data: td})
 }
 
 // makeSalesTable creates a "sales" table with region, product, amount.
@@ -119,7 +122,7 @@ func makeSalesTable(r *Registry) {
 			mkRow("east", "A", 300),
 		},
 	}
-	r.Store["sales"] = Value{VType: TList, Data: td}
+	r.ContextSet("sales", Value{VType: TList, Data: td})
 }
 
 // extractTD extracts TableData from a result Value (either TableData or QueryBuilder).
@@ -226,7 +229,8 @@ func TestQueryCovSelectSumAggregate(t *testing.T) {
 	if !ok {
 		t.Fatal("missing total_price column")
 	}
-	if val.AsInteger() != 85 {
+	_as0, _ := val.AsInteger()
+	if _as0 != 85 {
 		t.Errorf("expected sum=85, got %v", val)
 	}
 }
@@ -274,10 +278,12 @@ func TestQueryCovSelectMinMax(t *testing.T) {
 	row := td.Rows[0].AsMap()
 	minVal, _ := row.Get("cheapest")
 	maxVal, _ := row.Get("most_expensive")
-	if minVal.AsInteger() != 5 {
+	_as1, _ := minVal.AsInteger()
+	if _as1 != 5 {
 		t.Errorf("expected min=5, got %v", minVal)
 	}
-	if maxVal.AsInteger() != 30 {
+	_as2, _ := maxVal.AsInteger()
+	if _as2 != 30 {
 		t.Errorf("expected max=30, got %v", maxVal)
 	}
 }
@@ -526,7 +532,7 @@ func TestQueryCovWhereIsNull(t *testing.T) {
 		Record: rec,
 		Rows:   []Value{NewMap(row1), NewMap(row2)},
 	}
-	r.Store["items"] = Value{VType: TList, Data: td}
+	r.ContextSet("items", Value{VType: TList, Data: td})
 
 	// where [note is null]
 	result := runAQL(t, r, []Value{
@@ -669,8 +675,8 @@ func TestQueryCovJoinUsing(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "order1"), mk1(2, "order2"), mk1(1, "order3")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "Widget"), mk2(2, "Gadget"), mk2(3, "Gizmo")}}
-	r.Store["jorders"] = Value{VType: TList, Data: td1}
-	r.Store["jproducts"] = Value{VType: TList, Data: td2}
+	r.ContextSet("jorders", Value{VType: TList, Data: td1})
+	r.ContextSet("jproducts", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -719,8 +725,8 @@ func TestQueryCovLeftJoin(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "A"), mk1(2, "B"), mk1(3, "C")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 10), mk2(1, 20)}}
-	r.Store["ljProducts"] = Value{VType: TList, Data: td1}
-	r.Store["ljOrders"] = Value{VType: TList, Data: td2}
+	r.ContextSet("ljProducts", Value{VType: TList, Data: td1})
+	r.ContextSet("ljOrders", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -752,7 +758,7 @@ func TestQueryCovCrossJoin(t *testing.T) {
 	r2 := NewOrderedMap()
 	r2.Set("x", NewInteger(2))
 	td1 := TableData{Record: RecordTypeInfo{Fields: f1}, Rows: []Value{NewMap(r1), NewMap(r2)}}
-	r.Store["tblA"] = Value{VType: TList, Data: td1}
+	r.ContextSet("tblA", Value{VType: TList, Data: td1})
 
 	f2 := NewOrderedMap()
 	f2.Set("y", NewTypeLiteral(TString))
@@ -761,7 +767,7 @@ func TestQueryCovCrossJoin(t *testing.T) {
 	rb := NewOrderedMap()
 	rb.Set("y", NewString("b"))
 	td2 := TableData{Record: RecordTypeInfo{Fields: f2}, Rows: []Value{NewMap(ra), NewMap(rb)}}
-	r.Store["tblB"] = Value{VType: TList, Data: td2}
+	r.ContextSet("tblB", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -798,8 +804,8 @@ func TestQueryCovUnion(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.Store["setA"] = Value{VType: TList, Data: td1}
-	r.Store["setB"] = Value{VType: TList, Data: td2}
+	r.ContextSet("setA", Value{VType: TList, Data: td1})
+	r.ContextSet("setB", Value{VType: TList, Data: td2})
 
 	// from setA union from setB select star — UNION removes duplicates
 	result := runAQL(t, r, []Value{
@@ -831,8 +837,8 @@ func TestQueryCovUnionAll(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3)}}
-	r.Store["uaA"] = Value{VType: TList, Data: td1}
-	r.Store["uaB"] = Value{VType: TList, Data: td2}
+	r.ContextSet("uaA", Value{VType: TList, Data: td1})
+	r.ContextSet("uaB", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -863,8 +869,8 @@ func TestQueryCovIntersect(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.Store["isA"] = Value{VType: TList, Data: td1}
-	r.Store["isB"] = Value{VType: TList, Data: td2}
+	r.ContextSet("isA", Value{VType: TList, Data: td1})
+	r.ContextSet("isB", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -895,8 +901,8 @@ func TestQueryCovExcept(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.Store["exA"] = Value{VType: TList, Data: td1}
-	r.Store["exB"] = Value{VType: TList, Data: td2}
+	r.ContextSet("exA", Value{VType: TList, Data: td1})
+	r.ContextSet("exB", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -933,7 +939,8 @@ func TestQueryCovOrderByDesc(t *testing.T) {
 	// First row should be the most expensive (30)
 	first := td.Rows[0].AsMap()
 	price, _ := first.Get("price")
-	if price.AsNumber() != 30 {
+	_as3, _ := price.AsNumber()
+	if _as3 != 30 {
 		t.Errorf("expected first price=30 (desc), got %v", price)
 	}
 }
@@ -1161,7 +1168,7 @@ func TestQueryCovFromNonTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Store a non-table value
-	r.Store["notatable"] = NewInteger(42)
+	r.ContextSet("notatable", NewInteger(42))
 
 	err = runAQLError(t, r, []Value{
 		NewWord("from"), NewWord("notatable"),
@@ -1207,8 +1214,8 @@ func TestQueryCovCloneWithJoinsAndSetOps(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, 10), mk1(2, 20)}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 5), mk2(2, 3)}}
-	r.Store["cloneP"] = Value{VType: TList, Data: td1}
-	r.Store["cloneO"] = Value{VType: TList, Data: td2}
+	r.ContextSet("cloneP", Value{VType: TList, Data: td1})
+	r.ContextSet("cloneO", Value{VType: TList, Data: td2})
 
 	// Build a query with join AND then clone it via the where word
 	result := runAQL(t, r, []Value{
@@ -1312,8 +1319,8 @@ func TestQueryCovMergedSchemaOnJoin(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "o1")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "p1")}}
-	r.Store["msOrders"] = Value{VType: TList, Data: td1}
-	r.Store["msProducts"] = Value{VType: TList, Data: td2}
+	r.ContextSet("msOrders", Value{VType: TList, Data: td1})
+	r.ContextSet("msProducts", Value{VType: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -1840,7 +1847,7 @@ func TestQueryCovEnsureSourceAlreadySQLite(t *testing.T) {
 	td := extractTD(t, result[0])
 
 	// Store the result back and query it again (already SQLite)
-	r.Store["products_sq"] = Value{VType: TList, Data: td}
+	r.ContextSet("products_sq", Value{VType: TList, Data: td})
 
 	result = runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),

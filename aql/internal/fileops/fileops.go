@@ -14,6 +14,7 @@ import (
 type FileOps interface {
 	ReadFile(path string) ([]byte, error)
 	WriteFile(path string, data []byte, perm os.FileMode) error
+	MkdirAll(path string, perm os.FileMode) error
 	ResolvePath(path string) (string, error)
 }
 
@@ -48,6 +49,19 @@ func (o *OSFileOps) WriteFile(path string, data []byte, perm os.FileMode) error 
 	return os.WriteFile(resolved, data, perm)
 }
 
+// MkdirAll creates a directory and all parents. Idempotent.
+func (o *OSFileOps) MkdirAll(path string, perm os.FileMode) error {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	mkdirFn := o.mkdirAll
+	if mkdirFn == nil {
+		mkdirFn = os.MkdirAll
+	}
+	return mkdirFn(resolved, perm)
+}
+
 // ResolvePath resolves a relative path against the process working directory.
 func (o *OSFileOps) ResolvePath(path string) (string, error) {
 	if filepath.IsAbs(path) {
@@ -72,11 +86,15 @@ func NewDefault() FileOps {
 // MemFileOps is an in-memory implementation for testing.
 type MemFileOps struct {
 	Files map[string][]byte
-	Cwd   string // simulated working directory; defaults to "." if empty
+	Dirs  map[string]bool // tracked directories
+	Cwd   string          // simulated working directory; defaults to "." if empty
 }
 
 func NewMem() *MemFileOps {
-	return &MemFileOps{Files: make(map[string][]byte)}
+	return &MemFileOps{
+		Files: make(map[string][]byte),
+		Dirs:  make(map[string]bool),
+	}
 }
 
 func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
@@ -98,6 +116,21 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 	}
 	m.Files[resolved] = make([]byte, len(data))
 	copy(m.Files[resolved], data)
+	return nil
+}
+
+// MkdirAll records a directory path. Idempotent.
+func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
+	resolved, err := m.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	m.Dirs[resolved] = true
+	// Also record parent dirs.
+	for d := filepath.Dir(resolved); d != resolved && d != "." && d != "/"; d = filepath.Dir(d) {
+		m.Dirs[d] = true
+		resolved = d
+	}
 	return nil
 }
 

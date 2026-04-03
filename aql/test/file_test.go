@@ -42,7 +42,7 @@ func TestFileReadCSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -66,7 +66,7 @@ func TestFileReadCSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti := v.AsTableType()
+	ti, _ := v.AsTableType()
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -84,7 +84,7 @@ func TestFileReadSimpleCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -101,7 +101,7 @@ func TestFileReadQuotedCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -124,7 +124,7 @@ func TestFileReadEmptyCSV(t *testing.T) {
 			t.Fatalf("expected list/table type, got %s", v.VType)
 		}
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -146,7 +146,7 @@ func TestFileReadTSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -171,7 +171,7 @@ func TestFileReadTSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti := v.AsTableType()
+	ti, _ := v.AsTableType()
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -194,7 +194,7 @@ func TestFileReadCSVWithTextOverride(t *testing.T) {
 	if v.IsTableType() {
 		t.Fatal("expected plain string with text override, got table")
 	}
-	s := v.AsString()
+	s, _ := v.AsString()
 	if !strings.Contains(s, "x,y") {
 		t.Errorf("expected raw CSV content, got %q", s)
 	}
@@ -211,7 +211,7 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 	if !v.IsTableType() {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 3 {
 		t.Errorf("expected 3 rows, got %d", len(rows))
 	}
@@ -284,14 +284,14 @@ func TestFileReadTSVPrint(t *testing.T) {
 }
 
 // assertField checks that an OrderedMap has a field with the expected string value.
-func assertField(t *testing.T, om *engine.OrderedMap, key, want string) {
+func assertField(t *testing.T, om engine.ReadMap, key, want string) {
 	t.Helper()
 	val, ok := om.Get(key)
 	if !ok {
 		t.Errorf("missing field %q", key)
 		return
 	}
-	got := val.AsString()
+	got, _ := val.AsString()
 	if got != want {
 		t.Errorf("field %q = %q, want %q", key, got, want)
 	}

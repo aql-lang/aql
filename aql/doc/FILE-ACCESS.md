@@ -78,7 +78,7 @@ write "out.txt" (upper "hello")          # => 'out.txt' (content from expression
 write "log.txt" "entry\n" {mode:"append"} # => append mode
 ```
 
-**Note**: With two string arguments of the same type, prefer suffix style
+**Note**: With two string arguments of the same type, prefer forward style
 (`write "path" "content"`) for clarity. The infix form `"content" write "path"`
 is ambiguous because the engine cannot distinguish path from content when both
 are strings.
@@ -157,9 +157,9 @@ a.SetFileOps(aql.NewMemFileOps())
 
 ### Same-Type Argument Ambiguity
 `write` takes `[string, string]` — with two strings on the stack, flexible
-matching cannot distinguish path from content. Use suffix form or parens:
+matching cannot distinguish path from content. Use forward form or parens:
 ```
-write "path" "content"               # clear: both suffix
+write "path" "content"               # clear: both forward
 write "path" (read "source.txt")     # clear: content from expression
 ```
 
@@ -209,7 +209,7 @@ write "out.txt" "hello world"
 # Append to a log
 write "log.txt" "new entry\n" {mode:"append"}
 
-# Copy a file (suffix form)
+# Copy a file (forward form)
 write "dst.txt" (read "src.txt")
 
 # Read lines into a list

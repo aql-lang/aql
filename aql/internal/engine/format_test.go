@@ -15,7 +15,8 @@ func TestTextFormatDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsString() != "hello world" {
+	_as0, _ := result[0].AsString()
+	if len(result) != 1 || _as0 != "hello world" {
 		t.Errorf("got %v, want ['hello world']", result)
 	}
 }
@@ -123,11 +124,14 @@ func TestLinesFormatDecode(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	elems := result[0].AsList()
+	elems := result[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(elems))
 	}
-	if elems[0].AsString() != "a" || elems[1].AsString() != "b" || elems[2].AsString() != "c" {
+	_as3, _ := elems[0].AsString()
+	_as2, _ := elems[1].AsString()
+	_as1, _ := elems[2].AsString()
+	if _as3 != "a" || _as2 != "b" || _as1 != "c" {
 		t.Errorf("got %v", elems)
 	}
 }
@@ -193,7 +197,7 @@ func TestCSVFormatDecode(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -204,22 +208,28 @@ func TestCSVFormatDecode(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'name' key")
 	}
-	if nameVal.AsString() != "Alice" {
-		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	_as4, _ := nameVal.AsString()
+	if _as4 != "Alice" {
+		_as5, _ := nameVal.AsString()
+		t.Errorf("name = %q, want %q", _as5, "Alice")
 	}
 	ageVal, ok := r0.Get("age")
 	if !ok {
 		t.Fatal("expected 'age' key")
 	}
-	if ageVal.AsString() != "30" {
-		t.Errorf("age = %q, want %q", ageVal.AsString(), "30")
+	_as6, _ := ageVal.AsString()
+	if _as6 != "30" {
+		_as7, _ := ageVal.AsString()
+		t.Errorf("age = %q, want %q", _as7, "30")
 	}
 
 	// Check second row
 	r1 := rows[1].AsMap()
 	nameVal, _ = r1.Get("name")
-	if nameVal.AsString() != "Bob" {
-		t.Errorf("name = %q, want %q", nameVal.AsString(), "Bob")
+	_as8, _ := nameVal.AsString()
+	if _as8 != "Bob" {
+		_as9, _ := nameVal.AsString()
+		t.Errorf("name = %q, want %q", _as9, "Bob")
 	}
 }
 
@@ -232,7 +242,7 @@ func TestCSVFormatDecodeEmpty(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -244,14 +254,16 @@ func TestCSVFormatDecodeQuoted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	m := rows[0].AsMap()
 	aVal, _ := m.Get("a")
-	if aVal.AsString() != "hello, world" {
-		t.Errorf("a = %q, want %q", aVal.AsString(), "hello, world")
+	_as10, _ := aVal.AsString()
+	if _as10 != "hello, world" {
+		_as11, _ := aVal.AsString()
+		t.Errorf("a = %q, want %q", _as11, "hello, world")
 	}
 }
 
@@ -262,7 +274,7 @@ func TestCSVFormatDecodeTableSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := result[0]
-	tt := v.AsTableType()
+	tt, _ := v.AsTableType()
 	fields := tt.Record.Fields
 	if fields.Len() != 2 {
 		t.Errorf("expected 2 fields, got %d", fields.Len())
@@ -346,15 +358,17 @@ func TestTSVFormatDecode(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList()
+	rows := v.AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
 	r0 := rows[0].AsMap()
 	nameVal, _ := r0.Get("name")
-	if nameVal.AsString() != "Alice" {
-		t.Errorf("name = %q, want %q", nameVal.AsString(), "Alice")
+	_as12, _ := nameVal.AsString()
+	if _as12 != "Alice" {
+		_as13, _ := nameVal.AsString()
+		t.Errorf("name = %q, want %q", _as13, "Alice")
 	}
 }
 
@@ -408,14 +422,16 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x' from resolved file")
 	}
-	if xVal.AsInteger() != 1 {
+	_as14, _ := xVal.AsInteger()
+	if _as14 != 1 {
 		t.Errorf("x = %v, want 1", xVal)
 	}
 	yVal, ok := m.Get("y")
 	if !ok {
 		t.Fatal("expected key 'y'")
 	}
-	if yVal.AsInteger() != 2 {
+	_as15, _ := yVal.AsInteger()
+	if _as15 != 2 {
 		t.Errorf("y = %v, want 2", yVal)
 	}
 }
@@ -440,7 +456,8 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'outer'")
 	}
-	if outerVal.AsInteger() != 99 {
+	_as16, _ := outerVal.AsInteger()
+	if _as16 != 99 {
 		t.Errorf("outer = %v, want 99", outerVal)
 	}
 
@@ -448,7 +465,8 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'top' from a.jsonic")
 	}
-	if topVal.AsInteger() != 1 {
+	_as17, _ := topVal.AsInteger()
+	if _as17 != 1 {
 		t.Errorf("top = %v, want 1", topVal)
 	}
 
@@ -456,7 +474,8 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'nested' from b.jsonic")
 	}
-	if !nestedVal.AsBoolean() {
+	_as18, _ := nestedVal.AsBoolean()
+	if !_as18 {
 		t.Errorf("nested = %v, want true", nestedVal)
 	}
 }
@@ -487,8 +506,10 @@ func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key '@ref' in JSON output")
 	}
-	if v.AsString() != "value" {
-		t.Errorf("got %q, want %q", v.AsString(), "value")
+	_as19, _ := v.AsString()
+	if _as19 != "value" {
+		_as20, _ := v.AsString()
+		t.Errorf("got %q, want %q", _as20, "value")
 	}
 }
 
@@ -500,8 +521,10 @@ func TestJsonicFormatMultisourceNotUsedForText(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Text format returns raw string, no resolution.
-	if result[0].AsString() != `@"somefile.jsonic"` {
-		t.Errorf("text format should return raw content, got %q", result[0].AsString())
+	_as21, _ := result[0].AsString()
+	if _as21 != `@"somefile.jsonic"` {
+		_as22, _ := result[0].AsString()
+		t.Errorf("text format should return raw content, got %q", _as22)
 	}
 }
 
@@ -608,7 +631,8 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'val' from resolved test.jsonic")
 	}
-	if v.AsInteger() != 42 {
+	_as23, _ := v.AsInteger()
+	if _as23 != 42 {
 		t.Errorf("val = %v, want 42", v)
 	}
 }

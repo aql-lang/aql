@@ -87,12 +87,16 @@ func TestValueStringTableDataCov(t *testing.T) {
 
 func TestValueAsNumberCov(t *testing.T) {
 	v := NewInteger(42)
-	if v.AsNumber() != 42.0 {
-		t.Errorf("expected 42.0, got %f", v.AsNumber())
+	_as0, _ := v.AsNumber()
+	if _as0 != 42.0 {
+		_as1, _ := v.AsNumber()
+		t.Errorf("expected 42.0, got %f", _as1)
 	}
 	v = NewDecimal(3.14)
-	if v.AsNumber() != 3.14 {
-		t.Errorf("expected 3.14, got %f", v.AsNumber())
+	_as2, _ := v.AsNumber()
+	if _as2 != 3.14 {
+		_as3, _ := v.AsNumber()
+		t.Errorf("expected 3.14, got %f", _as3)
 	}
 }
 
@@ -101,7 +105,7 @@ func TestValueAsTableTypeCov(t *testing.T) {
 	fields.Set("x", NewTypeLiteral(TInteger))
 	tti := TableTypeInfo{Record: RecordTypeInfo{Fields: fields}}
 	v := Value{VType: TList, Data: tti}
-	tt := v.AsTableType()
+	tt, _ := v.AsTableType()
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("expected 1 field, got %d", tt.Record.Fields.Len())
 	}
@@ -109,7 +113,7 @@ func TestValueAsTableTypeCov(t *testing.T) {
 
 func TestValueAsListCov(t *testing.T) {
 	v := NewList([]Value{NewInteger(1), NewInteger(2)})
-	list := v.AsList()
+	list := v.AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -123,7 +127,7 @@ func TestValueAsListCov(t *testing.T) {
 		Rows:   []Value{NewMap(row)},
 	}
 	v = Value{VType: TList, Data: td}
-	list = v.AsList()
+	list = v.AsList().Slice()
 	if len(list) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(list))
 	}

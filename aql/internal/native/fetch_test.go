@@ -16,8 +16,8 @@ func TestFetchFunc(t *testing.T) {
 	if fn.Name != "fetch" {
 		t.Errorf("expected name 'fetch', got %q", fn.Name)
 	}
-	if !fn.SuffixPrecedence {
-		t.Error("expected SuffixPrecedence to be true")
+	if !fn.ForwardPrecedence {
+		t.Error("expected ForwardPrecedence to be true")
 	}
 	if len(fn.Signatures) != 3 {
 		t.Errorf("expected 3 signatures, got %d", len(fn.Signatures))
@@ -51,23 +51,27 @@ func TestFetchStringHandler(t *testing.T) {
 	m := resp.AsMap()
 
 	okVal, _ := m.Get("ok")
-	if !okVal.AsBoolean() {
+	okb, _ := okVal.AsBoolean()
+	if !okb {
 		t.Error("expected ok to be true")
 	}
 
 	statusVal, _ := m.Get("status")
-	if statusVal.AsInteger() != 200 {
-		t.Errorf("expected status 200, got %d", statusVal.AsInteger())
+	stati, _ := statusVal.AsInteger()
+	if stati != 200 {
+		t.Errorf("expected status 200, got %d", stati)
 	}
 
 	bodyVal, _ := m.Get("body")
-	if bodyVal.AsString() != `{"hello":"world"}` {
-		t.Errorf("expected body '{\"hello\":\"world\"}', got %q", bodyVal.AsString())
+	bodys, _ := bodyVal.AsString()
+	if bodys != `{"hello":"world"}` {
+		t.Errorf("expected body '{\"hello\":\"world\"}', got %q", bodys)
 	}
 
 	urlVal, _ := m.Get("url")
-	if urlVal.AsString() != ts.URL {
-		t.Errorf("expected url %q, got %q", ts.URL, urlVal.AsString())
+	urls, _ := urlVal.AsString()
+	if urls != ts.URL {
+		t.Errorf("expected url %q, got %q", ts.URL, urls)
 	}
 
 	headersVal, _ := m.Get("headers")
@@ -75,8 +79,11 @@ func TestFetchStringHandler(t *testing.T) {
 	xCustom, ok := hm.Get("x-custom")
 	if !ok {
 		t.Error("expected x-custom header in response")
-	} else if xCustom.AsString() != "test-value" {
-		t.Errorf("expected x-custom 'test-value', got %q", xCustom.AsString())
+	} else {
+		xcs, _ := xCustom.AsString()
+		if xcs != "test-value" {
+			t.Errorf("expected x-custom 'test-value', got %q", xcs)
+		}
 	}
 }
 
@@ -124,16 +131,19 @@ func TestFetchMapHandler(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	if !okVal.AsBoolean() {
+	okb, _ := okVal.AsBoolean()
+	if !okb {
 		t.Error("expected ok to be true for 201")
 	}
 	statusVal, _ := resp.Get("status")
-	if statusVal.AsInteger() != 201 {
-		t.Errorf("expected status 201, got %d", statusVal.AsInteger())
+	stati, _ := statusVal.AsInteger()
+	if stati != 201 {
+		t.Errorf("expected status 201, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	if bodyVal.AsString() != "created" {
-		t.Errorf("expected body 'created', got %q", bodyVal.AsString())
+	bodys, _ := bodyVal.AsString()
+	if bodys != "created" {
+		t.Errorf("expected body 'created', got %q", bodys)
 	}
 }
 
@@ -164,8 +174,9 @@ func TestFetchStringMapHandler(t *testing.T) {
 
 	resp := result[0].AsMap()
 	statusVal, _ := resp.Get("status")
-	if statusVal.AsInteger() != 200 {
-		t.Errorf("expected status 200, got %d", statusVal.AsInteger())
+	stati, _ := statusVal.AsInteger()
+	if stati != 200 {
+		t.Errorf("expected status 200, got %d", stati)
 	}
 }
 
@@ -226,16 +237,19 @@ func TestFetchResponseNotOk(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	if okVal.AsBoolean() {
+	okb, _ := okVal.AsBoolean()
+	if okb {
 		t.Error("expected ok to be false for 404")
 	}
 	statusVal, _ := resp.Get("status")
-	if statusVal.AsInteger() != 404 {
-		t.Errorf("expected status 404, got %d", statusVal.AsInteger())
+	stati, _ := statusVal.AsInteger()
+	if stati != 404 {
+		t.Errorf("expected status 404, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	if bodyVal.AsString() != "not found" {
-		t.Errorf("expected body 'not found', got %q", bodyVal.AsString())
+	bodys, _ := bodyVal.AsString()
+	if bodys != "not found" {
+		t.Errorf("expected body 'not found', got %q", bodys)
 	}
 }
 
@@ -263,12 +277,14 @@ func TestFetchRedirect(t *testing.T) {
 
 	resp := result[0].AsMap()
 	urlVal, _ := resp.Get("url")
-	if urlVal.AsString() != final.URL {
-		t.Errorf("expected final url %q, got %q", final.URL, urlVal.AsString())
+	urls, _ := urlVal.AsString()
+	if urls != final.URL {
+		t.Errorf("expected final url %q, got %q", final.URL, urls)
 	}
 	bodyVal, _ := resp.Get("body")
-	if bodyVal.AsString() != "final" {
-		t.Errorf("expected body 'final', got %q", bodyVal.AsString())
+	bodys, _ := bodyVal.AsString()
+	if bodys != "final" {
+		t.Errorf("expected body 'final', got %q", bodys)
 	}
 }
 
@@ -316,15 +332,21 @@ func TestFetchResponseHeaders(t *testing.T) {
 	ct, ok := hm.Get("content-type")
 	if !ok {
 		t.Error("expected content-type header")
-	} else if ct.AsString() != "application/json" {
-		t.Errorf("expected 'application/json', got %q", ct.AsString())
+	} else {
+		cts, _ := ct.AsString()
+		if cts != "application/json" {
+			t.Errorf("expected 'application/json', got %q", cts)
+		}
 	}
 
 	xrid, ok := hm.Get("x-request-id")
 	if !ok {
 		t.Error("expected x-request-id header")
-	} else if xrid.AsString() != "abc123" {
-		t.Errorf("expected 'abc123', got %q", xrid.AsString())
+	} else {
+		xrids, _ := xrid.AsString()
+		if xrids != "abc123" {
+			t.Errorf("expected 'abc123', got %q", xrids)
+		}
 	}
 }
 
@@ -343,12 +365,12 @@ func TestFetchResponseType(t *testing.T) {
 	}
 
 	resp := result[0]
-	// Map/Fetch/Response should match Map.
-	if !resp.VType.Matches(engine.TMap) {
-		t.Errorf("expected response to match Map, got %s", resp.VType)
+	// Object/Fetch/Response should match Object.
+	if !resp.VType.Matches(engine.TObject) {
+		t.Errorf("expected response to match Object, got %s", resp.VType)
 	}
 	if !resp.VType.Equal(engine.TFetchResponse) {
-		t.Errorf("expected type Map/Fetch/Response, got %s", resp.VType)
+		t.Errorf("expected type Object/Fetch/Response, got %s", resp.VType)
 	}
 }
 
@@ -369,11 +391,13 @@ func TestFetchServerError(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	if okVal.AsBoolean() {
+	okb, _ := okVal.AsBoolean()
+	if okb {
 		t.Error("expected ok to be false for 500")
 	}
 	statusVal, _ := resp.Get("status")
-	if statusVal.AsInteger() != 500 {
-		t.Errorf("expected status 500, got %d", statusVal.AsInteger())
+	stati, _ := statusVal.AsInteger()
+	if stati != 500 {
+		t.Errorf("expected status 500, got %d", stati)
 	}
 }

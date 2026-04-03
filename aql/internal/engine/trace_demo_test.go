@@ -23,8 +23,9 @@ func TestTraceDemo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 7 {
-		t.Errorf("got %v, want [7]", result)
+	_as0, _ := result[0].AsInteger()
+	if len(result) != 1 || _as0 != 9 {
+		t.Errorf("got %v, want [9]", result)
 	}
 }
 
@@ -46,7 +47,8 @@ func TestTraceDemoStringOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsString() != "HELLO WORLD" {
+	_as1, _ := result[0].AsString()
+	if len(result) != 1 || _as1 != "HELLO WORLD" {
 		t.Errorf("got %v, want [HELLO WORLD]", result)
 	}
 }
@@ -70,7 +72,8 @@ func TestTraceDemoStackOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].AsInteger() != 8 {
+	_as2, _ := result[0].AsInteger()
+	if len(result) != 1 || _as2 != 8 {
 		t.Errorf("got %v, want [8]", result)
 	}
 }

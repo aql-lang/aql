@@ -7,7 +7,7 @@ import (
 )
 
 // listFunc returns the "list" native function definition.
-// list has suffix precedence and four signatures:
+// list has forward precedence and four signatures:
 //   - [table, map]  — returns records whose fields match the map's key-value pairs
 //   - [table]       — returns all records from the table
 //   - [map, map]    — record type + filter: returns empty table
@@ -20,7 +20,7 @@ func listFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "list",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{
@@ -108,7 +108,7 @@ func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listAllHandler returns all records from a table as a list.
 func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
 	return []engine.Value{engine.NewList(result)}, nil
@@ -118,7 +118,7 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // A record matches when every key-value pair in the filter map has an equal
 // value in the corresponding record field.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	filter := args[1].AsMap()
 
 	var matched []engine.Value
@@ -153,7 +153,7 @@ func listRecordFilterHandler(args []engine.Value, ctx map[string]engine.Value, s
 // recordMatches reports whether all key-value pairs in filter are present
 // in rec with equal values. Equality is checked by comparing Value.String()
 // representations for scalar types and structural equality for others.
-func recordMatches(rec *engine.OrderedMap, filter *engine.OrderedMap) bool {
+func recordMatches(rec engine.ReadMap, filter engine.ReadMap) bool {
 	for _, key := range filter.Keys() {
 		filterVal, _ := filter.Get(key)
 		recVal, ok := rec.Get(key)
@@ -171,18 +171,30 @@ func recordMatches(rec *engine.OrderedMap, filter *engine.OrderedMap) bool {
 func valuesEqual(a, b engine.Value) bool {
 	switch {
 	case a.VType.Matches(engine.TInteger) && b.VType.Matches(engine.TInteger):
-		return a.AsInteger() == b.AsInteger()
+		ai, _ := a.AsInteger()
+		bi, _ := b.AsInteger()
+		return ai == bi
 	case a.VType.Matches(engine.TString) && b.VType.Matches(engine.TString):
-		return a.AsString() == b.AsString()
+		as, _ := a.AsString()
+		bs, _ := b.AsString()
+		return as == bs
 	case a.VType.Matches(engine.TBoolean) && b.VType.Matches(engine.TBoolean):
-		return a.AsBoolean() == b.AsBoolean()
+		ab, _ := a.AsBoolean()
+		bb, _ := b.AsBoolean()
+		return ab == bb
 	case a.VType.Equal(engine.TAtom) && b.VType.Equal(engine.TAtom):
-		return a.AsAtom() == b.AsAtom()
+		aa, _ := a.AsAtom()
+		ba, _ := b.AsAtom()
+		return aa == ba
 	// Cross-type: atom and string are interchangeable for equality.
 	case a.VType.Equal(engine.TAtom) && b.VType.Matches(engine.TString):
-		return a.AsAtom() == b.AsString()
+		aa, _ := a.AsAtom()
+		bs, _ := b.AsString()
+		return aa == bs
 	case a.VType.Matches(engine.TString) && b.VType.Equal(engine.TAtom):
-		return a.AsString() == b.AsAtom()
+		as, _ := a.AsString()
+		ba, _ := b.AsAtom()
+		return as == ba
 	default:
 		return a.String() == b.String()
 	}

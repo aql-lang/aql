@@ -19,7 +19,7 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
+	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,8 +31,9 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 99 {
+		t.Errorf("expected 99, got %d", vi)
 	}
 }
 
@@ -49,7 +50,7 @@ func TestTransformHandlerInject(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
+	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +59,9 @@ func TestTransformHandlerInject(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs, _ := v.AsString()
+	if vs != "Alice" {
+		t.Errorf("expected Alice, got %s", vs)
 	}
 }
 
@@ -78,14 +80,15 @@ func TestTransformHandlerNestedPath(t *testing.T) {
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{data, spec}, nil, nil, nil)
+	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("val")
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 42 {
+		t.Errorf("expected 42, got %d", vi)
 	}
 }
 
@@ -104,15 +107,18 @@ func TestValueToAnyRoundtrip(t *testing.T) {
 	}
 	m := back.AsMap()
 	name, _ := m.Get("name")
-	if name.AsString() != "Bob" {
-		t.Errorf("expected Bob, got %s", name.AsString())
+	ns, _ := name.AsString()
+	if ns != "Bob" {
+		t.Errorf("expected Bob, got %s", ns)
 	}
 	age, _ := m.Get("age")
-	if age.AsInteger() != 25 {
-		t.Errorf("expected 25, got %d", age.AsInteger())
+	ai, _ := age.AsInteger()
+	if ai != 25 {
+		t.Errorf("expected 25, got %d", ai)
 	}
 	active, _ := m.Get("active")
-	if !active.AsBoolean() {
+	ab, _ := active.AsBoolean()
+	if !ab {
 		t.Error("expected true")
 	}
 }
@@ -162,7 +168,8 @@ func TestAnyToValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.AsBoolean() {
+	vb, _ := v.AsBoolean()
+	if !vb {
 		t.Error("expected true")
 	}
 }
@@ -172,8 +179,9 @@ func TestAnyToValueInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 42 {
+		t.Errorf("expected 42, got %d", vi)
 	}
 }
 
@@ -182,8 +190,9 @@ func TestAnyToValueInt64(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 99 {
+		t.Errorf("expected 99, got %d", vi)
 	}
 }
 
@@ -206,17 +215,20 @@ func TestValueToAnyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := back.AsList()
+	list := back.AsList().Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
-	if list[0].AsInteger() != 1 {
-		t.Errorf("expected 1, got %d", list[0].AsInteger())
+	li0, _ := list[0].AsInteger()
+	if li0 != 1 {
+		t.Errorf("expected 1, got %d", li0)
 	}
-	if list[1].AsString() != "two" {
-		t.Errorf("expected two, got %s", list[1].AsString())
+	ls1, _ := list[1].AsString()
+	if ls1 != "two" {
+		t.Errorf("expected two, got %s", ls1)
 	}
-	if list[2].AsBoolean() {
+	lb2, _ := list[2].AsBoolean()
+	if lb2 {
 		t.Error("expected false")
 	}
 }

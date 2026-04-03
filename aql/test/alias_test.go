@@ -95,36 +95,36 @@ func TestAliasMod(t *testing.T) {
 
 func TestAliasAbs(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "abs",
-		defStep:   "def magnitude [abs]",
-		origSteps: []string{"-5 abs"},
+		name:      "math.abs",
+		defStep:   "def magnitude fn [[Integer] [Integer] [math.abs]]",
+		origSteps: []string{"-5 math.abs"},
 		aliaSteps: []string{"-5 magnitude"},
 	})
 }
 
 func TestAliasNegate(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "negate",
-		defStep:   "def neg [negate]",
-		origSteps: []string{"5 negate"},
+		name:      "math.negate",
+		defStep:   "def neg fn [[Integer] [Integer] [math.negate]]",
+		origSteps: []string{"5 math.negate"},
 		aliaSteps: []string{"5 neg"},
 	})
 }
 
 func TestAliasMin(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "min",
-		defStep:   "def smallest [min]",
-		origSteps: []string{"5 min 3"},
+		name:      "math.min",
+		defStep:   "def smallest fn [[Integer Integer] [Integer] [math.min]]",
+		origSteps: []string{"5 3 math.min"},
 		aliaSteps: []string{"5 smallest 3"},
 	})
 }
 
 func TestAliasMax(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "max",
-		defStep:   "def largest [max]",
-		origSteps: []string{"5 max 3"},
+		name:      "math.max",
+		defStep:   "def largest fn [[Integer Integer] [Integer] [math.max]]",
+		origSteps: []string{"5 3 math.max"},
 		aliaSteps: []string{"5 largest 3"},
 	})
 }
@@ -449,8 +449,8 @@ func TestAliasSetGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "set",
 		defStep:   "def myset [set]",
-		origSteps: []string{`42 set "x"`, `get "x"`},
-		aliaSteps: []string{`42 myset "x"`, `get "x"`},
+		origSteps: []string{`context set "x" 42 end context get "x"`},
+		aliaSteps: []string{`context myset "x" 42 end context get "x"`},
 	})
 }
 
@@ -458,8 +458,8 @@ func TestAliasGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "get",
 		defStep:   "def myget [get]",
-		origSteps: []string{`42 set "v"`, `get "v"`},
-		aliaSteps: []string{`42 set "v"`, `myget "v"`},
+		origSteps: []string{`context set "v" 42 end context get "v"`},
+		aliaSteps: []string{`context set "v" 42 end context myget "v"`},
 	})
 }
 
@@ -480,8 +480,8 @@ func TestAliasDblcall(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "dblcall",
 		defStep:   "def mydbl [dblcall]",
-		origSteps: []string{"5 [dup mul] dblcall"},
-		aliaSteps: []string{"5 [dup mul] mydbl"},
+		origSteps: []string{"[dup mul] 5 dblcall"},
+		aliaSteps: []string{"[dup mul] 5 mydbl"},
 	})
 }
 
@@ -554,8 +554,8 @@ func TestAliasGetpath(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "getpath",
 		defStep:   "def mygetpath [getpath]",
-		origSteps: []string{`{a:{b:42}} getpath "a.b"`},
-		aliaSteps: []string{`{a:{b:42}} mygetpath "a.b"`},
+		origSteps: []string{`getpath {a:{b:42}} "a.b"`},
+		aliaSteps: []string{`mygetpath {a:{b:42}} "a.b"`},
 	})
 }
 

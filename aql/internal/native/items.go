@@ -1,17 +1,19 @@
 package native
 
 import (
+	"fmt"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
 // itemsFunc returns the "items" native function definition.
-// items has suffix precedence and one signature:
+// items has forward precedence and one signature:
 //   - [any] — returns key-value pairs as a list of [key, value] lists
 func itemsFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "items",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny},
@@ -29,7 +31,11 @@ func itemsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engi
 
 	result := make([]engine.Value, len(pairs))
 	for i, pair := range pairs {
-		keyVal := engine.NewString(pair[0].(string))
+		keyStr, ok := pair[0].(string)
+		if !ok {
+			keyStr = fmt.Sprintf("%v", pair[0])
+		}
+		keyVal := engine.NewString(keyStr)
 		valVal, err := anyToValue(pair[1])
 		if err != nil {
 			valVal = engine.NewString("")

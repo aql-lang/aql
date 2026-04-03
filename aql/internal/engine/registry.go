@@ -9,42 +9,29 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-// Function groups all signatures for a named function.
-type Function struct {
-	Name             string
-	Signatures       []Signature
-	SuffixPrecedence bool // true = engine tries suffix-first; false = prefix-only
-}
-
-// TypeDef describes a named complex type in the type registry.
-// The Type field holds the full type path (e.g. Node/Map/Resource/Table).
-// The Constraint holds the type's structure — a record type, disjunct, etc.
-type TypeDef struct {
-	Type       Type  // full type path
-	Constraint Value // structural constraint (RecordTypeInfo, ChildTypeInfo, etc.)
-}
-
 // Registry maps function names to their definitions.
 type Registry struct {
-	funcs     map[string]*Function
-	Store     map[string]Value   // key-value store for set/get
-	DefStacks map[string][]Value // stacked bodies for def-defined words
-	Types     map[string]TypeDef // complex type registry keyed by full type path
-	FileOps   fileops.FileOps    // file operations for read/write words
-	Formats   map[string]Format  // format registry for read/write (keyed by name)
-	Output    io.Writer          // output writer for print/printstr and stdout
-	ErrOutput io.Writer          // error output writer for stderr
-	Input     io.Reader          // input reader for stdin
-	SQLite    *SQLiteStore       // in-memory SQLite store for table data
-	Modules        map[string]ModuleDesc    // child modules keyed by generated ID
-	moduleSeq      int                      // counter for generating module IDs
-	ParseFunc      func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
-	ctxStack       []map[string]Value // scoped context stack; top = current engine's context
-	argsStack      []Value            // stack of args lists for nested fn calls
-	KnownTypeParts map[string]bool    // set of all type path parts (for uniqueness enforcement)
-	Manager        any                // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache       map[string]any     // cached SDK instances keyed by spec name
-	BaseDir        string             // base directory for resolving relative file paths (set by loadFileModule)
+	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
+	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
+	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
+	Output            io.Writer                                          // output writer for print/printstr and stdout
+	ErrOutput         io.Writer                                          // error output writer for stderr
+	Input             io.Reader                                          // input reader for stdin
+	SQLite            *SQLiteStore                                       // in-memory SQLite store for table data
+	moduleSeq         int                                                // counter for generating module IDs
+	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
+	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
+	argsStack         []Value                                            // stack of args lists for nested fn calls
+	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
+	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
+	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
+	errs              []error                                            // registration errors accumulated during setup
+	ready             bool                                               // true after initial setup; triggers dynamic help generation
+	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
+	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
+	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 }
 
 // NewRegistry creates an empty registry.
@@ -63,17 +50,13 @@ func NewRegistry() (*Registry, error) {
 	}
 
 	r := &Registry{
-		funcs:          make(map[string]*Function),
-		Store:          make(map[string]Value),
 		DefStacks:      make(map[string][]Value),
-		Types:          make(map[string]TypeDef),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,
 		ErrOutput:      os.Stderr,
 		Input:          os.Stdin,
 		SQLite:         sqlStore,
-		Modules:        make(map[string]ModuleDesc),
 		KnownTypeParts: builtinTypeParts(),
 		SDKCache:       make(map[string]any),
 	}
@@ -95,17 +78,61 @@ func (r *Registry) SetFileOps(ops fileops.FileOps) {
 	}
 }
 
+// EffectiveFileOps returns the file operations to use based on __sys.fs.mem.
+// If mem is true, returns the in-memory file ops; otherwise the OS-backed default.
+func (r *Registry) EffectiveFileOps() fileops.FileOps {
+	store := r.ContextStore()
+	if store == nil {
+		return r.FileOps
+	}
+	sysVal, ok := store.Get("__sys")
+	if !ok {
+		return r.FileOps
+	}
+	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return r.FileOps
+	}
+	fsVal, ok := sysStore.Get("fs")
+	if !ok {
+		return r.FileOps
+	}
+	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return r.FileOps
+	}
+	memVal, ok := fsStore.Get("mem")
+	if !ok {
+		return r.FileOps
+	}
+	_as0, _ := memVal.AsBoolean()
+	if memVal.VType.Matches(TBoolean) && _as0 {
+		if r.MemOps == nil {
+			r.MemOps = fileops.NewMem()
+		}
+		return r.MemOps
+	}
+	return r.FileOps
+}
+
 // SetParseFunc sets the parser callback used by file-based import.
 func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 	r.ParseFunc = fn
 }
 
-// PushContext pushes a new context layer that is a shallow copy of parent.
-// Values are copied by reference (like Go's context.WithValue pattern).
-func (r *Registry) PushContext(parent map[string]Value) {
-	child := make(map[string]Value, len(parent))
-	for k, v := range parent {
-		child[k] = v
+// MarkReady signals that initial setup is complete. Subsequent Register
+// calls will trigger dynamic help example generation via OnRegisterHook.
+func (r *Registry) MarkReady() {
+	r.ready = true
+}
+
+// PushContext pushes a new context Store whose prototype is the parent.
+// Key resolution walks the prototype chain, enabling scope-like lookup.
+func (r *Registry) PushContext(parent *StoreInstanceInfo) {
+	child := &StoreInstanceInfo{
+		TypeName:  "Object/Store",
+		Data:      make(map[string]Value),
+		Prototype: parent,
 	}
 	r.ctxStack = append(r.ctxStack, child)
 }
@@ -117,47 +144,192 @@ func (r *Registry) PopContext() {
 	}
 }
 
-// Context returns the current (top) context map, or nil if no context is active.
+// Context returns the current (top) context as a map for handler compatibility.
+// Returns nil if no context is active.
 func (r *Registry) Context() map[string]Value {
+	si := r.ContextStore()
+	if si == nil {
+		return nil
+	}
+	return si.Data
+}
+
+// ContextStore returns the current (top) context Store, or nil if no context is active.
+func (r *Registry) ContextStore() *StoreInstanceInfo {
 	if len(r.ctxStack) == 0 {
 		return nil
 	}
 	return r.ctxStack[len(r.ctxStack)-1]
 }
 
-// Register adds one or more signatures to a named function with suffix precedence.
+// UpdateCtxStoreChain updates ALL ctxStack entries affected by a COW operation.
+// origRoot is the original Store that was COW'd (the prototype of the new
+// root). newRoot is the COW'd replacement. For each ctxStack entry whose
+// prototype chain passes through origRoot, replace origRoot with newRoot
+// in that chain.
+func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
+	for i := 0; i < len(r.ctxStack); i++ {
+		entry := r.ctxStack[i]
+		// Direct match: this ctxStack entry IS the original root.
+		if entry == origRoot {
+			r.ctxStack[i] = newRoot
+			continue
+		}
+		// Check if the entry's prototype chain passes through origRoot.
+		// If so, rebuild the chain with newRoot substituted.
+		for p := entry; p != nil; p = p.Prototype {
+			if p.Prototype == origRoot {
+				p.Prototype = newRoot
+				break
+			}
+		}
+	}
+}
+
+// Register adds one or more signatures to a named function with forward precedence.
+// Signatures are stored in a FnDefInfo entry in DefStacks.
 func (r *Registry) Register(name string, sigs ...Signature) {
-	fn, ok := r.funcs[name]
-	if !ok {
-		fn = &Function{Name: name, SuffixPrecedence: true}
-		r.funcs[name] = fn
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+			return
+		}
 	}
-	fn.Signatures = append(fn.Signatures, sigs...)
+	r.upsertFnDef(name, true, sigs...)
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
+	}
 }
 
-// RegisterPrefixOnly adds signatures to a named function without suffix precedence.
-func (r *Registry) RegisterPrefixOnly(name string, sigs ...Signature) {
-	fn, ok := r.funcs[name]
-	if !ok {
-		fn = &Function{Name: name, SuffixPrecedence: false}
-		r.funcs[name] = fn
+// RegisterStackOnly adds signatures to a named function without forward precedence.
+// Signatures are stored in a FnDefInfo entry in DefStacks.
+func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
+	for _, sig := range sigs {
+		if len(sig.Args) > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+			return
+		}
 	}
-	fn.Signatures = append(fn.Signatures, sigs...)
+	r.upsertFnDef(name, false, sigs...)
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
+	}
 }
 
-// Lookup returns the Function for a name, or nil.
-func (r *Registry) Lookup(name string) *Function {
-	return r.funcs[name]
+// upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
+// and appends the given compiled signatures. If the top entry is already a
+// FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
+// is pushed.
+func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
+	stack := r.DefStacks[name]
+	// If the top of the stack is already a FnDefInfo, update it in place.
+	if len(stack) > 0 {
+		if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+			fnDef.Signatures = append(fnDef.Signatures, sigs...)
+			SortSignatures(fnDef.Signatures)
+			fnDef.ForwardPrecedence = forwardPrec
+			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
+			stack[len(stack)-1].Data = fnDef
+			return
+		}
+	}
+	// No existing FnDefInfo on top — push a new one.
+	fnDef := FnDefInfo{
+		Name:              name,
+		Signatures:        append([]Signature(nil), sigs...),
+		ForwardPrecedence: forwardPrec,
+	}
+	SortSignatures(fnDef.Signatures)
+	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
+	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+}
+
+// calcMaxForwardArgs returns the maximum number of forward args needed
+// across all signatures. For sigs with a barrier, only positions before
+// the barrier count. This tells the engine how far ahead to scan and
+// pre-evaluate paren expressions before signature matching.
+func calcMaxForwardArgs(sigs []Signature) int {
+	max := 0
+	for i := range sigs {
+		n := len(sigs[i].Args)
+		if sigs[i].BarrierPos > 0 && sigs[i].BarrierPos < n {
+			n = sigs[i].BarrierPos
+		}
+		if n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// Lookup returns the top FnDefInfo for a name from DefStacks, or nil.
+func (r *Registry) Lookup(name string) *FnDefInfo {
+	stack := r.DefStacks[name]
+	for i := len(stack) - 1; i >= 0; i-- {
+		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+			return &fnDef
+		}
+	}
+	return nil
 }
 
 // Match finds the best matching signature for a function name given the
 // resolved stack state and word modifiers.
-func (r *Registry) Match(name string, stack []Value, modifiers WordInfo) *MatchResult {
-	fn := r.funcs[name]
-	if fn == nil {
+func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *MatchResult {
+	fnDef := r.Lookup(name)
+	if fnDef == nil {
 		return nil
 	}
-	return MatchSignature(fn.Signatures, stack, modifiers)
+	return MatchSignature(fnDef.Signatures, resolved, modifiers)
+}
+
+// clearSigsKeepFallback resets the Signatures on the top FnDefInfo in
+// DefStacks[name] to only the Fallback entries (if any). Used during
+// rebuild after overlap filtering or undef.
+func (r *Registry) clearSigsKeepFallback(name string) {
+	stack := r.DefStacks[name]
+	if len(stack) == 0 {
+		return
+	}
+	if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+		fnDef.Signatures = KeepFallback(fnDef.Signatures)
+		stack[len(stack)-1].Data = fnDef
+	}
+}
+
+// InitRootContext initializes the root context Store with the __sys key.
+// The __sys value is a Store/System instance containing system configuration.
+// All containers at every depth are Stores.
+func (r *Registry) InitRootContext() {
+	root := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+
+	// Create the System store.
+	sysStore := &StoreInstanceInfo{
+		TypeName: "Object/Store/System",
+		Data:     make(map[string]Value),
+	}
+
+	// fs: a Store with {mem: false, impl: None}
+	fsStore := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	fsStore.Set("mem", NewBoolean(false))
+	fsStore.Set("impl", NewTypeLiteral(TNone))
+	sysStore.Set("fs", NewStoreValue(fsStore))
+
+	// __val: a Store for user-defined values
+	valStore := &StoreInstanceInfo{
+		TypeName: "Object/Store",
+		Data:     make(map[string]Value),
+	}
+	sysStore.Set("__val", NewStoreValue(valStore))
+
+	root.Set("__sys", NewStoreValue(sysStore))
+	r.ctxStack = append(r.ctxStack, root)
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives.
@@ -166,11 +338,23 @@ func DefaultRegistry() (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	registerBuiltins(r)
+	registerCoreWords(r)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	r.InitRootContext()
 	return r, nil
 }
 
-func registerBuiltins(r *Registry) {
+// Err returns the first registration error, or nil if none occurred.
+func (r *Registry) Err() error {
+	if len(r.errs) == 0 {
+		return nil
+	}
+	return r.errs[0]
+}
+
+func registerCoreWords(r *Registry) {
 	// String
 	registerUpper(r)
 	registerLower(r)
@@ -180,11 +364,11 @@ func registerBuiltins(r *Registry) {
 	registerContains(r)
 	registerIndexOf(r)
 	registerReplace(r)
-	registerSlice(r)
 	registerChangeCase(r)
 	registerNormalize(r)
 	registerRepeat(r)
 	registerPad(r)
+	registerSlice(r)
 	registerMatch(r)
 	registerEscape(r)
 
@@ -205,45 +389,16 @@ func registerBuiltins(r *Registry) {
 	registerRoll(r)
 	registerStackCollect(r)
 
-	// Math: arithmetic
+	// Math: basic arithmetic (always available)
 	registerAdd(r)
 	registerSub(r)
 	registerMul(r)
 	registerDiv(r)
 	registerMod(r)
-	registerAbs(r)
-	registerNegate(r)
-	registerMin(r)
-	registerMax(r)
 	registerPow(r)
-	registerSign(r)
 
-	// Math: rounding
-	registerCeil(r)
-	registerFloor(r)
-	registerRound(r)
-	registerTrunc(r)
-
-	// Math: roots, exp/log
-	registerSqrt(r)
-	registerCbrt(r)
-	registerExp(r)
-	registerLog(r)
-	registerLog2(r)
-	registerLog10(r)
-
-	// Math: trigonometry
-	registerSin(r)
-	registerCos(r)
-	registerTan(r)
-	registerAsin(r)
-	registerAcos(r)
-	registerAtan(r)
-	registerAtan2(r)
-	registerHypot(r)
-
-	// Math: constants
-	registerMathConstants(r)
+	// Math: extended operations are in the "aql:math" native module.
+	// Use: "aql:math" import
 
 	// Boolean
 	registerOr(r)
@@ -293,16 +448,16 @@ func registerBuiltins(r *Registry) {
 	registerQuote(r)
 
 	// Accessors
-	registerDot(r)
-	registerDotr(r)
+	registerGetr(r)
 
 	// I/O
 	registerFileIO(r)
+	registerFolder(r)
 	registerPrint(r)
 	registerTrace(r)
 
-	// Query
-	registerQuery(r)
+	// Query (temporarily disabled — precedence removal)
+	// registerQuery(r)
 
 	// Unify
 	registerUnify(r)
@@ -310,61 +465,127 @@ func registerBuiltins(r *Registry) {
 	// Module
 	registerModule(r)
 
+	// Array
+	registerIota(r)
+	registerShape(r)
+	registerRank(r)
+	registerLength(r)
+	registerReshape(r)
+	registerArrFlatten(r)
+	registerArrTranspose(r)
+	registerReverse(r)
+	registerTake(r)
+	registerShed(r)
+	registerWhere(r)
+	registerUnique(r)
+	registerGrade(r)
+	registerAt(r)
+	registerSortby(r)
+	registerMember(r)
+	registerArrIndexof(r)
+	registerGroup(r)
+	registerReplicate(r)
+	registerExpand(r)
+	registerWindow(r)
+	registerPairs(r)
+
+	// Array higher-order
+	registerEach(r)
+	registerFold(r)
+	registerScan(r)
+	registerOuter(r)
+	registerInner(r)
+
 	// Help
 	registerHelp(r)
 }
 
+// IsNativeModLoaded returns true if the named native module has already been loaded.
+func (r *Registry) IsNativeModLoaded(name string) bool {
+	if r.loadedNativeMods == nil {
+		return false
+	}
+	return r.loadedNativeMods[name]
+}
+
+// MarkNativeModLoaded records that the named native module has been loaded.
+func (r *Registry) MarkNativeModLoaded(name string) {
+	if r.loadedNativeMods == nil {
+		r.loadedNativeMods = make(map[string]bool)
+	}
+	r.loadedNativeMods[name] = true
+}
+
 // --- Shared helpers used by multiple builtin files ---
 
+// RegisterBinaryIntOp registers a binary integer operation with a single
+// signature Args:[int, int] and forward precedence.
+func RegisterBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
+	registerBinaryIntOp(r, name, op)
+}
+
+// RegisterBinaryNumOp registers a binary numeric operation with three
+// overloads: [decimal, decimal], [number, decimal], and [decimal, number].
+func RegisterBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
+	registerBinaryNumOp(r, name, op)
+}
+
+// RegisterUnaryNumOp registers a unary numeric operation with two overloads:
+// [integer] -> [decimal] and [decimal] -> [decimal].
+func RegisterUnaryNumOp(r *Registry, name string, op func(float64) float64) {
+	registerUnaryNumOp(r, name, op)
+}
+
 // registerBinaryIntOp registers a binary integer operation with a single
-// signature Args:[int, int] and suffix precedence.
-func registerBinaryIntOp(r *Registry, name string, prec int, op func(a, b int64) (int64, error)) {
-	handler := func(args []Value) ([]Value, error) {
-		result, err := op(args[0].AsInteger(), args[1].AsInteger())
+// signature Args:[int, int] and forward precedence.
+func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as2, _ := args[0].AsInteger()
+		_as1, _ := args[1].AsInteger()
+		result, err := op(_as2, _as1)
 		if err != nil {
 			return nil, err
 		}
 		return []Value{NewInteger(result)}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TInteger, TInteger},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TInteger, TInteger},
+		Handler: handler,
 	})
 }
 
 // registerBinaryNumOp registers a binary numeric operation with three
 // overloads: [decimal, decimal], [number, decimal], and [decimal, number].
-func registerBinaryNumOp(r *Registry, name string, prec int, op func(a, b float64) (float64, error)) {
-	handler := func(args []Value) ([]Value, error) {
-		result, err := op(args[0].AsNumber(), args[1].AsNumber())
+func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float64, error)) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as4, _ := args[0].AsNumber()
+		_as3, _ := args[1].AsNumber()
+		result, err := op(_as4, _as3)
 		if err != nil {
 			return nil, err
 		}
 		return []Value{NewDecimal(result)}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TDecimal, TDecimal},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TDecimal, TDecimal},
+		Handler: handler,
 	})
 	r.Register(name, Signature{
-		Args:       []Type{TNumber, TDecimal},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TNumber, TDecimal},
+		Handler: handler,
 	})
 	r.Register(name, Signature{
-		Args:       []Type{TDecimal, TNumber},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TDecimal, TNumber},
+		Handler: handler,
 	})
 }
 
 // registerUnaryNumOp registers a unary numeric operation with two overloads:
 // [integer] -> [decimal] and [decimal] -> [decimal].
 func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
-	handler := func(args []Value) ([]Value, error) {
-		return []Value{NewDecimal(op(args[0].AsNumber()))}, nil
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as5, _ := args[0].AsNumber()
+		return []Value{NewDecimal(op(_as5))}, nil
 	}
 	r.Register(name, Signature{
 		Args:    []Type{TInteger},
@@ -377,50 +598,91 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 }
 
 // registerBinaryBoolOp registers a binary boolean operation with a single
-// signature Args:[boolean, boolean] and suffix precedence.
-func registerBinaryBoolOp(r *Registry, name string, prec int, op func(a, b bool) bool) {
-	handler := func(args []Value) ([]Value, error) {
-		return []Value{NewBoolean(op(args[0].AsBoolean(), args[1].AsBoolean()))}, nil
+// signature Args:[boolean, boolean] and forward precedence.
+func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		_as7, _ := args[0].AsBoolean()
+		_as6, _ := args[1].AsBoolean()
+		return []Value{NewBoolean(op(_as7, _as6))}, nil
 	}
 	r.Register(name, Signature{
-		Args:       []Type{TBoolean, TBoolean},
-		Precedence: prec,
-		Handler:    handler,
+		Args:    []Type{TBoolean, TBoolean},
+		Handler: handler,
 	})
 }
 
 // valToString converts any scalar Value to its string representation.
 func valToString(v Value) string {
+	if v.Data == nil && !v.VType.Equal(TNone) {
+		return v.VType.String()
+	}
 	switch {
 	case v.VType.Matches(TString):
-		return v.AsString()
+		_as8, _ := v.AsString()
+		return _as8
 	case v.IsAtom():
-		return v.AsAtom()
+		_as9, _ := v.AsAtom()
+		return _as9
 	case v.VType.Matches(TDecimal):
-		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
+		_as10, _ := v.AsDecimal()
+		return strconv.FormatFloat(_as10, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
-		return strconv.FormatInt(v.AsInteger(), 10)
+		_as11, _ := v.AsInteger()
+		return strconv.FormatInt(_as11, 10)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as12, _ := v.AsBoolean()
+		if _as12 {
 			return "true"
 		}
 		return "false"
+	case v.IsPath():
+		_as13, _ := v.AsPath()
+		return _as13.String()
+	case v.IsWord():
+		_as14, _ := v.AsWord()
+		return _as14.Name
 	default:
 		return v.String()
 	}
 }
 
+// contextStoreLookup looks up a key in the registry's context store,
+// walking the prototype chain. Returns the value and true if found.
+func contextStoreLookup(r *Registry, key string) (Value, bool) {
+	store := r.ContextStore()
+	if store == nil {
+		return Value{}, false
+	}
+	return store.Get(key)
+}
+
+// ContextSet stores a key-value pair in the root context store.
+// Convenience method for programmatic setup (e.g. tests, query setup).
+func (r *Registry) ContextSet(key string, val Value) {
+	store := r.ContextStore()
+	if store == nil {
+		r.InitRootContext()
+		store = r.ContextStore()
+	}
+	store.Set(key, val)
+}
+
 // storeKey converts a Value to a string key for the store.
 func storeKey(v Value) string {
+	if v.Data == nil {
+		return v.VType.String()
+	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as15, _ := v.AsWord()
+		return _as15.Name
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as16, _ := v.AsString()
+		return _as16
 	}
 	if v.IsAtom() {
-		return v.AsAtom()
+		_as17, _ := v.AsAtom()
+		return _as17
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
-

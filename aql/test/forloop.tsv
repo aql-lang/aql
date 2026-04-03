@@ -143,13 +143,14 @@ for 2 [for 4 [(if [i eq 1] [continue]) i]]	0 2 3 0 2 3
 
 # === For + complex body expressions ===
 # Multiple expressions per iteration
+# Forward-first: stack fully satisfies add [int,int] before forward collection of 10
 for 3 [i i add 10]	0 10 1 11 2 12
 
 # Arithmetic chain in body
 for 4 [i mul 3 add 1]	1 4 7 10
 
 # === For + type operations ===
-for 3 [i typeof]	Atom
+for 3 [i typeof]	Number Number Number
 
 # === For result used in further computation ===
 # Results from for feed into subsequent words
@@ -168,13 +169,13 @@ for 3 [(i add 1)]	1 2 3
 for 4 [(i mul i)]	0 1 4 9
 for 3 [(i mul 2 add 1)]	1 3 5
 
-# === For + abs/negate ===
-for 3 [negate i]	0 -1 -2
-for [3,0,-1] [abs i]	3 2 1
+# === For + math.abs/math.negate ===
+for 3 [i math.negate]	0 -1 -2
+for [3,0,-1] [i math.abs]	3 2 1
 
-# === For + min/max ===
-for 5 [i min 2]	0 1 2 2 2
-for 5 [i max 2]	2 2 2 3 4
+# === For + math.min/math.max ===
+for 5 [i 2 math.min]	0 1 2 2 2
+for 5 [i 2 math.max]	2 2 2 3 4
 
 # === For + conditional chains ===
 for 6 [(if [i lt 2] ["lo"] (if [i lt 4] ["mid"] ["hi"]))]	'lo' 'lo' 'mid' 'mid' 'hi' 'hi'
@@ -187,7 +188,7 @@ for 3 [42]	42 42 42
 for 4 ["x"]	'x' 'x' 'x' 'x'
 for 2 [true]	true true
 
-# === For with body that uses both prefix and suffix ===
+# === For with body that uses both prefix and forward ===
 for 3 [i add 1]	1 2 3
 for 3 [1 add i]	1 2 3
 

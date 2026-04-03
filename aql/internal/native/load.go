@@ -7,7 +7,7 @@ import (
 )
 
 // loadFunc returns the "load" native function definition.
-// load has suffix precedence and three signatures:
+// load has forward precedence and three signatures:
 //   - [map(kind:"api")] — loads a single entity via the SDK
 //   - [table, map]      — finds a single record by matching the map's key-value pairs (typically {id:"..."})
 //   - [map, map]        — record type + filter: returns empty map
@@ -18,7 +18,7 @@ func loadFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "load",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{
@@ -102,7 +102,7 @@ func loadRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // loadHandler finds and returns a single record matching the filter.
 // Returns an error if no matching record is found.
 func loadHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	filter := args[1].AsMap()
 
 	for _, row := range rows {

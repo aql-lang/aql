@@ -13,7 +13,7 @@ import (
 //   - maps/lists: printed as JSON-like text
 //   - tables: printed as a formatted table with column headers
 func registerPrint(r *Registry) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		out := formatForPrint(v)
 		fmt.Fprintln(r.Output, out)
@@ -27,7 +27,7 @@ func registerPrint(r *Registry) {
 		},
 	)
 
-	handlerStr := func(args []Value) ([]Value, error) {
+	handlerStr := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		out := formatForPrint(v)
 		fmt.Fprint(r.Output, out)
@@ -44,6 +44,14 @@ func registerPrint(r *Registry) {
 
 // formatForPrint returns the print representation of a value.
 func formatForPrint(v Value) string {
+	// Type literals (Data==nil) — print the type name; None prints "null".
+	if v.Data == nil {
+		if v.VType.Equal(TNone) {
+			return "null"
+		}
+		return v.VType.String()
+	}
+
 	// Table: formatted with headers and aligned columns.
 	if v.IsTableType() {
 		if td, ok := v.Data.(TableData); ok {
@@ -60,7 +68,13 @@ func formatForPrint(v Value) string {
 
 	// String: printed as-is (no quotes).
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as0, _ := v.AsString()
+		return _as0
+	}
+
+	// Options type: use String() representation.
+	if v.IsOptionsType() {
+		return v.String()
 	}
 
 	// Map: JSON-like output.
@@ -69,7 +83,7 @@ func formatForPrint(v Value) string {
 	}
 
 	// List: JSON-like output.
-	if v.VType.Equal(TList) {
+	if v.VType.Equal(TList) && v.Data != nil {
 		return formatListJSON(v)
 	}
 
@@ -94,8 +108,8 @@ func formatMapJSON(v Value) string {
 // formatListJSON formats a list value as a JSON-like string.
 func formatListJSON(v Value) string {
 	elems := v.AsList()
-	parts := make([]string, len(elems))
-	for i, e := range elems {
+	parts := make([]string, elems.Len())
+	for i, e := range elems.Slice() {
 		parts[i] = formatValueJSON(e)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
@@ -103,13 +117,22 @@ func formatListJSON(v Value) string {
 
 // formatValueJSON formats any value for JSON-like output.
 func formatValueJSON(v Value) string {
+	if v.Data == nil {
+		if v.VType.Equal(TNone) {
+			return "null"
+		}
+		return v.VType.String()
+	}
 	switch {
 	case v.VType.Matches(TString):
-		return fmt.Sprintf("%q", v.AsString())
+		_as1, _ := v.AsString()
+		return fmt.Sprintf("%q", _as1)
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.AsInteger())
+		_as2, _ := v.AsInteger()
+		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as3, _ := v.AsBoolean()
+		if _as3 {
 			return "true"
 		}
 		return "false"

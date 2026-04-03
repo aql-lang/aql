@@ -7,7 +7,7 @@ import (
 )
 
 // createFunc returns the "create" native function definition.
-// create has suffix precedence and three signatures:
+// create has forward precedence and three signatures:
 //   - [map(kind:"api")] — creates an entity via the SDK
 //   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
 //   - [map, map]        — record type + record: returns empty table
@@ -18,7 +18,7 @@ func createFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "create",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{
@@ -103,14 +103,17 @@ func createRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // The map must contain an "id" field. If a record with the same id already
 // exists, an error is returned.
 func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	rec := args[1].AsMap()
 
 	idVal, ok := rec.Get("id")
 	if !ok {
 		return nil, fmt.Errorf("create: record must contain an \"id\" field")
 	}
-	id := idVal.AsString()
+	id, err := idVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("create: id: %w", err)
+	}
 
 	// Check for duplicate id.
 	for _, row := range rows {
@@ -118,8 +121,11 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			continue
 		}
 		m := row.AsMap()
-		if existing, ok := m.Get("id"); ok && existing.AsString() == id {
-			return nil, fmt.Errorf("create: record with id %q already exists", id)
+		if existing, ok := m.Get("id"); ok {
+			existingStr, _ := existing.AsString()
+			if existingStr == id {
+				return nil, fmt.Errorf("create: record with id %q already exists", id)
+			}
 		}
 	}
 

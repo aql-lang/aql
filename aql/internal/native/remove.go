@@ -7,7 +7,7 @@ import (
 )
 
 // removeFunc returns the "remove" native function definition.
-// remove has suffix precedence and three signatures:
+// remove has forward precedence and three signatures:
 //   - [map(kind:"api")] — removes an entity via the SDK
 //   - [table, map]      — removes the record whose "id" matches the map's "id" field
 //   - [map, map]        — record type + filter: returns empty table
@@ -18,7 +18,7 @@ func removeFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "remove",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{
@@ -102,14 +102,17 @@ func removeRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // removeHandler finds a record by its "id" field and removes it from the table.
 // Returns the updated table. The map must contain an "id" field.
 func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	filter := args[1].AsMap()
 
 	idVal, ok := filter.Get("id")
 	if !ok {
 		return nil, fmt.Errorf("remove: filter must contain an \"id\" field")
 	}
-	id := idVal.AsString()
+	id, err := idVal.AsString()
+	if err != nil {
+		return nil, err
+	}
 
 	found := false
 	var result []engine.Value
@@ -120,9 +123,12 @@ func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		}
 		rec := row.AsMap()
 		existing, ok := rec.Get("id")
-		if ok && existing.AsString() == id {
-			found = true
-			continue // skip this record
+		if ok {
+			existingStr, _ := existing.AsString()
+			if existingStr == id {
+				found = true
+				continue // skip this record
+			}
 		}
 		result = append(result, row)
 	}

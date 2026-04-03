@@ -22,7 +22,7 @@ const defaultFetchTimeout = 30 * time.Second
 func fetchFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "fetch",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TString, engine.TMap},
@@ -52,6 +52,9 @@ func fetchStringHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // The URL is merged into the options map as the "url" field.
 func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	opts := args[1].AsMap()
+	if opts == nil {
+		return nil, fmt.Errorf("fetch: expected map for options, got nil")
+	}
 	reqOM := engine.NewOrderedMap()
 	reqOM.Set("url", args[0])
 	// Copy options into request map (url from first arg takes precedence).
@@ -68,7 +71,11 @@ func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // fetchMapHandler handles fetch with a full request map.
 // The map must contain a "url" field.
 func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	return doFetch(args[0].AsMap())
+	m := args[0].AsMap()
+	if m == nil {
+		return nil, fmt.Errorf("fetch: expected map argument, got nil")
+	}
+	return doFetch(m)
 }
 
 // doFetch performs a synchronous HTTP request from the given request map
@@ -80,24 +87,35 @@ func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 //   - headers (map, optional) — request headers
 //   - body    (string, optional) — request body
 //   - timeout (integer, optional, default 30000) — timeout in milliseconds
-func doFetch(reqOM *engine.OrderedMap) ([]engine.Value, error) {
+func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
 		return nil, fmt.Errorf("fetch: missing required \"url\" field")
 	}
-	urlStr := urlVal.AsString()
+	urlStr, err := urlVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("fetch: url: %w", err)
+	}
 
 	// Extract method (default GET).
 	method := "GET"
 	if mv, ok := reqOM.Get("method"); ok {
-		method = strings.ToUpper(mv.AsString())
+		mvStr, err := mv.AsString()
+		if err != nil {
+			return nil, fmt.Errorf("fetch: method: %w", err)
+		}
+		method = strings.ToUpper(mvStr)
 	}
 
 	// Extract body.
 	var bodyReader io.Reader
 	if bv, ok := reqOM.Get("body"); ok {
-		bodyReader = strings.NewReader(bv.AsString())
+		bvStr, err := bv.AsString()
+		if err != nil {
+			return nil, fmt.Errorf("fetch: body: %w", err)
+		}
+		bodyReader = strings.NewReader(bvStr)
 	}
 
 	// Build http.Request.
@@ -111,14 +129,22 @@ func doFetch(reqOM *engine.OrderedMap) ([]engine.Value, error) {
 		hm := hv.AsMap()
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)
-			req.Header.Set(key, val.AsString())
+			valStr, err := val.AsString()
+			if err != nil {
+				return nil, fmt.Errorf("fetch: header %q: %w", key, err)
+			}
+			req.Header.Set(key, valStr)
 		}
 	}
 
 	// Timeout.
 	timeout := defaultFetchTimeout
 	if tv, ok := reqOM.Get("timeout"); ok {
-		timeout = time.Duration(tv.AsInteger()) * time.Millisecond
+		tvInt, err := tv.AsInteger()
+		if err != nil {
+			return nil, fmt.Errorf("fetch: timeout: %w", err)
+		}
+		timeout = time.Duration(tvInt) * time.Millisecond
 	}
 
 	// Execute request.

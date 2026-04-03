@@ -25,7 +25,7 @@ type SetOp struct {
 // (where, order, limit), the QueryBuilder collects all clauses and
 // executes a single combined query when materialized.
 type QueryBuilder struct {
-	Source   TableData  // the source table data
+	Source   TableData // the source table data
 	Registry *Registry // needed for SQLite access during materialization
 	Where    string    // WHERE condition (without keyword)
 	OrderBy  string    // ORDER BY clause (without keyword)
@@ -44,8 +44,8 @@ func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 	return QueryBuilder{
 		Source:   td,
 		Registry: r,
-		Limit:   -1,
-		Offset:  -1,
+		Limit:    -1,
+		Offset:   -1,
 	}
 }
 
@@ -164,8 +164,8 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if qb.Registry.SQLite.HasTable(j.Table) {
 			continue
 		}
-		// Look up the table in the store and load it.
-		val, ok := qb.Registry.Store[j.Table]
+		// Look up the table in the context store and load it.
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
 		}
@@ -197,7 +197,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	}
 	// Add joined table fields.
 	for _, j := range qb.Joins {
-		val, ok := qb.Registry.Store[j.Table]
+		val, ok := contextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			// Try the original name if it was remapped to a temp table.
 			continue
@@ -356,16 +356,16 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 // except, cast, and aggregate words.
 func registerQuery(r *Registry) {
 	// star: [] -> [atom("*")]
-	r.RegisterPrefixOnly("star", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+	r.RegisterStackOnly("star", Signature{
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewAtom("*")}, nil
 		},
 	})
 
 	// from: [atom] -> [query-builder]
-	fromHandler := func(args []Value) ([]Value, error) {
-		name := args[0].AsAtom()
-		val, ok := r.Store[name]
+	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		name, _ := args[0].AsAtom()
+		val, ok := contextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
 		}
@@ -389,11 +389,11 @@ func registerQuery(r *Registry) {
 		},
 	)
 
-	// as: [table/query(prefix), atom(suffix)] -> [query-builder with alias]
+	// as: [table/query(prefix), atom(forward)] -> [query-builder with alias]
 	// Usage: from people as p
-	asHandler := func(args []Value) ([]Value, error) {
+	asHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		alias := args[1].AsAtom()
+		alias, _ := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -405,39 +405,42 @@ func registerQuery(r *Registry) {
 
 	r.Register("as",
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Precedence: 2,
-			Handler:    asHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: asHandler,
 		},
 	)
 
 	// select: [list, atom] -> [table]  (select * from ...)
 	// select: [list, list] -> [table]  (select [a, b] from ...)
 	// Infix star handler: "from products select star" → args=[table, star]
-	selectStarInfixHandler := func(args []Value) ([]Value, error) {
+	selectStarInfixHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colSpec := args[1]
 
-		if colSpec.AsAtom() != "*" {
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
+		_as0, _ := colSpec.AsAtom()
+		if _as0 != "*" {
+			_as1, _ := colSpec.AsAtom()
+			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as1)
 		}
 
 		return doSelect(r, nil, table)
 	}
 
 	// Suffix star handler: "select star from products" → args=[star, table]
-	selectStarSuffixHandler := func(args []Value) ([]Value, error) {
+	selectStarForwardHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		colSpec := args[0]
 		table := args[1]
 
-		if colSpec.AsAtom() != "*" {
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", colSpec.AsAtom())
+		_as2, _ := colSpec.AsAtom()
+		if _as2 != "*" {
+			_as3, _ := colSpec.AsAtom()
+			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as3)
 		}
 
 		return doSelect(r, nil, table)
 	}
 
-	selectColsHandler := func(args []Value) ([]Value, error) {
+	selectColsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		colList := args[0]
 		table := args[1]
 
@@ -458,25 +461,22 @@ func registerQuery(r *Registry) {
 	r.Register("select",
 		// Suffix: "select star from ..." → [TAtom, TList]
 		Signature{
-			Args:       []Type{TAtom, TList},
-			Precedence: 1,
-			Handler:    selectStarSuffixHandler,
+			Args:    []Type{TAtom, TList},
+			Handler: selectStarForwardHandler,
 		},
 		// Infix: "from ... select star" → [TList, TAtom]
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Precedence: 1,
-			Handler:    selectStarInfixHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: selectStarInfixHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 1,
-			Handler:    selectColsHandler,
+			Args:    []Type{TList, TList},
+			Handler: selectColsHandler,
 		},
 	)
 
-	// where: [condition(suffix), table/query(prefix)] -> [query-builder]
-	whereHandler := func(args []Value) ([]Value, error) {
+	// where: [condition(forward), table/query(prefix)] -> [query-builder]
+	whereHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -501,14 +501,13 @@ func registerQuery(r *Registry) {
 
 	r.Register("where",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    whereHandler,
+			Args:    []Type{TList, TList},
+			Handler: whereHandler,
 		},
 	)
 
-	// order: [columns(suffix), table/query(prefix)] -> [query-builder]
-	orderListHandler := func(args []Value) ([]Value, error) {
+	// order: [columns(forward), table/query(prefix)] -> [query-builder]
+	orderListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
@@ -525,7 +524,7 @@ func registerQuery(r *Registry) {
 		return []Value{newValue(TList, qb)}, nil
 	}
 
-	orderAtomHandler := func(args []Value) ([]Value, error) {
+	orderAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		col := args[1]
 
@@ -533,20 +532,19 @@ func registerQuery(r *Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("order: %w", err)
 		}
-		qb.OrderBy = quoteIdent(col.AsAtom())
+		_as4, _ := col.AsAtom()
+		qb.OrderBy = quoteIdent(_as4)
 		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("order",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    orderListHandler,
+			Args:    []Type{TList, TList},
+			Handler: orderListHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Precedence: 2,
-			Handler:    orderAtomHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: orderAtomHandler,
 		},
 	)
 
@@ -554,22 +552,22 @@ func registerQuery(r *Registry) {
 	r.Register("by",
 		Signature{
 			Args: []Type{TAtom},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewList(args)}, nil
 			},
 		},
 		Signature{
 			Args: []Type{TList},
-			Handler: func(args []Value) ([]Value, error) {
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return args, nil
 			},
 		},
 	)
 
-	// limit: [table/query(prefix), integer(suffix)] -> [query-builder]
-	limitHandler := func(args []Value) ([]Value, error) {
+	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
+	limitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n := args[1].AsInteger()
+		n, _ := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -581,16 +579,15 @@ func registerQuery(r *Registry) {
 
 	r.Register("limit",
 		Signature{
-			Args:       []Type{TList, TInteger},
-			Precedence: 2,
-			Handler:    limitHandler,
+			Args:    []Type{TList, TInteger},
+			Handler: limitHandler,
 		},
 	)
 
-	// offset: [table/query(prefix), integer(suffix)] -> [query-builder]
-	offsetHandler := func(args []Value) ([]Value, error) {
+	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
+	offsetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n := args[1].AsInteger()
+		n, _ := args[1].AsInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -602,14 +599,13 @@ func registerQuery(r *Registry) {
 
 	r.Register("offset",
 		Signature{
-			Args:       []Type{TList, TInteger},
-			Precedence: 2,
-			Handler:    offsetHandler,
+			Args:    []Type{TList, TInteger},
+			Handler: offsetHandler,
 		},
 	)
 
 	// distinct: [table/query(prefix)] -> [query-builder]
-	distinctHandler := func(args []Value) ([]Value, error) {
+	distinctHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 
 		qb, err := toQueryBuilder(r, table)
@@ -622,17 +618,16 @@ func registerQuery(r *Registry) {
 
 	r.Register("distinct",
 		Signature{
-			Args:       []Type{TList},
-			Precedence: 2,
-			Handler:    distinctHandler,
+			Args:    []Type{TList},
+			Handler: distinctHandler,
 		},
 	)
 
-	// group: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// group: [columns(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from sales group by [region]
 	//        from sales group by [region product]
 	//        from sales group [region]
-	groupListHandler := func(args []Value) ([]Value, error) {
+	groupListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
@@ -649,7 +644,7 @@ func registerQuery(r *Registry) {
 		return []Value{newValue(TList, qb)}, nil
 	}
 
-	groupAtomHandler := func(args []Value) ([]Value, error) {
+	groupAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		col := args[1]
 
@@ -657,26 +652,25 @@ func registerQuery(r *Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("group: %w", err)
 		}
-		qb.GroupBy = quoteIdent(col.AsAtom())
+		_as5, _ := col.AsAtom()
+		qb.GroupBy = quoteIdent(_as5)
 		return []Value{newValue(TList, qb)}, nil
 	}
 
 	r.Register("group",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    groupListHandler,
+			Args:    []Type{TList, TList},
+			Handler: groupListHandler,
 		},
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Precedence: 2,
-			Handler:    groupAtomHandler,
+			Args:    []Type{TList, TAtom},
+			Handler: groupAtomHandler,
 		},
 	)
 
-	// having: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// having: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from sales groupby [region] having [count gt 5]
-	havingHandler := func(args []Value) ([]Value, error) {
+	havingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -700,23 +694,22 @@ func registerQuery(r *Registry) {
 
 	r.Register("having",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    havingHandler,
+			Args:    []Type{TList, TList},
+			Handler: havingHandler,
 		},
 	)
 
-	// join: [atom(suffix), table/query(prefix)] -> [query-builder]
+	// join: [atom(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products on [...]
 	registerJoinWord(r, "join", "JOIN")
 	registerJoinWord(r, "innerjoin", "JOIN")
 	registerJoinWord(r, "leftjoin", "LEFT JOIN")
 	registerJoinWord(r, "crossjoin", "CROSS JOIN")
 
-	// on: [condition(suffix), table/query(prefix)] -> [query-builder]
+	// on: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Sets the ON condition for the most recent join.
 	// Usage: from orders join products on [orders.product_id eq products.id]
-	onHandler := func(args []Value) ([]Value, error) {
+	onHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		condList := args[1]
 
@@ -738,19 +731,18 @@ func registerQuery(r *Registry) {
 
 	r.Register("on",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    onHandler,
+			Args:    []Type{TList, TList},
+			Handler: onHandler,
 		},
 	)
 
-	// using: [columns(suffix), table/query(prefix)] -> [query-builder]
+	// using: [columns(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products using [id]
-	usingHandler := func(args []Value) ([]Value, error) {
+	usingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		colList := args[1]
 
-		elems := colList.AsList()
+		elems := colList.AsList().Slice()
 		cols := make([]string, 0, len(elems))
 		for _, e := range elems {
 			name := valueToColName(e)
@@ -773,9 +765,8 @@ func registerQuery(r *Registry) {
 
 	r.Register("using",
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    usingHandler,
+			Args:    []Type{TList, TList},
+			Handler: usingHandler,
 		},
 	)
 
@@ -794,9 +785,9 @@ func registerQuery(r *Registry) {
 
 // registerJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
 func registerJoinWord(r *Registry, name string, joinType string) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		tableName := args[1].AsAtom()
+		tableName, _ := args[1].AsAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -811,16 +802,15 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 
 	r.Register(name,
 		Signature{
-			Args:       []Type{TList, TAtom},
-			Precedence: 2,
-			Handler:    handler,
+			Args:    []Type{TList, TAtom},
+			Handler: handler,
 		},
 	)
 }
 
 // registerSetOpWord registers a set operation word (union, unionall, intersect, except).
 func registerSetOpWord(r *Registry, name string, op string) {
-	handler := func(args []Value) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		left := args[0]
 		right := args[1]
 
@@ -842,9 +832,8 @@ func registerSetOpWord(r *Registry, name string, op string) {
 
 	r.Register(name,
 		Signature{
-			Args:       []Type{TList, TList},
-			Precedence: 2,
-			Handler:    handler,
+			Args:    []Type{TList, TList},
+			Handler: handler,
 		},
 	)
 }
@@ -875,21 +864,24 @@ type columnSpec struct {
 //   - [[cast age integer]]       — CAST("age" AS INTEGER)
 //   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
 func parseColumnSpec(colList Value) ([]columnSpec, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	cols := make([]columnSpec, 0, len(elems))
 	for _, e := range elems {
 		switch {
 		case e.VType.Equal(TAtom):
-			cols = append(cols, columnSpec{Name: e.AsAtom()})
+			_as6, _ := e.AsAtom()
+			cols = append(cols, columnSpec{Name: _as6})
 		case e.VType.Matches(TString):
-			cols = append(cols, columnSpec{Name: e.AsString()})
+			_as7, _ := e.AsString()
+			cols = append(cols, columnSpec{Name: _as7})
 		case e.IsWord():
 			// A word that appears in the column list without evaluation
 			// is treated as a column name OR as an aggregate function name.
-			wname := e.AsWord().Name
+			_as8, _ := e.AsWord()
+			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
-			pair := e.AsList()
+			pair := e.AsList().Slice()
 			if len(pair) < 2 {
 				return nil, fmt.Errorf("select: column spec list must have at least 2 elements")
 			}
@@ -955,13 +947,16 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 // Unlike valueToColName, this also recognizes unevaluated word values.
 func nameFromValue(v Value) string {
 	if v.VType.Equal(TAtom) {
-		return v.AsAtom()
+		_as9, _ := v.AsAtom()
+		return _as9
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as10, _ := v.AsString()
+		return _as10
 	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as11, _ := v.AsWord()
+		return _as11.Name
 	}
 	return ""
 }
@@ -1058,13 +1053,16 @@ func sqlTypeToAQLType(sqlType string) Type {
 // valueToColName extracts the string content from an atom, string, or word value.
 func valueToColName(v Value) string {
 	if v.VType.Equal(TAtom) {
-		return v.AsAtom()
+		_as12, _ := v.AsAtom()
+		return _as12
 	}
 	if v.VType.Matches(TString) {
-		return v.AsString()
+		_as13, _ := v.AsString()
+		return _as13
 	}
 	if v.IsWord() {
-		return v.AsWord().Name
+		_as14, _ := v.AsWord()
+		return _as14.Name
 	}
 	return ""
 }
@@ -1127,6 +1125,7 @@ var logicalOps = map[string]string{
 //	[column is null]                           — IS NULL
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
+//
 // resolveSelectSubExprs evaluates parenthesized sub-expressions in a
 // SELECT column list, replacing them with their results. This enables
 // scalar subqueries in the column list:
@@ -1136,7 +1135,7 @@ var logicalOps = map[string]string{
 // The inner list elements are scanned for paren tokens. When found, the
 // sub-expression is evaluated and the result replaces the paren tokens.
 func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return colList, nil
 	}
@@ -1161,7 +1160,8 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	// Check for paren tokens at this level.
 	hasParen := false
 	for _, e := range result {
-		if e.IsWord() && e.AsWord().Name == "(" {
+		_as15, _ := e.AsWord()
+		if e.IsWord() && _as15.Name == "(" {
 			hasParen = true
 			break
 		}
@@ -1174,14 +1174,18 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	var out []Value
 	idx := 0
 	for idx < len(result) {
-		if result[idx].IsWord() && result[idx].AsWord().Name == "(" {
+		_as16, _ := result[idx].AsWord()
+		if result[idx].IsWord() && _as16.Name == "(" {
 			depth := 1
 			j := idx + 1
 			for j < len(result) && depth > 0 {
-				if result[j].IsWord() && result[j].AsWord().Name == "(" {
-					depth++
-				} else if result[j].IsWord() && result[j].AsWord().Name == ")" {
-					depth--
+				if result[j].IsWord() {
+					wj, _ := result[j].AsWord()
+					if wj.Name == "(" {
+						depth++
+					} else if wj.Name == ")" {
+						depth--
+					}
 				}
 				j++
 			}
@@ -1215,7 +1219,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 // The "(select [city] from cities)" tokens are evaluated, producing a
 // TableData value that buildInList can extract values from.
 func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return condList, nil
 	}
@@ -1223,7 +1227,8 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	// Quick scan: any open-paren words?
 	hasParen := false
 	for _, e := range elems {
-		if e.IsWord() && e.AsWord().Name == "(" {
+		_as19, _ := e.AsWord()
+		if e.IsWord() && _as19.Name == "(" {
 			hasParen = true
 			break
 		}
@@ -1253,15 +1258,19 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	var result []Value
 	i := 0
 	for i < len(elems) {
-		if elems[i].IsWord() && elems[i].AsWord().Name == "(" {
+		_as20, _ := elems[i].AsWord()
+		if elems[i].IsWord() && _as20.Name == "(" {
 			// Find the matching close paren.
 			depth := 1
 			j := i + 1
 			for j < len(elems) && depth > 0 {
-				if elems[j].IsWord() && elems[j].AsWord().Name == "(" {
-					depth++
-				} else if elems[j].IsWord() && elems[j].AsWord().Name == ")" {
-					depth--
+				if elems[j].IsWord() {
+					wj2, _ := elems[j].AsWord()
+					if wj2.Name == "(" {
+						depth++
+					} else if wj2.Name == ")" {
+						depth--
+					}
 				}
 				j++
 			}
@@ -1286,13 +1295,13 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	return NewList(result), nil
 }
 
-//	[column not between value1 value2]         — NOT BETWEEN ... AND ...
-//	[column in [v1 v2 v3]]                     — IN (v1, v2, v3)
-//	[column in (select [col] from table)]      — IN (subquery result)
-//	[column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
-//	[... and/or ...]                           — logical connectives
+// [column not between value1 value2]         — NOT BETWEEN ... AND ...
+// [column in [v1 v2 v3]]                     — IN (v1, v2, v3)
+// [column in (select [col] from table)]      — IN (subquery result)
+// [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
+// [... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1571,7 +1580,7 @@ func buildInList(v Value) (string, error) {
 		return buildInListFromTable(td)
 	}
 
-	elems := v.AsList()
+	elems := v.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty IN list")
 	}
@@ -1670,20 +1679,25 @@ func resolveScalarValue(v Value) (Value, error) {
 func valueToSQL(v Value) (string, error) {
 	switch {
 	case v.VType.Matches(TString):
-		return "'" + strings.ReplaceAll(v.AsString(), "'", "''") + "'", nil
+		_as23, _ := v.AsString()
+		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.AsInteger()), nil
+		_as24, _ := v.AsInteger()
+		return fmt.Sprintf("%d", _as24), nil
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as25, _ := v.AsBoolean()
+		if _as25 {
 			return "'true'", nil
 		}
 		return "'false'", nil
 	case v.VType.Equal(TAtom):
-		return "'" + strings.ReplaceAll(v.AsAtom(), "'", "''") + "'", nil
+		_as26, _ := v.AsAtom()
+		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
 	case v.VType.Equal(TWord):
-		return "'" + strings.ReplaceAll(v.AsWord().Name, "'", "''") + "'", nil
+		_as27, _ := v.AsWord()
+		return "'" + strings.ReplaceAll(_as27.Name, "'", "''") + "'", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
 	}
@@ -1691,7 +1705,7 @@ func valueToSQL(v Value) (string, error) {
 
 // buildGroupByClause translates a column list into a SQL GROUP BY clause.
 func buildGroupByClause(colList Value) (string, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty group by column list")
 	}
@@ -1709,7 +1723,7 @@ func buildGroupByClause(colList Value) (string, error) {
 // buildJoinCondition translates a condition list into a SQL ON clause.
 // Supports dot-separated qualified names: [a.id eq b.id]
 func buildJoinCondition(condList Value) (string, error) {
-	elems := condList.AsList()
+	elems := condList.AsList().Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1775,7 +1789,7 @@ func quoteJoinCol(name string) string {
 //   - [col1 asc nulls first]         — with nulls placement
 //   - [1, 2 desc]                    — positional (1-based)
 func buildOrderClause(colList Value) (string, error) {
-	elems := colList.AsList()
+	elems := colList.AsList().Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty order column list")
 	}
@@ -1811,7 +1825,8 @@ func buildOrderClause(colList Value) (string, error) {
 		e := elems[i]
 
 		if e.VType.Matches(TInteger) {
-			parts = append(parts, fmt.Sprintf("%d", e.AsInteger()))
+			_as28, _ := e.AsInteger()
+			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++
 			continue
 		}

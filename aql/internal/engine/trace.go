@@ -25,16 +25,16 @@ const (
 func traceColorize(v Value) string {
 	switch {
 	case v.IsWord():
-		w := v.AsWord()
-		if w.ForcePrefix {
-			return cYellow + w.Name + "/p" + cReset
-		}
-		if w.ForceSuffix {
+		w, _ := v.AsWord()
+		if w.ForceStack {
 			return cYellow + w.Name + "/s" + cReset
+		}
+		if w.ForceForward {
+			return cYellow + w.Name + "/f" + cReset
 		}
 		return cYellow + w.Name + cReset
 	case v.IsForward():
-		f := v.AsForward()
+		f, _ := v.AsForward()
 		return cMagenta + fmt.Sprintf("→%s(%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs) + cReset
 	case v.IsOpenParen():
 		return cDim + "(" + cReset
@@ -46,14 +46,19 @@ func traceColorize(v Value) string {
 	case v.VType.Matches(TInteger):
 		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as0, _ := v.AsBoolean()
+		if _as0 {
 			return cCyan + "true" + cReset
 		}
 		return cCyan + "false" + cReset
 	case v.VType.Equal(TAtom):
-		return cRed + v.Data.(string) + cReset
+		s, ok := v.Data.(string)
+		if !ok {
+			return cRed + fmt.Sprintf("%v", v.Data) + cReset
+		}
+		return cRed + s + cReset
 	case v.VType.Equal(TList):
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = traceColorize(e)
@@ -101,8 +106,11 @@ func traceVisibleLen(s string) int {
 func registerTrace(r *Registry) {
 	r.Register("trace", Signature{
 		Args: []Type{TList},
-		Handler: func(args []Value) ([]Value, error) {
-			elems := args[0].AsList()
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			if args[0].Data == nil {
+				return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
+			}
+			elems := args[0].AsList().Slice()
 			return runTrace(r, elems, r.Output)
 		},
 	})

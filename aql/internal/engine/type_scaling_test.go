@@ -387,8 +387,10 @@ func TestUnifyIntegerWithNumberType(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(42, number) should succeed")
 	}
-	if result.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result.AsInteger())
+	_as0, _ := result.AsInteger()
+	if _as0 != 42 {
+		_as1, _ := result.AsInteger()
+		t.Errorf("expected 42, got %d", _as1)
 	}
 }
 
@@ -401,8 +403,10 @@ func TestUnifyIntegerWithIntegerType(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(7, number/integer) should succeed")
 	}
-	if result.AsInteger() != 7 {
-		t.Errorf("expected 7, got %d", result.AsInteger())
+	_as2, _ := result.AsInteger()
+	if _as2 != 7 {
+		_as3, _ := result.AsInteger()
+		t.Errorf("expected 7, got %d", _as3)
 	}
 }
 
@@ -428,8 +432,10 @@ func TestUnifySameIntegerLiteralSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(10, 10) should succeed")
 	}
-	if result.AsInteger() != 10 {
-		t.Errorf("expected 10, got %d", result.AsInteger())
+	_as4, _ := result.AsInteger()
+	if _as4 != 10 {
+		_as5, _ := result.AsInteger()
+		t.Errorf("expected 10, got %d", _as5)
 	}
 }
 
@@ -520,6 +526,7 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},       // depth 6
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler},  // depth 7
 	}
+	SortSignatures(sigs)
 
 	// A value with the deepest type should match the most specific signature
 	val := Value{VType: mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge"), Data: nil}
@@ -541,6 +548,7 @@ func TestMatchSignatureMidLevelType(t *testing.T) {
 		{Args: []Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},
 	}
+	SortSignatures(sigs)
 
 	// A value at depth 6 should match the deepest available signature (depth 4)
 	val := Value{VType: mustTestType(t, "Data/Num/Int/I32/Signed/Big"), Data: nil}
@@ -565,11 +573,13 @@ func TestUnifyListsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer lists should succeed")
 	}
-	elems := result.AsList()
+	elems := result.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
-	if elems[0].AsInteger() != 1 || elems[1].AsInteger() != 2 {
+	_as7, _ := elems[0].AsInteger()
+	_as6, _ := elems[1].AsInteger()
+	if _as7 != 1 || _as6 != 2 {
 		t.Errorf("unexpected values: %v", elems)
 	}
 }
@@ -592,8 +602,12 @@ func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 	rm := result.AsMap()
 	xv, _ := rm.Get("X")
 	yv, _ := rm.Get("y")
-	if xv.AsInteger() != 10 || yv.AsInteger() != 20 {
-		t.Errorf("unexpected map values: x=%d y=%d", xv.AsInteger(), yv.AsInteger())
+	_as9, _ := xv.AsInteger()
+	_as8, _ := yv.AsInteger()
+	if _as9 != 10 || _as8 != 20 {
+		_as11, _ := xv.AsInteger()
+		_as10, _ := yv.AsInteger()
+		t.Errorf("unexpected map values: x=%d y=%d", _as11, _as10)
 	}
 }
 

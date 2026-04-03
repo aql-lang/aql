@@ -7,7 +7,7 @@ import (
 )
 
 // updateFunc returns the "update" native function definition.
-// update has suffix precedence and three signatures:
+// update has forward precedence and three signatures:
 //   - [map(kind:"api")] — updates an entity via the SDK
 //   - [table, map]      — finds a record by "id" and merges the map's fields into it
 //   - [map, map]        — record type + patch: returns empty table
@@ -18,7 +18,7 @@ func updateFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "update",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Entity object signatures (highest priority).
 			{
@@ -102,14 +102,17 @@ func updateRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // updateHandler finds a record by its "id" field and merges the provided
 // fields into it. Returns the updated table. The map must contain an "id" field.
 func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList()
+	rows := args[0].AsList().Slice()
 	patch := args[1].AsMap()
 
 	idVal, ok := patch.Get("id")
 	if !ok {
 		return nil, fmt.Errorf("update: record must contain an \"id\" field")
 	}
-	id := idVal.AsString()
+	id, err := idVal.AsString()
+	if err != nil {
+		return nil, fmt.Errorf("update: id: %w", err)
+	}
 
 	found := false
 	result := make([]engine.Value, len(rows))
@@ -120,7 +123,12 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		}
 		rec := row.AsMap()
 		existing, ok := rec.Get("id")
-		if !ok || existing.AsString() != id {
+		if !ok {
+			result[i] = row
+			continue
+		}
+		existingStr, _ := existing.AsString()
+		if existingStr != id {
 			result[i] = row
 			continue
 		}

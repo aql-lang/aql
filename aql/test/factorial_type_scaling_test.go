@@ -12,7 +12,7 @@ import (
 // Named base case with Number/Integer types
 func TestFactorialTypeScalingNamedBase0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -23,7 +23,7 @@ func TestFactorialTypeScalingNamedBase0(t *testing.T) {
 
 func TestFactorialTypeScalingNamedBase1(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -34,7 +34,7 @@ func TestFactorialTypeScalingNamedBase1(t *testing.T) {
 
 func TestFactorialTypeScalingNamedBase5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -45,7 +45,7 @@ func TestFactorialTypeScalingNamedBase5(t *testing.T) {
 
 func TestFactorialTypeScalingNamedBase10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number/Integer] [1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`10 fact`,
 	})
 	if err != nil {
@@ -57,7 +57,7 @@ func TestFactorialTypeScalingNamedBase10(t *testing.T) {
 // Unnamed literal base case with Number/Integer types
 func TestFactorialTypeScalingUnnamedBase0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -68,7 +68,7 @@ func TestFactorialTypeScalingUnnamedBase0(t *testing.T) {
 
 func TestFactorialTypeScalingUnnamedBase1(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestFactorialTypeScalingUnnamedBase1(t *testing.T) {
 
 func TestFactorialTypeScalingUnnamedBase5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func TestFactorialTypeScalingUnnamedBase5(t *testing.T) {
 
 func TestFactorialTypeScalingUnnamedBase10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x mul fact (x sub 1)]] end`,
+		`def fact fn [0 Number/Integer [drop 1] [x:Number/Integer] [Number/Integer] [x (fact (x sub 1)) mul]] end`,
 		`10 fact`,
 	})
 	if err != nil {
@@ -103,7 +103,7 @@ func TestFactorialTypeScalingUnnamedBase10(t *testing.T) {
 func TestFactorialTypeScalingTailRec0(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Number/Integer] [Number/Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Number/Integer] [Number/Integer] [swap drop] [Number/Integer,Number/Integer] [Number/Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Number/Integer,_:0] [Number/Integer] [acc] [acc:Number/Integer,n:Number/Integer] [Number/Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -115,7 +115,7 @@ func TestFactorialTypeScalingTailRec0(t *testing.T) {
 func TestFactorialTypeScalingTailRec1(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Number/Integer] [Number/Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Number/Integer] [Number/Integer] [swap drop] [Number/Integer,Number/Integer] [Number/Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Number/Integer,_:0] [Number/Integer] [acc] [acc:Number/Integer,n:Number/Integer] [Number/Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`1 fact`,
 	})
 	if err != nil {
@@ -127,7 +127,7 @@ func TestFactorialTypeScalingTailRec1(t *testing.T) {
 func TestFactorialTypeScalingTailRec5(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Number/Integer] [Number/Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Number/Integer] [Number/Integer] [swap drop] [Number/Integer,Number/Integer] [Number/Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Number/Integer,_:0] [Number/Integer] [acc] [acc:Number/Integer,n:Number/Integer] [Number/Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func TestFactorialTypeScalingTailRec5(t *testing.T) {
 func TestFactorialTypeScalingTailRec10(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def fact fn [[Number/Integer] [Number/Integer] [1 fact_acc]] end`,
-		`def fact_acc fn [[0,Number/Integer] [Number/Integer] [swap drop] [Number/Integer,Number/Integer] [Number/Integer] [over mul swap 1 sub swap fact_acc]] end`,
+		`def fact_acc fn [[acc:Number/Integer,_:0] [Number/Integer] [acc] [acc:Number/Integer,n:Number/Integer] [Number/Integer] [(acc mul n) (n sub 1) swap fact_acc]] end`,
 		`10 fact`,
 	})
 	if err != nil {
@@ -151,7 +151,7 @@ func TestFactorialTypeScalingTailRec10(t *testing.T) {
 // Mixed: use "number" (parent type) in return position, "Number/Integer" in input
 func TestFactorialTypeScalingMixedTypes0(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x (fact (x sub 1)) mul]] end`,
 		`0 fact`,
 	})
 	if err != nil {
@@ -162,7 +162,7 @@ func TestFactorialTypeScalingMixedTypes0(t *testing.T) {
 
 func TestFactorialTypeScalingMixedTypes5(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x (fact (x sub 1)) mul]] end`,
 		`5 fact`,
 	})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestFactorialTypeScalingMixedTypes5(t *testing.T) {
 
 func TestFactorialTypeScalingMixedTypes10(t *testing.T) {
 	result, err := runSteps(t, []string{
-		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x mul fact (x sub 1)]] end`,
+		`def fact fn [[_:0] [Number] [1] [x:Number/Integer] [Number] [x (fact (x sub 1)) mul]] end`,
 		`10 fact`,
 	})
 	if err != nil {

@@ -8,21 +8,21 @@ import (
 )
 
 // sliceFunc returns the "slice" native function definition.
-// slice has suffix precedence and three signatures:
-//   - [any, integer, integer] — slices the value from start to end
-//   - [any, integer]          — slices the value from start
-//   - [any]                   — returns the value unchanged
+// slice has forward precedence and three signatures.
+// Signatures use [Integer, Integer, Any] ordering so that forward-first
+// rearrangement (forward args at positions 0..F-1, stack data last) aligns
+// with positional matching.
 func sliceFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "slice",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []engine.Type{engine.TAny, engine.TInteger, engine.TInteger},
+				Args:    []engine.Type{engine.TInteger, engine.TInteger, engine.TAny},
 				Handler: sliceStartEndHandler,
 			},
 			{
-				Args:    []engine.Type{engine.TAny, engine.TInteger},
+				Args:    []engine.Type{engine.TInteger, engine.TAny},
 				Handler: sliceStartHandler,
 			},
 			{
@@ -45,9 +45,13 @@ func sliceAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 }
 
 // sliceStartHandler calls voxgigstruct.Slice with a start index.
+// With forward-first matching: args[0]=start (forward), args[1]=data (stack).
 func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	start := args[1].AsInteger()
+	start, err := args[0].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: start: %w", err)
+	}
+	data := valueToAny(args[1])
 	result := voxgigstruct.Slice(data, int(start))
 	val, err := anyToValue(result)
 	if err != nil {
@@ -57,10 +61,18 @@ func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 }
 
 // sliceStartEndHandler calls voxgigstruct.Slice with start and end indices.
+// With forward-first matching: args[0]=start (forward), args[1]=end (forward),
+// args[2]=data (stack).
 func sliceStartEndHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	start := args[1].AsInteger()
-	end := args[2].AsInteger()
+	start, err := args[0].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: start: %w", err)
+	}
+	end, err := args[1].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("slice: end: %w", err)
+	}
+	data := valueToAny(args[2])
 	result := voxgigstruct.Slice(data, int(start), int(end))
 	val, err := anyToValue(result)
 	if err != nil {

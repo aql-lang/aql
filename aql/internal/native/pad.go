@@ -6,13 +6,13 @@ import (
 )
 
 // padFunc returns the "pad" native function definition.
-// pad has suffix precedence and two signatures:
+// pad has forward precedence and two signatures:
 //   - [any, integer] — pads the string representation to the given width
 //   - [any]          — pads the string representation to the default width
 func padFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "pad",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TInteger},
@@ -36,7 +36,10 @@ func padDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // padWidthHandler calls voxgigstruct.Pad with a specified width.
 func padWidthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	width := args[1].AsInteger()
+	width, err := args[1].AsInteger()
+	if err != nil {
+		return nil, err
+	}
 	result := voxgigstruct.Pad(data, int(width))
 	return []engine.Value{engine.NewString(result)}, nil
 }

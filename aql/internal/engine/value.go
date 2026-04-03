@@ -11,11 +11,50 @@ import (
 	"time"
 )
 
+// ReadList is a read-only view of a list of Values.
+// Node list values expose this via AsList(). To mutate, use AsMutableList().
+type ReadList struct {
+	elems []Value
+}
+
+// Get returns the element at index i. Panics if out of bounds.
+func (l ReadList) Get(i int) Value {
+	return l.elems[i]
+}
+
+// Len returns the number of elements.
+func (l ReadList) Len() int {
+	return len(l.elems)
+}
+
+// Slice returns a copy of the underlying slice.
+func (l ReadList) Slice() []Value {
+	out := make([]Value, len(l.elems))
+	copy(out, l.elems)
+	return out
+}
+
+// IsNil reports whether this ReadList has no backing data.
+func (l ReadList) IsNil() bool {
+	return l.elems == nil
+}
+
+// ReadMap is a read-only view of an ordered key-value map.
+// Node values (Map, Options) expose this interface via AsMap().
+// To mutate, use AsMutableMap() which is only valid for Object instances.
+type ReadMap interface {
+	Get(key string) (Value, bool)
+	Keys() []string
+	SortedKeys() []string
+	Len() int
+}
+
 // OrderedMap is a map that preserves insertion order of keys.
 type OrderedMap struct {
 	keys     []string
 	vals     map[string]Value
-	Implicit bool // true when created from implicit pair syntax (e.g., [x:Integer])
+	Implicit bool              // true when created from implicit pair syntax (e.g., [x:Integer])
+	Meta     map[string]any    // optional metadata for parser/engine communication
 }
 
 // NewOrderedMap creates an empty OrderedMap.
@@ -70,6 +109,23 @@ func (m *OrderedMap) Delete(key string) bool {
 	return true
 }
 
+// PathInfo holds the data for a Scalar/Path value.
+// A Path represents a filesystem path as a sequence of parts.
+// Absolute paths start from the root (Abs = true).
+type PathInfo struct {
+	Parts []string // path segments (e.g. ["usr", "local", "bin"])
+	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
+}
+
+// String returns the OS path string for this path.
+func (p PathInfo) String() string {
+	joined := strings.Join(p.Parts, "/")
+	if p.Abs {
+		return "/" + joined
+	}
+	return joined
+}
+
 // ChildTypeInfo holds the child type constraint for a typed list or typed map.
 // For example, [:string] constrains all list elements to be strings,
 // and {:string} constrains all map values to be strings.
@@ -85,6 +141,14 @@ type RecordTypeInfo struct {
 	Fields *OrderedMap // field name → type-constraint Value
 }
 
+// OptionsTypeInfo holds the field schema for an options type.
+// Each field maps a name to a default value or type constraint.
+// Concrete values serve as defaults when the key is absent during unification;
+// type literals require the caller to provide a value.
+type OptionsTypeInfo struct {
+	Fields *OrderedMap // field name → default value or type constraint
+}
+
 // TableTypeInfo holds the record schema for a table type.
 // A table represents a list of record instances that all conform to the
 // same record type.
@@ -94,24 +158,37 @@ type TableTypeInfo struct {
 
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
-	Name    string // empty for unnamed positional parameters
-	Type    Type
-	Pattern *Value // optional: map/list pattern for structural matching
+	Name     string // empty for unnamed positional parameters
+	Type     Type
+	Pattern  *Value // optional: map/list pattern for structural matching
+	Optional bool   // true if this param was marked optional via ?
 }
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params  []FnParam
-	Returns []Type // declared return types (nil = unchecked)
-	Body    []Value
+	Params     []FnParam
+	Returns    []Type // declared return types (nil = unchecked)
+	Body       []Value
+	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
-// If Registry is non-nil, the function was defined in a module and should
-// execute in that registry's context (closure semantics).
+// Name is the function's registered name (set by installDef). If Registry is
+// non-nil, the function was defined in a module and should execute in that
+// registry's context (closure semantics).
+//
+// Signatures is the compiled dispatch table (typed args + Go handlers).
+// For Go builtins, Sigs is nil and Signatures holds the native handlers.
+// For AQL fn defs, installFnDef converts Sigs into Signatures with handler
+// closures that splice body tokens. ForwardPrecedence controls whether the
+// engine tries forward collection before stack matching.
 type FnDefInfo struct {
-	Sigs     []FnSig
-	Registry *Registry
+	Name              string
+	Sigs              []FnSig     // AQL-defined overloads (nil for Go-implemented words)
+	Signatures        []Signature // compiled dispatch table
+	ForwardPrecedence bool        // true = try forward-first; false = stack-only
+	MaxForwardArgs    int         // longest forward arg count across all sigs (respecting barriers)
+	Registry          *Registry
 }
 
 // FnSigSpec describes a signature specification without a body, used for
@@ -128,8 +205,9 @@ type FnUndefInfo struct {
 
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
-	FuncName string
-	Returns  []Type
+	FuncName     string
+	Returns      []Type
+	UnnamedCount int // number of unnamed params pushed onto the stack before the body
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -213,6 +291,78 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 	return result
 }
 
+// StoreInstanceInfo is a copy-on-write key-value store (Object/Store).
+// Unlike regular Object instances which have typed fields, Store instances
+// hold arbitrary key-value pairs. Key resolution walks the prototype chain,
+// enabling scope-like lookup when contexts are nested.
+//
+// Copy-on-write: the AQL `set` word creates a new Store layer (prototype =
+// old Store) instead of mutating in place. If this Store is nested inside
+// a parent Store, the parent is COW'd too, propagating up to the ctxStack.
+type StoreInstanceInfo struct {
+	TypeName  string              // full type path, e.g. "Object/Store" or "Object/Store/System"
+	Data      map[string]Value    // own key-value pairs (COW layer)
+	Prototype *StoreInstanceInfo  // prototype chain for key lookup / COW base
+	Parent    *StoreInstanceInfo  // containing Store (for COW propagation), nil if root
+	ParentKey string              // key in Parent that references this Store
+}
+
+// Get looks up a key in this store, walking the prototype chain if not found.
+func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
+	if v, ok := si.Data[key]; ok {
+		return v, true
+	}
+	if si.Prototype != nil {
+		return si.Prototype.Get(key)
+	}
+	return Value{}, false
+}
+
+// Set stores a key-value pair directly (for internal/init use only).
+// AQL code should use the set word which does COW via cowSet.
+func (si *StoreInstanceInfo) Set(key string, val Value) {
+	si.Data[key] = val
+	// Track parent relationship for nested Stores.
+	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {
+		childStore.Parent = si
+		childStore.ParentKey = key
+	}
+}
+
+// ArrayInstanceInfo is a mutable ordered array (Object/Array).
+// Unlike immutable Node/List values, Array instances can be modified
+// in place via set (index assignment), append, etc.
+type ArrayInstanceInfo struct {
+	Elems []Value
+}
+
+// Get returns the element at index i. Returns zero Value and false if out of bounds.
+func (ai *ArrayInstanceInfo) Get(i int) (Value, bool) {
+	if i < 0 || i >= len(ai.Elems) {
+		return Value{}, false
+	}
+	return ai.Elems[i], true
+}
+
+// Set sets the element at index i. Returns false if out of bounds.
+func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
+	if i < 0 || i >= len(ai.Elems) {
+		return false
+	}
+	ai.Elems[i] = val
+	return true
+}
+
+// Len returns the number of elements.
+func (ai *ArrayInstanceInfo) Len() int {
+	return len(ai.Elems)
+}
+
+// Append adds a value to the end of the array.
+func (ai *ArrayInstanceInfo) Append(val Value) {
+	ai.Elems = append(ai.Elems, val)
+}
+
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -284,20 +434,19 @@ type ModuleDesc struct {
 type WordInfo struct {
 	Name        string
 	ArgCount    int  // -1 = unspecified
-	ForcePrefix bool // lower/p
-	ForceSuffix bool // lower/s
+	ForceStack bool // lower/s
+	ForceForward bool // lower/f
 }
 
-// ForwardInfo tracks suffix argument collection for a deferred function call.
+// ForwardInfo tracks forward argument collection for a deferred function call.
 type ForwardInfo struct {
 	FuncName      string
 	ExpectedArgs  int
 	CollectedArgs int
-	PrefixArgs    int // number of sig args already consumed from the prefix (stack)
+	StackArgs     int // number of sig args already consumed from the stack
 	// FuncIndex records where the deferred function word sits in the stack.
-	FuncIndex  int
-	Precedence int        // copied from matched Signature
-	Sig        *Signature // the matched signature, for direct execution on completion
+	FuncIndex int
+	Sig       *Signature // the matched signature, for direct execution on completion
 }
 
 // Value is a typed entry on the AQL stack.
@@ -443,6 +592,11 @@ func NewRecordType(fields *OrderedMap) Value {
 	return newValue(TMap, RecordTypeInfo{Fields: fields})
 }
 
+// NewOptionsType creates an options type value from a field schema map.
+func NewOptionsType(fields *OrderedMap) Value {
+	return newValue(TMap, OptionsTypeInfo{Fields: fields})
+}
+
 // NewTableType creates a table type value from a record type.
 // A table type constrains a list so that each element is a map conforming
 // to the given record schema.
@@ -453,6 +607,13 @@ func NewTableType(record RecordTypeInfo) Value {
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
 	return newValue(TAtom, name)
+}
+
+// NewPath creates a Path value from parts and an absolute flag.
+func NewPath(parts []string, abs bool) Value {
+	p := make([]string, len(parts))
+	copy(p, parts)
+	return newValue(TPath, PathInfo{Parts: p, Abs: abs})
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
@@ -467,16 +628,16 @@ func NewWord(name string) Value {
 }
 
 // NewWordModified creates a word value with explicit modifiers.
-func NewWordModified(name string, argCount int, forcePrefix, forceSuffix bool) Value {
+func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
 		Name:        name,
 		ArgCount:    argCount,
-		ForcePrefix: forcePrefix,
-		ForceSuffix: forceSuffix,
+		ForceStack: forceStack,
+		ForceForward: forceForward,
 	})
 }
 
-// NewForward creates a forward primitive value for suffix argument tracking.
+// NewForward creates a forward primitive value for forward argument tracking.
 func NewForward(info ForwardInfo) Value {
 	return newValue(TForward, info)
 }
@@ -541,6 +702,19 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 	return newValue(TReturnCheck, info)
 }
 
+// DefCleanupInfo holds a snapshot of DefStacks lengths taken before fn body
+// execution. When the engine encounters a DefCleanup marker, it pops any
+// defs that were added during body execution back to the snapshot state.
+type DefCleanupInfo struct {
+	Snapshot map[string]int
+	Registry *Registry
+}
+
+// NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
+func NewDefCleanup(info DefCleanupInfo) Value {
+	return newValue(TDefCleanup, info)
+}
+
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
 	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
@@ -569,9 +743,90 @@ func NewObjectInstance(info ObjectInstanceInfo) Value {
 	return newValue(t, info)
 }
 
+// NewStore creates a Store value with the given type name.
+// If typeName is empty, defaults to "Object/Store".
+func NewStore(typeName string) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName: typeName,
+		Data:     make(map[string]Value),
+	})
+}
+
+// NewStoreValue wraps an existing StoreInstanceInfo into a Value.
+func NewStoreValue(si *StoreInstanceInfo) Value {
+	typeName := si.TypeName
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, si)
+}
+
+// NewStoreWithPrototype creates a Store value with a prototype chain.
+func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value {
+	if typeName == "" {
+		typeName = "Object/Store"
+	}
+	t, _ := NewType(typeName)
+	return newValue(t, &StoreInstanceInfo{
+		TypeName:  typeName,
+		Data:      make(map[string]Value),
+		Prototype: prototype,
+	})
+}
+
+// NewArray creates a mutable Array value from a slice of elements.
+func NewArray(elems []Value) Value {
+	data := make([]Value, len(elems))
+	copy(data, elems)
+	return newValue(TArray, &ArrayInstanceInfo{Elems: data})
+}
+
+// NewArrayEmpty creates an empty mutable Array value.
+func NewArrayEmpty() Value {
+	return newValue(TArray, &ArrayInstanceInfo{Elems: nil})
+}
+
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
 	return newValue(TModule, desc)
+}
+
+// MatrixData holds a dense matrix as a flat float64 slice in row-major order.
+type MatrixData struct {
+	Data []float64
+	Rows int
+	Cols int
+}
+
+// NewDate creates a Date value from a time.Time.
+func NewDate(t time.Time) Value {
+	return newValue(TDate, t)
+}
+
+// AsDate returns the time.Time for a Date value.
+func (v Value) AsDate() time.Time {
+	if t, ok := v.Data.(time.Time); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+// NewMatrix creates a Matrix value from a MatrixData.
+func NewMatrix(m MatrixData) Value {
+	return newValue(TMatrix, m)
+}
+
+// AsMatrix returns the MatrixData for a Matrix value.
+func (v Value) AsMatrix() MatrixData {
+	if m, ok := v.Data.(MatrixData); ok {
+		return m
+	}
+	return MatrixData{}
 }
 
 // ErrorInfo holds the details of an AQL error value.
@@ -590,8 +845,12 @@ func (v Value) IsError() bool {
 }
 
 // AsError returns the ErrorInfo for an error value.
-func (v Value) AsError() ErrorInfo {
-	return v.Data.(ErrorInfo)
+func (v Value) AsError() (ErrorInfo, error) {
+	info, ok := v.Data.(ErrorInfo)
+	if !ok {
+		return ErrorInfo{}, fmt.Errorf("AsError: not an error value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsWord reports whether this value is a word (function reference).
@@ -633,8 +892,12 @@ func (v Value) IsMark() bool {
 }
 
 // AsMark returns the MarkInfo, panics if not a mark.
-func (v Value) AsMark() MarkInfo {
-	return v.Data.(MarkInfo)
+func (v Value) AsMark() (MarkInfo, error) {
+	info, ok := v.Data.(MarkInfo)
+	if !ok {
+		return MarkInfo{}, fmt.Errorf("AsMark: not a mark value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsMove reports whether this value is a move.
@@ -643,8 +906,12 @@ func (v Value) IsMove() bool {
 }
 
 // AsMove returns the MoveInfo, panics if not a move.
-func (v Value) AsMove() MoveInfo {
-	return v.Data.(MoveInfo)
+func (v Value) AsMove() (MoveInfo, error) {
+	info, ok := v.Data.(MoveInfo)
+	if !ok {
+		return MoveInfo{}, fmt.Errorf("AsMove: not a move value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsReturnCheck reports whether this value is a return-check marker.
@@ -653,8 +920,26 @@ func (v Value) IsReturnCheck() bool {
 }
 
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
-func (v Value) AsReturnCheck() ReturnCheckInfo {
-	return v.Data.(ReturnCheckInfo)
+func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
+	info, ok := v.Data.(ReturnCheckInfo)
+	if !ok {
+		return ReturnCheckInfo{}, fmt.Errorf("AsReturnCheck: not a return-check value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsDefCleanup reports whether this value is a def-cleanup marker.
+func (v Value) IsDefCleanup() bool {
+	return v.VType.Equal(TDefCleanup)
+}
+
+// AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
+func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
+	info, ok := v.Data.(DefCleanupInfo)
+	if !ok {
+		return DefCleanupInfo{}, fmt.Errorf("AsDefCleanup: not a def-cleanup value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsDisjunct reports whether this value is a disjunction type.
@@ -664,8 +949,12 @@ func (v Value) IsDisjunct() bool {
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
-func (v Value) AsDisjunct() DisjunctInfo {
-	return v.Data.(DisjunctInfo)
+func (v Value) AsDisjunct() (DisjunctInfo, error) {
+	info, ok := v.Data.(DisjunctInfo)
+	if !ok {
+		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsObjectType reports whether this value is an object type definition.
@@ -675,8 +964,42 @@ func (v Value) IsObjectType() bool {
 }
 
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func (v Value) AsObjectType() ObjectTypeInfo {
-	return v.Data.(ObjectTypeInfo)
+func (v Value) AsObjectType() (ObjectTypeInfo, error) {
+	info, ok := v.Data.(ObjectTypeInfo)
+	if !ok {
+		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsStore reports whether this value is a Store instance.
+func (v Value) IsStore() bool {
+	_, ok := v.Data.(*StoreInstanceInfo)
+	return ok && v.VType.Matches(TStore)
+}
+
+// AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
+func (v Value) AsStore() *StoreInstanceInfo {
+	si, ok := v.Data.(*StoreInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return si
+}
+
+// IsArray reports whether this value is an Array instance.
+func (v Value) IsArray() bool {
+	_, ok := v.Data.(*ArrayInstanceInfo)
+	return ok && v.VType.Matches(TArray)
+}
+
+// AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
+func (v Value) AsArray() *ArrayInstanceInfo {
+	ai, ok := v.Data.(*ArrayInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return ai
 }
 
 // IsObjectInstance reports whether this value is an object instance.
@@ -686,8 +1009,12 @@ func (v Value) IsObjectInstance() bool {
 }
 
 // AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func (v Value) AsObjectInstance() ObjectInstanceInfo {
-	return v.Data.(ObjectInstanceInfo)
+func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
+	info, ok := v.Data.(ObjectInstanceInfo)
+	if !ok {
+		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsModule reports whether this value is a module descriptor.
@@ -696,18 +1023,44 @@ func (v Value) IsModule() bool {
 }
 
 // AsModule returns the ModuleDesc, panics if not a module.
-func (v Value) AsModule() ModuleDesc {
-	return v.Data.(ModuleDesc)
+func (v Value) AsModule() (ModuleDesc, error) {
+	info, ok := v.Data.(ModuleDesc)
+	if !ok {
+		return ModuleDesc{}, fmt.Errorf("AsModule: not a module value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsAtom reports whether this value is an atom.
+// IsPath reports whether this value is a Path.
+func (v Value) IsPath() bool {
+	_, ok := v.Data.(PathInfo)
+	return ok && v.VType.Equal(TPath)
+}
+
+// AsPath returns the PathInfo. Panics if not a path.
+func (v Value) AsPath() (PathInfo, error) {
+	info, ok := v.Data.(PathInfo)
+	if !ok {
+		return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
 func (v Value) IsAtom() bool {
 	return v.VType.Equal(TAtom)
 }
 
-// AsAtom returns the string payload, panics if not an atom.
-func (v Value) AsAtom() string {
-	return v.Data.(string)
+// AsAtom returns the string payload. Returns "" if Data is nil.
+func (v Value) AsAtom() (string, error) {
+	if v.Data == nil {
+		return "", fmt.Errorf("AsAtom: nil data")
+	}
+	s, ok := v.Data.(string)
+	if !ok {
+		return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
+	}
+	return s, nil
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
@@ -729,8 +1082,27 @@ func (v Value) IsRecordType() bool {
 }
 
 // AsRecordType returns the RecordTypeInfo, panics if not a record type.
-func (v Value) AsRecordType() RecordTypeInfo {
-	return v.Data.(RecordTypeInfo)
+func (v Value) AsRecordType() (RecordTypeInfo, error) {
+	info, ok := v.Data.(RecordTypeInfo)
+	if !ok {
+		return RecordTypeInfo{}, fmt.Errorf("AsRecordType: not a record type value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsOptionsType reports whether this value is an options type (map with defaults/constraints).
+func (v Value) IsOptionsType() bool {
+	_, ok := v.Data.(OptionsTypeInfo)
+	return ok && v.VType.Equal(TMap)
+}
+
+// AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
+func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
+	info, ok := v.Data.(OptionsTypeInfo)
+	if !ok {
+		return OptionsTypeInfo{}, fmt.Errorf("AsOptionsType: not an options type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // IsTableType reports whether this value is a table type (list with record schema).
@@ -750,108 +1122,202 @@ func (v Value) IsTableType() bool {
 }
 
 // AsTableType returns the TableTypeInfo, panics if not a table type.
-func (v Value) AsTableType() TableTypeInfo {
+func (v Value) AsTableType() (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
-		return TableTypeInfo{Record: td.Record}
+		return TableTypeInfo{Record: td.Record}, nil
 	}
 	if qb, ok := v.Data.(QueryBuilder); ok {
-		return TableTypeInfo{Record: qb.Source.Record}
+		return TableTypeInfo{Record: qb.Source.Record}, nil
 	}
-	return v.Data.(TableTypeInfo)
+	info, ok := v.Data.(TableTypeInfo)
+	if !ok {
+		return TableTypeInfo{}, fmt.Errorf("AsTableType: not a table type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
-func (v Value) AsChildType() ChildTypeInfo {
-	return v.Data.(ChildTypeInfo)
+func (v Value) AsChildType() (ChildTypeInfo, error) {
+	info, ok := v.Data.(ChildTypeInfo)
+	if !ok {
+		return ChildTypeInfo{}, fmt.Errorf("AsChildType: not a child type value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsWord returns the WordInfo, panics if not a word.
-func (v Value) AsWord() WordInfo {
-	return v.Data.(WordInfo)
+func (v Value) AsWord() (WordInfo, error) {
+	info, ok := v.Data.(WordInfo)
+	if !ok {
+		return WordInfo{}, fmt.Errorf("AsWord: not a word value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsForward returns the ForwardInfo, panics if not a forward.
-func (v Value) AsForward() ForwardInfo {
-	return v.Data.(ForwardInfo)
+func (v Value) AsForward() (ForwardInfo, error) {
+	info, ok := v.Data.(ForwardInfo)
+	if !ok {
+		return ForwardInfo{}, fmt.Errorf("AsForward: not a forward value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
-// AsString returns the string payload, panics if not a string type.
-func (v Value) AsString() string {
-	return v.Data.(string)
+// AsString returns the string payload. Returns "" if Data is nil (type literal).
+func (v Value) AsString() (string, error) {
+	if v.Data == nil {
+		return "", fmt.Errorf("AsString: nil data")
+	}
+	s, ok := v.Data.(string)
+	if !ok {
+		return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
+	}
+	return s, nil
 }
 
-// AsInteger returns the int64 payload, panics if not an integer type.
-func (v Value) AsInteger() int64 {
-	return v.Data.(int64)
+// AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
+func (v Value) AsInteger() (int64, error) {
+	if v.Data == nil {
+		return 0, fmt.Errorf("AsInteger: nil data")
+	}
+	n, ok := v.Data.(int64)
+	if !ok {
+		return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
+	}
+	return n, nil
 }
 
-// AsDecimal returns the float64 payload, panics if not a decimal type.
-func (v Value) AsDecimal() float64 {
-	return v.Data.(float64)
+// AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
+func (v Value) AsDecimal() (float64, error) {
+	if v.Data == nil {
+		return 0.0, fmt.Errorf("AsDecimal: nil data")
+	}
+	f, ok := v.Data.(float64)
+	if !ok {
+		return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
+	}
+	return f, nil
 }
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
-func (v Value) AsNumber() float64 {
+func (v Value) AsNumber() (float64, error) {
 	if v.VType.Matches(TDecimal) {
-		return v.AsDecimal()
+		f, err := v.AsDecimal()
+		return f, err
 	}
-	return float64(v.AsInteger())
+	n, err := v.AsInteger()
+	return float64(n), err
 }
 
-// AsBoolean returns the bool payload, panics if not a boolean type.
-func (v Value) AsBoolean() bool {
-	return v.Data.(bool)
+// AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
+func (v Value) AsBoolean() (bool, error) {
+	if v.Data == nil {
+		return false, fmt.Errorf("AsBoolean: nil data")
+	}
+	b, ok := v.Data.(bool)
+	if !ok {
+		return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
+	}
+	return b, nil
 }
 
-// AsList returns the []Value payload, panics if not a list type.
+// AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and QueryBuilder, returning the rows.
 // For QueryBuilder, this triggers materialization.
-func (v Value) AsList() []Value {
+// AsList returns a read-only view of the list payload.
+// Returns a ReadList with nil backing if the data is not a list.
+func (v Value) AsList() ReadList {
+	if v.Data == nil {
+		return ReadList{}
+	}
 	if td, ok := v.Data.(TableData); ok {
-		return td.Rows
+		return ReadList{elems: td.Rows}
 	}
 	if qb, ok := v.Data.(QueryBuilder); ok {
 		td, err := qb.Materialize()
 		if err != nil {
-			return nil
+			return ReadList{}
 		}
-		return td.Rows
+		return ReadList{elems: td.Rows}
 	}
-	return v.Data.([]Value)
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return ReadList{}
+	}
+	return ReadList{elems: elems}
 }
 
-// AsMap returns the OrderedMap payload, panics if not a map type.
-func (v Value) AsMap() *OrderedMap {
-	return v.Data.(*OrderedMap)
+// AsMutableList returns the underlying []Value slice for mutation.
+// Only valid for internal construction paths — never for immutable Node values.
+func (v Value) AsMutableList() []Value {
+	if v.Data == nil {
+		return nil
+	}
+	elems, ok := v.Data.([]Value)
+	if !ok {
+		return nil
+	}
+	return elems
+}
+
+// AsMap returns a read-only view of the map payload, or nil if the data is
+// not an *OrderedMap. Node values (Map, Options) are immutable — use this
+// for all read access.
+func (v Value) AsMap() ReadMap {
+	if v.Data == nil {
+		return nil
+	}
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
+}
+
+// AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
+// for Object instances and internal construction — never for Node values.
+func (v Value) AsMutableMap() *OrderedMap {
+	if v.Data == nil {
+		return nil
+	}
+	om, ok := v.Data.(*OrderedMap)
+	if !ok {
+		return nil
+	}
+	return om
 }
 
 // String returns a human-readable representation.
 func (v Value) String() string {
 	switch {
 	case v.IsWord():
-		w := v.AsWord()
+		w, _ := v.AsWord()
 		return fmt.Sprintf("word(%s)", w.Name)
 	case v.IsForward():
-		f := v.AsForward()
+		f, _ := v.AsForward()
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
 	case v.IsParenExpr():
 		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
 	case v.IsMark():
-		return fmt.Sprintf("mark(%s)", v.AsMark().ID)
+		_as2, _ := v.AsMark()
+		return fmt.Sprintf("mark(%s)", _as2.ID)
 	case v.IsMove():
-		m := v.AsMove()
+		m, _ := v.AsMove()
 		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
 	case v.IsReturnCheck():
-		rc := v.AsReturnCheck()
+		rc, _ := v.AsReturnCheck()
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
+	case v.IsDefCleanup():
+		return "__dc"
 	case v.IsModule():
-		md := v.AsModule()
+		md, _ := v.AsModule()
 		return fmt.Sprintf("module(%s)", md.ID)
 	case v.IsError():
-		return fmt.Sprintf("error(%s)", v.AsError().Message)
+		_as3, _ := v.AsError()
+		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()
@@ -860,14 +1326,29 @@ func (v Value) String() string {
 	case v.VType.Equal(TAtom):
 		return v.Data.(string)
 	case v.VType.Matches(TDecimal):
-		return strconv.FormatFloat(v.AsDecimal(), 'f', -1, 64)
+		_as4, _ := v.AsDecimal()
+		return strconv.FormatFloat(_as4, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):
-		if v.AsBoolean() {
+		_as5, _ := v.AsBoolean()
+		if _as5 {
 			return "true"
 		}
 		return "false"
+	case v.VType.Matches(TDate):
+		if t, ok := v.Data.(time.Time); ok {
+			return t.Format("2006-01-02")
+		}
+		return "Date(nil)"
+	case v.VType.Matches(TMatrix):
+		if m, ok := v.Data.(MatrixData); ok {
+			return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
+		}
+		return "Matrix(nil)"
+	case v.IsPath():
+		_as6, _ := v.AsPath()
+		return _as6.String()
 	case v.VType.Equal(TList):
 		if tt, ok := v.Data.(TableTypeInfo); ok {
 			parts := make([]string, 0, tt.Record.Fields.Len())
@@ -900,14 +1381,22 @@ func (v Value) String() string {
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
+	case v.IsArray():
+		arr := v.AsArray()
+		parts := make([]string, arr.Len())
+		for i := 0; i < arr.Len(); i++ {
+			e, _ := arr.Get(i)
+			parts[i] = e.String()
+		}
+		return "Array[" + strings.Join(parts, ",") + "]"
 	case v.IsObjectInstance():
-		oi := v.AsObjectInstance()
+		oi, _ := v.AsObjectInstance()
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -920,7 +1409,7 @@ func (v Value) String() string {
 		}
 		return name + "{" + strings.Join(parts, ",") + "}"
 	case v.IsObjectType():
-		ot := v.AsObjectType()
+		ot, _ := v.AsObjectType()
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -933,7 +1422,7 @@ func (v Value) String() string {
 		}
 		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
 	case v.IsDisjunct():
-		di := v.AsDisjunct()
+		di, _ := v.AsDisjunct()
 		parts := make([]string, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()
@@ -951,6 +1440,14 @@ func (v Value) String() string {
 			}
 			return "record{" + strings.Join(parts, ",") + "}"
 		}
+		if ot, ok := v.Data.(OptionsTypeInfo); ok {
+			parts := make([]string, 0, ot.Fields.Len())
+			for _, k := range ot.Fields.Keys() {
+				val, _ := ot.Fields.Get(k)
+				parts = append(parts, k+":"+val.String())
+			}
+			return "options{" + strings.Join(parts, ",") + "}"
+		}
 		m := v.AsMap()
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
@@ -961,4 +1458,46 @@ func (v Value) String() string {
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}
+}
+
+// IsTypeValue returns true if v is a type literal, an Options instance,
+// or a Node that contains a leaf that is a type.
+func IsTypeValue(v Value) bool {
+	// Type literal: Data==nil with a real type (not None).
+	if v.Data == nil && !v.VType.Equal(TNone) {
+		return true
+	}
+
+	// Options type, record type, typed list/map, table type, object type.
+	if v.IsOptionsType() || v.IsRecordType() || v.IsTypedList() ||
+		v.IsTypedMap() || v.IsTableType() || v.IsObjectType() {
+		return true
+	}
+
+	// Concrete list: check each element recursively.
+	if v.VType.Matches(TList) && v.Data != nil {
+		elems := v.AsList()
+		if !elems.IsNil() {
+			for _, elem := range elems.Slice() {
+				if IsTypeValue(elem) {
+					return true
+				}
+			}
+		}
+	}
+
+	// Concrete map: check each value recursively.
+	if v.VType.Matches(TMap) && v.Data != nil {
+		m := v.AsMap()
+		if m != nil {
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				if IsTypeValue(val) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

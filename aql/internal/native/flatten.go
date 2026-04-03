@@ -8,13 +8,13 @@ import (
 )
 
 // flattenFunc returns the "flatten" native function definition.
-// flatten has suffix precedence and two signatures:
+// flatten has forward precedence and two signatures:
 //   - [list, integer] — flattens the list to the given depth
 //   - [list]          — flattens the list by one level
 func flattenFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "flatten",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TList, engine.TInteger},
@@ -42,7 +42,10 @@ func flattenDefaultHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // flattenDepthHandler calls voxgigstruct.Flatten with a specified depth.
 func flattenDepthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	depth := args[1].AsInteger()
+	depth, err := args[1].AsInteger()
+	if err != nil {
+		return nil, fmt.Errorf("flatten: depth: %w", err)
+	}
 	result := voxgigstruct.Flatten(data, int(depth))
 	val, err := anyToValue(result)
 	if err != nil {

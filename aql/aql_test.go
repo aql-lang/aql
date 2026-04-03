@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
 func TestNew(t *testing.T) {
@@ -135,45 +136,34 @@ func TestIndependentInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := aql.New()
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	// Store in a.
-	_, err = a.Run("set x 42 end")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// b should not see x.
-	_, err = b.Run("get x")
-	if err == nil {
-		t.Fatal("expected error: b should not have key x")
-	}
-
-	// a should still see x.
-	result, err := a.Run("get x")
+	// Store and retrieve in a within a single Run.
+	result, err := a.Run("context set x 42 end context get x")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 1 || result[0] != int64(42) {
 		t.Errorf("got %v, want [42]", result)
 	}
+
+	// A separate instance should not see x.
+	b, err := aql.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.Run("context get x")
+	if err == nil {
+		t.Fatal("expected error: b should not have key x")
+	}
 }
 
-func TestStatePersistsAcrossRuns(t *testing.T) {
+func TestStatePersistsWithinRun(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = a.Run("set counter 10 end")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := a.Run("get counter")
+	result, err := a.Run("context set counter 10 end context get counter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,28 +173,15 @@ func TestStatePersistsAcrossRuns(t *testing.T) {
 }
 
 func TestManyIndependentInstances(t *testing.T) {
-	instances := make([]*aql.AQL, 5)
-	for i := range instances {
-		var err error
-		instances[i], err = aql.New()
+	// Each instance stores and retrieves its own index within a single Run.
+	for i := 0; i < 5; i++ {
+		a, err := aql.New()
 		if err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	// Each instance stores its own index.
-	for i, a := range instances {
-		_, err := a.Run("set idx " + itoa(i) + " end")
+		result, err := a.Run("context set idx " + itoa(i) + " end context get idx")
 		if err != nil {
-			t.Fatalf("instance %d set: %v", i, err)
-		}
-	}
-
-	// Each instance retrieves only its own index.
-	for i, a := range instances {
-		result, err := a.Run("get idx")
-		if err != nil {
-			t.Fatalf("instance %d get: %v", i, err)
+			t.Fatalf("instance %d: %v", i, err)
 		}
 		if result[0] != int64(i) {
 			t.Errorf("instance %d: got %v, want %d", i, result[0], i)
@@ -259,7 +236,7 @@ func TestMultilineMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := "set x 10 end\nset y 20 end\nget x\nadd\nget y"
+	src := "context set x 10 end\ncontext set y 20 end\n(context get x)\n(context get y)\nadd"
 	result, err := a.Run(src)
 	if err != nil {
 		t.Fatal(err)
@@ -303,11 +280,11 @@ func TestMultilineScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := `
-		set width 10 end
-		set height 5 end
-		get width
+		context set width 10 end
+		context set height 5 end
+		(context get width)
+		(context get height)
 		mul
-		get height
 	`
 	result, err := a.Run(script)
 	if err != nil {
@@ -325,12 +302,12 @@ func TestMultilineWithComments(t *testing.T) {
 	}
 	script := `
 		# set up values
-		set x 7 end
-		set y 3 end
+		context set x 7 end
+		context set y 3 end
 		# compute
-		get x
+		(context get x)
+		(context get y)
 		add
-		get y
 		# result should be 10
 	`
 	result, err := a.Run(script)
@@ -441,18 +418,18 @@ func TestRunDefaultBranch(t *testing.T) {
 	}
 }
 
-// --- Register / RegisterPrefixOnly ---
+// --- Register / RegisterStackOnly ---
 
-func TestRegisterSuffixWord(t *testing.T) {
+func TestRegisterForwardWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" as a suffix-precedence word: 5 double => 10
+	// Register "double" as a forward-precedence word: 5 double => 10
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(n * 2)}, nil
 		},
 	})
@@ -466,16 +443,16 @@ func TestRegisterSuffixWord(t *testing.T) {
 	}
 }
 
-func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
+func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" with suffix precedence — can collect arg after the word.
+	// Register "double" with forward precedence — can collect arg after the word.
 	a.Register("double", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(n * 2)}, nil
 		},
 	})
@@ -489,16 +466,16 @@ func TestRegisterSuffixWordCollectsAfter(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyWord(t *testing.T) {
+func TestRegisterStackOnlyWord(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "neg" as prefix-only: 5 neg => -5
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	// Register "neg" as stack-only: 5 neg => -5
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(-n)}, nil
 		},
 	})
@@ -512,24 +489,24 @@ func TestRegisterPrefixOnlyWord(t *testing.T) {
 	}
 }
 
-func TestRegisterPrefixOnlyDoesNotCollectSuffix(t *testing.T) {
+func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.RegisterPrefixOnly("neg", aql.Signature{
+	a.RegisterStackOnly("neg", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			n := args[0].AsInteger()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			n, _ := args[0].AsInteger()
 			return []aql.Value{aql.NewInteger(-n)}, nil
 		},
 	})
 
-	// "neg 5" — neg is prefix-only so it should not consume 5 from suffix.
+	// "neg 5" — neg is stack-only so it should not consume 5 from forward.
 	// Without a value on the stack, it should error.
 	_, err = a.Run("neg 5")
 	if err == nil {
-		t.Fatal("expected error: neg is prefix-only and has no prefix args")
+		t.Fatal("expected error: neg is stack-only and has no prefix args")
 	}
 }
 
@@ -542,15 +519,15 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	a.Register("square",
 		aql.Signature{
 			Args: []aql.Type{aql.TInteger},
-			Handler: func(args []aql.Value) ([]aql.Value, error) {
-				n := args[0].AsInteger()
+			Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+				n, _ := args[0].AsInteger()
 				return []aql.Value{aql.NewInteger(n * n)}, nil
 			},
 		},
 		aql.Signature{
 			Args: []aql.Type{aql.TString},
-			Handler: func(args []aql.Value) ([]aql.Value, error) {
-				s := args[0].AsString()
+			Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+				s, _ := args[0].AsString()
 				return []aql.Value{aql.NewString(s + s)}, nil
 			},
 		},
@@ -575,35 +552,36 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	}
 }
 
-func TestRegisterWithPrecedence(t *testing.T) {
+func TestRegisterLeftToRight(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Register "myadd" with low precedence and "mymul" with high precedence.
 	a.Register("myadd", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 1,
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + args[1].AsInteger())}, nil
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			a0, _ := args[0].AsInteger()
+			a1, _ := args[1].AsInteger()
+			return []aql.Value{aql.NewInteger(a0 + a1)}, nil
 		},
 	})
 	a.Register("mymul", aql.Signature{
-		Args:       []aql.Type{aql.TInteger, aql.TInteger},
-		Precedence: 2,
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() * args[1].AsInteger())}, nil
+		Args: []aql.Type{aql.TInteger, aql.TInteger},
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			m0, _ := args[0].AsInteger()
+			m1, _ := args[1].AsInteger()
+			return []aql.Value{aql.NewInteger(m0 * m1)}, nil
 		},
 	})
 
-	// 2 myadd 3 mymul 4 => mymul binds tighter, so 3*4=12 first, then 2+12=14
+	// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
 	result, err := a.Run("2 myadd 3 mymul 4")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || result[0] != int64(14) {
-		t.Errorf("got %v, want [14]", result)
+	if len(result) != 1 || result[0] != int64(20) {
+		t.Errorf("got %v, want [20]", result)
 	}
 }
 
@@ -613,10 +591,12 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Register "divmod" that returns quotient and remainder.
+	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
 	a.Register("divmod", aql.Signature{
 		Args: []aql.Type{aql.TInteger, aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			a, b := args[0].AsInteger(), args[1].AsInteger()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			a, _ := args[1].AsInteger()
+			b, _ := args[0].AsInteger()
 			if b == 0 {
 				return nil, fmt.Errorf("division by zero")
 			}
@@ -640,7 +620,7 @@ func TestRegisterErrorPropagation(t *testing.T) {
 	}
 	a.Register("fail", aql.Signature{
 		Args: []aql.Type{aql.TAny},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 			return nil, fmt.Errorf("intentional error")
 		},
 	})
@@ -661,8 +641,9 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 	}
 	a.Register("triple", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() * 3)}, nil
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			t0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(t0 * 3)}, nil
 		},
 	})
 
@@ -688,8 +669,9 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 
 	a.Register("custom", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + 100)}, nil
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			c0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(c0 + 100)}, nil
 		},
 	})
 
@@ -720,8 +702,8 @@ func TestRegisterStringHandler(t *testing.T) {
 	}
 	a.Register("shout", aql.Signature{
 		Args: []aql.Type{aql.TString},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			s := args[0].AsString()
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			s, _ := args[0].AsString()
 			return []aql.Value{aql.NewString(strings.ToUpper(s) + "!")}, nil
 		},
 	})
@@ -743,7 +725,7 @@ func TestRegisterZeroArgWord(t *testing.T) {
 	counter := 0
 	a.Register("tick", aql.Signature{
 		Args: []aql.Type{},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 			counter++
 			return []aql.Value{aql.NewInteger(int64(counter))}, nil
 		},
@@ -767,8 +749,9 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	// The existing string signature still works; the new one handles integers.
 	a.Register("upper", aql.Signature{
 		Args: []aql.Type{aql.TInteger},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
-			return []aql.Value{aql.NewInteger(args[0].AsInteger() + 1000)}, nil
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
+			u0, _ := args[0].AsInteger()
+			return []aql.Value{aql.NewInteger(u0 + 1000)}, nil
 		},
 	})
 
@@ -809,7 +792,7 @@ func TestRegisterWithTypeAny(t *testing.T) {
 	}
 	a.Register("identity", aql.Signature{
 		Args: []aql.Type{aql.TAny},
-		Handler: func(args []aql.Value) ([]aql.Value, error) {
+		Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
 			return args, nil
 		},
 	})

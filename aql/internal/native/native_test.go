@@ -65,12 +65,14 @@ func TestCloneHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("a")
-	if v.AsInteger() != 1 {
-		t.Errorf("expected 1, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 1 {
+		t.Errorf("expected 1, got %d", vi)
 	}
 	v, _ = m.Get("b")
-	if v.AsString() != "hello" {
-		t.Errorf("expected hello, got %s", v.AsString())
+	vs, _ := v.AsString()
+	if vs != "hello" {
+		t.Errorf("expected hello, got %s", vs)
 	}
 }
 
@@ -80,7 +82,7 @@ func TestCloneHandlerList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -95,7 +97,7 @@ func TestFlattenDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 4 {
 		t.Errorf("expected 4 elements, got %d", len(list))
 	}
@@ -111,7 +113,7 @@ func TestFlattenDepthHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	// [1, 3, [4]] -> 3 elements
 	if len(list) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(list))
@@ -127,8 +129,9 @@ func TestGetpathHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 42 {
+		t.Errorf("expected 42, got %d", ri)
 	}
 }
 
@@ -138,8 +141,9 @@ func TestGetpathHandlerTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsString() != "hello" {
-		t.Errorf("expected hello, got %s", result[0].AsString())
+	rs, _ := result[0].AsString()
+	if rs != "hello" {
+		t.Errorf("expected hello, got %s", rs)
 	}
 }
 
@@ -156,8 +160,9 @@ func TestSetpathHandler(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'b'")
 	}
-	if v.AsInteger() != 2 {
-		t.Errorf("expected 2, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 2 {
+		t.Errorf("expected 2, got %d", vi)
 	}
 }
 
@@ -172,8 +177,9 @@ func TestSetpathHandlerNewKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if check[0].AsString() != "new" {
-		t.Errorf("expected new, got %s", check[0].AsString())
+	cs, _ := check[0].AsString()
+	if cs != "new" {
+		t.Errorf("expected new, got %s", cs)
 	}
 }
 
@@ -188,8 +194,9 @@ func TestInjectHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("greeting")
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs, _ := v.AsString()
+	if vs != "Alice" {
+		t.Errorf("expected Alice, got %s", vs)
 	}
 }
 
@@ -201,12 +208,12 @@ func TestItemsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 pairs, got %d", len(list))
 	}
 	// Each item is [key, value]
-	pair := list[0].AsList()
+	pair := list[0].AsList().Slice()
 	if len(pair) != 2 {
 		t.Fatalf("expected pair of 2, got %d", len(pair))
 	}
@@ -220,7 +227,7 @@ func TestJoinDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s != "a,b,c" {
 		t.Errorf("expected a,b,c got %s", s)
 	}
@@ -232,7 +239,7 @@ func TestJoinSepHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s != "a-b" {
 		t.Errorf("expected a-b got %s", s)
 	}
@@ -246,7 +253,7 @@ func TestJsonifyDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s == "" {
 		t.Error("expected non-empty JSON string")
 	}
@@ -259,7 +266,7 @@ func TestJsonifyFlagsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if s == "" {
 		t.Error("expected non-empty JSON string")
 	}
@@ -276,11 +283,13 @@ func TestMergeHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, ok := m.Get("x")
-	if !ok || v.AsInteger() != 1 {
+	vi, _ := v.AsInteger()
+	if !ok || vi != 1 {
 		t.Error("expected x=1")
 	}
 	v, ok = m.Get("y")
-	if !ok || v.AsInteger() != 2 {
+	vi, _ = v.AsInteger()
+	if !ok || vi != 2 {
 		t.Error("expected y=2")
 	}
 }
@@ -294,8 +303,9 @@ func TestMergeHandlerOverwrite(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("x")
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi, _ := v.AsInteger()
+	if vi != 99 {
+		t.Errorf("expected 99, got %d", vi)
 	}
 }
 
@@ -306,7 +316,7 @@ func TestPadDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if len(s) == 0 {
 		t.Error("expected non-empty padded string")
 	}
@@ -317,7 +327,7 @@ func TestPadWidthHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := result[0].AsString()
+	s, _ := result[0].AsString()
 	if len(s) < 10 {
 		t.Errorf("expected at least 10 chars, got %d", len(s))
 	}
@@ -348,8 +358,9 @@ func TestSizeHandlerList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 3 {
-		t.Errorf("expected 3, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 3 {
+		t.Errorf("expected 3, got %d", ri)
 	}
 }
 
@@ -359,8 +370,9 @@ func TestSizeHandlerMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 2 {
-		t.Errorf("expected 2, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 2 {
+		t.Errorf("expected 2, got %d", ri)
 	}
 }
 
@@ -369,8 +381,9 @@ func TestSizeHandlerString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].AsInteger() != 5 {
-		t.Errorf("expected 5, got %d", result[0].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 5 {
+		t.Errorf("expected 5, got %d", ri)
 	}
 }
 
@@ -382,7 +395,7 @@ func TestSliceAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3, got %d", len(list))
 	}
@@ -390,11 +403,11 @@ func TestSliceAllHandler(t *testing.T) {
 
 func TestSliceStartHandler(t *testing.T) {
 	data := newList(engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3))
-	result, err := sliceStartHandler([]engine.Value{data, engine.NewInteger(1)}, nil, nil, nil)
+	result, err := sliceStartHandler([]engine.Value{engine.NewInteger(1), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -402,11 +415,11 @@ func TestSliceStartHandler(t *testing.T) {
 
 func TestSliceStartEndHandler(t *testing.T) {
 	data := newList(engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4))
-	result, err := sliceStartEndHandler([]engine.Value{data, engine.NewInteger(1), engine.NewInteger(3)}, nil, nil, nil)
+	result, err := sliceStartEndHandler([]engine.Value{engine.NewInteger(1), engine.NewInteger(3), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -437,7 +450,7 @@ func TestWalkHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) < 2 {
 		t.Errorf("expected at least 2 leaf nodes, got %d", len(list))
 	}
@@ -459,7 +472,7 @@ func TestWalkHandlerEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 leaves for empty map, got %d", len(list))
 	}
@@ -513,46 +526,47 @@ func TestFuncDefinitions(t *testing.T) {
 	}
 }
 
-// --- makeFullStackHandler ---
+// --- wrapSafetyCheck ---
 
-func TestMakeFullStackHandler(t *testing.T) {
-	r, err := engine.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+func TestWrapSafetyCheck(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return []engine.Value{engine.NewInteger(42)}, nil
 	}
-	handler := makeFullStackHandler(r, inner)
+	handler := wrapSafetyCheck(inner)
 
-	stackBefore := []engine.Value{engine.NewString("bottom")}
-	result, herr := handler(nil, stackBefore)
+	result, herr := handler([]engine.Value{engine.NewString("hello")}, nil, nil, nil)
 	if herr != nil {
 		t.Fatal(herr)
 	}
-	// Should be [bottom, 42]
-	if len(result) != 2 {
-		t.Fatalf("expected 2, got %d", len(result))
+	if len(result) != 1 {
+		t.Fatalf("expected 1, got %d", len(result))
 	}
-	if result[0].AsString() != "bottom" {
-		t.Errorf("expected bottom, got %s", result[0].AsString())
-	}
-	if result[1].AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", result[1].AsInteger())
+	ri, _ := result[0].AsInteger()
+	if ri != 42 {
+		t.Errorf("expected 42, got %d", ri)
 	}
 }
 
-func TestMakeFullStackHandlerError(t *testing.T) {
-	r, err := engine.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
+func TestWrapSafetyCheckRejectsTypeLiteral(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+		return []engine.Value{engine.NewInteger(1)}, nil
 	}
-	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+	handler := wrapSafetyCheck(inner)
+
+	// Type literal has Data==nil — should be rejected.
+	_, herr := handler([]engine.Value{engine.NewTypeLiteral(engine.TMap)}, nil, nil, nil)
+	if herr == nil {
+		t.Fatal("expected error for type literal")
+	}
+}
+
+func TestWrapSafetyCheckError(t *testing.T) {
+	inner := func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 		return nil, fmt.Errorf("test error")
 	}
-	handler := makeFullStackHandler(r, inner)
+	handler := wrapSafetyCheck(inner)
 
-	_, herr := handler(nil, nil)
+	_, herr := handler(nil, nil, nil, nil)
 	if herr == nil {
 		t.Fatal("expected error")
 	}
@@ -566,7 +580,7 @@ func TestListRecordAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -579,7 +593,7 @@ func TestListRecordFilterHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -593,7 +607,7 @@ func TestCreateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -622,7 +636,7 @@ func TestUpdateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -636,7 +650,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList()
+	list := result[0].AsList().Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -657,7 +671,6 @@ func makeTrueFilterFn() engine.Value {
 		},
 	})
 }
-
 
 func defaultRegistry(t *testing.T) *engine.Registry {
 	t.Helper()
@@ -684,7 +697,7 @@ func TestFilterHandler(t *testing.T) {
 	// All items should pass the filter (fn always returns true).
 	// voxgigstruct.Filter on a map may return a map or list; just check non-nil.
 	if result[0].VType.Equal(engine.TList) {
-		list := result[0].AsList()
+		list := result[0].AsList().Slice()
 		if len(list) != 2 {
 			t.Errorf("expected 2 entries, got %d", len(list))
 		}
@@ -699,7 +712,7 @@ func TestFilterHandler(t *testing.T) {
 // --- walk with before callback ---
 
 // makeWalkValueFn creates an AQL function that extracts the "value" field
-// from the walk node map. Body: [node getpath "value"]
+// from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{
 		Sigs: []engine.FnSig{
@@ -708,8 +721,8 @@ func makeWalkValueFn() engine.Value {
 					{Name: "node", Type: engine.TMap},
 				},
 				Body: []engine.Value{
-					engine.NewWord("node"),
 					engine.NewWord("getpath"),
+					engine.NewWord("node"),
 					engine.NewString("value"),
 				},
 			},

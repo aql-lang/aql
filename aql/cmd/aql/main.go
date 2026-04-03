@@ -13,7 +13,9 @@ import (
 
 	aql "github.com/metsitaba/voxgig-exp/aql"
 	jsonic "github.com/jsonicjs/jsonic/go"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
 
@@ -156,6 +158,18 @@ func runHelp(args []string, w io.Writer) int {
 	}
 
 	name := args[0]
+
+	// Build a registry to get dynamic signature data.
+	reg, err := engine.DefaultRegistry()
+	if err == nil {
+		native.Register(reg)
+		if info := engine.BuildFuncInfo(reg, name); info != nil {
+			fmt.Fprint(w, help.FormatDynamic(*info))
+			return 0
+		}
+	}
+
+	// Fallback to static help if registry unavailable.
 	entry := help.Lookup(name)
 	if entry == nil {
 		fmt.Fprintf(w, "help: no help available for %q\n", name)

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+<title>AQL REPL</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --surface: #181825;
+    --text: #cdd6f4;
+    --subtext: #a6adc8;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --blue: #89b4fa;
+    --mauve: #cba6f7;
+    --border: #313244;
+    --input-bg: #11111b;
+    --hover: #313244;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; font-weight: 600; color: var(--mauve); }
+  header .subtitle { font-size: 12px; color: var(--subtext); }
+  #status {
+    margin-left: auto;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .status-loading { color: #fab387; }
+  .status-ready { color: var(--green); }
+  .status-error { color: var(--red); }
+
+  /* --- REPL view --- */
+  #repl-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  #output {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .line { margin-bottom: 4px; }
+  .line-input { color: var(--blue); cursor: pointer; }
+  .line-input:active { opacity: 0.7; }
+  .line-result { color: var(--green); cursor: pointer; }
+  .line-result:active { opacity: 0.7; }
+  .line-error { color: var(--red); cursor: pointer; }
+  .line-error:active { opacity: 0.7; }
+  .line-info { color: var(--subtext); font-style: italic; }
+  #input-area {
+    display: flex;
+    align-items: flex-start;
+    padding: 8px 16px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  #input-area .prompt {
+    color: var(--mauve);
+    font-size: 14px;
+    flex-shrink: 0;
+    user-select: none;
+    line-height: 1.5;
+    padding-top: 8px;
+  }
+  #input {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 12px;
+    outline: none;
+    resize: none;
+    overflow-y: auto;
+    line-height: 1.5;
+    min-height: calc(1.5em + 18px);
+    max-height: 40vh;
+  }
+  #input:focus { border-color: var(--mauve); }
+  #input:disabled { opacity: 0.5; }
+  .input-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-self: flex-end;
+    flex-shrink: 0;
+  }
+  .btn {
+    background: var(--mauve);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .btn:active { opacity: 0.8; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn-secondary {
+    background: var(--border);
+    color: var(--text);
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--subtext);
+    padding: 4px 16px 0;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  /* --- History view --- */
+  #history-view {
+    display: none;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  #history-view.active { display: flex; }
+  #repl-view.hidden { display: none; }
+  #history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  #history-search {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none;
+  }
+  #history-search:focus { border-color: var(--mauve); }
+  #history-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .history-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--blue);
+    font-size: 13px;
+  }
+  .history-item:active { background: var(--hover); }
+  .history-empty {
+    padding: 24px 16px;
+    color: var(--subtext);
+    text-align: center;
+    font-style: italic;
+  }
+
+  @media (hover: hover) {
+    .line-input:hover, .line-result:hover, .line-error:hover { background: var(--hover); border-radius: 2px; }
+    .history-item:hover { background: var(--hover); }
+  }
+
+  @media (max-width: 600px) {
+    body { font-size: 13px; }
+    header { padding: 8px 12px; gap: 6px; }
+    header h1 { font-size: 15px; }
+    header .subtitle { display: none; }
+    #output { padding: 10px 12px; }
+    #input-area { padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    #input { font-size: 16px; }
+    .hint { padding: 4px 12px 0; }
+    #history-toolbar { padding: 8px 12px; }
+    #history-search { font-size: 16px; }
+    .history-item { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>AQL REPL</h1>
+  <span class="subtitle">concatenative query language</span>
+  <span id="status" class="status-loading">loading wasm...</span>
+</header>
+
+<div id="repl-view">
+  <div id="output">
+    <div class="line line-info">Loading AQL engine...</div>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div id="input-area">
+    <span class="prompt">&gt;&gt;</span>
+    <textarea id="input" rows="3" disabled autocomplete="off" autocorrect="off"
+              autocapitalize="off" spellcheck="false"
+              placeholder="Loading..."></textarea>
+    <div class="input-btns">
+      <button id="run-btn" class="btn" disabled>Run</button>
+      <button id="history-btn" class="btn btn-secondary" disabled>History</button>
+    </div>
+  </div>
+</div>
+
+<div id="history-view">
+  <div id="history-toolbar">
+    <input id="history-search" type="text" placeholder="Search history..."
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="history-back-btn" class="btn btn-secondary">Back</button>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<script src="sql-wasm.js"></script>
+<script src="wasm_exec.js"></script>
+<script>
+(function() {
+  var output = document.getElementById('output');
+  var input = document.getElementById('input');
+  var status = document.getElementById('status');
+  var runBtn = document.getElementById('run-btn');
+  var historyBtn = document.getElementById('history-btn');
+  var hintEl = document.getElementById('hint');
+  var replView = document.getElementById('repl-view');
+  var historyView = document.getElementById('history-view');
+  var historySearch = document.getElementById('history-search');
+  var historyList = document.getElementById('history-list');
+  var historyBackBtn = document.getElementById('history-back-btn');
+
+  var sessionHistory = [];
+  var historyIdx = -1;
+  var ready = false;
+  var STORAGE_KEY = 'aql_repl_history';
+  var MAX_HISTORY = 500;
+
+  var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  hintEl.textContent = isMobile
+    ? 'Enter for newline, tap Run to evaluate. Tap output to append.'
+    : 'Shift+Enter for newline, Enter to evaluate. Click output to append.';
+
+  // --- LocalStorage history (FIFO, capped) ---
+  function loadHistory() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch(e) { return []; }
+  }
+
+  function saveHistory(arr) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+    } catch(e) {}
+  }
+
+  function addToHistory(code) {
+    var h = loadHistory();
+    h.push(code);
+    if (h.length > MAX_HISTORY) h = h.slice(h.length - MAX_HISTORY);
+    saveHistory(h);
+  }
+
+  // --- Undo/redo for the input textarea ---
+  var undoStack = [''];
+  var redoStack = [];
+  var undoTimer = null;
+
+  function snapshotUndo() {
+    var val = input.value;
+    if (undoStack[undoStack.length - 1] !== val) {
+      undoStack.push(val);
+      redoStack = [];
+    }
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(snapshotUndo, 400);
+  }
+
+  function undo() {
+    snapshotUndo();
+    if (undoStack.length > 1) {
+      redoStack.push(undoStack.pop());
+      input.value = undoStack[undoStack.length - 1];
+      autoResize();
+    }
+  }
+
+  function redo() {
+    if (redoStack.length > 0) {
+      var val = redoStack.pop();
+      undoStack.push(val);
+      input.value = val;
+      autoResize();
+    }
+  }
+
+  function resetUndoState() {
+    undoStack = [''];
+    redoStack = [];
+  }
+
+  // --- Append text to input ---
+  function appendToInput(text) {
+    var cur = input.value;
+    if (cur.length > 0 && cur[cur.length - 1] !== '\n') {
+      input.value = cur + '\n' + text;
+    } else {
+      input.value = cur + text;
+    }
+    snapshotUndo();
+    autoResize();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  // --- Viewport resize handling for mobile keyboards ---
+  function updateLayout() {
+    if (window.visualViewport) {
+      document.body.style.height = window.visualViewport.height + 'px';
+    } else {
+      document.body.style.height = window.innerHeight + 'px';
+    }
+    scrollOutput();
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateLayout);
+    window.visualViewport.addEventListener('scroll', updateLayout);
+  }
+  window.addEventListener('resize', updateLayout);
+  updateLayout();
+
+  // --- Output helpers ---
+  function scrollOutput() {
+    requestAnimationFrame(function() {
+      output.scrollTop = output.scrollHeight;
+    });
+  }
+
+  function addLine(cls, text, rawCode) {
+    var div = document.createElement('div');
+    div.className = 'line ' + cls;
+    div.textContent = text;
+    if (cls !== 'line-info') {
+      div.setAttribute('data-code', rawCode !== undefined ? rawCode : text);
+      div.addEventListener('click', function() {
+        var code = this.getAttribute('data-code');
+        appendToInput(code);
+      });
+    }
+    output.appendChild(div);
+    scrollOutput();
+  }
+
+  function clearOutput() {
+    output.innerHTML = '';
+  }
+
+  function autoResize() {
+    input.style.height = 'auto';
+    var maxH = (window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.3;
+    input.style.height = Math.min(input.scrollHeight, maxH) + 'px';
+  }
+
+  function submit() {
+    if (!ready) return;
+    var code = input.value.trim();
+    if (!code) return;
+    sessionHistory.push(code);
+    historyIdx = sessionHistory.length;
+    addToHistory(code);
+    input.value = '';
+    resetUndoState();
+    autoResize();
+    evaluate(code);
+    input.focus();
+  }
+
+  // --- History view ---
+  function showHistoryView() {
+    replView.classList.add('hidden');
+    historyView.classList.add('active');
+    historySearch.value = '';
+    renderHistoryList('');
+    historySearch.focus();
+  }
+
+  function hideHistoryView() {
+    historyView.classList.remove('active');
+    replView.classList.remove('hidden');
+    updateLayout();
+    input.focus();
+  }
+
+  function renderHistoryList(filter) {
+    historyList.innerHTML = '';
+    var h = loadHistory();
+    var filtered = h;
+    if (filter) {
+      var lf = filter.toLowerCase();
+      filtered = h.filter(function(item) {
+        return item.toLowerCase().indexOf(lf) !== -1;
+      });
+    }
+    if (filtered.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = filter ? 'No matches' : 'No history yet';
+      historyList.appendChild(empty);
+      return;
+    }
+    // Most recent first
+    for (var i = filtered.length - 1; i >= 0; i--) {
+      var div = document.createElement('div');
+      div.className = 'history-item';
+      div.textContent = filtered[i];
+      div.setAttribute('data-code', filtered[i]);
+      div.addEventListener('click', function() {
+        var code = this.getAttribute('data-code');
+        hideHistoryView();
+        appendToInput(code);
+      });
+      historyList.appendChild(div);
+    }
+  }
+
+  historyBtn.addEventListener('click', showHistoryView);
+  historyBackBtn.addEventListener('click', hideHistoryView);
+  historySearch.addEventListener('input', function() {
+    renderHistoryList(historySearch.value);
+  });
+
+  // --- Load sql.js then Go WASM ---
+  var go = new Go();
+
+  window.__aqlReady = function() {
+    ready = true;
+    clearOutput();
+    addLine('line-info', 'AQL Web REPL ready. Type expressions and press Enter.');
+    addLine('line-info', 'Examples: 1 add 2  |  "hello" upper  |  def double [dup add]  |  5 double');
+    status.textContent = 'ready';
+    status.className = 'status-ready';
+    input.disabled = false;
+    runBtn.disabled = false;
+    historyBtn.disabled = false;
+    input.placeholder = 'Enter AQL expression...';
+    input.focus();
+  };
+
+  // --- Helpers for base64-encoded WASM (used in single-file bundle) ---
+  function b64ToArrayBuffer(b64) {
+    var bin = atob(b64);
+    var len = bin.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function loadAqlWasm() {
+    var p;
+    if (typeof window.__aqlWasmB64 === 'string') {
+      // Single-file bundle: decode inline base64.
+      p = WebAssembly.instantiate(b64ToArrayBuffer(window.__aqlWasmB64), go.importObject);
+    } else {
+      // Multi-file: fetch from server.
+      p = WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
+        .catch(function() {
+          return fetch('aql.wasm').then(function(r) { return r.arrayBuffer(); })
+            .then(function(b) { return WebAssembly.instantiate(b, go.importObject); });
+        });
+    }
+    p.then(function(result) {
+      go.run(result.instance);
+    }).catch(function(err) {
+      status.textContent = 'error';
+      status.className = 'status-error';
+      addLine('line-error', 'Failed to load AQL WASM: ' + err.message);
+    });
+  }
+
+  function initSqlAndStart() {
+    if (typeof initSqlJs !== 'function') {
+      loadAqlWasm();
+      return;
+    }
+    var opts = {};
+    if (typeof window.__sqlWasmB64 === 'string') {
+      // Single-file bundle: provide sql.js WASM from inline base64.
+      opts.wasmBinary = new Uint8Array(b64ToArrayBuffer(window.__sqlWasmB64));
+    } else {
+      // Multi-file: locate sql-wasm.wasm next to this page.
+      opts.locateFile = function(file) { return file; };
+    }
+    initSqlJs(opts).then(function(SQL) {
+      window.__sqlJS = SQL;
+      loadAqlWasm();
+    }).catch(function(err) {
+      addLine('line-info', 'Note: SQLite unavailable (' + err.message + ')');
+      loadAqlWasm();
+    });
+  }
+
+  initSqlAndStart();
+
+  function evaluate(code) {
+    var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
+    addLine('line-input', '>> ' + display, code);
+    try {
+      var res = aqlEval(code);
+      if (res.output) {
+        addLine('line-result', res.output.trimEnd(), res.output.trimEnd());
+      }
+      if (res.error) {
+        addLine('line-error', '  error: ' + res.error, res.error);
+      } else if (res.result) {
+        addLine('line-result', res.result, res.result);
+      }
+    } catch(e) {
+      addLine('line-error', '  error: ' + e.message, e.message);
+    }
+  }
+
+  input.addEventListener('input', function() {
+    scheduleSnapshot();
+    autoResize();
+  });
+
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
+      e.preventDefault();
+      submit();
+    } else if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    } else if ((e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
+               (e.key === 'y' && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault();
+      redo();
+    } else if (e.key === 'ArrowUp' && input.selectionStart === 0 && !e.shiftKey) {
+      e.preventDefault();
+      if (historyIdx > 0) {
+        historyIdx--;
+        input.value = sessionHistory[historyIdx];
+        snapshotUndo();
+        autoResize();
+      }
+    } else if (e.key === 'ArrowDown' && input.selectionStart === input.value.length && !e.shiftKey) {
+      e.preventDefault();
+      if (historyIdx < sessionHistory.length - 1) {
+        historyIdx++;
+        input.value = sessionHistory[historyIdx];
+      } else {
+        historyIdx = sessionHistory.length;
+        input.value = '';
+      }
+      snapshotUndo();
+      autoResize();
+    }
+  });
+
+  runBtn.addEventListener('click', submit);
+})();
+</script>
+</body>
+</html>

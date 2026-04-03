@@ -1,3 +1,5 @@
+//go:build !js
+
 package engine
 
 import (
@@ -244,16 +246,19 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 	case colType.Matches(TInteger):
 		// Column wants INTEGER. Coerce the value.
 		if v.VType.Matches(TInteger) {
-			return v.AsInteger()
+			_as0, _ := v.AsInteger()
+			return _as0
 		}
 		// String that looks numeric → parse it.
 		if v.VType.Matches(TString) {
-			if n, err := strconv.ParseInt(v.AsString(), 10, 64); err == nil {
+			_as1, _ := v.AsString()
+			if n, err := strconv.ParseInt(_as1, 10, 64); err == nil {
 				return n
 			}
 		}
 		if v.VType.Matches(TBoolean) {
-			if v.AsBoolean() {
+			_as2, _ := v.AsBoolean()
+			if _as2 {
 				return int64(1)
 			}
 			return int64(0)
@@ -264,13 +269,16 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 	case colType.Matches(TNumber):
 		// Column wants REAL.
 		if v.VType.Matches(TDecimal) {
-			return v.AsDecimal()
+			_as3, _ := v.AsDecimal()
+			return _as3
 		}
 		if v.VType.Matches(TInteger) {
-			return float64(v.AsInteger())
+			_as4, _ := v.AsInteger()
+			return float64(_as4)
 		}
 		if v.VType.Matches(TString) {
-			if f, err := strconv.ParseFloat(v.AsString(), 64); err == nil {
+			_as5, _ := v.AsString()
+			if f, err := strconv.ParseFloat(_as5, 64); err == nil {
 				return f
 			}
 		}
@@ -279,13 +287,15 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 	case colType.Matches(TBoolean):
 		// Column stored as INTEGER (0/1).
 		if v.VType.Matches(TBoolean) {
-			if v.AsBoolean() {
+			_as6, _ := v.AsBoolean()
+			if _as6 {
 				return int64(1)
 			}
 			return int64(0)
 		}
 		if v.VType.Matches(TString) {
-			if v.AsString() == "true" {
+			_as7, _ := v.AsString()
+			if _as7 == "true" {
 				return int64(1)
 			}
 			return int64(0)
@@ -295,7 +305,8 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 	default:
 		// TEXT column.
 		if v.VType.Matches(TString) {
-			return v.AsString()
+			_as8, _ := v.AsString()
+			return _as8
 		}
 		return valToString(v)
 	}
@@ -390,16 +401,3 @@ func (s *SQLiteStore) DropTable(name string) {
 	delete(s.tables, name)
 }
 
-// quoteIdent quotes a SQL identifier with double quotes.
-func quoteIdent(name string) string {
-	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
-}
-
-// joinQuoted joins identifiers with commas, each quoted.
-func joinQuoted(names []string) string {
-	parts := make([]string, len(names))
-	for i, n := range names {
-		parts[i] = quoteIdent(n)
-	}
-	return strings.Join(parts, ", ")
-}

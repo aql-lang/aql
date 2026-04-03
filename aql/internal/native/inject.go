@@ -8,13 +8,13 @@ import (
 )
 
 // injectFunc returns the "inject" native function definition.
-// inject has suffix precedence and one signature:
+// inject has forward precedence and one signature:
 //   - [any, any] — resolves backtick-escaped path references in the first value
 //     using the second value as the store
 func injectFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "inject",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:    []engine.Type{engine.TAny, engine.TAny},

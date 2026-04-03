@@ -1,7 +1,7 @@
 # Unified Core Engine Algorithm (Proposal)
 
 This note reviews the current engine behavior and proposes a single unified algorithm
-for signature-driven prefix/suffix/infix execution with precedence.
+for signature-driven prefix/forward/infix execution with precedence.
 
 ## Current engine architecture (review)
 
@@ -12,7 +12,7 @@ The implementation currently splits the core behavior across several interacting
 2. **Suffix fallback** via `Forward` markers inserted by `insertForward` (`engine.go`).
 3. **Heuristic signature selection for forwards** in `bestSigForForward`, including
    peek-ahead scoring bonuses (`engine.go`).
-4. **Type-directed collection + overload switching** while collecting suffix args in
+4. **Type-directed collection + overload switching** while collecting forward args in
    `stepLiteral` (`engine.go`).
 5. **Early forward resolution** via `shouldResolveForwardEarly`/`couldProduceType`
    (`engine.go`).
@@ -30,13 +30,13 @@ from typed values, word definitions, and precedence*.
 - `Type.Matches` supports hierarchical subtyping (`String/Proper` matches `String`).
 - `flexibleMatch` supports argument reordering (permutations for small arity).
 - `signatureScore` gives deterministic tie-breaking by arity + specificity.
-- Forward collection can switch overloads as more suffix information arrives.
+- Forward collection can switch overloads as more forward information arrives.
 
 ### Friction points
 
 - Matching policy is split between `MatchSignature`, `bestSigForForward`, and
   `shouldResolveForwardEarly`, with different local scoring logic.
-- Prefix and suffix are modeled as separate control paths that later converge.
+- Prefix and forward are modeled as separate control paths that later converge.
 - Precedence is enforced as a local defer rule during collection, not from a single
   global notion of binding power.
 - Future type prediction (`couldProduceType`) is useful, but currently isolated from
@@ -51,19 +51,19 @@ signatures with incremental constraints*.
 
 Represent each encountered function word as a frame:
 
-- `word`, `position`, `mode` (normal/forced prefix/forced suffix)
+- `word`, `position`, `mode` (normal/forced prefix/forced forward)
 - `minBP` (binding power / precedence floor)
 - `candidates[]` where each candidate has:
   - signature pointer
   - bound stack args (prefix)
-  - bound suffix args
+  - bound forward args
   - unmatched argument slots
   - score (same unified formula)
 
-Instead of choosing prefix first and suffix later, each candidate can bind from:
+Instead of choosing prefix first and forward later, each candidate can bind from:
 
 - available resolved stack values (prefix), and
-- future produced values (suffix),
+- future produced values (forward),
 
 subject to precedence and type compatibility.
 
@@ -77,7 +77,7 @@ subject to precedence and type compatibility.
    terminated by `end`).
 5. Execute reduced frame, push results as values, and continue.
 
-Precedence falls out naturally if each frame has binding power and only captures suffix
+Precedence falls out naturally if each frame has binding power and only captures forward
 values while no tighter frame to its right is active.
 
 ### Unifying match logic
@@ -107,7 +107,7 @@ into one state transition.
 ## Benefits
 
 - **Single source of truth** for overload selection.
-- **Consistent semantics** across prefix/suffix/infix and modifier modes.
+- **Consistent semantics** across prefix/forward/infix and modifier modes.
 - **Fewer heuristics** and less duplicated scoring logic.
 - **Easier proofs/tests**: frame transitions can be table-tested.
 - **Extensible** for optional/named args later.
@@ -126,12 +126,12 @@ Yes — there is a more unified algorithm, and the frame/candidate planner is th
 natural fit for this engine because the language already has:
 
 - typed overloads,
-- suffix collection,
+- forward collection,
 - precedence,
 - partial application (`curry`).
 
 Those are exactly the features that benefit from a single incremental constraint solver
-instead of split prefix-vs-suffix control flow.
+instead of split prefix-vs-forward control flow.
 
 
 ## Migration status

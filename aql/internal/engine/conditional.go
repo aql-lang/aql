@@ -10,9 +10,11 @@ package engine
 func isTruthy(v Value) bool {
 	switch {
 	case v.VType.Matches(TBoolean):
-		return v.AsBoolean()
+		_as0, _ := v.AsBoolean()
+		return _as0
 	case v.VType.Matches(TInteger):
-		return v.AsInteger() != 0
+		_as1, _ := v.AsInteger()
+		return _as1 != 0
 	case v.VType.Equal(TNone):
 		return false
 	case v.VType.Equal(TList):
@@ -42,11 +44,11 @@ func isTruthy(v Value) bool {
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
 func spliceArg(v Value) []Value {
-	if v.VType.Equal(TList) && !v.IsTypedList() && !v.IsTableType() {
+	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList()
-		result := make([]Value, 0, len(elems)+2)
+		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
-		result = append(result, elems...)
+		result = append(result, elems.Slice()...)
 		result = append(result, NewWord(")"))
 		return result
 	}
@@ -56,18 +58,18 @@ func spliceArg(v Value) []Value {
 func registerIf(r *Registry) {
 	// if: [any, any, any] -> [any] — 3-arg
 	// "if cond then else": args=[cond, then, else]
-	if3Handler := func(args []Value) ([]Value, error) {
+	if3Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		cond := args[0]
 		thenBranch := spliceArg(args[1])
 		elseBranch := spliceArg(args[2])
 
 		// If condition is a list, use mark/move to evaluate it in-place.
-		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
-			condElems := cond.AsList()
+		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
+			condSlice := cond.AsList().Slice()
 			id := NextMarkID()
-			tokens := make([]Value, 0, len(condElems)+2)
-			tokens = append(tokens, NewMark(id, condElems...))
-			tokens = append(tokens, condElems...)
+			tokens := make([]Value, 0, len(condSlice)+2)
+			tokens = append(tokens, NewMark(id, condSlice...))
+			tokens = append(tokens, condSlice...)
 			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
 				Then: thenBranch,
 				Else: elseBranch,
@@ -84,17 +86,17 @@ func registerIf(r *Registry) {
 
 	// if: [any, any] -> [any] — 2-arg
 	// "if cond then": args=[cond, then]
-	if2Handler := func(args []Value) ([]Value, error) {
+	if2Handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		cond := args[0]
 		thenBranch := spliceArg(args[1])
 
 		// If condition is a list, use mark/move to evaluate it in-place.
-		if cond.VType.Equal(TList) && !cond.IsTypedList() && !cond.IsTableType() {
-			condElems := cond.AsList()
+		if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
+			condSlice := cond.AsList().Slice()
 			id := NextMarkID()
-			tokens := make([]Value, 0, len(condElems)+2)
-			tokens = append(tokens, NewMark(id, condElems...))
-			tokens = append(tokens, condElems...)
+			tokens := make([]Value, 0, len(condSlice)+2)
+			tokens = append(tokens, NewMark(id, condSlice...))
+			tokens = append(tokens, condSlice...)
 			tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
 				Then: thenBranch,
 				Else: nil,
@@ -111,12 +113,14 @@ func registerIf(r *Registry) {
 
 	r.Register("if",
 		Signature{
-			Args:    []Type{TAny, TAny, TAny},
-			Handler: if3Handler,
+			Args:       []Type{TAny, TAny, TAny},
+			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+			Handler:    if3Handler,
 		},
 		Signature{
-			Args:    []Type{TAny, TAny},
-			Handler: if2Handler,
+			Args:       []Type{TAny, TAny},
+			NoEvalArgs: map[int]bool{0: true, 1: true},
+			Handler:    if2Handler,
 		},
 	)
 }

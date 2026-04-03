@@ -7,7 +7,7 @@ import (
 )
 
 // prepareFunc returns the "prepare" native function definition.
-// prepare has suffix precedence and one signature:
+// prepare has forward precedence and one signature:
 //   - [map(kind:"api")] — prepares a fetch definition via the SDK
 func prepareFunc() NativeFunc {
 	apiPattern := engine.NewOrderedMap()
@@ -16,7 +16,7 @@ func prepareFunc() NativeFunc {
 
 	return NativeFunc{
 		Name:             "prepare",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
 				Args:     []engine.Type{engine.TMap},
@@ -54,7 +54,7 @@ func prepareAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 
 // buildFetchArgs extracts fetch arguments (path, method, headers, body, params, query)
 // from an API options map, excluding the kind/spec/entity control fields.
-func buildFetchArgs(apiMap *engine.OrderedMap) map[string]any {
+func buildFetchArgs(apiMap engine.ReadMap) map[string]any {
 	out := make(map[string]any)
 	for _, key := range apiMap.Keys() {
 		switch key {

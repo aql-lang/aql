@@ -212,8 +212,8 @@ func TestWriteBasic(t *testing.T) {
 	}
 }
 
-func TestWriteSuffix(t *testing.T) {
-	// write path content — both suffix
+func TestWriteForward(t *testing.T) {
+	// write path content — both forward
 	mem, got, err := runWithMem(t, nil, `write "out.txt" "hello"`)
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	}
 	reg.SetFileOps(mem)
 
-	// Write with all suffix args to be explicit
+	// Write with all forward args to be explicit
 	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
 	if err != nil {
 		t.Fatal(err)
@@ -409,7 +409,7 @@ func TestStderrWord(t *testing.T) {
 }
 
 func TestReadStdin(t *testing.T) {
-	_, _, stack, err := runWithStdio(t, "hello from stdin", `read stdin`)
+	_, _, stack, err := runWithStdio(t, "hello from stdin", `read (stdin)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +419,7 @@ func TestReadStdin(t *testing.T) {
 }
 
 func TestWriteStdout(t *testing.T) {
-	stdout, _, stack, err := runWithStdio(t, "", `write stdout "hello out"`)
+	stdout, _, stack, err := runWithStdio(t, "", `write (stdout) "hello out"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +432,7 @@ func TestWriteStdout(t *testing.T) {
 }
 
 func TestWriteStderr(t *testing.T) {
-	_, stderr, stack, err := runWithStdio(t, "", `write stderr "error msg"`)
+	_, stderr, stack, err := runWithStdio(t, "", `write (stderr) "error msg"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +445,7 @@ func TestWriteStderr(t *testing.T) {
 }
 
 func TestReadStdinWithFormat(t *testing.T) {
-	_, _, stack, err := runWithStdio(t, `{"x":1}`, `read stdin {fmt:"json"}`)
+	_, _, stack, err := runWithStdio(t, `{"x":1}`, `read (stdin) {fmt:"json"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestReadStdinWithFormat(t *testing.T) {
 }
 
 func TestReadStdinLines(t *testing.T) {
-	_, _, stack, err := runWithStdio(t, "aaa\nbbb\nccc", `read stdin {fmt:"lines"}`)
+	_, _, stack, err := runWithStdio(t, "aaa\nbbb\nccc", `read (stdin) {fmt:"lines"}`)
 	if err != nil {
 		t.Fatal(err)
 	}

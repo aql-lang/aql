@@ -13,17 +13,22 @@ func valuesEqual(a, b engine.Value) bool {
 	}
 	switch {
 	case a.IsWord():
-		aw, bw := a.AsWord(), b.AsWord()
+		aw, _ := a.AsWord()
+		bw, _ := b.AsWord()
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
-			aw.ForcePrefix == bw.ForcePrefix &&
-			aw.ForceSuffix == bw.ForceSuffix
+			aw.ForceStack == bw.ForceStack &&
+			aw.ForceForward == bw.ForceForward
 	case a.IsOpenParen():
 		return true
 	case a.VType.Matches(engine.TString):
-		return a.AsString() == b.AsString()
+		as, _ := a.AsString()
+		bs, _ := b.AsString()
+		return as == bs
 	case a.VType.Matches(engine.TInteger):
-		return a.AsInteger() == b.AsInteger()
+		an, _ := a.AsInteger()
+		bn, _ := b.AsInteger()
+		return an == bn
 	default:
 		return a.String() == b.String()
 	}
@@ -132,7 +137,7 @@ func TestParsePrefixExpression(t *testing.T) {
 	})
 }
 
-func TestParseSuffixExpression(t *testing.T) {
+func TestParseForwardExpression(t *testing.T) {
 	// lower B → two words
 	assertParse(t, "lower B", []engine.Value{
 		engine.NewWord("lower"),
@@ -255,30 +260,30 @@ func TestParseArgCountModifier(t *testing.T) {
 	})
 }
 
-func TestParseForceSuffixModifier(t *testing.T) {
-	// lower/s
-	assertParse(t, "lower/s", []engine.Value{
+func TestParseForceForwardModifier(t *testing.T) {
+	// lower/f
+	assertParse(t, "lower/f", []engine.Value{
 		engine.NewWordModified("lower", -1, false, true),
 	})
 }
 
-func TestParseForcePrefixModifier(t *testing.T) {
-	// lower/p
-	assertParse(t, "lower/p", []engine.Value{
+func TestParseForceStackModifier(t *testing.T) {
+	// lower/s
+	assertParse(t, "lower/s", []engine.Value{
 		engine.NewWordModified("lower", -1, true, false),
 	})
 }
 
-func TestParseArgCountAndSuffixModifier(t *testing.T) {
-	// lower/1s
-	assertParse(t, "lower/1s", []engine.Value{
+func TestParseArgCountAndForwardModifier(t *testing.T) {
+	// lower/1f
+	assertParse(t, "lower/1f", []engine.Value{
 		engine.NewWordModified("lower", 1, false, true),
 	})
 }
 
-func TestParseArgCountAndPrefixModifier(t *testing.T) {
-	// lower/1p
-	assertParse(t, "lower/1p", []engine.Value{
+func TestParseArgCountAndStackModifier(t *testing.T) {
+	// lower/1s
+	assertParse(t, "lower/1s", []engine.Value{
 		engine.NewWordModified("lower", 1, true, false),
 	})
 }
@@ -298,8 +303,8 @@ func TestParseArgCountTwo(t *testing.T) {
 }
 
 func TestParseModifierInExpression(t *testing.T) {
-	// B lower/s → word then modified word
-	assertParse(t, "B lower/s", []engine.Value{
+	// B lower/f → word then modified word
+	assertParse(t, "B lower/f", []engine.Value{
 		engine.NewWord("B"),
 		engine.NewWordModified("lower", -1, false, true),
 	})
@@ -556,7 +561,8 @@ func TestParseTypedListMap(t *testing.T) {
 	if !got[0].IsTypedList() {
 		t.Fatalf("expected typed list, got %s", got[0])
 	}
-	child := got[0].AsChildType().Child
+	ct0a, _ := got[0].AsChildType()
+	child := ct0a.Child
 	if !child.VType.Equal(engine.TMap) {
 		t.Errorf("expected child type map, got %s", child.VType)
 	}
@@ -601,8 +607,9 @@ func TestParseTypedListMapChild(t *testing.T) {
 	if len(got) != 1 || !got[0].IsTypedList() {
 		t.Fatalf("expected 1 typed list, got %v", got)
 	}
-	child := got[0].AsChildType().Child
-	m := child.AsMap()
+	ct0b, _ := got[0].AsChildType()
+	child0b := ct0b.Child
+	m := child0b.AsMap()
 	if m.Len() != 2 {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
@@ -674,11 +681,12 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if len(got) != 1 || !got[0].IsTypedMap() {
 		t.Fatalf("expected 1 typed map, got %v", got)
 	}
-	child := got[0].AsChildType().Child
-	if !child.VType.Equal(engine.TMap) {
-		t.Errorf("expected child type map, got %s", child.VType)
+	ct0c, _ := got[0].AsChildType()
+	child0c := ct0c.Child
+	if !child0c.VType.Equal(engine.TMap) {
+		t.Errorf("expected child type map, got %s", child0c.VType)
 	}
-	m := child.AsMap()
+	m := child0c.AsMap()
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
@@ -702,7 +710,7 @@ func TestParseExplicitList(t *testing.T) {
 	if !got[0].VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", got[0].VType)
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -717,7 +725,7 @@ func TestParseListWithStrings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 2 {
 		t.Errorf("expected 2 elements, got %d", len(elems))
 	}
@@ -745,7 +753,7 @@ func TestParseMapWithList(t *testing.T) {
 	if !xVal.VType.Equal(engine.TList) {
 		t.Errorf("expected list, got %s", xVal.VType)
 	}
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -762,11 +770,13 @@ func TestParseMapWithBooleans(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	aVal, _ := m.Get("a")
-	if !aVal.IsWord() || aVal.AsWord().Name != "true" {
+	aw, _ := aVal.AsWord()
+	if !aVal.IsWord() || aw.Name != "true" {
 		t.Errorf("expected word(true), got %s", aVal)
 	}
 	bVal, _ := m.Get("b")
-	if !bVal.IsWord() || bVal.AsWord().Name != "false" {
+	bw, _ := bVal.AsWord()
+	if !bVal.IsWord() || bw.Name != "false" {
 		t.Errorf("expected word(false), got %s", bVal)
 	}
 }
@@ -876,100 +886,8 @@ func TestParseSemicolonAdjacentToWord(t *testing.T) {
 	})
 }
 
-// --- expandDottedWord direct tests ---
-
-func assertExpand(t *testing.T, text string, want []engine.Value) {
-	t.Helper()
-	got, err := expandDottedWord(text)
-	if err != nil {
-		t.Fatalf("expandDottedWord(%q) error: %v", text, err)
-	}
-	if len(got) != len(want) {
-		t.Fatalf("expandDottedWord(%q) got %d values, want %d\n  got:  %v\n  want: %v",
-			text, len(got), len(want), got, want)
-	}
-	for i := range got {
-		if !valuesEqual(got[i], want[i]) {
-			t.Errorf("expandDottedWord(%q)[%d] = %s, want %s", text, i, got[i], want[i])
-		}
-	}
-}
-
-func TestExpandDotStandalone(t *testing.T) {
-	assertExpand(t, ".", []engine.Value{engine.NewWord("dot")})
-}
-
-func TestExpandBangDotStandalone(t *testing.T) {
-	assertExpand(t, "!.", []engine.Value{engine.NewWord("dotr")})
-}
-
-func TestExpandDottedSimple(t *testing.T) {
-	assertExpand(t, "foo.bar", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("bar"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedChain(t *testing.T) {
-	assertExpand(t, "foo.a.b", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("a"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord("b"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedLeading(t *testing.T) {
-	assertExpand(t, ".a.b", []engine.Value{
-		engine.NewWord("a"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord("b"),
-		engine.NewWordModified("dot", -1, true, false),
-	})
-}
-
-func TestExpandDottedIntegerKey(t *testing.T) {
-	assertExpand(t, "foo.0", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewInteger(0),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedTrailingDot(t *testing.T) {
-	assertExpand(t, "foo.", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedEmptyMiddle(t *testing.T) {
-	// "foo..bar" → empty segment skipped
-	assertExpand(t, "foo..bar", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("foo"),
-		engine.NewWord("bar"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord(")"),
-	})
-}
-
-func TestExpandDottedLeadingSingle(t *testing.T) {
-	// ".x" → leading dot, just x dot/p
-	assertExpand(t, ".x", []engine.Value{
-		engine.NewWord("x"),
-		engine.NewWordModified("dot", -1, true, false),
-	})
-}
+// (expandDottedWord tests removed — dot notation is now handled by
+// simple token conversion: . → get, ! . → getr)
 
 // --- Boolean and nil as top-level values ---
 
@@ -1000,12 +918,14 @@ func TestParseDataMapWithNil(t *testing.T) {
 	m := got[0].AsMap()
 	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
-	if !bVal.IsWord() || bVal.AsWord().Name != "true" {
+	bw2, _ := bVal.AsWord()
+	if !bVal.IsWord() || bw2.Name != "true" {
 		t.Errorf("expected word(true), got %s", bVal)
 	}
 	// c should be word "false" (word context)
 	cVal, _ := m.Get("c")
-	if !cVal.IsWord() || cVal.AsWord().Name != "false" {
+	cw2, _ := cVal.AsWord()
+	if !cVal.IsWord() || cw2.Name != "false" {
 		t.Errorf("expected word(false), got %s", cVal)
 	}
 }
@@ -1059,19 +979,22 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
 	// With word context in lists, true/false become words (resolved at runtime),
 	// and null becomes a word (resolved to atom at runtime).
-	if !elems[0].IsWord() || elems[0].AsWord().Name != "true" {
+	ew0, _ := elems[0].AsWord()
+	ew1, _ := elems[1].AsWord()
+	ew2, _ := elems[2].AsWord()
+	if !elems[0].IsWord() || ew0.Name != "true" {
 		t.Errorf("expected word(true), got %s", elems[0])
 	}
-	if !elems[1].IsWord() || elems[1].AsWord().Name != "false" {
+	if !elems[1].IsWord() || ew1.Name != "false" {
 		t.Errorf("expected word(false), got %s", elems[1])
 	}
-	if !elems[2].IsWord() || elems[2].AsWord().Name != "null" {
+	if !elems[2].IsWord() || ew2.Name != "null" {
 		t.Errorf("expected word(null), got %s", elems[2])
 	}
 }
@@ -1133,7 +1056,7 @@ func TestParseListWithMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
+	elems := got[0].AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
@@ -1153,7 +1076,7 @@ func TestParseNestedList(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1162,7 +1085,7 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with dotted word expansion in word context
+	// [foo.bar] → list with foo get bar (3 elements)
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1170,10 +1093,9 @@ func TestParseListWithDottedWord(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := got[0].AsList()
-	// ( foo bar dot/p ) = 5 elements
-	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements (( foo bar dot/p )), got %d", len(elems))
+	elems := got[0].AsList().Slice()
+	if len(elems) != 3 {
+		t.Fatalf("expected 3 elements (foo get bar), got %d", len(elems))
 	}
 }
 
@@ -1251,19 +1173,6 @@ func TestParseDataMapWithTypedMap(t *testing.T) {
 	}
 }
 
-// --- Args expansion ---
-
-func TestExpandDottedArgs(t *testing.T) {
-	// args.x → resolves "args" as a word directly (not via get), wrapped in parens
-	assertExpand(t, "args.x", []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("args"),
-		engine.NewWord("x"),
-		engine.NewWordModified("dot", -1, true, false),
-		engine.NewWord(")"),
-	})
-}
-
 // --- Top-level dotted expansion ---
 
 func TestParseDottedWordTopLevel(t *testing.T) {
@@ -1279,14 +1188,13 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → triggers dotted expansion in convertTopLevel, wrapped in parens
+	// 1 foo.bar → 1 foo get bar = 4 values
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	// 1 ( foo bar dot ) = 6 values
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo bar dot/p )), got %d", len(got))
+	if len(got) != 4 {
+		t.Fatalf("expected 4 values (1 foo get bar), got %d: %v", len(got), got)
 	}
 }
 
@@ -1344,7 +1252,8 @@ func TestParseMapWithStringValues(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Matches(engine.TString) || xVal.AsString() != "hello" {
+	xValS, _ := xVal.AsString()
+	if !xVal.VType.Matches(engine.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1471,7 +1380,7 @@ func TestParseDataListWithDecimal(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	elems := xVal.AsList()
+	elems := xVal.AsList().Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1494,13 +1403,13 @@ func TestParseEscapeInStringWithParens(t *testing.T) {
 // --- parseWord edge cases ---
 
 func TestParseEmptyNameAfterModifier(t *testing.T) {
-	// /1s → modifier on empty name, should error
-	assertParseError(t, "/1s")
+	// /1f → modifier on empty name, should error
+	assertParseError(t, "/1f")
 }
 
-func TestParseSlashSModifier(t *testing.T) {
-	// /s → empty name with suffix modifier, should error
-	assertParseError(t, "/s")
+func TestParseSlashFModifier(t *testing.T) {
+	// /f → empty name with forward modifier, should error
+	assertParseError(t, "/f")
 }
 
 // --- convertTopLevelValue / convertDataValue unreachable cases ---
@@ -1552,28 +1461,17 @@ func TestResolveTextValueTypes(t *testing.T) {
 		input string
 		check func(engine.Value) bool
 	}{
-		{"true", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && v.AsBoolean() }},
-		{"false", func(v engine.Value) bool { return v.VType.Matches(engine.TBoolean) && !v.AsBoolean() }},
+		{"true", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && b }},
+		{"false", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && !b }},
 		{"Number", func(v engine.Value) bool { return v.VType.Equal(engine.TNumber) }},
 		{"String", func(v engine.Value) bool { return v.VType.Equal(engine.TString) }},
-		{"hello", func(v engine.Value) bool { return v.VType.Matches(engine.TAtom) && v.AsString() == "hello" }},
+		{"hello", func(v engine.Value) bool { s, _ := v.AsString(); return v.VType.Matches(engine.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
 		if !tt.check(v) {
 			t.Errorf("resolveTextValue(%q) = %s, unexpected", tt.input, v)
 		}
-	}
-}
-
-func TestExpandDottedWordModifier(t *testing.T) {
-	// foo/1.bar → first part has modifier, should work
-	got, err := expandDottedWord("foo/1.bar")
-	if err != nil {
-		t.Fatalf("expandDottedWord error: %v", err)
-	}
-	if len(got) < 3 {
-		t.Fatalf("expected at least 3 values, got %d", len(got))
 	}
 }
 
@@ -1584,14 +1482,16 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+	b1, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || v.AsBoolean() {
+	b2, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -1618,7 +1518,8 @@ func TestConvertDataValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Matches(engine.TBoolean) || !v.AsBoolean() {
+	b3, _ := v.AsBoolean()
+	if !v.VType.Matches(engine.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }
@@ -1690,7 +1591,7 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		ok    bool
 	}{
 		{"hello", "hello", true},
-		{"foo/2p", "foo", true},
+		{"foo/2s", "foo", true},
 		{"foo/0", "foo", true},
 		{"foo/bad", "foo/bad", true},   // unrecognized modifier
 		{"foo/", "foo/", true},         // slash at end not processed
@@ -1702,8 +1603,11 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		} else if !tt.ok && err == nil {
 			t.Errorf("parseWord(%q) expected error", tt.input)
 		}
-		if tt.ok && v.AsWord().Name != tt.name {
-			t.Errorf("parseWord(%q) name = %q, want %q", tt.input, v.AsWord().Name, tt.name)
+		if tt.ok {
+			vw, _ := v.AsWord()
+			if vw.Name != tt.name {
+				t.Errorf("parseWord(%q) name = %q, want %q", tt.input, vw.Name, tt.name)
+			}
 		}
 	}
 }
@@ -1725,14 +1629,14 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !list.VType.Equal(engine.TList) {
 		t.Fatalf("expected list, got %s", list.VType)
 	}
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if !m.Implicit {
 		t.Error("expected Implicit=true for pair syntax [x:Integer]")
 	}
@@ -1752,14 +1656,14 @@ func TestParseExplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := list.AsList()
+	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
 	if !elems[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := elems[0].AsMap()
+	m := elems[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
 	}
@@ -1777,8 +1681,123 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if !vals[0].VType.Equal(engine.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
-	m := vals[0].AsMap()
+	m := vals[0].AsMutableMap()
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
 }
+
+func TestParseOptionalFieldDisjunct(t *testing.T) {
+	// {a?:Integer} → key "a" with value (Integer or None)
+	vals, err := Parse("{a?:Integer}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "a" {
+		t.Errorf("expected key 'a', got %v", keys)
+	}
+	val, _ := m.Get("a")
+	if !val.IsDisjunct() {
+		t.Fatalf("expected disjunct for optional field, got %s", val.String())
+	}
+	dj, _ := val.AsDisjunct()
+	alts := dj.Alternatives
+	if len(alts) != 2 {
+		t.Fatalf("expected 2 alternatives, got %d", len(alts))
+	}
+	if !alts[1].VType.Equal(engine.TNone) {
+		t.Errorf("expected second alternative to be None, got %s", alts[1].VType)
+	}
+}
+
+func TestParseOptionalFieldMixed(t *testing.T) {
+	// {a:Integer, b?:String} → "a" is plain, "b" is disjunct
+	vals, err := Parse("{a:Integer, b?:String}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	aVal, _ := m.Get("a")
+	if aVal.IsDisjunct() {
+		t.Errorf("expected 'a' to NOT be a disjunct, got %s", aVal.String())
+	}
+	bVal, _ := m.Get("b")
+	if !bVal.IsDisjunct() {
+		t.Errorf("expected 'b' to be a disjunct, got %s", bVal.String())
+	}
+}
+
+func TestParseOptionalFieldInList(t *testing.T) {
+	// [x?:Integer] → implicit map with key "x" and disjunct value
+	vals, err := Parse("[x?:Integer]")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	list := vals[0]
+	elems := list.AsList().Slice()
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
+	}
+	m := elems[0].AsMutableMap()
+	if m == nil {
+		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+	val, _ := m.Get("x")
+	if !val.IsDisjunct() {
+		t.Errorf("expected disjunct for x, got %s", val.String())
+	}
+}
+
+func TestParseComputedKey(t *testing.T) {
+	// {[x]:1} → key "x" with value 1
+	vals, err := Parse("{[x]:1}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(vals) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(vals))
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
+	}
+	keys := m.Keys()
+	if len(keys) != 1 || keys[0] != "x" {
+		t.Errorf("expected key 'x', got %v", keys)
+	}
+}
+
+func TestParseComputedKeyMultiple(t *testing.T) {
+	// {[a]:1, [b]:2} → keys "a" and "b"
+	vals, err := Parse("{[a]:1, [b]:2}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m := vals[0].AsMap()
+	if m == nil {
+		t.Fatalf("AsMap() returned nil")
+	}
+	keys := m.Keys()
+	if len(keys) != 2 {
+		t.Errorf("expected 2 keys, got %v", keys)
+	}
+}
+

@@ -24,15 +24,18 @@ import "fmt"
 // which delegates to handleLoopBreak/handleLoopContinue.
 func registerFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
-	forCountHandler := func(args []Value) ([]Value, error) {
-		n := args[0].AsInteger()
+	forCountHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		n, _ := args[0].AsInteger()
 		body := args[1]
 		return runForLoop(r, 0, n, 1, "i", body)
 	}
 
 	// for [list, list] — range spec [end] or [start,end] or [start,end,step]
-	forRangeHandler := func(args []Value) ([]Value, error) {
-		rangeSpec := args[0].AsList()
+	forRangeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		if args[0].Data == nil {
+			return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
+		}
+		rangeSpec := args[0].AsList().Slice()
 		body := args[1]
 		start, end, step, err := parseRange(rangeSpec)
 		if err != nil {
@@ -43,25 +46,27 @@ func registerFor(r *Registry) {
 
 	r.Register("for",
 		Signature{
-			Args:    []Type{TInteger, TList},
-			Handler: forCountHandler,
+			Args:       []Type{TInteger, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    forCountHandler,
 		},
 		Signature{
-			Args:    []Type{TList, TList},
-			Handler: forRangeHandler,
+			Args:       []Type{TList, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    forRangeHandler,
 		},
 	)
 
 	// break: stops the current for loop iteration and exits the loop.
-	r.RegisterPrefixOnly("break", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+	r.RegisterStackOnly("break", Signature{
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return nil, errBreak
 		},
 	})
 
 	// continue: stops the current iteration and moves to the next.
-	r.RegisterPrefixOnly("continue", Signature{
-		Handler: func(_ []Value) ([]Value, error) {
+	r.RegisterStackOnly("continue", Signature{
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return nil, errContinue
 		},
 	})
@@ -97,14 +102,17 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 		return nil, nil
 	}
 
-	bodyElems := body.AsList()
+	if body.Data == nil {
+		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
+	}
+	bodySlice := body.AsList().Slice()
 
 	// Install the iterator variable for the first iteration.
 	installDef(r, iterName, NewInteger(start))
 
 	// Create the continuation state.
-	bodyCopy := make([]Value, len(bodyElems))
-	copy(bodyCopy, bodyElems)
+	bodyCopy := make([]Value, len(bodySlice))
+	copy(bodyCopy, bodySlice)
 
 	cont := &ForCont{
 		Registry: r,
@@ -117,10 +125,10 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 
 	// Build the stack segment: mark + body + move.
 	id := NextMarkID()
-	tokens := make([]Value, 0, len(bodyElems)+2)
-	tokens = append(tokens, NewMark(id, bodyElems...))
-	bodyTokens := make([]Value, len(bodyElems))
-	copy(bodyTokens, bodyElems)
+	tokens := make([]Value, 0, len(bodySlice)+2)
+	tokens = append(tokens, NewMark(id, bodySlice...))
+	bodyTokens := make([]Value, len(bodySlice))
+	copy(bodyTokens, bodySlice)
 	tokens = append(tokens, bodyTokens...)
 	tokens = append(tokens, NewMoveCont(id, "for loop", cont))
 
@@ -138,17 +146,23 @@ func parseRange(elems []Value) (start, end, step int64, err error) {
 		if !elems[0].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].VType)
 		}
-		return 0, elems[0].AsInteger(), 1, nil
+		_as0, _ := elems[0].AsInteger()
+		return 0, _as0, 1, nil
 	case 2:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		return elems[0].AsInteger(), elems[1].AsInteger(), 1, nil
+		_as2, _ := elems[0].AsInteger()
+		_as1, _ := elems[1].AsInteger()
+		return _as2, _as1, 1, nil
 	case 3:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) || !elems[2].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		return elems[0].AsInteger(), elems[1].AsInteger(), elems[2].AsInteger(), nil
+		_as5, _ := elems[0].AsInteger()
+		_as4, _ := elems[1].AsInteger()
+		_as3, _ := elems[2].AsInteger()
+		return _as5, _as4, _as3, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("range: expected 1-3 elements, got %d", len(elems))
 	}

@@ -55,10 +55,10 @@ a upper	'A'
 "abc" upper	'ABC'
 "MiXeD" lower	'mixed'
 
-# === String functions - suffix ===
+# === String functions - forward ===
 lower "ABC"	'abc'
 lower B	'b'
-# upper now has suffix precedence (unified model)
+# upper now has forward precedence (unified model)
 upper "abc"	'ABC'
 lower "XYZ"	'xyz'
 
@@ -92,14 +92,14 @@ lower "XYZ"	'xyz'
 1 add 2	3
 10 add -3	7
 
-# === Operator precedence ===
-2 add 3 mul 4	14
+# === Operator evaluation (left-to-right) ===
+2 add 3 mul 4	20
 2 mul 3 add 4	10
-1 add 2 mul 3 add 4	11
+1 add 2 mul 3 add 4	13
 10 sub 3 sub 1	6
 1 add 1 add 1	3
 2 mul 2 mul 2	8
-1 add 2 mul 3	7
+1 add 2 mul 3	9
 
 # === Parentheses ===
 (1 add 2)	3
@@ -119,14 +119,14 @@ lower "XYZ"	'xyz'
 "a" dup	'a' 'a'
 
 # === Modifiers ===
-lower/s "E"	'e'
-"F" lower/p	'f'
+lower/f "E"	'e'
+"F" lower/s	'f'
 lower/1 "G"	'g'
-lower/1s "H"	'h'
+lower/1f "H"	'h'
 
 # === Set/Get ===
-set foo 99 end get foo	99
-set bar "hello" end get bar	'hello'
+context set foo 99 end context get foo	99
+context set bar "hello" end context get bar	'hello'
 
 # === Unify - identical scalars (prefix: left right unify) ===
 1 1 unify	1 true
@@ -216,7 +216,7 @@ None None unify	None true
 None unify None	None true
 unify None None end	None true
 
-# === Unify - prefix/infix/suffix arg forms ===
+# === Unify - prefix/infix/forward arg forms ===
 
 # Prefix form: left right unify
 1 Number unify	1 true
@@ -500,10 +500,10 @@ def greeting "hello" greeting	'hello'
 # def with string name (quoted)
 def "inc" [1 add] 10 inc	11
 
-# def with prefix body (body def name form)
-[1 add] def inc2 10 inc2	11
-[1 sub] def dec2 5 dec2	4
-[1 add] def "inc3" 10 inc3	11
+# def with prefix body — semicolon separates def from call
+[1 add] def inc2; 10 inc2	11
+[1 sub] def dec2; 5 dec2	4
+[1 add] def "inc3"; 10 inc3	11
 
 # def with prefix scalar body
 42 def answer answer	42
@@ -526,7 +526,7 @@ lower B	'b'
 # Nested unmatched opening parenthesis
 ((1)		syntax_error
 
-# Missing suffix argument for add
+# Missing forward argument for add
 1 add		signature_error
 
 # Missing all arguments for add
@@ -582,7 +582,7 @@ var [[[x 2]] x mul x]	4
 7 var [[n] n mul n add n]	56
 
 # var with single inline value in body
-var [[[a 3] [b 4]] a mul a add b mul b]	25
+var [[[a 3] [b 4]] a mul a add b mul b]	52
 
 # var preserves existing definitions
 def foo 99 5 var [[x] x add foo] foo	104 99
@@ -608,16 +608,33 @@ def sq fn [[x:Number] [Number] [x mul x]] 4 sq x	16 x
 def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq	16 sq
 
 # targeted undef: remove 2-arg sig, 1-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number,Number] [Number]] 5 foo	25
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number,Number] [Number]]) 5 foo	25
 
 # targeted undef: remove 1-arg sig, 2-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo fn [[Number] [Number]] 3 5 foo	8
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number] [Number]]) 3 5 foo	8
 
 # Function def with infix call
 def sq fn [[x:Number] [Number] [x mul x]] sq 6	36
 
 # Multiple calls to function def
 def inc fn [[x:Number] [Number] [x add 1]] 1 inc inc inc	4
+
+# Unnamed Map parameter (type literal, not a map value)
+def mid fn [[Map] [] []] end {a:2} mid	{a:2}
+
+# Unnamed List parameter
+def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
+
+# Unnamed Boolean parameter
+def notb fn [[Boolean] [] [not]] end true notb	false
+
+# Unnamed String parameter
+# Stack-only fallback: rearrangeForForward reverses args, swap+add gives hello+world
+def greet fn [[String] [] ["hello " swap add]] end "world" greet	'hello world'
+
+# Multiple unnamed Map parameters
+# Forward-first: fn args reversed from stack, swap undoes the reverse
+def sw fn [[Map, Map] [] [swap]] end {a:1} {b:2} sw	{a:1} {b:2}
 
 # Function def shadows regular def
 (def foo 42) (def foo fn [[Number] [Number] [dup mul]]) (3 foo) (undef foo) foo	9 42
@@ -660,57 +677,54 @@ true implies false	false
 false implies true	true
 false implies false	true
 
-# Boolean precedence: and binds tighter than or
-true or false and false	true
+# Boolean operators (left-to-right)
+true or false and false	false
 false and true or true	true
 
 # not with binary operators
-true and not false	true
+true and (not false)	true
 not true or false	false
 
 # === convert - type conversions ===
 
 # Integer to string
-convert 99 String	'99'
-convert 0 String	'0'
-convert -5 String	'-5'
+99 convert String	'99'
+0 convert String	'0'
+-5 convert String	'-5'
 
-# Integer to string with variant
-convert 10 String "hex"	'a'
-convert 255 String "hex"	'ff'
-convert 255 String "HEX"	'FF'
-convert 10 String "bin"	'1010'
-convert 8 String "oct"	'10'
+# Integer to string with settings
+10 convert String {base:"hex"}	'a'
+255 convert String {base:"hex"}	'ff'
+255 convert String {base:"HEX"}	'FF'
+10 convert String {base:"bin"}	'1010'
+8 convert String {base:"oct"}	'10'
 
 # String to number
-convert "42" Number	42
-convert "-5" Number	-5
+"42" convert Number	42
+"-5" convert Number	-5
 
-# String to number with variant
-convert "ff" Number "hex"	255
-convert "1010" Number "bin"	10
-convert "10" Number "oct"	8
+# String to number with settings
+"ff" convert Number {base:"hex"}	255
+"1010" convert Number {base:"bin"}	10
+"10" convert Number {base:"oct"}	8
 
 # Boolean to string
-convert true String	'true'
-convert false String	'false'
+true convert String	'true'
+false convert String	'false'
 
 # Number to boolean
-convert 1 Boolean	true
-convert 0 Boolean	false
+1 convert Boolean	true
+0 convert Boolean	false
 
 # String to boolean
-convert "true" Boolean	true
-convert "false" Boolean	false
-convert "" Boolean	false
-convert "anything" Boolean	true
+"true" convert Boolean	true
+"false" convert Boolean	false
+"" convert Boolean	false
+"anything" convert Boolean	true
 
-# Atom to string
-convert foo String	'foo'
-
-# Any to atom
-convert 42 Atom	42
-convert "hello" Atom	hello
+# Atom conversion (Atom is Scalar/Atom)
+"hello" convert Atom	hello
+"42" convert Atom	42
 
 # === make - type instance creation ===
 
@@ -867,8 +881,8 @@ dblcall 5 [dup mul]	100
 # callback is a simple word
 dblcall 3 [dup add]	12
 
-# prefix form
-5 dblcall [add 1]	11
+# all forward form
+dblcall 5 [add 1]	11
 
 # callback that just leaves the doubled value
 dblcall 4 []	8
@@ -903,3 +917,28 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
+
+# === Forward argument distribution (forward-first, then stack reversed) ===
+
+# 1-arg forward function: all calling patterns
+def fa1 fn [[a:Integer] Integer [a]] fa1 1	1
+def fa1 fn [[a:Integer] Integer [a]] 1 fa1	1
+
+# 2-arg forward function: all calling patterns
+# body: a b add (postfix, commutative — order doesn't matter)
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] fa2 10 3	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 fa2 10	13
+def fa2 fn [[a:Integer b:Integer] Integer [a b add]] 3 10 fa2	13
+
+# 3-arg forward function: all calling patterns
+# body: a b add c add (commutative)
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] fa3 100 10 1	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 fa3 100 10	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 fa3 100	111
+def fa3 fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]] 1 10 100 fa3	111
+
+# Verify arg order with mixed types (forward fills sigArgs[0]=a first)
+# Body returns a (Integer) to confirm correct assignment
+def fa2m fn [[a:Integer b:String] Integer [a]] fa2m 42 "hello"	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" fa2m 42	42
+def fa2m fn [[a:Integer b:String] Integer [a]] "hello" 42 fa2m	42

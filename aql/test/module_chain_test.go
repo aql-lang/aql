@@ -459,7 +459,7 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 
 func TestImportFileRuntimeError(t *testing.T) {
 	files := map[string]string{
-		"bad.aql": `1 2 3 div 0`,
+		"bad.aql": `1 div 0`,
 	}
 
 	_, err := runModuleSteps(t, files, []string{`import "./bad.aql"`})
@@ -778,7 +778,7 @@ func TestModuleValueType(t *testing.T) {
 	if !v.IsModule() {
 		t.Fatal("expected module type")
 	}
-	desc := v.AsModule()
+	desc, _ := v.AsModule()
 	if desc.ID == "" {
 		t.Error("expected non-empty module ID")
 	}

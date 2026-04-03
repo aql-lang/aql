@@ -8,26 +8,29 @@ import (
 )
 
 // transformFunc returns the "transform" native function definition.
-// transform has suffix precedence and one signature:
-//   - [any, map] — transforms the data using the map as the transform spec
+// transform has forward precedence with sig [Map, Any]:
+//
+//	data transform {spec}   — spec (Map) forward-collected → args[0], data from stack → args[1]
+//
+// The spec (transform template) is always the Map at sig[0].
 func transformFunc() NativeFunc {
 	return NativeFunc{
 		Name:             "transform",
-		SuffixPrecedence: true,
+		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []engine.Type{engine.TAny, engine.TMap},
+				Args:    []engine.Type{engine.TMap, engine.TAny},
 				Handler: transformHandler,
 			},
 		},
 	}
 }
 
-// transformHandler calls voxgig struct Transform, converting between
-// engine.Value and Go any types.
+// transformHandler calls voxgig struct Transform.
+// args[0]=spec (Map, forward-collected), args[1]=data (Any, from stack).
 func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	spec := valueToAny(args[1])
+	spec := valueToAny(args[0])
+	data := valueToAny(args[1])
 
 	result := voxgigstruct.Transform(data, spec)
 
@@ -40,15 +43,24 @@ func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []
 
 // valueToAny converts an engine.Value to a Go any for use with voxgig struct.
 func valueToAny(v engine.Value) any {
+	// Type literals (e.g. bare Map, List, Integer) have Data==nil.
+	// Return nil rather than panicking on accessor calls.
+	if v.Data == nil {
+		return nil
+	}
 	switch {
 	case v.VType.Matches(engine.TInteger):
-		return float64(v.AsInteger())
+		i, _ := v.AsInteger()
+		return float64(i)
 	case v.VType.Matches(engine.TString):
-		return v.AsString()
+		s, _ := v.AsString()
+		return s
 	case v.VType.Matches(engine.TBoolean):
-		return v.AsBoolean()
+		b, _ := v.AsBoolean()
+		return b
 	case v.VType.Equal(engine.TAtom):
-		return v.AsAtom()
+		a, _ := v.AsAtom()
+		return a
 	case v.VType.Equal(engine.TNone):
 		return nil
 	case v.VType.Matches(engine.TMap):
@@ -60,7 +72,7 @@ func valueToAny(v engine.Value) any {
 		}
 		return out
 	case v.VType.Matches(engine.TList):
-		elems := v.AsList()
+		elems := v.AsList().Slice()
 		out := make([]any, len(elems))
 		for i, elem := range elems {
 			out[i] = valueToAny(elem)
@@ -114,6 +126,9 @@ func anyToValue(v any) (engine.Value, error) {
 // valueToMap converts a map-typed Value to map[string]any for use with SDK calls.
 func valueToMap(v engine.Value) map[string]any {
 	m := v.AsMap()
+	if m == nil {
+		return nil
+	}
 	out := make(map[string]any, m.Len())
 	for _, key := range m.Keys() {
 		val, _ := m.Get(key)

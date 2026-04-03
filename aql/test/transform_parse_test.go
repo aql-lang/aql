@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-// transform {a:"hello"} {x:"`a`"} — injects value from data into spec
+// {a:"hello"} transform {x:"`a`"} — injects value from data into spec
 func TestTransformInject(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `transform {a:"hello"} {x:"` + bt + `a` + bt + `"}`
+	input := `{a:"hello"} transform {x:"` + bt + `a` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
@@ -20,38 +20,41 @@ func TestTransformInject(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	if v.AsString() != "hello" {
-		t.Errorf("expected hello, got %s", v.AsString())
+	vs1, _ := v.AsString()
+	if vs1 != "hello" {
+		t.Errorf("expected hello, got %s", vs1)
 	}
 }
 
-// transform {a:"1"} {x:99} — literal spec passthrough
+// {a:"1"} transform {x:99} — literal spec passthrough
 func TestTransformPassthrough(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`transform {a:"1"} {x:99}`,
+		`{a:"1"} transform {x:99}`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("x")
-	if v.AsInteger() != 99 {
-		t.Errorf("expected 99, got %d", v.AsInteger())
+	vi1, _ := v.AsInteger()
+	if vi1 != 99 {
+		t.Errorf("expected 99, got %d", vi1)
 	}
 }
 
-// transform with nested path: {a:{b:42}} {val:"`a.b`"}
+// transform with nested path: {a:{b:42}} transform {val:"`a.b`"}
 func TestTransformNestedPath(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `transform {a:{b:42}} {val:"` + bt + `a.b` + bt + `"}`
+	input := `{a:{b:42}} transform {val:"` + bt + `a.b` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("val")
-	if v.AsInteger() != 42 {
-		t.Errorf("expected 42, got %d", v.AsInteger())
+	vi2, _ := v.AsInteger()
+	if vi2 != 42 {
+		t.Errorf("expected 42, got %d", vi2)
 	}
 }
 
@@ -71,7 +74,8 @@ func TestDefTransformWithLoad(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	if v.AsString() != "Alice" {
-		t.Errorf("expected Alice, got %s", v.AsString())
+	vs2, _ := v.AsString()
+	if vs2 != "Alice" {
+		t.Errorf("expected Alice, got %s", vs2)
 	}
 }

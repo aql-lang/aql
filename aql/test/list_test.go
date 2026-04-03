@@ -49,7 +49,7 @@ func TestListAllFromCSV(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -58,7 +58,8 @@ func TestListAllFromCSV(t *testing.T) {
 	for _, row := range rows {
 		m := row.AsMap()
 		v, _ := m.Get("name")
-		names[v.AsString()] = true
+		vs, _ := v.AsString()
+		names[vs] = true
 	}
 	for _, want := range []string{"Alice", "Bob", "Charlie"} {
 		if !names[want] {
@@ -82,7 +83,7 @@ func TestListFilterFromCSV(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 matching rows, got %d", len(rows))
 	}
@@ -90,8 +91,9 @@ func TestListFilterFromCSV(t *testing.T) {
 	for _, row := range rows {
 		m := row.AsMap()
 		cityVal, _ := m.Get("city")
-		if cityVal.AsString() != "London" {
-			t.Errorf("expected city London, got %s", cityVal.AsString())
+		cityStr, _ := cityVal.AsString()
+		if cityStr != "London" {
+			t.Errorf("expected city London, got %s", cityStr)
 		}
 	}
 }
@@ -108,7 +110,7 @@ func TestListFilterNoMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -126,7 +128,7 @@ func TestListFilterMultipleFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := result[0].AsList()
+	rows := result[0].AsList().Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -135,7 +137,8 @@ func TestListFilterMultipleFields(t *testing.T) {
 	for i, row := range rows {
 		m := row.AsMap()
 		v, _ := m.Get("name")
-		names[i] = v.AsString()
+		vs, _ := v.AsString()
+		names[i] = vs
 	}
 	got := strings.Join(names, ",")
 	if got != "Alice,Charlie" {

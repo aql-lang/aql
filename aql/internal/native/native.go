@@ -1,66 +1,63 @@
 package native
 
 import (
+	"fmt"
+
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// NativeHandler is the signature for built-in native functions.
-// It receives the matched arguments, the current context map, the
-// resolved stack (excluding matched args), and the registry (for
-// invoking AQL callbacks via r.CallAQL).
-type NativeHandler func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error)
-
 // NativeFunc describes a built-in native function with its name, signatures,
-// and whether it uses suffix precedence.
+// and whether it uses forward precedence.
 type NativeFunc struct {
-	Name             string
-	SuffixPrecedence bool
-	Signatures       []NativeSig
+	Name              string
+	ForwardPrecedence bool
+	SkipSafetyCheck   bool // when true, bypass wrapSafetyCheck (for type-inspecting words)
+	Signatures        []NativeSig
 }
 
 // NativeSig describes one overload of a native function.
 type NativeSig struct {
-	Args       []engine.Type
-	Precedence int
-	Handler    NativeHandler
-	Patterns   map[int]engine.Value // optional structural patterns for args
+	Args     []engine.Type
+	Handler  engine.Handler
+	Patterns map[int]engine.Value // optional structural patterns for args
 }
 
 // Register installs all built-in native functions into the given registry.
 func Register(r *engine.Registry) {
 	for _, fn := range All() {
 		for _, sig := range fn.Signatures {
-			handler := makeFullStackHandler(r, sig.Handler)
-			s := engine.Signature{
-				Args:             sig.Args,
-				Precedence:       sig.Precedence,
-				FullStackHandler: handler,
-				Patterns:         sig.Patterns,
+			handler := sig.Handler
+			if !fn.SkipSafetyCheck {
+				handler = wrapSafetyCheck(handler)
 			}
-			if fn.SuffixPrecedence {
+			s := engine.Signature{
+				Args:     sig.Args,
+				Handler:  handler,
+				Patterns: sig.Patterns,
+			}
+			if fn.ForwardPrecedence {
 				r.Register(fn.Name, s)
 			} else {
-				r.RegisterPrefixOnly(fn.Name, s)
+				r.RegisterStackOnly(fn.Name, s)
 			}
 		}
 	}
 }
 
-// makeFullStackHandler wraps a NativeHandler into an engine.FullStackHandler,
-// passing the registry's current context and the resolved stack.
-// The wrapper prepends the remaining stack to the handler's return values
-// so that FullStackHandler semantics are satisfied (it replaces 0..pointer).
-func makeFullStackHandler(r *engine.Registry, h NativeHandler) func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
-	return func(args []engine.Value, stack []engine.Value) ([]engine.Value, error) {
-		ctx := r.Context()
-		results, err := h(args, ctx, stack, r)
-		if err != nil {
-			return nil, err
+// wrapSafetyCheck wraps a Handler to reject type literals and Options types
+// before the handler runs. This prevents nil pointer dereferences in native
+// handlers that expect concrete data.
+func wrapSafetyCheck(h engine.Handler) engine.Handler {
+	return func(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+		for _, arg := range args {
+			if arg.Data == nil && !arg.VType.Equal(engine.TNone) {
+				return nil, fmt.Errorf("expected a concrete value, got type literal %s", arg.VType)
+			}
+			if arg.IsOptionsType() {
+				return nil, fmt.Errorf("expected a concrete map, got options type %s", arg.String())
+			}
 		}
-		out := make([]engine.Value, len(stack)+len(results))
-		copy(out, stack)
-		copy(out[len(stack):], results)
-		return out, nil
+		return h(args, ctx, stack, r)
 	}
 }
 
@@ -92,5 +89,10 @@ func All() []NativeFunc {
 		filterFunc(),
 		joinFunc(),
 		jsonifyFunc(),
+		pushFunc(),
+		popFunc(),
+		unshiftFunc(),
+		shiftFunc(),
+		istypeFunc(),
 	}
 }
