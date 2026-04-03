@@ -324,19 +324,38 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 				}
 
 				// Step through contents until we reach the matching ")".
-				for limit := 0; limit < 2222; limit++ {
+				// Track paren depth so that inner parens (e.g. from fn
+				// body expansion) are processed without prematurely
+				// breaking on their ")" tokens.
+				depth := 1
+				for limit := 0; limit < 2222 && depth > 0; limit++ {
 					if e.pointer >= len(e.stack) {
 						break
 					}
 					v := e.stack[e.pointer]
 
-					// Check if this is the ")" that closes our paren.
+					// Track depth changes from open/close parens.
+					if v.IsOpenParen() {
+						depth++
+						e.pointer++
+						continue
+					}
 					if v.IsWord() && v.AsWord().Name == ")" {
+						depth--
+						if depth == 0 {
+							// This is the matching ")" for our paren.
+							if err := e.stepCloseParen(); err != nil {
+								e.pointer = savedPointer
+								return err
+							}
+							break
+						}
+						// Inner ")" — process normally.
 						if err := e.stepCloseParen(); err != nil {
 							e.pointer = savedPointer
 							return err
 						}
-						break
+						continue
 					}
 
 					// Normal evaluation inside paren.
@@ -347,8 +366,6 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 							return err
 						}
 					case v.IsForward():
-						e.pointer++
-					case v.IsOpenParen():
 						e.pointer++
 					case v.IsReturnCheck():
 						e.pointer++
