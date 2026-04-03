@@ -48,14 +48,28 @@ func registerFn(r *Registry) {
 		return nil, fmt.Errorf("fn: list length must be a multiple of 3 (def) or 2 (undef spec)")
 	}
 
+	// 3-list syntax: fn [args] [returns] [body]
+	// Wraps the three lists into a single list and delegates.
+	fnThreeListHandler := func(args []Value, ctx map[string]Value, stack []Value, reg *Registry) ([]Value, error) {
+		wrapped := NewList([]Value{args[0], args[1], args[2]})
+		return fnHandler([]Value{wrapped}, ctx, stack, reg)
+	}
+
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    fnHandler,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:       []Type{TList, TList, TList},
+				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+				Handler:    fnThreeListHandler,
+			},
+			{
+				Args:       []Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    fnHandler,
+			},
+		},
 	})
 }
 

@@ -45,8 +45,4 @@ def neon {
   background: neon5
 }
 
-export Schemes {
-  sunset:  sunset
-  ocean:   ocean
-  neon:    neon
-}
+export Schemes {sunset: sunset ocean: ocean neon: neon}
