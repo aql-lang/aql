@@ -522,6 +522,15 @@ func (e *Engine) stepWord(val Value) error {
 	resolved := e.effectiveResolved()
 	sig, positions := e.matchSignature(fn, w, resolved)
 
+	// Fallback for ForwardPrecedence words: when nearest-first matching
+	// fails, retry with deepest-first (ForceStack). This handles CallAQL
+	// sub-engines where FnDef args are placed in deepest-first order.
+	if sig == nil && fn.ForwardPrecedence && !w.ForceStack {
+		wDeep := w
+		wDeep.ForceStack = true
+		sig, positions = e.matchSignature(fn, wDeep, resolved)
+	}
+
 	if sig == nil {
 		return fmt.Errorf("signature error: no matching signature for %s", w.Name)
 	}
@@ -1047,85 +1056,115 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Use unified matchSignature for all matching (forward and stack).
+	// Use matchSignature for forward collection only.
 	matchedSig, positions := e.matchSignature(fn, w, resolved)
 
-	if matchedSig == nil {
-		// No matching signature — just advance (treat as data).
-		e.pointer++
-		return nil
-	}
+	if matchedSig != nil {
+		// Count forward vs stack args from positions.
+		fwdCount := 0
+		for _, pos := range positions {
+			if pos > e.pointer {
+				fwdCount++
+			}
+		}
 
-	// Count forward vs stack args from positions.
-	fwdCount := 0
-	stkCount := 0
-	for _, pos := range positions {
-		if pos > e.pointer {
-			fwdCount++
-		} else {
-			stkCount++
+		if fwdCount > 0 {
+			stkCount := len(positions) - fwdCount
+			return e.insertForward(w, matchedSig, fwdCount, stkCount)
 		}
 	}
 
-	if fwdCount > 0 {
-		return e.insertForward(w, matchedSig, fwdCount, stkCount)
-	}
+	// Pure stack match against FnSig params. Two strategies:
+	// - Unnamed params (matrix-style): deepest-first so CallAQL's token
+	//   push order matches the registered handler's nearest-first matching.
+	// - Named params (decision-style): nearest-first because CallAQL
+	//   installs them as defs and the body's reversal expects this order.
+	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
+	for i := range fnDef.Sigs {
+		sig := &fnDef.Sigs[i]
+		nArgs := len(sig.Params)
+		if nArgs == 0 {
+			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
+		}
+		if len(resolved) < nArgs {
+			continue
+		}
 
-	// Pure stack match. Find the corresponding FnSig to pass to
-	// execFnDefSig (which needs FnSig for named params and CallAQL).
-	// Try exact match first, then fall back to subtype matching
-	// (e.g. registered sig has TInteger, FnSig wrapper has TNumber).
-	nArgs := len(matchedSig.Args)
-
-	findFnSig := func(useMatches bool) *FnSig {
-		for i := range fnDef.Sigs {
-			fs := &fnDef.Sigs[i]
-			if len(fs.Params) != nArgs {
-				continue
+		// Determine ordering: named params → nearest-first, unnamed → deepest-first.
+		hasNamed := false
+		for _, p := range sig.Params {
+			if p.Name != "" {
+				hasNamed = true
+				break
 			}
-			paramsMatch := true
-			for j := range fs.Params {
-				if useMatches {
-					// Allow subtype matching (e.g. TInteger matches TNumber)
-					// but skip TAny params — those should only match via exact Equal.
-					if fs.Params[j].Type.Equal(TAny) || !matchedSig.Args[j].Matches(fs.Params[j].Type) {
-						paramsMatch = false
-						break
-					}
-				} else {
-					if !fs.Params[j].Type.Equal(matchedSig.Args[j]) {
-						paramsMatch = false
-						break
+		}
+
+		match := true
+		if hasNamed {
+			// Nearest-first: top-of-stack → sig[0].
+			for j, p := range sig.Params {
+				ri := len(resolved) - 1 - j
+				if !sigTypeMatches(resolved[ri], p.Type) {
+					match = false
+					break
+				}
+				if p.Pattern != nil {
+					pat := *p.Pattern
+					if pat.VType.Equal(TMap) && resolved[ri].VType.Equal(TMap) &&
+						pat.Data != nil && resolved[ri].Data != nil &&
+						!pat.IsOptionsType() {
+						if !openUnifyMap(pat, resolved[ri]) {
+							match = false
+							break
+						}
+					} else {
+						if _, uOk := Unify(resolved[ri], pat); !uOk {
+							match = false
+							break
+						}
 					}
 				}
 			}
-			if paramsMatch {
-				return fs
+			if match {
+				args := make([]Value, nArgs)
+				for j := 0; j < nArgs; j++ {
+					ri := len(resolvedIdx) - 1 - j
+					args[j] = e.stack[resolvedIdx[ri]]
+				}
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
-		}
-		return nil
-	}
-
-	fs := findFnSig(false)
-	if fs == nil {
-		fs = findFnSig(true)
-	}
-	if fs != nil {
-		var args []Value
-		if nArgs > 0 {
-			args = make([]Value, nArgs)
-			for j, pos := range positions {
-				args[j] = e.stack[pos]
+		} else {
+			// Deepest-first: bottom-of-resolved → sig[0].
+			candidate := resolved[len(resolved)-nArgs:]
+			for j, p := range sig.Params {
+				if !sigTypeMatches(candidate[j], p.Type) {
+					match = false
+					break
+				}
+				if p.Pattern != nil {
+					pat := *p.Pattern
+					if pat.VType.Equal(TMap) && candidate[j].VType.Equal(TMap) &&
+						pat.Data != nil && candidate[j].Data != nil &&
+						!pat.IsOptionsType() {
+						if !openUnifyMap(pat, candidate[j]) {
+							match = false
+							break
+						}
+					} else {
+						if _, uOk := Unify(candidate[j], pat); !uOk {
+							match = false
+							break
+						}
+					}
+				}
 			}
-		}
-		return e.execFnDefSig(valIdx, fs, args, fnDef.Registry)
-	}
-
-	// Matched a 0-arg signature.
-	if nArgs == 0 {
-		for i := range fnDef.Sigs {
-			if len(fnDef.Sigs[i].Params) == 0 {
-				return e.execFnDefSig(valIdx, &fnDef.Sigs[i], nil, fnDef.Registry)
+			if match {
+				args := make([]Value, nArgs)
+				startIdx := len(resolvedIdx) - nArgs
+				for j := 0; j < nArgs; j++ {
+					args[j] = e.stack[resolvedIdx[startIdx+j]]
+				}
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		}
 	}
