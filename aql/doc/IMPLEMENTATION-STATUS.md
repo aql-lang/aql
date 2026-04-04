@@ -3,6 +3,13 @@
 Cross-reference of design documents in `aql/doc/` against the
 current codebase. Last updated: 2026-04-04.
 
+## Recent Changes
+
+- **String interpolation**: Backtick template strings with `${...}`
+  syntax, parsed natively by jsonic using custom tokens (#BT, #IS, #TL)
+  and grammar rules (interp/ielem/iexpr/ieval). Supports nested
+  interpolation to any depth. See LANGREF.md § Literals.
+
 
 ## Fully Implemented
 

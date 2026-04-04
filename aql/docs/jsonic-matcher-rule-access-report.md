@@ -121,22 +121,24 @@ This works but has drawbacks:
 
 ---
 
-## Recommendation
+## Resolution
 
-Update the Go jsonic library to align with the TypeScript version by passing the rule to matchers:
+**Resolved in jsonic/go v0.1.6.** The Go library was updated to pass the
+rule to matchers, aligning with the TypeScript version:
 
 ```go
-// Proposed new signature
+// v0.1.6 signature (matches TS)
 type LexMatcher func(lex *Lex, rule *Rule) *Token
 ```
 
-This change would:
-- Align Go with the TypeScript reference implementation
-- Enable context-sensitive lexing (template strings, mode switching, etc.)
-- Eliminate the need for shared closure state
-- Follow the principle of least surprise for developers familiar with the TS version
+AQL's string interpolation now uses this API. A custom `LexMatcher`
+(priority 1M) checks `rule.K["aql_tpl"]` to produce template literal
+tokens (#TL) only inside backtick strings. The interp/ielem/iexpr/ieval
+grammar rules use K map propagation for state tracking, and nesting
+works to any depth since each `iexpr` pushes to `val` which can open
+a fresh `interp` rule.
 
-The change is backwards-incompatible for the `LexMatcher` type but straightforward to migrate — existing matchers just add an unused `rule *Rule` parameter.
+The closure workaround described above is no longer needed.
 
 ---
 
@@ -145,8 +147,8 @@ The change is backwards-incompatible for the `LexMatcher` type but straightforwa
 | File | Description |
 |------|-------------|
 | `jsonicjs/jsonic` `src/lexer.ts:~1016` | TS matcher invocation with rule |
-| `jsonic/go@v0.1.5` `lexer.go` | Go `LexMatcher` type and `nextRaw()` |
-| `jsonic/go@v0.1.5` `plugin.go` | `AddMatcher`, `LexSub` APIs |
-| `jsonic/go@v0.1.5` `rule.go` | `ParseAlts` where `lex.Next()` called |
-| `aql/internal/parser/parse.go` | Current post-processing interpolation |
+| `jsonic/go@v0.1.6` `lexer.go` | Go `LexMatcher` type and `nextRaw()` |
+| `jsonic/go@v0.1.6` `plugin.go` | `AddMatcher`, `LexSub` APIs |
+| `jsonic/go@v0.1.6` `rule.go` | `ParseAlts` where `lex.Next()` called |
+| `aql/internal/parser/parse.go` | Jsonic-native interpolation rules |
 | `aql/internal/engine/engine.go` | InterpString evaluation |

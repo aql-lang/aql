@@ -27,6 +27,29 @@ arguments and push results.
 ""              => ''
 ```
 
+**Template strings** use backticks and support `${...}` interpolation.
+Expressions inside `${...}` are evaluated and their results are
+converted to strings and concatenated with the surrounding literal text.
+
+```
+`hello`                     => 'hello'
+`value is ${1 add 2}`       => 'value is 3'
+def x 42; `x = ${x}`       => 'x = 42'
+`${a} and ${b}`             => interpolates both a and b
+`price: $100`               => 'price: $100'   ($ alone is literal)
+```
+
+Template strings nest: an interpolation expression can itself contain
+a template string with its own interpolations, to any depth.
+
+```
+`a${`inner ${1}`}b`         => 'ainner 1b'
+```
+
+Escape sequences in template strings: `\\`, `` \` ``, `\$`, `\n`,
+`\t`, `\r`. Use `\$` to include a literal `${` without triggering
+interpolation.
+
 **Atoms** are bare unquoted words that do not match any defined function,
 type name, or boolean. They represent symbolic names.
 
