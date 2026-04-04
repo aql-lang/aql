@@ -1,7 +1,7 @@
 (import "wrapper")
 
-def emphasize fn [s:String] [String] [
+def emphasize fn [[s:String] [String] [
   "*" add (s Wrapper.shout) add "*"
-]
+]]
 
 export Caser {emphasize:emphasize}

@@ -82,7 +82,6 @@ func Format(src string) string {
 	tokens := tokenize(src)
 	tree := buildTree(tokens)
 	capitalizeTypesInTree(tree)
-	transformFnSigs(tree)
 	return emitRoot(tree, 0)
 }
 
@@ -412,59 +411,7 @@ func capitalize(s string) string {
 	return string(runes)
 }
 
-// --- fn signature transform ---
 
-func transformFnSigs(n *Node) {
-	for i := range n.Children {
-		ch := n.Children[i]
-		if ch.Kind == NdList || ch.Kind == NdMap ||
-			ch.Kind == NdParen || ch.Kind == NdRoot {
-			transformFnSigs(ch)
-		}
-	}
-
-	for i := 0; i < len(n.Children)-1; i++ {
-		if n.Children[i].Kind == NdWord && n.Children[i].Text == "fn" {
-			next := n.Children[i+1]
-			if next.Kind == NdList && isFnSigWrapper(next) {
-				inner := extractLists(next)
-				newCh := make([]*Node, 0, len(n.Children)-1+len(inner))
-				newCh = append(newCh, n.Children[:i+1]...)
-				newCh = append(newCh, inner...)
-				newCh = append(newCh, n.Children[i+2:]...)
-				n.Children = newCh
-				for _, il := range inner {
-					transformFnSigs(il)
-				}
-			}
-		}
-	}
-}
-
-func isFnSigWrapper(n *Node) bool {
-	listCount := 0
-	for _, ch := range n.Children {
-		switch ch.Kind {
-		case NdList:
-			listCount++
-		case NdNewline, NdComma:
-			// ok
-		default:
-			return false
-		}
-	}
-	return listCount >= 3 && listCount%3 == 0
-}
-
-func extractLists(n *Node) []*Node {
-	var out []*Node
-	for _, ch := range n.Children {
-		if ch.Kind == NdList {
-			out = append(out, ch)
-		}
-	}
-	return out
-}
 
 // --- Emitter ---
 
@@ -534,10 +481,11 @@ func emitStatement(nodes []*Node, indent int) string {
 	return wrapStatement(nodes, indent)
 }
 
-// tryFnFormat handles def name fn [args] [returns] [body] formatting.
+// tryFnFormat handles def name fn [[args] [returns] [body]] formatting.
+// The wrapper list contains three inner lists (one signature triple).
 // Returns "" if not applicable.
 func tryFnFormat(nodes []*Node, indent int) string {
-	// Look for pattern: ... fn [args] [returns] [body]
+	// Look for pattern: ... fn [wrapper]
 	fnIdx := -1
 	for i, n := range nodes {
 		if n.Kind == NdWord && n.Text == "fn" {
@@ -545,51 +493,56 @@ func tryFnFormat(nodes []*Node, indent int) string {
 			break
 		}
 	}
-	if fnIdx < 0 {
+	if fnIdx < 0 || fnIdx+1 >= len(nodes) {
 		return ""
 	}
 
-	// Collect the lists after fn.
-	var lists []*Node
-	var listIndices []int
-	for j := fnIdx + 1; j < len(nodes); j++ {
-		if nodes[j].Kind == NdList {
-			lists = append(lists, nodes[j])
-			listIndices = append(listIndices, j)
+	wrapper := nodes[fnIdx+1]
+	if wrapper.Kind != NdList {
+		return ""
+	}
+
+	// Extract the inner lists from the wrapper.
+	var inner []*Node
+	for _, ch := range wrapper.Children {
+		if ch.Kind == NdList {
+			inner = append(inner, ch)
 		}
 	}
-	if len(lists) < 3 || len(lists)%3 != 0 {
+	if len(inner) < 3 || len(inner)%3 != 0 {
 		return ""
 	}
 
 	prefix := strings.Repeat(" ", indent)
 
-	// Build the header: everything up to and including the return type list.
-	// For single-sig: def name fn [args] [returns]
-	headerNodes := nodes[:listIndices[1]+1]
-	header := prefix + renderInline(headerNodes, indent)
+	// Header: everything before fn + fn + [args] [returns]
+	headerParts := nodes[:fnIdx+1]
+	headerStr := renderInline(headerParts, indent)
+	argsStr := emitNode(inner[0], indent)
+	retStr := emitNode(inner[1], indent)
+	header := prefix + headerStr + " [" + argsStr + " " + retStr
 
-	// If header + " [" suffix is too long, wrap it.
-	if len(header)+2 > maxLineWidth {
-		header = wrapStatement(headerNodes, indent)
+	body := inner[2]
+	bodyChildren := nonTrivial(body.Children)
+	bodyInline := renderInline(bodyChildren, indent)
+
+	// Try single line: def name fn [[args] [returns] [body]]
+	oneLine := header + " [" + bodyInline + "]]"
+	if len(oneLine) <= maxLineWidth {
+		return oneLine
 	}
 
-	body := lists[2]
-	bodyChildren := nonTrivial(body.Children)
-
-	// Try fitting header + body on one line.
-	bodyInline := renderInline(bodyChildren, indent)
-	// Only try single line if header is single-line.
-	if !strings.Contains(header, "\n") {
-		oneLine := header + " [" + bodyInline + "]"
-		if len(oneLine) <= maxLineWidth {
-			return oneLine
-		}
+	// If header + " [" is too long, wrap it.
+	if len(header)+2 > maxLineWidth {
+		header = wrapStatement(append(headerParts,
+			&Node{Kind: NdWord, Text: "[" + argsStr},
+			&Node{Kind: NdWord, Text: retStr},
+		), indent)
 	}
 
 	// Multi-line: header [
 	//   body
-	// ]
+	// ]]
 	bodyIndent := indent + 2
 	groups := splitIntoGroups(bodyChildren)
 	var lines []string
@@ -602,15 +555,7 @@ func tryFnFormat(nodes []*Node, indent int) string {
 			lines = append(lines, wrapStatement(grp, bodyIndent))
 		}
 	}
-	lines = append(lines, prefix+"]")
-
-	// Handle multi-signature functions (6, 9, ... lists).
-	// Additional triples appear as separate fn overloads on subsequent lines.
-	afterBody := nodes[listIndices[2]+1:]
-	if len(afterBody) > 0 {
-		extra := emitStatement(afterBody, indent)
-		lines = append(lines, extra)
-	}
+	lines = append(lines, prefix+"]]")
 
 	return strings.Join(lines, "\n")
 }

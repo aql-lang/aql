@@ -22,14 +22,14 @@ func TestFormatBasic(t *testing.T) {
 			want: `(import "textkit")` + "\n",
 		},
 		{
-			name: "fn sig unwrap",
+			name: "fn single list",
 			in:   "def square fn [[x:Integer] [Integer] [x mul x]]\n",
-			want: "def square fn [x:Integer] [Integer] [x mul x]\n",
+			want: "def square fn [[x:Integer] [Integer] [x mul x]]\n",
 		},
 		{
 			name: "type capitalize after colon",
 			in:   "def f fn [[x:string] [integer] [x]]\n",
-			want: "def f fn [x:String] [Integer] [x]\n",
+			want: "def f fn [[x:String] [Integer] [x]]\n",
 		},
 		{
 			name: "no capitalize variable names",

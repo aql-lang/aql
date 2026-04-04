@@ -1,5 +1,5 @@
 (import "styler")
 
-def process fn [s:String] [String] [(s Styler.style)]
+def process fn [[s:String] [String] [(s Styler.style)]]
 
 export Textkit {process:process}
