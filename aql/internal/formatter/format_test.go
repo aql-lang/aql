@@ -67,6 +67,31 @@ func TestFormatBasic(t *testing.T) {
 			want: "type Cond record [field:Atom op:String]\n",
 		},
 		{
+			name: "comma space",
+			in:   "[a,b,c]\n",
+			want: "[a, b, c]\n",
+		},
+		{
+			name: "comma preserves spacing",
+			in:   "[a ,  b ,  c]\n",
+			want: "[a, b, c]\n",
+		},
+		{
+			name: "no space after open bracket",
+			in:   "[ a b c ]\n",
+			want: "[a b c]\n",
+		},
+		{
+			name: "no space after open brace",
+			in:   "{ a:1 b:2 }\n",
+			want: "{a:1 b:2}\n",
+		},
+		{
+			name: "no space after open paren",
+			in:   "( import \"foo\" )\n",
+			want: "(import \"foo\")\n",
+		},
+		{
 			name: "comment preserved",
 			in:   "# hello world\ndef x 1\n",
 			want: "# hello world\ndef x 1\n",

@@ -569,9 +569,6 @@ func renderInline(nodes []*Node, indent int) string {
 			parts[len(parts)-1] += s
 			continue
 		}
-		if n.Kind == NdComma {
-			continue
-		}
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, " ")
@@ -581,8 +578,8 @@ func renderInline(nodes []*Node, indent int) string {
 // the previous token (no space before it).
 func attach(nodes []*Node, i int) bool {
 	n := nodes[i]
-	// Colon, question, dot attach to previous.
-	if n.Kind == NdColon || n.Kind == NdQuestion || n.Kind == NdDot {
+	// Comma, colon, question, dot attach to previous.
+	if n.Kind == NdComma || n.Kind == NdColon || n.Kind == NdQuestion || n.Kind == NdDot {
 		return true
 	}
 	// After colon or dot, attach to it.
@@ -611,7 +608,7 @@ func emitNode(n *Node, indent int) string {
 	case NdComment, NdBlockComment:
 		return n.Text
 	case NdComma:
-		return ""
+		return ","
 	case NdColon:
 		return ":"
 	case NdSemicolon:
@@ -721,9 +718,6 @@ func wrapStatement(nodes []*Node, indent int) string {
 		if attach(nodes, i) && len(cur) > 0 {
 			cur[len(cur)-1] += s
 			curLen += len(s)
-			continue
-		}
-		if n.Kind == NdComma {
 			continue
 		}
 
@@ -950,7 +944,7 @@ func emitParen(n *Node, indent int) string {
 func nonTrivial(nodes []*Node) []*Node {
 	var out []*Node
 	for _, n := range nodes {
-		if n.Kind != NdNewline && n.Kind != NdComma {
+		if n.Kind != NdNewline {
 			out = append(out, n)
 		}
 	}
