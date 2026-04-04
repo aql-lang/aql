@@ -164,15 +164,14 @@ func TestImportFileIsolation(t *testing.T) {
 export M {x:1}`,
 	}
 
-	result, err := runModuleSteps(t, files, []string{
+	_, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
 		`secret`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	// "secret" is undefined (not exported) — should error.
+	if err == nil {
+		t.Fatal("expected error for undefined word 'secret', got nil")
 	}
-	// "secret" should be an unresolved atom, not 42.
-	assertResult(t, result, "secret")
 }
 
 func TestImportFileIsolationFromParent(t *testing.T) {

@@ -125,14 +125,14 @@ func TestChainInternalDefsNotLeaking(t *testing.T) {
 export M {x:1}`,
 	}
 
-	result, err := runModuleSteps(t, files, []string{
+	_, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
 		`internal`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	// "internal" is undefined (not exported) — should error.
+	if err == nil {
+		t.Fatal("expected error for undefined word 'internal', got nil")
 	}
-	assertResult(t, result, "internal")
 }
 
 // =====================================================================
@@ -699,14 +699,14 @@ func TestImportFileNoExports(t *testing.T) {
 		"empty.aql": `1 2 add`,
 	}
 
-	result, err := runModuleSteps(t, files, []string{
+	_, err := runModuleSteps(t, files, []string{
 		`import "./empty.aql"`,
 		`x`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	// "x" is undefined — should error.
+	if err == nil {
+		t.Fatal("expected error for undefined word 'x', got nil")
 	}
-	assertResult(t, result, "x")
 }
 
 // =====================================================================

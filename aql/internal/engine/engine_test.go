@@ -696,23 +696,15 @@ func TestArgCountForward(t *testing.T) {
 
 // --- Engine tests: unknown word ---
 
-func TestUnknownWordBecomesString(t *testing.T) {
+func TestUnknownWordErrors(t *testing.T) {
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewWord("foo")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 1 {
-		t.Fatalf("got %d values, want 1", len(result))
-	}
-	_as69, _ := result[0].AsString()
-	if _as69 != "foo" {
-		_as70, _ := result[0].AsString()
-		t.Errorf("got %q, want %q", _as70, "foo")
+	_, err = e.Run([]Value{NewWord("foo")})
+	if err == nil {
+		t.Fatal("expected error for undefined word, got nil")
 	}
 }
 
@@ -1703,28 +1695,18 @@ func TestEdgeMultipleLiterals(t *testing.T) {
 
 // --- Edge: unknown words ---
 
-func TestEdgeMultipleUnknownWords(t *testing.T) {
-	// foo bar baz → ['foo', 'bar', 'baz']
+func TestEdgeMultipleUnknownWordsError(t *testing.T) {
+	// foo bar baz → error (undefined words)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("foo"), NewWord("bar"), NewWord("baz"),
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 3 {
-		t.Fatalf("got %d values, want 3: %v", len(result), result)
-	}
-	for i, want := range []string{"foo", "bar", "baz"} {
-		_as124, _ := result[i].AsString()
-		if _as124 != want {
-			_as125, _ := result[i].AsString()
-			t.Errorf("result[%d] = %q, want %q", i, _as125, want)
-		}
+	if err == nil {
+		t.Fatal("expected error for undefined words, got nil")
 	}
 }
 
@@ -2836,22 +2818,18 @@ func TestEdgeParenConsecutive(t *testing.T) {
 	}
 }
 
-func TestEdgeParenWithUnknownWord(t *testing.T) {
-	// (foo) → ['foo']
+func TestEdgeParenWithUnknownWordErrors(t *testing.T) {
+	// (foo) → error (undefined word)
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{
+	_, err = e.Run([]Value{
 		NewWord("("), NewWord("foo"), NewWord(")"),
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	_as191, _ := result[0].AsString()
-	if len(result) != 1 || _as191 != "foo" {
-		t.Errorf("got %v, want ['foo']", result)
+	if err == nil {
+		t.Fatal("expected error for undefined word in paren, got nil")
 	}
 }
 
@@ -3185,24 +3163,16 @@ func TestEdgeLookupUnknown(t *testing.T) {
 	}
 }
 
-func TestEdgeEmptyRegistry(t *testing.T) {
+func TestEdgeEmptyRegistryErrors(t *testing.T) {
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := NewTop(r)
-	// Everything becomes unknown word → string
-	result, err := e.Run([]Value{NewWord("foo"), NewWord("bar")})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("got %d values, want 2: %v", len(result), result)
-	}
-	_as207, _ := result[0].AsString()
-	_as206, _ := result[1].AsString()
-	if _as207 != "foo" || _as206 != "bar" {
-		t.Errorf("got %v, want ['foo', 'bar']", result)
+	// Undefined words should error
+	_, err = e.Run([]Value{NewWord("foo"), NewWord("bar")})
+	if err == nil {
+		t.Fatal("expected error for undefined words, got nil")
 	}
 }
 

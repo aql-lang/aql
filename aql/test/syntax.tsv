@@ -35,10 +35,10 @@ None	None
 List	Node/List
 Map	Node/Map
 
-# === Unknown words become atoms ===
-foo	foo
-abc	abc
-xyz	xyz
+# === Unknown words error ===
+foo		undefined_word
+abc		undefined_word
+xyz		undefined_word
 
 # === Multiple values on stack ===
 1 2 3	1 2 3
@@ -259,7 +259,7 @@ unify Number String end	'~unify-fail' false
 [Number,String]	[Scalar/Number,Scalar/String]
 [Integer,Decimal,Boolean]	[Scalar/Number/Integer,Scalar/Number/Decimal,Scalar/Boolean]
 [Any,None]	[Any,None]
-[String,foo]	[Scalar/String,foo]
+[String,foo]		undefined_word
 
 # === Map literals ===
 {x:1}	{x:1}
@@ -546,17 +546,17 @@ add		signature_error
 
 # === undef - remove word definitions ===
 
-# Basic undef removes a definition
-def foo 1 foo undef foo foo	1 foo
+# Basic undef removes a definition — accessing after undef errors
+def foo 1 foo undef foo foo		undefined_word
 
 # Nested defs: undef reveals the shadowed definition
 def foo 1 def foo 2 foo undef foo foo	2 1
 
-# Multiple undefs peel off all layers
-def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo	3 2 1 foo
+# Multiple undefs peel off all layers — final access errors
+def foo 1 def foo 2 def foo 3 foo undef foo foo undef foo foo undef foo foo		undefined_word
 
-# undef with string name
-def "bar" 42 bar undef "bar" bar	42 bar
+# undef with string name — access after undef errors
+def "bar" 42 bar undef "bar" bar		undefined_word
 
 # Shadowed def with parenthesized expressions
 (def foo 1) (add foo 2) (def foo 3) (add foo 4) (undef foo) (add foo 5) (undef foo)	3 7 6
@@ -575,8 +575,8 @@ var [[[x 2]] x mul x]	4
 # var with mixed inline and stack variables
 10 var [[[x 2] y] x add y]	12
 
-# var cleans up: word reverts to string after var
-5 var [[x] x mul x] x	25 x
+# var cleans up: word is undefined after var — errors
+5 var [[x] x mul x] x		undefined_word
 
 # var with arithmetic body
 7 var [[n] n mul n add n]	56
@@ -587,8 +587,8 @@ var [[[a 3] [b 4]] a mul a add b mul b]	52
 # var preserves existing definitions
 def foo 99 5 var [[x] x add foo] foo	104 99
 
-# Nested var does not leak
-3 var [[x] x add 1] x	4 x
+# Nested var does not leak — errors
+3 var [[x] x add 1] x		undefined_word
 
 # === def with function signatures (fn word) ===
 
@@ -601,11 +601,11 @@ def add2 fn [[x:Number,y:Number] [Number] [x add y]] 3 5 add2	8
 # Unnamed parameters (positional, no pair syntax)
 def double fn [[Number] [Number] [dup add]] 7 double	14
 
-# Named parameters don't leak after call
-def sq fn [[x:Number] [Number] [x mul x]] 4 sq x	16 x
+# Named parameters don't leak after call — errors
+def sq fn [[x:Number] [Number] [x mul x]] 4 sq x		undefined_word
 
-# undef removes function def
-def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq	16 sq
+# undef removes function def — errors
+def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq		undefined_word
 
 # targeted undef: remove 2-arg sig, 1-arg remains
 def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number,Number] [Number]]) 5 foo	25

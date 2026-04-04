@@ -16,9 +16,9 @@
 'world'	'world'
 ""	''
 
-# Unknown words become atoms (bare, unquoted)
-foo	foo
-abc	abc
+# Unknown words error
+foo	ERROR:undefined_word
+abc	ERROR:undefined_word
 
 # Multiple values on stack
 1 2 3	1 2 3

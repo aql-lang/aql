@@ -458,12 +458,13 @@ type ForwardInfo struct {
 //
 // Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
-	ID      string
-	VType   Type
-	Data    interface{}
-	Quoted  bool // true when value was produced by the quote word; prevents auto-evaluation
-	Eval    bool // true for parser-created lists that should auto-evaluate at end of Run
-	Pos     SrcPos // source position for error reporting (zero value = unknown)
+	ID        string
+	VType     Type
+	Data      interface{}
+	Quoted    bool   // true when value was produced by the quote word; prevents auto-evaluation
+	Eval      bool   // true for parser-created lists that should auto-evaluate at end of Run
+	Pos       SrcPos // source position for error reporting (zero value = unknown)
+	Undefined bool   // true when atom was created from an undefined word (error if left on result stack)
 }
 
 // idRand is the package-level RNG used for ID generation.
