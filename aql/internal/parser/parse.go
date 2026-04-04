@@ -45,6 +45,16 @@ type parenGroup []any
 // The converter produces an error for these.
 type unclosedParen struct{ items []any }
 
+// interpGroup represents the parts collected between backticks by the interp
+// grammar rule. Each element is either a jsonic.Text{Quote:"tl"} (literal
+// segment) or an iexprGroup (interpolated expression).
+type interpGroup []any
+
+// iexprGroup represents the values collected between ${ and } by the iexpr
+// grammar rule. Contains raw jsonic values that will be converted to engine
+// values by the converter.
+type iexprGroup []any
+
 // Parse tokenizes the AQL source string into a slice of engine.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
@@ -69,6 +79,12 @@ func Parse(src string) ([]engine.Value, error) {
 		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
+	// Remove backtick from string chars so jsonic doesn't consume backtick
+	// strings with the built-in string matcher. Template strings are handled
+	// by custom tokens and rules below.
+	delete(j.Config().StringChars, '`')
+	delete(j.Config().MultiChars, '`')
+
 	// Register ( ) . ; ? ! | as separate fixed tokens so jsonic lexes them
 	// independently, even when adjacent to other text (e.g. "(foo" → "(" + "foo").
 	TinOP := j.Token("#OP", "(")
@@ -78,6 +94,74 @@ func Parse(src string) ([]engine.Value, error) {
 	TinQM := j.Token("#QM", "?")
 	TinBG := j.Token("#BG", "!")
 	TinPI := j.Token("#PI", "|")
+
+	// Template string interpolation tokens.
+	// #BT = backtick (opens/closes template strings)
+	// #IS = interpolation start ${ (longest-match-first over bare $)
+	// #TL = template literal segment (text between interpolations)
+	TinBT := j.Token("#BT", "`")
+	TinIS := j.Token("#IS", "${")
+	TinTL := j.Token("#TL")
+
+	// Custom matcher for template literal text: when inside a template string
+	// (rule.K["aql_tpl"] is set), read characters until ` or ${ is found,
+	// producing a #TL token with the literal text. Runs before built-in
+	// matchers (priority 1000000).
+	j.AddMatcher("template_literal", 1000000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+		if rule == nil {
+			return nil
+		}
+		if _, ok := rule.K["aql_tpl"]; !ok {
+			return nil
+		}
+		cursor := lex.Cursor()
+		si := cursor.SI
+		s := lex.Src
+		if si >= len(s) {
+			return nil
+		}
+		// Don't match if at ` or ${ — let fixed token matcher handle those.
+		if s[si] == '`' {
+			return nil
+		}
+		if s[si] == '$' && si+1 < len(s) && s[si+1] == '{' {
+			return nil
+		}
+		// Scan forward collecting literal text until ` or ${ or end.
+		start := si
+		for si < len(s) {
+			if s[si] == '`' {
+				break
+			}
+			if s[si] == '$' && si+1 < len(s) && s[si+1] == '{' {
+				break
+			}
+			// Process escape sequences in template literals.
+			if s[si] == '\\' && si+1 < len(s) {
+				si += 2
+				continue
+			}
+			si++
+		}
+		if si == start {
+			return nil
+		}
+		lit := s[start:si]
+		// Process escape sequences.
+		lit = processTemplateEscapes(lit)
+		tkn := lex.Token("#TL", TinTL, lit, s[start:si])
+		cursor.SI = si
+		// Update row/col tracking.
+		for _, ch := range s[start:si] {
+			if ch == '\n' {
+				cursor.RI++
+				cursor.CI = 1
+			} else {
+				cursor.CI++
+			}
+		}
+		return tkn
+	})
 
 	// Add val rule alternates so the grammar recognizes these custom tokens
 	// and produces Text marker values that the converter layer processes.
@@ -92,6 +176,8 @@ func Parse(src string) ([]engine.Value, error) {
 	j.Rule("val", func(rs *jsonic.RuleSpec) {
 		rs.Open = append([]*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{TinOP}}, P: "paren"},
+			// Backtick opens a template string → push to interp rule.
+			{S: [][]jsonic.Tin{{TinBT}}, P: "interp"},
 			// Bare ) outside a paren group: produce a marker so the engine
 			// can report "unmatched closing parenthesis" at runtime.
 			{S: [][]jsonic.Tin{{TinCP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
@@ -376,6 +462,152 @@ func Parse(src string) ([]engine.Value, error) {
 		}
 	})
 
+	// Interp rule: collects template string parts between backticks.
+	// K["aql_tpl"] is set in BO so the custom matcher produces #TL tokens
+	// for literal text segments. Parts are accumulated in Node as an interpGroup.
+	j.Rule("interp", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = interpGroup{}
+				// Set K so the custom matcher knows we're inside a template.
+				// K propagates to child rules.
+				r.K["aql_tpl"] = true
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Empty template: `` (immediate closing backtick)
+			{S: [][]jsonic.Tin{{TinBT}}},
+			// First element: push to ielem.
+			{P: "ielem"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// Closing backtick ends the template.
+			{S: [][]jsonic.Tin{{TinBT}}},
+			// End of source: unterminated template string (auto-close).
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+		}
+	})
+
+	// Ielem rule: each element inside a template string.
+	// Handles #TL (literal text) and #IS (interpolation start).
+	// On close, appends its own Node to the parent interp's interpGroup.
+	j.Rule("ielem", func(rs *jsonic.RuleSpec) {
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Collect the node value. For #TL, the action sets r.Node directly.
+				// For #IS→iexpr, the child rule sets r.Node (iexprGroup) via push.
+				node := r.Node
+				if !jsonic.IsUndefined(r.Child.Node) {
+					node = r.Child.Node
+				}
+				if jsonic.IsUndefined(node) {
+					return
+				}
+				if r.Parent != nil && r.Parent != jsonic.NoRule {
+					if grp, ok := r.Parent.Node.(interpGroup); ok {
+						r.Parent.Node = append(grp, node)
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Literal text segment.
+			{S: [][]jsonic.Tin{{TinTL}},
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					// Store literal text as a Text with Quote="tl".
+					if str, ok := r.O0.Val.(string); ok {
+						r.Node = jsonic.Text{Str: str, Quote: "tl"}
+					}
+				}},
+			// Interpolation start ${ — push to iexpr to collect the expression.
+			{S: [][]jsonic.Tin{{TinIS}}, P: "iexpr"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// Closing backtick: backtrack so interp.Close can consume it.
+			{S: [][]jsonic.Tin{{TinBT}}, B: 1},
+			// End of source.
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+			// Next element (another literal or interpolation).
+			{R: "ielem", B: 1},
+		}
+	})
+
+	// Iexpr rule: collects expression values between ${ and }.
+	// Pushes to val for each value, collects into a list.
+	// Clears aql_tpl in BO so that expression content is parsed normally
+	// (the custom matcher won't fire inside expressions).
+	j.Rule("iexpr", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = make([]any, 0)
+				// Clear template mode so expressions parse normally.
+				delete(r.K, "aql_tpl")
+				// Increment dlist and dmap so val.Close won't create
+				// implicit lists or maps inside interpolation expressions.
+				if v, ok := r.N["dlist"]; ok {
+					r.N["dlist"] = v + 1
+				} else {
+					r.N["dlist"] = 1
+				}
+				if v, ok := r.N["dmap"]; ok {
+					r.N["dmap"] = v + 1
+				} else {
+					r.N["dmap"] = 1
+				}
+			},
+		}
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Wrap the collected values as an iexprGroup.
+				if arr, ok := r.Node.([]any); ok {
+					r.Node = iexprGroup(arr)
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Empty expression: ${}
+			{S: [][]jsonic.Tin{{jsonic.TinCB}}},
+			// First expression value.
+			{P: "ieval"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// Closing brace } ends the expression.
+			{S: [][]jsonic.Tin{{jsonic.TinCB}}},
+			// End of source inside expression.
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+		}
+	})
+
+	// Ieval rule: each value inside an interpolation expression.
+	// Similar to pelem but closes on } instead of ).
+	j.Rule("ieval", func(rs *jsonic.RuleSpec) {
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if !jsonic.IsUndefined(r.Child.Node) {
+					if arr, ok := r.Node.([]any); ok {
+						r.Node = append(arr, r.Child.Node)
+						if r.Parent != nil && r.Parent != jsonic.NoRule {
+							r.Parent.Node = r.Node
+						}
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			{P: "val"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// } ends the expression (backtrack so iexpr.Close consumes it).
+			{S: [][]jsonic.Tin{{jsonic.TinCB}}, B: 1},
+			// End of source.
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+			// Comma: next expression value.
+			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "ieval"},
+			// Space-separated: next expression value.
+			{R: "ieval", B: 1},
+		}
+	})
+
 	// Intercept number tokens at lex time: wrap float64 values in numberVal
 	// so the converter can distinguish "5" (integer) from "5.0" (decimal).
 	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
@@ -439,6 +671,14 @@ func Parse(src string) ([]engine.Value, error) {
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
 		return convertTopLevelItems([]any{val})
+
+	case interpGroup:
+		// Single template string at top level.
+		iv, err := convertInterpGroup(val)
+		if err != nil {
+			return nil, err
+		}
+		return []engine.Value{iv}, nil
 
 	default:
 		v, err := convertTopLevelValue(val)
@@ -521,11 +761,10 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if val.Quote == "" {
 			return parseWord(val.Str)
 		}
-		// Backtick strings may contain ${...} interpolations.
-		if val.Quote == "`" {
-			return convertInterpolatedString(val.Str)
-		}
 		return engine.NewString(val.Str), nil
+
+	case interpGroup:
+		return convertInterpGroup(val)
 
 	case numberVal:
 		return numberValToValue(val), nil
@@ -650,16 +889,15 @@ func convertDataValue(v any) (engine.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote != "" {
-			// Backtick strings may contain ${...} interpolations.
-			if val.Quote == "`" {
-				return convertInterpolatedString(val.Str)
-			}
 			// Quoted text (e.g. "hello") → string
 			return engine.NewString(val.Str), nil
 		}
 		// Unquoted text → word (same as top-level word context).
 		// This allows map values like {r:rv} to evaluate rv.
 		return parseWord(val.Str)
+
+	case interpGroup:
+		return convertInterpGroup(val)
 
 	case numberVal:
 		return numberValToValue(val), nil
@@ -851,117 +1089,76 @@ func parseWord(text string) (engine.Value, error) {
 	return engine.NewWord(name), nil
 }
 
-// splitInterpolation scans a backtick string for ${...} interpolations.
-// Returns the parsed parts and true if interpolation was found, or nil
-// and false if the string has no interpolations.
-func splitInterpolation(s string) ([]engine.InterpPart, bool, error) {
+// convertInterpGroup converts an interpGroup (produced by the interp/ielem/iexpr
+// jsonic rules) into an engine InterpString value, or a plain string if there
+// are no expression parts.
+func convertInterpGroup(grp interpGroup) (engine.Value, error) {
+	if len(grp) == 0 {
+		return engine.NewString(""), nil
+	}
 	var parts []engine.InterpPart
-	hasInterp := false
-	i := 0
-	start := 0
-
-	for i < len(s) {
-		// Check for ${
-		if s[i] == '$' && i+1 < len(s) && s[i+1] == '{' {
-			hasInterp = true
-			// Save preceding literal part.
-			if i > start {
-				parts = append(parts, engine.InterpPart{Lit: s[start:i]})
-			}
-			i += 2 // skip ${
-			exprStart := i
-			depth := 1
-			inSingle := false
-			inDouble := false
-
-			for i < len(s) && depth > 0 {
-				ch := s[i]
-				if inSingle {
-					if ch == '\\' && i+1 < len(s) {
-						i += 2
-						continue
-					}
-					if ch == '\'' {
-						inSingle = false
-					}
-				} else if inDouble {
-					if ch == '\\' && i+1 < len(s) {
-						i += 2
-						continue
-					}
-					if ch == '"' {
-						inDouble = false
-					}
-				} else {
-					switch ch {
-					case '\'':
-						inSingle = true
-					case '"':
-						inDouble = true
-					case '{':
-						depth++
-					case '}':
-						depth--
-						if depth == 0 {
-							break
-						}
-					}
-				}
-				if depth == 0 {
-					break
-				}
-				i++
-			}
-
-			if depth != 0 {
-				return nil, false, engine.MakeAqlError(
-					"syntax_error",
-					"unclosed interpolation ${...} in template string",
-					"${", s, "")
-			}
-
-			exprStr := s[exprStart:i]
-			i++ // skip closing }
-			start = i
-
-			// Parse the expression as AQL code.
-			exprVals, err := Parse(exprStr)
+	hasExpr := false
+	for _, item := range grp {
+		switch v := item.(type) {
+		case jsonic.Text:
+			// Template literal segment (Quote="tl").
+			parts = append(parts, engine.InterpPart{Lit: v.Str})
+		case iexprGroup:
+			hasExpr = true
+			exprVals, err := convertTopLevelItems([]any(v))
 			if err != nil {
-				return nil, false, fmt.Errorf("interpolation parse error: %w", err)
+				return engine.Value{}, fmt.Errorf("interpolation expression error: %w", err)
 			}
-
 			parts = append(parts, engine.InterpPart{Expr: exprVals})
-			continue
+		default:
+			return engine.Value{}, fmt.Errorf("unexpected interp part type %T", item)
 		}
-
-		i++
 	}
-
-	if !hasInterp {
-		return nil, false, nil
-	}
-
-	// Final literal part.
-	if start < len(s) {
-		parts = append(parts, engine.InterpPart{Lit: s[start:]})
-	}
-
-	return parts, true, nil
-}
-
-// convertInterpolatedString checks a backtick-quoted string for ${...}
-// interpolations and returns either a plain string (no interpolations)
-// or an InterpString value. Called from convertTopLevelValue and
-// convertDataValue when Quote is backtick.
-func convertInterpolatedString(text string) (engine.Value, error) {
-	parts, hasInterp, err := splitInterpolation(text)
-	if err != nil {
-		return engine.Value{}, err
-	}
-	if !hasInterp {
-		return engine.NewString(text), nil
+	if !hasExpr {
+		// No interpolations — just concatenate literals into a plain string.
+		var buf strings.Builder
+		for _, p := range parts {
+			buf.WriteString(p.Lit)
+		}
+		return engine.NewString(buf.String()), nil
 	}
 	return engine.NewInterpString(parts), nil
+}
+
+// processTemplateEscapes processes escape sequences in template literal text.
+func processTemplateEscapes(s string) string {
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+	var buf strings.Builder
+	buf.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			switch next {
+			case 'n':
+				buf.WriteByte('\n')
+			case 't':
+				buf.WriteByte('\t')
+			case 'r':
+				buf.WriteByte('\r')
+			case '\\':
+				buf.WriteByte('\\')
+			case '`':
+				buf.WriteByte('`')
+			case '$':
+				buf.WriteByte('$')
+			default:
+				// Unknown escape: keep as-is.
+				buf.WriteByte('\\')
+				buf.WriteByte(next)
+			}
+			i++ // skip the escaped char
+		} else {
+			buf.WriteByte(s[i])
+		}
+	}
+	return buf.String()
 }
 
 // numberVal wraps a float64 with source text so we can distinguish
