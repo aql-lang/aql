@@ -407,10 +407,22 @@
     input.style.height = Math.min(input.scrollHeight, maxH) + 'px';
   }
 
+  function fmtCode(code) {
+    if (typeof aqlFmt === 'function') {
+      try {
+        var f = aqlFmt(code).replace(/\n+$/, '');
+        if (f) return f;
+      } catch(e) {}
+    }
+    return code;
+  }
+
   function submit() {
     if (!ready) return;
     var code = input.value.trim();
     if (!code) return;
+    code = fmtCode(code);
+    input.value = code;
     sessionHistory.push(code);
     historyIdx = sessionHistory.length;
     addToHistory(code);
@@ -547,18 +559,27 @@
 
   initSqlAndStart();
 
+  function fmtDisplay(code) {
+    var formatted = fmtCode(code);
+    return formatted.includes('\n')
+      ? formatted.replace(/\n/g, ' \u21b5 ')
+      : formatted;
+  }
+
   function evaluate(code) {
-    var display = code.includes('\n') ? code.replace(/\n/g, ' \u21b5 ') : code;
-    addLine('line-input', '>> ' + display, code);
+    var display = fmtDisplay(code);
+    addLine('line-input', '>> ' + display, fmtCode(code));
     try {
       var res = aqlEval(code);
       if (res.output) {
-        addLine('line-result', res.output.trimEnd(), res.output.trimEnd());
+        var out = res.output.trimEnd();
+        addLine('line-result', fmtDisplay(out), fmtCode(out));
       }
       if (res.error) {
         addLine('line-error', '  error: ' + res.error, res.error);
       } else if (res.result) {
-        addLine('line-result', res.result, res.result);
+        var r = res.result;
+        addLine('line-result', fmtDisplay(r), fmtCode(r));
       }
     } catch(e) {
       addLine('line-error', '  error: ' + e.message, e.message);

@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 
 	aql "github.com/metsitaba/voxgig-exp/aql"
+	"github.com/metsitaba/voxgig-exp/aql/internal/formatter"
 )
 
 func main() {
@@ -44,6 +45,13 @@ func main() {
 			parts[i] = fmt.Sprintf("%v", v)
 		}
 		return map[string]any{"result": strings.Join(parts, " "), "output": printed}
+	}))
+
+	js.Global().Set("aqlFmt", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) < 1 {
+			return ""
+		}
+		return formatter.Format(args[0].String())
 	}))
 
 	// Signal that the WASM module is ready.
