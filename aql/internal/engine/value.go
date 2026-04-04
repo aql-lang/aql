@@ -53,8 +53,8 @@ type ReadMap interface {
 type OrderedMap struct {
 	keys     []string
 	vals     map[string]Value
-	Implicit bool              // true when created from implicit pair syntax (e.g., [x:Integer])
-	Meta     map[string]any    // optional metadata for parser/engine communication
+	Implicit bool           // true when created from implicit pair syntax (e.g., [x:Integer])
+	Meta     map[string]any // optional metadata for parser/engine communication
 }
 
 // NewOrderedMap creates an empty OrderedMap.
@@ -225,10 +225,10 @@ type DisjunctInfo struct {
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
 type ObjectTypeInfo struct {
-	Fields *OrderedMap      // own fields (field name → type-constraint Value)
-	Parent *ObjectTypeInfo  // parent object type (nil if direct child of Object)
-	ID     string           // unique internal ID: "T_" + 12 hex chars
-	Name   string           // full type path (e.g. "Object/Foo/Bar")
+	Fields *OrderedMap     // own fields (field name → type-constraint Value)
+	Parent *ObjectTypeInfo // parent object type (nil if direct child of Object)
+	ID     string          // unique internal ID: "T_" + 12 hex chars
+	Name   string          // full type path (e.g. "Object/Foo/Bar")
 }
 
 // AllFields returns all fields including inherited ones. Parent fields come
@@ -256,8 +256,8 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 // Prototype points to the parent instance (like JavaScript prototypes):
 // field lookups fall through to the prototype chain for inherited fields.
 type ObjectInstanceInfo struct {
-	TypeRef   *ObjectTypeInfo    // the object type this is an instance of
-	Fields    *OrderedMap        // own field name → resolved Value
+	TypeRef   *ObjectTypeInfo     // the object type this is an instance of
+	Fields    *OrderedMap         // own field name → resolved Value
 	Prototype *ObjectInstanceInfo // parent instance (nil if root type)
 }
 
@@ -300,11 +300,11 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 // old Store) instead of mutating in place. If this Store is nested inside
 // a parent Store, the parent is COW'd too, propagating up to the ctxStack.
 type StoreInstanceInfo struct {
-	TypeName  string              // full type path, e.g. "Object/Store" or "Object/Store/System"
-	Data      map[string]Value    // own key-value pairs (COW layer)
-	Prototype *StoreInstanceInfo  // prototype chain for key lookup / COW base
-	Parent    *StoreInstanceInfo  // containing Store (for COW propagation), nil if root
-	ParentKey string              // key in Parent that references this Store
+	TypeName  string             // full type path, e.g. "Object/Store" or "Object/Store/System"
+	Data      map[string]Value   // own key-value pairs (COW layer)
+	Prototype *StoreInstanceInfo // prototype chain for key lookup / COW base
+	Parent    *StoreInstanceInfo // containing Store (for COW propagation), nil if root
+	ParentKey string             // key in Parent that references this Store
 }
 
 // Get looks up a key in this store, walking the prototype chain if not found.
@@ -426,15 +426,15 @@ type IfCont struct {
 // ModuleDesc describes a module: its generated ID and named exports.
 // Each export call adds a named entry mapping export name → export map.
 type ModuleDesc struct {
-	ID      string                    // generated internal identifier
-	Exports map[string]*OrderedMap    // export name → export map (name → value)
+	ID      string                 // generated internal identifier
+	Exports map[string]*OrderedMap // export name → export map (name → value)
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
 type WordInfo struct {
-	Name        string
-	ArgCount    int  // -1 = unspecified
-	ForceStack bool // lower/s
+	Name         string
+	ArgCount     int  // -1 = unspecified
+	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
 }
 
@@ -632,9 +632,9 @@ func NewWord(name string) Value {
 // NewWordModified creates a word value with explicit modifiers.
 func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
-		Name:        name,
-		ArgCount:    argCount,
-		ForceStack: forceStack,
+		Name:         name,
+		ArgCount:     argCount,
+		ForceStack:   forceStack,
 		ForceForward: forceForward,
 	})
 }
@@ -655,6 +655,21 @@ func NewOpenParen() Value {
 // paren markers, producing a single result value.
 func NewParenExpr(items []Value) Value {
 	return newValue(TParenExpr, items)
+}
+
+// InterpPart represents one segment of an interpolated string.
+// If Expr is nil, Lit is a literal string segment.
+// If Expr is non-nil, it contains parsed AQL values to evaluate.
+type InterpPart struct {
+	Lit  string
+	Expr []Value
+}
+
+// NewInterpString creates an interpolated string value from alternating
+// literal and expression parts. The engine evaluates expression parts in
+// a sub-engine, converts results to strings, and concatenates everything.
+func NewInterpString(parts []InterpPart) Value {
+	return newValue(TInterpString, parts)
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -884,6 +899,19 @@ func (v Value) IsParenExpr() bool {
 func (v Value) AsParenExpr() []Value {
 	if items, ok := v.Data.([]Value); ok {
 		return items
+	}
+	return nil
+}
+
+// IsInterpString reports whether this value is an interpolated string.
+func (v Value) IsInterpString() bool {
+	return v.VType.Equal(TInterpString)
+}
+
+// AsInterpString returns the parts of an interpolated string value.
+func (v Value) AsInterpString() []InterpPart {
+	if parts, ok := v.Data.([]InterpPart); ok {
+		return parts
 	}
 	return nil
 }

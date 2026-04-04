@@ -3097,3 +3097,140 @@ func TestIsMetatypes(t *testing.T) {
 		})
 	}
 }
+
+// --- String interpolation integration tests ---
+
+func TestInterpStringLiteral(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := []InterpPart{
+		{Lit: "hello world"},
+	}
+	result := runAQL(t, r, []Value{NewInterpString(parts)})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := result[0].AsString()
+	if got != "hello world" {
+		t.Errorf("expected 'hello world', got %q", got)
+	}
+}
+
+func TestInterpStringWithExpression(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{
+		NewString("world"), NewWord("def"), NewWord("name"), NewWord("end"),
+		NewInterpString([]InterpPart{
+			{Lit: "hello "},
+			{Expr: []Value{NewWord("name")}},
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := result[0].AsString()
+	if got != "hello world" {
+		t.Errorf("expected 'hello world', got %q", got)
+	}
+}
+
+func TestInterpStringArithmetic(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{
+		NewInterpString([]InterpPart{
+			{Lit: "answer: "},
+			{Expr: []Value{NewInteger(1), NewWord("add"), NewInteger(2)}},
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := result[0].AsString()
+	if got != "answer: 3" {
+		t.Errorf("expected 'answer: 3', got %q", got)
+	}
+}
+
+func TestInterpStringMultipleExprs(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("def"), NewWord("a"), NewWord("end"),
+		NewInteger(2), NewWord("def"), NewWord("b"), NewWord("end"),
+		NewInterpString([]InterpPart{
+			{Expr: []Value{NewWord("a")}},
+			{Lit: " and "},
+			{Expr: []Value{NewWord("b")}},
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := result[0].AsString()
+	if got != "1 and 2" {
+		t.Errorf("expected '1 and 2', got %q", got)
+	}
+}
+
+func TestInterpStringInMapValue(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{
+		NewInteger(42), NewWord("def"), NewWord("x"), NewWord("end"),
+		NewEvalMap(func() *OrderedMap {
+			om := NewOrderedMap()
+			om.Set("msg", NewInterpString([]InterpPart{
+				{Lit: "value is "},
+				{Expr: []Value{NewWord("x")}},
+			}))
+			return om
+		}()),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	m := result[0].AsMap()
+	if m == nil {
+		t.Fatal("expected map result")
+	}
+	v, ok := m.Get("msg")
+	if !ok {
+		t.Fatal("expected 'msg' key in map")
+	}
+	got, _ := v.AsString()
+	if got != "value is 42" {
+		t.Errorf("expected 'value is 42', got %q", got)
+	}
+}
+
+func TestInterpStringAsWordArg(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runAQL(t, r, []Value{
+		NewInterpString([]InterpPart{
+			{Lit: "hello"},
+		}),
+		NewWord("upper"),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := result[0].AsString()
+	if got != "HELLO" {
+		t.Errorf("expected 'HELLO', got %q", got)
+	}
+}

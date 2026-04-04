@@ -691,3 +691,12 @@ quote "hello"	'hello'
 # def body is implicitly quoted (not auto-evaluated)
 def double [dup add] 5 double	10
 def triple [dup dup add add] 3 triple	9
+
+# String interpolation with backtick template strings
+`hello`	'hello'
+`hello world`	'hello world'
+`answer: ${1 add 2}`	'answer: 3'
+def x 42; `value is ${x}`	'value is 42'
+def a 1; def b 2; `${a} and ${b}`	'1 and 2'
+`${"hi"}`	'hi'
+`price: $100`	'price: $100'

@@ -1801,3 +1801,95 @@ func TestParseComputedKeyMultiple(t *testing.T) {
 	}
 }
 
+// --- String interpolation tests ---
+
+func TestParseBacktickNoInterpolation(t *testing.T) {
+	// Backtick string without ${} is just a plain string.
+	assertParse(t, "`hello`", []engine.Value{engine.NewString("hello")})
+}
+
+func TestParseBacktickSimpleInterpolation(t *testing.T) {
+	// `hello ${name}` produces an InterpString with 2 parts.
+	got, err := Parse("`hello ${name}`")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 value, got %d", len(got))
+	}
+	if !got[0].IsInterpString() {
+		t.Fatalf("expected InterpString, got %s", got[0].VType)
+	}
+	parts := got[0].AsInterpString()
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts, got %d", len(parts))
+	}
+	// Part 0: literal "hello "
+	if parts[0].Expr != nil || parts[0].Lit != "hello " {
+		t.Errorf("part 0: expected literal 'hello ', got %+v", parts[0])
+	}
+	// Part 1: expression [Word(name)]
+	if parts[1].Expr == nil || len(parts[1].Expr) != 1 || !parts[1].Expr[0].IsWord() {
+		t.Errorf("part 1: expected expression with Word(name), got %+v", parts[1])
+	}
+}
+
+func TestParseBacktickMultipleInterpolations(t *testing.T) {
+	// `${a} and ${b}` → [empty-lit, expr(a), " and ", expr(b), empty-lit]
+	got, err := Parse("`${a} and ${b}`")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsInterpString() {
+		t.Fatalf("expected 1 InterpString value, got %d values", len(got))
+	}
+	parts := got[0].AsInterpString()
+	// Parts: expr(a), " and ", expr(b)
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 parts, got %d", len(parts))
+	}
+}
+
+func TestParseBacktickExpressionInterpolation(t *testing.T) {
+	// `result: ${1 add 2}` → InterpString with expression [1, Word(add), 2]
+	got, err := Parse("`result: ${1 add 2}`")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsInterpString() {
+		t.Fatalf("expected 1 InterpString value")
+	}
+	parts := got[0].AsInterpString()
+	// Parts: "result: ", expr(1 add 2), empty trailing
+	if parts[0].Lit != "result: " {
+		t.Errorf("expected literal 'result: ', got %q", parts[0].Lit)
+	}
+	if parts[1].Expr == nil || len(parts[1].Expr) != 3 {
+		t.Errorf("expected expression with 3 values, got %+v", parts[1])
+	}
+}
+
+func TestParseBacktickNestedBraces(t *testing.T) {
+	// `${{a:1}}` → expression containing a map
+	got, err := Parse("`${{a:1}}`")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsInterpString() {
+		t.Fatalf("expected 1 InterpString value")
+	}
+}
+
+func TestParseBacktickUnclosedInterpolation(t *testing.T) {
+	// `${name` → error: unclosed interpolation
+	_, err := Parse("`${name`")
+	if err == nil {
+		t.Fatal("expected error for unclosed interpolation")
+	}
+}
+
+func TestParseBacktickOnlyLiteral(t *testing.T) {
+	// Backtick string with $ but no ${ is just a plain string.
+	assertParse(t, "`price: $100`", []engine.Value{engine.NewString("price: $100")})
+}
+

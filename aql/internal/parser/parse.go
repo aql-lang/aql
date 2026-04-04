@@ -12,21 +12,21 @@ import (
 
 // typeNames maps well-known type names to their engine Type.
 var typeNames = map[string]engine.Type{
-	"Any":       engine.TAny,
-	"None":      engine.TNone,
-	"Scalar":    engine.TScalar,
-	"Number":    engine.TNumber,
-	"Integer":   engine.TInteger,
-	"Decimal":   engine.TDecimal,
-	"String":    engine.TString,
-	"Boolean":   engine.TBoolean,
-	"Atom":      engine.TAtom,
-	"Node":      engine.TNode,
-	"List":      engine.TList,
-	"Map":       engine.TMap,
-	"Table":     engine.TTable,
-	"Record":    engine.TRecord,
-	"Object":    engine.TObject,
+	"Any":     engine.TAny,
+	"None":    engine.TNone,
+	"Scalar":  engine.TScalar,
+	"Number":  engine.TNumber,
+	"Integer": engine.TInteger,
+	"Decimal": engine.TDecimal,
+	"String":  engine.TString,
+	"Boolean": engine.TBoolean,
+	"Atom":    engine.TAtom,
+	"Node":    engine.TNode,
+	"List":    engine.TList,
+	"Map":     engine.TMap,
+	"Table":   engine.TTable,
+	"Record":  engine.TRecord,
+	"Object":  engine.TObject,
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -521,6 +521,10 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		if val.Quote == "" {
 			return parseWord(val.Str)
 		}
+		// Backtick strings may contain ${...} interpolations.
+		if val.Quote == "`" {
+			return convertInterpolatedString(val.Str)
+		}
 		return engine.NewString(val.Str), nil
 
 	case numberVal:
@@ -646,6 +650,10 @@ func convertDataValue(v any) (engine.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote != "" {
+			// Backtick strings may contain ${...} interpolations.
+			if val.Quote == "`" {
+				return convertInterpolatedString(val.Str)
+			}
 			// Quoted text (e.g. "hello") → string
 			return engine.NewString(val.Str), nil
 		}
@@ -841,6 +849,119 @@ func parseWord(text string) (engine.Value, error) {
 	}
 
 	return engine.NewWord(name), nil
+}
+
+// splitInterpolation scans a backtick string for ${...} interpolations.
+// Returns the parsed parts and true if interpolation was found, or nil
+// and false if the string has no interpolations.
+func splitInterpolation(s string) ([]engine.InterpPart, bool, error) {
+	var parts []engine.InterpPart
+	hasInterp := false
+	i := 0
+	start := 0
+
+	for i < len(s) {
+		// Check for ${
+		if s[i] == '$' && i+1 < len(s) && s[i+1] == '{' {
+			hasInterp = true
+			// Save preceding literal part.
+			if i > start {
+				parts = append(parts, engine.InterpPart{Lit: s[start:i]})
+			}
+			i += 2 // skip ${
+			exprStart := i
+			depth := 1
+			inSingle := false
+			inDouble := false
+
+			for i < len(s) && depth > 0 {
+				ch := s[i]
+				if inSingle {
+					if ch == '\\' && i+1 < len(s) {
+						i += 2
+						continue
+					}
+					if ch == '\'' {
+						inSingle = false
+					}
+				} else if inDouble {
+					if ch == '\\' && i+1 < len(s) {
+						i += 2
+						continue
+					}
+					if ch == '"' {
+						inDouble = false
+					}
+				} else {
+					switch ch {
+					case '\'':
+						inSingle = true
+					case '"':
+						inDouble = true
+					case '{':
+						depth++
+					case '}':
+						depth--
+						if depth == 0 {
+							break
+						}
+					}
+				}
+				if depth == 0 {
+					break
+				}
+				i++
+			}
+
+			if depth != 0 {
+				return nil, false, engine.MakeAqlError(
+					"syntax_error",
+					"unclosed interpolation ${...} in template string",
+					"${", s, "")
+			}
+
+			exprStr := s[exprStart:i]
+			i++ // skip closing }
+			start = i
+
+			// Parse the expression as AQL code.
+			exprVals, err := Parse(exprStr)
+			if err != nil {
+				return nil, false, fmt.Errorf("interpolation parse error: %w", err)
+			}
+
+			parts = append(parts, engine.InterpPart{Expr: exprVals})
+			continue
+		}
+
+		i++
+	}
+
+	if !hasInterp {
+		return nil, false, nil
+	}
+
+	// Final literal part.
+	if start < len(s) {
+		parts = append(parts, engine.InterpPart{Lit: s[start:]})
+	}
+
+	return parts, true, nil
+}
+
+// convertInterpolatedString checks a backtick-quoted string for ${...}
+// interpolations and returns either a plain string (no interpolations)
+// or an InterpString value. Called from convertTopLevelValue and
+// convertDataValue when Quote is backtick.
+func convertInterpolatedString(text string) (engine.Value, error) {
+	parts, hasInterp, err := splitInterpolation(text)
+	if err != nil {
+		return engine.Value{}, err
+	}
+	if !hasInterp {
+		return engine.NewString(text), nil
+	}
+	return engine.NewInterpString(parts), nil
 }
 
 // numberVal wraps a float64 with source text so we can distinguish
