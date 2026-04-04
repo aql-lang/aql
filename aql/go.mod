@@ -4,8 +4,8 @@ go 1.24.7
 
 require (
 	github.com/chzyer/readline v1.5.1
-	github.com/jsonicjs/csv/go v0.1.1
-	github.com/jsonicjs/jsonic/go v0.1.5
+	github.com/jsonicjs/csv/go v0.1.2
+	github.com/jsonicjs/jsonic/go v0.1.6
 	golang.org/x/text v0.21.0
 	modernc.org/sqlite v1.46.1
 	voxgiguniversalsdk v0.1.1
@@ -13,9 +13,9 @@ require (
 
 require (
 	github.com/jsonicjs/directive/go v0.1.0 // indirect
-	github.com/jsonicjs/multisource/go v0.1.1
-	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/term v0.28.0 // indirect
+	github.com/jsonicjs/multisource/go v0.1.2
+	golang.org/x/crypto v0.32.0
+	golang.org/x/term v0.28.0
 )
 
 require (
