@@ -258,10 +258,11 @@ func TestEngineCoreUndefBasic(t *testing.T) {
 	// undef myVal
 	runAQL(t, r, []Value{NewWord("undef"), NewWord("myValUndef")})
 
-	// After undef, the word should resolve to an atom
-	result = runAQL(t, r, []Value{NewWord("myValUndef")})
-	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("after undef, myValUndef should be atom, got %v (type %s)", result, result[0].VType)
+	// After undef, the word should error (undefined)
+	e := New(r)
+	_, runErr := e.Run([]Value{NewWord("myValUndef")})
+	if runErr == nil {
+		t.Errorf("after undef, myValUndef should error, got nil")
 	}
 }
 
@@ -295,9 +296,10 @@ func TestEngineCoreUndefWithStringName(t *testing.T) {
 		NewWord("def"), NewWord("strUndef"), NewInteger(77), NewWord("end"),
 	})
 	runAQL(t, r, []Value{NewWord("undef"), NewString("strUndef")})
-	result := runAQL(t, r, []Value{NewWord("strUndef")})
-	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("after undef by string, strUndef should be atom, got %v", result)
+	e := New(r)
+	_, err := e.Run([]Value{NewWord("strUndef")})
+	if err == nil {
+		t.Errorf("after undef by string, strUndef should error, got nil")
 	}
 }
 
@@ -963,16 +965,12 @@ func TestEngineCoreTypeNameResolution(t *testing.T) {
 	}
 }
 
-func TestEngineCoreUnknownWordBecomesAtom(t *testing.T) {
+func TestEngineCoreUnknownWordErrors(t *testing.T) {
 	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{NewWord("unknownXyz")})
-	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("unknown word should become atom, got %v (type %s)", result, result[0].VType)
-	}
-	_as44, _ := result[0].AsAtom()
-	if _as44 != "unknownXyz" {
-		_as45, _ := result[0].AsAtom()
-		t.Errorf("atom value = %v, want 'unknownXyz'", _as45)
+	e := New(r)
+	_, err := e.Run([]Value{NewWord("unknownXyz")})
+	if err == nil {
+		t.Error("expected error for undefined word, got nil")
 	}
 }
 

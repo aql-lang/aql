@@ -684,14 +684,10 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 		t.Errorf("got %v, want 105", result[0])
 	}
 
-	// b should not have "custom" — it becomes an atom.
-	result, err = b.Run("5 custom")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// "custom" is not registered in b, so it stays as an atom on the stack.
-	if len(result) != 2 {
-		t.Fatalf("got %d values, want 2 (5 and atom custom)", len(result))
+	// b should not have "custom" — it errors.
+	_, err = b.Run("5 custom")
+	if err == nil {
+		t.Fatal("expected error for undefined word 'custom' in b, got nil")
 	}
 }
 

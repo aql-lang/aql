@@ -301,6 +301,22 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		return nil, err
 	}
 
+	// Check for undefined words left on the result stack.
+	// Atoms marked Undefined came from words that were never defined;
+	// they are only allowed when consumed by a function expecting TAtom
+	// or in a quoted map/list (which skips evaluation entirely).
+	for _, v := range e.stack {
+		if v.Undefined {
+			name, _ := v.AsAtom()
+			return nil, &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + name,
+				Src:        name,
+				fullSource: e.effectiveSource(),
+			}
+		}
+	}
+
 	return e.stack, nil
 }
 
@@ -578,7 +594,10 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
-		e.stack[e.pointer] = NewAtom(w.Name)
+		v := NewAtom(w.Name)
+		v.Pos = val.Pos
+		v.Undefined = true
+		e.stack[e.pointer] = v
 		return nil
 	}
 
@@ -685,6 +704,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 		}
 		match.Args[i].Eval = false
+		match.Args[i].Undefined = false
 	}
 
 	// Compute context (cheap O(1) call).
@@ -1297,6 +1317,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			}
 		}
 		args[i].Eval = false
+		args[i].Undefined = false
 	}
 
 	if capturedReg != nil {
@@ -2181,3 +2202,4 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 	}
 	return false
 }
+

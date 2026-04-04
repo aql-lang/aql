@@ -290,21 +290,16 @@ func TestForIteratorScoping(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// After "for 3 [i]", the word "i" should resolve to atom (not integer)
-	result := runAQL(t, r, []Value{
+	// After "for 3 [i]", the word "i" is out of scope and should error
+	e := New(r)
+	_, err = e.Run([]Value{
 		NewWord("for"),
 		NewInteger(3),
 		NewList([]Value{NewWord("i")}),
 		NewWord("i"),
 	})
-
-	// First 3 results are 0,1,2 from the loop; 4th is atom "i"
-	if len(result) != 4 {
-		t.Fatalf("expected 4 results, got %d: %v", len(result), result)
-	}
-	last := result[3]
-	if !last.IsAtom() {
-		t.Errorf("iterator 'i' should be atom after loop, got type %s", last.VType)
+	if err == nil {
+		t.Fatal("expected error for undefined 'i' after loop, got nil")
 	}
 }
 

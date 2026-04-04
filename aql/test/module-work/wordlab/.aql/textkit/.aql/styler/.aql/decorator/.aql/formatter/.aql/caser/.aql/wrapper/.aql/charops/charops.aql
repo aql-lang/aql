@@ -1,4 +1,4 @@
 def to-up fn [[s:String] [String] [s upper]]
 def to-down fn [[s:String] [String] [s lower]]
 
-export Charops {to-up: to-up to-down: to-down}
+export Charops {to-up:to-up to-down:to-down}

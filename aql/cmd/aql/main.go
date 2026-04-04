@@ -15,6 +15,7 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
+	"github.com/metsitaba/voxgig-exp/aql/internal/formatter"
 	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/repl"
 )
@@ -37,7 +38,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -98,6 +99,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "clean" subcommand: aql clean [dir]
 	if len(args) > 0 && args[0] == "clean" {
 		return runClean(args[1:], stdout, stderr)
+	}
+
+	// Handle "fmt" subcommand: aql fmt [file.aql ...]
+	if len(args) > 0 && args[0] == "fmt" {
+		return runFmt(args[1:], stdout, stderr)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -355,5 +361,54 @@ func runClean(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "cleaned %s\n", aqlDir)
+	return 0
+}
+
+// runFmt handles `aql fmt [file.aql ...]`: format AQL source files in place.
+// With no arguments, formats all .aql files in the current directory tree.
+func runFmt(args []string, stdout, stderr io.Writer) int {
+	var files []string
+	if len(args) == 0 {
+		// Find all .aql files in current directory tree.
+		err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() && info.Name() == ".aql" {
+				return filepath.SkipDir
+			}
+			if !info.IsDir() && strings.HasSuffix(path, ".aql") {
+				files = append(files, path)
+			}
+			return nil
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+	} else {
+		files = args
+	}
+
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "no .aql files found")
+		return 0
+	}
+
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		formatted := formatter.Format(string(data))
+		if string(data) != formatted {
+			if err := os.WriteFile(path, []byte(formatted), 0644); err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			fmt.Fprintln(stdout, path)
+		}
+	}
 	return 0
 }

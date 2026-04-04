@@ -1,4 +1,4 @@
 def add-dot fn [[s:String] [String] [s add "."]]
 def add-bang fn [[s:String] [String] [s add "!"]]
 
-export Joiner {add-dot: add-dot add-bang: add-bang}
+export Joiner {add-dot:add-dot add-bang:add-bang}

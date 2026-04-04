@@ -571,20 +571,16 @@ func TestEngineUndef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// def foo 42 end foo undef foo end foo
-	result := runAQL(t, r, []Value{
+	// def foo 42 end foo undef foo end foo → error (foo undefined after undef)
+	e := New(r)
+	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
 		NewWord("foo"),
 		NewWord("undef"), NewWord("foo"), NewWord("end"),
 		NewWord("foo"),
 	})
-	// After undef, foo becomes atom
-	if len(result) != 2 {
-		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
-	}
-	_as25, _ := result[0].AsInteger()
-	if _as25 != 42 {
-		t.Errorf("first foo = %v, want 42", result[0])
+	if err == nil {
+		t.Fatal("expected error for undefined word after undef, got nil")
 	}
 }
 
@@ -2904,18 +2900,15 @@ func TestFnUndefRemovesAll(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 	})
 
-	result := runAQL(t, r, []Value{
+	e := New(r)
+	_, err = e.Run([]Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
 		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
 		NewWord("foo"),
 	})
-	// foo should fall through to atom (string)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
-	}
-	_as131, _ := result[0].AsString()
-	if _as131 != "foo" {
-		t.Errorf("foo after removing all sigs = %v, want atom \"foo\"", result[0])
+	// foo should error (undefined after all sigs removed)
+	if err == nil {
+		t.Fatal("expected error for undefined word after removing all sigs, got nil")
 	}
 }
 

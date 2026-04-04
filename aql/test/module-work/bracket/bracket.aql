@@ -2,4 +2,4 @@
 
 def label fn [[s:String] [String] ["<" add (s Tagger.tag) add ">"]]
 
-export Bracket {label: label}
+export Bracket {label:label}

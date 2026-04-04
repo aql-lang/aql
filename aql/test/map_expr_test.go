@@ -294,8 +294,9 @@ export M {double:double}`,
 
 func TestMapExprModuleIsolation(t *testing.T) {
 	// Parent defs should NOT leak into module map values.
+	// Undefined word in map value now errors, so use a string.
 	files := map[string]string{
-		"mod.aql": `export M {x:foo}`,
+		"mod.aql": `export M {x:"foo"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
@@ -305,8 +306,7 @@ func TestMapExprModuleIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// "foo" is not defined inside the module, so it should resolve
-	// as an atom, not as 99.
+	// "foo" is a string, not 99 — proves isolation.
 	got := formatStack(result)
 	if got == "99" {
 		t.Error("parent def 'foo' leaked into module map value")

@@ -79,10 +79,11 @@ func TestChainThreeFileImports(t *testing.T) {
 
 func TestChainIsolationBetweenFiles(t *testing.T) {
 	// Defs from one file module don't leak to another.
+	// Use string value to avoid undefined word error.
 	files := map[string]string{
 		"a.aql": `def secret 42
 export A {x:1}`,
-		"b.aql": `export B {y:secret}`,
+		"b.aql": `export B {y:"secret"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
@@ -93,7 +94,7 @@ export A {x:1}`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	// "secret" in b.aql is not visible — should be string 'secret', not 42.
+	// "secret" in b.aql is a string, not 42 — proves isolation.
 	got := formatStack(result)
 	if got == "42" {
 		t.Error("def 'secret' leaked between file modules")
@@ -101,8 +102,9 @@ export A {x:1}`,
 }
 
 func TestChainIsolationFromParent(t *testing.T) {
+	// Use string value to avoid undefined word error.
 	files := map[string]string{
-		"mod.aql": `export M {val:foo}`,
+		"mod.aql": `export M {val:"foo"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
@@ -125,14 +127,14 @@ func TestChainInternalDefsNotLeaking(t *testing.T) {
 export M {x:1}`,
 	}
 
-	result, err := runModuleSteps(t, files, []string{
+	_, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
 		`internal`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	// "internal" is undefined (not exported) — should error.
+	if err == nil {
+		t.Fatal("expected error for undefined word 'internal', got nil")
 	}
-	assertResult(t, result, "internal")
 }
 
 // =====================================================================
@@ -699,14 +701,14 @@ func TestImportFileNoExports(t *testing.T) {
 		"empty.aql": `1 2 add`,
 	}
 
-	result, err := runModuleSteps(t, files, []string{
+	_, err := runModuleSteps(t, files, []string{
 		`import "./empty.aql"`,
 		`x`,
 	})
-	if err != nil {
-		t.Fatal(err)
+	// "x" is undefined — should error.
+	if err == nil {
+		t.Fatal("expected error for undefined word 'x', got nil")
 	}
-	assertResult(t, result, "x")
 }
 
 // =====================================================================

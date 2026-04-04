@@ -230,14 +230,15 @@ func TestQueryFromGroupBy(t *testing.T) {
 	}
 }
 
-func TestQueryStarWord(t *testing.T) {
+func TestQueryStarWordErrors(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewWord("star")})
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
+	e := New(r)
+	_, err = e.Run([]Value{NewWord("star")})
+	if err == nil {
+		t.Fatal("expected error for undefined word 'star', got nil")
 	}
 }
 
