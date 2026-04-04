@@ -830,12 +830,13 @@ func emitMap(n *Node, indent int) string {
 		return single
 	}
 
-	// Multi-line.
+	// Multi-line: first entry on { line, rest indented.
 	childIndent := indent + 2
 	childPfx := strings.Repeat(" ", childIndent)
 	var lines []string
-	lines = append(lines, "{")
-	for _, e := range entries {
+	first := renderMapEntry(entries[0], childIndent)
+	lines = append(lines, "{"+first)
+	for _, e := range entries[1:] {
 		lines = append(lines, childPfx+renderMapEntry(e, childIndent))
 	}
 	lines = append(lines, strings.Repeat(" ", indent)+"}")

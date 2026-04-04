@@ -9,8 +9,7 @@ def int2hex fn [[Integer] [String] [
 
 def hex2rgb fn [[hex:String] [Map] [
   make Color
-    {
-      r:(hex slice 1 3 hex2int)
+    {r:(hex slice 1 3 hex2int)
       g:(hex slice 3 5 hex2int)
       b:(hex slice 5 7 hex2int)
     }
