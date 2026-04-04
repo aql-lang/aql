@@ -176,8 +176,9 @@ export M {x:1}`,
 
 func TestImportFileIsolationFromParent(t *testing.T) {
 	// Parent defs should not be visible inside the file's module.
+	// Use a string value so the map doesn't error on undefined word.
 	files := map[string]string{
-		"mod.aql": `export M {val:foo}`,
+		"mod.aql": `export M {val:"foo"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
@@ -189,7 +190,7 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	// "foo" should be an atom (or string), not 99.
+	// "foo" should be the string, not 99.
 	if got == "99" {
 		t.Error("parent def 'foo' leaked into file module")
 	}

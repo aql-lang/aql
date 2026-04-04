@@ -974,19 +974,6 @@ func TestEngineCoreUnknownWordErrors(t *testing.T) {
 	}
 }
 
-func TestEngineCoreUnknownWordAllowedInMapContext(t *testing.T) {
-	r, _ := DefaultRegistry()
-	e := New(r)
-	e.allowAtom = true
-	result, err := e.Run([]Value{NewWord("unknownXyz")})
-	if err != nil {
-		t.Fatalf("unexpected error in allowAtom context: %v", err)
-	}
-	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("unknown word should become atom in allowAtom context, got %v", result)
-	}
-}
-
 // =============================================================================
 // TestEngineCoreFnSigMatchesSpec — direct unit test
 // =============================================================================

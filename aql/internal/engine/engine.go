@@ -45,15 +45,14 @@ type TraceCallback func(step int, pointer int, stack []Value, note string)
 
 // Engine is the AQL stack machine.
 type Engine struct {
-	stack      []Value
-	pointer    int
-	registry   *Registry
-	trace      TraceCallback
-	traceNote  string          // annotation set during execution for the next trace call
-	stepLimit  int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
-	marks      map[string]bool // active mark IDs (for mark/move control flow)
-	source     string          // original source text for error reporting
-	allowAtom  bool            // when true, undefined words silently become atoms (map eval context)
+	stack     []Value
+	pointer   int
+	registry  *Registry
+	trace     TraceCallback
+	traceNote string          // annotation set during execution for the next trace call
+	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	source    string          // original source text for error reporting
 }
 
 // New creates an Engine with the given function registry.
@@ -304,18 +303,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 	// Check for undefined words left on the result stack.
 	// Atoms marked Undefined came from words that were never defined;
-	// they are only allowed in map evaluation contexts (allowAtom)
-	// or when consumed by a function expecting TAtom.
-	if !e.allowAtom {
-		for _, v := range e.stack {
-			if v.Undefined {
-				name, _ := v.AsAtom()
-				return nil, &AqlError{
-					Code:       "undefined_word",
-					Detail:     "undefined word: " + name,
-					Src:        name,
-					fullSource: e.effectiveSource(),
-				}
+	// they are only allowed when consumed by a function expecting TAtom
+	// or in a quoted map/list (which skips evaluation entirely).
+	for _, v := range e.stack {
+		if v.Undefined {
+			name, _ := v.AsAtom()
+			return nil, &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + name,
+				Src:        name,
+				fullSource: e.effectiveSource(),
 			}
 		}
 	}
@@ -599,9 +596,7 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		v := NewAtom(w.Name)
 		v.Pos = val.Pos
-		if !e.allowAtom {
-			v.Undefined = true
-		}
+		v.Undefined = true
 		e.stack[e.pointer] = v
 		return nil
 	}
@@ -1068,7 +1063,6 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		// the actual string key. E.g., {[a]:1} with def a 'x' → {x:1}
 		if ckSet[key] {
 			sub := New(e.registry)
-			sub.allowAtom = true
 			keyResult, err := sub.Run([]Value{NewWord(key)})
 			if err != nil {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
@@ -1089,7 +1083,6 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		if v.IsParenExpr() {
 			items := v.AsParenExpr()
 			sub := New(e.registry)
-			sub.allowAtom = true
 			input := make([]Value, 0, len(items)+2)
 			input = append(input, NewOpenParen())
 			input = append(input, items...)
@@ -1107,9 +1100,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		}
 
 		// Evaluate each value in a sub-engine.
-		// Map values allow undefined words as atoms.
 		sub := New(e.registry)
-		sub.allowAtom = true
 		result, err := sub.Run([]Value{v})
 		if err != nil {
 			return Value{}, err
