@@ -4,4 +4,4 @@ def emphasize fn [s:String] [String] [
   "*" add (s Wrapper.shout) add "*"
 ]
 
-export Caser {emphasize: emphasize}
+export Caser {emphasize:emphasize}

@@ -1,2 +1,2 @@
 import "./helpers.aql"
-export Utils {magicnum: 42}
+export Utils {magicnum:42}

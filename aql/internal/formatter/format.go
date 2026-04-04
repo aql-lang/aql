@@ -967,7 +967,7 @@ func renderMapEntry(e mapEntry, indent int) string {
 	if e.optional {
 		opt = "?"
 	}
-	return e.key + opt + ": " + emitNode(e.value, indent)
+	return e.key + opt + ":" + emitNode(e.value, indent)
 }
 
 // emitParen formats (...).

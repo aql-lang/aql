@@ -39,12 +39,17 @@ func TestFormatBasic(t *testing.T) {
 		{
 			name: "map formatting",
 			in:   "{a:1 b:2 c:3}\n",
-			want: "{a: 1 b: 2 c: 3}\n",
+			want: "{a:1 b:2 c:3}\n",
+		},
+		{
+			name: "map no space after brace",
+			in:   "{ a:1 b:2 }\n",
+			want: "{a:1 b:2}\n",
 		},
 		{
 			name: "export map",
 			in:   "export Foo {a:1 b:2}\n",
-			want: "export Foo {a: 1 b: 2}\n",
+			want: "export Foo {a:1 b:2}\n",
 		},
 		{
 			name: "empty list",
@@ -107,7 +112,7 @@ func TestFormatIdempotent(t *testing.T) {
 
 def process fn [[s:String] [String] [(s Styler.style)]]
 
-export Textkit {process: process}
+export Textkit {process:process}
 `
 	first := Format(src)
 	second := Format(first)
