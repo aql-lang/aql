@@ -84,6 +84,29 @@ _[] -> [string/empty]_
 _[] -> [data/map]_
 
 
+`` `hello` `` - template string (same as `"hello"`)
+
+_[] -> [string/proper]_
+
+
+`` `value is ${1 add 2}` `` - string interpolation
+
+_[] -> [string/proper]_ with value `'value is 3'`
+
+
+```
+def name "world"
+`hello ${name}`
+```
+- interpolation with variable reference
+
+_[] -> [string/proper]_ with value `'hello world'`
+
+
+`` `a${`inner ${1}`}b` `` - nested template strings
+
+_[] -> [string/proper]_ with value `'ainner 1b'`
+
 
 ## Control
 

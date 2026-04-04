@@ -8,23 +8,23 @@ import (
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
 var typeNames = map[string]Type{
-	"Any":      TAny,
-	"None":     TNone,
-	"Scalar":   TScalar,
-	"Number":   TNumber,
-	"Integer":  TInteger,
-	"Decimal":  TDecimal,
-	"String":   TString,
-	"Boolean":  TBoolean,
-	"Path":     TPath,
-	"Atom":     TAtom,
-	"Node":     TNode,
-	"List":     TList,
-	"Map":      TMap,
-	"Table":    TTable,
-	"Record":   TRecord,
-	"Options":  TOptions,
-	"Object":   TObject,
+	"Any":        TAny,
+	"None":       TNone,
+	"Scalar":     TScalar,
+	"Number":     TNumber,
+	"Integer":    TInteger,
+	"Decimal":    TDecimal,
+	"String":     TString,
+	"Boolean":    TBoolean,
+	"Path":       TPath,
+	"Atom":       TAtom,
+	"Node":       TNode,
+	"List":       TList,
+	"Map":        TMap,
+	"Table":      TTable,
+	"Record":     TRecord,
+	"Options":    TOptions,
+	"Object":     TObject,
 	"Resource":   TResource,
 	"Entity":     TResourceEntity,
 	"Array":      TArray,
@@ -253,6 +253,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			// the parser for paren groups in data context). They should
 			// not appear on the main stack; skip if encountered.
 			e.pointer++
+
+		case val.IsInterpString():
+			result, err := e.evalInterpString(val)
+			if err != nil {
+				return nil, err
+			}
+			// Replace with the evaluated string but do NOT advance the
+			// pointer. The resulting string value needs to go through
+			// stepLiteral so forward collection works correctly.
+			e.stack[e.pointer] = result
 
 		case val.IsMark():
 			e.stepMark(val)
@@ -1035,6 +1045,32 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 	return NewList(result), nil
 }
 
+// evalInterpString evaluates an interpolated string by running each
+// expression part in a sub-engine, converting results to strings, and
+// concatenating everything into a single string value.
+func (e *Engine) evalInterpString(val Value) (Value, error) {
+	parts := val.AsInterpString()
+	if parts == nil {
+		return NewString(""), nil
+	}
+	var buf strings.Builder
+	for _, part := range parts {
+		if part.Expr == nil {
+			buf.WriteString(part.Lit)
+		} else {
+			sub := New(e.registry)
+			result, err := sub.Run(part.Expr)
+			if err != nil {
+				return Value{}, err
+			}
+			for _, r := range result {
+				buf.WriteString(valToString(r))
+			}
+		}
+	}
+	return NewString(buf.String()), nil
+}
+
 // autoEvalMap evaluates each value in a plain map using a sub-engine.
 // Word values resolve directly; lists auto-evaluate via autoEvalStack:
 //
@@ -1076,6 +1112,16 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 					resolvedKey = valToString(keyResult[0])
 				}
 			}
+		}
+
+		// Interpolated string: evaluate inline.
+		if v.IsInterpString() {
+			result, err := e.evalInterpString(v)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(resolvedKey, result)
+			continue
 		}
 
 		// Paren expression: evaluate items with paren markers so the
@@ -2002,7 +2048,6 @@ func (e *Engine) isInsidePendingForward() bool {
 	return false
 }
 
-
 // peekForwardValue returns a value representing what the next stack element
 // would resolve to, for use in speculative signature matching. Unknown words
 // become atoms; true/false become booleans; literals are returned as-is.
@@ -2202,4 +2247,3 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 	}
 	return false
 }
-

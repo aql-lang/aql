@@ -63,47 +63,48 @@ var typeAncestry = map[string]string{
 	"Entity":      "Object/Resource/Entity",
 	"ScalarType":  "Type/ScalarType",
 	"NodeType":    "Type/NodeType",
-	"ObjectType": "Type/ObjectType",
-	"Date":      "Scalar/Time/Date",
-	"Matrix":    "Scalar/Number/Matrix",
+	"ObjectType":  "Type/ObjectType",
+	"Date":        "Scalar/Time/Date",
+	"Matrix":      "Scalar/Number/Matrix",
 }
 
 // Well-known types.
 var (
-	TAny          = mustType("Any")
-	TNone         = mustType("None")
-	TScalar       = mustType("Scalar")
-	TString       = mustType("Scalar/String")
-	TStringProper = mustType("Scalar/String/Proper")
-	TStringEmpty  = mustType("Scalar/String/Empty")
-	TNumber       = mustType("Scalar/Number")
-	TInteger      = mustType("Scalar/Number/Integer")
-	TDecimal      = mustType("Scalar/Number/Decimal")
-	TBoolean      = mustType("Scalar/Boolean")
-	TPath         = mustType("Scalar/Path")
-	TNode         = mustType("Node")
-	TList         = mustType("Node/List")
-	TListArgs     = mustType("Node/List/Args")
-	TMap          = mustType("Node/Map")
-	TOptions      = mustType("Node/Map/Options")
-	TTable        = mustType("Object/Table")
-	TRecord       = mustType("Object/Record")
-	TAtom         = mustType("Scalar/Atom")
-	TWord         = mustType("Word")
-	TFunction     = mustType("Word/Function")
-	TForward      = mustType("Word/__FW")
-	TOpenParen    = mustType("Word/__OP")
-	TParenExpr    = mustType("Word/__PE")
-	TFnDef        = mustType("Word/__FN")
-	TFnUndef      = mustType("Word/__UF")
-	TReturnCheck  = mustType("Word/__RC")
-	TDefCleanup   = mustType("Word/__IN/__DC")
-	TDisjunct     = mustType("Word/__DJ")
-	TMark         = mustType("Word/__MK")
-	TMove         = mustType("Word/__MV")
-	TModule       = mustType("Word/__MD")
-	TInternal     = mustType("Word/__IN")
-	TInspect      = mustType("Node/Map/Inspect")
+	TAny            = mustType("Any")
+	TNone           = mustType("None")
+	TScalar         = mustType("Scalar")
+	TString         = mustType("Scalar/String")
+	TStringProper   = mustType("Scalar/String/Proper")
+	TStringEmpty    = mustType("Scalar/String/Empty")
+	TNumber         = mustType("Scalar/Number")
+	TInteger        = mustType("Scalar/Number/Integer")
+	TDecimal        = mustType("Scalar/Number/Decimal")
+	TBoolean        = mustType("Scalar/Boolean")
+	TPath           = mustType("Scalar/Path")
+	TNode           = mustType("Node")
+	TList           = mustType("Node/List")
+	TListArgs       = mustType("Node/List/Args")
+	TMap            = mustType("Node/Map")
+	TOptions        = mustType("Node/Map/Options")
+	TTable          = mustType("Object/Table")
+	TRecord         = mustType("Object/Record")
+	TAtom           = mustType("Scalar/Atom")
+	TWord           = mustType("Word")
+	TFunction       = mustType("Word/Function")
+	TForward        = mustType("Word/__FW")
+	TOpenParen      = mustType("Word/__OP")
+	TParenExpr      = mustType("Word/__PE")
+	TInterpString   = mustType("Word/__IS")
+	TFnDef          = mustType("Word/__FN")
+	TFnUndef        = mustType("Word/__UF")
+	TReturnCheck    = mustType("Word/__RC")
+	TDefCleanup     = mustType("Word/__IN/__DC")
+	TDisjunct       = mustType("Word/__DJ")
+	TMark           = mustType("Word/__MK")
+	TMove           = mustType("Word/__MV")
+	TModule         = mustType("Word/__MD")
+	TInternal       = mustType("Word/__IN")
+	TInspect        = mustType("Node/Map/Inspect")
 	TObject         = mustType("Object")
 	TStore          = mustType("Object/Store")
 	TStoreSystem    = mustType("Object/Store/System")
@@ -111,72 +112,72 @@ var (
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
 	TFetchFunction  = mustType("Object/Fetch")
-	TFetchRequest  = mustType("Object/Fetch/Request")
-	TFetchResponse = mustType("Object/Fetch/Response")
-	TError         = mustType("Object/Error")
-	TType          = mustType("Type")
-	TScalarType    = mustType("Type/ScalarType")
-	TNodeType      = mustType("Type/NodeType")
-	TObjectType    = mustType("Type/ObjectType")
-	TDate   = mustType("Scalar/Time/Date")
-	TMatrix = mustType("Scalar/Number/Matrix")
-
+	TFetchRequest   = mustType("Object/Fetch/Request")
+	TFetchResponse  = mustType("Object/Fetch/Response")
+	TError          = mustType("Object/Error")
+	TType           = mustType("Type")
+	TScalarType     = mustType("Type/ScalarType")
+	TNodeType       = mustType("Type/NodeType")
+	TObjectType     = mustType("Type/ObjectType")
+	TDate           = mustType("Scalar/Time/Date")
+	TMatrix         = mustType("Scalar/Number/Matrix")
 )
 
 // builtinTypeIDs maps fully-qualified builtin type paths to their fixed
 // numeric IDs. These assignments are stable: new types are appended at the
 // end, existing numbers never change.
 var builtinTypeIDs = map[string]int{
-	"Any":                      1,
-	"None":                     2,
-	"Scalar":                   3,
-	"Scalar/String":            4,
-	"Scalar/String/Proper":     5,
-	"Scalar/String/Empty":      6,
-	"Scalar/Number":            7,
-	"Scalar/Number/Integer":    8,
-	"Scalar/Number/Decimal":    9,
-	"Scalar/Boolean":           10,
-	"Scalar/Path":              47,
-	"Node":                     11,
-	"Node/List":                12,
-	"Node/List/Args":           13,
-	"Node/Map":                 14,
-	"Object/Table":             15,
-	"Object/Record":            16,
-	"Word":                     17,
-	"Scalar/Atom":              18,
-	"Word/Function":            19,
-	"Word/__IN":                20,
-	"Word/__IN/__DC":           20,
-	"Word/__FW":                21,
-	"Word/__OP":                22,
-	"Word/__FN":                23,
-	"Word/__UF":                24,
-	"Word/__RC":                25,
-	"Word/__DJ":                26,
-	"Word/__MK":                27,
-	"Word/__MV":                28,
-	"Word/__MD":                29,
-	"Node/Map/Options":         38,
-	"Object":                   30,
-	"Node/Map/Inspect":         31,
-	"Object/Fetch":             33,
-	"Object/Fetch/Request":     34,
-	"Object/Fetch/Response":    35,
-	"Object/Store":             42,
-	"Object/Store/System":      43,
-	"Object/Array":             44,
-	"Object/Error":             45,
-	"Object/Resource":          36,
-	"Object/Resource/Entity":   37,
-	"Type":                     39,
-	"Type/ScalarType":          40,
-	"Type/NodeType":            41,
-	"Type/ObjectType":          46,
-	"Scalar/Time":             48,
-	"Scalar/Time/Date":        49,
-	"Scalar/Number/Matrix":    50,
+	"Any":                    1,
+	"None":                   2,
+	"Scalar":                 3,
+	"Scalar/String":          4,
+	"Scalar/String/Proper":   5,
+	"Scalar/String/Empty":    6,
+	"Scalar/Number":          7,
+	"Scalar/Number/Integer":  8,
+	"Scalar/Number/Decimal":  9,
+	"Scalar/Boolean":         10,
+	"Scalar/Path":            47,
+	"Node":                   11,
+	"Node/List":              12,
+	"Node/List/Args":         13,
+	"Node/Map":               14,
+	"Object/Table":           15,
+	"Object/Record":          16,
+	"Word":                   17,
+	"Scalar/Atom":            18,
+	"Word/Function":          19,
+	"Word/__IN":              20,
+	"Word/__IN/__DC":         20,
+	"Word/__FW":              21,
+	"Word/__OP":              22,
+	"Word/__FN":              23,
+	"Word/__UF":              24,
+	"Word/__RC":              25,
+	"Word/__DJ":              26,
+	"Word/__MK":              27,
+	"Word/__MV":              28,
+	"Word/__MD":              29,
+	"Node/Map/Options":       38,
+	"Object":                 30,
+	"Node/Map/Inspect":       31,
+	"Object/Fetch":           33,
+	"Object/Fetch/Request":   34,
+	"Object/Fetch/Response":  35,
+	"Object/Store":           42,
+	"Object/Store/System":    43,
+	"Object/Array":           44,
+	"Object/Error":           45,
+	"Object/Resource":        36,
+	"Object/Resource/Entity": 37,
+	"Type":                   39,
+	"Type/ScalarType":        40,
+	"Type/NodeType":          41,
+	"Type/ObjectType":        46,
+	"Scalar/Time":            48,
+	"Scalar/Time/Date":       49,
+	"Scalar/Number/Matrix":   50,
+	"Word/__IS":              51,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -375,7 +376,7 @@ func builtinTypeParts() map[string]bool {
 		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
-		TOpenParen, TParenExpr, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
+		TOpenParen, TParenExpr, TInterpString, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
 		TMove, TModule, TInternal, TInspect, TObject,
 		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,

@@ -290,7 +290,8 @@ Signature: `[string, minilang/glob] -> [boolean]`
 ### fm — Format String
 
 Positional string formatting. Placeholders `{}` are filled from
-the stack or a list.
+the stack or a list. (For inline expression interpolation, use
+backtick template strings: `` `value is ${expr}` ``.)
 
 Syntax: `fm/template`
 

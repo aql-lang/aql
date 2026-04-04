@@ -41,7 +41,7 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-AQL uses `github.com/jsonicjs/jsonic/go` (v0.1.4) for all tokenization and
+AQL uses `github.com/jsonicjs/jsonic/go` (v0.1.6) for all tokenization and
 structural parsing. The custom lexer (`internal/lexer/`) and token types
 (`internal/token/`) are stubs — not used in the parse pipeline.
 
@@ -51,15 +51,33 @@ The real parser lives in `internal/parser/parse.go`. Key jsonic integration:
   `ListRef/MapRef:true` (structural metadata), `Pair:true` and `Child:true`
   (typed list/map syntax like `[:String]` and `{:String}`), `Lex:false`
   (raw values for custom processing).
-- **Custom tokens**: `(`, `)`, `.`, `;` are registered via `j.Token()` so
-  jsonic lexes them as separate fixed tokens even when adjacent to text.
-- **Grammar rule**: The `"val"` rule is extended with `j.Rule()` to handle
-  parens, semicolons (aliased to "end"), and dot operators. Parens push to
-  a custom "paren"/"pelem" rule pair that collects items into a `parenGroup`.
-  At the top level, paren groups expand to engine markers `( ... )`. In data
-  context (map values), they become `ParenExpr` values for inline evaluation
-  by `autoEvalMap`. Adjacent dots (`foo.bar`) use source position analysis
-  to distinguish from standalone dots (`foo . bar`).
+- **Custom tokens**: `(`, `)`, `.`, `;`, `` ` ``, `${` are registered via
+  `j.Token()` so jsonic lexes them as separate fixed tokens even when
+  adjacent to text.
+- **Grammar rules**: The `"val"` rule is extended with `j.Rule()` to handle
+  parens, semicolons (aliased to "end"), dot operators, and template strings.
+  Parens push to a custom "paren"/"pelem" rule pair that collects items into
+  a `parenGroup`. At the top level, paren groups expand to engine markers
+  `( ... )`. In data context (map values), they become `ParenExpr` values
+  for inline evaluation by `autoEvalMap`. Adjacent dots (`foo.bar`) use
+  source position analysis to distinguish from standalone dots
+  (`foo . bar`).
+- **Template string interpolation**: Backtick is removed from jsonic's
+  `StringChars` so it is not consumed by the built-in string matcher.
+  Instead, `` ` `` (#BT), `${` (#IS), and template literal text (#TL) are
+  handled by custom tokens and grammar rules:
+  - A `LexMatcher` (priority 1M) checks `rule.K["aql_tpl"]` to produce
+    #TL tokens for literal text segments only inside template strings.
+  - `"interp"` rule: opened by #BT in val, sets `K["aql_tpl"]` in BO,
+    collects parts into an `interpGroup`.
+  - `"ielem"` rule: matches #TL (literal text) or #IS (interpolation start).
+  - `"iexpr"/"ieval"` rules: collect expression values between `${` and `}`.
+    `iexpr` clears `K["aql_tpl"]` and increments `dlist`/`dmap` so
+    expressions parse normally without template literal interference.
+  - Nesting works to any depth since each `iexpr` pushes to `val` which
+    can match another backtick and open a fresh `interp` rule.
+  - `convertInterpGroup` converts the jsonic output to engine
+    `InterpString` values (or plain strings if no interpolations found).
 - **Number wrapping**: A `j.Sub()` callback wraps floats containing `.` in a
   `numberVal` struct to distinguish integers from decimals at parse time.
 
@@ -145,7 +163,10 @@ consumed.
 
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate
-`convert*` function.
+`convert*` function. For context-sensitive lexing, use `j.AddMatcher()`
+with the v0.1.6 rule-aware `LexMatcher` signature
+`func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
+See the template string interpolation rules for a complete example.
 
 ## Panic Prevention (CRITICAL)
 
