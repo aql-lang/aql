@@ -70,6 +70,12 @@ func formatForPrint(v Value) string {
 		}
 	}
 
+	// Error: print the error message.
+	if v.IsError() {
+		info, _ := v.AsError()
+		return info.Message
+	}
+
 	// String: printed as-is (no quotes).
 	if v.VType.Matches(TString) {
 		_as0, _ := v.AsString()

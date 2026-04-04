@@ -5048,7 +5048,7 @@ func TestDoBlockCatchesError(t *testing.T) {
 }
 
 func TestErrorWordSimple(t *testing.T) {
-	// do [1 div 0] error → prints error, continues
+	// do [1 div 0] error [print] → prints "division by zero", continues
 	reg, _ := DefaultRegistry()
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
@@ -5056,6 +5056,7 @@ func TestErrorWordSimple(t *testing.T) {
 		NewWord("do"),
 		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
 		NewWord("error"),
+		NewList([]Value{NewWord("print")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -5070,15 +5071,16 @@ func TestErrorWordSimple(t *testing.T) {
 }
 
 func TestErrorWordWithList(t *testing.T) {
-	// do [1 div 0] [print "handled"] error 3 mul 4 → 12
+	// do [1 div 0] error [print] 3 mul 4 → 12
+	// The error is on the stack inside the handler list; print consumes it.
 	reg, _ := DefaultRegistry()
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
 		NewWord("do"),
 		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewWord("print"), NewString("handled")}),
 		NewWord("error"),
+		NewList([]Value{NewWord("print")}),
 		NewInteger(3), NewWord("mul"), NewInteger(4),
 	})
 	if err != nil {
@@ -5092,13 +5094,10 @@ func TestErrorWordWithList(t *testing.T) {
 	if !strings.Contains(out, "division by zero") {
 		t.Errorf("expected error message in output, got %q", out)
 	}
-	if !strings.Contains(out, "handled") {
-		t.Errorf("expected 'handled' in output, got %q", out)
-	}
 }
 
 func TestErrorWordContinuesExecution(t *testing.T) {
-	// do [1 div 0] error 3 mul 4 → 12
+	// do [1 div 0] error [drop] 3 mul 4 → 12
 	reg, _ := DefaultRegistry()
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
@@ -5106,6 +5105,7 @@ func TestErrorWordContinuesExecution(t *testing.T) {
 		NewWord("do"),
 		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
 		NewWord("error"),
+		NewList([]Value{NewWord("drop")}),
 		NewInteger(3), NewWord("mul"), NewInteger(4),
 	})
 	if err != nil {
