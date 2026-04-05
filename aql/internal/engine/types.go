@@ -65,6 +65,12 @@ var typeAncestry = map[string]string{
 	"NodeType":    "Type/NodeType",
 	"ObjectType":  "Type/ObjectType",
 	"Date":        "Scalar/Time/Date",
+	"DateTime":    "Scalar/Time/DateTime",
+	"Instant":     "Scalar/Time/Instant",
+	"TimeOfDay":   "Scalar/Time/TimeOfDay",
+	"CalDuration": "Scalar/Time/Duration/CalDuration",
+	"ClkDuration": "Scalar/Time/Duration/ClkDuration",
+	"Timezone":    "Scalar/Time/Timezone",
 	"Matrix":      "Scalar/Number/Matrix",
 }
 
@@ -120,6 +126,13 @@ var (
 	TNodeType       = mustType("Type/NodeType")
 	TObjectType     = mustType("Type/ObjectType")
 	TDate           = mustType("Scalar/Time/Date")
+	TDateTime       = mustType("Scalar/Time/DateTime")
+	TInstant        = mustType("Scalar/Time/Instant")
+	TTimeOfDay      = mustType("Scalar/Time/TimeOfDay")
+	TDuration       = mustType("Scalar/Time/Duration")
+	TCalDuration    = mustType("Scalar/Time/Duration/CalDuration")
+	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
+	TTimezone       = mustType("Scalar/Time/Timezone")
 	TMatrix         = mustType("Scalar/Number/Matrix")
 )
 
@@ -174,10 +187,17 @@ var builtinTypeIDs = map[string]int{
 	"Type/ScalarType":        40,
 	"Type/NodeType":          41,
 	"Type/ObjectType":        46,
-	"Scalar/Time":            48,
-	"Scalar/Time/Date":       49,
-	"Scalar/Number/Matrix":   50,
-	"Word/__IS":              51,
+	"Scalar/Time":                      48,
+	"Scalar/Time/Date":                 49,
+	"Scalar/Number/Matrix":             50,
+	"Word/__IS":                        51,
+	"Scalar/Time/DateTime":             52,
+	"Scalar/Time/Instant":              53,
+	"Scalar/Time/TimeOfDay":            54,
+	"Scalar/Time/Duration":             55,
+	"Scalar/Time/Duration/CalDuration": 56,
+	"Scalar/Time/Duration/ClkDuration": 57,
+	"Scalar/Time/Timezone":             58,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -298,7 +318,8 @@ var builtinTypeList = []Type{
 	TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
 	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
-	TDate, TMatrix,
+	TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone,
+	TMatrix,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -381,7 +402,8 @@ func builtinTypeParts() map[string]bool {
 		TStore, TStoreSystem, TArray, TError,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 		TType, TScalarType, TNodeType, TObjectType,
-		TDate, TMatrix,
+		TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone,
+		TMatrix,
 	}
 	for _, t := range builtins {
 		for _, p := range t.Parts {

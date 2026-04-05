@@ -820,7 +820,7 @@ type MatrixData struct {
 	Cols int
 }
 
-// NewDate creates a Date value from a time.Time.
+// NewDate creates a Date value from a time.Time (date only, midnight UTC).
 func NewDate(t time.Time) Value {
 	return newValue(TDate, t)
 }
@@ -831,6 +831,91 @@ func (v Value) AsDate() time.Time {
 		return t
 	}
 	return time.Time{}
+}
+
+// NewDateTime creates a DateTime value from a time.Time (date+time, no timezone).
+func NewDateTime(t time.Time) Value {
+	return newValue(TDateTime, t)
+}
+
+// AsDateTime returns the time.Time for a DateTime value.
+func (v Value) AsDateTime() time.Time {
+	if t, ok := v.Data.(time.Time); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+// NewInstant creates an Instant value from a time.Time (absolute UTC timestamp).
+func NewInstant(t time.Time) Value {
+	return newValue(TInstant, t.UTC())
+}
+
+// AsInstant returns the time.Time for an Instant value.
+func (v Value) AsInstant() time.Time {
+	if t, ok := v.Data.(time.Time); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+// NewTimeOfDay creates a TimeOfDay value from a time.Duration (offset from midnight).
+func NewTimeOfDay(d time.Duration) Value {
+	return newValue(TTimeOfDay, d)
+}
+
+// AsTimeOfDay returns the time.Duration for a TimeOfDay value.
+func (v Value) AsTimeOfDay() time.Duration {
+	if d, ok := v.Data.(time.Duration); ok {
+		return d
+	}
+	return 0
+}
+
+// CalDurationData holds a calendar duration (years, months, days).
+type CalDurationData struct {
+	Years  int
+	Months int
+	Days   int
+}
+
+// NewCalDuration creates a CalDuration value.
+func NewCalDuration(years, months, days int) Value {
+	return newValue(TCalDuration, CalDurationData{Years: years, Months: months, Days: days})
+}
+
+// AsCalDuration returns the CalDurationData for a CalDuration value.
+func (v Value) AsCalDuration() (CalDurationData, bool) {
+	if d, ok := v.Data.(CalDurationData); ok {
+		return d, true
+	}
+	return CalDurationData{}, false
+}
+
+// NewClkDuration creates a ClkDuration value from a time.Duration.
+func NewClkDuration(d time.Duration) Value {
+	return newValue(TClkDuration, d)
+}
+
+// AsClkDuration returns the time.Duration for a ClkDuration value.
+func (v Value) AsClkDuration() (time.Duration, bool) {
+	if d, ok := v.Data.(time.Duration); ok {
+		return d, true
+	}
+	return 0, false
+}
+
+// NewTimezone creates a Timezone value from a *time.Location.
+func NewTimezone(loc *time.Location) Value {
+	return newValue(TTimezone, loc)
+}
+
+// AsTimezone returns the *time.Location for a Timezone value.
+func (v Value) AsTimezone() *time.Location {
+	if loc, ok := v.Data.(*time.Location); ok {
+		return loc
+	}
+	return nil
 }
 
 // NewMatrix creates a Matrix value from a MatrixData.
@@ -1366,11 +1451,48 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
+	case v.VType.Matches(TInstant):
+		if t, ok := v.Data.(time.Time); ok {
+			return t.Format(time.RFC3339Nano)
+		}
+		return "Instant(nil)"
+	case v.VType.Matches(TDateTime):
+		if t, ok := v.Data.(time.Time); ok {
+			return t.Format("2006-01-02T15:04:05.999999999")
+		}
+		return "DateTime(nil)"
 	case v.VType.Matches(TDate):
 		if t, ok := v.Data.(time.Time); ok {
 			return t.Format("2006-01-02")
 		}
 		return "Date(nil)"
+	case v.VType.Matches(TTimeOfDay):
+		if d, ok := v.Data.(time.Duration); ok {
+			h := int(d.Hours())
+			m := int(d.Minutes()) % 60
+			s := int(d.Seconds()) % 60
+			ns := d.Nanoseconds() % 1e9
+			if ns != 0 {
+				return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
+			}
+			return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+		}
+		return "TimeOfDay(nil)"
+	case v.VType.Matches(TCalDuration):
+		if cd, ok := v.Data.(CalDurationData); ok {
+			return fmt.Sprintf("P%dY%dM%dD", cd.Years, cd.Months, cd.Days)
+		}
+		return "CalDuration(nil)"
+	case v.VType.Matches(TClkDuration):
+		if d, ok := v.Data.(time.Duration); ok {
+			return d.String()
+		}
+		return "ClkDuration(nil)"
+	case v.VType.Matches(TTimezone):
+		if loc, ok := v.Data.(*time.Location); ok {
+			return loc.String()
+		}
+		return "Timezone(nil)"
 	case v.VType.Matches(TMatrix):
 		if m, ok := v.Data.(MatrixData); ok {
 			return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
