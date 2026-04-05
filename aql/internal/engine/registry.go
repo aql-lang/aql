@@ -504,6 +504,7 @@ func registerCoreWords(r *Registry) {
 	registerTimeout(r)
 	registerInterval(r)
 	registerCancel(r)
+	registerAwait(r)
 
 	// Help
 	registerHelp(r)
