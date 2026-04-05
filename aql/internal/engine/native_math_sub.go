@@ -17,6 +17,28 @@ func registerSub(r *Registry) {
 		return []Value{NewDecimal(result)}, nil
 	}
 
+	// Temporal: Date sub CalDuration → Date
+	// date sub 1 months → args[0]=CalDuration (nearest), args[1]=Date
+	subDateCalHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := args[1].AsDate()
+		cd, _ := args[0].AsCalDuration()
+		return []Value{NewDate(t.AddDate(-cd.Years, -cd.Months, -cd.Days))}, nil
+	}
+
+	// Temporal: DateTime sub ClkDuration → DateTime
+	subDtClkHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := args[1].AsDateTime()
+		d, _ := args[0].AsClkDuration()
+		return []Value{NewDateTime(t.Add(-d))}, nil
+	}
+
+	// Temporal: Instant sub ClkDuration → Instant
+	subInsClkHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := args[1].AsInstant()
+		d, _ := args[0].AsClkDuration()
+		return []Value{NewInstant(t.Add(-d))}, nil
+	}
+
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "sub",
 		ForwardPrecedence: true,
@@ -36,6 +58,19 @@ func registerSub(r *Registry) {
 			{
 				Args:    []Type{TDecimal, TNumber},
 				Handler: numHandler,
+			},
+			// Temporal signatures
+			{
+				Args:    []Type{TCalDuration, TDate},
+				Handler: subDateCalHandler,
+			},
+			{
+				Args:    []Type{TClkDuration, TDateTime},
+				Handler: subDtClkHandler,
+			},
+			{
+				Args:    []Type{TClkDuration, TInstant},
+				Handler: subInsClkHandler,
 			},
 		},
 	})

@@ -498,6 +498,9 @@ func registerCoreWords(r *Registry) {
 	registerOuter(r)
 	registerInner(r)
 
+	// Temporal (standard words, not in aql:time module)
+	registerNow(r)
+
 	// Help
 	registerHelp(r)
 }
