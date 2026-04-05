@@ -76,6 +76,42 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	}
 	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []engine.FnParam{{Type: engine.TCalDuration}}, []engine.Type{engine.TInteger}, subReg))
 
+	// Arithmetic
+	exports.Set("until", makeTimeFnDef("until", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TCalDuration}, subReg))
+	exports.Set("since", makeTimeFnDef("since", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TCalDuration}, subReg))
+	exports.Set("diff", makeTimeFnDef("diff", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TInstant}}, []engine.Type{engine.TClkDuration}, subReg))
+	exports.Set("elapsed", makeTimeFnDef("elapsed", []engine.FnParam{{Type: engine.TInstant}}, []engine.Type{engine.TClkDuration}, subReg))
+
+	// Comparison extended
+	exports.Set("compare", makeTimeFnDef("time-compare", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TInteger}, subReg))
+	exports.Set("between?", makeTimeFnDef("between?", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TBoolean}, subReg))
+	exports.Set("earliest", makeTimeFnDef("earliest", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TDate}, subReg))
+	exports.Set("latest", makeTimeFnDef("latest", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []engine.Type{engine.TDate}, subReg))
+
+	// Conversion
+	exports.Set("to-date", makeTimeFnDef("to-date", []engine.FnParam{{Type: engine.TDateTime}}, []engine.Type{engine.TDate}, subReg))
+	exports.Set("to-time-of-day", makeTimeFnDef("to-time-of-day", []engine.FnParam{{Type: engine.TDateTime}}, []engine.Type{engine.TTimeOfDay}, subReg))
+	exports.Set("to-datetime", makeTimeFnDef("to-datetime", []engine.FnParam{{Type: engine.TDate}}, []engine.Type{engine.TDateTime}, subReg))
+	exports.Set("to-instant", makeTimeFnDef("to-instant", []engine.FnParam{{Type: engine.TDateTime}, {Type: engine.TTimezone}}, []engine.Type{engine.TInstant}, subReg))
+	exports.Set("to-local", makeTimeFnDef("to-local", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []engine.Type{engine.TDateTime}, subReg))
+	exports.Set("to-utc", makeTimeFnDef("to-utc", []engine.FnParam{{Type: engine.TInstant}}, []engine.Type{engine.TDateTime}, subReg))
+
+	// Rounding
+	exports.Set("start-of", makeTimeFnDef("start-of", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []engine.Type{engine.TDate}, subReg))
+	exports.Set("end-of", makeTimeFnDef("end-of", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []engine.Type{engine.TDate}, subReg))
+
+	// Timezone
+	exports.Set("tz-utc", makeTimeFnDef("tz-utc", []engine.FnParam{}, []engine.Type{engine.TTimezone}, subReg))
+	exports.Set("tz-local", makeTimeFnDef("tz-local", []engine.FnParam{}, []engine.Type{engine.TTimezone}, subReg))
+	exports.Set("tz-name", makeTimeFnDef("tz-name", []engine.FnParam{{Type: engine.TTimezone}}, []engine.Type{engine.TString}, subReg))
+	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []engine.Type{engine.TString}, subReg))
+	exports.Set("dst?", makeTimeFnDef("dst?", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []engine.Type{engine.TBoolean}, subReg))
+
+	// Parsing
+	exports.Set("parse-date", makeTimeFnDef("parse-date", []engine.FnParam{{Type: engine.TString}, {Type: engine.TString}}, []engine.Type{engine.TDate}, subReg))
+	exports.Set("parse-datetime", makeTimeFnDef("parse-datetime", []engine.FnParam{{Type: engine.TString}, {Type: engine.TString}}, []engine.Type{engine.TDateTime}, subReg))
+	exports.Set("auto-date", makeTimeFnDef("auto-date", []engine.FnParam{{Type: engine.TString}}, []engine.Type{engine.TDate}, subReg))
+
 	// Legacy arithmetic (Date Integer -> Date)
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
 		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}, {Type: engine.TInteger}}, []engine.Type{engine.TDate}, subReg))
@@ -170,6 +206,42 @@ func registerAllTimeWords(r *engine.Registry) {
 	registerDurMonthsExtract(r)
 	registerDurDaysExtract(r)
 	registerDurSign(r)
+
+	// Arithmetic
+	registerUntil(r)
+	registerSince(r)
+	registerDiff(r)
+	registerElapsed(r)
+
+	// Comparison extended
+	registerTimeCompare(r)
+	registerBetween(r)
+	registerEarliest(r)
+	registerLatest(r)
+
+	// Conversion
+	registerToDate(r)
+	registerToTimeOfDay(r)
+	registerToDateTime(r)
+	registerToInstant(r)
+	registerToLocal(r)
+	registerToUtc(r)
+
+	// Rounding
+	registerStartOf(r)
+	registerEndOf(r)
+
+	// Timezone
+	registerTzUtc(r)
+	registerTzLocal(r)
+	registerTzName(r)
+	registerTzOffset(r)
+	registerDst(r)
+
+	// Parsing
+	registerParseDate(r)
+	registerParseDatetime(r)
+	registerAutoDate(r)
 
 	// Legacy arithmetic
 	registerAddDays(r)
@@ -969,6 +1041,477 @@ func registerDurSign(r *engine.Registry) {
 			default:
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
+		},
+	})
+}
+
+// --- Arithmetic ---
+
+// dateDiffCalDuration computes the CalDuration between two dates (from → to).
+func dateDiffCalDuration(from, to time.Time) engine.CalDurationData {
+	years := to.Year() - from.Year()
+	months := int(to.Month()) - int(from.Month())
+	days := to.Day() - from.Day()
+	if days < 0 {
+		months--
+		// Days in the previous month of 'to'
+		prev := time.Date(to.Year(), to.Month(), 0, 0, 0, 0, 0, time.UTC)
+		days += prev.Day()
+	}
+	if months < 0 {
+		years--
+		months += 12
+	}
+	return engine.CalDurationData{Years: years, Months: months, Days: days}
+}
+
+func registerUntil(r *engine.Registry) {
+	// d1 d2 until → duration from d1 to d2. args[0]=d2 (nearest), args[1]=d1
+	r.Register("until", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			from := extractTime(args[1])
+			to := extractTime(args[0])
+			cd := dateDiffCalDuration(from, to)
+			return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+		},
+	})
+}
+
+func registerSince(r *engine.Registry) {
+	// d1 d2 since → duration from d2 to d1. args[0]=d2 (nearest), args[1]=d1
+	r.Register("since", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			from := extractTime(args[0])
+			to := extractTime(args[1])
+			cd := dateDiffCalDuration(from, to)
+			return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+		},
+	})
+}
+
+func registerDiff(r *engine.Registry) {
+	// ins1 ins2 diff → ClkDuration. args[0]=ins2 (nearest), args[1]=ins1
+	r.Register("diff", engine.Signature{
+		Args: []engine.Type{engine.TInstant, engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t1 := extractTime(args[1])
+			t2 := extractTime(args[0])
+			return []engine.Value{engine.NewClkDuration(t2.Sub(t1))}, nil
+		},
+	})
+}
+
+func registerElapsed(r *engine.Registry) {
+	r.Register("elapsed", engine.Signature{
+		Args: []engine.Type{engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			start := extractTime(args[0])
+			return []engine.Value{engine.NewClkDuration(time.Since(start))}, nil
+		},
+	})
+}
+
+// --- Comparison extended ---
+
+func registerTimeCompare(r *engine.Registry) {
+	r.Register("time-compare", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t1 := extractTime(args[1])
+			t2 := extractTime(args[0])
+			switch {
+			case t1.Before(t2):
+				return []engine.Value{engine.NewInteger(-1)}, nil
+			case t1.After(t2):
+				return []engine.Value{engine.NewInteger(1)}, nil
+			default:
+				return []engine.Value{engine.NewInteger(0)}, nil
+			}
+		},
+	})
+}
+
+func registerBetween(r *engine.Registry) {
+	// d start end between? → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
+	r.Register("between?", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d := extractTime(args[2])
+			start := extractTime(args[1])
+			end := extractTime(args[0])
+			return []engine.Value{engine.NewBoolean(!d.Before(start) && !d.After(end))}, nil
+		},
+	})
+}
+
+func registerEarliest(r *engine.Registry) {
+	r.Register("earliest", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t1 := extractTime(args[1])
+			t2 := extractTime(args[0])
+			if t1.Before(t2) {
+				return []engine.Value{engine.NewDate(t1)}, nil
+			}
+			return []engine.Value{engine.NewDate(t2)}, nil
+		},
+	})
+}
+
+func registerLatest(r *engine.Registry) {
+	r.Register("latest", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t1 := extractTime(args[1])
+			t2 := extractTime(args[0])
+			if t1.After(t2) {
+				return []engine.Value{engine.NewDate(t1)}, nil
+			}
+			return []engine.Value{engine.NewDate(t2)}, nil
+		},
+	})
+}
+
+// --- Conversion ---
+
+func registerToDate(r *engine.Registry) {
+	r.Register("to-date", engine.Signature{
+		Args: []engine.Type{engine.TDateTime},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
+		},
+	})
+	r.Register("to-date", engine.Signature{
+		Args: []engine.Type{engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
+		},
+	})
+}
+
+func registerToTimeOfDay(r *engine.Registry) {
+	r.Register("to-time-of-day", engine.Signature{
+		Args: []engine.Type{engine.TDateTime},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
+				time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
+			return []engine.Value{engine.NewTimeOfDay(d)}, nil
+		},
+	})
+	r.Register("to-time-of-day", engine.Signature{
+		Args: []engine.Type{engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
+				time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
+			return []engine.Value{engine.NewTimeOfDay(d)}, nil
+		},
+	})
+}
+
+func registerToDateTime(r *engine.Registry) {
+	r.Register("to-datetime", engine.Signature{
+		Args: []engine.Type{engine.TDate},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			return []engine.Value{engine.NewDateTime(t)}, nil
+		},
+	})
+}
+
+func registerToInstant(r *engine.Registry) {
+	// dt tz to-instant → args[0]=tz (nearest), args[1]=dt
+	r.Register("to-instant", engine.Signature{
+		Args: []engine.Type{engine.TTimezone, engine.TDateTime},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			dt := extractTime(args[1])
+			loc := args[0].AsTimezone()
+			if loc == nil {
+				loc = time.UTC
+			}
+			t := time.Date(dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(), dt.Second(), dt.Nanosecond(), loc)
+			return []engine.Value{engine.NewInstant(t)}, nil
+		},
+	})
+}
+
+func registerToLocal(r *engine.Registry) {
+	// ins tz to-local → args[0]=tz (nearest), args[1]=ins
+	r.Register("to-local", engine.Signature{
+		Args: []engine.Type{engine.TTimezone, engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[1])
+			loc := args[0].AsTimezone()
+			if loc == nil {
+				loc = time.UTC
+			}
+			return []engine.Value{engine.NewDateTime(t.In(loc))}, nil
+		},
+	})
+}
+
+func registerToUtc(r *engine.Registry) {
+	r.Register("to-utc", engine.Signature{
+		Args: []engine.Type{engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			return []engine.Value{engine.NewDateTime(t.UTC())}, nil
+		},
+	})
+}
+
+// --- Rounding ---
+
+func registerStartOf(r *engine.Registry) {
+	r.Register("start-of", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			unit, err := args[1].AsString()
+			if err != nil {
+				return nil, err
+			}
+			var result time.Time
+			switch unit {
+			case "year":
+				result = time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
+			case "quarter":
+				q := (int(t.Month()) + 2) / 3
+				m := time.Month((q-1)*3 + 1)
+				result = time.Date(t.Year(), m, 1, 0, 0, 0, 0, t.Location())
+			case "month":
+				result = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+			case "week":
+				wd := t.Weekday()
+				if wd == time.Sunday {
+					wd = 7
+				}
+				result = t.AddDate(0, 0, -int(wd-time.Monday))
+				result = time.Date(result.Year(), result.Month(), result.Day(), 0, 0, 0, 0, t.Location())
+			case "day":
+				result = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+			default:
+				return nil, fmt.Errorf("start-of: unknown unit %q", unit)
+			}
+			return []engine.Value{engine.NewDate(result)}, nil
+		},
+	})
+}
+
+func registerEndOf(r *engine.Registry) {
+	r.Register("end-of", engine.Signature{
+		Args: []engine.Type{engine.TDate, engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[0])
+			unit, err := args[1].AsString()
+			if err != nil {
+				return nil, err
+			}
+			var result time.Time
+			switch unit {
+			case "year":
+				result = time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location())
+			case "quarter":
+				q := (int(t.Month()) + 2) / 3
+				endMonth := time.Month(q * 3)
+				last := time.Date(t.Year(), endMonth+1, 0, 0, 0, 0, 0, t.Location())
+				result = last
+			case "month":
+				result = time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location())
+			case "week":
+				wd := t.Weekday()
+				if wd == time.Sunday {
+					wd = 7
+				}
+				daysToSunday := 7 - int(wd)
+				result = t.AddDate(0, 0, daysToSunday)
+				result = time.Date(result.Year(), result.Month(), result.Day(), 0, 0, 0, 0, t.Location())
+			case "day":
+				result = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+			default:
+				return nil, fmt.Errorf("end-of: unknown unit %q", unit)
+			}
+			return []engine.Value{engine.NewDate(result)}, nil
+		},
+	})
+}
+
+// --- Timezone ---
+
+func registerTzUtc(r *engine.Registry) {
+	r.RegisterStackOnly("tz-utc", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			return []engine.Value{engine.NewTimezone(time.UTC)}, nil
+		},
+	})
+}
+
+func registerTzLocal(r *engine.Registry) {
+	r.RegisterStackOnly("tz-local", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			return []engine.Value{engine.NewTimezone(time.Local)}, nil
+		},
+	})
+}
+
+func registerTzName(r *engine.Registry) {
+	r.Register("tz-name", engine.Signature{
+		Args: []engine.Type{engine.TTimezone},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			loc := args[0].AsTimezone()
+			if loc == nil {
+				return []engine.Value{engine.NewString("UTC")}, nil
+			}
+			return []engine.Value{engine.NewString(loc.String())}, nil
+		},
+	})
+}
+
+func registerTzOffset(r *engine.Registry) {
+	// ins tz tz-offset → args[0]=tz (nearest), args[1]=ins
+	r.Register("tz-offset", engine.Signature{
+		Args: []engine.Type{engine.TTimezone, engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[1])
+			loc := args[0].AsTimezone()
+			if loc == nil {
+				loc = time.UTC
+			}
+			_, offset := t.In(loc).Zone()
+			h := offset / 3600
+			m := (offset % 3600) / 60
+			if m < 0 {
+				m = -m
+			}
+			sign := "+"
+			if h < 0 {
+				sign = "-"
+				h = -h
+			}
+			return []engine.Value{engine.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
+		},
+	})
+}
+
+func registerDst(r *engine.Registry) {
+	// ins tz dst? → args[0]=tz (nearest), args[1]=ins
+	r.Register("dst?", engine.Signature{
+		Args: []engine.Type{engine.TTimezone, engine.TInstant},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			t := extractTime(args[1])
+			loc := args[0].AsTimezone()
+			if loc == nil {
+				loc = time.UTC
+			}
+			name, _ := t.In(loc).Zone()
+			// Heuristic: standard zone names don't end in "DT" or "ST",
+			// but DST zones typically contain "DT" (e.g. EDT, CDT, PDT).
+			// A more robust check: compare January offset vs current offset.
+			jan := time.Date(t.Year(), 1, 1, 0, 0, 0, 0, loc)
+			jul := time.Date(t.Year(), 7, 1, 0, 0, 0, 0, loc)
+			_, janOff := jan.Zone()
+			_, julOff := jul.Zone()
+			_, curOff := t.In(loc).Zone()
+			_ = name
+			// If offsets differ between Jan and Jul, the larger offset is DST.
+			if janOff == julOff {
+				return []engine.Value{engine.NewBoolean(false)}, nil
+			}
+			stdOff := janOff
+			if julOff < janOff {
+				stdOff = julOff // Southern hemisphere
+			}
+			return []engine.Value{engine.NewBoolean(curOff != stdOff)}, nil
+		},
+	})
+}
+
+// --- Parsing ---
+
+func registerParseDate(r *engine.Registry) {
+	// "15/03/2024" "02/01/2006" parse-date → args[0]=layout (nearest), args[1]=str
+	r.Register("parse-date", engine.Signature{
+		Args: []engine.Type{engine.TString, engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			s, err := args[1].AsString()
+			if err != nil {
+				return nil, err
+			}
+			layout, err := args[0].AsString()
+			if err != nil {
+				return nil, err
+			}
+			t, err := time.Parse(layout, s)
+			if err != nil {
+				return nil, fmt.Errorf("parse-date: %w", err)
+			}
+			d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+			return []engine.Value{engine.NewDate(d)}, nil
+		},
+	})
+}
+
+func registerParseDatetime(r *engine.Registry) {
+	r.Register("parse-datetime", engine.Signature{
+		Args: []engine.Type{engine.TString, engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			s, err := args[1].AsString()
+			if err != nil {
+				return nil, err
+			}
+			layout, err := args[0].AsString()
+			if err != nil {
+				return nil, err
+			}
+			t, err := time.Parse(layout, s)
+			if err != nil {
+				return nil, fmt.Errorf("parse-datetime: %w", err)
+			}
+			return []engine.Value{engine.NewDateTime(t)}, nil
+		},
+	})
+}
+
+// autoDateLayouts is a list of common date formats tried in order by auto-date.
+var autoDateLayouts = []string{
+	"2006-01-02",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05",
+	time.RFC3339,
+	"01/02/2006",       // US
+	"02/01/2006",       // European
+	"Jan 2, 2006",      // English
+	"January 2, 2006",  // Full English
+	"2 Jan 2006",       // European English
+	"2006/01/02",       // ISO with slashes
+	"02-Jan-2006",      // Dash with abbrev month
+	time.RFC1123,       // RFC 1123
+	time.RFC822,        // RFC 822
+	"Mon, 02 Jan 2006", // RFC 2822 date part
+}
+
+func registerAutoDate(r *engine.Registry) {
+	r.Register("auto-date", engine.Signature{
+		Args: []engine.Type{engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			s, err := args[0].AsString()
+			if err != nil {
+				return nil, err
+			}
+			for _, layout := range autoDateLayouts {
+				if t, e := time.Parse(layout, s); e == nil {
+					d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+					return []engine.Value{engine.NewDate(d)}, nil
+				}
+			}
+			return nil, fmt.Errorf("auto-date: unable to parse %q", s)
 		},
 	})
 }
