@@ -466,6 +466,191 @@ func TestNowStandardWord(t *testing.T) {
 	}
 }
 
+// --- Duration Construction ---
+
+func TestTimeDurYears(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("years", engine.NewInteger(2)))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Years != 2 || cd.Months != 0 || cd.Days != 0 {
+		t.Errorf("2 years = %+v, want {2 0 0}", cd)
+	}
+}
+
+func TestTimeDurMonths(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("months", engine.NewInteger(6)))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Months != 6 {
+		t.Errorf("6 months = %+v, want {0 6 0}", cd)
+	}
+}
+
+func TestTimeDurWeeks(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("weeks", engine.NewInteger(2)))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Days != 14 {
+		t.Errorf("2 weeks = %+v, want {0 0 14}", cd)
+	}
+}
+
+func TestTimeDurDays(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("days", engine.NewInteger(30)))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Days != 30 {
+		t.Errorf("30 days = %+v, want {0 0 30}", cd)
+	}
+}
+
+func TestTimeDurHours(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("hours", engine.NewInteger(3)))
+	d, ok := result[0].AsClkDuration()
+	if !ok || d != 3*time.Hour {
+		t.Errorf("3 hours = %v, want %v", d, 3*time.Hour)
+	}
+}
+
+func TestTimeDurMinutes(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("minutes", engine.NewInteger(90)))
+	d, ok := result[0].AsClkDuration()
+	if !ok || d != 90*time.Minute {
+		t.Errorf("90 minutes = %v, want %v", d, 90*time.Minute)
+	}
+}
+
+func TestTimeDurSeconds(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("seconds", engine.NewInteger(30)))
+	d, ok := result[0].AsClkDuration()
+	if !ok || d != 30*time.Second {
+		t.Errorf("30 seconds = %v, want %v", d, 30*time.Second)
+	}
+}
+
+func TestTimeDurMs(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("ms", engine.NewInteger(500)))
+	d, ok := result[0].AsClkDuration()
+	if !ok || d != 500*time.Millisecond {
+		t.Errorf("500 ms = %v, want %v", d, 500*time.Millisecond)
+	}
+}
+
+func TestTimeCalDur(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("cal-dur", engine.NewInteger(1), engine.NewInteger(6), engine.NewInteger(15)))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Years != 1 || cd.Months != 6 || cd.Days != 15 {
+		t.Errorf("cal-dur 1 6 15 = %+v, want {1 6 15}", cd)
+	}
+}
+
+func TestTimeDurationParseISO(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("duration", engine.NewString("P1Y6M")))
+	cd, ok := result[0].AsCalDuration()
+	if !ok || cd.Years != 1 || cd.Months != 6 {
+		t.Errorf("P1Y6M = %+v, want {1 6 0}", cd)
+	}
+}
+
+func TestTimeDurationParseISOTime(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("duration", engine.NewString("PT2H30M")))
+	d, ok := result[0].AsClkDuration()
+	if !ok || d != 2*time.Hour+30*time.Minute {
+		t.Errorf("PT2H30M = %v, want %v", d, 2*time.Hour+30*time.Minute)
+	}
+}
+
+// --- Duration Extraction ---
+
+func TestTimeTotalHours(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("total-hours", engine.NewClkDuration(90*time.Minute)))
+	v, _ := result[0].AsNumber()
+	if v != 1.5 {
+		t.Errorf("total-hours(90min) = %v, want 1.5", v)
+	}
+}
+
+func TestTimeTotalMinutes(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("total-minutes", engine.NewClkDuration(2*time.Hour)))
+	v, _ := result[0].AsNumber()
+	if v != 120.0 {
+		t.Errorf("total-minutes(2h) = %v, want 120", v)
+	}
+}
+
+func TestTimeTotalSeconds(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("total-seconds", engine.NewClkDuration(90*time.Second)))
+	v, _ := result[0].AsNumber()
+	if v != 90.0 {
+		t.Errorf("total-seconds(90s) = %v, want 90", v)
+	}
+}
+
+func TestTimeTotalMs(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("total-ms", engine.NewClkDuration(2*time.Second+500*time.Millisecond)))
+	v, _ := result[0].AsNumber()
+	if v != 2500.0 {
+		t.Errorf("total-ms(2.5s) = %v, want 2500", v)
+	}
+}
+
+func TestTimeDurYearsExtract(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("dur-years", engine.NewCalDuration(1, 6, 15)))
+	v, _ := result[0].AsInteger()
+	if v != 1 {
+		t.Errorf("dur-years = %d, want 1", v)
+	}
+}
+
+func TestTimeDurMonthsExtract(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("dur-months", engine.NewCalDuration(1, 6, 15)))
+	v, _ := result[0].AsInteger()
+	if v != 6 {
+		t.Errorf("dur-months = %d, want 6", v)
+	}
+}
+
+func TestTimeDurDaysExtract(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("dur-days", engine.NewCalDuration(1, 6, 15)))
+	v, _ := result[0].AsInteger()
+	if v != 15 {
+		t.Errorf("dur-days = %d, want 15", v)
+	}
+}
+
+func TestTimeDurSign(t *testing.T) {
+	r := timeRegistry(t)
+	result := runAQL(t, r, callTimeDot("dur-sign", engine.NewCalDuration(1, 0, 0)))
+	v, _ := result[0].AsInteger()
+	if v != 1 {
+		t.Errorf("dur-sign(+) = %d, want 1", v)
+	}
+	result = runAQL(t, r, callTimeDot("dur-sign", engine.NewCalDuration(-1, 0, 0)))
+	v, _ = result[0].AsInteger()
+	if v != -1 {
+		t.Errorf("dur-sign(-) = %d, want -1", v)
+	}
+	result = runAQL(t, r, callTimeDot("dur-sign", engine.NewCalDuration(0, 0, 0)))
+	v, _ = result[0].AsInteger()
+	if v != 0 {
+		t.Errorf("dur-sign(0) = %d, want 0", v)
+	}
+}
+
 // helper
 func parseDate(t *testing.T, s string) time.Time {
 	t.Helper()

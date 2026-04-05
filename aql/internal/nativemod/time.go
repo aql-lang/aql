@@ -2,6 +2,7 @@ package nativemod
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -55,6 +56,25 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	exports.Set("to-string", makeTimeFnDef("to-string", []engine.FnParam{{Type: engine.TDate}}, []engine.Type{engine.TString}, subReg))
 	exports.Set("format", makeTimeFnDef("format", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []engine.Type{engine.TString}, subReg))
 	exports.Set("to-iso", makeTimeFnDef("to-iso", []engine.FnParam{{Type: engine.TDate}}, []engine.Type{engine.TString}, subReg))
+
+	// Duration construction
+	for _, name := range []string{"years", "months", "weeks", "days"} {
+		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TInteger}}, []engine.Type{engine.TCalDuration}, subReg))
+	}
+	for _, name := range []string{"hours", "minutes", "seconds", "ms", "us", "ns"} {
+		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TNumber}}, []engine.Type{engine.TClkDuration}, subReg))
+	}
+	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}, {Type: engine.TInteger}}, []engine.Type{engine.TCalDuration}, subReg))
+	exports.Set("duration", makeTimeFnDef("time-duration", []engine.FnParam{{Type: engine.TString}}, []engine.Type{engine.TCalDuration}, subReg))
+
+	// Duration extraction
+	for _, name := range []string{"total-hours", "total-minutes", "total-seconds", "total-ms"} {
+		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TClkDuration}}, []engine.Type{engine.TDecimal}, subReg))
+	}
+	for _, name := range []string{"dur-years", "dur-months", "dur-days"} {
+		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TCalDuration}}, []engine.Type{engine.TInteger}, subReg))
+	}
+	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []engine.FnParam{{Type: engine.TCalDuration}}, []engine.Type{engine.TInteger}, subReg))
 
 	// Legacy arithmetic (Date Integer -> Date)
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
@@ -126,6 +146,30 @@ func registerAllTimeWords(r *engine.Registry) {
 	registerToString(r)
 	registerFormat(r)
 	registerToIso(r)
+
+	// Duration construction
+	registerDurYears(r)
+	registerDurMonths(r)
+	registerDurWeeks(r)
+	registerDurDays(r)
+	registerDurHours(r)
+	registerDurMinutes(r)
+	registerDurSeconds(r)
+	registerDurMs(r)
+	registerDurUs(r)
+	registerDurNs(r)
+	registerCalDur(r)
+	registerTimeDuration(r)
+
+	// Duration extraction
+	registerTotalHours(r)
+	registerTotalMinutes(r)
+	registerTotalSeconds(r)
+	registerTotalMs(r)
+	registerDurYearsExtract(r)
+	registerDurMonthsExtract(r)
+	registerDurDaysExtract(r)
+	registerDurSign(r)
 
 	// Legacy arithmetic
 	registerAddDays(r)
@@ -566,6 +610,365 @@ func registerAddYears(r *engine.Registry) {
 				return nil, err
 			}
 			return []engine.Value{engine.NewDate(t.AddDate(int(n), 0, 0))}, nil
+		},
+	})
+}
+
+// --- Duration Construction ---
+
+func registerDurYears(r *engine.Registry) {
+	r.Register("years", engine.Signature{
+		Args: []engine.Type{engine.TInteger},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewCalDuration(int(n), 0, 0)}, nil
+		},
+	})
+}
+
+func registerDurMonths(r *engine.Registry) {
+	r.Register("months", engine.Signature{
+		Args: []engine.Type{engine.TInteger},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewCalDuration(0, int(n), 0)}, nil
+		},
+	})
+}
+
+func registerDurWeeks(r *engine.Registry) {
+	r.Register("weeks", engine.Signature{
+		Args: []engine.Type{engine.TInteger},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewCalDuration(0, 0, int(n)*7)}, nil
+		},
+	})
+}
+
+func registerDurDays(r *engine.Registry) {
+	r.Register("days", engine.Signature{
+		Args: []engine.Type{engine.TInteger},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewCalDuration(0, 0, int(n))}, nil
+		},
+	})
+}
+
+func registerDurHours(r *engine.Registry) {
+	r.Register("hours", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Hour)))}, nil
+		},
+	})
+}
+
+func registerDurMinutes(r *engine.Registry) {
+	r.Register("minutes", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Minute)))}, nil
+		},
+	})
+}
+
+func registerDurSeconds(r *engine.Registry) {
+	r.Register("seconds", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Second)))}, nil
+		},
+	})
+}
+
+func registerDurMs(r *engine.Registry) {
+	r.Register("ms", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Millisecond)))}, nil
+		},
+	})
+}
+
+func registerDurUs(r *engine.Registry) {
+	r.Register("us", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Microsecond)))}, nil
+		},
+	})
+}
+
+func registerDurNs(r *engine.Registry) {
+	r.Register("ns", engine.Signature{
+		Args: []engine.Type{engine.TNumber},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			n, err := args[0].AsNumber()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewClkDuration(time.Duration(n))}, nil
+		},
+	})
+}
+
+func registerCalDur(r *engine.Registry) {
+	// cal-dur 1 6 15 → args[0]=15 (nearest), args[1]=6, args[2]=1 (deepest)
+	r.Register("cal-dur", engine.Signature{
+		Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TInteger},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			y, err := args[2].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			m, err := args[1].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			d, err := args[0].AsInteger()
+			if err != nil {
+				return nil, err
+			}
+			return []engine.Value{engine.NewCalDuration(int(y), int(m), int(d))}, nil
+		},
+	})
+}
+
+// parseISO8601Duration parses a subset of ISO 8601 durations: P[nY][nM][nD][T[nH][nM][nS]]
+func parseISO8601Duration(s string) (engine.CalDurationData, time.Duration, bool, error) {
+	if !strings.HasPrefix(s, "P") {
+		return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: must start with P: %q", s)
+	}
+	rest := s[1:]
+	var years, months, days int
+	var clk time.Duration
+	isCal := true
+
+	// Split on T
+	parts := strings.SplitN(rest, "T", 2)
+	datePart := parts[0]
+	timePart := ""
+	if len(parts) == 2 {
+		timePart = parts[1]
+		isCal = false
+	}
+
+	// Parse date components: nY, nM, nD
+	for len(datePart) > 0 {
+		i := 0
+		for i < len(datePart) && (datePart[i] >= '0' && datePart[i] <= '9') {
+			i++
+		}
+		if i == 0 || i >= len(datePart) {
+			return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: invalid date component in %q", s)
+		}
+		n := 0
+		for _, c := range datePart[:i] {
+			n = n*10 + int(c-'0')
+		}
+		switch datePart[i] {
+		case 'Y':
+			years = n
+		case 'M':
+			months = n
+		case 'W':
+			days += n * 7
+		case 'D':
+			days = n
+		default:
+			return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: unknown date unit %c in %q", datePart[i], s)
+		}
+		datePart = datePart[i+1:]
+	}
+
+	// Parse time components: nH, nM, nS
+	for len(timePart) > 0 {
+		i := 0
+		for i < len(timePart) && (timePart[i] >= '0' && timePart[i] <= '9' || timePart[i] == '.') {
+			i++
+		}
+		if i == 0 || i >= len(timePart) {
+			return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: invalid time component in %q", s)
+		}
+		n := 0.0
+		fmt.Sscanf(timePart[:i], "%f", &n)
+		switch timePart[i] {
+		case 'H':
+			clk += time.Duration(n * float64(time.Hour))
+		case 'M':
+			clk += time.Duration(n * float64(time.Minute))
+		case 'S':
+			clk += time.Duration(n * float64(time.Second))
+		default:
+			return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: unknown time unit %c in %q", timePart[i], s)
+		}
+		timePart = timePart[i+1:]
+	}
+
+	if isCal && clk == 0 {
+		return engine.CalDurationData{Years: years, Months: months, Days: days}, 0, true, nil
+	}
+	if years == 0 && months == 0 && days == 0 {
+		return engine.CalDurationData{}, clk, false, nil
+	}
+	// Mixed: return as CalDuration (date part only; time part is lost)
+	return engine.CalDurationData{Years: years, Months: months, Days: days}, clk, true, nil
+}
+
+func registerTimeDuration(r *engine.Registry) {
+	r.Register("time-duration", engine.Signature{
+		Args: []engine.Type{engine.TString},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			s, err := args[0].AsString()
+			if err != nil {
+				return nil, err
+			}
+			cd, clk, isCal, err := parseISO8601Duration(s)
+			if err != nil {
+				return nil, err
+			}
+			if isCal {
+				return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+			}
+			return []engine.Value{engine.NewClkDuration(clk)}, nil
+		},
+	})
+}
+
+// --- Duration Extraction ---
+
+func registerTotalHours(r *engine.Registry) {
+	r.Register("total-hours", engine.Signature{
+		Args: []engine.Type{engine.TClkDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d, _ := args[0].AsClkDuration()
+			return []engine.Value{engine.NewDecimal(d.Hours())}, nil
+		},
+	})
+}
+
+func registerTotalMinutes(r *engine.Registry) {
+	r.Register("total-minutes", engine.Signature{
+		Args: []engine.Type{engine.TClkDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d, _ := args[0].AsClkDuration()
+			return []engine.Value{engine.NewDecimal(d.Minutes())}, nil
+		},
+	})
+}
+
+func registerTotalSeconds(r *engine.Registry) {
+	r.Register("total-seconds", engine.Signature{
+		Args: []engine.Type{engine.TClkDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d, _ := args[0].AsClkDuration()
+			return []engine.Value{engine.NewDecimal(d.Seconds())}, nil
+		},
+	})
+}
+
+func registerTotalMs(r *engine.Registry) {
+	r.Register("total-ms", engine.Signature{
+		Args: []engine.Type{engine.TClkDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d, _ := args[0].AsClkDuration()
+			return []engine.Value{engine.NewDecimal(float64(d.Milliseconds()))}, nil
+		},
+	})
+}
+
+func registerDurYearsExtract(r *engine.Registry) {
+	r.Register("dur-years", engine.Signature{
+		Args: []engine.Type{engine.TCalDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			cd, _ := args[0].AsCalDuration()
+			return []engine.Value{engine.NewInteger(int64(cd.Years))}, nil
+		},
+	})
+}
+
+func registerDurMonthsExtract(r *engine.Registry) {
+	r.Register("dur-months", engine.Signature{
+		Args: []engine.Type{engine.TCalDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			cd, _ := args[0].AsCalDuration()
+			return []engine.Value{engine.NewInteger(int64(cd.Months))}, nil
+		},
+	})
+}
+
+func registerDurDaysExtract(r *engine.Registry) {
+	r.Register("dur-days", engine.Signature{
+		Args: []engine.Type{engine.TCalDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			cd, _ := args[0].AsCalDuration()
+			return []engine.Value{engine.NewInteger(int64(cd.Days))}, nil
+		},
+	})
+}
+
+func registerDurSign(r *engine.Registry) {
+	r.Register("dur-sign", engine.Signature{
+		Args: []engine.Type{engine.TCalDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			cd, _ := args[0].AsCalDuration()
+			total := cd.Years*365 + cd.Months*30 + cd.Days
+			switch {
+			case total < 0:
+				return []engine.Value{engine.NewInteger(-1)}, nil
+			case total > 0:
+				return []engine.Value{engine.NewInteger(1)}, nil
+			default:
+				return []engine.Value{engine.NewInteger(0)}, nil
+			}
+		},
+	})
+	r.Register("dur-sign", engine.Signature{
+		Args: []engine.Type{engine.TClkDuration},
+		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			d, _ := args[0].AsClkDuration()
+			switch {
+			case d < 0:
+				return []engine.Value{engine.NewInteger(-1)}, nil
+			case d > 0:
+				return []engine.Value{engine.NewInteger(1)}, nil
+			default:
+				return []engine.Value{engine.NewInteger(0)}, nil
+			}
 		},
 	})
 }
