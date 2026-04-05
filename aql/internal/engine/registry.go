@@ -500,6 +500,10 @@ func registerCoreWords(r *Registry) {
 
 	// Temporal (standard words, not in aql:time module)
 	registerNow(r)
+	registerSleep(r)
+	registerTimeout(r)
+	registerInterval(r)
+	registerCancel(r)
 
 	// Help
 	registerHelp(r)
