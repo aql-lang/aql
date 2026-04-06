@@ -10,24 +10,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// typeNames maps well-known type names to their engine Type.
-var typeNames = map[string]engine.Type{
-	"Any":     engine.TAny,
-	"None":    engine.TNone,
-	"Scalar":  engine.TScalar,
-	"Number":  engine.TNumber,
-	"Integer": engine.TInteger,
-	"Decimal": engine.TDecimal,
-	"String":  engine.TString,
-	"Boolean": engine.TBoolean,
-	"Atom":    engine.TAtom,
-	"Node":    engine.TNode,
-	"List":    engine.TList,
-	"Map":     engine.TMap,
-	"Table":   engine.TTable,
-	"Record":  engine.TRecord,
-	"Object":  engine.TObject,
-}
+// typeNames is the subset of type names safe for parse-time resolution.
+// Derived from the engine's canonical registry to prevent drift.
+var typeNames = engine.ParseTimeTypeNames()
 
 func boolPtr(b bool) *bool { return &b }
 

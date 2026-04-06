@@ -5,35 +5,81 @@ import (
 	"strings"
 )
 
+// TypeNameEntry describes a single type-name binding.
+type TypeNameEntry struct {
+	Type Type
+	// ParseTime indicates the parser should resolve this name eagerly to a
+	// type literal. When false the name is only resolved at runtime by the
+	// engine (after definition lookup), which allows user-defined object
+	// types (e.g. Entity, Resource) to shadow the built-in type.
+	ParseTime bool
+}
+
+// typeNameEntries is the single canonical registry of well-known type names.
+// Both the parser and engine derive their lookup tables from this slice.
+var typeNameEntries = []struct {
+	Name  string
+	Type  Type
+	Parse bool // resolve at parse time?
+}{
+	// Core / structural types — always safe at parse time.
+	{"Any", TAny, true},
+	{"None", TNone, true},
+	{"Scalar", TScalar, true},
+	{"Number", TNumber, true},
+	{"Integer", TInteger, true},
+	{"Decimal", TDecimal, true},
+	{"String", TString, true},
+	{"Boolean", TBoolean, true},
+	{"Atom", TAtom, true},
+	{"Node", TNode, true},
+	{"List", TList, true},
+	{"Map", TMap, true},
+	{"Table", TTable, true},
+	{"Record", TRecord, true},
+	{"Object", TObject, true},
+
+	// Types that may be shadowed by user-defined object types at runtime.
+	{"Path", TPath, false},
+	{"Options", TOptions, false},
+	{"Resource", TResource, false},
+	{"Entity", TResourceEntity, false},
+	{"Array", TArray, false},
+	{"Type", TType, false},
+	{"ScalarType", TScalarType, false},
+	{"NodeType", TNodeType, false},
+	{"ObjectType", TObjectType, false},
+	{"Timeout", TTimeout, false},
+	{"Interval", TInterval, false},
+}
+
 // typeNames maps well-known type names to their Type, so bare words like
 // "number" or "string" resolve to type-literal values instead of strings.
-var typeNames = map[string]Type{
-	"Any":        TAny,
-	"None":       TNone,
-	"Scalar":     TScalar,
-	"Number":     TNumber,
-	"Integer":    TInteger,
-	"Decimal":    TDecimal,
-	"String":     TString,
-	"Boolean":    TBoolean,
-	"Path":       TPath,
-	"Atom":       TAtom,
-	"Node":       TNode,
-	"List":       TList,
-	"Map":        TMap,
-	"Table":      TTable,
-	"Record":     TRecord,
-	"Options":    TOptions,
-	"Object":     TObject,
-	"Resource":   TResource,
-	"Entity":     TResourceEntity,
-	"Array":      TArray,
-	"Type":       TType,
-	"ScalarType": TScalarType,
-	"NodeType":   TNodeType,
-	"ObjectType": TObjectType,
-	"Timeout":    TTimeout,
-	"Interval":   TInterval,
+// Built from typeNameEntries at init time.
+var typeNames = func() map[string]Type {
+	m := make(map[string]Type, len(typeNameEntries))
+	for _, e := range typeNameEntries {
+		m[e.Name] = e.Type
+	}
+	return m
+}()
+
+// TypeNameTable returns the canonical mapping of ALL well-known type names
+// to their Type. Used by the engine for runtime fallback resolution.
+func TypeNameTable() map[string]Type {
+	return typeNames
+}
+
+// ParseTimeTypeNames returns only the type names that are safe for the
+// parser to resolve eagerly (before the engine checks definition stacks).
+func ParseTimeTypeNames() map[string]Type {
+	m := make(map[string]Type)
+	for _, e := range typeNameEntries {
+		if e.Parse {
+			m[e.Name] = e.Type
+		}
+	}
+	return m
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,
