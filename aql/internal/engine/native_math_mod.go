@@ -6,46 +6,18 @@ import (
 )
 
 func registerMod(r *Registry) {
-	// Signature [Integer, Integer]: args[0] = nearest to word (top/forward),
-	// args[1] = farther (deeper/later). `a b mod` → args=[b,a] → a%b.
-	intHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as2, _ := args[0].AsInteger()
-		_as1, _ := args[1].AsInteger()
-		if _as2 == 0 {
-			return nil, fmt.Errorf("modulo by zero")
-		}
-		return []Value{NewInteger(_as1 % _as2)}, nil
-	}
-
-	numHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as4, _ := args[0].AsNumber()
-		_as3, _ := args[1].AsNumber()
-		if _as4 == 0 {
-			return nil, fmt.Errorf("modulo by zero")
-		}
-		return []Value{NewDecimal(math.Mod(_as3, _as4))}, nil
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "mod",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args:    []Type{TInteger, TInteger},
-				Handler: intHandler,
-			},
-			{
-				Args:    []Type{TDecimal, TDecimal},
-				Handler: numHandler,
-			},
-			{
-				Args:    []Type{TNumber, TDecimal},
-				Handler: numHandler,
-			},
-			{
-				Args:    []Type{TDecimal, TNumber},
-				Handler: numHandler,
-			},
+	registerBinaryMathWord(r, "mod",
+		func(a, b int64) (Value, error) {
+			if b == 0 {
+				return Value{}, fmt.Errorf("modulo by zero")
+			}
+			return NewInteger(a % b), nil
 		},
-	})
+		func(a, b float64) (Value, error) {
+			if b == 0 {
+				return Value{}, fmt.Errorf("modulo by zero")
+			}
+			return NewDecimal(math.Mod(a, b)), nil
+		},
+	)
 }
