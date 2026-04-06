@@ -32,6 +32,8 @@ var typeNames = map[string]Type{
 	"ScalarType": TScalarType,
 	"NodeType":   TNodeType,
 	"ObjectType": TObjectType,
+	"Timeout":    TTimeout,
+	"Interval":   TInterval,
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,

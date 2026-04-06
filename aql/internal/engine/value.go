@@ -955,6 +955,59 @@ func (v Value) AsError() (ErrorInfo, error) {
 	return info, nil
 }
 
+// TimeoutInfo holds a pending timeout handle.
+type TimeoutInfo struct {
+	ID    string      // unique identifier
+	Ms    int64       // delay in milliseconds
+	Timer *time.Timer // underlying Go timer (nil after cancel)
+}
+
+// NewTimeout creates a Timeout value.
+func NewTimeout(info *TimeoutInfo) Value {
+	return newValue(TTimeout, info)
+}
+
+// IsTimeout reports whether this value is a Timeout.
+func (v Value) IsTimeout() bool {
+	return v.VType.Equal(TTimeout)
+}
+
+// AsTimeout returns the TimeoutInfo for a Timeout value.
+func (v Value) AsTimeout() (*TimeoutInfo, error) {
+	info, ok := v.Data.(*TimeoutInfo)
+	if !ok {
+		return nil, fmt.Errorf("AsTimeout: not a timeout value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IntervalInfo holds a repeating interval handle.
+type IntervalInfo struct {
+	ID     string       // unique identifier
+	Ms     int64        // interval in milliseconds
+	Ticker *time.Ticker // underlying Go ticker (nil after cancel)
+	Done   chan struct{} // closed to signal cancellation
+}
+
+// NewInterval creates an Interval value.
+func NewInterval(info *IntervalInfo) Value {
+	return newValue(TInterval, info)
+}
+
+// IsInterval reports whether this value is an Interval.
+func (v Value) IsInterval() bool {
+	return v.VType.Equal(TInterval)
+}
+
+// AsInterval returns the IntervalInfo for an Interval value.
+func (v Value) AsInterval() (*IntervalInfo, error) {
+	info, ok := v.Data.(*IntervalInfo)
+	if !ok {
+		return nil, fmt.Errorf("AsInterval: not an interval value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {
 	return v.VType.Equal(TWord)
@@ -1547,6 +1600,12 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "Array[" + strings.Join(parts, ",") + "]"
+	case v.IsTimeout():
+		ti, _ := v.AsTimeout()
+		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
+	case v.IsInterval():
+		ii, _ := v.AsInterval()
+		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
 	case v.IsObjectInstance():
 		oi, _ := v.AsObjectInstance()
 		allFields := oi.AllFields()

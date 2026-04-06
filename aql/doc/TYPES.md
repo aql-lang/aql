@@ -54,6 +54,8 @@ Object                       -- mutable typed instances
     Response                 -- fetch response
   Resource                   -- external resource
     Entity                   -- resource entity
+  Timeout                    -- pending timeout handle
+  Interval                   -- repeating interval handle
   [User-defined]             -- created via `object` word
 
 Type                         -- metatypes (types of types)
@@ -114,6 +116,8 @@ Type names are auto-expanded when creating types:
 | `Record`  | `Object/Record` |
 | `Resource` | `Object/Resource` |
 | `Entity`  | `Object/Resource/Entity` |
+| `Timeout` | `Object/Timeout` |
+| `Interval` | `Object/Interval` |
 | `Function` | `Word/Function` |
 
 ## Metatypes

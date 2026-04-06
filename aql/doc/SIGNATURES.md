@@ -339,6 +339,22 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | `module` | `[L]` | `[Module]` | Define module from body list | `arg0: L` |
 
 
+## Timer / Concurrency
+
+| Word | Signatures (match order) | Returns | Notes | Data Arg |
+|------|--------------------------|---------|-------|----------|
+| `await` | `[Options, L]` | `[L]` | Parallel exec with mode option (all/full/first/any) | `arg1: L` |
+| | `[L]` | `[L]` | Parallel exec, default mode `'all` | `arg0: L` |
+| `cancel` | `[Timeout]` | `[]` | Cancel a pending timeout | — |
+| | `[Interval]` | `[]` | Cancel a repeating interval | — |
+| `interval` | `[I, L]` /q(1) | `[Interval]` | Repeat callback every N ms | `arg1: L` |
+| | `[I, A]` /q(1) | `[Interval]` | Repeat named word every N ms | — |
+| `now` /s | `[]` | `[Instant]` | Current UTC instant | — |
+| `sleep` | `[I]` | `[]` | Pause execution for N milliseconds | — |
+| `timeout` | `[I, L]` /q(1) | `[Timeout]` | Schedule callback after N ms | `arg1: L` |
+| | `[I, A]` /q(1) | `[Timeout]` | Schedule named word after N ms | — |
+
+
 ## Unification
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |

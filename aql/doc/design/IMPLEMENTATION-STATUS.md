@@ -1,7 +1,7 @@
 # AQL Implementation Status
 
-Cross-reference of design documents in `aql/doc/` against the
-current codebase. Last updated: 2026-04-04.
+Cross-reference of design documents in `aql/doc/design/` against the
+current codebase. Last updated: 2026-04-05.
 
 ## Recent Changes
 
@@ -9,6 +9,9 @@ current codebase. Last updated: 2026-04-04.
   syntax, parsed natively by jsonic using custom tokens (#BT, #IS, #TL)
   and grammar rules (interp/ielem/iexpr/ieval). Supports nested
   interpolation to any depth. See LANGREF.md § Literals.
+- **Timer/concurrency words**: `sleep`, `timeout`, `interval`, `cancel`,
+  `await` with four parallel execution modes (all, full, first, any).
+  New types: `Object/Timeout`, `Object/Interval`.
 
 
 ## Fully Implemented
@@ -27,11 +30,12 @@ current codebase. Last updated: 2026-04-04.
 | FILE-ACCESS.md | read/write words, FileOps interface | CSV/TSV/JSON/jsonic/text, options maps, stdin/stdout/stderr. |
 | FOR-LOOP-REVIEW.md | For-loop design review | Sentinel errors for break/continue, mark/move, lazy ForCont. |
 
-**103 native words** across: stack manipulation (15), math (6),
+**109 native words** across: stack manipulation (15), math (6),
 boolean logic (6), string ops (15), comparison (7), type system (11),
 control flow (5), definition/scoping (9), array ops (23),
 higher-order array (5), storage/context (3), file I/O (5),
-printing (2), modules (3), accessor (1), debug (2), unify (1).
+printing (2), modules (3), accessor (1), debug (2), unify (1),
+timer/concurrency (6: sleep, timeout, interval, cancel, await, now).
 
 
 ## Partially Implemented
@@ -93,10 +97,12 @@ Linear algebra operations (gonum dependency). Planned words:
 | Comparison | `mat-eq?`, `mat-close?`, `mat-gt`, `mat-lt`, `mat-any?`, `mat-all?` |
 | Advanced | `mat-dot`, `mat-cross`, `mat-outer`, `mat-kron`, `mat-conv`, `mat-apply`, `mat-map-row`, `mat-map-col` |
 
-### TEMPORAL-WORDS.md — ~70 words
+### TEMPORAL-WORDS.md — ~70 words (partially implemented)
 
-Date/time types and operations. Planned types: Instant, DateTime,
-Date, TimeOfDay, CalDuration, ClkDuration, Timezone.
+Date/time types and operations. Types implemented: Instant, DateTime,
+Date, TimeOfDay, CalDuration, ClkDuration, Timezone, Timeout, Interval.
+Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
+`cancel`, `await`. Remaining ~64 temporal module words not yet implemented.
 
 | Category | Words |
 |----------|-------|

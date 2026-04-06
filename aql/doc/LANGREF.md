@@ -2864,6 +2864,108 @@ select [name] (from people where [city eq "Paris"])
 ```
 
 
+### Timer and Concurrency Words
+
+#### `sleep`
+
+Pause execution for the specified number of milliseconds.
+
+*Signature:* `[integer] -> []`
+*Precedence:* forward
+
+```
+sleep 100           # pause for 100ms
+500 sleep           # same thing, prefix form
+```
+
+#### `timeout`
+
+Schedule a callback to execute once after a delay. The callback is a
+quoted list or word, executed with `do` semantics in a new sub-engine.
+Returns a `Timeout` object that can be cancelled.
+
+*Signatures:* `[integer, list/q] -> [Timeout]`, `[integer, atom/q] -> [Timeout]`
+*Precedence:* forward
+
+```
+timeout 1000 [print "done"]       # fires after 1 second
+timeout 500 myCallback            # word callback form
+def t timeout 200 [print "hi"]    # save handle for cancel
+```
+
+#### `interval`
+
+Schedule a callback to repeat at regular intervals. Returns an
+`Interval` object that can be cancelled. The interval must be positive.
+
+*Signatures:* `[integer, list/q] -> [Interval]`, `[integer, atom/q] -> [Interval]`
+*Precedence:* forward
+
+```
+def i interval 1000 [print "tick"]  # fires every second
+```
+
+#### `cancel`
+
+Cancel a pending timeout or repeating interval. Idempotent: cancelling
+an already-cancelled timer is a no-op.
+
+*Signatures:* `[Timeout] -> []`, `[Interval] -> []`
+*Precedence:* forward
+
+```
+def t timeout 5000 [print "late"]
+t cancel                            # prevent the callback
+```
+
+#### `now`
+
+Return the current UTC instant.
+
+*Signature:* `[] -> [Instant]`
+*Precedence:* stack-only
+
+```
+now       # pushes current time as an Instant value
+```
+
+#### `await`
+
+Run a list of parallel branches concurrently using Go goroutines.
+Each element of the parallels list is executed with `do` semantics
+in its own sub-engine. An optional `Options` argument controls the
+mode.
+
+*Signatures:* `[Options, list/q] -> [list]`, `[list/q] -> [list]`
+*Precedence:* forward
+
+**Modes** (set via `mode` field in Options):
+
+| Mode | JS equivalent | Behavior |
+|------|--------------|----------|
+| `'all` (default) | `Promise.all` | Wait for all. First error rejects. Returns `[result, ...]` |
+| `'full` | `Promise.allSettled` | Wait for all. Returns `[{status:'ok, value:...}, ...]` |
+| `'first` | `Promise.race` | Return first to complete (success or error) |
+| `'any` | `Promise.any` | Return first success. All reject → last error |
+
+```
+# Default mode (all): wait for all branches
+await [[1 add 2] [3 add 4]]                    # → [3, 7]
+
+# Full mode: get status of every branch
+await (make Options {mode:'full}) [[1 add 2] [1 div 0]]
+# → [{status:ok, value:3}, {status:error, value:error(...)}]
+
+# First mode: race — first to finish wins
+await (make Options {mode:'first}) [[sleep 100 1] [42]]
+# → 42
+
+# Any mode: first success wins, errors skipped
+await (make Options {mode:'any}) [[1 div 0] [42]]
+# → 42
+```
+
+
 ## Type System
 
 Types form a slash-separated hierarchy. A child type matches a parent

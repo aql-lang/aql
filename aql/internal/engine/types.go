@@ -72,6 +72,8 @@ var typeAncestry = map[string]string{
 	"ClkDuration": "Scalar/Time/Duration/ClkDuration",
 	"Timezone":    "Scalar/Time/Timezone",
 	"Matrix":      "Scalar/Number/Matrix",
+	"Timeout":     "Object/Timeout",
+	"Interval":    "Object/Interval",
 }
 
 // Well-known types.
@@ -134,6 +136,8 @@ var (
 	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
 	TTimezone       = mustType("Scalar/Time/Timezone")
 	TMatrix         = mustType("Scalar/Number/Matrix")
+	TTimeout        = mustType("Object/Timeout")
+	TInterval       = mustType("Object/Interval")
 )
 
 // builtinTypeIDs maps fully-qualified builtin type paths to their fixed
@@ -198,6 +202,8 @@ var builtinTypeIDs = map[string]int{
 	"Scalar/Time/Duration/CalDuration": 56,
 	"Scalar/Time/Duration/ClkDuration": 57,
 	"Scalar/Time/Timezone":             58,
+	"Object/Timeout":                   59,
+	"Object/Interval":                  60,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -320,6 +326,7 @@ var builtinTypeList = []Type{
 	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
 	TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone,
 	TMatrix,
+	TTimeout, TInterval,
 }
 
 // Matches reports whether this type satisfies the given pattern.
@@ -399,7 +406,7 @@ func builtinTypeParts() map[string]bool {
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TInterpString, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
 		TMove, TModule, TInternal, TInspect, TObject,
-		TStore, TStoreSystem, TArray, TError,
+		TStore, TStoreSystem, TArray, TError, TTimeout, TInterval,
 		TResource, TResourceEntity, TFetchFunction, TFetchRequest, TFetchResponse,
 		TType, TScalarType, TNodeType, TObjectType,
 		TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone,
