@@ -225,16 +225,21 @@ type DisjunctInfo struct {
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
 type ObjectTypeInfo struct {
-	Fields *OrderedMap     // own fields (field name → type-constraint Value)
-	Parent *ObjectTypeInfo // parent object type (nil if direct child of Object)
-	ID     string          // unique internal ID: "T_" + 12 hex chars
-	Name   string          // full type path (e.g. "Object/Foo/Bar")
+	Fields          *OrderedMap     // own fields (field name → type-constraint Value)
+	Parent          *ObjectTypeInfo // parent object type (nil if direct child of Object)
+	ID              string          // unique internal ID: "T_" + 12 hex chars
+	Name            string          // full type path (e.g. "Object/Foo/Bar")
+	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 
 // AllFields returns all fields including inherited ones. Parent fields come
 // first, followed by the type's own fields. Own fields override inherited
-// fields with the same name.
+// fields with the same name. The result is cached since ObjectTypeInfo is
+// immutable after registration.
 func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+	if o.cachedAllFields != nil {
+		return o.cachedAllFields
+	}
 	result := NewOrderedMap()
 	if o.Parent != nil {
 		parentFields := o.Parent.AllFields()
@@ -247,6 +252,7 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 		v, _ := o.Fields.Get(k)
 		result.Set(k, v)
 	}
+	o.cachedAllFields = result
 	return result
 }
 
