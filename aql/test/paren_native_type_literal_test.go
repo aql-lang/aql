@@ -327,6 +327,11 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"is-type-type", `Type is Type`},
 		{"is-scalartype-type", `ScalarType is Type`},
 		{"is-nodetype-type", `NodeType is Type`},
+
+		// Undef with type literals
+		{"undef-map", `undef Map`},
+		{"undef-list", `undef List`},
+		{"undef-string", `undef String`},
 	}
 
 	for _, tc := range cases {

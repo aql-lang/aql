@@ -1,4 +1,4 @@
-.PHONY: build test clean install run vet fmt wasm
+.PHONY: build test clean install run vet fmt wasm lint-assertions
 
 BINARY := bin/aql
 CMD := ./cmd/aql
@@ -21,6 +21,22 @@ vet:
 
 fmt:
 	gofmt -w .
+
+# Fail if any non-test runtime handler uses a single-value .Data.(Type)
+# assertion (panics on mismatch). Two-value (v, ok := ...) is safe.
+lint-assertions:
+	@echo "Checking for unsafe .Data.(Type) assertions in runtime handlers..."
+	@HITS=$$(find internal/engine -name 'native_*.go' ! -name '*_test.go' \
+		-exec grep -Hn '\.Data\.(' {} \; \
+		| grep -v ',.*:=' | grep -v '\.(type)' \
+		| grep -v '// lint:allow-assert'); \
+	if [ -n "$$HITS" ]; then \
+		echo "FAIL: unsafe .Data.(Type) assertions found:"; \
+		echo "$$HITS"; \
+		echo "Use the two-value form: v, ok := x.Data.(Type)"; \
+		exit 1; \
+	fi
+	@echo "OK: no unsafe assertions found"
 
 clean:
 	rm -rf bin/
