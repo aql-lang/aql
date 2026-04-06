@@ -23,8 +23,8 @@ func registerSub(r *Registry) {
 	}
 
 	registerBinaryMathWord(r, "sub",
-		func(a, b int64) (Value, error) { return NewInteger(a - b), nil },
 		func(a, b float64) (Value, error) { return NewDecimal(a - b), nil },
+		func(a, b int64) (Value, error) { return NewInteger(a - b), nil },
 		NativeSig{Args: []Type{TCalDuration, TDate}, Handler: subDateCalHandler},
 		NativeSig{Args: []Type{TClkDuration, TDateTime}, Handler: subDtClkHandler},
 		NativeSig{Args: []Type{TClkDuration, TInstant}, Handler: subInsClkHandler},

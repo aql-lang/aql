@@ -4,7 +4,7 @@ import "time"
 
 func registerAdd(r *Registry) {
 	// String concatenation: [TScalar, TScalar] converts both to strings.
-	// More specific signatures (Integer×Integer) win due to higher specificity.
+	// The more specific [TNumber, TNumber] sig wins for numeric args.
 	concatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewString(valToString(args[1]) + valToString(args[0]))}, nil
 	}
@@ -38,8 +38,8 @@ func registerAdd(r *Registry) {
 	}
 
 	registerBinaryMathWord(r, "add",
-		func(a, b int64) (Value, error) { return NewInteger(a + b), nil },
 		func(a, b float64) (Value, error) { return NewDecimal(a + b), nil },
+		func(a, b int64) (Value, error) { return NewInteger(a + b), nil },
 		NativeSig{Args: []Type{TScalar, TScalar}, Handler: concatHandler},
 		NativeSig{Args: []Type{TCalDuration, TDate}, Handler: addDateCalHandler},
 		NativeSig{Args: []Type{TClkDuration, TDateTime}, Handler: addDtClkHandler},

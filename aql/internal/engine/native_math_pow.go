@@ -7,6 +7,7 @@ import (
 
 func registerPow(r *Registry) {
 	registerBinaryMathWord(r, "pow",
+		func(base, exp float64) (Value, error) { return NewDecimal(math.Pow(base, exp)), nil },
 		func(base, exp int64) (Value, error) {
 			if exp < 0 {
 				return Value{}, fmt.Errorf("pow: negative exponent %d", exp)
@@ -23,6 +24,5 @@ func registerPow(r *Registry) {
 			}
 			return NewInteger(result), nil
 		},
-		func(base, exp float64) (Value, error) { return NewDecimal(math.Pow(base, exp)), nil },
 	)
 }

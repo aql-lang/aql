@@ -42,33 +42,32 @@ func registerBinaryBoolWord(r *Registry, name string, fn func(a, b bool) bool) {
 	})
 }
 
-// registerBinaryMathWord registers a word with the standard 4-signature
-// int/decimal pattern (Integer×Integer, Decimal×Decimal, Number×Decimal,
-// Decimal×Number). intFn operates on int64 args, decFn on float64 args.
+// registerBinaryMathWord registers a word with a single [TNumber, TNumber]
+// signature. The fn receives (farther, nearest) as float64 and returns the
+// result. When both inputs are integers and intFn is non-nil, intFn is
+// called with int64 args instead, preserving integer output type.
 // Extra signatures (e.g. temporal) can be appended via extraSigs.
 func registerBinaryMathWord(
 	r *Registry,
 	name string,
+	fn func(a, b float64) (Value, error),
 	intFn func(a, b int64) (Value, error),
-	decFn func(a, b float64) (Value, error),
 	extraSigs ...NativeSig,
 ) {
-	intHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		a, _ := args[0].AsInteger()
-		b, _ := args[1].AsInteger()
-		return singleResult(intFn(b, a))
-	}
-	decHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		// When both args are integers, use the integer path to preserve type.
+		if intFn != nil && args[0].VType.Matches(TInteger) && args[1].VType.Matches(TInteger) {
+			a, _ := args[0].AsInteger()
+			b, _ := args[1].AsInteger()
+			return singleResult(intFn(b, a))
+		}
 		a, _ := args[0].AsNumber()
 		b, _ := args[1].AsNumber()
-		return singleResult(decFn(b, a))
+		return singleResult(fn(b, a))
 	}
 
 	sigs := []NativeSig{
-		{Args: []Type{TInteger, TInteger}, Handler: intHandler},
-		{Args: []Type{TDecimal, TDecimal}, Handler: decHandler},
-		{Args: []Type{TNumber, TDecimal}, Handler: decHandler},
-		{Args: []Type{TDecimal, TNumber}, Handler: decHandler},
+		{Args: []Type{TNumber, TNumber}, Handler: handler},
 	}
 	sigs = append(sigs, extraSigs...)
 
