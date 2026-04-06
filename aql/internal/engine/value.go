@@ -17,9 +17,19 @@ type ReadList struct {
 	elems []Value
 }
 
-// Get returns the element at index i. Panics if out of bounds.
+// Get returns the element at index i.
+// Internal use only — caller must ensure 0 <= i < Len().
 func (l ReadList) Get(i int) Value {
 	return l.elems[i]
+}
+
+// GetOk returns the element at index i and true, or the zero Value and false
+// if i is out of bounds. Safe for use at system boundaries.
+func (l ReadList) GetOk(i int) (Value, bool) {
+	if i < 0 || i >= len(l.elems) {
+		return Value{}, false
+	}
+	return l.elems[i], true
 }
 
 // Len returns the number of elements.
@@ -1214,7 +1224,7 @@ func (v Value) IsPath() bool {
 	return ok && v.VType.Equal(TPath)
 }
 
-// AsPath returns the PathInfo. Panics if not a path.
+// AsPath returns the PathInfo, or an error if the value is not a path.
 func (v Value) AsPath() (PathInfo, error) {
 	info, ok := v.Data.(PathInfo)
 	if !ok {
