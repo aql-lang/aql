@@ -1,5 +1,7 @@
 package engine
 
+import "fmt"
+
 // registerUndef registers the "undef" word for removing word definitions.
 // undef removes the most recent definition, potentially revealing a
 // shadowed one.
@@ -22,7 +24,10 @@ func registerUndef(r *Registry) {
 	// Targeted undef: undef foo fn [[number] [number]]
 	undefFnHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
-		undefInfo := args[1].Data.(FnUndefInfo)
+		undefInfo, ok := args[1].Data.(FnUndefInfo)
+		if !ok {
+			return nil, fmt.Errorf("undef: expected fn undef spec, got %s", args[1].String())
+		}
 		uninstallFnSigs(r, name, undefInfo)
 		return nil, nil
 	}

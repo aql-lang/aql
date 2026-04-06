@@ -1492,7 +1492,8 @@ func (v Value) String() string {
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):
-		return v.Data.(string)
+		s, _ := v.Data.(string)
+		return s
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as4, 'f', -1, 64)
