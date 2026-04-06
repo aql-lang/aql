@@ -311,11 +311,14 @@ func registerMake(r *Registry) {
 	}
 
 	// Position-agnostic: detect which arg is the type and which is the source.
-	makeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	makeHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
 		if !isTypeLike(targetVal) && isTypeLike(srcVal) {
 			targetVal, srcVal = srcVal, targetVal
 		}
+
+		// Resolve bare type literals to their DefStack ObjectType if available.
+		targetVal = ResolveTypeLiteralDef(targetVal, reg)
 
 		// Object type instance creation.
 		if targetVal.IsObjectType() {
@@ -451,9 +454,14 @@ func registerMake(r *Registry) {
 
 	// 3-arg handler with prototype: make ObjType source prototype
 	// Position-agnostic: finds object type, prototype instance, and source.
-	makeWithPrototype := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	makeWithPrototype := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		// Resolve any bare type literals before classification.
+		resolved := make([]Value, len(args))
+		for i, a := range args {
+			resolved[i] = ResolveTypeLiteralDef(a, reg)
+		}
 		var targetVal, srcVal, protoVal Value
-		for _, a := range args {
+		for _, a := range resolved {
 			switch {
 			case a.IsObjectType() && targetVal.VType.Equal(Type{}):
 				targetVal = a
@@ -478,12 +486,13 @@ func registerMake(r *Registry) {
 
 	// 3-arg handler: make RecType source {options}
 	// Position-agnostic: finds type, source, and options.
-	makeWithOpts := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	makeWithOpts := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 		var targetVal, srcVal, optsVal Value
 		for _, a := range args {
+			resolved := ResolveTypeLiteralDef(a, reg)
 			switch {
-			case isTypeLike(a) && targetVal.VType.Equal(Type{}):
-				targetVal = a
+			case isTypeLike(resolved) && targetVal.VType.Equal(Type{}):
+				targetVal = resolved
 			default:
 				// Remaining args: one is source, one is options map.
 				if srcVal.VType.Equal(Type{}) {
@@ -553,8 +562,9 @@ func registerMake(r *Registry) {
 	}
 
 	// Object 2-arg: [ObjectType, Map] → Object instance
-	makeObjHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	makeObjHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 		targetVal, srcVal := args[0], args[1]
+		targetVal = ResolveTypeLiteralDef(targetVal, reg)
 		if targetVal.IsObjectType() {
 			objType, _ := targetVal.AsObjectType()
 			return makeObject(objType, srcVal, nil)

@@ -18,39 +18,35 @@ type TypeNameEntry struct {
 // typeNameEntries is the single canonical registry of well-known type names.
 // Both the parser and engine derive their lookup tables from this slice.
 var typeNameEntries = []struct {
-	Name  string
-	Type  Type
-	Parse bool // resolve at parse time?
+	Name string
+	Type Type
 }{
-	// Core / structural types — always safe at parse time.
-	{"Any", TAny, true},
-	{"None", TNone, true},
-	{"Scalar", TScalar, true},
-	{"Number", TNumber, true},
-	{"Integer", TInteger, true},
-	{"Decimal", TDecimal, true},
-	{"String", TString, true},
-	{"Boolean", TBoolean, true},
-	{"Atom", TAtom, true},
-	{"Node", TNode, true},
-	{"List", TList, true},
-	{"Map", TMap, true},
-	{"Table", TTable, true},
-	{"Record", TRecord, true},
-	{"Object", TObject, true},
-
-	// Types that may be shadowed by user-defined object types at runtime.
-	{"Path", TPath, false},
-	{"Options", TOptions, false},
-	{"Resource", TResource, false},
-	{"Entity", TResourceEntity, false},
-	{"Array", TArray, false},
-	{"Type", TType, false},
-	{"ScalarType", TScalarType, false},
-	{"NodeType", TNodeType, false},
-	{"ObjectType", TObjectType, false},
-	{"Timeout", TTimeout, false},
-	{"Interval", TInterval, false},
+	{"Any", TAny},
+	{"None", TNone},
+	{"Scalar", TScalar},
+	{"Number", TNumber},
+	{"Integer", TInteger},
+	{"Decimal", TDecimal},
+	{"String", TString},
+	{"Boolean", TBoolean},
+	{"Path", TPath},
+	{"Atom", TAtom},
+	{"Node", TNode},
+	{"List", TList},
+	{"Map", TMap},
+	{"Table", TTable},
+	{"Record", TRecord},
+	{"Options", TOptions},
+	{"Object", TObject},
+	{"Resource", TResource},
+	{"Entity", TResourceEntity},
+	{"Array", TArray},
+	{"Type", TType},
+	{"ScalarType", TScalarType},
+	{"NodeType", TNodeType},
+	{"ObjectType", TObjectType},
+	{"Timeout", TTimeout},
+	{"Interval", TInterval},
 }
 
 // typeNames maps well-known type names to their Type, so bare words like
@@ -64,22 +60,45 @@ var typeNames = func() map[string]Type {
 	return m
 }()
 
-// TypeNameTable returns the canonical mapping of ALL well-known type names
-// to their Type. Used by the engine for runtime fallback resolution.
+// TypeNameTable returns the canonical mapping of all well-known type names
+// to their Type. Used by both the parser and engine.
 func TypeNameTable() map[string]Type {
 	return typeNames
 }
 
-// ParseTimeTypeNames returns only the type names that are safe for the
-// parser to resolve eagerly (before the engine checks definition stacks).
-func ParseTimeTypeNames() map[string]Type {
-	m := make(map[string]Type)
+// typeNamesByTypeID maps a Type's ID back to its canonical name. Built at init
+// from typeNameEntries. Used by ResolveTypeLiteralDef to find DefStack entries
+// that shadow a bare type literal.
+var typeNamesByTypeID = func() map[string]string {
+	m := make(map[string]string, len(typeNameEntries))
 	for _, e := range typeNameEntries {
-		if e.Parse {
-			m[e.Name] = e.Type
+		if e.Type.ID != "" {
+			m[e.Type.ID] = e.Name
 		}
 	}
 	return m
+}()
+
+// ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
+// a richer definition in the registry's DefStacks (e.g. an ObjectTypeInfo
+// installed by registerResource). If so it returns that value; otherwise it
+// returns the original value unchanged. This lets the parser eagerly resolve
+// all type names while the engine still picks up installed ObjectType defs.
+func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
+	if v.Data != nil || reg == nil {
+		return v
+	}
+	name, ok := typeNamesByTypeID[v.VType.ID]
+	if !ok {
+		return v
+	}
+	if ds := reg.DefStacks[name]; len(ds) > 0 {
+		top := ds[len(ds)-1]
+		if top.IsObjectType() {
+			return top
+		}
+	}
+	return v
 }
 
 // stackHeadroom is the extra capacity allocated beyond current need,

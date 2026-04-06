@@ -10,9 +10,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// typeNames is the subset of type names safe for parse-time resolution.
-// Derived from the engine's canonical registry to prevent drift.
-var typeNames = engine.ParseTimeTypeNames()
+// typeNames is derived from the engine's canonical registry to prevent drift.
+var typeNames = engine.TypeNameTable()
 
 func boolPtr(b bool) *bool { return &b }
 
