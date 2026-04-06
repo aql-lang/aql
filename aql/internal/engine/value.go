@@ -76,9 +76,11 @@ func (m *OrderedMap) Get(key string) (Value, bool) {
 	return v, ok
 }
 
-// Keys returns the keys in insertion order.
+// Keys returns the keys in insertion order (defensive copy).
 func (m *OrderedMap) Keys() []string {
-	return m.keys
+	out := make([]string, len(m.keys))
+	copy(out, m.keys)
+	return out
 }
 
 // SortedKeys returns the keys in sorted order (for deterministic comparison).
