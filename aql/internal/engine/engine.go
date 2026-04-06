@@ -5,16 +5,6 @@ import (
 	"strings"
 )
 
-// TypeNameEntry describes a single type-name binding.
-type TypeNameEntry struct {
-	Type Type
-	// ParseTime indicates the parser should resolve this name eagerly to a
-	// type literal. When false the name is only resolved at runtime by the
-	// engine (after definition lookup), which allows user-defined object
-	// types (e.g. Entity, Resource) to shadow the built-in type.
-	ParseTime bool
-}
-
 // typeNameEntries is the single canonical registry of well-known type names.
 // Both the parser and engine derive their lookup tables from this slice.
 var typeNameEntries = []struct {
