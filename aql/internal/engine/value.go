@@ -17,9 +17,19 @@ type ReadList struct {
 	elems []Value
 }
 
-// Get returns the element at index i. Panics if out of bounds.
+// Get returns the element at index i.
+// Internal use only — caller must ensure 0 <= i < Len().
 func (l ReadList) Get(i int) Value {
 	return l.elems[i]
+}
+
+// GetOk returns the element at index i and true, or the zero Value and false
+// if i is out of bounds. Safe for use at system boundaries.
+func (l ReadList) GetOk(i int) (Value, bool) {
+	if i < 0 || i >= len(l.elems) {
+		return Value{}, false
+	}
+	return l.elems[i], true
 }
 
 // Len returns the number of elements.
@@ -76,9 +86,11 @@ func (m *OrderedMap) Get(key string) (Value, bool) {
 	return v, ok
 }
 
-// Keys returns the keys in insertion order.
+// Keys returns the keys in insertion order (defensive copy).
 func (m *OrderedMap) Keys() []string {
-	return m.keys
+	out := make([]string, len(m.keys))
+	copy(out, m.keys)
+	return out
 }
 
 // SortedKeys returns the keys in sorted order (for deterministic comparison).
@@ -225,16 +237,21 @@ type DisjunctInfo struct {
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
 type ObjectTypeInfo struct {
-	Fields *OrderedMap     // own fields (field name → type-constraint Value)
-	Parent *ObjectTypeInfo // parent object type (nil if direct child of Object)
-	ID     string          // unique internal ID: "T_" + 12 hex chars
-	Name   string          // full type path (e.g. "Object/Foo/Bar")
+	Fields          *OrderedMap     // own fields (field name → type-constraint Value)
+	Parent          *ObjectTypeInfo // parent object type (nil if direct child of Object)
+	ID              string          // unique internal ID: "T_" + 12 hex chars
+	Name            string          // full type path (e.g. "Object/Foo/Bar")
+	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 
 // AllFields returns all fields including inherited ones. Parent fields come
 // first, followed by the type's own fields. Own fields override inherited
-// fields with the same name.
+// fields with the same name. The result is cached since ObjectTypeInfo is
+// immutable after registration.
 func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+	if o.cachedAllFields != nil {
+		return o.cachedAllFields
+	}
 	result := NewOrderedMap()
 	if o.Parent != nil {
 		parentFields := o.Parent.AllFields()
@@ -247,6 +264,7 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 		v, _ := o.Fields.Get(k)
 		result.Set(k, v)
 	}
+	o.cachedAllFields = result
 	return result
 }
 
@@ -1206,7 +1224,7 @@ func (v Value) IsPath() bool {
 	return ok && v.VType.Equal(TPath)
 }
 
-// AsPath returns the PathInfo. Panics if not a path.
+// AsPath returns the PathInfo, or an error if the value is not a path.
 func (v Value) AsPath() (PathInfo, error) {
 	info, ok := v.Data.(PathInfo)
 	if !ok {
@@ -1492,7 +1510,8 @@ func (v Value) String() string {
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):
-		return v.Data.(string)
+		s, _ := v.Data.(string)
+		return s
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as4, 'f', -1, 64)

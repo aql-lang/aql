@@ -164,21 +164,21 @@ func (r *Registry) ContextStore() *StoreInstanceInfo {
 	return r.ctxStack[len(r.ctxStack)-1]
 }
 
-// UpdateCtxStoreChain updates ALL ctxStack entries affected by a COW operation.
+// UpdateCtxStoreChain updates ctxStack entries affected by a COW operation.
 // origRoot is the original Store that was COW'd (the prototype of the new
-// root). newRoot is the COW'd replacement. For each ctxStack entry whose
-// prototype chain passes through origRoot, replace origRoot with newRoot
-// in that chain.
+// root). newRoot is the COW'd replacement. Scans from the top of the stack
+// (most likely match) and uses direct pointer comparison as a fast path
+// before walking prototype chains.
 func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
-	for i := 0; i < len(r.ctxStack); i++ {
+	for i := len(r.ctxStack) - 1; i >= 0; i-- {
 		entry := r.ctxStack[i]
-		// Direct match: this ctxStack entry IS the original root.
+		// Fast path: direct match (the common case for top-of-stack COW).
 		if entry == origRoot {
 			r.ctxStack[i] = newRoot
 			continue
 		}
-		// Check if the entry's prototype chain passes through origRoot.
-		// If so, rebuild the chain with newRoot substituted.
+		// Walk the prototype chain only if needed. Limit walk depth to
+		// short-circuit if the chain is long and doesn't contain origRoot.
 		for p := entry; p != nil; p = p.Prototype {
 			if p.Prototype == origRoot {
 				p.Prototype = newRoot

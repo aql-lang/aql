@@ -29,6 +29,9 @@ jobs:
       - name: Vet
         run: make vet
 
+      - name: Lint assertions
+        run: make lint-assertions
+
       - name: Test
         run: make test
 
