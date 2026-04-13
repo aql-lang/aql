@@ -8,29 +8,69 @@ document explores what that idea looks like translated into a
 concatenative, stack-based, dynamically-typed language.
 
 
-## Core Insight: Types Are Stack Words
+## The Foundational Observation: Values Are Types
 
-AQL already treats types as first-class values — type literals sit on
-the stack, `unify` checks type compatibility, `is` tests membership,
-`record` builds structured types. The natural extension is: **let
-types be computed by the same stack words that compute values.**
+Most languages draw a hard line between values and types. Lean
+bridges that line with dependent types. AQL has no line to bridge.
 
-A dependent type is just a type that depends on a value. In a stack
-language, that means a type that was produced by running code. AQL
-already does this:
+In AQL, every value already IS a type — the most specific type in the
+hierarchy. `42` has type `Scalar/Number/Integer` (and the engine
+already supports literal subtypes like `Integer/42`). A type literal
+like `number` is a value that sits on the stack. `record` is an
+ordinary word that takes a list and returns a type value. `type`
+just binds a name to whatever value you hand it:
 
 ```
-record [x:number y:string]       # type built by a word at runtime
-[:number]                        # type built by syntax at parse time
-(number or string)               # type built by disjunction
+record [x:number y:number]       # word returns a type value
+type Point record [x:number y:number]   # binds the name Point
+[:number]                        # typed list — a type value
+(number or string)               # disjunction — a type value
 ```
 
-The proposal extends this principle to three new capabilities:
+There is no "type level" vs "value level." The stack is the only
+level. Type-level computation is just computation.
 
-1. **Refinement types** — types with value predicates (`where`)
-2. **Type functions** — words that produce types from arguments (`tyfn`)
-3. **Dependent signatures** — function signatures where output types
-   reference input values
+This means AQL does not need a special `tyfn` keyword or any
+separate machinery for "type functions." A function that returns a
+type is just a function:
+
+```
+# A function that takes a number and returns a type
+def Vec fn [[n:integer] [type] [
+  (list where [len n eq])
+]]
+
+# Use it — Vec is a normal word, called normally
+type Vec3 (Vec 3)
+[1,2,3] is Vec3              => true
+[1,2] is Vec3                => false
+
+# A function that takes two types and returns a type
+def Pair fn [[a:type, b:type] [type] [
+  record [fst:a snd:b]
+]]
+
+type IntStr (Pair integer string)
+make IntStr [1 "hello"]      => {fst:1, snd:'hello'}
+```
+
+No new syntax. No new concept. `def`, `fn`, `type`, `record` — all
+existing words. The "generic type constructor" is just a function
+that happens to return a type. This is the consequence of having no
+value/type boundary.
+
+
+## What AQL Actually Needs
+
+Given that type-returning functions already work, only three things
+are genuinely missing to get dependent types:
+
+1. **Refinement types** — narrowing a type with a predicate (`where`)
+2. **Type variables** — binding a type during signature matching (`@`)
+3. **Property testing** — checking properties about AQL in AQL (`check`)
+
+Everything else — type functions, generic containers, dependent
+return types — falls out of these three plus what already exists.
 
 
 ## 1. Refinement Types: `where`
@@ -72,6 +112,36 @@ type Sorted ([:number] where [
 ])
 ```
 
+### Why `where` Is the Only New Keyword Needed
+
+Refinement is the one thing AQL's type system genuinely can't
+express today. Disjunctions (`or`) combine types horizontally.
+The hierarchical tree narrows types vertically. But neither can
+say "an integer, but only if it's positive." That requires
+attaching a predicate to a type — which is what `where` does.
+
+Everything else people associate with dependent types is
+expressible once `where` exists:
+
+```
+# "Vector of length n" — dependent type
+def Vec fn [[n:integer] [type] [(list where [len n eq])]]
+
+# "Number in range" — bounded type
+def Range fn [[lo:number, hi:number] [type] [
+  (number where [dup gte lo swap lte hi and])
+]]
+type Byte (Range 0 255)
+
+# "Non-empty list of T" — constrained generic
+def NonEmptyList fn [[t:type] [type] [
+  ([:t] where [len gt 0])
+]]
+```
+
+These are all normal functions returning refined types. No special
+forms.
+
 ### Semantics
 
 A refined type `(T where [P])` matches a value `v` when:
@@ -99,268 +169,176 @@ Pos unify number         => Pos true        # type-vs-type: narrower wins
 
 **Signature matching** evaluates predicates during dispatch:
 ```
-def abs-pos fn [[x:Pos] [Pos] [x]]
-def abs-neg fn [[x:(integer where [lt 0])] [Pos] [x negate]]
+def abs fn [
+  [x:Pos] [Pos] [x]
+  [x:(integer where [lt 0])] [Pos] [x negate]
+]
 
-5 abs-pos                => 5
--3 abs-neg               => 3
+5 abs                    => 5
+-3 abs                   => 3
 ```
 
 The engine tries signatures in order. When a signature slot has a
 refined type, the predicate runs as part of matching. If it returns
-false, that signature is skipped and the next is tried — exactly
-like a type mismatch today.
+false, that signature is skipped — exactly like a type mismatch today.
+
+### Dependent Return Types
+
+Because named parameters from `fn` input signatures are in scope
+when output types are evaluated, dependent return types work
+automatically:
+
+```
+def Vec fn [[n:integer] [type] [(list where [len n eq])]]
+
+def replicate fn [
+  [n:integer, x:any]
+  [(Vec n)]                  # output type references input n
+  [iota n each [drop x]]
+]
+
+replicate 3 "x"             => ["x","x","x"]
+# return type contract: (Vec 3), i.e., list of length 3
+```
+
+The output type `(Vec n)` evaluates with `n` bound to the actual
+argument. If the body violates the contract, an error value is
+produced. This is a runtime postcondition, not a compile-time proof.
+
+### Pre/Post Contracts
+
+For explicit contract style, `where` on the output type covers
+postconditions. For preconditions beyond what the input types
+express, use a refined input type:
+
+```
+# Binary search requires sorted input
+type Sorted ([:number] where [
+  var [[xs]
+    xs len lt 2 if [true] [
+      xs each-pair [lte] fold true [and]
+    ]
+  ]
+])
+
+def bsearch fn [
+  [xs:Sorted, target:number]
+  [(integer where [dup gte 0 if [xs swap get target eq] [true]])]
+  [...]
+]
+```
+
+The precondition (sorted input) is the input type. The postcondition
+(valid index pointing to target) is the output type. Both are just
+types with `where` clauses. No `pre`/`post` keywords needed.
 
 
-## 2. Type Functions: `tyfn`
+## 2. Type Variables: `@`
 
-A type function is a word that takes arguments (values or types) and
-produces a type. This is how AQL gets generics.
+For generic functions that preserve type relationships across
+arguments and return values, we need one mechanism that doesn't
+fall out of existing features: type variables.
+
+### The Problem
+
+A normal function can take `any` and return `any`:
+
+```
+def id fn [[any] [any] []]
+```
+
+But this loses the constraint "output type = input type." If you
+pass an integer, the return type should be integer, not any. The
+existing type system can't express this — `any` matches everything
+but remembers nothing.
 
 ### Syntax
 
-```
-tyfn [params] [body]
-```
-
-Where `params` is a list of typed parameter declarations (like `fn`
-input params) and `body` is a block that computes and leaves a type
-on the stack.
-
-### Examples
+`@name` in a signature position introduces a type variable. The
+first occurrence binds it; subsequent occurrences must unify.
 
 ```
-# Parameterized list type (generic container)
-def ListOf tyfn [t:type] [[:t]]
-type Ints (ListOf integer)
-[1,2,3] is Ints             => true
-["a"] is Ints                => false
-
-# Fixed-length list
-def Vec tyfn [n:integer] [(list where [len n eq])]
-type Vec3 (Vec 3)
-[1,2,3] is Vec3              => true
-[1,2] is Vec3                => false
-
-# Generic pair record
-def Pair tyfn [a:type, b:type] [record [fst:a snd:b]]
-type IntStr (Pair integer string)
-make IntStr [1 "hello"]      => {fst:1, snd:'hello'}
-
-# Bounded number range
-def Range tyfn [lo:number, hi:number] [
-  (number where [dup gte lo swap lte hi and])
-]
-type Byte (Range 0 255)
-42 is Byte                   => true
-300 is Byte                  => false
-
-# Matrix type: list of lists with dimensions
-def Matrix tyfn [rows:integer, cols:integer] [
-  (Vec rows where [each [len cols eq] fold true [and]])
-]
-type Mat2x3 (Matrix 2 3)
-```
-
-### Semantics
-
-`tyfn` creates a callable word (like `fn`) that:
-1. Binds its parameters from the stack / forward collection
-2. Evaluates the body in a sub-engine
-3. Returns the resulting type value
-
-Type functions participate in forward collection like any word:
-```
-Vec 5                        # forward: Vec collects 5
-5 Vec end                    # prefix: 5 on stack, Vec consumes it
-```
-
-### Interaction with `type`
-
-`type` already accepts any type value as its body. Type functions
-compose naturally:
-
-```
-def Vec tyfn [n:integer] [(list where [len n eq])]
-type Pos (integer where [gt 0])
-def PosVec tyfn [n:Pos] [(Vec n where [each [is Pos] fold true [and]])]
-
-type PV3 (PosVec 3)
-[1,2,3] is PV3              => true
-[1,-1,3] is PV3             => false
-[1,2] is PV3                => false
-```
-
-
-## 3. Type Variables in Signatures: `@`
-
-For generic functions, we need type variables — placeholders bound
-during signature matching.
-
-### Syntax
-
-`@name` in a signature position introduces a type variable. The first
-occurrence binds it; subsequent occurrences require the same type.
-
-### Examples
-
-```
-# Identity: preserves type
+# Identity preserves type
 def id fn [[@a] [@a] []]
 
-# Swap: generic over both types
+# Swap is generic over both types
 def swap2 fn [[@a, @b] [@b, @a] [swap]]
 
-# Map preserves container, transforms element type
-def map-typed fn [
-  [xs:[:@a], f:(@a -> @b)]
-  [:@b]
-  [xs each f]
-]
+# Head extracts the element type from a typed list
+def head fn [[xs:[:@a]] [@a] [xs . 0]]
+
+# Two args must have the same type
+def add-same fn [[x:@a, y:@a] [@a] [x add y]]
 ```
+
+### Why This Can't Be Expressed With `where`
+
+You might think: just use a `where` clause to check type equality.
+But `where` constrains a single value. Type variables constrain
+relationships *between* signature positions. "The return type is
+the same as the input type" requires binding information from one
+position and using it in another. That's what `@` does.
 
 ### Semantics
 
 During signature matching, when the engine encounters `@a`:
 1. If `@a` is unbound: bind it to the concrete type of the argument.
-   The match succeeds (any value matches an unbound variable).
+   Match succeeds (any value matches an unbound variable).
 2. If `@a` is already bound: check that the argument's type unifies
    with the bound type. If yes, narrow the binding. If no, the
    signature fails.
 
 Type variable bindings are scoped to a single signature match
-attempt and discarded afterward. They do not persist.
+attempt and discarded afterward.
 
-### Interaction with Refinement Types
+### Interaction with Refinement
 
-Type variables and refinement compose:
+Type variables and `where` compose:
 
 ```
-# A function that takes two values of the same type, both positive
-def add-same fn [
+# Both args same type, first must be positive
+def add-pos fn [
   [x:(@a where [gt 0]), y:@a]
   [@a]
   [x add y]
 ]
 ```
 
-Here `@a` is bound by the first argument's base type, then the
-second argument must match. The `where` clause further constrains
-the first argument.
+`@a` is bound by the first argument's base type, then the second
+argument must match. The `where` clause further constrains the
+first argument's value.
 
+### Interaction with Type-Returning Functions
 
-## 4. Dependent Signatures: Output Types Referencing Inputs
-
-The most powerful feature: the output type of a function can
-reference named input parameters.
-
-### Syntax
-
-Named parameters from the input signature are visible in the output
-type expression:
+Type variables can appear inside computed types:
 
 ```
-def word fn [[input-params] [output-type-expr] [body]]
-```
+def PairOf fn [[t:type] [type] [record [fst:t snd:t]]]
 
-Where `output-type-expr` may reference names bound in `input-params`.
-
-### Examples
-
-```
-# replicate: returns a list of exactly n copies
-def Vec tyfn [n:integer] [(list where [len n eq])]
-
-def replicate fn [
-  [n:integer, x:@a]
-  [(Vec n)]
-  [iota n each [drop x]]
-]
-
-replicate 3 "x"             => ["x","x","x"]
-# return type: (Vec 3), i.e., list of length 3
-
-# take: output length = min(n, input length)
-def take fn [
-  [n:integer, xs:list]
-  [(list where [len (n min (xs len)) eq])]
-  [xs slice 0 n]
-]
-
-# split-at: returns two lists whose lengths sum to the original
-def split-at fn [
-  [n:integer, xs:list]
-  [(Vec n), (Vec (xs len sub n))]
-  [xs slice 0 n  xs slice n (xs len)]
+def make-pair fn [
+  [x:@a, y:@a]
+  [(PairOf @a)]
+  [make (PairOf @a) [x y]]
 ]
 ```
 
-### Semantics
-
-When a function with a dependent output signature returns:
-1. The return values are on the stack.
-2. The engine evaluates the output type expression with input
-   parameter bindings still in scope.
-3. Each return value is checked against its corresponding output type.
-4. On mismatch, an error value is produced (not a panic — consistent
-   with AQL's error-as-values philosophy).
-
-This is a **runtime contract**, not a compile-time proof. The
-predicate executes after the body. Think of it as a postcondition.
+`@a` binds during input matching, then the return type expression
+`(PairOf @a)` evaluates with the bound type substituted in.
 
 
-## 5. Contracts: `pre` and `post`
+## 3. Property Testing: `check`
 
-For explicit design-by-contract style, two new words provide
-preconditions and postconditions without modifying `fn` syntax:
-
-### Syntax
-
-```
-def word fn [
-  [params]
-  [return-types]
-  [body]
-] pre [precondition] post [postcondition]
-```
-
-### Examples
-
-```
-# Binary search requires sorted input
-def bsearch fn [
-  [xs:[:number], target:number]
-  [integer]
-  [...]
-] pre [xs is Sorted] post [
-  dup gte 0 if [xs swap get target eq] [true]
-]
-```
-
-`pre` receives named parameters on the stack/in scope. `post`
-receives the return value(s) and named parameters. Both must leave a
-boolean. On failure, an error value is produced.
-
-### Semantics
-
-- `pre` runs before the body. If it returns false, the body is not
-  executed; an error value is pushed instead.
-- `post` runs after the body. If it returns false, the return values
-  are replaced with an error value.
-- Both run in sub-engines (no mutation of caller state).
-
-
-## 6. Property Testing: `check`
-
-The article argues Lean's power is writing properties *about* code
-*in* the language. AQL can approximate this with property-based
-testing using the same language for both properties and code.
+The article's deepest claim is that Lean is "perfectable" because
+you can reason about code in the same language. AQL can't prove
+properties (that requires a fundamentally different execution
+model). But it can *test* properties — and because types are values
+and predicates are code, the same language expresses both the code
+and the properties about the code.
 
 ### Syntax
 
 ```
 check [property-block] n
-check [property-block] n {options}
 ```
 
 ### Examples
@@ -381,237 +359,230 @@ check [
 ] 500
 
 # Replicate produces correct length
+def Vec fn [[n:integer] [type] [(list where [len n eq])]]
+
 check [
-  var [[n (random (Range 0 100))]
-    replicate n 0 len eq n
+  var [[n (random (integer where [gte 0 lte 100]))]
+    replicate n 0 is (Vec n)
   ]
 ] 200
+
+# Reverse is its own inverse
+check [
+  var [[xs (random [:integer])]
+    xs reverse reverse eq xs
+  ]
+] 500
 ```
 
 ### Semantics
 
 `check` evaluates the property block `n` times. Each evaluation
-should produce a boolean. If any returns false, `check` pushes an
-error value containing the failing inputs (for shrinking/debugging).
-If all pass, it pushes `true`.
+must produce a boolean. If any returns false, `check` pushes an
+error value containing the failing inputs. If all pass, it pushes
+`true`.
 
 The `random` word generates random values matching a type —
 including refined types. For `(integer where [gt 0])`, it generates
-random integers and filters/retries until the predicate passes.
+random integers and filters until the predicate passes.
+
+### Why `check` Is Sufficient
+
+Lean's formal proofs give certainty: if it compiles, the property
+holds for all inputs, forever. AQL's `check` gives confidence: if
+1000 random tests pass, the property probably holds. The tradeoff:
+
+- AQL programmers never need to learn proof tactics. Properties are
+  just AQL code they already know how to write.
+- The same `where` predicates used in types are reusable as test
+  generators — `random Pos` generates positive integers because
+  `Pos` already knows what "positive integer" means.
+- Properties compose the same way functions compose — because they
+  ARE functions.
 
 
-## Does This Provide Generics?
+## Generics: Already Solved
 
-**Yes.** Generics fall out naturally from two features:
+With just `where` and `@`, generics fall out of what AQL already has.
+No additional features needed.
 
-### Parametric Polymorphism via Type Functions
+### Generic Type Constructors
+
+These are just functions that return types:
 
 ```
-def ListOf tyfn [t:type] [[:t]]
-def MapOf tyfn [k:type, v:type] [{:v}]  # note: map keys are always strings
-def Pair tyfn [a:type, b:type] [record [fst:a snd:b]]
+def ListOf fn [[t:type] [type] [[:t]]]
+def Pair fn [[a:type, b:type] [type] [record [fst:a snd:b]]]
 
 type IntList (ListOf integer)
-type StrNumMap (MapOf string number)
 type IntPair (Pair integer integer)
 ```
 
-This is exactly what Java/C#/TypeScript call generics — type
-constructors parameterized by other types.
+Already works today (modulo `where` for constrained variants). The
+function *is* the generic. Calling it with different arguments
+produces different types.
 
-### Generic Functions via Type Variables
+### Generic Functions
 
-```
-# Works for any element type
-def head fn [
-  [xs:[:@a]]
-  [@a]
-  [xs . 0]
-]
-
-# Preserves element type
-def reverse fn [
-  [xs:[:@a]]
-  [:@a]
-  [xs len iota each [xs len sub 1 sub] each [xs swap get]]
-]
-```
-
-### Generic Functions via Type Dispatch (Already Exists)
-
-AQL already has a form of generics through type-directed dispatch:
+Type variables provide parametric polymorphism:
 
 ```
-def stringify fn [
+def head fn [[xs:[:@a]] [@a] [xs . 0]]
+def reverse fn [[xs:[:@a]] [:@a] [xs len iota each [xs len sub 1 sub] each [xs swap get]]]
+def zip fn [[xs:[:@a], ys:[:@b]] [:(Pair @a @b)] [
+  iota (xs len min (ys len)) each [
+    var [[i] make (Pair @a @b) [(xs get i) (ys get i)]]
+  ]
+]]
+```
+
+### Bounded Generics
+
+Combine `@` with `where`:
+
+```
+# Works for any numeric type
+def sum fn [[xs:[:(@a where [is number])]] [@a] [xs fold 0 [add]]]
+```
+
+### Ad-Hoc Polymorphism (Already Exists)
+
+AQL already has this via multiple `fn` signatures:
+
+```
+def show fn [
   [x:integer] [string] [make string x]
   [x:string] [string] [x]
-  [x:list] [string] [x each [stringify] " " join]
+  [x:list] [string] [x each [show] ", " join]
 ]
 ```
 
-The new features complement this with parametric generics where the
-*same code* works for *any* type, rather than requiring separate
-implementations.
+Parametric generics (`@`) complement this: use `@` when the same
+code works for any type; use multiple signatures when different
+types need different code.
 
 
-## Implementation Approach
+## Implementation
 
-### Phase 1: Refinement Types (`where`)
+### Phase 1: `where` (Refinement Types)
 
-**Effort: Medium.** Extends the type system, touches signature matching.
+The only new syntax. Extends the parser and type system.
 
-1. **Parser**: Recognize `(type where [block])` as a new type form.
-   The parser already handles parenthesized expressions and
-   `(type or type)` disjunctions. Add `where` as a keyword within
-   type expressions that captures the following quoted block.
+1. **Parser**: Recognize `where` inside parenthesized type
+   expressions. The parser already handles `(type or type)`.
+   Add `where` as a keyword that captures the next quoted block.
+   Result: a refined type value carrying base type + predicate.
 
-2. **Type representation**: Add a `Predicate` field to `VType` (or
-   create a `RefinedType` wrapper struct) that holds the quoted
-   block as a `[]Value`.
+2. **Type representation**: Add a `Predicate []Value` field to
+   the type representation (or wrap in a `RefinedType` struct).
 
-3. **Signature matching**: In `MatchSignatureReversed` and forward
-   matching, after the base type matches, run the predicate in a
-   sub-engine. If it returns false, the match fails.
+3. **Signature matching**: After the base type matches, run the
+   predicate in a sub-engine. False = match fails.
 
-4. **`unify`**: When one side is refined, check base type first,
-   then run predicate if a concrete value is present.
+4. **`is`**: Base type check, then predicate.
 
-5. **`is`**: Same — base type check, then predicate.
+5. **`unify`**: Base type unification first, then predicate if a
+   concrete value is present.
 
-### Phase 2: Type Functions (`tyfn`)
+### Phase 2: `@` (Type Variables)
 
-**Effort: Low-Medium.** Very similar to `fn` implementation.
+New token in signatures. Changes to signature matching.
 
-1. **Parser**: Recognize `tyfn` as a word like `fn`. The parameter
-   list uses the same syntax as `fn` input params.
+1. **Parser**: Recognize `@name` in signature positions. Store as
+   a `TypeVar` value.
 
-2. **Engine**: `tyfn` creates a callable value (like `FnDef`) that,
-   when invoked, evaluates the body and returns a type value. The
-   body must leave exactly one type value on the stack.
+2. **Signature matching**: Maintain a `map[string]*VType` binding
+   map per match attempt. First `@a` binds; later `@a` unifies.
 
-3. **`type` integration**: `type Foo (Bar 3)` already works if
-   `Bar` is a word that returns a type. `tyfn` just formalizes this.
+3. **Return type evaluation**: Substitute bound type variables into
+   output type expressions after matching.
 
-### Phase 3: Type Variables (`@`)
+### Phase 3: `check` and `random`
 
-**Effort: Medium-High.** Requires changes to signature matching.
+Two new native words. No parser changes.
 
-1. **Parser**: Recognize `@name` in signature positions as a type
-   variable reference. Store as a new value kind (e.g., `TypeVar`).
+1. **`random`**: Generate values for a type. Base types are
+   straightforward. Refined types use generate-and-filter.
+   Records generate per-field. Lists generate elements.
 
-2. **Signature matching**: Maintain a binding map
-   (`map[string]*VType`) during each match attempt. On first
-   encounter of `@a`, bind it. On subsequent encounters, unify.
-
-3. **Return type evaluation**: After matching, substitute bound type
-   variables into the output type expression.
-
-### Phase 4: Dependent Signatures
-
-**Effort: Medium.** Builds on Phase 3.
-
-1. **Output type evaluation**: Instead of treating output types as
-   static annotations, evaluate them as expressions with input
-   parameter bindings in scope. This is essentially `do` with a
-   pre-populated context.
-
-2. **Postcondition checking**: After the body runs, check each
-   return value against the evaluated output type. On mismatch,
-   produce an error value.
-
-### Phase 5: `check` and Property Testing
-
-**Effort: Low.** Mostly a new native word.
-
-1. **`random` word**: Generate random values for a given type. For
-   base types, straightforward. For refined types, generate-and-test.
-   For records, generate each field.
-
-2. **`check` word**: Loop `n` times, evaluate block, collect results.
-   On failure, report the failing input values.
+2. **`check`**: Loop, evaluate, collect. Report failures with
+   the failing inputs for debugging.
 
 
 ## Design Tradeoffs
 
-### Runtime vs. Compile-Time
+### Runtime, Not Compile-Time
 
-This proposal is entirely **runtime**. Predicates execute when
-values are matched, not when code is parsed. This fits AQL's dynamic
-nature but means:
+All checking is runtime. Predicates execute when values are
+matched. This fits AQL's dynamic nature:
 
-- **Pro**: No separate type-checking phase. Types and code use the
-  same language. Refinement predicates can be arbitrarily expressive.
-- **Pro**: Works with AQL's existing dynamic dispatch — refined types
-  are just more specific dispatchers.
-- **Con**: Type errors are caught at execution time, not definition
-  time. A function with a wrong return type won't fail until called.
-- **Con**: Predicate evaluation has runtime cost. For hot paths,
-  predicates could be expensive.
-
-A future `verify` mode could attempt static analysis over refinement
-predicates, but this is not required for the initial design.
+- **Pro**: Types and code use the same language. No separate
+  type-checking phase. Predicates can be arbitrarily expressive.
+- **Pro**: Works with existing dynamic dispatch — refined types are
+  just more specific dispatchers.
+- **Con**: Errors caught at call time, not definition time.
+- **Con**: Predicate evaluation has runtime cost.
 
 ### Predicate Termination
 
-Refinement predicates could loop forever. The sub-engine should
-enforce a timeout (reuse `await` timeout semantics). If a predicate
-times out, the match fails.
+Predicates could loop. Sub-engines should enforce a timeout (reuse
+`await` timeout mechanics). If a predicate times out, the match
+fails with an error.
 
 ### Predicate Purity
 
-Predicates run in sub-engines and should not observe or cause side
-effects. The sub-engine should have a restricted context (no `write`,
-`fetch`, or other I/O words). This is enforceable by stripping I/O
-words from the sub-engine's registry.
+Predicates run in sub-engines with a restricted context — no I/O
+words (`write`, `fetch`, etc.). This is enforceable by filtering
+the sub-engine's registry.
 
 
-## Comparison: AQL Dependent Types vs. Lean
+## Comparison: AQL vs. Lean
 
 | Aspect | Lean | AQL (Proposed) |
 |--------|------|----------------|
+| Value/type boundary | Bridged by dependent types | No boundary exists |
+| Type-level computation | Universe hierarchy | Ordinary functions |
 | When checked | Compile time | Runtime |
 | Proof method | Formal logical deduction | Predicate evaluation + property testing |
-| Expressiveness | Arbitrary propositions (Prop) | Arbitrary predicates (stack blocks) |
-| Guarantees | Sound and complete (if it compiles, it's correct) | Sound but incomplete (runtime only catches executed paths) |
-| Syntax overhead | Theorem declarations, tactic proofs | `where` clauses, same syntax as regular code |
-| Self-reference | Can prove properties about Lean in Lean | Can test properties about AQL in AQL |
-| Generics | Universes and polymorphism | `tyfn` and `@` type variables |
-| Learning curve | High (proof tactics, type theory) | Low (predicates are just AQL code) |
+| Generics | Universes and polymorphism | Functions returning types + `@` |
+| New concepts needed | Dependent types, tactics, universes | `where`, `@` |
+| Self-reference | Prove properties about Lean in Lean | Test properties about AQL in AQL |
+| Learning curve | High (type theory) | Low (predicates are stack code) |
 
-Lean gives you certainty: if the proof compiles, the property holds
-for all inputs. AQL gives you confidence: if the property passes
-1000 random tests with `check`, it probably holds. The tradeoff is
-accessibility — AQL programmers don't need to learn proof tactics.
+Lean needs dependent types to bridge the value/type gap. AQL has no
+gap to bridge. The only missing piece is `where` — the ability to
+say "this type, but only when this predicate holds." Everything else
+is already expressible because types are already values.
 
 
 ## Syntax Summary
 
 ```
-# Refinement type
+# Refinement type — the one new concept
 type Pos (integer where [gt 0])
+type Sorted ([:number] where [each-pair [lte] fold true [and]])
 
-# Type function (generics)
-def Vec tyfn [n:integer] [(list where [len n eq])]
-def Pair tyfn [a:type, b:type] [record [fst:a snd:b]]
+# Type-returning function — already works, no new syntax
+def Vec fn [[n:integer] [type] [(list where [len n eq])]]
+def Pair fn [[a:type, b:type] [type] [record [fst:a snd:b]]]
+def Range fn [[lo:number, hi:number] [type] [
+  (number where [dup gte lo swap lte hi and])
+]]
 
-# Type variable in signature
-def id fn [[@a] [@a] []]
+# Generic function with type variables
 def head fn [[xs:[:@a]] [@a] [xs . 0]]
+def zip fn [[xs:[:@a], ys:[:@b]] [:(Pair @a @b)] [...]]
 
-# Dependent output type
+# Dependent return type — falls out of named params + where
 def replicate fn [
-  [n:integer, x:@a]
+  [n:integer, x:any]
   [(Vec n)]
   [iota n each [drop x]]
 ]
 
-# Contract
-def bsearch fn [...] pre [xs is Sorted] post [result gte 0]
-
 # Property testing
-check [var [[n (random Pos)] replicate n 0 len eq n]] 1000
+check [var [[x (random Pos)] x gt 0]] 1000
 ```
 
-All of these use existing AQL syntax patterns (quoted blocks, pair
-syntax, parenthesized type expressions) with minimal new keywords:
-`where`, `tyfn`, `@`, `pre`, `post`, `check`, `random`.
+New keywords: `where`, `@`, `check`, `random`. That's it.
+Everything else reuses existing AQL.
