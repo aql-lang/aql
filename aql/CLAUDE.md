@@ -100,28 +100,84 @@ Key conversion functions in `parse.go`:
 
 ## Argument Ordering (CRITICAL)
 
-AQL is a concatenative language where a function word consumes arguments
-**outward from its position**. The value nearest the function on each side
-maps to `sig[0]`, the next nearest to `sig[1]`, and so on. Stack (prefix)
-args are consumed top-of-stack first; forward args are collected
-left-to-right after the word. This means all positions are equivalent:
+AQL is a concatenative language where argument order is a **symmetric
+mirror around the function word**. The args on each side of the word
+are read inward toward it: forward args left-to-right, stack args
+nearest-first (top-of-stack). Forward args always fill the lowest sig
+indices, then stack args fill the remainder. To move an arg from the
+forward side to the stack side while preserving its sig position, it
+must go to the **far** (deepest) stack position — creating the mirror.
 
+### The mirror pattern
+
+For a word `f` with N args, the equivalent forms are obtained by
+moving the **last** forward arg to the **far left** of the stack,
+one at a time. The args on the left of `f` are always the reverse of
+the args they replace on the right:
+
+**1 arg:**
 ```
-j a b c       →  sig[0]=a  sig[1]=b  sig[2]=c   (all forward)
-c j a b       →  sig[0]=a  sig[1]=b  sig[2]=c   (1 prefix, 2 forward)
-c b j a       →  sig[0]=a  sig[1]=b  sig[2]=c   (2 prefix, 1 forward)
-c b a j       →  sig[0]=a  sig[1]=b  sig[2]=c   (all prefix)
+f a             →  sig[0]=a       (forward)
+a f             →  sig[0]=a       (prefix)
 ```
 
-Forward args fill sig slots first (from sig[0]), then remaining slots are
-filled from the stack (top-of-stack → next unfilled sig slot). This is the
-fundamental design of the language — do NOT assume left-to-right source
-order is preserved. All four forms above produce identical results.
+**2 args** (verified with non-commutative `sub`: 10 sub 3 = 7, 3 sub 10 = -7):
+```
+f a b           →  sig[0]=a  sig[1]=b     (all forward)
+b f a           →  sig[0]=a  sig[1]=b     (1 prefix, 1 forward)
+b a f           →  sig[0]=a  sig[1]=b     (all prefix)
+```
+Note: `a f b` gives sig[0]=b, sig[1]=a — **NOT** equivalent to `f a b`.
 
-Implementation: `rearrangeForForward()` in `engine.go` places forward-collected
-values before stack values (reversed) so that `execMatch` always sees args in
-signature order. `MatchSignatureReversed` handles the all-prefix case by
-matching top-of-stack → sig[0].
+**3 args:**
+```
+f a b c         →  sig[0]=a  sig[1]=b  sig[2]=c   (all forward)
+c f a b         →  sig[0]=a  sig[1]=b  sig[2]=c   (1 prefix, 2 forward)
+c b f a         →  sig[0]=a  sig[1]=b  sig[2]=c   (2 prefix, 1 forward)
+c b a f         →  sig[0]=a  sig[1]=b  sig[2]=c   (all prefix)
+```
+
+**4 args:**
+```
+f a b c d       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (all forward)
+d f a b c       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (1 prefix, 3 forward)
+d c f a b       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (2 prefix, 2 forward)
+d c b f a       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (3 prefix, 1 forward)
+d c b a f       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (all prefix)
+```
+
+**5 args:**
+```
+f a b c d e     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+e f a b c d     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+e d f a b c     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+e d c f a b     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+e d c b f a     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+e d c b a f     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+```
+
+### The rule
+
+Reading from the all-forward form `f a b c d e`:
+- The forward args `a b c d e` read left-to-right → sig[0..4]
+- The all-prefix form reverses them: `e d c b a f` reads top-of-stack
+  first → sig[0]=a (top), sig[4]=e (deepest)
+- Every mixed form is a split: forward args on the right of `f` keep
+  their left-to-right order, stack args on the left are the remaining
+  args in reverse
+
+Do NOT assume left-to-right source order maps to sig order — only the
+mirror equivalences above are valid. `a f b` is NOT equivalent to
+`f a b` (it swaps sig[0] and sig[1]).
+
+### Implementation
+
+`rearrangeForForward()` in `engine.go` reorders collected values so
+forward args occupy the deepest positions and stack args (reversed)
+follow, then `matchSignature` with `ForceStack` and deepest-first
+matching reads them in signature order. For the all-prefix case,
+`matchSignature` uses `nearestFirst` mode (`match.go:282`) which maps
+top-of-stack → sig[0].
 
 ## Quotation System
 
