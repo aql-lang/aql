@@ -93,7 +93,7 @@ Implication: the abstract interpreter must simulate this forward-collection stat
 
 ### 7) Argument equivalence simplifies analysis
 
-Since `f a b`, `a f b`, and `a b f` all produce identical results (see CLAUDE.md: Argument Ordering), the abstract interpreter can normalize to a canonical form before matching. The result type is position-independent — the checker does not need to track permutations.
+For a word `f` with args `a` (sig[0]) and `b` (sig[1]), the equivalence is `f a b` <=> `b f a` <=> `b a f` — NOT `f a b` <=> `a f b`. Forward args claim the lowest sig indices first; stack args (nearest-to-word first) fill the remainder. Moving an arg from forward to stack reverses it to the far (deepest) stack position. For 3 args: `f a b c` <=> `c f a b` <=> `c b f a` <=> `c b a f`. This means the abstract interpreter can normalize to canonical (all-forward) form, and the result type is position-independent within an equivalence class.
 
 ### 8) No return type annotations exist on signatures
 
