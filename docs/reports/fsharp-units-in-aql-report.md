@@ -135,6 +135,135 @@ Ship **Tier 1 only** first: `qty`, unit words per base, and `Number#<unit>` in t
 4. Errors use existing error-value convention: `unit-mismatch`, `non-integer-exponent`.
 5. Defer generic unit variables and engine-native tagging until real usage justifies them.
 
+## Implementation
+
+Concrete plan for building Tier 1 inside the current engine, with file references.
+
+### Value representation
+Add a `Quantity` payload carried as a typed-Object, slotting into the existing `Object` branch of the type tree:
+
+```
+Object
+  Quantity                    -- tagged numeric value
+```
+
+- New type constant `TQuantity` registered next to `TResource`/`TTable` in `internal/engine/types.go`.
+- Payload struct:
+  ```go
+  type QuantityData struct {
+      Value Value          // VType must match TNumber (Integer or Decimal)
+      Unit  UnitTag        // canonical unit, integer exponents keyed by base atom
+  }
+  type UnitTag map[string]int
+  ```
+- `UnitTag` is canonical: keys sorted, zero exponents dropped, empty map = dimensionless. Store the canonical form so equality is a plain `reflect.DeepEqual` / map compare.
+- Add `NewQuantity(v Value, u UnitTag) Value` constructor mirroring `NewDecimal` / `NewDate` in `value.go`.
+- Add `(v Value) AsQuantity() (*QuantityData, bool)` accessor following the `AsDate` / `AsCalDuration` pattern. Return `nil, false` for type literals with `Data==nil` (panic-prevention rule).
+
+### Type matching
+- `TQuantity` is a leaf under `TObject`, so existing `Matches()` in `internal/engine/types.go` handles parent/child matching without change.
+- For per-unit dispatch, extend `Matches()` with an optional tag check: a signature can carry a `UnitConstraint` (nil = any unit). This is implemented as a wrapper `TaggedType{Base: TQuantity, Unit: UnitTag, Vars: []string}` passed in `NativeSig.Args`. The matcher in `match.go` already walks `Type` values; add a narrow `matchTaggedType` helper called when `Base.Equal(TQuantity)`.
+- Generic unit variables (`'u`) become entries in `Vars`. A `UnitBindings` map is threaded through `matchSignature` alongside the existing argument collection state, reset per dispatch attempt.
+
+### Unit algebra
+A single pure helper covers the arithmetic cases:
+
+```go
+// internal/engine/units.go
+func UnitMul(a, b UnitTag) UnitTag
+func UnitDiv(a, b UnitTag) UnitTag
+func UnitPow(a UnitTag, n int) UnitTag
+func UnitEqual(a, b UnitTag) bool
+func UnitCanonical(a UnitTag) UnitTag
+func UnitFormat(a UnitTag) string    // "m/s^2"
+func UnitParse(s string) (UnitTag, error)
+```
+
+Each is mechanical: add/subtract exponents, drop zeros, sort keys. No external deps.
+
+### Arithmetic word extensions
+Touch the existing `registerAdd`, `registerSub`, `registerMul`, `registerDiv`, `registerPow`, `registerMod` in `internal/engine/native_math_*.go`. Pattern, using `add` as the canonical example (currently at `native_math_add.go:40`):
+
+```go
+addQtyHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+    a, _ := args[1].AsQuantity()
+    b, _ := args[0].AsQuantity()
+    if !UnitEqual(a.Unit, b.Unit) {
+        return nil, NewAqlError("unit-mismatch",
+            fmt.Sprintf("add: %s vs %s", UnitFormat(a.Unit), UnitFormat(b.Unit)))
+    }
+    sum, err := addNumbers(a.Value, b.Value)   // reuse existing numeric helper
+    if err != nil { return nil, err }
+    return []Value{NewQuantity(sum, a.Unit)}, nil
+}
+
+registerBinaryMathWord(r, "add",
+    /* existing numeric closures... */,
+    NativeSig{Args: []Type{TQuantity, TQuantity}, Handler: addQtyHandler},
+    /* existing temporal sigs... */,
+)
+```
+
+- `add` / `sub` / `mod`: require `UnitEqual`, propagate the shared tag.
+- `mul`: unit is `UnitMul(a, b)`.
+- `div`: unit is `UnitDiv(a, b)`; dimensionless result collapses to plain `Number`.
+- `pow`: exponent must be an `Integer` literal at match time; unit becomes `UnitPow(base, n)`. Non-integer exponent → `non-integer-exponent` error.
+- `negate`, `abs`, `min`, `max`, `sign`: accept `Quantity`, preserve tag.
+- Comparisons (`lt`, `gt`, `eq`, …) in `compare.go`: require `UnitEqual`, then compare underlying numbers.
+
+### Mixed Quantity/Number interop
+One choice, documented once: **promote raw numbers only inside `mul`, `div`, `pow`; reject them in `add`/`sub`/comparisons**. This matches F# (you can scale a `float<m>` by a raw `float`, but you can't add a `float` to a `float<m>`). Implementation:
+
+- Add extra sigs `[TQuantity, TNumber]` and `[TNumber, TQuantity]` to `mul`, `div`, `pow` only. Treat the raw number as dimensionless.
+- `add`/`sub` keep only the `[TQuantity, TQuantity]` and existing `[TNumber, TNumber]` sigs — cross-dispatch produces the normal no-match error.
+
+### New words
+Register in a new `internal/engine/native_math_qty.go`:
+
+- `qty [Number, Map] -> Quantity` — build from a value and a unit-map literal.
+- `unit [Quantity] -> Map` — extract the unit tag as a map.
+- `value [Quantity] -> Number` — extract the raw numeric.
+- `dimensionless? [Quantity] -> Boolean`
+- `convert [Quantity, Map, Decimal] -> Quantity` — retag and scale (`convert q {m:1, cm:-1} 100` says 1 m = 100 cm).
+- `compatible? [Quantity, Quantity] -> Boolean` — same-unit check used by tooling/debugging.
+
+Per-base unit words (`m`, `kg`, `s`, `A`, `K`, `mol`, `cd` for SI; plus `m/s`, `m/s^2`, `N`, `J`, `W`, `Hz`, `Pa` as composites) live in a new native module `internal/native/units.go` loaded via `import "aql:units"`. Each is a 1-arg word `[Number] -> Quantity` whose handler just calls `NewQuantity(n, precomputedTag)`.
+
+### Parser hook (Tier 2 only — defer)
+If/when the `#` literal suffix is adopted, the changes are localised:
+
+1. Register `#` via `j.Token()` in `internal/parser/parse.go` (alongside the existing custom tokens documented in `aql/CLAUDE.md`).
+2. Extend the `"val"` rule so a number followed by `#` opens a `"unitexpr"` sub-rule that lexes the unit grammar (`atom`, `*`, `/`, `^`, integer, `(`, `)`).
+3. In `convertTopLevelValue` / `convertDataValue`, fold the resulting tokens into a `Quantity` literal via `UnitParse`.
+4. For signature positions, teach `convertTypeLiteral` to recognise `Number#<unit>` and produce a `TaggedType` entry.
+
+Nothing in the engine changes for Tier 2 — it only adds a shorter path to the same `NewQuantity` constructor.
+
+### Serialization
+- `print` (`internal/engine/print.go`): render as `"<value> <unit>"`, with `UnitFormat` producing `m/s^2`.
+- `inspect`: use the existing map-emit path to show `qty(<value>, {m:1, s:-2})`.
+- JSON (`internal/native/jsonify.go`): emit `{"$qty": <number>, "$unit": {"m": 1, "s": -2}}`. Round-trip via a `$qty` reviver in `jsonify.go` parse path.
+- SQL storage (`internal/engine/sqlite.go`): store as TEXT in the above JSON form; decode on column read.
+
+### Testing
+Mirror the existing pattern (`native_temporal_*_test.go`, `math_bool_coverage_test.go`):
+
+1. `units_test.go` — pure unit-algebra coverage (`UnitMul`/`UnitDiv`/`UnitPow`/canonicalisation).
+2. `native_math_qty_test.go` — dispatch cases: `add` same-unit, `add` mismatch, `mul` tag propagation, `div` collapse to dimensionless, `pow` integer check, raw-number interop rules.
+3. Panic-prevention: extend `TestTypeLiteralNoPanic` in `internal/engine/type_scaling_test.go` so the new `qty`, `unit`, `value`, `convert`, and per-base unit words receive a `Quantity` type literal (`Data==nil`) and return an error cleanly.
+4. End-to-end: add an AQL-level script under `aql/test/` mirroring `aql/test/*.aql` layout — a small physics example and a finance (currency tags) example.
+
+### Effort estimate
+- Engine type + accessors: ~0.5 day.
+- Unit algebra + tests: ~0.5 day.
+- Arithmetic/comparison sig extensions: ~1 day.
+- New words + per-base unit module: ~1 day.
+- Serialization paths: ~0.5 day.
+- Panic-prevention and integration tests: ~1 day.
+- Docs (`LANGREF.md`, `SIGNATURES.md`, `TYPES.md`): ~0.5 day.
+
+**Total Tier 1: ~5 dev days.** Tier 2 parser work is an additional ~2-3 days and can follow later.
+
 ## Risk
 - Dispatch cost: tagged-number signatures widen the match set for hot arithmetic words.
 - Interop: tagged numbers flowing into untagged words must degrade gracefully (strip tag or error — pick one and document).
