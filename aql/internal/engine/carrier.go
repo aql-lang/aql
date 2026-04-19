@@ -533,42 +533,27 @@ func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
 	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
 }
 
-// applyGuardNarrowing inspects a condition list for simple flow-
-// typing patterns and, for each one, pushes a narrowed carrier onto
-// the relevant name's DefStack. Returns a restore function that pops
-// those narrowings; callers must invoke it after analysing the
-// then-branch.
-//
-// Supported patterns (AQL concatenative order, infix-style):
-//
-//	x is T        → narrow x to T in the then-branch
-//	is x T        → same, via forward collection
-//	x is T and y is U   → narrow both (if the binder-pattern
-//	                       appears exactly, we walk the list and
-//	                       apply each is-clause independently)
-//
-// Only concrete type literals (Data==nil) narrow; runtime-computed
-// type values fall through. Only bare Word references with a
-// carrier def on DefStacks are narrowed — the narrowing is installed
-// as a new DefStack entry (carrier value) that shadows the original.
-func applyGuardNarrowing(r *Registry, condList Value) func() {
-	noop := func() {}
-	if r == nil || !r.CheckMode || condList.Data == nil {
-		return noop
+// GuardClause describes one `x is T` clause detected in a condition.
+type GuardClause struct {
+	Name string
+	Type Type
+}
+
+// extractGuardClauses walks a condition list looking for triplets
+// `Word(x) Word(is) TypeLiteral(T)` and returns the corresponding
+// GuardClause entries. Skips anything that doesn't resolve to a
+// bare type literal or an ObjectType. Accepts type-word references
+// by looking them up on DefStacks.
+func extractGuardClauses(r *Registry, condList Value) []GuardClause {
+	if r == nil || condList.Data == nil {
+		return nil
 	}
 	list := condList.AsList()
 	if list.IsNil() || list.Len() < 3 {
-		return noop
+		return nil
 	}
 	elems := list.Slice()
-
-	type narrow struct{ name string }
-	var applied []narrow
-
-	// Walk triplets looking for `Word(x) Word(is) TypeLiteral(T)`.
-	// The concatenative `x is T` parses to exactly that sequence
-	// (is is forward-precedence and consumes T from the forward
-	// side, x from the stack side).
+	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
 		if !elems[i].VType.Equal(TWord) || !elems[i+1].VType.Equal(TWord) {
 			continue
@@ -581,37 +566,111 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 		if err != nil || wis.Name != "is" {
 			continue
 		}
-		// Type literal: Data==nil or an ObjectTypeInfo.
 		tv := elems[i+2]
-		if tv.Data != nil {
-			// Maybe a type stored on DefStacks (e.g. object type).
-			if tv.VType.Equal(TWord) {
-				inner, _ := tv.AsWord()
-				if ds := r.DefStacks[inner.Name]; len(ds) > 0 {
-					tv = ds[len(ds)-1]
-				}
+		if tv.Data != nil && tv.VType.Equal(TWord) {
+			inner, _ := tv.AsWord()
+			if ds := r.DefStacks[inner.Name]; len(ds) > 0 {
+				tv = ds[len(ds)-1]
 			}
 		}
-		// Only accept a bare type literal or an object type.
 		if tv.Data != nil && !tv.IsObjectType() {
 			continue
 		}
-		// Install a narrowed carrier on the DefStack for wx.Name.
-		r.DefStacks[wx.Name] = append(r.DefStacks[wx.Name], NewCarrier(tv.VType))
-		applied = append(applied, narrow{name: wx.Name})
+		out = append(out, GuardClause{Name: wx.Name, Type: tv.VType})
 	}
+	return out
+}
 
-	if len(applied) == 0 {
+// applyGuardNarrowing installs then-branch narrowings for each
+// `x is T` clause in the condition. Returns a restore func to pop
+// the narrowings after the then-branch runs.
+func applyGuardNarrowing(r *Registry, condList Value) func() {
+	noop := func() {}
+	if r == nil || !r.CheckMode {
+		return noop
+	}
+	clauses := extractGuardClauses(r, condList)
+	if len(clauses) == 0 {
+		return noop
+	}
+	for _, c := range clauses {
+		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], NewCarrier(c.Type))
+	}
+	return func() {
+		for _, c := range clauses {
+			ds := r.DefStacks[c.Name]
+			if len(ds) > 0 {
+				r.DefStacks[c.Name] = ds[:len(ds)-1]
+			}
+			if len(r.DefStacks[c.Name]) == 0 {
+				delete(r.DefStacks, c.Name)
+			}
+		}
+	}
+}
+
+// applyComplementNarrowing installs else-branch narrowings — for
+// each `x is T` clause it tries to compute the complement of T in
+// x's current carrier type and, if non-trivial, pushes the
+// complement carrier onto x's DefStack. Currently only refines
+// when x's existing binding is a disjunction: the matching
+// alternative is subtracted. Returns a restore func.
+func applyComplementNarrowing(r *Registry, condList Value) func() {
+	noop := func() {}
+	if r == nil || !r.CheckMode {
+		return noop
+	}
+	clauses := extractGuardClauses(r, condList)
+	if len(clauses) == 0 {
+		return noop
+	}
+	type applied struct{ name string }
+	var pushed []applied
+	for _, c := range clauses {
+		ds := r.DefStacks[c.Name]
+		if len(ds) == 0 {
+			continue
+		}
+		cur := ds[len(ds)-1]
+		if !cur.IsDisjunct() {
+			continue
+		}
+		di, err := cur.AsDisjunct()
+		if err != nil {
+			continue
+		}
+		var remaining []Value
+		for _, alt := range di.Alternatives {
+			if alt.VType.Equal(c.Type) {
+				continue
+			}
+			remaining = append(remaining, alt)
+		}
+		if len(remaining) == len(di.Alternatives) || len(remaining) == 0 {
+			// No change (alt not found) or all subtracted — skip.
+			continue
+		}
+		var narrowed Value
+		if len(remaining) == 1 {
+			narrowed = NewCarrier(remaining[0].VType)
+		} else {
+			narrowed = NewDisjunct(remaining)
+			narrowed.Carrier = true
+		}
+		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], narrowed)
+		pushed = append(pushed, applied{name: c.Name})
+	}
+	if len(pushed) == 0 {
 		return noop
 	}
 	return func() {
-		for _, n := range applied {
-			ds := r.DefStacks[n.name]
+		for _, p := range pushed {
+			ds := r.DefStacks[p.name]
 			if len(ds) > 0 {
-				r.DefStacks[n.name] = ds[:len(ds)-1]
+				r.DefStacks[p.name] = ds[:len(ds)-1]
 			}
-			if len(r.DefStacks[n.name]) == 0 {
-				delete(r.DefStacks, n.name)
+			if len(r.DefStacks[p.name]) == 0 {
+				delete(r.DefStacks, p.name)
 			}
 		}
 	}

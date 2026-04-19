@@ -129,11 +129,16 @@ func registerIf(r *Registry) {
 				// auto-eval so we get the raw body).
 				ReturnsFn: func(args []Value) []Value {
 					// Flow typing: detect `x is Type` in the
-					// condition and narrow x in the then-branch.
-					restore := applyGuardNarrowing(r, args[0])
+					// condition and narrow x in the then-branch;
+					// apply the complement in the else-branch
+					// (currently only effective for disjunct
+					// bindings — subtracts the matched alternative).
+					restoreThen := applyGuardNarrowing(r, args[0])
 					thenStk := RunCarrierBody(r, args[1])
-					restore()
+					restoreThen()
+					restoreElse := applyComplementNarrowing(r, args[0])
 					elseStk := RunCarrierBody(r, args[2])
+					restoreElse()
 					joined := JoinCarrierStacks(thenStk, elseStk)
 					if len(joined) == 0 {
 						return []Value{NewCarrier(TAny)}
