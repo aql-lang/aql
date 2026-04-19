@@ -172,6 +172,27 @@ func commonAncestorType(a, b Type) Type {
 	return Type{Parts: parts}
 }
 
+// CarrierDisjunctCap is the maximum number of alternatives a carrier
+// disjunction may hold before it is widened to the common ancestor
+// of all alternatives. Matches the report's recommended cap of 8.
+const CarrierDisjunctCap = 8
+
+// flattenAlternatives walks a carrier value and returns the unique
+// type literals it represents. For a disjunct carrier, flattens its
+// alternatives recursively; for any other carrier, returns a single
+// type literal of its VType.
+func flattenAlternatives(v Value) []Value {
+	if v.IsDisjunct() {
+		di, _ := v.AsDisjunct()
+		var out []Value
+		for _, alt := range di.Alternatives {
+			out = append(out, flattenAlternatives(alt)...)
+		}
+		return out
+	}
+	return []Value{NewTypeLiteral(v.VType)}
+}
+
 // JoinCarriers folds two carriers into a single carrier that
 // represents the disjunction of both. Applies a few simple
 // normalisations:
@@ -180,37 +201,90 @@ func commonAncestorType(a, b Type) Type {
 //   - If one side is a strict subtype of the other, the parent wins.
 //   - Sibling literal types (e.g. Number/Integer/42 vs Number/Integer/99)
 //     collapse to their nearest common ancestor (Number/Integer).
+//   - Disjunctions wider than CarrierDisjunctCap widen to the common
+//     ancestor of all alternatives.
 //   - Otherwise a TDisjunct carrier is returned whose Data is a
 //     DisjunctInfo listing the unique alternative type literals.
 //
 // This is the primary join used when the checker needs to combine
 // two branch outcomes (e.g. `if` then/else).
 func JoinCarriers(a, b Value) Value {
-	if a.VType.Equal(b.VType) {
+	if a.VType.Equal(b.VType) && !a.IsDisjunct() && !b.IsDisjunct() {
 		out := a
 		out.Carrier = true
 		out.Data = nil
 		return out
 	}
-	if a.VType.Matches(b.VType) {
-		// a is subtype of b → widen to b
-		return NewCarrier(b.VType)
+	if !a.IsDisjunct() && !b.IsDisjunct() {
+		if a.VType.Matches(b.VType) {
+			// a is subtype of b → widen to b
+			return NewCarrier(b.VType)
+		}
+		if b.VType.Matches(a.VType) {
+			return NewCarrier(a.VType)
+		}
+		// Check for a non-trivial common ancestor (shared prefix of at
+		// least one part). This collapses value-tagged literals (e.g.
+		// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
+		anc := commonAncestorType(a.VType, b.VType)
+		if len(anc.Parts) > 0 && !anc.Equal(TAny) {
+			return NewCarrier(anc)
+		}
 	}
-	if b.VType.Matches(a.VType) {
-		return NewCarrier(a.VType)
+	// Gather unique alternatives across a and b, subsume subtypes,
+	// then apply the width cap.
+	alts := mergeAlternatives(
+		flattenAlternatives(a),
+		flattenAlternatives(b),
+	)
+	if len(alts) == 1 {
+		return NewCarrier(alts[0].VType)
 	}
-	// Check for a non-trivial common ancestor (shared prefix of at
-	// least one part). This collapses value-tagged literals (e.g.
-	// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
-	anc := commonAncestorType(a.VType, b.VType)
-	if len(anc.Parts) > 0 && !anc.Equal(TAny) {
-		return NewCarrier(anc)
+	if len(alts) > CarrierDisjunctCap {
+		t := alts[0].VType
+		for i := 1; i < len(alts); i++ {
+			t = commonAncestorType(t, alts[i].VType)
+		}
+		return NewCarrier(t)
 	}
-	// No subtype relation and no useful ancestor — build a disjunction carrier.
-	alts := []Value{NewTypeLiteral(a.VType), NewTypeLiteral(b.VType)}
 	v := NewDisjunct(alts)
 	v.Carrier = true
 	return v
+}
+
+// mergeAlternatives merges two slices of type-literal alternatives
+// into a single slice with subsumption: if one alternative is a
+// subtype of another, only the parent is kept. Duplicates are
+// removed.
+func mergeAlternatives(a, b []Value) []Value {
+	combined := append([]Value(nil), a...)
+	combined = append(combined, b...)
+	// Deduplicate by VType path, subsume subtypes.
+	out := combined[:0]
+outer:
+	for i, cand := range combined {
+		// Skip if already subsumed by an earlier entry.
+		for j := 0; j < i; j++ {
+			if combined[j].VType.Equal(cand.VType) {
+				continue outer // duplicate
+			}
+		}
+		// Drop candidates whose type is a strict subtype of any
+		// other candidate.
+		for j, other := range combined {
+			if j == i {
+				continue
+			}
+			if cand.VType.Equal(other.VType) {
+				continue
+			}
+			if cand.VType.Matches(other.VType) {
+				continue outer // subsumed
+			}
+		}
+		out = append(out, cand)
+	}
+	return out
 }
 
 // checkModeFallbackPositions returns up to n stack indices to use as

@@ -425,6 +425,39 @@ func TestCheckUserFnBadArgDiagnoses(t *testing.T) {
 	}
 }
 
+// TestCheckDisjunctWidthCap verifies that carrier disjunctions never
+// grow past CarrierDisjunctCap alternatives: instead they widen to
+// their common ancestor. We construct a chain of nested `if`s with
+// heterogeneous branch types and confirm the residual carrier is a
+// widened type, not a large disjunction.
+func TestCheckDisjunctWidthCap(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// Nested-if chain returning different scalar types per branch.
+	// After >8 distinct non-comparable alternatives, the join must
+	// widen; the common ancestor of mixed Number/String/Boolean is
+	// Scalar.
+	src := `if [true] [1] [if [true] [2.5] [if [true] ["a"] [if [true] [true] [if [true] [false] [if [true] [10] [if [true] [20] [if [true] [3.14] [99]]]]]]]]`
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 {
+		t.Fatalf("expected 1 carrier, got %v", res.Stack)
+	}
+	// Must not be a disjunct of 9 alternatives — should have widened
+	// to a common ancestor (Scalar) or narrower.
+	got := res.Stack[0]
+	if strings.Count(got, "|") >= 8 {
+		t.Fatalf("disjunction should have been width-capped, got %q", got)
+	}
+	if got != "Scalar" && !strings.HasPrefix(got, "Scalar/") {
+		t.Fatalf("expected Scalar-family ancestor, got %q", got)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics
