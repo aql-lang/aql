@@ -1026,6 +1026,23 @@ func TestCheckContextMissingKey(t *testing.T) {
 	}
 }
 
+// TestCheckDoViaDefStacks verifies `do body` (where body is a def'd
+// quoted list) resolves the list via DefStacks and analyses its
+// contents just like a literal `do [...]` would.
+func TestCheckDoViaDefStacks(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`def body quote [1 add 2]  do body`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || !strings.Contains(res.Stack[0], "Integer") {
+		t.Errorf("expected Integer carrier, got %v", res.Stack)
+	}
+}
+
 // TestPerfContextTracking measures Check vs Run for a program that
 // uses the context-store for simple key/value.
 func TestPerfContextTracking(t *testing.T) {

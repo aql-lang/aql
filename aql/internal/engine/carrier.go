@@ -410,7 +410,14 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// args. TAny carriers are treated as wildcards.
 	best := fallback
 	bestMatch := -1
-	// Scan all signatures; prefer: concrete matches > same arity > fallback.
+	// Scan all signatures and pick the best fit. Scoring:
+	//  - compatible concrete-type matches count.
+	//  - ties break toward sigs with ReturnsFn (carry custom
+	//    check-mode logic) over plain Returns (static list).
+	// When nothing is concretely compatible, fall through to
+	// scanning by arity alone so we still land on a ReturnsFn-
+	// bearing sig when possible rather than a static catch-all.
+	bestHasFn := fallback.ReturnsFn != nil
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if s.Fallback {
@@ -425,7 +432,6 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		compatible := true
 		for j, p := range pos {
 			av := e.stack[p]
-			// TAny carriers match any type without penalty.
 			if av.VType.Equal(TAny) {
 				continue
 			}
@@ -433,13 +439,32 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				score++
 				continue
 			}
-			// Incompatible unless the actual carrier is Any.
 			compatible = false
 			break
 		}
-		if compatible && score > bestMatch {
+		if !compatible {
+			continue
+		}
+		hasFn := s.ReturnsFn != nil
+		if score > bestMatch || (score == bestMatch && hasFn && !bestHasFn) {
 			bestMatch = score
 			best = s
+			bestHasFn = hasFn
+		}
+	}
+	// Fallback pass: if no compatible sig was found at all, prefer
+	// a sig with a ReturnsFn over one without (all else equal).
+	if bestMatch < 0 {
+		for i := range fn.Signatures {
+			s := &fn.Signatures[i]
+			if s.Fallback {
+				continue
+			}
+			if s.ReturnsFn != nil && !bestHasFn {
+				best = s
+				bestHasFn = true
+				break
+			}
 		}
 	}
 	sig := best

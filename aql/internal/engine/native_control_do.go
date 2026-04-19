@@ -95,12 +95,21 @@ func registerDo(r *Registry) {
 					return evalList(args[0].AsList().Slice())
 				},
 				// Static type-check: when the body is a literal
-				// list, run it through a sub-engine in check mode
-				// and use the residual top-of-stack carrier as the
-				// result. Falls back to TAny for non-concrete
-				// bodies (e.g. computed at runtime).
+				// list (concrete Data), run it through a sub-engine
+				// in check mode and use the residual top-of-stack
+				// carrier as the result. If the arg is a Word
+				// reference to a def'd list, resolve via DefStacks
+				// first. Falls back to TAny for truly computed
+				// bodies.
 				ReturnsFn: func(args []Value) []Value {
-					stk := RunCarrierBody(r, args[0])
+					body := args[0]
+					if body.IsWord() {
+						w, _ := body.AsWord()
+						if ds := r.DefStacks[w.Name]; len(ds) > 0 {
+							body = ds[len(ds)-1]
+						}
+					}
+					stk := RunCarrierBody(r, body)
 					if len(stk) == 0 {
 						return []Value{NewCarrier(TAny)}
 					}
