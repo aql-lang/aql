@@ -25,6 +25,71 @@ func NewCarrier(t Type) Value {
 	return v
 }
 
+// NewCarrierTypedList constructs a typed-list carrier — a list
+// carrier whose element type is known. Implemented as a regular
+// Value with VType=TList and Data=ChildTypeInfo{Child: NewCarrier(elem)}.
+// The Carrier flag is still set so the rest of the engine treats it
+// as abstract. Downstream list-consuming words can recover the
+// element carrier via dataListElemType.
+func NewCarrierTypedList(elem Type) Value {
+	v := NewTypedList(NewCarrier(elem))
+	v.Carrier = true
+	return v
+}
+
+// ReturnsPreserveListAt builds a ReturnsFunc that returns a typed-
+// list carrier whose element type matches the data-list arg at
+// index i. Used by list-preserving words like reverse, take, shed,
+// unique, at, sortby — they return a list of the same element type
+// as their input.
+func ReturnsPreserveListAt(i int) ReturnsFunc {
+	return func(args []Value) []Value {
+		if i < 0 || i >= len(args) {
+			return []Value{NewCarrier(TList)}
+		}
+		elem := dataListElemTypeFromValue(args[i])
+		return []Value{NewCarrierTypedList(elem)}
+	}
+}
+
+// ReturnsListElemAt builds a ReturnsFunc that returns the element
+// type carrier of the data-list arg at index i. Used by words like
+// head/first (if added) that pick a single element out of a list.
+func ReturnsListElemAt(i int) ReturnsFunc {
+	return func(args []Value) []Value {
+		if i < 0 || i >= len(args) {
+			return []Value{NewCarrier(TAny)}
+		}
+		elem := dataListElemTypeFromValue(args[i])
+		return []Value{NewCarrier(elem)}
+	}
+}
+
+// dataListElemTypeFromValue is a package-level duplicate of
+// dataListElemType that lives in carrier.go so ReturnsFunc helpers
+// don't depend on the native_array_higher.go symbol. It reads the
+// ChildTypeInfo first, then joins concrete element VTypes.
+func dataListElemTypeFromValue(data Value) Type {
+	if data.Data == nil {
+		return TAny
+	}
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		return ct.Child.VType
+	}
+	list := data.AsList()
+	if list.IsNil() || list.Len() == 0 {
+		return TAny
+	}
+	t := list.Get(0).VType
+	for i := 1; i < list.Len(); i++ {
+		t = commonAncestorType(t, list.Get(i).VType)
+		if t.Equal(TAny) {
+			break
+		}
+	}
+	return t
+}
+
 // toCarrier converts a concrete Value to its carrier form. Control /
 // structural tokens (words, marks, moves, open-paren, paren-expr,
 // interp-string, return-check, def-cleanup, forward) are returned

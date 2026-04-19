@@ -24,7 +24,9 @@ func registerIota(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value {
+				return []Value{NewCarrierTypedList(TInteger)}
+			},
 		}},
 	})
 }
@@ -47,7 +49,7 @@ func registerShape(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -148,7 +150,7 @@ func registerReshape(r *Registry) {
 				result := buildNested(flat, dims)
 				return []Value{result}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -208,7 +210,7 @@ func registerArrFlatten(r *Registry) {
 				flat := flattenList(args[0])
 				return []Value{NewList(flat)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -250,7 +252,7 @@ func registerArrTranspose(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -274,7 +276,7 @@ func registerReverse(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -316,7 +318,7 @@ func registerTake(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -358,7 +360,7 @@ func registerShed(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -387,7 +389,7 @@ func registerWhere(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -419,7 +421,7 @@ func registerUnique(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -452,7 +454,7 @@ func registerGrade(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -504,7 +506,7 @@ func registerAt(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -543,7 +545,7 @@ func registerSortby(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -575,7 +577,7 @@ func registerMember(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TBoolean)} },
 		}},
 	})
 }
@@ -616,7 +618,7 @@ func registerArrIndexof(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -727,7 +729,7 @@ func registerReplicate(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -764,7 +766,7 @@ func registerExpand(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -801,7 +803,7 @@ func registerWindow(r *Registry) {
 				}
 				return []Value{NewList(windows)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TList)} },
 		}},
 	})
 }
@@ -829,7 +831,7 @@ func registerPairs(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			Returns: []Type{TList},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TList)} },
 		}},
 	})
 }

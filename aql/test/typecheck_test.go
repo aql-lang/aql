@@ -507,6 +507,52 @@ func TestCheckFlowTypingWithoutGuard(t *testing.T) {
 	_ = res
 }
 
+// TestCheckTypedListCarrier verifies that typed-list carriers flow
+// through list-preserving operations: iota produces TList<Integer>,
+// each applied to upper (which expects String) then fires a
+// no_signature diagnostic because the element type is Integer.
+func TestCheckTypedListCarrier(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("each [upper] ( iota 5 )")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Word == "upper" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected no_signature on upper (Integer elems vs String sig), got: %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckTypedListPreserved verifies that list-preserving ops
+// carry the element carrier type through, so e.g. `reverse` on a
+// TList<Integer> still yields a TList<Integer> and a following
+// each body analyses the element as Integer.
+func TestCheckTypedListPreserved(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// Build TList<Integer>, reverse it, each +1 over it.
+	res, err := a.Check("each [dup add] ( reverse ( iota 5 ) )")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" {
+			t.Errorf("unexpected no_signature after typed-list preservation: %+v", d)
+		}
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics

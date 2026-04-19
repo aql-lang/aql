@@ -38,24 +38,36 @@ func registerEach(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
-			// each returns a list whose elements are whatever the
-			// body produces. Pass the concrete data list's element
-			// type (if known) so the body sees realistic carriers.
+			// each returns a list whose element type is whatever the
+			// body's top-of-stack produces. Pass the concrete data
+			// list's element carrier into the body so diagnostics
+			// fire against realistic types.
 			ReturnsFn: func(args []Value) []Value {
 				elem := dataListElemType(args[1])
-				analyseHigherOrderBody(r, args[0], elem)
-				return []Value{NewCarrier(TList)}
+				stk := analyseHigherOrderBody(r, args[0], elem)
+				if len(stk) == 0 {
+					return []Value{NewCarrier(TList)}
+				}
+				return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
 			},
 		}},
 	})
 }
 
-// dataListElemType inspects a concrete data list Value and returns
-// a conservative element type by joining all element VTypes. If the
-// list is empty or not concrete, returns TAny.
+// dataListElemType inspects a data list Value and returns a
+// conservative element type. Handles three cases:
+//
+//  1. Typed-list carrier (ChildTypeInfo{Child: ...}): return the
+//     child carrier's VType directly.
+//  2. Concrete list with real elements: join all element VTypes
+//     via commonAncestorType.
+//  3. Empty / non-concrete / nil-data list: TAny.
 func dataListElemType(data Value) Type {
 	if data.Data == nil {
 		return TAny
+	}
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		return ct.Child.VType
 	}
 	list := data.AsList()
 	if list.IsNil() || list.Len() == 0 {
@@ -245,8 +257,11 @@ func registerScan(r *Registry) {
 			},
 			ReturnsFn: func(args []Value) []Value {
 				elem := dataListElemType(args[1])
-				analyseHigherOrderBody(r, args[0], elem, elem)
-				return []Value{NewCarrier(TList)}
+				stk := analyseHigherOrderBody(r, args[0], elem, elem)
+				if len(stk) == 0 {
+					return []Value{NewCarrier(TList)}
+				}
+				return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
 			},
 		}},
 	})
@@ -297,8 +312,12 @@ func registerOuter(r *Registry) {
 			ReturnsFn: func(args []Value) []Value {
 				leftElem := dataListElemType(args[1])
 				rightElem := dataListElemType(args[2])
+				// outer produces a 2D list (rows of body results).
+				// The carrier model flattens that to TList (list of
+				// lists); refining to a nested typed list is
+				// future work.
 				analyseHigherOrderBody(r, args[0], leftElem, rightElem)
-				return []Value{NewCarrier(TList)}
+				return []Value{NewCarrierTypedList(TList)}
 			},
 		}},
 	})
