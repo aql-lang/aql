@@ -46,6 +46,11 @@ func registerModule(r *Registry) {
 				return []Value{NewModule(desc)}, nil
 			},
 			Returns: []Type{TModule},
+			// Run in check mode so the module body is analysed in
+			// a sub-registry and its exports are wired up; without
+			// this the downstream `import` would see a data-nil
+			// carrier and do nothing.
+			RunInCheckMode: true,
 		}},
 	})
 
@@ -193,11 +198,13 @@ func registerModule(r *Registry) {
 				Args:    []Type{TModule},
 				Handler: importAllHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			{
 				Args:    []Type{TList, TModule},
 				Handler: importRenameHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			{
 				Args: []Type{TAtom, TModule},
@@ -206,16 +213,19 @@ func registerModule(r *Registry) {
 					return importSingleRenameHandler(_as0, args)
 				},
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			{
 				Args:    []Type{TString},
 				Handler: importFileHandler,
 				Returns: []Type{TModule},
+			RunInCheckMode: true,
 			},
 			{
 				Args:    []Type{TList, TString},
 				Handler: importFileRenameHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			// Inline module forms: use /q to capture "module" as a quoted word
 			// instead of executing it as a function.
@@ -225,6 +235,7 @@ func registerModule(r *Registry) {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    importInlineHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			{
 				Args:       []Type{TList, TAtom, TList},
@@ -232,6 +243,7 @@ func registerModule(r *Registry) {
 				NoEvalArgs: map[int]bool{2: true},
 				Handler:    importInlineRenameHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 			{
 				Args:       []Type{TAtom, TAtom, TList},
@@ -239,6 +251,7 @@ func registerModule(r *Registry) {
 				NoEvalArgs: map[int]bool{2: true},
 				Handler:    importInlineSingleRenameHandler,
 				Returns: []Type{},
+			RunInCheckMode: true,
 			},
 		},
 	})

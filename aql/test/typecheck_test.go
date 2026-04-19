@@ -1026,6 +1026,26 @@ func TestCheckContextMissingKey(t *testing.T) {
 	}
 }
 
+// TestCheckInlineModule verifies that an inline module + export +
+// dotted access type-checks without spurious diagnostics. The
+// module's handler must run in check mode so its exports are
+// available for downstream references.
+func TestCheckInlineModule(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`import module [export X {v:42}]  X.v`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Severity == aql.SeverityError {
+			t.Errorf("unexpected error: %+v", d)
+		}
+	}
+}
+
 // TestCheckRecordShapeMismatch verifies that passing a map missing
 // a record's required fields fires a record_shape_mismatch
 // diagnostic naming the missing field.
