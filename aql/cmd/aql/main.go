@@ -363,10 +363,7 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOu
 
 	res, err := a.Check(source)
 	if jsonOut {
-		out, jerr := json.MarshalIndent(struct {
-			Stack       []string              `json:"stack"`
-			Diagnostics []aql.CheckDiagnostic `json:"diagnostics"`
-		}{res.Stack, res.Diagnostics}, "", "  ")
+		out, jerr := json.MarshalIndent(res, "", "  ")
 		if jerr != nil {
 			return fmt.Errorf("json marshal: %s", jerr)
 		}
@@ -378,15 +375,22 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOu
 	}
 
 	for _, d := range res.Diagnostics {
+		sev := string(d.Severity)
+		if sev == "" {
+			sev = "info"
+		}
 		if d.Row > 0 {
-			fmt.Fprintf(stderr, "check: %d:%d: %s: %s\n", d.Row, d.Col, d.Code, d.Detail)
+			fmt.Fprintf(stderr, "check: %d:%d: [%s] %s: %s\n", d.Row, d.Col, sev, d.Code, d.Detail)
 		} else {
-			fmt.Fprintf(stderr, "check: %s: %s\n", d.Code, d.Detail)
+			fmt.Fprintf(stderr, "check: [%s] %s: %s\n", sev, d.Code, d.Detail)
 		}
 	}
 	if err != nil {
 		return fmt.Errorf("check error: %s", err)
 	}
+
+	fmt.Fprintf(stderr, "check: %d error(s), %d warning(s), %d info\n",
+		res.Summary.Errors, res.Summary.Warnings, res.Summary.Infos)
 
 	if len(res.Stack) > 0 {
 		fmt.Fprintln(stdout, "check: "+strings.Join(res.Stack, " "))

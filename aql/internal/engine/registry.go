@@ -76,13 +76,49 @@ type Registry struct {
 // (thousands of words) while preventing pathological runaways.
 const DefaultCheckStepBudget = 500_000
 
+// CheckSeverity classifies a diagnostic as an error, warning, or info.
+// Errors indicate a real type/signature violation that prevents
+// successful execution. Warnings flag suspicious patterns that are
+// still type-correct. Info is everything else (missing annotation,
+// budget overshoot, etc.).
+type CheckSeverity string
+
+const (
+	SeverityError   CheckSeverity = "error"
+	SeverityWarning CheckSeverity = "warning"
+	SeverityInfo    CheckSeverity = "info"
+)
+
+// checkCodeSeverity maps a diagnostic code to its default severity.
+// Unknown codes default to SeverityInfo so new codes don't
+// accidentally trip CI gates until they're classified.
+var checkCodeSeverity = map[string]CheckSeverity{
+	"no_signature":         SeverityError,
+	"undefined_word":       SeverityError,
+	"fn_body_error":        SeverityError,
+	"branch_error":         SeverityError,
+	"missing_returns":      SeverityWarning,
+	"step_budget_exceeded": SeverityWarning,
+	"body_error":           SeverityWarning,
+}
+
+// SeverityFor returns the default severity classification for a
+// diagnostic code. Exported so consumers can tag custom codes.
+func SeverityFor(code string) CheckSeverity {
+	if s, ok := checkCodeSeverity[code]; ok {
+		return s
+	}
+	return SeverityInfo
+}
+
 // CheckDiagnostic is a single static type-check finding.
 type CheckDiagnostic struct {
-	Code   string `json:"code"`             // short stable code, e.g. "missing_returns", "no_signature"
-	Detail string `json:"detail"`           // human-readable description
-	Word   string `json:"word,omitempty"`   // word name relevant to the diagnostic, if any
-	Row    int    `json:"row,omitempty"`    // 1-based line number, 0 if unknown
-	Col    int    `json:"col,omitempty"`    // 1-based column number, 0 if unknown
+	Code     string        `json:"code"`               // short stable code, e.g. "missing_returns", "no_signature"
+	Detail   string        `json:"detail"`             // human-readable description
+	Word     string        `json:"word,omitempty"`     // word name relevant to the diagnostic, if any
+	Row      int           `json:"row,omitempty"`      // 1-based line number, 0 if unknown
+	Col      int           `json:"col,omitempty"`      // 1-based column number, 0 if unknown
+	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
 }
 
 // NewRegistry creates an empty registry.

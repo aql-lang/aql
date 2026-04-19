@@ -615,8 +615,13 @@ func JoinCarrierStacks(a, b []Value) []Value {
 }
 
 // addCheckDiagnostic appends a diagnostic to the registry. Safe to call
-// outside of check mode — it simply records the finding.
+// outside of check mode — it simply records the finding. If the
+// diagnostic's Severity is empty, the default mapping from its Code
+// is applied via SeverityFor.
 func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
+	if d.Severity == "" {
+		d.Severity = SeverityFor(d.Code)
+	}
 	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
 }
 

@@ -892,6 +892,55 @@ func TestPerfSimpleMath(t *testing.T) {
 	runPerfComparison(t, "1 add 2 mul 3 sub 4 add 5", 100)
 }
 
+// TestPerfRealistic measures Check vs Run on a realistic program
+// combining arithmetic, higher-order words, and a user-defined fn.
+// This is the headline perf number — closer to typical AQL code.
+func TestPerfRealistic(t *testing.T) {
+	src := `def inc fn [[n:Integer] [Integer] [n add 1]]
+	        each [inc] ( iota 20 )`
+	runPerfComparison(t, src, 50)
+}
+
+// TestCheckSummaryCounts verifies the per-severity counts in
+// CheckResult.Summary reflect the emitted diagnostics.
+func TestCheckSummaryCounts(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// One error (upper 42), one error (nonexistent), zero others.
+	res, err := a.Check("upper 42 nonexistent")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if res.Summary.Errors != 2 {
+		t.Errorf("expected 2 errors, got %d (diags=%+v)", res.Summary.Errors, res.Diagnostics)
+	}
+	// Sum invariance: errors+warnings+infos == len(diagnostics).
+	total := res.Summary.Errors + res.Summary.Warnings + res.Summary.Infos
+	if total != len(res.Diagnostics) {
+		t.Errorf("summary total %d != diagnostics %d", total, len(res.Diagnostics))
+	}
+}
+
+// TestCheckSeverityClassification verifies the severity mapping for
+// the main diagnostic codes.
+func TestCheckSeverityClassification(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("upper 42")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Severity != aql.SeverityError {
+			t.Errorf("no_signature should be SeverityError, got %q", d.Severity)
+		}
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics
