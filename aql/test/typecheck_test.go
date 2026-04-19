@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -856,6 +857,39 @@ func TestCheckNestedTypedList(t *testing.T) {
 // nested-list program dominated by pairs/each.
 func TestPerfNestedTypedList(t *testing.T) {
 	runPerfComparison(t, "each [length] ( pairs ( iota 10 ) )", 50)
+}
+
+// TestCheckDiagnosticJSON verifies CheckDiagnostic marshals to JSON
+// with the documented lowercase, omitempty-friendly field set.
+func TestCheckDiagnosticJSON(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("upper 42")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Diagnostics) == 0 {
+		t.Fatalf("expected at least one diagnostic")
+	}
+	// Marshal and check expected field names are present.
+	buf, err := json.Marshal(res.Diagnostics[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	s := string(buf)
+	for _, want := range []string{`"code":`, `"detail":`, `"word":`, `"row":`, `"col":`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("expected %q in JSON: %s", want, s)
+		}
+	}
+}
+
+// TestPerfSimpleMath compares Check and Run on plain arithmetic to
+// establish a baseline perf ratio for non-allocating programs.
+func TestPerfSimpleMath(t *testing.T) {
+	runPerfComparison(t, "1 add 2 mul 3 sub 4 add 5", 100)
 }
 
 // TestCheckBuiltinsAnnotated walks a handful of common words to

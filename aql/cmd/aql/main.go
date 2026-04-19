@@ -141,7 +141,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if hasSource {
 		if *checkFirst {
-			if err := check(stdout, stderr, source, *registry, *seed); err != nil {
+			if err := check(stdout, stderr, source, *registry, *seed, false); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}
@@ -351,13 +351,32 @@ func run(w io.Writer, source string, registry string, seed int64) error {
 // result stack and any diagnostics to the provided writers. It returns
 // an error for a parse/execution failure; diagnostics on their own do
 // not fail the run (they're printed to stderr).
-func check(stdout, stderr io.Writer, source, registry string, seed int64) error {
+//
+// When jsonOut is true, the entire CheckResult is emitted to stdout as
+// a single JSON object {"stack": [...], "diagnostics": [...]}, suitable
+// for editor / tooling integration.
+func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut bool) error {
 	a, err := aql.New(aql.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
 
 	res, err := a.Check(source)
+	if jsonOut {
+		out, jerr := json.MarshalIndent(struct {
+			Stack       []string              `json:"stack"`
+			Diagnostics []aql.CheckDiagnostic `json:"diagnostics"`
+		}{res.Stack, res.Diagnostics}, "", "  ")
+		if jerr != nil {
+			return fmt.Errorf("json marshal: %s", jerr)
+		}
+		fmt.Fprintln(stdout, string(out))
+		if err != nil {
+			return fmt.Errorf("check error: %s", err)
+		}
+		return nil
+	}
+
 	for _, d := range res.Diagnostics {
 		if d.Row > 0 {
 			fmt.Fprintf(stderr, "check: %d:%d: %s: %s\n", d.Row, d.Col, d.Code, d.Detail)
@@ -377,15 +396,20 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64) error 
 	return nil
 }
 
-// runCheck implements the `aql check [script.aql]` subcommand.
+// runCheck implements the `aql check [--json] [script.aql]` subcommand.
 func runCheck(args []string, stdout, stderr io.Writer) int {
+	jsonOut := false
+	// Pop any leading --json / -json flag.
+	for len(args) > 0 && (args[0] == "--json" || args[0] == "-json") {
+		jsonOut = true
+		args = args[1:]
+	}
 	if len(args) == 0 {
 		fmt.Fprintf(stderr, "error: aql check requires a script file or -e expression\n")
 		return 1
 	}
 
 	var source string
-	// Support `aql check -e "expr"` as well as `aql check file.aql`.
 	if args[0] == "-e" {
 		if len(args) < 2 {
 			fmt.Fprintf(stderr, "error: aql check -e requires an expression\n")
@@ -401,7 +425,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		source = string(data)
 	}
 
-	if err := check(stdout, stderr, source, "", 0); err != nil {
+	if err := check(stdout, stderr, source, "", 0, jsonOut); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

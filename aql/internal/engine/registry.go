@@ -78,11 +78,11 @@ const DefaultCheckStepBudget = 500_000
 
 // CheckDiagnostic is a single static type-check finding.
 type CheckDiagnostic struct {
-	Code   string // short stable code, e.g. "missing_returns", "no_signature"
-	Detail string // human-readable description
-	Word   string // word name relevant to the diagnostic, if any
-	Row    int    // 1-based line number, 0 if unknown
-	Col    int    // 1-based column number, 0 if unknown
+	Code   string `json:"code"`             // short stable code, e.g. "missing_returns", "no_signature"
+	Detail string `json:"detail"`           // human-readable description
+	Word   string `json:"word,omitempty"`   // word name relevant to the diagnostic, if any
+	Row    int    `json:"row,omitempty"`    // 1-based line number, 0 if unknown
+	Col    int    `json:"col,omitempty"`    // 1-based column number, 0 if unknown
 }
 
 // NewRegistry creates an empty registry.
