@@ -480,13 +480,35 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 // Used by branch-aware words (e.g. `if`) to analyse each branch
 // symbolically.
 func RunCarrierBody(r *Registry, body Value) []Value {
+	stk, _ := runCarrierBodyWithDefs(r, body)
+	return stk
+}
+
+// runCarrierBodyWithDefs is the branch-aware helper that snapshots
+// DefStack depths, runs the body through a sub-engine in check
+// mode, and returns both the residual carrier stack and a map of
+// every DefStacks[name] -> top-of-stack entry that was added
+// during analysis. The top entry is popped (restored to snapshot)
+// so the caller can decide whether to re-push, join, or discard.
+//
+// Only per-name "net additions" are reported. If a branch both
+// pushes and pops for the same name, the net change is zero and
+// the name is not in the returned map.
+func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
 	if body.Data == nil {
-		return nil
+		return nil, nil
 	}
 	elems := body.AsList()
 	if elems.IsNil() {
-		return nil
+		return nil, nil
 	}
+
+	// Snapshot def-stack depths (all known names).
+	snapshot := make(map[string]int, len(r.DefStacks))
+	for k, v := range r.DefStacks {
+		snapshot[k] = len(v)
+	}
+
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
 	sub := New(r)
@@ -496,9 +518,57 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 			Code:   "branch_error",
 			Detail: "branch analysis error: " + err.Error(),
 		})
-		return nil
+		result = nil
 	}
-	return result
+
+	// Collect the top of each def stack whose depth grew, then
+	// restore depths back to snapshot.
+	adds := map[string]Value{}
+	for k, ds := range r.DefStacks {
+		before := snapshot[k] // zero for names not present before
+		if len(ds) > before {
+			adds[k] = ds[len(ds)-1]
+			r.DefStacks[k] = ds[:before]
+			if len(r.DefStacks[k]) == 0 {
+				delete(r.DefStacks, k)
+			}
+		}
+	}
+	return result, adds
+}
+
+// installJoinedDefs merges the `adds` maps from two branches back
+// into r.DefStacks. If both branches defined the same name, their
+// carriers are joined via JoinCarriers and the joined carrier is
+// pushed. If only one branch defined it, that def is pushed back —
+// but joined with the pre-branch carrier (if any) since the other
+// branch's path kept the original binding.
+func installJoinedDefs(r *Registry, then, else_ map[string]Value) {
+	seen := make(map[string]bool)
+	for k, tv := range then {
+		seen[k] = true
+		if ev, ok := else_[k]; ok {
+			r.DefStacks[k] = append(r.DefStacks[k], JoinCarriers(tv, ev))
+			continue
+		}
+		// then-only: join with the pre-branch top-of-stack if any.
+		if ds := r.DefStacks[k]; len(ds) > 0 {
+			r.DefStacks[k] = append(ds, JoinCarriers(tv, ds[len(ds)-1]))
+		} else {
+			r.DefStacks[k] = append(r.DefStacks[k], tv)
+		}
+	}
+	for k, ev := range else_ {
+		if seen[k] {
+			continue
+		}
+		// else-only: join with pre-branch top-of-stack.
+		if ds := r.DefStacks[k]; len(ds) > 0 {
+			r.DefStacks[k] = append(ds, JoinCarriers(ev, ds[len(ds)-1]))
+		} else {
+			r.DefStacks[k] = append(r.DefStacks[k], ev)
+		}
+	}
 }
 
 // JoinCarrierStacks folds two carrier result stacks (e.g. produced by

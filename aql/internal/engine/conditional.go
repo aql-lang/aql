@@ -130,18 +130,23 @@ func registerIf(r *Registry) {
 				ReturnsFn: func(args []Value) []Value {
 					// Flow typing: detect `x is Type` in the
 					// condition and narrow x in the then-branch;
-					// apply the complement in the else-branch
-					// (currently only effective for disjunct
-					// bindings — subtracts the matched alternative).
+					// apply the complement in the else-branch.
+					// Def-joining: any new defs either branch
+					// creates are snapshotted/restored per branch,
+					// then joined via installJoinedDefs so a
+					// following word sees the post-if binding.
 					restoreThen := applyGuardNarrowing(r, args[0])
-					thenStk := RunCarrierBody(r, args[1])
+					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
 					restoreThen()
 					restoreElse := applyComplementNarrowing(r, args[0])
-					elseStk := RunCarrierBody(r, args[2])
+					elseStk, elseDefs := runCarrierBodyWithDefs(r, args[2])
 					restoreElse()
+					installJoinedDefs(r, thenDefs, elseDefs)
 					joined := JoinCarrierStacks(thenStk, elseStk)
 					if len(joined) == 0 {
-						return []Value{NewCarrier(TAny)}
+						// Both branches side-effect only — no
+						// residual value.
+						return nil
 					}
 					return []Value{joined[len(joined)-1]}
 				},
@@ -151,11 +156,15 @@ func registerIf(r *Registry) {
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    if2Handler,
 				// 2-arg if: no else branch means "then or nothing".
-				// Widen the then-branch top with TNone.
+				// Widen the then-branch top with TNone. Any defs the
+				// then-branch created are joined with the pre-branch
+				// binding (or dropped if the name wasn't bound
+				// before) — mirrors the 3-arg semantics.
 				ReturnsFn: func(args []Value) []Value {
 					restore := applyGuardNarrowing(r, args[0])
-					thenStk := RunCarrierBody(r, args[1])
+					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
 					restore()
+					installJoinedDefs(r, thenDefs, nil)
 					if len(thenStk) == 0 {
 						return []Value{NewCarrier(TNone)}
 					}

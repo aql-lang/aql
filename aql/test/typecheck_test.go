@@ -580,6 +580,45 @@ func TestCheckDiagnosticPosition(t *testing.T) {
 	}
 }
 
+// TestCheckConditionalDefJoin verifies that a def in each branch of
+// an if is joined across branches: after
+// `if [cond] [def x 1] [def x "hi"]`, x should be Scalar
+// (common ancestor of Integer and String), not whichever branch
+// ran last.
+func TestCheckConditionalDefJoin(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [true] [def x 1] [def x "hi"]  x`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 {
+		t.Fatalf("expected 1 carrier, got %v", res.Stack)
+	}
+	if res.Stack[0] != "Scalar" {
+		t.Errorf("expected Scalar ancestor after if-def-join, got %q", res.Stack[0])
+	}
+}
+
+// TestCheckConditionalDefSameBranch verifies sibling integer values
+// across branches collapse via commonAncestorType (Integer, not a
+// disjunction of literal subtypes).
+func TestCheckConditionalDefSameBranch(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [true] [def x 1] [def x 2]  x`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
+		t.Errorf("expected Scalar/Number/Integer, got %v", res.Stack)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics
