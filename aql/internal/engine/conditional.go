@@ -128,15 +128,16 @@ func registerIf(r *Registry) {
 				// lists with Eval=true (NoEvalArgs suppresses
 				// auto-eval so we get the raw body).
 				ReturnsFn: func(args []Value) []Value {
+					// Flow typing: detect `x is Type` in the
+					// condition and narrow x in the then-branch.
+					restore := applyGuardNarrowing(r, args[0])
 					thenStk := RunCarrierBody(r, args[1])
+					restore()
 					elseStk := RunCarrierBody(r, args[2])
 					joined := JoinCarrierStacks(thenStk, elseStk)
 					if len(joined) == 0 {
 						return []Value{NewCarrier(TAny)}
 					}
-					// if semantics: the result is the top of the
-					// chosen branch's stack. Conservatively return
-					// the joined top-of-stack carrier.
 					return []Value{joined[len(joined)-1]}
 				},
 			},
@@ -147,7 +148,9 @@ func registerIf(r *Registry) {
 				// 2-arg if: no else branch means "then or nothing".
 				// Widen the then-branch top with TNone.
 				ReturnsFn: func(args []Value) []Value {
+					restore := applyGuardNarrowing(r, args[0])
 					thenStk := RunCarrierBody(r, args[1])
+					restore()
 					if len(thenStk) == 0 {
 						return []Value{NewCarrier(TNone)}
 					}

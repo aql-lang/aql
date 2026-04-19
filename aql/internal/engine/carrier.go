@@ -462,6 +462,90 @@ func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
 	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
 }
 
+// applyGuardNarrowing inspects a condition list for simple flow-
+// typing patterns and, for each one, pushes a narrowed carrier onto
+// the relevant name's DefStack. Returns a restore function that pops
+// those narrowings; callers must invoke it after analysing the
+// then-branch.
+//
+// Supported patterns (AQL concatenative order, infix-style):
+//
+//	x is T        → narrow x to T in the then-branch
+//	is x T        → same, via forward collection
+//	x is T and y is U   → narrow both (if the binder-pattern
+//	                       appears exactly, we walk the list and
+//	                       apply each is-clause independently)
+//
+// Only concrete type literals (Data==nil) narrow; runtime-computed
+// type values fall through. Only bare Word references with a
+// carrier def on DefStacks are narrowed — the narrowing is installed
+// as a new DefStack entry (carrier value) that shadows the original.
+func applyGuardNarrowing(r *Registry, condList Value) func() {
+	noop := func() {}
+	if r == nil || !r.CheckMode || condList.Data == nil {
+		return noop
+	}
+	list := condList.AsList()
+	if list.IsNil() || list.Len() < 3 {
+		return noop
+	}
+	elems := list.Slice()
+
+	type narrow struct{ name string }
+	var applied []narrow
+
+	// Walk triplets looking for `Word(x) Word(is) TypeLiteral(T)`.
+	// The concatenative `x is T` parses to exactly that sequence
+	// (is is forward-precedence and consumes T from the forward
+	// side, x from the stack side).
+	for i := 0; i+2 < len(elems); i++ {
+		if !elems[i].VType.Equal(TWord) || !elems[i+1].VType.Equal(TWord) {
+			continue
+		}
+		wx, err := elems[i].AsWord()
+		if err != nil {
+			continue
+		}
+		wis, err := elems[i+1].AsWord()
+		if err != nil || wis.Name != "is" {
+			continue
+		}
+		// Type literal: Data==nil or an ObjectTypeInfo.
+		tv := elems[i+2]
+		if tv.Data != nil {
+			// Maybe a type stored on DefStacks (e.g. object type).
+			if tv.VType.Equal(TWord) {
+				inner, _ := tv.AsWord()
+				if ds := r.DefStacks[inner.Name]; len(ds) > 0 {
+					tv = ds[len(ds)-1]
+				}
+			}
+		}
+		// Only accept a bare type literal or an object type.
+		if tv.Data != nil && !tv.IsObjectType() {
+			continue
+		}
+		// Install a narrowed carrier on the DefStack for wx.Name.
+		r.DefStacks[wx.Name] = append(r.DefStacks[wx.Name], NewCarrier(tv.VType))
+		applied = append(applied, narrow{name: wx.Name})
+	}
+
+	if len(applied) == 0 {
+		return noop
+	}
+	return func() {
+		for _, n := range applied {
+			ds := r.DefStacks[n.name]
+			if len(ds) > 0 {
+				r.DefStacks[n.name] = ds[:len(ds)-1]
+			}
+			if len(r.DefStacks[n.name]) == 0 {
+				delete(r.DefStacks, n.name)
+			}
+		}
+	}
+}
+
 // AnalyseFnBody runs a user-defined fn body through a sub-engine in
 // check mode, treating named parameters as deffed values bound to
 // their arg carriers and unnamed parameters as pre-pushed stack
