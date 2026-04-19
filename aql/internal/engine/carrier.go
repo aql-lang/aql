@@ -211,6 +211,81 @@ func JoinCarriers(a, b Value) Value {
 	return v
 }
 
+// checkModeFallbackPositions returns up to n stack indices to use as
+// argument positions when a check-mode fallback fires (no signature
+// matched, assume first candidate). Values before the pointer are
+// preferred (normal stack order); any shortfall is filled from
+// values after the pointer, skipping control tokens. Types are not
+// verified — this is the "assume" path.
+func (e *Engine) checkModeFallbackPositions(n int) []int {
+	positions := e.resolvedIndicesBefore(n)
+	remaining := n - len(positions)
+	for i := e.pointer + 1; remaining > 0 && i < len(e.stack); i++ {
+		v := e.stack[i]
+		if v.IsForward() || v.IsMark() || v.IsMove() ||
+			v.IsOpenParen() || v.IsReturnCheck() || v.IsDefCleanup() {
+			continue
+		}
+		positions = append(positions, i)
+		remaining--
+	}
+	return positions
+}
+
+// checkModeAssumeSig is the recovery path for unmatched signatures in
+// check mode: emit a diagnostic, gather up to N adjacent positions as
+// synthetic args, synthesise carrier results from the assumed
+// signature, and splice them over the word + consumed positions.
+//
+// This path deliberately bypasses forward collection and type
+// matching — both would cascade failures. The trade-off is that the
+// checker reports one diagnostic per site and keeps going with the
+// assumed signature's declared return types (or Any if unannotated).
+func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, sig *Signature) error {
+	e.registry.addCheckDiagnostic(CheckDiagnostic{
+		Code:   "no_signature",
+		Detail: "no matching signature for " + w.Name + "; assuming first candidate for analysis",
+		Word:   w.Name,
+	})
+	n := len(sig.Args)
+	positions := e.checkModeFallbackPositions(n)
+	args := make([]Value, len(positions))
+	for i, p := range positions {
+		args[i] = e.stack[p]
+	}
+	results := carrierResults(e.registry, w.Name, sig, args)
+
+	// Remove the word and any consumed positions, then splice results
+	// in at the word's slot. We rely on ascending order for removal.
+	indices := append([]int{e.pointer}, positions...)
+	// Insertion sort (small n).
+	for i := 1; i < len(indices); i++ {
+		for j := i; j > 0 && indices[j] < indices[j-1]; j-- {
+			indices[j], indices[j-1] = indices[j-1], indices[j]
+		}
+	}
+	// Deduplicate (defensive).
+	uniq := indices[:0]
+	prev := -1
+	for _, idx := range indices {
+		if idx != prev {
+			uniq = append(uniq, idx)
+			prev = idx
+		}
+	}
+	// Remove from highest to lowest to avoid shifting.
+	insertAt := e.pointer
+	for i := len(uniq) - 1; i >= 0; i-- {
+		if uniq[i] < insertAt {
+			insertAt--
+		}
+		e.stackRemove(uniq[i])
+	}
+	e.stackSplice(insertAt, 0, results...)
+	e.pointer = insertAt
+	return nil
+}
+
 // RunCarrierBody runs a list body (a Value with VType=TList) through a
 // fresh sub-engine in check mode and returns the residual carrier
 // stack. Returns nil if the body is not a concrete list. Requires

@@ -227,6 +227,61 @@ func TestCheckIfMixedBranchesWidenToScalar(t *testing.T) {
 	}
 }
 
+// TestCheckNoSignatureDiagnosis verifies error-tolerant continuation:
+// calling `upper` with an integer carrier (instead of a string) emits
+// a `no_signature` diagnostic and still produces a Scalar/String
+// carrier from the assumed first-candidate signature.
+func TestCheckNoSignatureDiagnosis(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("upper 42")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/String" {
+		t.Fatalf("expected single Scalar/String carrier, got %v", res.Stack)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Word == "upper" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected no_signature diagnostic for upper, got: %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordDiagnosis verifies undefined words produce a
+// diagnostic in check mode rather than halting analysis, and the
+// residual carrier is Any.
+func TestCheckUndefinedWordDiagnosis(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("nonexistent")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Any" {
+		t.Fatalf("expected Any carrier, got %v", res.Stack)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "undefined_word" && d.Word == "nonexistent" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected undefined_word diagnostic, got %+v", res.Diagnostics)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics

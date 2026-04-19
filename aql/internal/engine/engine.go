@@ -380,15 +380,27 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// Atoms marked Undefined came from words that were never defined;
 	// they are only allowed when consumed by a function expecting TAtom
 	// or in a quoted map/list (which skips evaluation entirely).
-	for _, v := range e.stack {
-		if v.Undefined {
-			name, _ := v.AsAtom()
-			return nil, &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + name,
-				Src:        name,
-				fullSource: e.effectiveSource(),
-			}
+	// In check mode, demote to a diagnostic and replace with an Any
+	// carrier so analysis of the surrounding program continues.
+	for i, v := range e.stack {
+		if !v.Undefined {
+			continue
+		}
+		name, _ := v.AsAtom()
+		if e.registry != nil && e.registry.CheckMode {
+			e.registry.addCheckDiagnostic(CheckDiagnostic{
+				Code:   "undefined_word",
+				Detail: "undefined word: " + name,
+				Word:   name,
+			})
+			e.stack[i] = NewCarrier(TAny)
+			continue
+		}
+		return nil, &AqlError{
+			Code:       "undefined_word",
+			Detail:     "undefined word: " + name,
+			Src:        name,
+			fullSource: e.effectiveSource(),
 		}
 	}
 
@@ -701,6 +713,15 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	if sig == nil {
+		// In check mode, a missing signature is a soft diagnostic
+		// rather than a hard error: pick the first-ranked candidate,
+		// synthesise carrier return values from it, and splice them
+		// in place of the word + up to N adjacent arg slots.
+		// We bypass insertForward here because forward collection
+		// would re-trigger sigTypeMatches and loop indefinitely.
+		if e.registry != nil && e.registry.CheckMode && len(fn.Signatures) > 0 {
+			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0])
+		}
 		return e.sigError(w.Name, fn)
 	}
 
