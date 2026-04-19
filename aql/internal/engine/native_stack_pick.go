@@ -17,6 +17,9 @@ func registerPick(r *Registry) {
 				}
 				return append(stack, stack[len(stack)-1-n]), nil
 			},
+			// pick appends a stack-indexed value — its type is
+			// not statically knowable without stack introspection.
+			Returns: []Type{TAny},
 		}},
 	})
 }

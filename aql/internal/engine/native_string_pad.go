@@ -41,8 +41,8 @@ func registerPad(r *Registry) {
 		Name:              "pad",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TInteger, TMap, TString}, Handler: padOptsHandler},
-			{Args: []Type{TInteger, TString}, Handler: padHandler},
+			{Args: []Type{TInteger, TMap, TString}, Handler: padOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TInteger, TString}, Handler: padHandler, Returns: []Type{TString}},
 		},
 	})
 }

@@ -94,6 +94,7 @@ func registerDo(r *Registry) {
 					}
 					return evalList(args[0].AsList().Slice())
 				},
+				Returns: []Type{TAny},
 			},
 			{
 				Args: []Type{TMap},
@@ -104,6 +105,7 @@ func registerDo(r *Registry) {
 					}
 					return []Value{result}, nil
 				},
+				Returns: []Type{TAny},
 			},
 		},
 	})

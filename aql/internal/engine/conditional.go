@@ -119,11 +119,40 @@ func registerIf(r *Registry) {
 				Args:       []Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
 				Handler:    if3Handler,
+				// Branch-aware check: analyse both branches in a
+				// sub-engine in check mode, then widen the top-of-
+				// stack carriers into a disjunction. args[0]=cond
+				// (already a carrier; ignored), args[1]=then body,
+				// args[2]=else body. Forward precedence + arg order
+				// means both branches are parser-produced code
+				// lists with Eval=true (NoEvalArgs suppresses
+				// auto-eval so we get the raw body).
+				ReturnsFn: func(args []Value) []Value {
+					thenStk := RunCarrierBody(r, args[1])
+					elseStk := RunCarrierBody(r, args[2])
+					joined := JoinCarrierStacks(thenStk, elseStk)
+					if len(joined) == 0 {
+						return []Value{NewCarrier(TAny)}
+					}
+					// if semantics: the result is the top of the
+					// chosen branch's stack. Conservatively return
+					// the joined top-of-stack carrier.
+					return []Value{joined[len(joined)-1]}
+				},
 			},
 			{
 				Args:       []Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    if2Handler,
+				// 2-arg if: no else branch means "then or nothing".
+				// Widen the then-branch top with TNone.
+				ReturnsFn: func(args []Value) []Value {
+					thenStk := RunCarrierBody(r, args[1])
+					if len(thenStk) == 0 {
+						return []Value{NewCarrier(TNone)}
+					}
+					return []Value{JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))}
+				},
 			},
 		},
 	})

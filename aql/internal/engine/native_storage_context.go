@@ -20,6 +20,7 @@ func registerContext(r *Registry) {
 				}
 				return []Value{NewStoreValue(store)}, nil
 			},
+			Returns: []Type{TStore},
 		}},
 	})
 }

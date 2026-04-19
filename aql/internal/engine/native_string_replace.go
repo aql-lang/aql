@@ -25,8 +25,8 @@ func registerReplace(r *Registry) {
 		Name:              "replace",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler},
-			{Args: []Type{TString, TString, TString}, Handler: replaceHandler},
+			{Args: []Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString, TString, TString}, Handler: replaceHandler, Returns: []Type{TString}},
 		},
 	})
 }

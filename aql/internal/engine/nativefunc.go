@@ -38,6 +38,10 @@ type NativeSig struct {
 	// Returns lists the declared return types for static type-checking.
 	// See Signature.Returns for details.
 	Returns []Type
+
+	// ReturnsFn computes the carrier return values for a signature in
+	// static type-check mode. See Signature.ReturnsFn for details.
+	ReturnsFn ReturnsFunc
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
@@ -54,6 +58,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			BarrierPos: sig.BarrierPos,
 			Fallback:   sig.Fallback,
 			Returns:    sig.Returns,
+			ReturnsFn:  sig.ReturnsFn,
 		}
 		if fn.ForwardPrecedence {
 			r.Register(fn.Name, s)

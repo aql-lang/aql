@@ -15,6 +15,7 @@ func registerImplies(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TBoolean, TBoolean},
 			Handler: handler,
+			Returns: []Type{TBoolean},
 		}},
 	})
 }

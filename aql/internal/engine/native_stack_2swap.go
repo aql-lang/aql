@@ -9,6 +9,7 @@ func register2swap(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[2], args[3], args[0], args[1]}, nil
 			},
+			ReturnsFn: ReturnsIdentity(2, 3, 0, 1),
 		}},
 	})
 }

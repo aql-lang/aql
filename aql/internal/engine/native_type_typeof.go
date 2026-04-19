@@ -36,6 +36,7 @@ func registerTypeof(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: typeofHandler,
+			Returns: []Type{TAtom},
 		}},
 	})
 }
@@ -67,6 +68,7 @@ func registerFullTypeof(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: fulltypeofHandler,
+			Returns: []Type{TAtom},
 		}},
 	})
 }

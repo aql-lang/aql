@@ -116,6 +116,7 @@ func registerTrace(r *Registry) {
 				elems := args[0].AsList().Slice()
 				return runTrace(r, elems, r.Output)
 			},
+			Returns: []Type{TAny},
 		}},
 	})
 }

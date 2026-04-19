@@ -22,6 +22,10 @@ func registerRoll(r *Registry) {
 				result = append(result, stack[idx])
 				return result, nil
 			},
+			// roll permutes the stack without adding or removing
+			// values; check mode cannot model that precisely, so
+			// treat the top as an Any placeholder.
+			Returns: []Type{TAny},
 		}},
 	})
 }

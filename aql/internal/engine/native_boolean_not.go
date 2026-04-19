@@ -10,6 +10,7 @@ func registerNot(r *Registry) {
 				_as0, _ := args[0].AsBoolean()
 				return []Value{NewBoolean(!_as0)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 }

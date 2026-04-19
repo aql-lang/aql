@@ -26,10 +26,10 @@ func registerChangeCase(r *Registry) {
 		Name:              "changecase",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TMap}, Handler: changeCaseOptsHandler},
-			{Args: []Type{TString}, Handler: changeCaseHandler},
-			{Args: []Type{TAtom, TMap}, Handler: changeCaseOptsHandler},
-			{Args: []Type{TAtom}, Handler: changeCaseHandler},
+			{Args: []Type{TString, TMap}, Handler: changeCaseOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString}, Handler: changeCaseHandler, Returns: []Type{TString}},
+			{Args: []Type{TAtom, TMap}, Handler: changeCaseOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TAtom}, Handler: changeCaseHandler, Returns: []Type{TString}},
 		},
 	})
 }

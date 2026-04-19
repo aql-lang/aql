@@ -52,11 +52,15 @@ func registerFor(r *Registry) {
 				Args:       []Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forCountHandler,
+				// for accumulates per-iteration results into a
+				// list at runtime. Carrier model: returns TList.
+				Returns: []Type{TList},
 			},
 			{
 				Args:       []Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forRangeHandler,
+				Returns:    []Type{TList},
 			},
 		},
 	})
@@ -69,6 +73,7 @@ func registerFor(r *Registry) {
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errBreak
 			},
+			Returns: []Type{},
 		}},
 	})
 
@@ -80,6 +85,7 @@ func registerFor(r *Registry) {
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errContinue
 			},
+			Returns: []Type{},
 		}},
 	})
 }

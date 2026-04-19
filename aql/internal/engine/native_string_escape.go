@@ -20,8 +20,8 @@ func registerEscape(r *Registry) {
 		Name:              "escape",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TMap}, Handler: escapeOptsHandler},
-			{Args: []Type{TString}, Handler: escapeHandler},
+			{Args: []Type{TString, TMap}, Handler: escapeOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString}, Handler: escapeHandler, Returns: []Type{TString}},
 		},
 	})
 }

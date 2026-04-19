@@ -68,26 +68,31 @@ func registerSet(r *Registry) {
 			{
 				Args:    []Type{TString, TAny, TStore},
 				Handler: storeHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   storeHandler,
+				Returns: []Type{},
 			},
 			// Array (indexed by integer)
 			{
 				Args:    []Type{TInteger, TAny, TArray},
 				Handler: arrayHandler,
+				Returns: []Type{},
 			},
 			// Object
 			{
 				Args:    []Type{TString, TAny, TObject},
 				Handler: objectHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   objectHandler,
+				Returns: []Type{},
 			},
 		},
 	})

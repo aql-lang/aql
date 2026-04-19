@@ -23,8 +23,8 @@ func registerMatch(r *Registry) {
 		Name:              "match",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TString, TMap}, Handler: matchOptsHandler},
-			{Args: []Type{TString, TString}, Handler: matchHandler},
+			{Args: []Type{TString, TString, TMap}, Handler: matchOptsHandler, Returns: []Type{TMap}},
+			{Args: []Type{TString, TString}, Handler: matchHandler, Returns: []Type{TMap}},
 		},
 	})
 }

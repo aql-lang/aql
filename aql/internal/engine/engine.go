@@ -783,9 +783,10 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	}
 
 	// Static type-check mode: skip the handler, splice carrier results
-	// derived from Signature.Returns. The rest of the dispatch machinery
-	// (positions, splicing, forward resolution) is shared with normal
-	// execution, so runtime and checker stay in parity.
+	// derived from Signature.ReturnsFn / Signature.Returns. The rest of
+	// the dispatch machinery (positions, splicing, forward resolution)
+	// is shared with normal execution, so runtime and checker stay in
+	// parity.
 	if e.registry != nil && e.registry.CheckMode {
 		name := ""
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
@@ -793,7 +794,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				name = w.Name
 			}
 		}
-		results := carrierResults(e.registry, name, match.Sig)
+		results := carrierResults(e.registry, name, match.Sig, match.Args)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 

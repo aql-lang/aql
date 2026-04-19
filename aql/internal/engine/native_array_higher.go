@@ -38,6 +38,7 @@ func registerEach(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -64,6 +65,7 @@ func registerFold(r *Registry) {
 					dataList := args[2].AsList()
 					return doFold(reg, init, bodySlice, dataList)
 				},
+				Returns: []Type{TAny},
 			},
 			{
 				// Without initial: body data → result (uses first element as init)
@@ -87,6 +89,7 @@ func registerFold(r *Registry) {
 					restList := ReadList{elems: rest}
 					return doFold(reg, init, bodySlice, restList)
 				},
+				Returns: []Type{TAny},
 			},
 		},
 	})
@@ -159,6 +162,7 @@ func registerScan(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -205,6 +209,7 @@ func registerOuter(r *Registry) {
 			}
 			return []Value{NewList(rows)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -325,6 +330,7 @@ func registerInner(r *Registry) {
 			}
 			return []Value{NewList(rows)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }

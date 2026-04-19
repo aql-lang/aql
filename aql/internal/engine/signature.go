@@ -64,7 +64,22 @@ type Signature struct {
 	// Returns. When nil or empty, the checker falls back to a
 	// conservative approximation (see engine carrier handling).
 	Returns []Type
+
+	// ReturnsFn, when non-nil, overrides Returns for static
+	// type-checking: the checker calls it with the carrier-typed args
+	// and uses the resulting slice as the return carriers. This is
+	// required for signatures whose return type depends on the input
+	// types (e.g. Integer+Integer → Integer, otherwise Decimal) or on
+	// the input values themselves (e.g. dup, swap propagate their
+	// inputs). When both Returns and ReturnsFn are set, ReturnsFn
+	// wins.
+	ReturnsFn ReturnsFunc
 }
+
+// ReturnsFunc computes the carrier return values for a signature in
+// static type-check mode. args are the carrier-typed input values in
+// signature order.
+type ReturnsFunc func(args []Value) []Value
 
 // TotalArgs returns the number of arguments.
 func (s *Signature) TotalArgs() int {

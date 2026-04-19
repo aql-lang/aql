@@ -39,20 +39,24 @@ func registerUndef(r *Registry) {
 			{
 				Args:    []Type{TString},
 				Handler: undefHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   undefHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:    []Type{TString, TFnUndef},
 				Handler: undefFnHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom, TFnUndef},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   undefFnHandler,
+				Returns: []Type{},
 			},
 		},
 	})

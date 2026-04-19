@@ -17,8 +17,8 @@ func registerUnaryStringWord(r *Registry, name string, fn func(string) string) {
 		Name:              name,
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString}, Handler: handler},
-			{Args: []Type{TAtom}, Handler: handler},
+			{Args: []Type{TString}, Handler: handler, Returns: []Type{TString}},
+			{Args: []Type{TAtom}, Handler: handler, Returns: []Type{TString}},
 		},
 	})
 }
@@ -38,6 +38,7 @@ func registerBinaryBoolWord(r *Registry, name string, fn func(a, b bool) bool) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TBoolean, TBoolean},
 			Handler: handler,
+			Returns: []Type{TBoolean},
 		}},
 	})
 }
@@ -66,12 +67,11 @@ func registerBinaryMathWord(
 		return singleResult(fn(b, a))
 	}
 
-	// Static type-check annotation: TNumber+TNumber returns a Number.
-	// Intra-signature value-dependence (Integer+Integer→Integer,
-	// otherwise Decimal) is modelled at the carrier level as a widened
-	// TNumber for now; a finer split is future work.
+	// Static type-check annotation: mirror the handler's intra-signature
+	// value-dependence with ReturnsNumericBinary — when both args are
+	// integers, the carrier result is Integer, otherwise Decimal.
 	sigs := []NativeSig{
-		{Args: []Type{TNumber, TNumber}, Handler: handler, Returns: []Type{TNumber}},
+		{Args: []Type{TNumber, TNumber}, Handler: handler, ReturnsFn: ReturnsNumericBinary()},
 	}
 	sigs = append(sigs, extraSigs...)
 

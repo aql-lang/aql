@@ -275,6 +275,7 @@ func registerTimeDate(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t)}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 }
 
@@ -298,6 +299,7 @@ func registerTimeDateTime(r *engine.Registry) {
 			}
 			return nil, fmt.Errorf("datetime: invalid datetime string: %q", s)
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -321,6 +323,7 @@ func registerTimeInstant(r *engine.Registry) {
 			}
 			return nil, fmt.Errorf("instant: invalid ISO 8601 instant string: %q", s)
 		},
+		Returns: []engine.Type{engine.TInstant},
 	})
 }
 
@@ -343,6 +346,7 @@ func registerTimeTimeOfDay(r *engine.Registry) {
 			}
 			return nil, fmt.Errorf("time-of-day: invalid time string: %q", s)
 		},
+		Returns: []engine.Type{engine.TTimeOfDay},
 	})
 }
 
@@ -360,6 +364,7 @@ func registerTimeTz(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewTimezone(loc)}, nil
 		},
+		Returns: []engine.Type{engine.TTimezone},
 	})
 }
 
@@ -373,6 +378,7 @@ func registerTimeUnix(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInstant(time.Unix(n, 0))}, nil
 		},
+		Returns: []engine.Type{engine.TInstant},
 	})
 }
 
@@ -386,6 +392,7 @@ func registerTimeUnixMs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInstant(time.UnixMilli(n))}, nil
 		},
+		Returns: []engine.Type{engine.TInstant},
 	})
 }
 
@@ -400,6 +407,7 @@ func registerTimeUnixNs(r *engine.Registry) {
 			t := time.Unix(0, n)
 			return []engine.Value{engine.NewInstant(t)}, nil
 		},
+		Returns: []engine.Type{engine.TInstant},
 	})
 }
 
@@ -411,6 +419,7 @@ func registerTimeNowLocal(r *engine.Registry) {
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewDateTime(time.Now())}, nil
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -422,6 +431,7 @@ func registerTimeToday(r *engine.Registry) {
 			d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 			return []engine.Value{engine.NewDate(d)}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 }
 
@@ -433,6 +443,7 @@ func registerTimeTodayUtc(r *engine.Registry) {
 			d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 			return []engine.Value{engine.NewDate(d)}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 }
 
@@ -444,6 +455,7 @@ func registerYear(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(int64(extractTime(args[0]).Year()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -453,6 +465,7 @@ func registerMonth(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(int64(extractTime(args[0]).Month()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -462,6 +475,7 @@ func registerDay(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(int64(extractTime(args[0]).Day()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -476,6 +490,7 @@ func registerWeekday(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(iso)}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -485,6 +500,7 @@ func registerYearDay(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(int64(extractTime(args[0]).YearDay()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -494,6 +510,7 @@ func registerWeekdayName(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewString(extractTime(args[0]).Weekday().String())}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -503,6 +520,7 @@ func registerMonthName(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewString(extractTime(args[0]).Month().String())}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -513,6 +531,7 @@ func registerIsoWeek(r *engine.Registry) {
 			_, week := extractTime(args[0]).ISOWeek()
 			return []engine.Value{engine.NewInteger(int64(week))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -524,6 +543,7 @@ func registerQuarter(r *engine.Registry) {
 			q := (int(m) + 2) / 3
 			return []engine.Value{engine.NewInteger(int64(q))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -535,6 +555,7 @@ func registerDaysInMonth(r *engine.Registry) {
 			last := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location())
 			return []engine.Value{engine.NewInteger(int64(last.Day()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -548,6 +569,7 @@ func registerDaysInYear(r *engine.Registry) {
 			days := int64(end.Sub(start).Hours() / 24)
 			return []engine.Value{engine.NewInteger(days)}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -559,6 +581,7 @@ func registerLeapYear(r *engine.Registry) {
 			leap := y%4 == 0 && (y%100 != 0 || y%400 == 0)
 			return []engine.Value{engine.NewBoolean(leap)}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -568,6 +591,7 @@ func registerToUnix(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(extractTime(args[0]).Unix())}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -577,6 +601,7 @@ func registerToUnixMs(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(extractTime(args[0]).UnixMilli())}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -588,6 +613,7 @@ func registerBefore(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewBoolean(extractTime(args[1]).Before(extractTime(args[0])))}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -597,6 +623,7 @@ func registerAfter(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewBoolean(extractTime(args[1]).After(extractTime(args[0])))}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -606,6 +633,7 @@ func registerEqual(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewBoolean(extractTime(args[0]).Equal(extractTime(args[1])))}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -617,6 +645,7 @@ func registerToString(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -630,6 +659,7 @@ func registerFormat(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewString(extractTime(args[0]).Format(layout))}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -639,6 +669,7 @@ func registerToIso(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -655,6 +686,7 @@ func registerAddDays(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t.AddDate(0, 0, int(n)))}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -669,6 +701,7 @@ func registerAddMonths(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t.AddDate(0, int(n), 0))}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -683,6 +716,7 @@ func registerAddYears(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t.AddDate(int(n), 0, 0))}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -698,6 +732,7 @@ func registerDurYears(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewCalDuration(int(n), 0, 0)}, nil
 		},
+		Returns: []engine.Type{engine.TCalDuration},
 	})
 }
 
@@ -711,6 +746,7 @@ func registerDurMonths(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewCalDuration(0, int(n), 0)}, nil
 		},
+		Returns: []engine.Type{engine.TCalDuration},
 	})
 }
 
@@ -724,6 +760,7 @@ func registerDurWeeks(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewCalDuration(0, 0, int(n)*7)}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -737,6 +774,7 @@ func registerDurDays(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewCalDuration(0, 0, int(n))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -750,6 +788,7 @@ func registerDurHours(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Hour)))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -763,6 +802,7 @@ func registerDurMinutes(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Minute)))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -776,6 +816,7 @@ func registerDurSeconds(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Second)))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -789,6 +830,7 @@ func registerDurMs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Millisecond)))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -802,6 +844,7 @@ func registerDurUs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(time.Microsecond)))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -815,6 +858,7 @@ func registerDurNs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(time.Duration(n))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -837,6 +881,7 @@ func registerCalDur(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewCalDuration(int(y), int(m), int(d))}, nil
 		},
+		Returns: []engine.Type{engine.TCalDuration},
 	})
 }
 
@@ -938,6 +983,7 @@ func registerTimeDuration(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewClkDuration(clk)}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -950,6 +996,7 @@ func registerTotalHours(r *engine.Registry) {
 			d, _ := args[0].AsClkDuration()
 			return []engine.Value{engine.NewDecimal(d.Hours())}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -960,6 +1007,7 @@ func registerTotalMinutes(r *engine.Registry) {
 			d, _ := args[0].AsClkDuration()
 			return []engine.Value{engine.NewDecimal(d.Minutes())}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -970,6 +1018,7 @@ func registerTotalSeconds(r *engine.Registry) {
 			d, _ := args[0].AsClkDuration()
 			return []engine.Value{engine.NewDecimal(d.Seconds())}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -980,6 +1029,7 @@ func registerTotalMs(r *engine.Registry) {
 			d, _ := args[0].AsClkDuration()
 			return []engine.Value{engine.NewDecimal(float64(d.Milliseconds()))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -990,6 +1040,7 @@ func registerDurYearsExtract(r *engine.Registry) {
 			cd, _ := args[0].AsCalDuration()
 			return []engine.Value{engine.NewInteger(int64(cd.Years))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -1000,6 +1051,7 @@ func registerDurMonthsExtract(r *engine.Registry) {
 			cd, _ := args[0].AsCalDuration()
 			return []engine.Value{engine.NewInteger(int64(cd.Months))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -1010,6 +1062,7 @@ func registerDurDaysExtract(r *engine.Registry) {
 			cd, _ := args[0].AsCalDuration()
 			return []engine.Value{engine.NewInteger(int64(cd.Days))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -1028,6 +1081,7 @@ func registerDurSign(r *engine.Registry) {
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 	r.Register("dur-sign", engine.Signature{
 		Args: []engine.Type{engine.TClkDuration},
@@ -1042,6 +1096,7 @@ func registerDurSign(r *engine.Registry) {
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -1075,6 +1130,7 @@ func registerUntil(r *engine.Registry) {
 			cd := dateDiffCalDuration(from, to)
 			return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -1088,6 +1144,7 @@ func registerSince(r *engine.Registry) {
 			cd := dateDiffCalDuration(from, to)
 			return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -1100,6 +1157,7 @@ func registerDiff(r *engine.Registry) {
 			t2 := extractTime(args[0])
 			return []engine.Value{engine.NewClkDuration(t2.Sub(t1))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -1110,6 +1168,7 @@ func registerElapsed(r *engine.Registry) {
 			start := extractTime(args[0])
 			return []engine.Value{engine.NewClkDuration(time.Since(start))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -1130,6 +1189,7 @@ func registerTimeCompare(r *engine.Registry) {
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -1143,6 +1203,7 @@ func registerBetween(r *engine.Registry) {
 			end := extractTime(args[0])
 			return []engine.Value{engine.NewBoolean(!d.Before(start) && !d.After(end))}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -1157,6 +1218,7 @@ func registerEarliest(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t2)}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -1171,6 +1233,7 @@ func registerLatest(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(t2)}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -1183,6 +1246,7 @@ func registerToDate(r *engine.Registry) {
 			t := extractTime(args[0])
 			return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 	r.Register("to-date", engine.Signature{
 		Args: []engine.Type{engine.TInstant},
@@ -1190,6 +1254,7 @@ func registerToDate(r *engine.Registry) {
 			t := extractTime(args[0])
 			return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 }
 
@@ -1202,6 +1267,7 @@ func registerToTimeOfDay(r *engine.Registry) {
 				time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 			return []engine.Value{engine.NewTimeOfDay(d)}, nil
 		},
+		Returns: []engine.Type{engine.TTimeOfDay},
 	})
 	r.Register("to-time-of-day", engine.Signature{
 		Args: []engine.Type{engine.TInstant},
@@ -1211,6 +1277,7 @@ func registerToTimeOfDay(r *engine.Registry) {
 				time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 			return []engine.Value{engine.NewTimeOfDay(d)}, nil
 		},
+		Returns: []engine.Type{engine.TTimeOfDay},
 	})
 }
 
@@ -1221,6 +1288,7 @@ func registerToDateTime(r *engine.Registry) {
 			t := extractTime(args[0])
 			return []engine.Value{engine.NewDateTime(t)}, nil
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -1237,6 +1305,7 @@ func registerToInstant(r *engine.Registry) {
 			t := time.Date(dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(), dt.Second(), dt.Nanosecond(), loc)
 			return []engine.Value{engine.NewInstant(t)}, nil
 		},
+		Returns: []engine.Type{engine.TInstant},
 	})
 }
 
@@ -1252,6 +1321,7 @@ func registerToLocal(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDateTime(t.In(loc))}, nil
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -1262,6 +1332,7 @@ func registerToUtc(r *engine.Registry) {
 			t := extractTime(args[0])
 			return []engine.Value{engine.NewDateTime(t.UTC())}, nil
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -1300,6 +1371,7 @@ func registerStartOf(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(result)}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -1338,6 +1410,7 @@ func registerEndOf(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDate(result)}, nil
 		},
+		Returns: []engine.Type{engine.TAny},
 	})
 }
 
@@ -1349,6 +1422,7 @@ func registerTzUtc(r *engine.Registry) {
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewTimezone(time.UTC)}, nil
 		},
+		Returns: []engine.Type{engine.TTimezone},
 	})
 }
 
@@ -1358,6 +1432,7 @@ func registerTzLocal(r *engine.Registry) {
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewTimezone(time.Local)}, nil
 		},
+		Returns: []engine.Type{engine.TTimezone},
 	})
 }
 
@@ -1371,6 +1446,7 @@ func registerTzName(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewString(loc.String())}, nil
 		},
+		Returns: []engine.Type{engine.TString},
 	})
 }
 
@@ -1397,6 +1473,7 @@ func registerTzOffset(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
 		},
+		Returns: []engine.Type{engine.TClkDuration},
 	})
 }
 
@@ -1430,6 +1507,7 @@ func registerDst(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewBoolean(curOff != stdOff)}, nil
 		},
+		Returns: []engine.Type{engine.TBoolean},
 	})
 }
 
@@ -1455,6 +1533,7 @@ func registerParseDate(r *engine.Registry) {
 			d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 			return []engine.Value{engine.NewDate(d)}, nil
 		},
+		Returns: []engine.Type{engine.TDate},
 	})
 }
 
@@ -1476,6 +1555,7 @@ func registerParseDatetime(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDateTime(t)}, nil
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }
 
@@ -1513,5 +1593,6 @@ func registerAutoDate(r *engine.Registry) {
 			}
 			return nil, fmt.Errorf("auto-date: unable to parse %q", s)
 		},
+		Returns: []engine.Type{engine.TDateTime},
 	})
 }

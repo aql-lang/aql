@@ -39,11 +39,13 @@ func registerTypeDef(r *Registry) {
 			{
 				Args:    []Type{TString, TAny},
 				Handler: typeHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom, TAny},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   typeHandler,
+				Returns:   []Type{},
 			},
 		},
 	})

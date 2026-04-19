@@ -68,10 +68,12 @@ func registerFolder(r *Registry) {
 			{
 				Args:    []Type{TOptions, TPath},
 				Handler: folderOptsHandler,
+				Returns: []Type{TList},
 			},
 			{
 				Args:    []Type{TPath},
 				Handler: folderHandler,
+				Returns: []Type{TList},
 			},
 		},
 	})

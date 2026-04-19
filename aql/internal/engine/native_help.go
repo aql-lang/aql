@@ -371,6 +371,7 @@ func registerHelp(r *Registry) {
 				Args:      []Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   wordHandler,
+				Returns: []Type{},
 			},
 			{Args: []Type{}, Handler: selfHandler},
 		},

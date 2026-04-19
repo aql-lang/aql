@@ -10,5 +10,6 @@ func registerNow(r *Registry) {
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewInstant(time.Now())}, nil
 		},
+		Returns: []Type{TInstant},
 	})
 }

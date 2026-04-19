@@ -577,6 +577,7 @@ func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, e
 	r.Register(name, Signature{
 		Args:    []Type{TInteger, TInteger},
 		Handler: handler,
+		Returns: []Type{TInteger},
 	})
 }
 
@@ -595,14 +596,17 @@ func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float6
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal, TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TNumber, TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal, TNumber},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 }
 
@@ -616,10 +620,12 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 	r.Register(name, Signature{
 		Args:    []Type{TInteger},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 }
 
@@ -634,6 +640,7 @@ func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	r.Register(name, Signature{
 		Args:    []Type{TBoolean, TBoolean},
 		Handler: handler,
+		Returns: []Type{TBoolean},
 	})
 }
 

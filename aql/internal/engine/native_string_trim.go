@@ -23,10 +23,10 @@ func registerTrim(r *Registry) {
 		Name:              "trim",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TMap}, Handler: trimOptsHandler},
-			{Args: []Type{TString}, Handler: trimHandler},
-			{Args: []Type{TAtom, TMap}, Handler: trimOptsHandler},
-			{Args: []Type{TAtom}, Handler: trimHandler},
+			{Args: []Type{TString, TMap}, Handler: trimOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString}, Handler: trimHandler, Returns: []Type{TString}},
+			{Args: []Type{TAtom, TMap}, Handler: trimOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TAtom}, Handler: trimHandler, Returns: []Type{TString}},
 		},
 	})
 }

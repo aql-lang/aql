@@ -26,6 +26,7 @@ func registerPrint(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handler,
+			Returns: []Type{},
 		}},
 	})
 
@@ -42,6 +43,7 @@ func registerPrint(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: handlerStr,
+			Returns: []Type{},
 		}},
 	})
 }

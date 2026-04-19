@@ -155,6 +155,7 @@ func registerAbs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(v)}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 	r.Register("abs", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
@@ -165,6 +166,7 @@ func registerAbs(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(math.Abs(d))}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -178,6 +180,7 @@ func registerNegate(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(-v)}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 	r.Register("negate", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
@@ -188,6 +191,7 @@ func registerNegate(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(-d)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -208,6 +212,7 @@ func registerSign(r *engine.Registry) {
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 	r.Register("sign", engine.Signature{
 		Args: []engine.Type{engine.TDecimal},
@@ -225,6 +230,7 @@ func registerSign(r *engine.Registry) {
 				return []engine.Value{engine.NewInteger(0)}, nil
 			}
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -268,6 +274,7 @@ func registerCeil(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(int64(math.Ceil(d)))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -281,6 +288,7 @@ func registerFloor(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(int64(math.Floor(d)))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -294,6 +302,7 @@ func registerRound(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(int64(math.Round(d)))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -307,6 +316,7 @@ func registerTrunc(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewInteger(int64(math.Trunc(d)))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -340,6 +350,7 @@ func registerAtan2(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -360,6 +371,7 @@ func registerHypot(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(math.Hypot(float64(a0), float64(a1)))}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -369,11 +381,13 @@ func registerMathConstants(r *engine.Registry) {
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewDecimal(math.Pi)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 	r.RegisterStackOnly("math-e", engine.Signature{
 		Args: []engine.Type{},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewDecimal(math.E)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }

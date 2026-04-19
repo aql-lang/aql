@@ -19,6 +19,8 @@ func registerStackCollect(r *Registry) {
 				copy(items, stack[len(stack)-n:])
 				return append(stack, NewList(items)), nil
 			},
+			// Wraps top N stack values into a list.
+			Returns: []Type{TList},
 		}},
 	})
 }

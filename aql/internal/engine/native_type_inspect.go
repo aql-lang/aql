@@ -39,18 +39,22 @@ func registerInspect(r *Registry) {
 			{
 				Args:    []Type{TWord},
 				Handler: wordHandler,
+				Returns: []Type{TInspect},
 			},
 			{
 				Args:    []Type{TAtom},
 				Handler: atomHandler,
+				Returns: []Type{TInspect},
 			},
 			{
 				Args:    []Type{TNode},
 				Handler: typeHandler,
+				Returns: []Type{TInspect},
 			},
 			{
 				Args:    []Type{TScalar},
 				Handler: typeHandler,
+				Returns: []Type{TInspect},
 			},
 		},
 	})

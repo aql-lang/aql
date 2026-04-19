@@ -24,6 +24,7 @@ func registerIota(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -46,6 +47,7 @@ func registerShape(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -87,6 +89,7 @@ func registerRank(r *Registry) {
 				dims := computeShape(args[0])
 				return []Value{NewInteger(int64(len(dims)))}, nil
 			},
+			Returns: []Type{TInteger},
 		}},
 	})
 }
@@ -105,6 +108,7 @@ func registerLength(r *Registry) {
 				list := args[0].AsList()
 				return []Value{NewInteger(int64(list.Len()))}, nil
 			},
+			Returns: []Type{TInteger},
 		}},
 	})
 }
@@ -144,6 +148,7 @@ func registerReshape(r *Registry) {
 				result := buildNested(flat, dims)
 				return []Value{result}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -203,6 +208,7 @@ func registerArrFlatten(r *Registry) {
 				flat := flattenList(args[0])
 				return []Value{NewList(flat)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -244,6 +250,7 @@ func registerArrTranspose(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -267,6 +274,7 @@ func registerReverse(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -308,6 +316,7 @@ func registerTake(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -349,6 +358,7 @@ func registerShed(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -377,6 +387,7 @@ func registerWhere(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -408,6 +419,7 @@ func registerUnique(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -440,6 +452,7 @@ func registerGrade(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -491,6 +504,7 @@ func registerAt(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -529,6 +543,7 @@ func registerSortby(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -560,6 +575,7 @@ func registerMember(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -600,6 +616,7 @@ func registerArrIndexof(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -642,6 +659,7 @@ func registerGroup(r *Registry) {
 					}
 					return []Value{NewMap(om)}, nil
 				},
+				Returns: []Type{TMap},
 			},
 			{
 				// Single-arg: group by value, return map of value -> list of indices
@@ -666,6 +684,7 @@ func registerGroup(r *Registry) {
 					}
 					return []Value{NewMap(om)}, nil
 				},
+				Returns: []Type{TMap},
 			},
 		},
 	})
@@ -708,6 +727,7 @@ func registerReplicate(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -744,6 +764,7 @@ func registerExpand(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -780,6 +801,7 @@ func registerWindow(r *Registry) {
 				}
 				return []Value{NewList(windows)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }
@@ -807,6 +829,7 @@ func registerPairs(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }

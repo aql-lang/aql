@@ -57,12 +57,14 @@ func registerDef(r *Registry) {
 				Args:       []Type{TString, TAny},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    defHandler,
+				Returns:    []Type{},
 			},
 			{
 				Args:       []Type{TAtom, TAny},
 				QuoteArgs:  map[int]bool{0: true},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    defHandler,
+				Returns:    []Type{},
 			},
 		},
 	})

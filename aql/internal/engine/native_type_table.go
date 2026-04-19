@@ -18,6 +18,7 @@ func registerTable(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: tableHandler,
+			Returns: []Type{TTable},
 		}},
 	})
 }

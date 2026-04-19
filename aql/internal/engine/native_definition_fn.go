@@ -55,6 +55,7 @@ func registerFn(r *Registry) {
 			Args:       []Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnHandler,
+			Returns: []Type{TFunction},
 		}},
 	})
 }

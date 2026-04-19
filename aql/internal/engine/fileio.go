@@ -298,14 +298,14 @@ func registerFileIO(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Path signatures
-			{Args: []Type{TPath, TMap}, Handler: readOptsHandler},
-			{Args: []Type{TPath}, Handler: readHandler},
+			{Args: []Type{TPath, TMap}, Handler: readOptsHandler, Returns: []Type{TAny}},
+			{Args: []Type{TPath}, Handler: readHandler, Returns: []Type{TAny}},
 			// String signatures (backward compatible)
-			{Args: []Type{TString, TMap}, Handler: readOptsHandler},
-			{Args: []Type{TString}, Handler: readHandler},
+			{Args: []Type{TString, TMap}, Handler: readOptsHandler, Returns: []Type{TAny}},
+			{Args: []Type{TString}, Handler: readHandler, Returns: []Type{TAny}},
 			// Reversed signatures for stack-first: "path" {opts} read
-			{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler},
-			{Args: []Type{TMap, TString}, Handler: readOptsRevHandler},
+			{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []Type{TAny}},
+			{Args: []Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []Type{TAny}},
 		},
 	})
 
@@ -314,13 +314,13 @@ func registerFileIO(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// Path signatures
-			{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler},
-			{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler},
-			{Args: []Type{TPath, TString}, Handler: writeHandler},
+			{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []Type{}},
+			{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []Type{}},
+			{Args: []Type{TPath, TString}, Handler: writeHandler, Returns: []Type{}},
 			// String signatures (backward compatible)
-			{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler},
-			{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler},
-			{Args: []Type{TString, TString}, Handler: writeHandler},
+			{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []Type{}},
+			{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []Type{}},
+			{Args: []Type{TString, TString}, Handler: writeHandler, Returns: []Type{}},
 		},
 	})
 
@@ -333,6 +333,7 @@ func registerFileIO(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStdin)}, nil
 			},
+			Returns: []Type{TString},
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
@@ -343,6 +344,7 @@ func registerFileIO(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStdout)}, nil
 			},
+			Returns: []Type{TString},
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
@@ -353,6 +355,7 @@ func registerFileIO(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewString(pathStderr)}, nil
 			},
+			Returns: []Type{TString},
 		}},
 	})
 }

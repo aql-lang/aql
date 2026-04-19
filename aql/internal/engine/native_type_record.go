@@ -39,6 +39,7 @@ func registerRecord(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TList},
 			Handler: recordHandler,
+			Returns: []Type{TRecord},
 		}},
 	})
 }

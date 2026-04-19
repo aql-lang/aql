@@ -96,11 +96,13 @@ func registerObject(r *Registry) {
 			{
 				Args:    []Type{TMap, TObject},
 				Handler: objectWithParentHandler,
+				Returns: []Type{TObjectType},
 			},
 			// 1-arg: map only (no parent)
 			{
 				Args:    []Type{TMap},
 				Handler: objectHandler,
+				Returns: []Type{TObjectType},
 			},
 		},
 	})

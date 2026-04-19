@@ -39,6 +39,7 @@ func registerError(r *Registry) {
 				Args:       []Type{TList, TError},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    listHandler,
+				Returns: []Type{TError},
 			},
 		},
 	})

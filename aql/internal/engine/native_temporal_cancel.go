@@ -20,6 +20,7 @@ func registerCancel(r *Registry) {
 					}
 					return nil, nil
 				},
+				Returns: []Type{},
 			},
 			{
 				Args: []Type{TInterval},
@@ -35,6 +36,7 @@ func registerCancel(r *Registry) {
 					}
 					return nil, nil
 				},
+				Returns: []Type{},
 			},
 		},
 	})
