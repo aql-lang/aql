@@ -43,6 +43,17 @@ type Registry struct {
 	// CheckDiagnostics rather than returned as hard errors.
 	CheckMode        bool
 	CheckDiagnostics []CheckDiagnostic
+
+	// CheckFnSummaries caches carrier return-stacks for user-defined
+	// fn bodies keyed by (name + "#" + argTypesJoined). Populated by
+	// analyseFnBody; re-entrant calls (recursion) consult this cache
+	// to break cycles and converge on a fixed point.
+	CheckFnSummaries map[string][]Value
+
+	// CheckFnInflight tracks which (name, arg-types) analyses are
+	// currently running so that recursive calls can bail out with a
+	// placeholder instead of looping.
+	CheckFnInflight map[string]bool
 }
 
 // CheckDiagnostic is a single static type-check finding.

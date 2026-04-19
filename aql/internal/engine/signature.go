@@ -74,6 +74,14 @@ type Signature struct {
 	// inputs). When both Returns and ReturnsFn are set, ReturnsFn
 	// wins.
 	ReturnsFn ReturnsFunc
+
+	// RunInCheckMode, when true, causes the engine to execute this
+	// signature's Handler even when Registry.CheckMode is on. Use it
+	// for words with registry-level side effects that later words
+	// rely on (def, undef, fn, type, import, export, module). The
+	// handler still runs against carrier args, so it must tolerate
+	// Data==nil / Carrier=true values at its input positions.
+	RunInCheckMode bool
 }
 
 // ReturnsFunc computes the carrier return values for a signature in

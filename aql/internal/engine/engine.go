@@ -712,6 +712,25 @@ func (e *Engine) stepWord(val Value) error {
 		sig, positions = e.matchSignature(fn, wDeep, resolved)
 	}
 
+	// In check mode, if matchSignature fell through to the 0-arg /
+	// Fallback handler because no typed signature matched (but
+	// typed signatures exist), treat it as an unmatched call and go
+	// through the assume-sig recovery path so the user gets a
+	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
+	if sig != nil && sig.Fallback &&
+		e.registry != nil && e.registry.CheckMode {
+		hasTyped := false
+		for i := range fn.Signatures {
+			if !fn.Signatures[i].Fallback {
+				hasTyped = true
+				break
+			}
+		}
+		if hasTyped {
+			sig = nil
+		}
+	}
+
 	if sig == nil {
 		// In check mode, a missing signature is a soft diagnostic
 		// rather than a hard error: pick the first-ranked candidate,
@@ -808,7 +827,11 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// the dispatch machinery (positions, splicing, forward resolution)
 	// is shared with normal execution, so runtime and checker stay in
 	// parity.
-	if e.registry != nil && e.registry.CheckMode {
+	//
+	// Signatures marked RunInCheckMode opt out of this intercept —
+	// used by words whose side effects (def, undef, fn, type, …)
+	// are prerequisites for subsequent analysis.
+	if e.registry != nil && e.registry.CheckMode && !match.Sig.RunInCheckMode {
 		name := ""
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
 			if w, err := e.stack[e.pointer].AsWord(); err == nil {

@@ -1,5 +1,7 @@
 package engine
 
+import "strings"
+
 // Carrier-based static type-checking support.
 //
 // A "carrier" is a normal Value with Carrier=true and (typically)
@@ -384,4 +386,88 @@ func JoinCarrierStacks(a, b []Value) []Value {
 // outside of check mode — it simply records the finding.
 func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
 	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
+}
+
+// AnalyseFnBody runs a user-defined fn body through a sub-engine in
+// check mode, treating named parameters as deffed values bound to
+// their arg carriers and unnamed parameters as pre-pushed stack
+// values. Results are cached on the registry keyed by (name,
+// arg-types) so recursive functions converge instead of looping.
+//
+// Returns the residual carrier stack. An empty or nil return means
+// the analyser aborted (recursion detected or body not available) —
+// callers should treat that as an Any carrier.
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value) []Value {
+	if len(body) == 0 {
+		return nil
+	}
+	// Memoisation key: name + arg type paths.
+	var sb strings.Builder
+	sb.WriteString(name)
+	sb.WriteByte('#')
+	for _, a := range args {
+		sb.WriteString(a.VType.String())
+		sb.WriteByte(',')
+	}
+	key := sb.String()
+
+	if r.CheckFnSummaries == nil {
+		r.CheckFnSummaries = map[string][]Value{}
+	}
+	if r.CheckFnInflight == nil {
+		r.CheckFnInflight = map[string]bool{}
+	}
+	if cached, ok := r.CheckFnSummaries[key]; ok {
+		return cached
+	}
+	if r.CheckFnInflight[key] {
+		// Recursion detected — break the cycle with an Any carrier.
+		return []Value{NewCarrier(TAny)}
+	}
+	r.CheckFnInflight[key] = true
+	defer delete(r.CheckFnInflight, key)
+
+	// Snapshot def-stack depths so we can unwind any defs the body
+	// or parameter binding created.
+	snapshot := make(map[string]int, len(r.DefStacks))
+	for k, v := range r.DefStacks {
+		snapshot[k] = len(v)
+	}
+
+	// Bind named parameters as simple defs (carrier-typed). Unnamed
+	// parameters flow through the stack — push them before the body.
+	var input []Value
+	for i, arg := range args {
+		if i < len(paramNames) && paramNames[i] != "" {
+			r.DefStacks[paramNames[i]] = append(r.DefStacks[paramNames[i]], arg)
+		} else {
+			input = append(input, arg)
+		}
+	}
+	input = append(input, body...)
+
+	sub := New(r)
+	result, err := sub.Run(input)
+	if err != nil {
+		r.addCheckDiagnostic(CheckDiagnostic{
+			Code:   "fn_body_error",
+			Detail: "fn body analysis error for " + name + ": " + err.Error(),
+			Word:   name,
+		})
+		result = nil
+	}
+
+	// Restore def-stacks to snapshot.
+	for k := range r.DefStacks {
+		want := snapshot[k]
+		if len(r.DefStacks[k]) > want {
+			r.DefStacks[k] = r.DefStacks[k][:want]
+		}
+		if len(r.DefStacks[k]) == 0 {
+			delete(r.DefStacks, k)
+		}
+	}
+
+	r.CheckFnSummaries[key] = result
+	return result
 }

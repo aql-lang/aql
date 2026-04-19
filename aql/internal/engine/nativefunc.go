@@ -42,6 +42,10 @@ type NativeSig struct {
 	// ReturnsFn computes the carrier return values for a signature in
 	// static type-check mode. See Signature.ReturnsFn for details.
 	ReturnsFn ReturnsFunc
+
+	// RunInCheckMode runs the Handler even under CheckMode. See
+	// Signature.RunInCheckMode for details.
+	RunInCheckMode bool
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
@@ -49,16 +53,17 @@ type NativeSig struct {
 func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 	for _, sig := range fn.Signatures {
 		s := Signature{
-			Args:       sig.Args,
-			Handler:    sig.Handler,
-			FullStack:  sig.FullStack,
-			Patterns:   sig.Patterns,
-			QuoteArgs:  sig.QuoteArgs,
-			NoEvalArgs: sig.NoEvalArgs,
-			BarrierPos: sig.BarrierPos,
-			Fallback:   sig.Fallback,
-			Returns:    sig.Returns,
-			ReturnsFn:  sig.ReturnsFn,
+			Args:           sig.Args,
+			Handler:        sig.Handler,
+			FullStack:      sig.FullStack,
+			Patterns:       sig.Patterns,
+			QuoteArgs:      sig.QuoteArgs,
+			NoEvalArgs:     sig.NoEvalArgs,
+			BarrierPos:     sig.BarrierPos,
+			Fallback:       sig.Fallback,
+			Returns:        sig.Returns,
+			ReturnsFn:      sig.ReturnsFn,
+			RunInCheckMode: sig.RunInCheckMode,
 		}
 		if fn.ForwardPrecedence {
 			r.Register(fn.Name, s)

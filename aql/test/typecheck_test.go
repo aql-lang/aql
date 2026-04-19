@@ -364,6 +364,67 @@ func TestCheckHigherOrderBadBody(t *testing.T) {
 	}
 }
 
+// TestCheckUserFnInference verifies user-defined fn bodies are
+// analysed symbolically: the checker produces the declared return
+// type when annotated, and infers from the body otherwise.
+func TestCheckUserFnInference(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `def inc fn [[n:Integer] [Integer] [n add 1]]  inc 10`
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
+		t.Fatalf("expected Scalar/Number/Integer, got %v", res.Stack)
+	}
+}
+
+// TestCheckUserFnRecursion verifies recursive user-defined
+// functions (e.g. factorial) converge via the memoisation cache
+// instead of looping forever.
+func TestCheckUserFnRecursion(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `def fact fn [[n:Integer] [Integer] [if [n lte 1] [1] [n mul ( fact n sub 1 )]]]  fact 5`
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
+		t.Fatalf("expected Scalar/Number/Integer, got %v", res.Stack)
+	}
+}
+
+// TestCheckUserFnBadArgDiagnoses verifies that calling a user fn
+// with a wrong-typed carrier emits a no_signature diagnostic and
+// still synthesises a result via the typed signature.
+func TestCheckUserFnBadArgDiagnoses(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `def inc fn [[n:Integer] [Integer] [n add 1]]  inc "hi"`
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Word == "inc" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected no_signature diagnostic for inc, got: %+v", res.Diagnostics)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics

@@ -52,10 +52,11 @@ func registerFn(r *Registry) {
 		Name:              "fn",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    fnHandler,
-			Returns: []Type{TFunction},
+			Args:           []Type{TList},
+			NoEvalArgs:     map[int]bool{0: true},
+			Handler:        fnHandler,
+			Returns:        []Type{TFunction},
+			RunInCheckMode: true,
 		}},
 	})
 }
@@ -707,6 +708,32 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			result = append(result, NewWord(")"))
 			return result, nil
 		}
+		// Static type-check: analyse the body once per arg-type
+		// tuple via AnalyseFnBody. If declared return types are
+		// present, use them verbatim (no analysis needed); otherwise
+		// use the residual top-of-stack carrier(s).
+		paramNames := make([]string, len(s.Params))
+		for i, p := range s.Params {
+			paramNames[i] = p.Name
+		}
+		declaredReturns := append([]Type(nil), s.Returns...)
+		bodyCopy := append([]Value(nil), s.Body...)
+		nameCopy := name
+		returnsFn := func(args []Value) []Value {
+			if len(declaredReturns) > 0 {
+				out := make([]Value, len(declaredReturns))
+				for i, t := range declaredReturns {
+					out[i] = NewCarrier(t)
+				}
+				return out
+			}
+			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
+			if len(stk) == 0 {
+				return []Value{NewCarrier(TAny)}
+			}
+			return stk
+		}
+
 		r.RegisterNativeFunc(NativeFunc{
 			Name:              name,
 			ForwardPrecedence: !isStackOnly,
@@ -715,6 +742,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				Handler:    handler,
 				Patterns:   patterns,
 				BarrierPos: s.BarrierPos,
+				ReturnsFn:  returnsFn,
 			}},
 		})
 	}
