@@ -141,7 +141,8 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if hasSource {
 		if *checkFirst {
-			if err := check(stdout, stderr, source, *registry, *seed, false); err != nil {
+			// --check before execution: always soft (don't block run).
+			if err := check(stdout, stderr, source, *registry, *seed, false, true); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}
@@ -353,9 +354,14 @@ func run(w io.Writer, source string, registry string, seed int64) error {
 // not fail the run (they're printed to stderr).
 //
 // When jsonOut is true, the entire CheckResult is emitted to stdout as
-// a single JSON object {"stack": [...], "diagnostics": [...]}, suitable
-// for editor / tooling integration.
-func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut bool) error {
+// a single JSON object suitable for editor / tooling integration.
+//
+// When soft is false (the default), the presence of any Error-severity
+// diagnostic causes a non-nil error to be returned so the caller
+// propagates a non-zero exit code. Passing soft=true downgrades every
+// diagnostic to advisory: check returns nil as long as the underlying
+// analysis completes.
+func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft bool) error {
 	a, err := aql.New(aql.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
@@ -370,6 +376,9 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOu
 		fmt.Fprintln(stdout, string(out))
 		if err != nil {
 			return fmt.Errorf("check error: %s", err)
+		}
+		if !soft && res.Summary.Errors > 0 {
+			return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
 		}
 		return nil
 	}
@@ -397,17 +406,32 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOu
 	} else {
 		fmt.Fprintln(stdout, "check: (empty stack)")
 	}
+	if !soft && res.Summary.Errors > 0 {
+		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
+	}
 	return nil
 }
 
-// runCheck implements the `aql check [--json] [script.aql]` subcommand.
+// runCheck implements the `aql check [--json] [--soft] [script.aql]`
+// subcommand. By default the command exits non-zero when any
+// Error-severity diagnostic was recorded. Pass --soft to report
+// diagnostics while always exiting zero (advisory mode for CI).
 func runCheck(args []string, stdout, stderr io.Writer) int {
 	jsonOut := false
-	// Pop any leading --json / -json flag.
-	for len(args) > 0 && (args[0] == "--json" || args[0] == "-json") {
-		jsonOut = true
-		args = args[1:]
+	soft := false
+	for len(args) > 0 {
+		switch args[0] {
+		case "--json", "-json":
+			jsonOut = true
+			args = args[1:]
+		case "--soft", "-soft":
+			soft = true
+			args = args[1:]
+		default:
+			goto done
+		}
 	}
+done:
 	if len(args) == 0 {
 		fmt.Fprintf(stderr, "error: aql check requires a script file or -e expression\n")
 		return 1
@@ -429,7 +453,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		source = string(data)
 	}
 
-	if err := check(stdout, stderr, source, "", 0, jsonOut); err != nil {
+	if err := check(stdout, stderr, source, "", 0, jsonOut, soft); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

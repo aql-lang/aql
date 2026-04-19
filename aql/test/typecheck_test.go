@@ -892,6 +892,14 @@ func TestPerfSimpleMath(t *testing.T) {
 	runPerfComparison(t, "1 add 2 mul 3 sub 4 add 5", 100)
 }
 
+// TestPerfCleanProgram measures Check vs Run on a program with zero
+// diagnostics — establishing the baseline for strict-mode CI usage
+// where the checker will run on every build.
+func TestPerfCleanProgram(t *testing.T) {
+	src := `1 add 2 mul 3 dup mul`
+	runPerfComparison(t, src, 100)
+}
+
 // TestPerfRealistic measures Check vs Run on a realistic program
 // combining arithmetic, higher-order words, and a user-defined fn.
 // This is the headline perf number — closer to typical AQL code.
