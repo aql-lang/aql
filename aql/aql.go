@@ -154,6 +154,8 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	a.registry.Source = src
 	a.registry.CheckMode = true
 	a.registry.CheckDiagnostics = nil
+	a.registry.CheckStepCount = 0
+	a.registry.CheckBudgetTripped = false
 	defer func() { a.registry.CheckMode = false }()
 
 	eng := engine.NewTop(a.registry)

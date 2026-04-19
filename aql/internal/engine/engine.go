@@ -281,6 +281,27 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			break
 		}
 
+		// Check-mode global step budget: abort the whole run
+		// gracefully once exceeded. Emits one diagnostic and
+		// then short-circuits every subsequent sub-engine too.
+		if e.registry != nil && e.registry.CheckMode {
+			budget := e.registry.CheckStepBudget
+			if budget == 0 {
+				budget = DefaultCheckStepBudget
+			}
+			e.registry.CheckStepCount++
+			if e.registry.CheckStepCount > budget {
+				if !e.registry.CheckBudgetTripped {
+					e.registry.CheckBudgetTripped = true
+					e.registry.addCheckDiagnostic(CheckDiagnostic{
+						Code:   "step_budget_exceeded",
+						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
+					})
+				}
+				break
+			}
+		}
+
 		val := e.stack[e.pointer]
 
 		if e.trace != nil {

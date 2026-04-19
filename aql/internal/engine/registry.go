@@ -54,7 +54,27 @@ type Registry struct {
 	// currently running so that recursive calls can bail out with a
 	// placeholder instead of looping.
 	CheckFnInflight map[string]bool
+
+	// CheckStepCount is the running total of engine steps consumed
+	// by the current check run, summed across every sub-engine.
+	// Used with CheckStepBudget to cap total analysis effort.
+	CheckStepCount int
+
+	// CheckStepBudget is the maximum total steps the check run may
+	// consume. Zero means "use DefaultCheckStepBudget". Once
+	// exceeded, the engine emits a step_budget_exceeded diagnostic
+	// and returns the current residual stack immediately.
+	CheckStepBudget int
+
+	// CheckBudgetTripped is set to true after the first budget
+	// overshoot so we emit at most one diagnostic per check run.
+	CheckBudgetTripped bool
 }
+
+// DefaultCheckStepBudget caps total check-mode steps across all
+// sub-engines. Chosen to comfortably fit typical programs
+// (thousands of words) while preventing pathological runaways.
+const DefaultCheckStepBudget = 500_000
 
 // CheckDiagnostic is a single static type-check finding.
 type CheckDiagnostic struct {
