@@ -1123,6 +1123,43 @@ func TestPerfCleanProgram(t *testing.T) {
 	runPerfComparison(t, src, 100)
 }
 
+// TestPerfCorpus exercises Check vs Run across a collection of
+// representative programs and emits a table summarising median
+// latencies and the check/run ratio. Always passes — it's a
+// benchmark-style observational test that shows the performance
+// envelope of the checker.
+func TestPerfCorpus(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"arith", "1 add 2 mul 3 sub 4 add 5"},
+		{"bool", "true and false or true"},
+		{"string", `upper "hello world" trim`},
+		{"stack", "1 2 3 dup swap drop over nip"},
+		{"if-const", `if [true] [1 add 2] ["dead"]`},
+		{"if-dyn", `if [1 lt 2] [42] [99]`},
+		{"for", "for 20 [i dup add]"},
+		{"each-iota", "each [dup add] ( iota 20 )"},
+		{"fold-iota", "0 fold [add] ( iota 20 )"},
+		{"scan-iota", "scan [add] ( iota 20 )"},
+		{"pairs", "pairs ( iota 15 )"},
+		{"nested-higher-order", "each [length] ( pairs ( iota 15 ) )"},
+		{"userfn-call", `def inc fn [[n:Integer] [Integer] [n add 1]]  inc 21`},
+		{"fullstack", "1 2 3 4 5 depth 1 pick 2 roll 3 stack"},
+		{"ctxtrack", `context set "x" 42 end context get "x"`},
+	}
+	t.Logf("%-22s %10s %10s %8s", "program", "check-ns", "run-ns", "ratio")
+	for _, c := range cases {
+		s := runPerfComparison(t, c.src, 30)
+		ratio := 0.0
+		if s.RunNs > 0 {
+			ratio = float64(s.CheckNs) / float64(s.RunNs)
+		}
+		t.Logf("%-22s %10d %10d %7.2fx", c.name, s.CheckNs, s.RunNs, ratio)
+	}
+}
+
 // TestPerfRealistic measures Check vs Run on a realistic program
 // combining arithmetic, higher-order words, and a user-defined fn.
 // This is the headline perf number — closer to typical AQL code.
