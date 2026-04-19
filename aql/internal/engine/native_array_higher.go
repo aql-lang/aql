@@ -312,12 +312,14 @@ func registerOuter(r *Registry) {
 			ReturnsFn: func(args []Value) []Value {
 				leftElem := dataListElemType(args[1])
 				rightElem := dataListElemType(args[2])
-				// outer produces a 2D list (rows of body results).
-				// The carrier model flattens that to TList (list of
-				// lists); refining to a nested typed list is
-				// future work.
-				analyseHigherOrderBody(r, args[0], leftElem, rightElem)
-				return []Value{NewCarrierTypedList(TList)}
+				stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
+				// outer produces a 2D list: TList<TList<body-result>>.
+				var innerElem Type = TAny
+				if len(stk) > 0 {
+					innerElem = stk[len(stk)-1].VType
+				}
+				inner := NewCarrierTypedList(innerElem)
+				return []Value{NewCarrierTypedListValue(inner)}
 			},
 		}},
 	})

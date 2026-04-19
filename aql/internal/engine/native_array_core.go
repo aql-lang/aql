@@ -803,7 +803,13 @@ func registerWindow(r *Registry) {
 				}
 				return []Value{NewList(windows)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TList)} },
+			// window yields a TList<TList<sameElem>>: wrap the
+			// source-data element carrier twice.
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemTypeFromValue(args[1])
+				inner := NewCarrierTypedList(elem)
+				return []Value{NewCarrierTypedListValue(inner)}
+			},
 		}},
 	})
 }
@@ -831,7 +837,12 @@ func registerPairs(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TList)} },
+			// pairs yields TList<TList<sameElem>> (2-tuples).
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemTypeFromValue(args[0])
+				inner := NewCarrierTypedList(elem)
+				return []Value{NewCarrierTypedListValue(inner)}
+			},
 		}},
 	})
 }

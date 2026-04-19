@@ -17,11 +17,18 @@ import "strings"
 // carrier-result builder for a matched signature.
 
 // NewCarrier constructs a carrier Value for the given type. Data is
-// nil — the carrier represents "some value of type t", not a specific
-// one.
+// nil for scalar types. For TList and TMap, Data is set to a
+// ChildTypeInfo wrapping an Any carrier so the carrier satisfies
+// positionalMatch's "concrete list/map" rule (it rejects values
+// whose Data==nil when the signature requires a concrete TList or
+// TMap). Typed-list carriers (element type known) are produced via
+// NewCarrierTypedList / NewCarrierTypedListValue.
 func NewCarrier(t Type) Value {
 	v := newValue(t, nil)
 	v.Carrier = true
+	if t.Equal(TList) || t.Equal(TMap) {
+		v.Data = ChildTypeInfo{Child: Value{VType: TAny, Carrier: true}}
+	}
 	return v
 }
 
@@ -33,6 +40,16 @@ func NewCarrier(t Type) Value {
 // element carrier via dataListElemType.
 func NewCarrierTypedList(elem Type) Value {
 	v := NewTypedList(NewCarrier(elem))
+	v.Carrier = true
+	return v
+}
+
+// NewCarrierTypedListValue constructs a typed-list carrier whose
+// element is an arbitrary carrier Value. Use this when the element
+// itself is a typed list (nested lists), a disjunct, or otherwise
+// needs more structure than a bare VType.
+func NewCarrierTypedListValue(child Value) Value {
+	v := NewTypedList(child)
 	v.Carrier = true
 	return v
 }

@@ -828,6 +828,36 @@ func TestPerfFullStack(t *testing.T) {
 	runPerfComparison(t, `1 2 3 4 5 depth 1 pick 2 roll 3 stack`, 50)
 }
 
+// TestCheckNestedTypedList verifies that 2D constructors (pairs,
+// window, outer) produce nested typed-list carriers whose inner
+// element type survives a subsequent each call.
+func TestCheckNestedTypedList(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// pairs yields TList<TList<Integer>>; each [length] should
+	// type-check cleanly because length accepts TList.
+	res, err := a.Check("each [length] ( pairs ( iota 5 ) )")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" {
+			t.Errorf("unexpected no_signature on nested-list chain: %+v", d)
+		}
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Node/List" {
+		t.Errorf("expected Node/List, got %v", res.Stack)
+	}
+}
+
+// TestPerfNestedTypedList measures Check vs Run latency for a
+// nested-list program dominated by pairs/each.
+func TestPerfNestedTypedList(t *testing.T) {
+	runPerfComparison(t, "each [length] ( pairs ( iota 10 ) )", 50)
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics
