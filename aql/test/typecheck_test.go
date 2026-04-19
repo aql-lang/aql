@@ -1,8 +1,10 @@
 package test
 
 import (
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	aql "github.com/metsitaba/voxgig-exp/aql"
 )
@@ -648,6 +650,135 @@ func TestCheckStepBudget(t *testing.T) {
 			t.Errorf("did not expect step_budget_exceeded on tiny program, got: %+v", d)
 		}
 	}
+}
+
+// TestCheckForLoopAnalysis verifies that `for` body analysis binds
+// the iterator (as Integer) in check mode and propagates the body's
+// top-of-stack through as the list element type.
+func TestCheckForLoopAnalysis(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// Body returns Integer per iteration → TList<Integer>.
+	res, err := a.Check("for 5 [i dup add]")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Node/List" {
+		t.Fatalf("expected Node/List, got %v", res.Stack)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" {
+			t.Errorf("unexpected no_signature: %+v", d)
+		}
+	}
+}
+
+// TestCheckForLoopBadBody flags body errors in for analysis.
+func TestCheckForLoopBadBody(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("for 5 [i upper]")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Word == "upper" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected no_signature on upper, got: %+v", res.Diagnostics)
+	}
+}
+
+// PerfSample captures one check vs run timing sample.
+type PerfSample struct {
+	Program     string
+	CheckNs     int64
+	RunNs       int64
+	CheckStack  []string
+	RunResult   int
+}
+
+// runPerfComparison measures Check() and Run() for a program, N
+// iterations each, and reports the median timing and any value
+// produced. Logs a summary line so `go test -v` output carries a
+// human-readable comparison.
+func runPerfComparison(t *testing.T, program string, iters int) PerfSample {
+	t.Helper()
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	// First call to check (so any caches warm up).
+	res, err := a.Check(program)
+	if err != nil {
+		t.Fatalf("check err: %v", err)
+	}
+
+	// Measure Check.
+	checkTimes := make([]time.Duration, iters)
+	for i := 0; i < iters; i++ {
+		start := time.Now()
+		_, err := a.Check(program)
+		if err != nil {
+			t.Fatalf("check iter %d: %v", i, err)
+		}
+		checkTimes[i] = time.Since(start)
+	}
+
+	// Fresh AQL for runtime so Check-mode state doesn't influence.
+	a2, _ := aql.New()
+	runRes, err := a2.Run(program)
+	if err != nil {
+		t.Fatalf("run err: %v", err)
+	}
+
+	// Measure Run.
+	runTimes := make([]time.Duration, iters)
+	for i := 0; i < iters; i++ {
+		a3, _ := aql.New()
+		start := time.Now()
+		_, err := a3.Run(program)
+		if err != nil {
+			t.Fatalf("run iter %d: %v", i, err)
+		}
+		runTimes[i] = time.Since(start)
+	}
+
+	sort.Slice(checkTimes, func(i, j int) bool { return checkTimes[i] < checkTimes[j] })
+	sort.Slice(runTimes, func(i, j int) bool { return runTimes[i] < runTimes[j] })
+	medCheck := checkTimes[iters/2]
+	medRun := runTimes[iters/2]
+
+	sample := PerfSample{
+		Program:    program,
+		CheckNs:    medCheck.Nanoseconds(),
+		RunNs:      medRun.Nanoseconds(),
+		CheckStack: res.Stack,
+		RunResult:  len(runRes),
+	}
+
+	ratio := float64(medCheck.Nanoseconds()) / float64(medRun.Nanoseconds())
+	t.Logf("perf %q: check=%v run=%v ratio=%.2fx  check-stack=%v  run-count=%d",
+		program, medCheck, medRun, ratio, res.Stack, len(runRes))
+
+	return sample
+}
+
+// TestPerfForLoop compares Check vs Run on a program that exercises
+// for-loop body analysis. Published so subsequent steps' perf tests
+// can reuse the helper. The test always passes — it only logs the
+// comparison — so regressions in the ratio show up via `-v` output
+// rather than failing CI.
+func TestPerfForLoop(t *testing.T) {
+	runPerfComparison(t, "for 10 [i dup add]", 50)
 }
 
 // TestCheckBuiltinsAnnotated walks a handful of common words to
