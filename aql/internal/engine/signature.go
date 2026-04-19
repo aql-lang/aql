@@ -82,7 +82,22 @@ type Signature struct {
 	// handler still runs against carrier args, so it must tolerate
 	// Data==nil / Carrier=true values at its input positions.
 	RunInCheckMode bool
+
+	// CheckFullStackFn, when non-nil, replaces both Returns and
+	// ReturnsFn for FullStack signatures in check mode. It is
+	// passed the matched args and the full resolved carrier stack
+	// (from the nearest paren/root barrier through to the pointer
+	// exclusive of args). The returned slice is the complete
+	// replacement for that base..pointer range — mirroring the
+	// runtime FullStack handler's semantics.
+	CheckFullStackFn CheckFullStackFunc
 }
+
+// CheckFullStackFunc produces the full base..pointer replacement
+// for a FullStack signature in check mode. args are the matched
+// carrier args in signature order; stack is the preserved carrier
+// stack segment below the args.
+type CheckFullStackFunc func(args []Value, stack []Value) []Value
 
 // ReturnsFunc computes the carrier return values for a signature in
 // static type-check mode. args are the carrier-typed input values in

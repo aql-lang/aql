@@ -863,6 +863,35 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				name = w.Name
 			}
 		}
+
+		// FullStack signatures in check mode: if a CheckFullStackFn
+		// is declared, it receives the preserved carrier stack
+		// (below args) and returns the complete replacement for
+		// base..end (matching the runtime FullStack path). end
+		// covers both the word itself and any forward-collected
+		// arg positions so the splice consumes every token the
+		// call actually bound.
+		if match.Sig.FullStack && match.Sig.CheckFullStackFn != nil {
+			base := 0
+			for i := e.pointer - 1; i >= 0; i-- {
+				if e.stack[i].IsOpenParen() {
+					base = i + 1
+					break
+				}
+			}
+			end := e.pointer
+			for _, p := range sortedIndices {
+				if p > end {
+					end = p
+				}
+			}
+			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
+			results := match.Sig.CheckFullStackFn(match.Args, preserved)
+			e.stackSplice(base, end+1-base, results...)
+			e.pointer = base
+			return nil
+		}
+
 		results := carrierResults(e.registry, name, match.Sig, match.Args, pos)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}

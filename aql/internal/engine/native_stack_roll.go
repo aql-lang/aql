@@ -22,10 +22,25 @@ func registerRoll(r *Registry) {
 				result = append(result, stack[idx])
 				return result, nil
 			},
-			// roll permutes the stack without adding or removing
-			// values; check mode cannot model that precisely, so
-			// treat the top as an Any placeholder.
-			Returns: []Type{TAny},
+			// Check-mode FullStack: roll moves one stack element to
+			// the top without changing the total count. We don't
+			// know statically which element; return a copy of the
+			// stack whose new top is the join of existing elements.
+			CheckFullStackFn: func(_ []Value, stack []Value) []Value {
+				if len(stack) == 0 {
+					return nil
+				}
+				// Result: stack minus one element + picked-top.
+				// Conservative: keep all stack entries as-is and
+				// mark the last as the joined carrier.
+				out := append([]Value(nil), stack...)
+				t := stack[0].VType
+				for i := 1; i < len(stack); i++ {
+					t = commonAncestorType(t, stack[i].VType)
+				}
+				out[len(out)-1] = NewCarrier(t)
+				return out
+			},
 		}},
 	})
 }

@@ -781,6 +781,53 @@ func TestPerfForLoop(t *testing.T) {
 	runPerfComparison(t, "for 10 [i dup add]", 50)
 }
 
+// TestCheckFullStackDepth verifies `depth` in check mode preserves
+// the carrier stack and appends one Integer carrier, matching the
+// runtime FullStack handler's net +1 effect.
+func TestCheckFullStackDepth(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("1 2 3 depth")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 4 {
+		t.Fatalf("expected 4 residual carriers, got %v", res.Stack)
+	}
+	if res.Stack[3] != "Scalar/Number/Integer" {
+		t.Errorf("expected last carrier to be Scalar/Number/Integer, got %q", res.Stack[3])
+	}
+}
+
+// TestCheckFullStackPickStack verifies the stack-only pick form
+// (`1 "hi" 3 1 pick`) preserves the stack minus the index arg and
+// appends one carrier whose type is the join of what's below.
+func TestCheckFullStackPickStack(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`1 "hi" 3 1 pick`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	// Expect: [Integer/1, String/Proper, Integer/3, Scalar]
+	if len(res.Stack) != 4 {
+		t.Fatalf("expected 4 residual carriers, got %v", res.Stack)
+	}
+	if res.Stack[3] != "Scalar" {
+		t.Errorf("expected last carrier to be Scalar (join), got %q", res.Stack[3])
+	}
+}
+
+// TestPerfFullStack measures Check vs Run latency for a program
+// dominated by FullStack words.
+func TestPerfFullStack(t *testing.T) {
+	runPerfComparison(t, `1 2 3 4 5 depth 1 pick 2 roll 3 stack`, 50)
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics
