@@ -80,6 +80,16 @@ type Registry struct {
 	// simple-value substitution in check mode. Used to filter out
 	// defs that were referenced at least once.
 	CheckDefsUsed map[string]bool
+
+	// CheckContextTypes is a best-effort record of keys that user
+	// code wrote to a Store during a check run. The value is the
+	// last-seen carrier type for that key, joined via
+	// JoinCarriers on repeated writes. Used by get's ReturnsFn so
+	// subsequent reads can produce a typed carrier rather than
+	// falling back to Any. Shared across the entire check run —
+	// not keyed by store identity — to keep the model simple for
+	// the common "one context store" usage pattern.
+	CheckContextTypes map[string]Value
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all

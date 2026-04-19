@@ -125,21 +125,35 @@ func registerGet(r *Registry) {
 		Name:              "get",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			// [Key | Store] — key forward, container from stack
-			{Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler},
-			{Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler},
+			// [Key | Store] — key forward, container from stack.
+			// In check mode, consult CheckContextTypes to produce a
+			// typed carrier for previously-set keys.
+			{
+				Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler,
+				ReturnsFn: func(args []Value) []Value {
+					v, _ := r.LookupContextType(storeKey(args[0]))
+					return []Value{v}
+				},
+			},
+			{
+				Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler,
+				ReturnsFn: func(args []Value) []Value {
+					v, _ := r.LookupContextType(storeKey(args[0]))
+					return []Value{v}
+				},
+			},
 			// [Key | Node] — covers Map, List, Options
-			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: nodeHandler},
-			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: nodeHandler},
-			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: nodeHandler},
+			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: nodeHandler, Returns: []Type{TAny}},
+			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: nodeHandler, Returns: []Type{TAny}},
+			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: nodeHandler, Returns: []Type{TAny}},
 			// [Key | Array]
-			{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: arrayHandler},
+			{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: arrayHandler, Returns: []Type{TAny}},
 			// [Key | Object]
-			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler},
-			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler},
-			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler},
+			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: objectHandler, Returns: []Type{TAny}},
+			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: objectHandler, Returns: []Type{TAny}},
+			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: objectHandler, Returns: []Type{TAny}},
 			// [Key | None]
-			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler},
+			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: noneHandler, Returns: []Type{TNone}},
 		},
 	})
 }

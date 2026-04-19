@@ -614,6 +614,35 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	return out
 }
 
+// RecordContextSet records (key → carrier) for the given store-set
+// call. Called from `set`'s ReturnsFn. Repeated writes to the same
+// key join their carrier types via JoinCarriers so the recorded
+// type reflects every write. Safe to call outside check mode — it
+// becomes a no-op.
+func (r *Registry) RecordContextSet(key string, carrier Value) {
+	if !r.CheckMode || key == "" {
+		return
+	}
+	if r.CheckContextTypes == nil {
+		r.CheckContextTypes = map[string]Value{}
+	}
+	if existing, ok := r.CheckContextTypes[key]; ok {
+		r.CheckContextTypes[key] = JoinCarriers(existing, carrier)
+		return
+	}
+	r.CheckContextTypes[key] = carrier
+}
+
+// LookupContextType returns the carrier recorded for the given key
+// via a prior set, or an Any carrier + false when the key has not
+// been observed in this check run.
+func (r *Registry) LookupContextType(key string) (Value, bool) {
+	if v, ok := r.CheckContextTypes[key]; ok {
+		return v, true
+	}
+	return NewCarrier(TAny), false
+}
+
 // recordCheckDef is called by the def/undef handlers when running
 // under check mode. It remembers the name the user bound so that
 // end-of-run analysis can flag defs that were never referenced.

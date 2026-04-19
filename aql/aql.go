@@ -158,6 +158,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	a.registry.CheckBudgetTripped = false
 	a.registry.CheckDefsInstalled = nil
 	a.registry.CheckDefsUsed = nil
+	a.registry.CheckContextTypes = nil
 	defer func() { a.registry.CheckMode = false }()
 
 	eng := engine.NewTop(a.registry)

@@ -991,6 +991,48 @@ func TestCheckUnusedDefFn(t *testing.T) {
 	}
 }
 
+// TestCheckContextTracking verifies `set key value context` records
+// the carrier type against the key, and a subsequent `get key
+// context` reads it back.
+func TestCheckContextTracking(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`context set "x" 42 end context get "x"`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || !strings.Contains(res.Stack[0], "Integer") {
+		t.Errorf("expected Integer carrier for x, got %v", res.Stack)
+	}
+}
+
+// TestCheckContextMissingKey verifies that get-ing an unset key falls
+// back to an Any carrier rather than matching runtime behaviour
+// (which returns None). Carrier is conservative — we don't know the
+// key's type statically.
+func TestCheckContextMissingKey(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`context get "missing"`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Any" {
+		t.Errorf("expected Any carrier for unset key, got %v", res.Stack)
+	}
+}
+
+// TestPerfContextTracking measures Check vs Run for a program that
+// uses the context-store for simple key/value.
+func TestPerfContextTracking(t *testing.T) {
+	src := `context set "x" 42 end context get "x"`
+	runPerfComparison(t, src, 100)
+}
+
 // TestPerfUnusedDef establishes a perf baseline for a program with
 // defs that include unused ones (the checker scans each def for use,
 // runtime doesn't care).
