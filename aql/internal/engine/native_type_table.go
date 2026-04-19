@@ -16,9 +16,10 @@ func registerTable(r *Registry) {
 		Name:              "table",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny},
-			Handler: tableHandler,
-			Returns: []Type{TTable},
+			Args:           []Type{TAny},
+			Handler:        tableHandler,
+			Returns:        []Type{TTable},
+			RunInCheckMode: true,
 		}},
 	})
 }

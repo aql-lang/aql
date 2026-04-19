@@ -713,13 +713,69 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		// present, use them verbatim (no analysis needed); otherwise
 		// use the residual top-of-stack carrier(s).
 		paramNames := make([]string, len(s.Params))
+		paramPatterns := make([]*Value, len(s.Params))
 		for i, p := range s.Params {
 			paramNames[i] = p.Name
+			paramPatterns[i] = p.Pattern
 		}
 		declaredReturns := append([]Type(nil), s.Returns...)
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
 		returnsFn := func(args []Value) []Value {
+			// Pattern / record-shape check: for each declared
+			// record-typed param, verify the arg map carries each
+			// declared field key. Skip calls whose arg is empty or
+			// whose key set doesn't overlap the pattern at all
+			// (that pattern is typically the one used during fn
+			// body analysis, not a real user call).
+			for i, pat := range paramPatterns {
+				if pat == nil || i >= len(args) {
+					continue
+				}
+				val := args[i]
+				if !pat.VType.Equal(TMap) || !val.VType.Equal(TMap) ||
+					pat.Data == nil || val.Data == nil {
+					continue
+				}
+				pMap := pat.AsMap()
+				vMap := val.AsMap()
+				if pMap == nil || vMap == nil || vMap.Len() == 0 {
+					continue
+				}
+				// Overlap gate: only emit if val's keys intersect
+				// the pattern at all. This avoids false positives
+				// when analysing with synthetic/default arg maps.
+				overlap := 0
+				for _, k := range pMap.Keys() {
+					if _, ok := vMap.Get(k); ok {
+						overlap++
+					}
+				}
+				if overlap == 0 {
+					continue
+				}
+				for _, key := range pMap.Keys() {
+					pv, _ := pMap.Get(key)
+					av, hasKey := vMap.Get(key)
+					if !hasKey {
+						r.addCheckDiagnostic(CheckDiagnostic{
+							Code:     "record_shape_mismatch",
+							Detail:   "argument to " + nameCopy + " missing field: " + key,
+							Word:     nameCopy,
+							Severity: SeverityError,
+						})
+						continue
+					}
+					if pv.Data == nil && !av.VType.Matches(pv.VType) && !av.VType.Equal(TAny) {
+						r.addCheckDiagnostic(CheckDiagnostic{
+							Code:     "record_shape_mismatch",
+							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.VType.String() + ", got " + av.VType.String(),
+							Word:     nameCopy,
+							Severity: SeverityError,
+						})
+					}
+				}
+			}
 			if len(declaredReturns) > 0 {
 				out := make([]Value, len(declaredReturns))
 				for i, t := range declaredReturns {

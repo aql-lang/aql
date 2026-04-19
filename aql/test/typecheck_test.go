@@ -1026,6 +1026,35 @@ func TestCheckContextMissingKey(t *testing.T) {
 	}
 }
 
+// TestCheckRecordShapeMismatch verifies that passing a map missing
+// a record's required fields fires a record_shape_mismatch
+// diagnostic naming the missing field.
+func TestCheckRecordShapeMismatch(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `
+type Point record [x:Integer y:Integer]
+def dist fn [[p:Point] [Integer] [42]]
+dist {x:10}
+`
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "record_shape_mismatch" && strings.Contains(d.Detail, "y") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected record_shape_mismatch for missing y, got: %+v", res.Diagnostics)
+	}
+}
+
 // TestCheckDoViaDefStacks verifies `do body` (where body is a def'd
 // quoted list) resolves the list via DefStacks and analyses its
 // contents just like a literal `do [...]` would.

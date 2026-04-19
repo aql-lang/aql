@@ -94,15 +94,17 @@ func registerObject(r *Registry) {
 		Signatures: []NativeSig{
 			// 2-arg: map + parent object type
 			{
-				Args:    []Type{TMap, TObject},
-				Handler: objectWithParentHandler,
-				Returns: []Type{TObjectType},
+				Args:           []Type{TMap, TObject},
+				Handler:        objectWithParentHandler,
+				Returns:        []Type{TObjectType},
+				RunInCheckMode: true,
 			},
 			// 1-arg: map only (no parent)
 			{
-				Args:    []Type{TMap},
-				Handler: objectHandler,
-				Returns: []Type{TObjectType},
+				Args:           []Type{TMap},
+				Handler:        objectHandler,
+				Returns:        []Type{TObjectType},
+				RunInCheckMode: true,
 			},
 		},
 	})
