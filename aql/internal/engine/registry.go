@@ -69,6 +69,17 @@ type Registry struct {
 	// CheckBudgetTripped is set to true after the first budget
 	// overshoot so we emit at most one diagnostic per check run.
 	CheckBudgetTripped bool
+
+	// CheckDefsInstalled records the names (and source positions)
+	// that the user's program defined during a check run via the
+	// def word. Populated by recordCheckDef; consulted at end of
+	// run to emit unused_def warnings.
+	CheckDefsInstalled map[string]SrcPos
+
+	// CheckDefsUsed records names looked up via Registry.Lookup or
+	// simple-value substitution in check mode. Used to filter out
+	// defs that were referenced at least once.
+	CheckDefsUsed map[string]bool
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -350,6 +361,12 @@ func calcMaxForwardArgs(sigs []Signature) int {
 }
 
 // Lookup returns the top FnDefInfo for a name from DefStacks, or nil.
+//
+// Lookup deliberately does NOT record a check-mode "use" of the name
+// because it is called from internal machinery (installDef, undef,
+// match dispatch) that would inflate use counts. User-code usage is
+// recorded by the engine.stepWord paths (simple-value substitution
+// and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
 	stack := r.DefStacks[name]
 	for i := len(stack) - 1; i >= 0; i-- {

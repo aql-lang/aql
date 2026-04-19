@@ -156,11 +156,16 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	a.registry.CheckDiagnostics = nil
 	a.registry.CheckStepCount = 0
 	a.registry.CheckBudgetTripped = false
+	a.registry.CheckDefsInstalled = nil
+	a.registry.CheckDefsUsed = nil
 	defer func() { a.registry.CheckMode = false }()
 
 	eng := engine.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
+	// Emit unused-def warnings after all execution has completed
+	// so the Used map has been fully populated.
+	a.registry.EmitUnusedDefDiagnostics()
 	if err != nil {
 		return CheckResult{Diagnostics: a.registry.CheckDiagnostics}, err
 	}

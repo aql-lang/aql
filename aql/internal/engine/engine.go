@@ -671,6 +671,9 @@ func (e *Engine) stepWord(val Value) error {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
+			// Record the substitution as a "use" for unused-def
+			// tracking in check mode.
+			e.registry.recordCheckUse(w.Name)
 			// For list bodies, expand onto the stack like the fallback handler does.
 			// Quoted lists are treated as data values (not expanded).
 			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
@@ -686,6 +689,11 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	fn := e.registry.Lookup(w.Name)
+	if fn != nil {
+		// User-code dispatch — record the name as "used" for
+		// unused-def analysis in check mode.
+		e.registry.recordCheckUse(w.Name)
+	}
 
 	if fn == nil {
 		if w.Name == "true" {

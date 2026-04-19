@@ -46,6 +46,9 @@ func registerDef(r *Registry) {
 		stackOnly := defStackOnly(args[0])
 		body := args[1]
 		installDef(r, name, body, stackOnly)
+		// Record installation for unused-def analysis. The arg's
+		// Pos points at the name token.
+		r.recordCheckDef(name, args[0].Pos)
 		return nil, nil
 	}
 

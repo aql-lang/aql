@@ -614,6 +614,57 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	return out
 }
 
+// recordCheckDef is called by the def/undef handlers when running
+// under check mode. It remembers the name the user bound so that
+// end-of-run analysis can flag defs that were never referenced.
+// Names starting with "_" (engine internals) are ignored.
+func (r *Registry) recordCheckDef(name string, pos SrcPos) {
+	if !r.CheckMode || name == "" || strings.HasPrefix(name, "_") {
+		return
+	}
+	if r.CheckDefsInstalled == nil {
+		r.CheckDefsInstalled = map[string]SrcPos{}
+	}
+	r.CheckDefsInstalled[name] = pos
+	// Any prior "use" count for this name was against an older
+	// (now-shadowed) def or against a lookup during def setup —
+	// reset so only uses AFTER this install count.
+	delete(r.CheckDefsUsed, name)
+}
+
+// recordCheckUse marks a name as referenced during check mode. It is
+// safe to call unconditionally; when CheckMode is off the call is a
+// no-op. Used by Registry.Lookup and stepWord's simple-value path.
+func (r *Registry) recordCheckUse(name string) {
+	if !r.CheckMode || name == "" {
+		return
+	}
+	if r.CheckDefsUsed == nil {
+		r.CheckDefsUsed = map[string]bool{}
+	}
+	r.CheckDefsUsed[name] = true
+}
+
+// EmitUnusedDefDiagnostics walks the set of defs installed during a
+// check run and emits an unused_def warning for any name that was
+// never referenced. Call this at the end of a check pass, before
+// returning the CheckResult.
+func (r *Registry) EmitUnusedDefDiagnostics() {
+	for name, pos := range r.CheckDefsInstalled {
+		if r.CheckDefsUsed[name] {
+			continue
+		}
+		r.addCheckDiagnostic(CheckDiagnostic{
+			Code:     "unused_def",
+			Detail:   "def " + name + " is never used",
+			Word:     name,
+			Row:      pos.Row,
+			Col:      pos.Col,
+			Severity: SeverityWarning,
+		})
+	}
+}
+
 // addCheckDiagnostic appends a diagnostic to the registry. Safe to call
 // outside of check mode — it simply records the finding. If the
 // diagnostic's Severity is empty, the default mapping from its Code

@@ -939,6 +939,66 @@ func TestCheckUnreachableBranchFalse(t *testing.T) {
 	}
 }
 
+// TestCheckUnusedDef verifies defs never referenced produce a
+// warning, while defs used at least once stay silent.
+func TestCheckUnusedDef(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`def x 5  def y 10  x add x`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	var unusedY, unusedX bool
+	for _, d := range res.Diagnostics {
+		if d.Code == "unused_def" {
+			if d.Word == "y" {
+				unusedY = true
+			}
+			if d.Word == "x" {
+				unusedX = true
+			}
+		}
+	}
+	if !unusedY {
+		t.Errorf("expected unused_def for y, got: %+v", res.Diagnostics)
+	}
+	if unusedX {
+		t.Errorf("x is used (x add x) — should not be flagged: %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUnusedDefFn covers fn-based defs: an unreferenced fn
+// should also trip unused_def.
+func TestCheckUnusedDefFn(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`def helper fn [[n:Integer] [Integer] [n add 1]]  10`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "unused_def" && d.Word == "helper" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected unused_def for helper fn, got: %+v", res.Diagnostics)
+	}
+}
+
+// TestPerfUnusedDef establishes a perf baseline for a program with
+// defs that include unused ones (the checker scans each def for use,
+// runtime doesn't care).
+func TestPerfUnusedDef(t *testing.T) {
+	src := `def a 1  def b 2  def c 3  def d 4  def e 5  a add b add c`
+	runPerfComparison(t, src, 100)
+}
+
 // TestPerfUnreachableBranch demonstrates the check's ability to skip
 // a dead branch — with a literal-true condition, only the reachable
 // side is analysed.
