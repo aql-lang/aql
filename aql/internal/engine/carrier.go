@@ -673,6 +673,53 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	return out
 }
 
+// boolWord returns "true" / "false" for use in human-readable
+// diagnostic text.
+func boolWord(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// literalCondValue inspects a condition list for a single boolean
+// literal (true/false word or Boolean carrier). Returns (value,
+// true) when the condition is statically determinable, or (false,
+// false) otherwise. Used by `if` analysis to warn about
+// unreachable branches.
+func literalCondValue(condList Value) (bool, bool) {
+	if condList.Data == nil {
+		return false, false
+	}
+	list := condList.AsList()
+	if list.IsNil() || list.Len() != 1 {
+		return false, false
+	}
+	only := list.Get(0)
+	// Bare true/false word (parser emits these as Word values that
+	// resolve to booleans in engine.stepWord; in check mode the
+	// words stay as Words until the branch runs).
+	if only.VType.Equal(TWord) {
+		w, err := only.AsWord()
+		if err == nil {
+			if w.Name == "true" {
+				return true, true
+			}
+			if w.Name == "false" {
+				return false, true
+			}
+		}
+	}
+	// Concrete Boolean value with Data set (post-runtime path).
+	if only.VType.Matches(TBoolean) && only.Data != nil {
+		b, err := only.AsBoolean()
+		if err == nil {
+			return b, true
+		}
+	}
+	return false, false
+}
+
 // applyGuardNarrowing installs then-branch narrowings for each
 // `x is T` clause in the condition. Returns a restore func to pop
 // the narrowings after the then-branch runs.

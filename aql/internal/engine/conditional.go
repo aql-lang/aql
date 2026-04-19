@@ -135,6 +135,41 @@ func registerIf(r *Registry) {
 					// creates are snapshotted/restored per branch,
 					// then joined via installJoinedDefs so a
 					// following word sees the post-if binding.
+					//
+					// Unreachable-branch warning: when the
+					// condition is a statically known boolean
+					// literal, the opposite branch never runs.
+					// Emit a warning and skip that branch's
+					// contribution so downstream types stay tight.
+					if lit, ok := literalCondValue(args[0]); ok {
+						branch := "else"
+						if !lit {
+							branch = "then"
+						}
+						r.addCheckDiagnostic(CheckDiagnostic{
+							Code:     "unreachable_branch",
+							Detail:   "if condition is a constant " + boolWord(lit) + "; " + branch + "-branch is unreachable",
+							Severity: SeverityWarning,
+						})
+						if lit {
+							restoreThen := applyGuardNarrowing(r, args[0])
+							stk, defs := runCarrierBodyWithDefs(r, args[1])
+							restoreThen()
+							installJoinedDefs(r, defs, nil)
+							if len(stk) == 0 {
+								return nil
+							}
+							return []Value{stk[len(stk)-1]}
+						}
+						restoreElse := applyComplementNarrowing(r, args[0])
+						stk, defs := runCarrierBodyWithDefs(r, args[2])
+						restoreElse()
+						installJoinedDefs(r, nil, defs)
+						if len(stk) == 0 {
+							return nil
+						}
+						return []Value{stk[len(stk)-1]}
+					}
 					restoreThen := applyGuardNarrowing(r, args[0])
 					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
 					restoreThen()
@@ -144,8 +179,6 @@ func registerIf(r *Registry) {
 					installJoinedDefs(r, thenDefs, elseDefs)
 					joined := JoinCarrierStacks(thenStk, elseStk)
 					if len(joined) == 0 {
-						// Both branches side-effect only — no
-						// residual value.
 						return nil
 					}
 					return []Value{joined[len(joined)-1]}
@@ -161,6 +194,13 @@ func registerIf(r *Registry) {
 				// binding (or dropped if the name wasn't bound
 				// before) — mirrors the 3-arg semantics.
 				ReturnsFn: func(args []Value) []Value {
+					if lit, ok := literalCondValue(args[0]); ok && !lit {
+						r.addCheckDiagnostic(CheckDiagnostic{
+							Code:     "unreachable_branch",
+							Detail:   "if condition is a constant false; then-branch is unreachable",
+							Severity: SeverityWarning,
+						})
+					}
 					restore := applyGuardNarrowing(r, args[0])
 					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
 					restore()

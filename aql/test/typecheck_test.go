@@ -593,7 +593,10 @@ func TestCheckConditionalDefJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`if [true] [def x 1] [def x "hi"]  x`)
+	// Use a dynamic condition (1 lt 2) so the checker must analyse
+	// both branches; a literal true would be flagged as
+	// unreachable-branch and select only the then side.
+	res, err := a.Check(`if [1 lt 2] [def x 1] [def x "hi"]  x`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -613,7 +616,7 @@ func TestCheckConditionalDefSameBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`if [true] [def x 1] [def x 2]  x`)
+	res, err := a.Check(`if [1 lt 2] [def x 1] [def x 2]  x`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -890,6 +893,58 @@ func TestCheckDiagnosticJSON(t *testing.T) {
 // establish a baseline perf ratio for non-allocating programs.
 func TestPerfSimpleMath(t *testing.T) {
 	runPerfComparison(t, "1 add 2 mul 3 sub 4 add 5", 100)
+}
+
+// TestCheckUnreachableBranchTrue verifies that a literal-true
+// condition produces an unreachable-branch warning and narrows
+// the result to the then-branch type.
+func TestCheckUnreachableBranchTrue(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [true] [1] ["dead"]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	// Result should be Integer (the reachable branch), not
+	// widened Scalar.
+	if len(res.Stack) != 1 || !strings.Contains(res.Stack[0], "Integer") {
+		t.Errorf("expected Integer result after unreachable-else, got %v", res.Stack)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "unreachable_branch" && d.Severity == aql.SeverityWarning {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected unreachable_branch warning, got: %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUnreachableBranchFalse covers the false side.
+func TestCheckUnreachableBranchFalse(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [false] ["dead"] [42]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || !strings.Contains(res.Stack[0], "Integer") {
+		t.Errorf("expected Integer result after unreachable-then, got %v", res.Stack)
+	}
+}
+
+// TestPerfUnreachableBranch demonstrates the check's ability to skip
+// a dead branch — with a literal-true condition, only the reachable
+// side is analysed.
+func TestPerfUnreachableBranch(t *testing.T) {
+	src := `if [true] [1 add 2 mul 3] [each [length] pairs iota 100]`
+	runPerfComparison(t, src, 30)
 }
 
 // TestPerfCleanProgram measures Check vs Run on a program with zero
