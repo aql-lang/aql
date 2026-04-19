@@ -282,6 +282,88 @@ func TestCheckUndefinedWordDiagnosis(t *testing.T) {
 	}
 }
 
+// TestCheckDoLiteralBody verifies `do` on a literal list runs the
+// body through a sub-engine in check mode and yields the top-of-
+// stack carrier. `do [1 add 2]` → Integer, `do [upper "hi"]` → String.
+func TestCheckDoLiteralBody(t *testing.T) {
+	cases := []struct {
+		src    string
+		expect string
+	}{
+		{"do [1 add 2]", "Scalar/Number/Integer"},
+		{`do [upper "hi"]`, "Scalar/String"},
+	}
+	for _, c := range cases {
+		a, err := aql.New()
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		res, err := a.Check(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		if len(res.Stack) != 1 || res.Stack[0] != c.expect {
+			t.Errorf("%q: want %q, got %v", c.src, c.expect, res.Stack)
+		}
+	}
+}
+
+// TestCheckHigherOrderBody verifies each/fold/scan bodies are
+// analysed in check mode and produce expected carriers. The
+// element-type of the concrete data list is passed into the body.
+func TestCheckHigherOrderBody(t *testing.T) {
+	cases := []struct {
+		src    string
+		expect string
+	}{
+		{"each [dup add] [1 2 3]", "Node/List"},
+		{"0 fold [add] [1 2 3]", "Scalar/Number/Integer"},
+		{"scan [add] [1 2 3]", "Node/List"},
+	}
+	for _, c := range cases {
+		a, err := aql.New()
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		res, err := a.Check(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		if len(res.Stack) != 1 || res.Stack[0] != c.expect {
+			t.Errorf("%q: want %q, got %v", c.src, c.expect, res.Stack)
+		}
+		for _, d := range res.Diagnostics {
+			if d.Code == "no_signature" {
+				t.Errorf("%q: unexpected no_signature diagnostic: %+v", c.src, d)
+			}
+		}
+	}
+}
+
+// TestCheckHigherOrderBadBody verifies the checker flags a type-
+// mismatch diagnostic in each-body analysis when the body misuses
+// its element (e.g. calling `upper` on an Integer element).
+func TestCheckHigherOrderBadBody(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("each [upper 42] [1 2]")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" && d.Word == "upper" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected no_signature diagnostic on upper in body, got: %+v", res.Diagnostics)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics

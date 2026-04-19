@@ -241,10 +241,49 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 // matching — both would cascade failures. The trade-off is that the
 // checker reports one diagnostic per site and keeps going with the
 // assumed signature's declared return types (or Any if unannotated).
-func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, sig *Signature) error {
+func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature) error {
+	// Gather candidate positions once and try to pick a signature
+	// whose arity matches and whose declared types are compatible
+	// with (or at least not contradicted by) the actual carrier
+	// args. TAny carriers are treated as wildcards.
+	best := fallback
+	bestMatch := -1
+	// Scan all signatures; prefer: concrete matches > same arity > fallback.
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue
+		}
+		n := len(s.Args)
+		pos := e.checkModeFallbackPositions(n)
+		if len(pos) != n {
+			continue
+		}
+		score := 0
+		compatible := true
+		for j, p := range pos {
+			av := e.stack[p]
+			// TAny carriers match any type without penalty.
+			if av.VType.Equal(TAny) {
+				continue
+			}
+			if sigTypeMatches(av, s.Args[j]) {
+				score++
+				continue
+			}
+			// Incompatible unless the actual carrier is Any.
+			compatible = false
+			break
+		}
+		if compatible && score > bestMatch {
+			bestMatch = score
+			best = s
+		}
+	}
+	sig := best
 	e.registry.addCheckDiagnostic(CheckDiagnostic{
 		Code:   "no_signature",
-		Detail: "no matching signature for " + w.Name + "; assuming first candidate for analysis",
+		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
 		Word:   w.Name,
 	})
 	n := len(sig.Args)

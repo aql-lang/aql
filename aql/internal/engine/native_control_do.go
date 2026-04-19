@@ -94,7 +94,18 @@ func registerDo(r *Registry) {
 					}
 					return evalList(args[0].AsList().Slice())
 				},
-				Returns: []Type{TAny},
+				// Static type-check: when the body is a literal
+				// list, run it through a sub-engine in check mode
+				// and use the residual top-of-stack carrier as the
+				// result. Falls back to TAny for non-concrete
+				// bodies (e.g. computed at runtime).
+				ReturnsFn: func(args []Value) []Value {
+					stk := RunCarrierBody(r, args[0])
+					if len(stk) == 0 {
+						return []Value{NewCarrier(TAny)}
+					}
+					return []Value{stk[len(stk)-1]}
+				},
 			},
 			{
 				Args: []Type{TMap},
