@@ -34,6 +34,22 @@ type Registry struct {
 	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
 	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
 	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
+
+	// CheckMode toggles static type-checking execution. When true, the
+	// engine runs the same dispatch/matching machinery but carries
+	// type-only Carrier values instead of concrete payloads, and
+	// replaces signature handlers with carrier-typed return propagation
+	// (see Signature.Returns). Diagnostics are accumulated into
+	// CheckDiagnostics rather than returned as hard errors.
+	CheckMode        bool
+	CheckDiagnostics []CheckDiagnostic
+}
+
+// CheckDiagnostic is a single static type-check finding.
+type CheckDiagnostic struct {
+	Code   string // short stable code, e.g. "missing_returns", "no_signature"
+	Detail string // human-readable description
+	Word   string // word name relevant to the diagnostic, if any
 }
 
 // NewRegistry creates an empty registry.

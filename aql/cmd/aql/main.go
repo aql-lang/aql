@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	aql "github.com/metsitaba/voxgig-exp/aql"
 	jsonic "github.com/jsonicjs/jsonic/go"
+	aql "github.com/metsitaba/voxgig-exp/aql"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 	"github.com/metsitaba/voxgig-exp/aql/internal/formatter"
@@ -36,9 +36,10 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	registry := fs.String("r", "", "registry path")
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
+	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -59,6 +60,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "help" subcommand: aql help [word]
 	if len(args) > 0 && args[0] == "help" {
 		return runHelp(args[1:], stdout)
+	}
+
+	// Handle "check" subcommand: aql check [script.aql]
+	if len(args) > 0 && args[0] == "check" {
+		return runCheck(args[1:], stdout, stderr)
 	}
 
 	// Handle "prep" subcommand: aql prep [dir]
@@ -134,6 +140,12 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if hasSource {
+		if *checkFirst {
+			if err := check(stdout, stderr, source, *registry, *seed); err != nil {
+				fmt.Fprintf(stderr, "%s\n", err)
+				return 1
+			}
+		}
 		if err := run(stdout, source, *registry, *seed); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
@@ -333,6 +345,63 @@ func run(w io.Writer, source string, registry string, seed int64) error {
 		fmt.Fprintln(w, strings.Join(parts, " "))
 	}
 	return nil
+}
+
+// check runs the static type-checker over source and writes the carrier
+// result stack and any diagnostics to the provided writers. It returns
+// an error for a parse/execution failure; diagnostics on their own do
+// not fail the run (they're printed to stderr).
+func check(stdout, stderr io.Writer, source, registry string, seed int64) error {
+	a, err := aql.New(aql.Options{Registry: registry, Seed: seed})
+	if err != nil {
+		return fmt.Errorf("init error: %s", err)
+	}
+
+	res, err := a.Check(source)
+	for _, d := range res.Diagnostics {
+		fmt.Fprintf(stderr, "check: %s: %s\n", d.Code, d.Detail)
+	}
+	if err != nil {
+		return fmt.Errorf("check error: %s", err)
+	}
+
+	if len(res.Stack) > 0 {
+		fmt.Fprintln(stdout, "check: "+strings.Join(res.Stack, " "))
+	} else {
+		fmt.Fprintln(stdout, "check: (empty stack)")
+	}
+	return nil
+}
+
+// runCheck implements the `aql check [script.aql]` subcommand.
+func runCheck(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "error: aql check requires a script file or -e expression\n")
+		return 1
+	}
+
+	var source string
+	// Support `aql check -e "expr"` as well as `aql check file.aql`.
+	if args[0] == "-e" {
+		if len(args) < 2 {
+			fmt.Fprintf(stderr, "error: aql check -e requires an expression\n")
+			return 1
+		}
+		source = args[1]
+	} else {
+		data, err := os.ReadFile(args[0])
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		source = string(data)
+	}
+
+	if err := check(stdout, stderr, source, "", 0); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return 1
+	}
+	return 0
 }
 
 // runClean handles `aql clean [dir]`: delete everything in .aql/ except dotfiles.

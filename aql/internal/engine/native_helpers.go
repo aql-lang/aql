@@ -66,8 +66,12 @@ func registerBinaryMathWord(
 		return singleResult(fn(b, a))
 	}
 
+	// Static type-check annotation: TNumber+TNumber returns a Number.
+	// Intra-signature value-dependence (Integer+Integer→Integer,
+	// otherwise Decimal) is modelled at the carrier level as a widened
+	// TNumber for now; a finer split is future work.
 	sigs := []NativeSig{
-		{Args: []Type{TNumber, TNumber}, Handler: handler},
+		{Args: []Type{TNumber, TNumber}, Handler: handler, Returns: []Type{TNumber}},
 	}
 	sigs = append(sigs, extraSigs...)
 

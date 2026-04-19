@@ -256,6 +256,14 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	e.registry.PushContext(parent)
 	defer e.registry.PopContext()
 
+	// In static type-check mode, convert concrete literal values to
+	// carriers before execution. The same dispatch/matching machinery
+	// then runs over carrier values; execMatch short-circuits handler
+	// calls to push carrier return values declared on the signature.
+	if e.registry != nil && e.registry.CheckMode {
+		input = StripToCarriers(input)
+	}
+
 	if cap(e.stack) >= len(input) {
 		e.stack = e.stack[:len(input)]
 	} else {
@@ -774,6 +782,21 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		match.Args[i].Undefined = false
 	}
 
+	// Static type-check mode: skip the handler, splice carrier results
+	// derived from Signature.Returns. The rest of the dispatch machinery
+	// (positions, splicing, forward resolution) is shared with normal
+	// execution, so runtime and checker stay in parity.
+	if e.registry != nil && e.registry.CheckMode {
+		name := ""
+		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
+			if w, err := e.stack[e.pointer].AsWord(); err == nil {
+				name = w.Name
+			}
+		}
+		results := carrierResults(e.registry, name, match.Sig)
+		return e.spliceMatchResults(match, sortedIndices, n, results)
+	}
+
 	// Compute context (cheap O(1) call).
 	ctx := e.registry.Context()
 
@@ -807,6 +830,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return err
 	}
 
+	return e.spliceMatchResults(match, sortedIndices, n, results)
+}
+
+// spliceMatchResults replaces the word and its matched args on the
+// stack with the supplied results. Shared between handler execution
+// and carrier-based check-mode execution so both paths stay in parity.
+func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n int, results []Value) error {
 	if len(sortedIndices) == n && n > 0 {
 		firstArgIdx := sortedIndices[0]
 

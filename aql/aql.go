@@ -136,6 +136,40 @@ func (a *AQL) Options() Options {
 	return a.options
 }
 
+// Check parses the source and runs it through the engine in static
+// type-check mode. Literals are stripped to carrier values (type-only)
+// and signature handlers are replaced by carrier return propagation
+// driven by Signature.Returns. The actual runtime dispatch, matching,
+// and forward-collection machinery is reused verbatim so checker and
+// runtime stay in absolute parity.
+//
+// The returned CheckResult holds the residual carrier stack (as type
+// path strings) and any diagnostics the checker collected.
+func (a *AQL) Check(src string) (CheckResult, error) {
+	values, err := parser.Parse(src)
+	if err != nil {
+		return CheckResult{}, err
+	}
+
+	a.registry.Source = src
+	a.registry.CheckMode = true
+	a.registry.CheckDiagnostics = nil
+	defer func() { a.registry.CheckMode = false }()
+
+	eng := engine.NewTop(a.registry)
+	eng.SetSource(src)
+	result, err := eng.Run(values)
+	if err != nil {
+		return CheckResult{Diagnostics: a.registry.CheckDiagnostics}, err
+	}
+
+	stack := make([]string, len(result))
+	for i, v := range result {
+		stack[i] = v.VType.String()
+	}
+	return CheckResult{Stack: stack, Diagnostics: a.registry.CheckDiagnostics}, nil
+}
+
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
 	a.registry.SetFileOps(ops)
@@ -231,3 +265,17 @@ func (a *AQL) Run(src string) ([]any, error) {
 	}
 	return out, nil
 }
+
+// CheckResult is the outcome of a static type-check run.
+//
+// Stack holds the carrier values left on the stack after symbolic
+// execution (one per residual result), represented as their type
+// path strings. Diagnostics holds any findings the checker recorded
+// (e.g. missing return-type annotations).
+type CheckResult struct {
+	Stack       []string
+	Diagnostics []CheckDiagnostic
+}
+
+// CheckDiagnostic is a single finding from the static checker.
+type CheckDiagnostic = engine.CheckDiagnostic

@@ -34,6 +34,10 @@ type NativeSig struct {
 
 	// Fallback marks this as the generic 0-arg fallback handler.
 	Fallback bool
+
+	// Returns lists the declared return types for static type-checking.
+	// See Signature.Returns for details.
+	Returns []Type
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
@@ -49,6 +53,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			NoEvalArgs: sig.NoEvalArgs,
 			BarrierPos: sig.BarrierPos,
 			Fallback:   sig.Fallback,
+			Returns:    sig.Returns,
 		}
 		if fn.ForwardPrecedence {
 			r.Register(fn.Name, s)

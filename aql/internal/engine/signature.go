@@ -57,6 +57,13 @@ type Signature struct {
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
+
+	// Returns lists the declared return types for this signature. It is
+	// used by static type-checking mode: when the engine runs in check
+	// mode, it skips the handler and pushes carrier values typed by
+	// Returns. When nil or empty, the checker falls back to a
+	// conservative approximation (see engine carrier handling).
+	Returns []Type
 }
 
 // TotalArgs returns the number of arguments.
