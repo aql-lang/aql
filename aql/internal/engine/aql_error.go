@@ -136,10 +136,17 @@ type SrcPos struct {
 	Src string // source text of the token
 }
 
-// findWordInSource locates the last occurrence of a word in the source text
-// and returns 1-based row and col. Searching from the end is more likely to
-// find the call site rather than the definition site (e.g. "def f ..." vs "f").
-// If the word is not found, returns (0, 0).
+// FindWordInSource locates the last occurrence of a word in the source
+// text and returns 1-based row and col. Searching from the end is more
+// likely to find the call site rather than the definition site (e.g.
+// "def f ..." vs "f"). If the word is not found, returns (0, 0).
+//
+// Exported for use by the static type-checker when filling in Row/Col
+// on diagnostics whose Pos is unknown.
+func FindWordInSource(src, word string) (row int, col int) {
+	return findWordInSource(src, word)
+}
+
 func findWordInSource(src, word string) (row int, col int) {
 	if src == "" || word == "" {
 		return 0, 0

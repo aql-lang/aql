@@ -553,6 +553,33 @@ func TestCheckTypedListPreserved(t *testing.T) {
 	}
 }
 
+// TestCheckDiagnosticPosition verifies diagnostics carry 1-based
+// Row/Col locations pointing at the offending word in the source.
+func TestCheckDiagnosticPosition(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// upper expects String, gets Integer → no_signature.
+	res, err := a.Check("upper 42")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	var d aql.CheckDiagnostic
+	for _, cand := range res.Diagnostics {
+		if cand.Word == "upper" {
+			d = cand
+			break
+		}
+	}
+	if d.Row != 1 {
+		t.Errorf("expected Row=1 on upper, got %d (diag=%+v)", d.Row, d)
+	}
+	if d.Col != 1 {
+		t.Errorf("expected Col=1 on upper, got %d (diag=%+v)", d.Col, d)
+	}
+}
+
 // TestCheckBuiltinsAnnotated walks a handful of common words to
 // confirm that all their matched signatures have Returns/ReturnsFn
 // set after the annotation sweep — no missing_returns diagnostics

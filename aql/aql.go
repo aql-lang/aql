@@ -167,7 +167,18 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	for i, v := range result {
 		stack[i] = v.VType.String()
 	}
-	return CheckResult{Stack: stack, Diagnostics: a.registry.CheckDiagnostics}, nil
+
+	// Fill in missing Row/Col on diagnostics by locating the Word
+	// in the source text. Best-effort — duplicates fall back to
+	// the last occurrence, which is usually the call site rather
+	// than the definition.
+	diags := a.registry.CheckDiagnostics
+	for i := range diags {
+		if diags[i].Row == 0 && diags[i].Word != "" {
+			diags[i].Row, diags[i].Col = engine.FindWordInSource(src, diags[i].Word)
+		}
+	}
+	return CheckResult{Stack: stack, Diagnostics: diags}, nil
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.

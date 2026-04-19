@@ -359,7 +359,11 @@ func check(stdout, stderr io.Writer, source, registry string, seed int64) error 
 
 	res, err := a.Check(source)
 	for _, d := range res.Diagnostics {
-		fmt.Fprintf(stderr, "check: %s: %s\n", d.Code, d.Detail)
+		if d.Row > 0 {
+			fmt.Fprintf(stderr, "check: %d:%d: %s: %s\n", d.Row, d.Col, d.Code, d.Detail)
+		} else {
+			fmt.Fprintf(stderr, "check: %s: %s\n", d.Code, d.Detail)
+		}
 	}
 	if err != nil {
 		return fmt.Errorf("check error: %s", err)

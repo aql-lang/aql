@@ -61,6 +61,8 @@ type CheckDiagnostic struct {
 	Code   string // short stable code, e.g. "missing_returns", "no_signature"
 	Detail string // human-readable description
 	Word   string // word name relevant to the diagnostic, if any
+	Row    int    // 1-based line number, 0 if unknown
+	Col    int    // 1-based column number, 0 if unknown
 }
 
 // NewRegistry creates an empty registry.

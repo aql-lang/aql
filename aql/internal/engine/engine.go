@@ -392,6 +392,8 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 				Code:   "undefined_word",
 				Detail: "undefined word: " + name,
 				Word:   name,
+				Row:    v.Pos.Row,
+				Col:    v.Pos.Col,
 			})
 			e.stack[i] = NewCarrier(TAny)
 			continue
@@ -739,7 +741,7 @@ func (e *Engine) stepWord(val Value) error {
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
 		if e.registry != nil && e.registry.CheckMode && len(fn.Signatures) > 0 {
-			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0])
+			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn)
 	}
@@ -833,12 +835,14 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// are prerequisites for subsequent analysis.
 	if e.registry != nil && e.registry.CheckMode && !match.Sig.RunInCheckMode {
 		name := ""
+		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
+			pos = e.stack[e.pointer].Pos
 			if w, err := e.stack[e.pointer].AsWord(); err == nil {
 				name = w.Name
 			}
 		}
-		results := carrierResults(e.registry, name, match.Sig, match.Args)
+		results := carrierResults(e.registry, name, match.Sig, match.Args, pos)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 

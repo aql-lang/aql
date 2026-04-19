@@ -140,8 +140,9 @@ func StripToCarriers(in []Value) []Value {
 //     returned so the checker can keep making progress.
 //
 // args are the carrier-typed input values in signature order (same
-// args that would be passed to the runtime handler).
-func carrierResults(r *Registry, word string, sig *Signature, args []Value) []Value {
+// args that would be passed to the runtime handler). pos carries the
+// word's source location so diagnostics can point at it.
+func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
 	if sig.ReturnsFn != nil {
 		raw := sig.ReturnsFn(args)
 		out := make([]Value, len(raw))
@@ -157,6 +158,8 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value) []Va
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
 			Word:   word,
+			Row:    pos.Row,
+			Col:    pos.Col,
 		})
 		return []Value{NewCarrier(TAny)}
 	}
@@ -374,15 +377,16 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 }
 
 // checkModeAssumeSig is the recovery path for unmatched signatures in
-// check mode: emit a diagnostic, gather up to N adjacent positions as
-// synthetic args, synthesise carrier results from the assumed
-// signature, and splice them over the word + consumed positions.
+// check mode: emit a diagnostic (with pos attached), gather up to N
+// adjacent positions as synthetic args, synthesise carrier results
+// from the assumed signature, and splice them over the word +
+// consumed positions.
 //
 // This path deliberately bypasses forward collection and type
 // matching — both would cascade failures. The trade-off is that the
 // checker reports one diagnostic per site and keeps going with the
 // assumed signature's declared return types (or Any if unannotated).
-func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature) error {
+func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
 	// Gather candidate positions once and try to pick a signature
 	// whose arity matches and whose declared types are compatible
 	// with (or at least not contradicted by) the actual carrier
@@ -426,6 +430,8 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Code:   "no_signature",
 		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
 		Word:   w.Name,
+		Row:    pos.Row,
+		Col:    pos.Col,
 	})
 	n := len(sig.Args)
 	positions := e.checkModeFallbackPositions(n)
@@ -433,7 +439,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	for i, p := range positions {
 		args[i] = e.stack[p]
 	}
-	results := carrierResults(e.registry, w.Name, sig, args)
+	results := carrierResults(e.registry, w.Name, sig, args, pos)
 
 	// Remove the word and any consumed positions, then splice results
 	// in at the word's slot. We rely on ascending order for removal.
