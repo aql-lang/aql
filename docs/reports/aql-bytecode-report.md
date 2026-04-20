@@ -1345,3 +1345,118 @@ The next instalment will catalogue the gotchas — the specific
 ways in which this approach could misbehave, fail silently, or
 surprise users. Then a final instalment will cover prior art
 in detail and the overall verdict.
+
+---
+
+## 8. Gotcha inventory (headings only)
+
+This section lists the concrete failure modes and surprising
+behaviours the approach has to handle, ranked roughly from
+most-likely-to-bite to least. Each is expanded in a later pass;
+for now the purpose is to fix the scope of §8 so it can be
+reviewed and reordered before any of them are written up.
+
+### Severe (correctness risks)
+
+1. **Interpreter/compiled divergence on checker-unsound sites.**
+   Anywhere the carrier checker had to widen to `Any`, the
+   compiled code might pick a different dispatch path than the
+   interpreter would. Differential-execution is the mitigation,
+   but any unchecked gap is a silent bug.
+2. **Stale bytecode after source edit.** Because forward
+   collection, def resolution, and dispatch are baked into the
+   bytecode, any source edit invalidates the compiled artefact.
+   Caching by source hash is easy; partial recompilation is hard.
+3. **Mutation of the registry at runtime that the compiler
+   assumed frozen.** A runtime `def` that the compiler promoted
+   to a local, but which in fact leaks to a sub-engine, would
+   silently diverge from the interpreter.
+4. **Value-dependent return types that aren't split.** Words
+   like `add [Number,Number]` whose return depends on the inputs
+   propagate a disjunct unless split into monomorphic sig_ids.
+   Forgetting to split cascades the disjunct and loses the
+   speed-up.
+5. **Sub-engine registry sharing.** `each`, `fold`, `do` create
+   sub-engines over the same registry; a `def` in a body mutates
+   state visible to subsequent iterations. Bytecode that assumed
+   per-iteration isolation would be wrong.
+
+### Moderate (implementation hazards)
+
+6. **Forward-collection edge cases.** Optional args, barrier
+   positions (`|` in fn signatures), and `/q` implicit-quote
+   positions all interact with forward collection in subtle
+   ways. The compiler must simulate each exactly or emit
+   wrong-arity calls.
+7. **Auto-evaluation semantics.** Lists with `Eval=true` are
+   auto-evaluated when consumed as non-code args. The compiler
+   must decide at emit time whether a list literal becomes a
+   `PUSH_CONST list_id` (code body) or a compiled eval sequence
+   (data).
+8. **Template string interpolation.** `InterpString` values
+   are evaluated lazily by the engine. The compiler can lower
+   them to a sequence of expression evaluations plus a join,
+   but escape and nesting rules must match the parser exactly.
+9. **Paren groups and inline evaluation.** `(expr)` groups inside
+   maps become `ParenExpr` values for `autoEvalMap`. These need
+   their own compiled sub-programs or a fallback-to-interp.
+10. **Error positions shifting.** Errors reported by PC → span
+    lookup must match the interpreter's token-position errors
+    byte-for-byte, or user tooling that scrapes error output
+    breaks.
+11. **Break/continue across compiled and interpreted frames.**
+    When a `FALLBACK_INTERP` span contains a `break`, the
+    sentinel error must unwind the compiled frame correctly
+    (currently uses Go error propagation; the bytecode VM needs
+    an equivalent).
+12. **Stack-only vs forward precedence defaults.** `/s` and `/f`
+    modifiers on word invocations and on word definitions both
+    affect arg collection. Easy to miss on a per-site basis.
+13. **Constant-pool identity.** Interning breaks `===`-style
+    identity semantics if any word cares about value identity
+    rather than equality. Spot-check: `eq`, `is`, map key
+    lookup.
+
+### Low (ops / UX hazards)
+
+14. **Debuggability regression.** Step-through tracing currently
+    tracks the token stream. The compiled VM would need a new
+    tracing mode (PC-level with source mapping).
+15. **Coverage/test instrumentation.** Coverage is currently
+    expressed in terms of tokens and call sites. Bytecode PCs
+    need a parallel notion.
+16. **Worse error messages for disjunct-related bugs.** When
+    the checker widens and the user writes bad code downstream,
+    the bytecode error may surface far from the original
+    ambiguity. The diagnostic needs to carry both PCs.
+17. **Bytecode ABI stability.** `.aqlc` files baked across
+    versions risk mismatches. Either version-tag the file and
+    recompile on mismatch, or never persist.
+18. **Cold-start regression for tiny scripts.** A 5-line script
+    that today runs in microseconds would pay compile cost
+    (also microseconds, but relatively larger). Eager
+    compilation default may surprise CLI users.
+19. **GOMAXPROCS / concurrent VMs.** If multiple goroutines run
+    separate VM instances sharing a `Program`, the constants
+    and sig tables must be immutable. Straightforward but easy
+    to regress.
+20. **Tooling needs to understand two modes.** `aql repl`,
+    `aql check`, `aql run` each need to know whether they
+    operate on source, checker carriers, or bytecode, and
+    surface the right diagnostics for each.
+
+### Out-of-scope-for-v1 but worth flagging
+
+21. **Unboxing breaks handler signatures.** Typed opcodes (v2)
+    require dual-call handlers — one for boxed, one for
+    unboxed. Mixing them is where most embedded-VM projects
+    accumulate complexity.
+22. **JIT temptation.** Once bytecode exists, the pressure to
+    add a trace-compiling JIT grows. That's a much larger
+    project and not what the carrier-to-bytecode path buys
+    you on its own.
+
+Next pass: expand each severe and moderate item into a full
+subsection with a concrete failure scenario and the specific
+mitigation. Low-priority items stay as a short checklist in the
+final document.
