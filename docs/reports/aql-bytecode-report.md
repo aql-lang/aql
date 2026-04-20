@@ -2093,3 +2093,171 @@ approach for dynamic features.
 AQL's plan sits well within this landscape; the approach is
 neither novel nor risky, it's just applied differently to match
 AQL's specific design choices.
+
+---
+
+## 12. Verdict
+
+### 12.1 Is it feasible?
+
+**Yes, conditionally.** The approach is a natural extension of
+the carrier-based static type checker. The checker already
+makes every dispatch decision in typed regions; compilation is
+that same pass with an instruction-emission side effect and a
+label-resolution pass at the end. No new theory is required.
+Nothing proposed here is novel research — the combination is
+AQL-specific, but each ingredient is standard.
+
+The main condition is **Phase 0**: the carrier checker's
+return-type annotations must be complete. The bytecode
+compiler's sig table is a direct consumer of that metadata;
+any gap produces either a `Carrier<Any>` cascade (performance
+loss) or a missed signature split (correctness or performance
+loss via §9.4).
+
+### 12.2 Is it worth it?
+
+**Probably, for compute-heavy workloads. Marginal for I/O-
+heavy workloads.** §7 estimates:
+
+- Arithmetic loops, typed folds, counted iteration:
+  **5–15× faster** at v1, potentially 2–4× more at v2 with
+  typed opcodes.
+- Record transforms, typed-list `each`/`fold`: **3–6× faster**.
+- Orchestration (I/O, context, module wiring):
+  **marginal — dispatch is not the bottleneck there.**
+
+Whether this investment is worth making depends on what kinds
+of AQL programs dominate usage. If AQL is mostly used to
+orchestrate external systems (database queries, HTTP calls,
+file I/O), the speed-up is small and the risk/benefit is
+poor. If AQL is used to compute things directly (aggregations,
+transformations, decision logic), the speed-up is meaningful
+and the investment is justified.
+
+### 12.3 What's the scope?
+
+Rough sizing, in phases that deliver value independently:
+
+**Phase 0 — return type annotations.** Already the Phase 0 of
+the checker. Mechanical but touches ~126 native signatures.
+Must be complete for the compiler to resolve dispatch.
+
+**Phase 1 — basic bytecode emitter + VM.** Straight-line code,
+arithmetic, comparisons, `if`/`for`, user fns with a single
+signature. Skip disjunct dispatch, skip higher-order words,
+skip module imports. Ships a working VM for the simplest
+programs. **~2 weeks**.
+
+**Phase 2 — full surface.** Multi-signature `fn`, `each`/
+`fold`/`scan` with inlined bodies, records and tables, module
+imports, polymorphic dispatch (`CALL_NATIVE_POLY`,
+`CALL_USER_POLY`), runtime `def`. Ships complete feature
+parity with the interpreter for typed regions. **~4 weeks**.
+
+**Phase 3 — dynamic fallback.** `FALLBACK_INTERP` glue, `do`
+on computed code, `context get` with unknown keys. Completes
+the compile-or-fall-back coverage; the VM now handles
+everything the interpreter does. **~2 weeks**.
+
+**Phase 4 — specialisation (optional).** Sig-id splitting for
+`ReturnsFn` (§9.4), inline caches for polymorphic sites
+(§11.7), compact opcode encoding (§11.4), typed opcodes for
+hot arithmetic (§7.6). Each is independent; prioritise by
+benchmark results. **~4 weeks each.**
+
+**Phase 5 — tooling.** Source-map integration, debugger PC →
+span tracing, coverage instrumentation, `.aqlc` caching. Can
+be skipped entirely for v1 and added later. **~2–4 weeks.**
+
+Rough total for a production-ready v1: **~10 weeks** of
+focused work, assuming Phase 0 is already done. Phase 4 and 5
+add more weeks depending on requirements.
+
+### 12.4 What are the risks?
+
+Ranked by likelihood × severity:
+
+1. **§9.4 not fully implemented** — the single biggest risk to
+   the expected speed-ups. Value-dependent return types that
+   don't split into monomorphic sig_ids dissolve the whole
+   benefit. Mitigation: regression-test arithmetic chains
+   explicitly for mono propagation.
+2. **Divergence between interpreter and compiled** — any
+   semantic corner missed by the compiler produces wrong
+   answers silently. Mitigation: differential-execution harness
+   in CI from day one.
+3. **Handler allocation dominates in practice** — if handlers
+   are heap-allocation-heavy, dispatch elimination saves less
+   than §7 predicts. Mitigation: profile first, compile second;
+   attack allocations with Phase 4 typed opcodes if needed.
+4. **`do`-on-computed-code more common than expected** —
+   frequent fallbacks defeat the speed-up. Mitigation: audit
+   real programs; if this pattern is widespread, consider
+   language-level features (e.g. static `do` on literal lists
+   only) before investing in compilation.
+5. **Maintenance drag** — two execution modes to keep in sync
+   as the language evolves. Mitigation: the compiler IS the
+   checker plus emission; language changes must go through the
+   checker anyway, so the incremental maintenance is small if
+   the architecture is clean.
+
+### 12.5 Recommendation
+
+**Proceed, but gate Phase 1 on Phase 0 completion.** Do not
+start emitting bytecode until every native signature has a
+`Returns` annotation or `ReturnsFn`. Starting early produces a
+VM that handles 60% of the language well and 40% as fallbacks
+— which is worse than the pure interpreter in practice,
+because users see variable performance and the fallback path
+is the same speed as pure interpretation anyway.
+
+Once Phase 0 is done, ship Phase 1 as an **opt-in mode**:
+`aql run --compile` or `AQL_COMPILE=1`. Keep the interpreter
+as the default. Measure on real programs; graduate to default
+only when differential-execution has been clean for a
+reasonable sample.
+
+The carrier-to-bytecode path is the right next step after the
+static type checker, but only if the checker is done. It is
+not a substitute for the checker, and it multiplies every
+checker bug into a runtime bug.
+
+### 12.6 Summary of the report
+
+- Compilation via the carrier checker is **feasible** and
+  **structurally sound**: the same pass that types the program
+  records its dispatch decisions as bytecode.
+- **Fixed-arity calls** eliminate AQL's single largest
+  interpreter overhead — the combination of `matchSignature`,
+  forward collection, and stack splicing.
+- The **~35-opcode instruction set** is small, with ~5 hot
+  opcodes (`PUSH_CONST`, `CALL_NATIVE1_1`, `CALL_NATIVE2_1`,
+  `JMP_IF_FALSE`, `FOR_NEXT`) covering the common case.
+- **Mark/move** disappears from the runtime; `if`/`for` become
+  `JMP`s.
+- **User fns** compile as `CompiledFn` with call frames;
+  recursion works naturally.
+- **`RunInCheckMode` words** run at compile time and emit
+  nothing at runtime.
+- Expected **speed-up: 5–15× on hot paths**, 2–4× additional
+  with typed opcodes in a later phase. Minimal on I/O-bound
+  code.
+- **Severe gotchas** cluster around silent divergence and
+  missed monomorphisation; mitigations are known and
+  implementable.
+- **Moderate gotchas** are standard implementation hazards
+  with clear fixes.
+- **Prior art** places AQL between Forth (baseline threading)
+  and Factor (optimising concatenative compile), with Lua and
+  LuaJIT mapping the later-phase roadmap.
+- **Recommendation**: proceed after Phase 0, ship as opt-in
+  first, graduate to default when differential-execution is
+  clean.
+
+The path from text-stream interpretation to compiled bytecode
+is well-trodden, and the carrier checker makes it straightforward
+for AQL specifically. The open question is not "can it be done"
+but "is it worth the ongoing maintenance cost versus the
+real-world workloads AQL needs to serve?" — and that's a
+question only usage data can answer.
