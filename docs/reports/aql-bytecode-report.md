@@ -1848,3 +1848,248 @@ subsection) and run them in both interpreter and compiled modes;
 any divergence is a bug in the emit logic. None of these are
 showstoppers; collectively they represent perhaps a week of
 careful work.
+
+---
+
+## 11. Prior art and comparison
+
+The original question asked how this approach compares to other
+languages that compile through similar stages. This section
+surveys the landscape, grouped by structural similarity to AQL,
+and highlights what each case teaches about the design choices
+above.
+
+### 11.1 Forth — direct, indirect, and subroutine threaded code
+
+**Structural fit: high.** Forth is the closest analogue. It's a
+concatenative stack language; its words dispatch by name lookup
+in a dictionary; its interpreter executes a token stream one
+word at a time. Every mature Forth implementation replaces the
+naïve interpreter with some form of threaded code, typically:
+
+- **Direct-threaded code (DTC)**: each word's body is a list of
+  pointers to other words' code. The inner interpreter is a
+  tight `*ip++ ; goto *ip;` loop (in C) — in AQL terms, a
+  program is a `[]uintptr` and the "VM" is two lines.
+- **Indirect-threaded code (ITC)**: one more level of indirection
+  to handle colon definitions vs. primitives uniformly.
+- **Subroutine-threaded code (STC)**: each word-body slot is a
+  machine `CALL` instruction. Essentially native code, just
+  without inlining.
+
+Forth routinely gets 3–10× over text-stream interpretation from
+threaded code alone (Rodriguez, "Moving Forth", 1993; Ertl &
+Gregg, "Retargeting JIT Compilers by Using C-Compiler Generated
+Executable Code", 2004 — the same Ertl who wrote Gforth). The
+lesson for AQL: the baseline win from bytecode is historically
+well-documented at exactly the order of magnitude we're
+projecting in §7.
+
+What Forth does *not* have: signatures, overloading, or static
+type dispatch. So Forth-style threading handles AQL's straight-
+line cases but doesn't help with polymorphic dispatch — that's
+where AQL's carrier-driven pre-resolution is the value add.
+
+### 11.2 Factor — concatenative with stack checker and optimising compiler
+
+**Structural fit: very high.** Factor is a modern concatenative
+language with a static stack checker (`( a b -- c )` effects)
+and an optimising compiler that goes all the way to machine
+code. The pipeline is:
+
+1. Parser → word definitions.
+2. Stack-effect inference per quotation.
+3. Tree-IR optimisation (inlining, escape analysis).
+4. Low-level IR.
+5. Machine code (x86-64, ARM64).
+
+Factor's stack checker verifies arity and stack balance but does
+not track value types. AQL's carrier checker goes one step
+further — it tracks types through dispatch. Structurally, the
+AQL-to-bytecode path corresponds to Factor's steps 1–2 plus a
+trivial "lowering to bytecode" step; the full Factor pipeline
+is what v2 and v3 of AQL (typed opcodes, JIT) would look like.
+
+Lesson: the approach proposed here is a proven execution model,
+not a novel research effort. Factor has been in production use
+for ~20 years with a stack-effect-driven compiler.
+(factorcode.org; Pestov et al.'s papers on Factor's design.)
+
+### 11.3 Cat and Kitten — HM-typed concatenative
+
+**Structural fit: moderate.** Cat (Diggins, 2006) and Kitten
+(Purdy, ~2013) are concatenative languages with Hindley-Milner
+type inference extended with stack row polymorphism. Both
+eliminate runtime dispatch entirely: once the type check
+passes, every call site has a known static callee and the
+compiler emits direct calls with no dispatch table at all.
+
+Neither language has ad-hoc overloading (multiple signatures
+per name), which is exactly the feature AQL couldn't drop
+without a rewrite. So Cat/Kitten represent the ceiling: if
+AQL ever required full annotation and gave up first-match
+dispatch, it could compile even more aggressively. The
+carrier-based approach sacrifices some precision (disjuncts,
+widening) in exchange for keeping AQL's existing semantics.
+
+Lesson: static-type-driven concatenative compilation is not
+only feasible but can be pushed considerably further than what
+AQL's approach needs. The ceiling is well above the floor set
+by §7's estimates.
+
+### 11.4 Lua 5 — register VM from a dynamic stack language
+
+**Structural fit: moderate.** Lua 5 is not concatenative, but
+it's a widely-studied dynamic-language VM implemented in
+portable C, and the design choices map directly:
+
+- **Register-based bytecode**: Lua 5 uses virtual registers
+  rather than a stack; this packs operands into the opcode
+  encoding and reduces instruction count by ~30% vs. a stack
+  machine (Ierusalimschy et al., "The Implementation of Lua
+  5.0", 2005).
+- **Single-pass compile**: source → bytecode in one parser
+  pass. Very fast compilation — usually invisible to users.
+- **Precomputed constants and upvalues**: resolved at compile
+  time, exactly as proposed for AQL's constant pool and fn
+  tables.
+
+AQL stays stack-based because the language is stack-based;
+moving to registers would fight the source semantics. But Lua
+5's compact opcode encoding (bit-packed 32-bit words) is a
+cheap optimisation AQL should consider for v1 rather than v2.
+
+Lesson: stack vs. register is a valid design question, but for
+a *concatenative* source language, stack bytecode is the natural
+choice. The encoding density question is separate and worth
+tightening.
+
+### 11.5 LuaJIT — trace compilation over a bytecode VM
+
+**Structural fit: roadmap signpost.** LuaJIT adds a trace-
+recording JIT on top of Lua's bytecode VM. Hot loops trigger
+recording; recorded traces become native code via Mike Pall's
+extremely efficient SSA IR and backend. Typical speed-ups over
+Lua 5 are 10–100×.
+
+This is what AQL v3+ could look like if the bytecode VM
+demonstrates real-world usage. The bytecode layer is a
+prerequisite — you can't trace-compile a text-stream
+interpreter cleanly. The §7 v1 win is a stepping stone toward
+this kind of future optimisation, not an end-state.
+
+Lesson: bytecode is infrastructure, not a destination. If AQL
+ever needs JavaScript-class performance, the bytecode VM is
+step zero.
+
+### 11.6 CPython — dispatch still dominates
+
+**Structural fit: cautionary tale.** CPython has had a bytecode
+VM since the beginning, yet until PEP 659 ("Specializing
+Adaptive Interpreter", Python 3.11, 2022) the VM was not
+meaningfully faster than a tight AST walker for many workloads.
+The problem was that every opcode still paid for runtime
+type/attribute lookup inside the handler.
+
+PEP 659 fixes this with **inline caching**: a `LOAD_ATTR`
+opcode mutates itself on first execution to a specialised
+variant that remembers the object shape. Repeated executions
+on the same shape skip the full lookup.
+
+AQL doesn't have CPython's runtime flexibility (attributes
+added at runtime, classes redefined) so inline caching is
+less important — the carrier checker already narrows most of
+what IC catches at run time. But for the residual polymorphic
+sites (`CALL_NATIVE_POLY`), inline caching is the right v2
+optimisation.
+
+Lesson: fixed arity alone isn't sufficient if handlers still
+dispatch internally. The §7 estimates assume AQL's handlers
+are already reasonably specialised; if they aren't, the win
+shrinks. The `ReturnsFn`-driven signature splitting in §9.4 is
+what keeps handler dispatch flat.
+
+### 11.7 V8 / SpiderMonkey — inline caches for polymorphic sites
+
+**Structural fit: relevant for v2.** Modern JS engines use
+inline caches at every property-access and call site,
+specialised per observed type. Polymorphic sites maintain a
+small (typically ≤4) table of observed shapes. Sites that blow
+past the table fall back to the generic dispatch.
+
+For AQL this is directly applicable at `CALL_NATIVE_POLY`: the
+first observed input type tag becomes the fast path; a small
+table grows on further types; beyond the table size, fall back
+to the generic. The lattice in §2.4 described this shape; the
+JS-engine literature gives the detailed design.
+
+Lesson: the polymorphic-site design in §2.4 should follow the
+inline-cache pattern rather than a static switch. Cheap to
+implement on top of an opcode that already carries a table
+index.
+
+### 11.8 Racket / Scheme JITs — continuations and dynamic binding
+
+**Structural fit: interesting for `do` and `context`.** Scheme
+systems (Racket, Chez) have handled compilation in the presence
+of first-class continuations, dynamic-wind, and parameterise
+for decades. The lesson most relevant to AQL: **dynamic
+features don't block AOT compilation; they require an explicit
+boundary**. Chez compiles nearly everything and falls back only
+at continuation captures.
+
+AQL's `do` on computed code and `context get` play the role
+of Scheme's `eval` and parameterise. The fallback-to-interpreter
+approach is the right strategy; Chez proves it scales.
+
+Lesson: the dynamic escape hatches aren't a bug, they're an
+expected feature of any dynamic-language compiler. Budget for
+them but don't let them block the common case.
+
+### 11.9 Comparison table
+
+| System            | Dispatch resolution | Compile target | What AQL borrows                          |
+|-------------------|---------------------|----------------|-------------------------------------------|
+| Forth (DTC/STC)   | Dictionary lookup   | Threaded code  | Stack-machine baseline, threading idea    |
+| Factor            | Stack-effect infer  | Machine code   | Closest structural analogue end-to-end    |
+| Cat / Kitten      | HM inference        | Machine code   | Ceiling for typed concatenative compile   |
+| Lua 5             | None (typed ops)    | Register bytecode | Compact encoding, compile-time constants |
+| LuaJIT            | Trace + specialise  | SSA → native   | Roadmap for AQL v3                        |
+| CPython (pre-3.11) | Runtime            | Stack bytecode | What to avoid — handler still dispatches  |
+| CPython ≥3.11      | Inline caching     | Adaptive bytecode | Specialisation design for v2             |
+| V8 / SpiderMonkey | Inline caching      | Native + ICs   | Polymorphic-site design                   |
+| Chez Scheme       | Whole-program       | Native         | Dynamic-escape-hatch discipline           |
+
+### 11.10 Where AQL sits
+
+AQL's position is **Factor-like in shape, Lua-like in scope**:
+the source language is concatenative and dispatch-heavy
+(Factor), but the target is a small embedded VM that needs to
+stay simple and Go-native (Lua). The carrier checker is the
+piece that makes Factor-style pre-resolution tractable without
+an HM inference engine — it uses the existing runtime dispatch
+machinery in reverse.
+
+No existing system combines precisely these ingredients:
+concatenative source, first-match ad-hoc overloading, carrier-
+value pre-resolution, and a bytecode VM. That's not because the
+combination is novel research — it's because each ingredient is
+a specific AQL design choice. The overall recipe is standard
+and well-understood; the carrier checker is the one piece that
+makes it work for AQL's specific dispatch model.
+
+### 11.11 Summary of §11
+
+Forth establishes the performance baseline (3–10× from
+threading alone). Factor proves the full pipeline works for
+concatenative languages with static stack analysis. Cat/Kitten
+show the ceiling if full HM were viable. Lua 5 and LuaJIT map
+out the v1-to-v3 roadmap. CPython's pre-3.11 history warns
+that dispatch elimination alone is insufficient without handler
+specialisation. V8/SpiderMonkey inform the polymorphic-site
+design. Chez Scheme validates the fallback-to-interpreter
+approach for dynamic features.
+
+AQL's plan sits well within this landscape; the approach is
+neither novel nor risky, it's just applied differently to match
+AQL's specific design choices.
