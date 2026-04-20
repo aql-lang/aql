@@ -1674,3 +1674,177 @@ pass, sig-id splitting, and shared-registry modelling. The
 hard work is covering them systematically in a differential-
 execution harness so new dispatches don't reintroduce silent
 divergence as the language grows.
+
+---
+
+## 10. Moderate gotchas expanded
+
+Shorter than §9: these are hazards during implementation rather
+than silent correctness traps. Each is one or two paragraphs
+with the specific shape of the problem and the intended fix.
+
+### 10.1 Forward-collection edge cases (inventory #6)
+
+AQL's forward collection handles three wrinkles that the
+compiler must emulate: **optional args** (signatures with
+trailing `Option` types that may or may not be collected),
+**barrier positions** (`|` in fn signatures — `BarrierPos` in
+the Signature struct — halts forward collection at a specific
+arg index), and **`/q` implicit-quote positions** that capture
+Word values as Atoms rather than evaluating.
+
+Each of these is resolved statically by the checker (it picks
+the actual signature chosen, with optional args either present
+or absent). The compiler must read the checker's chosen
+signature, not the declared signature family, to know the exact
+arity to emit. Concretely: `MatchResult.Sig.Args` gives the
+real length and types; `Positions` gives the real source
+indices. Emit `CALL_NATIVE sig_id` with `sig_id` resolving to
+the chosen concrete signature, not the parent family. Regression
+tests: one per optional-arg word (`format`, `slice`, `pad`),
+one per barrier (`fn` with `|`), one per `/q` (`def`, `undef`).
+
+### 10.2 Auto-evaluation semantics (inventory #7)
+
+Lists have an `Eval` flag. A list consumed as a word argument
+is auto-evaluated (elements resolved as a sub-program) unless
+the signature's `NoEvalArgs[i]` is set or the list is `Quoted`.
+Maps auto-evaluate their values similarly.
+
+At the bytecode level, a list in the program must be lowered in
+one of three shapes:
+
+- **Inline bytecode** — the list is a code body (if branch, fn
+  body, for body). The compiler recursively compiles it into a
+  sub-program and emits `PUSH_CONST prog_id` pointing at a
+  `CompiledFn`.
+- **Pre-evaluated value** — `Eval=true` list consumed as data.
+  The compiler emits the list's bytecode followed by a
+  `MAKE_LIST n` to materialise it. Equivalent to running the
+  sub-program at that point.
+- **Literal data** — a list with no `Eval=true` elements. Emit
+  `PUSH_CONST list_id` with the interned list value.
+
+Distinguishing these at emit time is a straightforward walk of
+the list's element types: if any element is a Word that
+resolves to a defined fn or expression, it's case 1 or 2; if
+the consumer's signature has `NoEvalArgs`, it's case 1; else
+case 2. Otherwise case 3.
+
+### 10.3 Template string interpolation (inventory #8)
+
+Template strings (`` `foo ${x} bar` ``) are `InterpString`
+values at parse time, evaluated lazily by the engine
+(`engine.go:343-351`). Compile lowering:
+
+```
+PUSH_CONST "foo "           ; literal segment
+...compile expr for x...
+CALL_NATIVE1_1 to_string    ; coerce top-of-stack to string
+PUSH_CONST " bar"
+STR_CONCAT_N 3              ; concat N strings from the stack
+```
+
+`STR_CONCAT_N` is new — arity in the arg field, pops N, pushes
+one. Nested template strings work automatically because the
+expression inside `${...}` is just compiled code; a nested
+template produces its own `STR_CONCAT_N` on its own stack
+level. Escape-sequence handling happens at parse time as
+today — the compiler sees the parser's decoded output, not raw
+source.
+
+### 10.4 Paren groups and inline evaluation (inventory #9)
+
+`(expr)` groups are already resolved in the parser: top-level
+paren groups expand to engine markers `( ... )`, data-context
+paren groups become `ParenExpr` values inside maps. At runtime,
+the engine either treats `( ... )` as a sub-expression barrier
+(stop forward-collection, evaluate what's inside) or
+`autoEvalMap` evaluates `ParenExpr`.
+
+For compilation, both cases lower identically: compile the
+paren content as a sub-program and emit the result inline.
+Engine-marker parens don't emit anything — they are pure
+structural hints the compiler uses to decide where to emit
+sub-programs. `ParenExpr` inside a map literal becomes an
+emitted expression sequence preceding the map-build, with its
+result stored into the map's value slot.
+
+### 10.5 Error positions shifting (inventory #10)
+
+Runtime errors today carry the token's `Pos`. The compiled VM
+has only a PC. A `DebugInfo []SrcSpan` table (§3.3) maps PC to
+source span. When a `CALL_NATIVE` handler returns an error, the
+VM wraps it with `DebugInfo[pc]` before returning, so the
+user-visible error text looks identical to the interpreter's.
+
+Two risks. First, spans are per-instruction, but a single source
+token can emit multiple instructions (e.g. forward-arg
+rearrangement). The compiler must attach the *token's* pos to
+every emitted instruction, not the rearrangement bookkeeping.
+Second, tools that scrape AQL error messages (IDEs, CI) must
+keep working — if the wording changes, tooling breaks. Fix: use
+the same error-format code path for both modes, feed it
+(span, message) tuples, and keep the format stable.
+
+### 10.6 Break/continue across compiled and interpreted frames (inventory #11)
+
+In the interpreter, `break` and `continue` are sentinel errors
+caught by the engine loop. In the compiled VM, they become
+`JMP` instructions to the loop's end/start label.
+
+What happens when a compiled loop body contains a
+`FALLBACK_INTERP` span whose inner code hits a `break`? The
+interpreter returns `errBreak`; the VM host needs to catch that
+and jump to the compiled loop's end label. Concretely: the VM's
+fallback entry point checks for `errBreak`/`errContinue` and
+translates to the surrounding loop's labels from a static table
+maintained per-frame. This is ~20 lines of glue but easy to
+forget.
+
+Analogous concern for `return` from user fns: if a
+`FALLBACK_INTERP` returns, it must unwind the compiled call
+frame, not just the interpreter's sub-engine.
+
+### 10.7 Stack-only vs forward precedence defaults (inventory #12)
+
+`def/s` (stack-only) and `def/f` (forward-only) modifiers are
+settable both at definition time (per word) and at call site
+(per invocation: `foo/s`, `foo/f`, `foo/1f`, etc.). The parser
+captures these on the `WordInfo`; `matchSignature` reads
+`ForceStack` / `ForceForward` flags.
+
+The checker already handles this — whichever signature it
+matched tells the compiler the actual arg layout. The compiler
+just emits `CALL_NATIVE sig_id` for the selected signature.
+The invocation modifiers don't survive into the bytecode; they
+resolve at compile time. The gotcha is the test matrix: every
+word with forward precedence needs tests exercising `/s` and
+`/f` invocations to confirm the compiler picks the right
+signature. Mechanical, but easy to miss.
+
+### 10.8 Constant-pool identity (inventory #13)
+
+Interning shares storage for equal values: two `PUSH_CONST 3`
+instructions both reference `Constants[k]`. Most AQL words
+compare by value (`eq`, `lt`, etc.), so this is invisible. But
+any word that compares by identity — the `is` type-membership
+word, or a future `same?` identity predicate — would see
+different behaviour: the interpreter gives each parsed `3` its
+own Value; the compiler shares them.
+
+Mitigation: audit the small set of identity-checking words.
+Today `is` compares by type, not identity, so it's safe. If
+an identity word is ever added, either disable interning for
+the affected types or give every interned value a stable "id"
+field the identity check uses. Document the invariant.
+
+### 10.9 Summary of §10
+
+The moderate gotchas are tractable because each has a single
+clear mitigation and a small test-case surface. The implementor
+should write all eight regression tests up front (one per
+subsection) and run them in both interpreter and compiled modes;
+any divergence is a bug in the emit logic. None of these are
+showstoppers; collectively they represent perhaps a week of
+careful work.
