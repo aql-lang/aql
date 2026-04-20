@@ -1079,3 +1079,269 @@ The next instalment will cover performance analysis — expected
 speed-ups per construct, benchmarking methodology, memory
 behaviour, and the specific costs that fixed-arity cannot
 eliminate (allocation, boxing, I/O).
+
+---
+
+## 7. Performance analysis
+
+This section separates **what bytecode compilation does eliminate**
+from **what it leaves unchanged**. The distinction matters: the
+selling point of compilation is dispatch and control-flow cost,
+not the arithmetic itself. Everything below is an expectation
+against the current interpreter, not a measurement — there is no
+compiled backend to benchmark yet. A benchmarking methodology is
+sketched in §7.5.
+
+### 7.1 Where the current interpreter spends time
+
+To frame expected speed-ups, it's worth cataloguing what each
+token costs today. Per token processed in `engine.Run`:
+
+1. **Pointer advance and dispatch switch** — `engine.go:305-375`.
+   A handful of interface checks (`IsWord`, `IsForward`,
+   `IsMark`, etc.) and a Go `switch`. Low cost.
+2. **Trace hook, if enabled** — off by default.
+3. **Step-budget check in check mode** — off at runtime.
+4. **`stepLiteral` forward collection** — inserts a `Forward`
+   marker into the stack, advances. Allocates if the stack
+   header grows.
+5. **`stepWord`** — resolves the word, runs `matchSignature`,
+   collects forward args, runs `rearrangeForForward`, runs
+   `execMatch`. `matchSignature` iterates sorted signatures;
+   `execMatch` splices the stack (one small allocation for
+   `skipSet`, one for the results splice if net size grows).
+
+Steps 4 and 5 dominate for any program with meaningful control
+flow or forward precedence. A single `add` in `1 add 2` form
+goes through:
+
+- `add` pushed as a Word.
+- `add`'s `matchSignature` fails (no stack args yet), inserts a
+  forward marker.
+- `1` pushed, stepLiteral collects it as forward arg.
+- `2` pushed, stepLiteral collects it.
+- Now 2 forward args collected; `execMatch` triggers.
+- `rearrangeForForward` swaps order; `execMatch` splices the
+  word and args out and the result in; pointer rewinds.
+
+That's roughly ~20 interface method calls, 3–5 `make`/`append`
+operations, and a handful of slice copies — to compute one
+`int64 + int64`.
+
+### 7.2 Per-construct speed-up estimates
+
+With `CALL_NATIVE2_1 sig_id`, the same `add` becomes:
+
+- `op := code[pc]` — one load.
+- `sig := sigs[op.Arg]` — one load.
+- Pop two values (two slice-header updates), call handler, push
+  one value (one slice-header update or `append`).
+
+That's 3–5 operations. The ratio is 5–15× per arithmetic token
+on straight-line code. Concrete per-construct estimates:
+
+| Construct                         | Expected speed-up | Why                                                    |
+|-----------------------------------|-------------------|--------------------------------------------------------|
+| Arithmetic on known-int chains    | 10–20×            | Fixed arity + direct handler, no sig scan, no splice  |
+| Comparison chains                 | 8–15×             | Same as arithmetic                                     |
+| `if` with scalar condition        | 5–10×             | `JMP_IF_FALSE` vs. mark/move cont                     |
+| `for` tight body                  | 4–10×             | `FOR_NEXT` vs. mark/move per iteration                |
+| `each`/`fold` with typed list     | 3–6×              | Inline body + accum slot vs. sub-engine per step      |
+| String concatenation              | 2–3×              | Handler dominates; dispatch elimination is a small %   |
+| Record field access (known key)   | 3–5×              | Key hash avoided if compile-time key index             |
+| Record field access (unknown key) | 1.2–1.5×          | Handler dominates                                      |
+| `context get` typed site          | 2–4×              | Prototype walk replaced by slot index where possible   |
+| `do` on computed code             | ~1×               | Falls back to interpreter                              |
+| I/O-heavy code                    | ~1×               | Dispatch is a rounding error on I/O wait              |
+
+The message: compute-heavy code (numerical loops, comparison
+chains, typed-list folds) gets the big wins. Orchestration-heavy
+code (I/O, dynamic dispatch, context manipulation) gets
+modest-to-negligible wins.
+
+Factorial — a canonical AQL benchmark in `aql/test/factorial_type_scaling_test.go`
+— is the ideal candidate: recursion plus a tight arithmetic body.
+Estimate: 10–15× faster compiled. Record-transform pipelines
+(e.g. map over a list of maps, fold into a summary record) would
+see 3–6×.
+
+### 7.3 Memory behaviour
+
+Current per-call allocations in the interpreter (approximate):
+
+- `skipSet := make(map[int]bool, n+1)` in `spliceMatchResults` —
+  a small heap map per matched call.
+- `resolvedIndicesBefore` can allocate an `indices` slice, though
+  it's small.
+- `stackInsert` / `stackSplice` trigger `append` growth when the
+  stack outgrows its `cap`. With `stackHeadroom=8`, this is rare
+  for small stacks but common for loop bodies that push and pop
+  repeatedly past the headroom boundary.
+- Handler returns: any word returning a new list or map allocates.
+
+Bytecode VM allocations:
+
+- **Zero per-call dispatch allocations.** No `skipSet`, no
+  `indices`, no splice. Fixed-arity pops and pushes touch only
+  the slice header.
+- **Pre-sized operand stack.** `Program.MaxStack` tells the VM
+  to `make([]Value, 0, MaxStack)` once. No reallocation.
+- **Frame stack.** A `[]Frame` pre-sized from user fn depth
+  (observed during compile). Recursive calls grow it; a modest
+  initial capacity (say 64) avoids reallocation in almost all
+  programs.
+- **Locals stack.** A single flat `[]Value` sized to the sum of
+  `MaxLocals` across the deepest call chain (bounded by the
+  frame stack). Locals slots are reused on frame pop.
+
+Net effect on GC pressure: a compiled program that runs a tight
+numerical loop allocates approximately **zero bytes** from the
+dispatch machinery — all remaining allocation is intrinsic to
+the handlers (list builds, string ops, etc.). The interpreter,
+by contrast, allocates several small objects per loop iteration
+from dispatch alone.
+
+### 7.4 What fixed-arity does NOT speed up
+
+1. **The handler's actual work.** `strings.ToUpper` scans the
+   string whether called from a bytecode VM or an interpreter.
+   Any word whose handler is the bottleneck sees a ~1× "speed-up".
+2. **Go interface boxing.** `Value.Data interface{}` boxes every
+   scalar. An `int64 + int64` in AQL still involves two `AsInteger()`
+   unboxings and one `NewInteger()` box, whether dispatched or
+   direct. Unboxed arithmetic requires typed opcodes (`IADD`,
+   `IMUL`) and a parallel un-boxed value representation — see
+   §7.6.
+3. **I/O and context.** File reads, HTTP calls, context-store
+   lookups dominate their own runtimes; the dispatch cost saved
+   is negligible.
+4. **Map probes.** Record field access with an unknown key still
+   hashes the key. The only saveable case is when the key is a
+   compile-time literal and the record's shape is known — the
+   compiler can then emit a slot index instead of a hash.
+5. **Reflection-style words.** `typeof`, `dump`, `stack` (the
+   full-stack dump) cannot be optimised much without changing
+   their semantics.
+
+### 7.5 Benchmarking methodology
+
+To validate the estimates above, a benchmarking plan:
+
+**Corpus.** The existing AQL tests and the step-by-step programs
+in `aql/test/` (factorial scaling, arg order, array ops, fold
+patterns) are the natural starting corpus. Supplement with:
+
+- **Microbenchmarks.** One per dispatch shape: arithmetic chain,
+  comparison chain, `if` with scalar cond, `if` with list cond,
+  `for` counted loop, `each` over typed list, `fold` with int
+  accum, `fold` with list accum, record field access, string
+  op, deep recursion.
+- **Application benchmarks.** A small ETL-style program (read
+  list of records, transform, fold to summary). A recursive
+  algorithm (factorial, fib, tree walk). A mixed orchestration
+  script (module loading, context lookups, `do`-based dynamic
+  dispatch).
+
+**Measurement.** `go test -bench=.` with a bytecode-mode flag on
+each benchmark. Capture both wall-clock time and `-benchmem`
+allocations. The interpreter is the baseline; the compiled VM is
+the candidate. Acceptance criterion: compiled ≥5× on the
+arithmetic/loop benchmarks, ≥2× on the orchestration benchmarks,
+and ≤10% regression on the dynamic-dispatch benchmarks (where
+`do` or context dominates).
+
+**Cross-validation.** Run the same programs in check mode (the
+carrier checker) and ensure compile-time resolution matches the
+bytecode it produces — any mismatch is a compiler bug. A
+differential-execution harness that runs a test suite in both
+modes and asserts identical results is a low-cost correctness
+guarantee.
+
+**Profile hotspots.** Use Go's `pprof` on the interpreter to
+locate its hottest functions (`matchSignature`, `execMatch`,
+`stepLiteral`) and confirm they drop out of the compiled VM's
+profile.
+
+### 7.6 The unboxing ceiling
+
+Fixed-arity calls with boxed `Value` cap the speed-up at the
+boxing cost for simple operations. To go faster:
+
+1. **Typed opcodes.** `IADD` / `IMUL` / `ISUB` for Integer,
+   `FADD` / `FMUL` for Decimal, `SCMP` / `SCAT` for strings.
+   The compiler picks the typed op when the carriers at both
+   operands are concrete.
+2. **Typed stack cells.** A parallel representation where cells
+   are tagged unions in a Go struct (`{Tag uint8; Int int64;
+   Float float64; Ptr unsafe.Pointer}`) avoids `interface{}`
+   boxing. Interop with boxed handlers requires a boundary
+   conversion.
+3. **Specialised loop forms.** A `FOR_INT` opcode that keeps an
+   int64 counter outside the value stack avoids boxing the
+   iterator variable entirely. Classic Forth tightens `DO`/
+   `LOOP` this way.
+
+These are **compound** optimisations beyond the fixed-arity
+baseline. A reasonable project staging:
+
+- **v1**: fixed-arity, boxed values, everything else as sketched.
+  Ships ~5–15× speed-up on typed hot paths.
+- **v2**: add typed opcodes and un-boxed stack cells at typed
+  sites. Ships a further 2–4× on arithmetic-dominated code.
+- **v3**: specialised loop iterators (int-counter, list-index,
+  map-iter). Ships a further 1.5–2× on iteration-heavy code.
+
+v1 is where the carrier checker investment pays off; v2 and v3
+are the usual bytecode-VM follow-ons.
+
+### 7.7 Compilation cost
+
+The compile pass itself has a cost. The carrier checker's cost
+is already known to be polynomial with widening
+(`CARRIER-STATIC-TYPECHECK-REPORT.md`). Compilation adds:
+
+- **Instruction emission.** O(tokens) work per call site — an
+  `append` into a `[]Instr`.
+- **Label resolution.** Two-pass or backpatch approach, both
+  O(branches).
+- **Constant interning.** O(literals) with a `map[value]int`.
+- **User-fn compilation.** Recursive; each fn's body is compiled
+  once, cached by `fn_id`.
+
+Net: compilation is ~2× the checker's cost, i.e. still
+polynomial and small. For typical AQL programs this is
+milliseconds — well under the latency a user notices.
+
+A more interesting question is **when to compile**. Three
+strategies:
+
+1. **Ahead-of-time.** A `aql compile` CLI produces a `.aqlc`
+   file. Cheap for library loading; adds build-step complexity.
+2. **Eagerly at load.** Every `import` triggers a compile. Most
+   natural for an interpreter-embedded VM; no user-visible
+   build step.
+3. **Lazily on first call.** Compile a fn the first time it's
+   called (and cache the bytecode). Minimises cold-start cost
+   for scripts that don't exercise the whole program.
+
+Given AQL programs are generally small, **eager at load** is
+the right default. Lazy compilation introduces concurrent-
+compile hazards for multi-threaded use that aren't worth the
+complexity.
+
+### 7.8 Summary of §7
+
+Dispatch and control-flow costs drop 5–15× for typed hot paths.
+Handler work, allocation, and I/O are unchanged. Memory
+pressure from the dispatch machinery falls to approximately
+zero. The unboxing ceiling can be lifted in later phases with
+typed opcodes and an unboxed stack representation.
+Compilation cost is a small multiple of the carrier checker's
+cost — milliseconds for typical programs. A differential-
+execution harness gives cheap correctness validation and a
+natural benchmarking methodology.
+
+The next instalment will catalogue the gotchas — the specific
+ways in which this approach could misbehave, fail silently, or
+surprise users. Then a final instalment will cover prior art
+in detail and the overall verdict.
