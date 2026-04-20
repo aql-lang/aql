@@ -40,11 +40,13 @@ func registerTimeout(r *Registry) {
 				Args:      []Type{TInteger, TList},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(true),
+				Returns:   []Type{TTimeout},
 			},
 			{
 				Args:      []Type{TInteger, TAtom},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(false),
+				Returns:   []Type{TTimeout},
 			},
 		},
 	})

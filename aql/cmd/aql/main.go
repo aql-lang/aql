@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	aql "github.com/metsitaba/voxgig-exp/aql"
 	jsonic "github.com/jsonicjs/jsonic/go"
+	aql "github.com/metsitaba/voxgig-exp/aql"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine/help"
 	"github.com/metsitaba/voxgig-exp/aql/internal/formatter"
@@ -36,9 +36,10 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	registry := fs.String("r", "", "registry path")
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
+	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql registry -r <folder> -p <port>\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -59,6 +60,11 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Handle "help" subcommand: aql help [word]
 	if len(args) > 0 && args[0] == "help" {
 		return runHelp(args[1:], stdout)
+	}
+
+	// Handle "check" subcommand: aql check [script.aql]
+	if len(args) > 0 && args[0] == "check" {
+		return runCheck(args[1:], stdout, stderr)
 	}
 
 	// Handle "prep" subcommand: aql prep [dir]
@@ -134,6 +140,13 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if hasSource {
+		if *checkFirst {
+			// --check before execution: always soft (don't block run).
+			if err := check(stdout, stderr, source, *registry, *seed, false, true); err != nil {
+				fmt.Fprintf(stderr, "%s\n", err)
+				return 1
+			}
+		}
 		if err := run(stdout, source, *registry, *seed); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
@@ -333,6 +346,118 @@ func run(w io.Writer, source string, registry string, seed int64) error {
 		fmt.Fprintln(w, strings.Join(parts, " "))
 	}
 	return nil
+}
+
+// check runs the static type-checker over source and writes the carrier
+// result stack and any diagnostics to the provided writers. It returns
+// an error for a parse/execution failure; diagnostics on their own do
+// not fail the run (they're printed to stderr).
+//
+// When jsonOut is true, the entire CheckResult is emitted to stdout as
+// a single JSON object suitable for editor / tooling integration.
+//
+// When soft is false (the default), the presence of any Error-severity
+// diagnostic causes a non-nil error to be returned so the caller
+// propagates a non-zero exit code. Passing soft=true downgrades every
+// diagnostic to advisory: check returns nil as long as the underlying
+// analysis completes.
+func check(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft bool) error {
+	a, err := aql.New(aql.Options{Registry: registry, Seed: seed})
+	if err != nil {
+		return fmt.Errorf("init error: %s", err)
+	}
+
+	res, err := a.Check(source)
+	if jsonOut {
+		out, jerr := json.MarshalIndent(res, "", "  ")
+		if jerr != nil {
+			return fmt.Errorf("json marshal: %s", jerr)
+		}
+		fmt.Fprintln(stdout, string(out))
+		if err != nil {
+			return fmt.Errorf("check error: %s", err)
+		}
+		if !soft && res.Summary.Errors > 0 {
+			return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
+		}
+		return nil
+	}
+
+	for _, d := range res.Diagnostics {
+		sev := string(d.Severity)
+		if sev == "" {
+			sev = "info"
+		}
+		if d.Row > 0 {
+			fmt.Fprintf(stderr, "check: %d:%d: [%s] %s: %s\n", d.Row, d.Col, sev, d.Code, d.Detail)
+		} else {
+			fmt.Fprintf(stderr, "check: [%s] %s: %s\n", sev, d.Code, d.Detail)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("check error: %s", err)
+	}
+
+	fmt.Fprintf(stderr, "check: %d error(s), %d warning(s), %d info\n",
+		res.Summary.Errors, res.Summary.Warnings, res.Summary.Infos)
+
+	if len(res.Stack) > 0 {
+		fmt.Fprintln(stdout, "check: "+strings.Join(res.Stack, " "))
+	} else {
+		fmt.Fprintln(stdout, "check: (empty stack)")
+	}
+	if !soft && res.Summary.Errors > 0 {
+		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
+	}
+	return nil
+}
+
+// runCheck implements the `aql check [--json] [--soft] [script.aql]`
+// subcommand. By default the command exits non-zero when any
+// Error-severity diagnostic was recorded. Pass --soft to report
+// diagnostics while always exiting zero (advisory mode for CI).
+func runCheck(args []string, stdout, stderr io.Writer) int {
+	jsonOut := false
+	soft := false
+	for len(args) > 0 {
+		switch args[0] {
+		case "--json", "-json":
+			jsonOut = true
+			args = args[1:]
+		case "--soft", "-soft":
+			soft = true
+			args = args[1:]
+		default:
+			goto done
+		}
+	}
+done:
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "error: aql check requires a script file or -e expression\n")
+		return 1
+	}
+
+	var source string
+	if args[0] == "-e" {
+		if len(args) < 2 {
+			fmt.Fprintf(stderr, "error: aql check -e requires an expression\n")
+			return 1
+		}
+		source = args[1]
+	} else {
+		data, err := os.ReadFile(args[0])
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		source = string(data)
+	}
+
+	if err := check(stdout, stderr, source, "", 0, jsonOut, soft); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err)
+		return 1
+	}
+	return 0
 }
 
 // runClean handles `aql clean [dir]`: delete everything in .aql/ except dotfiles.

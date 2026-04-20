@@ -38,8 +38,80 @@ func registerEach(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
+			// each returns a list whose element type is whatever the
+			// body's top-of-stack produces. Pass the concrete data
+			// list's element carrier into the body so diagnostics
+			// fire against realistic types.
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemType(args[1])
+				stk := analyseHigherOrderBody(r, args[0], elem)
+				if len(stk) == 0 {
+					return []Value{NewCarrier(TList)}
+				}
+				return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+			},
 		}},
 	})
+}
+
+// dataListElemType inspects a data list Value and returns a
+// conservative element type. Handles three cases:
+//
+//  1. Typed-list carrier (ChildTypeInfo{Child: ...}): return the
+//     child carrier's VType directly.
+//  2. Concrete list with real elements: join all element VTypes
+//     via commonAncestorType.
+//  3. Empty / non-concrete / nil-data list: TAny.
+func dataListElemType(data Value) Type {
+	if data.Data == nil {
+		return TAny
+	}
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		return ct.Child.VType
+	}
+	list := data.AsList()
+	if list.IsNil() || list.Len() == 0 {
+		return TAny
+	}
+	t := list.Get(0).VType
+	for i := 1; i < list.Len(); i++ {
+		t = commonAncestorType(t, list.Get(i).VType)
+		if t.Equal(TAny) {
+			break
+		}
+	}
+	return t
+}
+
+// analyseHigherOrderBody runs a literal code-body list through a
+// sub-engine in check mode, prepending the given element carrier
+// type(s) so body words see realistic input carriers. Returns the
+// residual carrier stack, or nil if the body is not concrete. The
+// primary purpose is side-effect: any diagnostics the body produces
+// (type mismatches, undefined words) are accumulated on the registry.
+func analyseHigherOrderBody(r *Registry, body Value, elems ...Type) []Value {
+	if body.Data == nil {
+		return nil
+	}
+	bodyList := body.AsList()
+	if bodyList.IsNil() {
+		return nil
+	}
+	input := make([]Value, 0, len(elems)+bodyList.Len())
+	for _, t := range elems {
+		input = append(input, NewCarrier(t))
+	}
+	input = append(input, bodyList.Slice()...)
+	sub := New(r)
+	result, err := sub.Run(input)
+	if err != nil {
+		r.addCheckDiagnostic(CheckDiagnostic{
+			Code:   "body_error",
+			Detail: "higher-order body analysis error: " + err.Error(),
+		})
+		return nil
+	}
+	return result
 }
 
 // registerFold registers the "fold" word with two signatures.
@@ -64,6 +136,20 @@ func registerFold(r *Registry) {
 					dataList := args[2].AsList()
 					return doFold(reg, init, bodySlice, dataList)
 				},
+				// Fold result type is the body's output. Analyse the
+				// body once with (init, element) as carrier inputs;
+				// use the residual top-of-stack carrier as the
+				// result. A proper fixed-point would iterate until
+				// the accumulator type stabilises — one pass is a
+				// close approximation for bounded-lattice types.
+				ReturnsFn: func(args []Value) []Value {
+					elem := dataListElemType(args[2])
+					stk := analyseHigherOrderBody(r, args[1], args[0].VType, elem)
+					if len(stk) == 0 {
+						return []Value{NewCarrier(TAny)}
+					}
+					return []Value{stk[len(stk)-1]}
+				},
 			},
 			{
 				// Without initial: body data → result (uses first element as init)
@@ -86,6 +172,16 @@ func registerFold(r *Registry) {
 					}
 					restList := ReadList{elems: rest}
 					return doFold(reg, init, bodySlice, restList)
+				},
+				// No init — accumulator type and element type both
+				// come from the data list.
+				ReturnsFn: func(args []Value) []Value {
+					elem := dataListElemType(args[1])
+					stk := analyseHigherOrderBody(r, args[0], elem, elem)
+					if len(stk) == 0 {
+						return []Value{NewCarrier(TAny)}
+					}
+					return []Value{stk[len(stk)-1]}
 				},
 			},
 		},
@@ -159,6 +255,14 @@ func registerScan(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemType(args[1])
+				stk := analyseHigherOrderBody(r, args[0], elem, elem)
+				if len(stk) == 0 {
+					return []Value{NewCarrier(TList)}
+				}
+				return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+			},
 		}},
 	})
 }
@@ -204,6 +308,18 @@ func registerOuter(r *Registry) {
 				rows[i] = NewList(row)
 			}
 			return []Value{NewList(rows)}, nil
+			},
+			ReturnsFn: func(args []Value) []Value {
+				leftElem := dataListElemType(args[1])
+				rightElem := dataListElemType(args[2])
+				stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
+				// outer produces a 2D list: TList<TList<body-result>>.
+				var innerElem Type = TAny
+				if len(stk) > 0 {
+					innerElem = stk[len(stk)-1].VType
+				}
+				inner := NewCarrierTypedList(innerElem)
+				return []Value{NewCarrierTypedListValue(inner)}
 			},
 		}},
 	})
@@ -324,6 +440,17 @@ func registerInner(r *Registry) {
 				rows[i] = NewList(cols)
 			}
 			return []Value{NewList(rows)}, nil
+			},
+			ReturnsFn: func(args []Value) []Value {
+				leftElem := dataListElemType(args[2])
+				rightElem := dataListElemType(args[3])
+				// pair op consumes (left-elem, right-elem); agg
+				// consumes (accumulator, pair-result). Without
+				// carrier list element tracking we use the pair
+				// output as TAny for the agg input.
+				analyseHigherOrderBody(r, args[0], leftElem, rightElem)
+				analyseHigherOrderBody(r, args[1], TAny, TAny)
+				return []Value{NewCarrier(TList)}
 			},
 		}},
 	})

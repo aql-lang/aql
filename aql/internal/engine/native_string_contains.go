@@ -22,8 +22,8 @@ func registerContains(r *Registry) {
 		Name:              "contains",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TString, TMap}, Handler: containsOptsHandler},
-			{Args: []Type{TString, TString}, Handler: containsHandler},
+			{Args: []Type{TString, TString, TMap}, Handler: containsOptsHandler, Returns: []Type{TBoolean}},
+			{Args: []Type{TString, TString}, Handler: containsHandler, Returns: []Type{TBoolean}},
 		},
 	})
 }

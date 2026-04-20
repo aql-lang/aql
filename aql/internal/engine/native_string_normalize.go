@@ -23,8 +23,8 @@ func registerNormalize(r *Registry) {
 		Name:              "normalize",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TMap}, Handler: normalizeOptsHandler},
-			{Args: []Type{TString}, Handler: normalizeHandler},
+			{Args: []Type{TString, TMap}, Handler: normalizeOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString}, Handler: normalizeHandler, Returns: []Type{TString}},
 		},
 	})
 }

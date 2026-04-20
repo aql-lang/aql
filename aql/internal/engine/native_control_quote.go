@@ -32,6 +32,7 @@ func registerQuote(r *Registry) {
 					v.Quoted = true
 					return []Value{v}, nil
 				},
+				Returns: []Type{TAtom},
 			},
 			// TAny signature: catches all non-word values (lists, maps,
 			// scalars). Returns the value with Quoted=true to prevent
@@ -45,6 +46,14 @@ func registerQuote(r *Registry) {
 					v.Quoted = true
 					return []Value{v}, nil
 				},
+				// quote has a semantic side-effect — Quoted=true
+				// prevents downstream auto-evaluation. Run the
+				// handler in check mode so the flag is preserved
+				// on stored list values; otherwise a later
+				// simple-value substitution would expand the
+				// list and drop the do-ability.
+				RunInCheckMode: true,
+				ReturnsFn:      ReturnsIdentity(0),
 			},
 		},
 	})

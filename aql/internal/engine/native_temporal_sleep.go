@@ -22,6 +22,7 @@ func registerSleep(r *Registry) {
 					time.Sleep(time.Duration(ms) * time.Millisecond)
 					return nil, nil
 				},
+				Returns: []Type{},
 			},
 		},
 	})

@@ -33,6 +33,7 @@ func registerCall(r *Registry) {
 				bodyCopy := bodyElems.Slice()
 				return bodyCopy, nil
 			},
+			Returns: []Type{TAny},
 		}},
 	})
 }

@@ -136,6 +136,68 @@ func (a *AQL) Options() Options {
 	return a.options
 }
 
+// Check parses the source and runs it through the engine in static
+// type-check mode. Literals are stripped to carrier values (type-only)
+// and signature handlers are replaced by carrier return propagation
+// driven by Signature.Returns. The actual runtime dispatch, matching,
+// and forward-collection machinery is reused verbatim so checker and
+// runtime stay in absolute parity.
+//
+// The returned CheckResult holds the residual carrier stack (as type
+// path strings) and any diagnostics the checker collected.
+func (a *AQL) Check(src string) (CheckResult, error) {
+	values, err := parser.Parse(src)
+	if err != nil {
+		return CheckResult{}, err
+	}
+
+	a.registry.Source = src
+	a.registry.CheckMode = true
+	a.registry.CheckDiagnostics = nil
+	a.registry.CheckStepCount = 0
+	a.registry.CheckBudgetTripped = false
+	a.registry.CheckDefsInstalled = nil
+	a.registry.CheckDefsUsed = nil
+	a.registry.CheckContextTypes = nil
+	defer func() { a.registry.CheckMode = false }()
+
+	eng := engine.NewTop(a.registry)
+	eng.SetSource(src)
+	result, err := eng.Run(values)
+	// Emit unused-def warnings after all execution has completed
+	// so the Used map has been fully populated.
+	a.registry.EmitUnusedDefDiagnostics()
+	if err != nil {
+		return CheckResult{Diagnostics: a.registry.CheckDiagnostics}, err
+	}
+
+	stack := make([]string, len(result))
+	for i, v := range result {
+		stack[i] = v.VType.String()
+	}
+
+	// Fill in missing Row/Col on diagnostics by locating the Word
+	// in the source text. Best-effort — duplicates fall back to
+	// the last occurrence, which is usually the call site rather
+	// than the definition.
+	diags := a.registry.CheckDiagnostics
+	var summary CheckSummary
+	for i := range diags {
+		if diags[i].Row == 0 && diags[i].Word != "" {
+			diags[i].Row, diags[i].Col = engine.FindWordInSource(src, diags[i].Word)
+		}
+		switch diags[i].Severity {
+		case SeverityError:
+			summary.Errors++
+		case SeverityWarning:
+			summary.Warnings++
+		default:
+			summary.Infos++
+		}
+	}
+	return CheckResult{Stack: stack, Diagnostics: diags, Summary: summary}, nil
+}
+
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
 	a.registry.SetFileOps(ops)
@@ -231,3 +293,39 @@ func (a *AQL) Run(src string) ([]any, error) {
 	}
 	return out, nil
 }
+
+// CheckResult is the outcome of a static type-check run.
+//
+// Stack holds the carrier values left on the stack after symbolic
+// execution (one per residual result), represented as their type
+// path strings. Diagnostics holds any findings the checker recorded
+// (e.g. missing return-type annotations). Summary captures a count
+// per severity so callers can quickly decide pass/fail without
+// walking the diagnostics slice.
+type CheckResult struct {
+	Stack       []string          `json:"stack"`
+	Diagnostics []CheckDiagnostic `json:"diagnostics"`
+	Summary     CheckSummary      `json:"summary"`
+}
+
+// CheckSummary reports the per-severity count of diagnostics from
+// a check run. Errors > 0 means the program has at least one type
+// violation the runtime will trip on.
+type CheckSummary struct {
+	Errors   int `json:"errors"`
+	Warnings int `json:"warnings"`
+	Infos    int `json:"infos"`
+}
+
+// CheckSeverity classifies a diagnostic.
+type CheckSeverity = engine.CheckSeverity
+
+// Re-exported severity constants.
+const (
+	SeverityError   = engine.SeverityError
+	SeverityWarning = engine.SeverityWarning
+	SeverityInfo    = engine.SeverityInfo
+)
+
+// CheckDiagnostic is a single finding from the static checker.
+type CheckDiagnostic = engine.CheckDiagnostic

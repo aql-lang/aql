@@ -3016,3 +3016,77 @@ longest argument list with narrowest types.
 | `cannot_compare`  | Ordering comparison on incompatible or non-orderable types |
 | `read`            | File read error (not found, invalid format, etc.) |
 | `write`           | File write error                                  |
+
+
+## Static Type Checking
+
+`aql check` runs a program through the same engine as normal
+execution but uses **carrier** values — type-only abstractions
+without concrete payloads — in place of literals. The dispatch,
+signature matching, and forward-collection machinery are shared
+with runtime, so the checker stays in lockstep with real semantics.
+
+### Usage
+
+```
+aql check [--json] [--soft] script.aql
+aql check -e "1 add 2 mul 3"
+aql --check script.aql        # run the checker before real execution
+```
+
+Strict mode (default): non-zero exit when any Error-severity
+diagnostic fires. `--soft` reports diagnostics but always exits
+zero (advisory CI). `--json` emits the full `CheckResult` on
+stdout for editor/tooling integration.
+
+### Diagnostic Codes
+
+| Code                     | Severity | Meaning                                                                     |
+|--------------------------|----------|-----------------------------------------------------------------------------|
+| `no_signature`           | error    | No signature matched at a call site; assumed best-fit candidate.            |
+| `undefined_word`         | error    | Word reference with no def; replaced with `Any` carrier to continue.        |
+| `fn_body_error`          | error    | Analysis of a user-defined fn body raised an error.                         |
+| `branch_error`           | error    | A branch (if/each/fold body) raised an error during symbolic analysis.      |
+| `record_shape_mismatch`  | error    | Map argument to a record-typed param is missing a field or has wrong type.  |
+| `missing_returns`        | warning  | A matched signature has no declared `Returns`; falls back to `Any`.         |
+| `step_budget_exceeded`   | warning  | Global analysis budget (default 500,000 steps) was exhausted.               |
+| `unused_def`             | warning  | A `def` was installed but never referenced.                                 |
+| `unreachable_branch`     | warning  | `if` condition is a constant `true`/`false`; the other branch never runs.  |
+| `body_error`             | warning  | Higher-order body (do/each/fold/...) analysis raised an error.              |
+
+### Returned Types
+
+The `CheckResult` JSON object has:
+
+```
+{
+  "stack":       ["<type path>", ...],   // residual carriers
+  "diagnostics": [ {code,detail,word,row,col,severity}, ... ],
+  "summary":     { "errors": N, "warnings": N, "infos": N }
+}
+```
+
+### Carrier Semantics (summary)
+
+- **Literals** become carriers of their type (e.g. `1` → `Scalar/Number/Integer/1` carrier).
+- **List / map args** keep concrete Data so pattern matching continues to work.
+- **Function words** with `Returns` or `ReturnsFn` metadata return typed carriers
+  without running their handlers.
+- **`def`, `undef`, `fn`, `type`, `record`, `object`, `module`, `import`, `export`,
+  `quote`** execute their handlers even in check mode (they mutate state that
+  later analysis needs to observe).
+- **`if`** analyses both branches, joins the residual carrier stacks via common-
+  ancestor widening; with a constant condition it picks the reachable branch.
+- **Recursion** in user fn bodies converges via memoisation keyed by
+  (name, arg-type-tuple).
+- **Disjunction widening**: carrier disjunctions wider than `CarrierDisjunctCap`
+  (8 alternatives) collapse to their common ancestor.
+
+### Adding `Returns` to Custom Native Words
+
+Every `NativeSig` should declare either `Returns []Type` (static return types)
+or `ReturnsFn ReturnsFunc` (dynamic, args-dependent) so the checker can
+propagate types through calls to the word. Side-effect-only words (e.g.
+`print`, `set`) should use `Returns: []Type{}` (explicit "returns nothing"
+distinct from nil "not annotated"). Words whose state effects are needed by
+downstream analysis should also set `RunInCheckMode: true`.

@@ -57,7 +57,52 @@ type Signature struct {
 	// Fallback marks the generic 0-arg handler installed by def as the
 	// fallback entry. SortSignatures always places fallbacks last.
 	Fallback bool
+
+	// Returns lists the declared return types for this signature. It is
+	// used by static type-checking mode: when the engine runs in check
+	// mode, it skips the handler and pushes carrier values typed by
+	// Returns. When nil or empty, the checker falls back to a
+	// conservative approximation (see engine carrier handling).
+	Returns []Type
+
+	// ReturnsFn, when non-nil, overrides Returns for static
+	// type-checking: the checker calls it with the carrier-typed args
+	// and uses the resulting slice as the return carriers. This is
+	// required for signatures whose return type depends on the input
+	// types (e.g. Integer+Integer → Integer, otherwise Decimal) or on
+	// the input values themselves (e.g. dup, swap propagate their
+	// inputs). When both Returns and ReturnsFn are set, ReturnsFn
+	// wins.
+	ReturnsFn ReturnsFunc
+
+	// RunInCheckMode, when true, causes the engine to execute this
+	// signature's Handler even when Registry.CheckMode is on. Use it
+	// for words with registry-level side effects that later words
+	// rely on (def, undef, fn, type, import, export, module). The
+	// handler still runs against carrier args, so it must tolerate
+	// Data==nil / Carrier=true values at its input positions.
+	RunInCheckMode bool
+
+	// CheckFullStackFn, when non-nil, replaces both Returns and
+	// ReturnsFn for FullStack signatures in check mode. It is
+	// passed the matched args and the full resolved carrier stack
+	// (from the nearest paren/root barrier through to the pointer
+	// exclusive of args). The returned slice is the complete
+	// replacement for that base..pointer range — mirroring the
+	// runtime FullStack handler's semantics.
+	CheckFullStackFn CheckFullStackFunc
 }
+
+// CheckFullStackFunc produces the full base..pointer replacement
+// for a FullStack signature in check mode. args are the matched
+// carrier args in signature order; stack is the preserved carrier
+// stack segment below the args.
+type CheckFullStackFunc func(args []Value, stack []Value) []Value
+
+// ReturnsFunc computes the carrier return values for a signature in
+// static type-check mode. args are the carrier-typed input values in
+// signature order.
+type ReturnsFunc func(args []Value) []Value
 
 // TotalArgs returns the number of arguments.
 func (s *Signature) TotalArgs() int {

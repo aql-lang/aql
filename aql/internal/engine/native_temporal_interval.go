@@ -51,11 +51,13 @@ func registerInterval(r *Registry) {
 				Args:      []Type{TInteger, TList},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(true),
+				Returns:   []Type{TInterval},
 			},
 			{
 				Args:      []Type{TInteger, TAtom},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(false),
+				Returns:   []Type{TInterval},
 			},
 		},
 	})

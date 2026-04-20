@@ -155,10 +155,13 @@ func registerConvert(r *Registry) {
 				Args:     []Type{TScalarType, TMap, TScalar},
 				Patterns: map[int]Value{1: optsPattern},
 				Handler:  convert3Handler,
+				// Result type is the target type literal (first arg).
+				ReturnsFn: ReturnsIdentity(0),
 			},
 			{
-				Args:    []Type{TScalarType, TScalar},
-				Handler: convert2Handler,
+				Args:      []Type{TScalarType, TScalar},
+				Handler:   convert2Handler,
+				ReturnsFn: ReturnsIdentity(0),
 			},
 		},
 	})

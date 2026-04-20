@@ -97,6 +97,7 @@ func registerVar(r *Registry) {
 			Args:       []Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    varHandler,
+			Returns: []Type{TAny},
 		}},
 	})
 }

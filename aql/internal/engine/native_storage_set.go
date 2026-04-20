@@ -68,26 +68,42 @@ func registerSet(r *Registry) {
 			{
 				Args:    []Type{TString, TAny, TStore},
 				Handler: storeHandler,
+				Returns: []Type{},
+				// Record key → carrier for the check-mode context
+				// tracker so `get key store` can later produce a
+				// typed carrier instead of Any.
+				ReturnsFn: func(args []Value) []Value {
+					r.RecordContextSet(storeKey(args[0]), args[1])
+					return nil
+				},
 			},
 			{
 				Args:      []Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   storeHandler,
+				Returns:   []Type{},
+				ReturnsFn: func(args []Value) []Value {
+					r.RecordContextSet(storeKey(args[0]), args[1])
+					return nil
+				},
 			},
 			// Array (indexed by integer)
 			{
 				Args:    []Type{TInteger, TAny, TArray},
 				Handler: arrayHandler,
+				Returns: []Type{},
 			},
 			// Object
 			{
 				Args:    []Type{TString, TAny, TObject},
 				Handler: objectHandler,
+				Returns: []Type{},
 			},
 			{
 				Args:      []Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   objectHandler,
+				Returns: []Type{},
 			},
 		},
 	})

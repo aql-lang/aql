@@ -1,0 +1,20 @@
+{
+  "stack": [
+    "Scalar/String"
+  ],
+  "diagnostics": [
+    {
+      "code": "no_signature",
+      "detail": "no matching signature for upper; assuming best-fit candidate for analysis",
+      "word": "upper",
+      "row": 1,
+      "col": 1,
+      "severity": "error"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 0,
+    "infos": 0
+  }
+}

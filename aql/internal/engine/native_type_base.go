@@ -19,6 +19,9 @@ func registerBase(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
 			Handler: baseHandler,
+			// base returns the zero value of the arg's described
+			// type; at the carrier level, this is the arg's type.
+			ReturnsFn: ReturnsIdentity(0),
 		}},
 	})
 }

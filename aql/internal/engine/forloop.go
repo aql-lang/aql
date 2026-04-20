@@ -52,11 +52,18 @@ func registerFor(r *Registry) {
 				Args:       []Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forCountHandler,
+				// for accumulates per-iteration results into a
+				// list at runtime. Carrier model: analyse the body
+				// once with the iterator (named "i") bound to an
+				// Integer carrier, then return a typed list whose
+				// element type is the body's top-of-stack.
+				ReturnsFn: forCarrierReturns(r, "i", TInteger),
 			},
 			{
 				Args:       []Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forRangeHandler,
+				ReturnsFn:  forCarrierReturns(r, "i", TInteger),
 			},
 		},
 	})
@@ -69,6 +76,7 @@ func registerFor(r *Registry) {
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errBreak
 			},
+			Returns: []Type{},
 		}},
 	})
 
@@ -80,8 +88,34 @@ func registerFor(r *Registry) {
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, errContinue
 			},
+			Returns: []Type{},
 		}},
 	})
+}
+
+// forCarrierReturns builds a ReturnsFn for the for-loop's carrier
+// analysis. The iterator name (e.g. "i") is installed as a typed
+// carrier on DefStacks for the duration of a single body analysis,
+// then popped. Returns a typed list whose element type mirrors the
+// body's residual top-of-stack.
+func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc {
+	return func(args []Value) []Value {
+		// body is always the last arg (Integer,List or List,List).
+		body := args[len(args)-1]
+		r.DefStacks[iterName] = append(r.DefStacks[iterName], NewCarrier(iterType))
+		stk, _ := runCarrierBodyWithDefs(r, body)
+		// Pop the iterator binding.
+		if ds := r.DefStacks[iterName]; len(ds) > 0 {
+			r.DefStacks[iterName] = ds[:len(ds)-1]
+			if len(r.DefStacks[iterName]) == 0 {
+				delete(r.DefStacks, iterName)
+			}
+		}
+		if len(stk) == 0 {
+			return []Value{NewCarrier(TList)}
+		}
+		return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+	}
 }
 
 // Sentinel errors for break and continue.

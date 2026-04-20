@@ -25,8 +25,8 @@ func registerRepeat(r *Registry) {
 		Name:              "repeat",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TInteger, TMap}, Handler: repeatOptsHandler},
-			{Args: []Type{TString, TInteger}, Handler: repeatHandler},
+			{Args: []Type{TString, TInteger, TMap}, Handler: repeatOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TString, TInteger}, Handler: repeatHandler, Returns: []Type{TString}},
 		},
 	})
 }

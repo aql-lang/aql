@@ -9,6 +9,7 @@ func registerDrop(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
 			},
+			Returns: []Type{}, // drop consumes its arg and returns nothing
 		}},
 	})
 }

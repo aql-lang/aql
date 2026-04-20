@@ -13,6 +13,7 @@ func registerPopArgs(r *Registry) {
 				}
 				return nil, nil
 			},
+			Returns: []Type{},
 		}},
 	})
 }

@@ -15,6 +15,7 @@ func registerArgs(r *Registry) {
 				}
 				return []Value{r.argsStack[len(r.argsStack)-1]}, nil
 			},
+			Returns: []Type{TList},
 		}},
 	})
 }

@@ -256,6 +256,14 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	e.registry.PushContext(parent)
 	defer e.registry.PopContext()
 
+	// In static type-check mode, convert concrete literal values to
+	// carriers before execution. The same dispatch/matching machinery
+	// then runs over carrier values; execMatch short-circuits handler
+	// calls to push carrier return values declared on the signature.
+	if e.registry != nil && e.registry.CheckMode {
+		input = StripToCarriers(input)
+	}
+
 	if cap(e.stack) >= len(input) {
 		e.stack = e.stack[:len(input)]
 	} else {
@@ -271,6 +279,27 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break
+		}
+
+		// Check-mode global step budget: abort the whole run
+		// gracefully once exceeded. Emits one diagnostic and
+		// then short-circuits every subsequent sub-engine too.
+		if e.registry != nil && e.registry.CheckMode {
+			budget := e.registry.CheckStepBudget
+			if budget == 0 {
+				budget = DefaultCheckStepBudget
+			}
+			e.registry.CheckStepCount++
+			if e.registry.CheckStepCount > budget {
+				if !e.registry.CheckBudgetTripped {
+					e.registry.CheckBudgetTripped = true
+					e.registry.addCheckDiagnostic(CheckDiagnostic{
+						Code:   "step_budget_exceeded",
+						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
+					})
+				}
+				break
+			}
 		}
 
 		val := e.stack[e.pointer]
@@ -372,15 +401,29 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// Atoms marked Undefined came from words that were never defined;
 	// they are only allowed when consumed by a function expecting TAtom
 	// or in a quoted map/list (which skips evaluation entirely).
-	for _, v := range e.stack {
-		if v.Undefined {
-			name, _ := v.AsAtom()
-			return nil, &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + name,
-				Src:        name,
-				fullSource: e.effectiveSource(),
-			}
+	// In check mode, demote to a diagnostic and replace with an Any
+	// carrier so analysis of the surrounding program continues.
+	for i, v := range e.stack {
+		if !v.Undefined {
+			continue
+		}
+		name, _ := v.AsAtom()
+		if e.registry != nil && e.registry.CheckMode {
+			e.registry.addCheckDiagnostic(CheckDiagnostic{
+				Code:   "undefined_word",
+				Detail: "undefined word: " + name,
+				Word:   name,
+				Row:    v.Pos.Row,
+				Col:    v.Pos.Col,
+			})
+			e.stack[i] = NewCarrier(TAny)
+			continue
+		}
+		return nil, &AqlError{
+			Code:       "undefined_word",
+			Detail:     "undefined word: " + name,
+			Src:        name,
+			fullSource: e.effectiveSource(),
 		}
 	}
 
@@ -628,6 +671,9 @@ func (e *Engine) stepWord(val Value) error {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
+			// Record the substitution as a "use" for unused-def
+			// tracking in check mode.
+			e.registry.recordCheckUse(w.Name)
 			// For list bodies, expand onto the stack like the fallback handler does.
 			// Quoted lists are treated as data values (not expanded).
 			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
@@ -643,6 +689,11 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	fn := e.registry.Lookup(w.Name)
+	if fn != nil {
+		// User-code dispatch — record the name as "used" for
+		// unused-def analysis in check mode.
+		e.registry.recordCheckUse(w.Name)
+	}
 
 	if fn == nil {
 		if w.Name == "true" {
@@ -692,7 +743,35 @@ func (e *Engine) stepWord(val Value) error {
 		sig, positions = e.matchSignature(fn, wDeep, resolved)
 	}
 
+	// In check mode, if matchSignature fell through to the 0-arg /
+	// Fallback handler because no typed signature matched (but
+	// typed signatures exist), treat it as an unmatched call and go
+	// through the assume-sig recovery path so the user gets a
+	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
+	if sig != nil && sig.Fallback &&
+		e.registry != nil && e.registry.CheckMode {
+		hasTyped := false
+		for i := range fn.Signatures {
+			if !fn.Signatures[i].Fallback {
+				hasTyped = true
+				break
+			}
+		}
+		if hasTyped {
+			sig = nil
+		}
+	}
+
 	if sig == nil {
+		// In check mode, a missing signature is a soft diagnostic
+		// rather than a hard error: pick the first-ranked candidate,
+		// synthesise carrier return values from it, and splice them
+		// in place of the word + up to N adjacent arg slots.
+		// We bypass insertForward here because forward collection
+		// would re-trigger sigTypeMatches and loop indefinitely.
+		if e.registry != nil && e.registry.CheckMode && len(fn.Signatures) > 0 {
+			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
+		}
 		return e.sigError(w.Name, fn)
 	}
 
@@ -774,6 +853,57 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		match.Args[i].Undefined = false
 	}
 
+	// Static type-check mode: skip the handler, splice carrier results
+	// derived from Signature.ReturnsFn / Signature.Returns. The rest of
+	// the dispatch machinery (positions, splicing, forward resolution)
+	// is shared with normal execution, so runtime and checker stay in
+	// parity.
+	//
+	// Signatures marked RunInCheckMode opt out of this intercept —
+	// used by words whose side effects (def, undef, fn, type, …)
+	// are prerequisites for subsequent analysis.
+	if e.registry != nil && e.registry.CheckMode && !match.Sig.RunInCheckMode {
+		name := ""
+		var pos SrcPos
+		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
+			pos = e.stack[e.pointer].Pos
+			if w, err := e.stack[e.pointer].AsWord(); err == nil {
+				name = w.Name
+			}
+		}
+
+		// FullStack signatures in check mode: if a CheckFullStackFn
+		// is declared, it receives the preserved carrier stack
+		// (below args) and returns the complete replacement for
+		// base..end (matching the runtime FullStack path). end
+		// covers both the word itself and any forward-collected
+		// arg positions so the splice consumes every token the
+		// call actually bound.
+		if match.Sig.FullStack && match.Sig.CheckFullStackFn != nil {
+			base := 0
+			for i := e.pointer - 1; i >= 0; i-- {
+				if e.stack[i].IsOpenParen() {
+					base = i + 1
+					break
+				}
+			}
+			end := e.pointer
+			for _, p := range sortedIndices {
+				if p > end {
+					end = p
+				}
+			}
+			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
+			results := match.Sig.CheckFullStackFn(match.Args, preserved)
+			e.stackSplice(base, end+1-base, results...)
+			e.pointer = base
+			return nil
+		}
+
+		results := carrierResults(e.registry, name, match.Sig, match.Args, pos)
+		return e.spliceMatchResults(match, sortedIndices, n, results)
+	}
+
 	// Compute context (cheap O(1) call).
 	ctx := e.registry.Context()
 
@@ -807,6 +937,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return err
 	}
 
+	return e.spliceMatchResults(match, sortedIndices, n, results)
+}
+
+// spliceMatchResults replaces the word and its matched args on the
+// stack with the supplied results. Shared between handler execution
+// and carrier-based check-mode execution so both paths stay in parity.
+func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n int, results []Value) error {
 	if len(sortedIndices) == n && n > 0 {
 		firstArgIdx := sortedIndices[0]
 

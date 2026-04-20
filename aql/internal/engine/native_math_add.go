@@ -40,11 +40,11 @@ func registerAdd(r *Registry) {
 	registerBinaryMathWord(r, "add",
 		func(a, b float64) (Value, error) { return NewDecimal(a + b), nil },
 		func(a, b int64) (Value, error) { return NewInteger(a + b), nil },
-		NativeSig{Args: []Type{TScalar, TScalar}, Handler: concatHandler},
-		NativeSig{Args: []Type{TCalDuration, TDate}, Handler: addDateCalHandler},
-		NativeSig{Args: []Type{TClkDuration, TDateTime}, Handler: addDtClkHandler},
-		NativeSig{Args: []Type{TClkDuration, TInstant}, Handler: addInsClkHandler},
-		NativeSig{Args: []Type{TClkDuration, TDate}, Handler: addDateClkHandler},
+		NativeSig{Args: []Type{TScalar, TScalar}, Handler: concatHandler, Returns: []Type{TString}},
+		NativeSig{Args: []Type{TCalDuration, TDate}, Handler: addDateCalHandler, Returns: []Type{TDate}},
+		NativeSig{Args: []Type{TClkDuration, TDateTime}, Handler: addDtClkHandler, Returns: []Type{TDateTime}},
+		NativeSig{Args: []Type{TClkDuration, TInstant}, Handler: addInsClkHandler, Returns: []Type{TInstant}},
+		NativeSig{Args: []Type{TClkDuration, TDate}, Handler: addDateClkHandler, Returns: []Type{TDateTime}},
 	)
 }
 

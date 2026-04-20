@@ -24,6 +24,9 @@ func registerIota(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value {
+				return []Value{NewCarrierTypedList(TInteger)}
+			},
 		}},
 	})
 }
@@ -46,6 +49,7 @@ func registerShape(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -87,6 +91,7 @@ func registerRank(r *Registry) {
 				dims := computeShape(args[0])
 				return []Value{NewInteger(int64(len(dims)))}, nil
 			},
+			Returns: []Type{TInteger},
 		}},
 	})
 }
@@ -105,6 +110,7 @@ func registerLength(r *Registry) {
 				list := args[0].AsList()
 				return []Value{NewInteger(int64(list.Len()))}, nil
 			},
+			Returns: []Type{TInteger},
 		}},
 	})
 }
@@ -144,6 +150,7 @@ func registerReshape(r *Registry) {
 				result := buildNested(flat, dims)
 				return []Value{result}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -203,6 +210,7 @@ func registerArrFlatten(r *Registry) {
 				flat := flattenList(args[0])
 				return []Value{NewList(flat)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -244,6 +252,7 @@ func registerArrTranspose(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -267,6 +276,7 @@ func registerReverse(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -308,6 +318,7 @@ func registerTake(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -349,6 +360,7 @@ func registerShed(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -377,6 +389,7 @@ func registerWhere(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -408,6 +421,7 @@ func registerUnique(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	})
 }
@@ -440,6 +454,7 @@ func registerGrade(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -491,6 +506,7 @@ func registerAt(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -529,6 +545,7 @@ func registerSortby(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -560,6 +577,7 @@ func registerMember(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TBoolean)} },
 		}},
 	})
 }
@@ -600,6 +618,7 @@ func registerArrIndexof(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -642,6 +661,7 @@ func registerGroup(r *Registry) {
 					}
 					return []Value{NewMap(om)}, nil
 				},
+				Returns: []Type{TMap},
 			},
 			{
 				// Single-arg: group by value, return map of value -> list of indices
@@ -666,6 +686,7 @@ func registerGroup(r *Registry) {
 					}
 					return []Value{NewMap(om)}, nil
 				},
+				Returns: []Type{TMap},
 			},
 		},
 	})
@@ -708,6 +729,7 @@ func registerReplicate(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -744,6 +766,7 @@ func registerExpand(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
+			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	})
 }
@@ -780,6 +803,13 @@ func registerWindow(r *Registry) {
 				}
 				return []Value{NewList(windows)}, nil
 			},
+			// window yields a TList<TList<sameElem>>: wrap the
+			// source-data element carrier twice.
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemTypeFromValue(args[1])
+				inner := NewCarrierTypedList(elem)
+				return []Value{NewCarrierTypedListValue(inner)}
+			},
 		}},
 	})
 }
@@ -806,6 +836,12 @@ func registerPairs(r *Registry) {
 					result[i] = NewList(pair)
 				}
 				return []Value{NewList(result)}, nil
+			},
+			// pairs yields TList<TList<sameElem>> (2-tuples).
+			ReturnsFn: func(args []Value) []Value {
+				elem := dataListElemTypeFromValue(args[0])
+				inner := NewCarrierTypedList(elem)
+				return []Value{NewCarrierTypedListValue(inner)}
 			},
 		}},
 	})

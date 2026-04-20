@@ -82,11 +82,13 @@ func registerAwait(r *Registry) {
 				Args:       []Type{TOptions, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    withOptsHandler,
+				Returns: []Type{TAny},
 			},
 			{
 				Args:       []Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    defaultHandler,
+				Returns: []Type{TAny},
 			},
 		},
 	})

@@ -37,13 +37,17 @@ func registerTypeDef(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TString, TAny},
-				Handler: typeHandler,
+				Args:           []Type{TString, TAny},
+				Handler:        typeHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:      []Type{TAtom, TAny},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   typeHandler,
+				Args:           []Type{TAtom, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        typeHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 		},
 	})

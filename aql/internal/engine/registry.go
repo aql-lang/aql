@@ -34,6 +34,112 @@ type Registry struct {
 	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
 	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
 	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
+
+	// CheckMode toggles static type-checking execution. When true, the
+	// engine runs the same dispatch/matching machinery but carries
+	// type-only Carrier values instead of concrete payloads, and
+	// replaces signature handlers with carrier-typed return propagation
+	// (see Signature.Returns). Diagnostics are accumulated into
+	// CheckDiagnostics rather than returned as hard errors.
+	CheckMode        bool
+	CheckDiagnostics []CheckDiagnostic
+
+	// CheckFnSummaries caches carrier return-stacks for user-defined
+	// fn bodies keyed by (name + "#" + argTypesJoined). Populated by
+	// analyseFnBody; re-entrant calls (recursion) consult this cache
+	// to break cycles and converge on a fixed point.
+	CheckFnSummaries map[string][]Value
+
+	// CheckFnInflight tracks which (name, arg-types) analyses are
+	// currently running so that recursive calls can bail out with a
+	// placeholder instead of looping.
+	CheckFnInflight map[string]bool
+
+	// CheckStepCount is the running total of engine steps consumed
+	// by the current check run, summed across every sub-engine.
+	// Used with CheckStepBudget to cap total analysis effort.
+	CheckStepCount int
+
+	// CheckStepBudget is the maximum total steps the check run may
+	// consume. Zero means "use DefaultCheckStepBudget". Once
+	// exceeded, the engine emits a step_budget_exceeded diagnostic
+	// and returns the current residual stack immediately.
+	CheckStepBudget int
+
+	// CheckBudgetTripped is set to true after the first budget
+	// overshoot so we emit at most one diagnostic per check run.
+	CheckBudgetTripped bool
+
+	// CheckDefsInstalled records the names (and source positions)
+	// that the user's program defined during a check run via the
+	// def word. Populated by recordCheckDef; consulted at end of
+	// run to emit unused_def warnings.
+	CheckDefsInstalled map[string]SrcPos
+
+	// CheckDefsUsed records names looked up via Registry.Lookup or
+	// simple-value substitution in check mode. Used to filter out
+	// defs that were referenced at least once.
+	CheckDefsUsed map[string]bool
+
+	// CheckContextTypes is a best-effort record of keys that user
+	// code wrote to a Store during a check run. The value is the
+	// last-seen carrier type for that key, joined via
+	// JoinCarriers on repeated writes. Used by get's ReturnsFn so
+	// subsequent reads can produce a typed carrier rather than
+	// falling back to Any. Shared across the entire check run —
+	// not keyed by store identity — to keep the model simple for
+	// the common "one context store" usage pattern.
+	CheckContextTypes map[string]Value
+}
+
+// DefaultCheckStepBudget caps total check-mode steps across all
+// sub-engines. Chosen to comfortably fit typical programs
+// (thousands of words) while preventing pathological runaways.
+const DefaultCheckStepBudget = 500_000
+
+// CheckSeverity classifies a diagnostic as an error, warning, or info.
+// Errors indicate a real type/signature violation that prevents
+// successful execution. Warnings flag suspicious patterns that are
+// still type-correct. Info is everything else (missing annotation,
+// budget overshoot, etc.).
+type CheckSeverity string
+
+const (
+	SeverityError   CheckSeverity = "error"
+	SeverityWarning CheckSeverity = "warning"
+	SeverityInfo    CheckSeverity = "info"
+)
+
+// checkCodeSeverity maps a diagnostic code to its default severity.
+// Unknown codes default to SeverityInfo so new codes don't
+// accidentally trip CI gates until they're classified.
+var checkCodeSeverity = map[string]CheckSeverity{
+	"no_signature":         SeverityError,
+	"undefined_word":       SeverityError,
+	"fn_body_error":        SeverityError,
+	"branch_error":         SeverityError,
+	"missing_returns":      SeverityWarning,
+	"step_budget_exceeded": SeverityWarning,
+	"body_error":           SeverityWarning,
+}
+
+// SeverityFor returns the default severity classification for a
+// diagnostic code. Exported so consumers can tag custom codes.
+func SeverityFor(code string) CheckSeverity {
+	if s, ok := checkCodeSeverity[code]; ok {
+		return s
+	}
+	return SeverityInfo
+}
+
+// CheckDiagnostic is a single static type-check finding.
+type CheckDiagnostic struct {
+	Code     string        `json:"code"`               // short stable code, e.g. "missing_returns", "no_signature"
+	Detail   string        `json:"detail"`             // human-readable description
+	Word     string        `json:"word,omitempty"`     // word name relevant to the diagnostic, if any
+	Row      int           `json:"row,omitempty"`      // 1-based line number, 0 if unknown
+	Col      int           `json:"col,omitempty"`      // 1-based column number, 0 if unknown
+	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
 }
 
 // NewRegistry creates an empty registry.
@@ -265,6 +371,12 @@ func calcMaxForwardArgs(sigs []Signature) int {
 }
 
 // Lookup returns the top FnDefInfo for a name from DefStacks, or nil.
+//
+// Lookup deliberately does NOT record a check-mode "use" of the name
+// because it is called from internal machinery (installDef, undef,
+// match dispatch) that would inflate use counts. User-code usage is
+// recorded by the engine.stepWord paths (simple-value substitution
+// and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
 	stack := r.DefStacks[name]
 	for i := len(stack) - 1; i >= 0; i-- {
@@ -561,6 +673,7 @@ func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, e
 	r.Register(name, Signature{
 		Args:    []Type{TInteger, TInteger},
 		Handler: handler,
+		Returns: []Type{TInteger},
 	})
 }
 
@@ -579,14 +692,17 @@ func registerBinaryNumOp(r *Registry, name string, op func(a, b float64) (float6
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal, TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TNumber, TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal, TNumber},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 }
 
@@ -600,10 +716,12 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 	r.Register(name, Signature{
 		Args:    []Type{TInteger},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 	r.Register(name, Signature{
 		Args:    []Type{TDecimal},
 		Handler: handler,
+		Returns: []Type{TDecimal},
 	})
 }
 
@@ -618,6 +736,7 @@ func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	r.Register(name, Signature{
 		Args:    []Type{TBoolean, TBoolean},
 		Handler: handler,
+		Returns: []Type{TBoolean},
 	})
 }
 

@@ -284,6 +284,7 @@ func registerMatrixMake(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -304,6 +305,7 @@ func registerMatrixZeros(r *engine.Registry) {
 			data := make([]float64, rows*cols)
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -327,6 +329,7 @@ func registerMatrixOnes(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -345,6 +348,7 @@ func registerMatrixEye(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: n, Cols: n})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -371,6 +375,7 @@ func registerMatrixFill(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -383,6 +388,7 @@ func registerMatrixRows(r *engine.Registry) {
 			m := args[0].AsMatrix()
 			return []engine.Value{engine.NewInteger(int64(m.Rows))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -393,6 +399,7 @@ func registerMatrixCols(r *engine.Registry) {
 			m := args[0].AsMatrix()
 			return []engine.Value{engine.NewInteger(int64(m.Cols))}, nil
 		},
+		Returns: []engine.Type{engine.TInteger},
 	})
 }
 
@@ -403,6 +410,7 @@ func registerMatrixSize(r *engine.Registry) {
 			m := args[0].AsMatrix()
 			return []engine.Value{engine.NewInteger(int64(m.Rows * m.Cols))}, nil
 		},
+		Returns: []engine.Type{engine.TList},
 	})
 }
 
@@ -427,6 +435,7 @@ func registerMatrixAt(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(m.Data[row*m.Cols+col])}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -449,6 +458,7 @@ func registerMatrixRow(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewList(elems)}, nil
 		},
+		Returns: []engine.Type{engine.TList},
 	})
 }
 
@@ -471,6 +481,7 @@ func registerMatrixCol(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewList(elems)}, nil
 		},
+		Returns: []engine.Type{engine.TList},
 	})
 }
 
@@ -491,6 +502,7 @@ func registerMatrixAdd(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -510,6 +522,7 @@ func registerMatrixSub(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -526,6 +539,7 @@ func registerMatrixMul(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(result)}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -544,6 +558,7 @@ func registerMatrixScale(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Rows, Cols: m.Cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -562,6 +577,7 @@ func registerMatrixEmul(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -580,6 +596,7 @@ func registerMatrixTranspose(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Cols, Cols: m.Rows})}, nil
 		},
+		Returns: []engine.Type{engine.TMatrix},
 	})
 }
 
@@ -594,6 +611,7 @@ func registerMatrixFlatten(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewList(elems)}, nil
 		},
+		Returns: []engine.Type{engine.TList},
 	})
 }
 
@@ -610,6 +628,7 @@ func registerMatrixSum(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(s)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -627,6 +646,7 @@ func registerMatrixTrace(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(s)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -641,6 +661,7 @@ func registerMatrixDet(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(d)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 
@@ -672,6 +693,7 @@ func registerMatrixDot(r *engine.Registry) {
 			}
 			return []engine.Value{engine.NewDecimal(s)}, nil
 		},
+		Returns: []engine.Type{engine.TDecimal},
 	})
 }
 

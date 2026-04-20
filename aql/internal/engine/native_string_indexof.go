@@ -22,8 +22,8 @@ func registerIndexOf(r *Registry) {
 		Name:              "indexof",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TString, TMap}, Handler: indexOfOptsHandler},
-			{Args: []Type{TString, TString}, Handler: indexOfHandler},
+			{Args: []Type{TString, TString, TMap}, Handler: indexOfOptsHandler, Returns: []Type{TInteger}},
+			{Args: []Type{TString, TString}, Handler: indexOfHandler, Returns: []Type{TInteger}},
 		},
 	})
 }

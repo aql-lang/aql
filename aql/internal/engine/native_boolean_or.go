@@ -39,11 +39,21 @@ func registerOr(r *Registry) {
 				Args:       []Type{TBoolean, TBoolean},
 				BarrierPos: 1,
 				Handler:    boolHandler,
+				Returns:    []Type{TBoolean},
 			},
 			{
 				Args:       []Type{TAny, TAny},
 				BarrierPos: 1,
 				Handler:    disjunctHandler,
+				// Non-boolean `or` builds a disjunction carrier
+				// that flattens incoming disjuncts, subsumes
+				// subtypes, and applies CarrierDisjunctCap widening.
+				ReturnsFn: func(args []Value) []Value {
+					if len(args) != 2 {
+						return []Value{NewCarrier(TAny)}
+					}
+					return []Value{JoinCarriers(args[1], args[0])}
+				},
 			},
 		},
 	})

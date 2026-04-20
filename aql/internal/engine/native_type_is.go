@@ -35,6 +35,7 @@ func registerIs(r *Registry) {
 				}
 				return []Value{NewBoolean(true)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 }

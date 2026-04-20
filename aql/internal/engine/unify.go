@@ -768,6 +768,7 @@ func registerUnify(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny, TAny},
 			Handler: unifyHandler,
+			Returns: []Type{TAny, TBoolean},
 		}},
 	})
 }

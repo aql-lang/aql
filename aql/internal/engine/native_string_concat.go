@@ -21,8 +21,8 @@ func registerConcat(r *Registry) {
 		Name:              "concat",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList, TMap}, Handler: concatOptsHandler},
-			{Args: []Type{TList}, Handler: concatHandler},
+			{Args: []Type{TList, TMap}, Handler: concatOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TList}, Handler: concatHandler, Returns: []Type{TString}},
 		},
 	})
 }

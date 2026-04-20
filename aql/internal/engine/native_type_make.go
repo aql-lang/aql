@@ -602,22 +602,25 @@ func registerMake(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			// New specific signatures
-			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler},
-			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler},
-			{Args: []Type{TArray, TList}, Handler: makeArrayHandler},
-			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler},
+			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []Type{TArray, TList}, Handler: makeArrayHandler, Returns: []Type{TArray}},
+			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
 			// Existing position-agnostic signatures (fallback)
 			{
 				Args:    []Type{TObject, TAny, TObject},
 				Handler: makeWithPrototype,
+				Returns: []Type{TObject},
 			},
 			{
 				Args:    []Type{TAny, TAny, TMap},
 				Handler: makeWithOpts,
+				Returns: []Type{TAny},
 			},
 			{
 				Args:    []Type{TAny, TAny},
 				Handler: makeHandler,
+				Returns: []Type{TAny},
 			},
 		},
 	})

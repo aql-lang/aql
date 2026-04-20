@@ -50,6 +50,7 @@ func registerDblcall(r *Registry) {
 				tokens = append(tokens, NewWord(")"))
 				return tokens, nil
 			},
+			Returns: []Type{TAny},
 		}},
 	})
 }

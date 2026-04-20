@@ -1,0 +1,20 @@
+{
+  "stack": [
+    "Scalar/Number/Integer/1"
+  ],
+  "diagnostics": [
+    {
+      "code": "unused_def",
+      "detail": "def y is never used",
+      "word": "y",
+      "row": 2,
+      "col": 5,
+      "severity": "warning"
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "infos": 0
+  }
+}

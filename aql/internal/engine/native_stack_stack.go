@@ -19,6 +19,23 @@ func registerStackCollect(r *Registry) {
 				copy(items, stack[len(stack)-n:])
 				return append(stack, NewList(items)), nil
 			},
+			// Check-mode FullStack: `stack N` wraps the top N
+			// entries into a list. We don't know N statically, so
+			// build a typed list whose element carrier is the
+			// join of all preserved stack carriers, and leave the
+			// preserved stack below it. Net effect: stack count
+			// reduces by an unknown amount. Conservative model:
+			// keep the whole stack, append the typed-list carrier.
+			CheckFullStackFn: func(_ []Value, stack []Value) []Value {
+				var elem Type = TAny
+				if len(stack) > 0 {
+					elem = stack[0].VType
+					for i := 1; i < len(stack); i++ {
+						elem = commonAncestorType(elem, stack[i].VType)
+					}
+				}
+				return append(append([]Value(nil), stack...), NewCarrierTypedList(elem))
+			},
 		}},
 	})
 }

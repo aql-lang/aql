@@ -527,3 +527,43 @@ func TestExecuteCleanDefaultDir(t *testing.T) {
 		t.Error("expected aql.json to be removed")
 	}
 }
+
+// TestCheckStrictExitNonZeroOnError verifies that `aql check` (the
+// default "strict" mode) returns a non-zero exit code when the
+// program produces an Error-severity diagnostic.
+func TestCheckStrictExitNonZeroOnError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"check", "-e", "upper 42"}, nil, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for strict check with errors; stderr=%s stdout=%s",
+			stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "check failed") {
+		t.Errorf("expected 'check failed' in stderr, got %q", stderr.String())
+	}
+}
+
+// TestCheckSoftExitZeroOnError verifies that `aql check --soft` reports
+// errors but still exits zero (advisory mode).
+func TestCheckSoftExitZeroOnError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"check", "--soft", "-e", "upper 42"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected zero exit for soft check; stderr=%s stdout=%s",
+			stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "[error]") {
+		t.Errorf("expected error diagnostic in stderr, got %q", stderr.String())
+	}
+}
+
+// TestCheckStrictExitZeroOnClean verifies that `aql check` exits zero
+// when no error-severity diagnostics are emitted.
+func TestCheckStrictExitZeroOnClean(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"check", "-e", "1 add 2"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected zero exit for clean program; stderr=%s stdout=%s",
+			stderr.String(), stdout.String())
+	}
+}

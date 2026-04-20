@@ -207,6 +207,7 @@ func registerComparison(r *Registry) {
 				}
 				return []Value{NewBoolean(cmp < 0)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -223,6 +224,7 @@ func registerComparison(r *Registry) {
 				}
 				return []Value{NewBoolean(cmp > 0)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -239,6 +241,7 @@ func registerComparison(r *Registry) {
 				}
 				return []Value{NewBoolean(cmp <= 0)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -255,6 +258,7 @@ func registerComparison(r *Registry) {
 				}
 				return []Value{NewBoolean(cmp >= 0)}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -267,6 +271,7 @@ func registerComparison(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewBoolean(exactEqual(args[0], args[1]))}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -279,6 +284,7 @@ func registerComparison(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewBoolean(!exactEqual(args[0], args[1]))}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 
@@ -291,6 +297,7 @@ func registerComparison(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewBoolean(deepEqual(args[0], args[1]))}, nil
 			},
+			Returns: []Type{TBoolean},
 		}},
 	})
 }

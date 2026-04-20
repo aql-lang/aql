@@ -34,6 +34,21 @@ type NativeSig struct {
 
 	// Fallback marks this as the generic 0-arg fallback handler.
 	Fallback bool
+
+	// Returns lists the declared return types for static type-checking.
+	// See Signature.Returns for details.
+	Returns []Type
+
+	// ReturnsFn computes the carrier return values for a signature in
+	// static type-check mode. See Signature.ReturnsFn for details.
+	ReturnsFn ReturnsFunc
+
+	// RunInCheckMode runs the Handler even under CheckMode. See
+	// Signature.RunInCheckMode for details.
+	RunInCheckMode bool
+
+	// CheckFullStackFn — see Signature.CheckFullStackFn.
+	CheckFullStackFn CheckFullStackFunc
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
@@ -41,14 +56,18 @@ type NativeSig struct {
 func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 	for _, sig := range fn.Signatures {
 		s := Signature{
-			Args:       sig.Args,
-			Handler:    sig.Handler,
-			FullStack:  sig.FullStack,
-			Patterns:   sig.Patterns,
-			QuoteArgs:  sig.QuoteArgs,
-			NoEvalArgs: sig.NoEvalArgs,
-			BarrierPos: sig.BarrierPos,
-			Fallback:   sig.Fallback,
+			Args:             sig.Args,
+			Handler:          sig.Handler,
+			FullStack:        sig.FullStack,
+			Patterns:         sig.Patterns,
+			QuoteArgs:        sig.QuoteArgs,
+			NoEvalArgs:       sig.NoEvalArgs,
+			BarrierPos:       sig.BarrierPos,
+			Fallback:         sig.Fallback,
+			Returns:          sig.Returns,
+			ReturnsFn:        sig.ReturnsFn,
+			RunInCheckMode:   sig.RunInCheckMode,
+			CheckFullStackFn: sig.CheckFullStackFn,
 		}
 		if fn.ForwardPrecedence {
 			r.Register(fn.Name, s)

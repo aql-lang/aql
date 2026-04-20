@@ -49,12 +49,12 @@ func registerSlice(r *Registry) {
 		Name:              "slice",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler},
-			{Args: []Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler},
-			{Args: []Type{TInteger, TString}, Handler: sliceStartHandler},
-			{Args: []Type{TInteger, TList}, Handler: sliceStartHandler},
-			{Args: []Type{TString}, Handler: sliceAllHandler},
-			{Args: []Type{TList}, Handler: sliceAllHandler},
+			{Args: []Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler, Returns: []Type{TString}},
+			{Args: []Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler, Returns: []Type{TList}},
+			{Args: []Type{TInteger, TString}, Handler: sliceStartHandler, Returns: []Type{TString}},
+			{Args: []Type{TInteger, TList}, Handler: sliceStartHandler, Returns: []Type{TList}},
+			{Args: []Type{TString}, Handler: sliceAllHandler, Returns: []Type{TString}},
+			{Args: []Type{TList}, Handler: sliceAllHandler, Returns: []Type{TList}},
 		},
 	})
 }

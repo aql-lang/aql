@@ -483,6 +483,7 @@ type Value struct {
 	Eval      bool   // true for parser-created lists that should auto-evaluate at end of Run
 	Pos       SrcPos // source position for error reporting (zero value = unknown)
 	Undefined bool   // true when atom was created from an undefined word (error if left on result stack)
+	Carrier   bool   // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
 }
 
 // idRand is the package-level RNG used for ID generation.

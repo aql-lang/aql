@@ -22,8 +22,8 @@ func registerSplit(r *Registry) {
 		Name:              "split",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TString, TString, TMap}, Handler: splitOptsHandler},
-			{Args: []Type{TString, TString}, Handler: splitHandler},
+			{Args: []Type{TString, TString, TMap}, Handler: splitOptsHandler, Returns: []Type{TList}},
+			{Args: []Type{TString, TString}, Handler: splitHandler, Returns: []Type{TList}},
 		},
 	})
 }
