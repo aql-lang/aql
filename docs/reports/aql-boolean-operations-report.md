@@ -314,7 +314,211 @@ mirroring the existing `applyGuardNarrowing` machinery in
 
 ---
 
-## 8. Summary
+## 8. Disambiguating `or`: Options and Trade-offs
+
+The dual dispatch of `or` (logical OR and type disjunction through a
+single word) is ergonomic but invites silent misuse: a missing
+`convert boolean` causes the disjunct handler to swallow what the
+user intended as a boolean expression. Four approaches, ordered from
+least to most invasive:
+
+1. **Split the words.** Keep `or` strictly boolean; introduce `union`
+   (or a `|` operator) for type disjunction. Cleanest end-state;
+   breaks the pervasive `String or None` syntax used in tests and
+   docs and requires a migration.
+2. **Tighten `or`'s second signature.** Replace `[TAny, TAny]` with
+   `[TType, TType]` plus carrier / disjunct variants, so mixed
+   operands (e.g. `true or String`) fail signature matching instead
+   of silently flattening. Low-risk — existing disjunct call sites
+   already pass type values.
+3. **Context-driven dispatch.** Treat a type literal, existing
+   disjunct, or carrier as a hard signal for the disjunct handler;
+   two `TBoolean` values as a hard signal for logical OR; *error*
+   on mixed. Preserves today's surface syntax.
+4. **Check-mode warning.** When static carriers infer a boolean
+   earlier in the program but `or` still dispatches to disjunct,
+   emit a diagnostic. Catches the "forgot `convert boolean`" class
+   without runtime behaviour change.
+
+**Recommendation:** combine options 2 and 4. They preserve
+`String or None`, eliminate the silent fall-through, and leave a
+clean migration path to option 1 later if the language owners want
+to retire the overload entirely.
+
+---
+
+## 9. Alternative Design: Strict Boolean Ops + Explicit Type Builders
+
+A more radical reshape — worth considering because it resolves the
+ambiguity for good and gives the type system a first-class builder
+vocabulary:
+
+- **Infixable boolean operators** (`and`, `or`, `not`, `xor`, `nand`,
+  `implies`) become **strictly boolean-returning**. They coerce
+  non-booleans via `isTruthy` (the same rule `if` already uses), so
+  the "two notions of truth" divergence (§4) disappears.
+- **Type construction moves to named builder words**, taken as
+  arguments a list of types rather than overloading infix operators.
+
+User-proposed seed set:
+
+```
+any [A B C]                          => A|B|C           (disjunction)
+all [A B C]                          => A&B&C           (conjunction)
+without [from:A remove:B]            => A without B     (difference)
+```
+
+This cleanly splits the two worlds: `or` is always a boolean OR,
+`any` is always a union.
+
+### 9.1 Additional builders needed to complete the algebra
+
+**Close the set algebra**
+
+- `never` / `bottom` — the empty type, the natural result of
+  `all [A B]` on disjoint operands and of `without [from:T remove:T]`.
+  Required for exhaustiveness checks and as the carrier-narrowing
+  sentinel after `without`.
+- `complement Type` — "any value that isn't T". Equivalent to
+  `without [from:Any remove:T]` but worth a name (mirrors boolean
+  `not`, and appears often enough — e.g. `complement None` for
+  not-null — to justify the shortcut).
+- `literal Value` — pin a concrete value as a type. AQL already
+  treats `42 is 42` as true; this builder just lifts that
+  capability into the type algebra. Foundation for enums and
+  discriminated unions.
+
+**Parametric containers (word forms of the existing `[:T]`/`{:T}`
+sugar, for naming consistency with `any`/`all`/`without`)**
+
+- `listof Type` — homogeneous typed list.
+- `mapof Type` (or `mapof [Key Value]` once keyed maps land) —
+  typed map.
+- `setof Type` — if sets become first-class; mainly a distinction
+  from `listof` with respect to ordering and duplicates.
+- `tuple [T0 T1 ...]` — fixed-arity heterogeneous list. AQL already
+  accepts `[1 "a" true] is [Integer String Boolean]`; this gives
+  the construct a canonical name.
+- `optionof Type` — sugar for `any [T None]`; could coexist with
+  the `?` suffix.
+
+**Record / structural manipulation**
+
+- `pick Record [keys]` — keep only the listed fields.
+- `omit Record [keys]` — drop the listed fields.
+- `partial Record` — every field becomes `optionof`.
+- `required Record` — strip optionality from every field.
+- `extend Record Record` — structural merge of two record types.
+- `tableof Record` — align naming with existing `table R`.
+
+**Nominal and parametric**
+
+- `newtype Name Type` — branded wrapper that does *not* unify with
+  its underlying type (distinguishes `UserId` from `Integer`).
+  Complements the current structural `type` alias.
+- `generic [params:[X Y]] Body` — introduce type variables for
+  reusable templates (e.g. `Pair<A,B>`).
+- `apply Template [Types]` — instantiate a generic to concrete
+  types.
+- `rec Name [Body]` — recursive / self-referential definitions
+  for trees and linked lists (`rec Tree [{val:Any children:(listof
+  Tree)}]`).
+
+**Refinement**
+
+- `refine Type [Predicate]` — subtype by value predicate
+  (`refine Integer [gte 0]`). With this in place, `enum` becomes a
+  thin sugar over `any [(literal a) (literal b) ...]`, and numeric
+  ranges become `refine Integer [between 0 100]`.
+
+**First-class function types**
+
+- `signature [args:[Type] returns:[Type]]` — the arrow type as a
+  value. Currently `fn` bodies encode this implicitly at definition
+  time; a standalone builder lets function types flow through the
+  system the way record types do (for higher-order APIs, typed
+  callbacks, etc.).
+
+### 9.2 Coverage check
+
+With the seed three plus the additions above, the core algebra is
+complete:
+
+| Concept                  | Operator / Builder                    |
+|--------------------------|---------------------------------------|
+| Union (∪)                | `any [...]`                           |
+| Intersection (∩)         | `all [...]`                           |
+| Difference (∖)           | `without [from: remove:]`             |
+| Complement (¬)           | `complement T`                        |
+| Top (⊤)                  | `Any` (exists)                        |
+| Bottom (⊥)               | `never`                               |
+| Unit                     | `None` (exists)                       |
+| Literal / singleton      | `literal v`                           |
+| Homogeneous container    | `listof` / `mapof` / `setof`          |
+| Heterogeneous tuple      | `tuple [...]`                         |
+| Option / nullable        | `optionof T` (or `T?`)                |
+| Record                   | `record [...]` (exists)               |
+| Record reshape           | `pick` / `omit` / `partial` / `required` / `extend` |
+| Table                    | `tableof R` (exists as `table R`)     |
+| Nominal                  | `newtype Name T`                      |
+| Structural alias         | `type Name T` (exists)                |
+| Parametric               | `generic [...]`, `apply`              |
+| Recursive                | `rec Name [...]`                      |
+| Refinement               | `refine T [p]`                        |
+| Arrow                    | `signature [[args] [returns]]`        |
+
+### 9.3 Knock-on effects
+
+- **Boolean operators become total.** Since every value has an
+  `isTruthy` interpretation, `and`/`or`/`not`/… stop erroring on
+  non-booleans. Users coming from Python, Lua, JavaScript find this
+  natural; users who relied on today's strict typing lose the
+  compile-time guard and must migrate to explicit `convert boolean`
+  or a linter rule.
+- **Type expressions become uniformly prefix.** Today's
+  `String or None` reads left-to-right; `any [String None]` is
+  longer but parses without specificity rules or `BarrierPos`
+  tricks — and the entire builder family shares a single grammar.
+- **Static check mode simplifies.** The carrier dispatch for `or`
+  no longer has to hedge between two signatures; `any`/`all`/
+  `without`/etc. carry only type values, so their handlers are
+  pure type algebra.
+- **Short-circuiting lands naturally.** With booleans always
+  returning booleans and coercing truthy values, §7.1's list-form
+  lazy operands (`false and [expensive]`) fit without overloading
+  worries, because the builder family has been lifted out of the
+  infix space.
+- **Migration cost is real.** Every `(T or None)` in the corpus —
+  `basic.tsv`, `LANGREF.md`, field types throughout — must become
+  `any [T None]` or `optionof T`. A codemod on the parser's
+  disjunct construction path can automate most of it.
+
+### 9.4 Recommendation
+
+This alternative is strictly more expressive and avoids the
+overloading problem by construction. If the project is willing to
+absorb a migration, the target design is:
+
+1. Make infix boolean operators strict about *returning* booleans
+   but lenient about *accepting* any value (via `isTruthy`
+   coercion).
+2. Introduce the builder family above, starting with
+   `any` / `all` / `without` / `never` / `literal` / `optionof` /
+   `listof` / `mapof` / `tuple`, which cover ~90% of current
+   usage.
+3. Retire `or`'s disjunct signature behind a deprecation warning;
+   remove it once the corpus has migrated.
+4. Layer `pick` / `omit` / `partial` / `newtype` / `rec` /
+   `generic` / `refine` / `signature` in a second wave, as demand
+   surfaces — none of them unblock the core disambiguation.
+
+The first wave alone delivers the win the report is after: a clean
+boolean algebra, a clean type algebra, and no overloading between
+them.
+
+---
+
+## 10. Summary
 
 AQL's boolean layer is small, regular, and conceptually clean:
 forward-precedence words with strict `[boolean, boolean]`
