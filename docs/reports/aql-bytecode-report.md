@@ -739,3 +739,343 @@ discipline, multiple-signature dispatch, recursion), the
 register / constants layout, and how the compiler interacts
 with the `RunInCheckMode` words that already run during the
 carrier pass.
+
+---
+
+## 5. User-defined functions
+
+User-defined functions in AQL come from two constructs: `def` —
+installing a literal-substitution body or a fn value under a name
+— and `fn` — building a multi-signature function value. Both are
+`RunInCheckMode` (see `native_definition_def.go:64,72` and
+`native_definition_fn.go:59`), which means the carrier checker
+actually executes them at check time, mutating the registry's
+`DefStacks`. This is exactly the behaviour we want for
+compilation: the compiler shares the same registry and so
+already knows every binding by the time it reaches a call site.
+
+### 5.1 What `def` produces
+
+`def name body` has two shapes that matter for compilation:
+
+1. **Literal substitution.** `def pi 3.14159` or `def doubled [dup
+   add]`. The body is a value (scalar or list). At every call
+   site of `pi` the interpreter splices the body's tokens onto
+   the stack. There is no separate arity or signature — the body
+   is just code.
+2. **Named `fn` value.** `def square fn [[Integer] [Integer] [dup
+   mul]]`. The body is a `FnDefInfo` with a list of signature
+   triples `[input, output, body]`. Each triple has its own
+   input types, output types, and body tokens.
+
+Both shapes get lowered differently by the compiler.
+
+### 5.2 Compiling a literal-substitution `def`
+
+For `def pi 3.14159`:
+
+- The compiler's registry pass (running under `RunInCheckMode`)
+  installs the binding.
+- The compiler records `name → Value` in its *inlining table*.
+- At each `Word("pi")` reference, the compiler emits
+  `PUSH_CONST const_pi`. No call, no dispatch.
+
+For `def doubled [dup add]`:
+
+- Same registry install.
+- The inlining table records `name → []Instr` by compiling the
+  body once as a standalone instruction sequence.
+- At each `Word("doubled")` reference, the compiler chooses
+  between **inlining** (paste the instructions directly, cheap
+  if the body is small) and **emitting a CALL_USER** to a single
+  compiled copy (better for large bodies or recursive defs).
+
+A reasonable heuristic: inline if the body is ≤8 instructions
+and non-recursive; otherwise promote to a `CompiledFn`. This
+mirrors how modern JITs decide inlining, but the threshold is
+small because AQL's literal defs are usually terse.
+
+### 5.3 Compiling a `fn` value
+
+`fn [[I] [I] [dup mul]]` is a multi-signature function. For
+each triple, the checker already runs a carrier analysis per
+signature. For the compiler this means:
+
+- Each triple produces its own `CompiledFn` — same body bytecode
+  across signatures if they share one body, specialised if the
+  body references input-typed locals that would differ.
+- The overall fn value becomes a `CompiledFnSet` — a small
+  dispatch table keyed by input type.
+
+The compiled shape of `def square fn [[I] [I] [dup mul]]`:
+
+```
+CompiledFnSet "square" {
+  sigs: [
+    { Args: [Integer], Returns: [Integer], Code: [DUP, CALL_NATIVE2_1 mul_i_i, RET] },
+  ],
+  argCount: 1,
+}
+```
+
+At a call site, `CALL_USER square_id` resolves to this set. If
+the set has exactly one signature — the common case — the call
+is direct: push frame, jump to the body. If multiple signatures
+exist, the VM needs a `CALL_USER_POLY` variant that inspects the
+argument's VType and indexes into the set.
+
+### 5.4 Multi-signature dispatch at compile time
+
+The carrier checker resolves multi-signature `fn` values
+deterministically: it orders signatures by specificity
+(`SortSignatures`), then applies the same first-match rule as
+runtime. So at compile time, every `CALL_USER` site has a
+definite target signature — *unless* the caller's carrier
+includes a disjunct that straddles two signatures.
+
+Example where the disjunct stays:
+
+```
+def f fn [
+  [Integer] [Integer] [dup mul]       ; sig 0
+  [Decimal] [Decimal] [dup mul]       ; sig 1
+]
+if [cond] [1 f] [1.0 f]
+```
+
+Each branch of the `if` is monomorphic (`f[Integer]` vs.
+`f[Decimal]`), so if the checker propagates the disjunct to the
+join, the downstream site sees `Integer|Decimal`. But *within
+each branch*, the compiler emits a direct `CALL_USER f_sig0` or
+`CALL_USER f_sig1`. No runtime dispatch at the call point.
+
+Where the disjunct *is* the input — e.g. `f x` where `x :
+Integer|Decimal` flowing from a prior `get` — the compiler emits
+`CALL_USER_POLY f_set_id`, and the VM switches on the top-of-
+stack type tag. Still O(1); still no signature scan.
+
+### 5.5 Frames, locals, and named parameters
+
+When a `fn` signature declares named parameters
+(`fn [[x:Integer] [Integer] [x mul x]]`), the parser installs
+each name as a `def` inside the body's scope. The carrier
+checker already models this: it pushes a `DefCleanup` marker on
+entry and pops bindings on exit.
+
+The bytecode VM handles this with a classic **call frame**:
+
+```
+Frame {
+    returnPC  int
+    localsPtr int        // index into a flat locals stack
+    prevFrame *Frame
+}
+```
+
+Each `CompiledFn` declares its `MaxLocals`. `CALL_USER`:
+
+1. Pops N args off the operand stack.
+2. Pushes a new frame; reserves `MaxLocals` slots.
+3. Stores args into the first N local slots (in signature
+   order).
+4. Sets `pc = fn.Code` start.
+
+`RET` unwinds: pops the frame, frees locals, pushes the function's
+declared results onto the caller's operand stack from the
+callee's top-of-stack, and restores `pc`.
+
+Named parameters (`x`) become `PUSH_LOCAL x_slot` references.
+This is one array index vs. a DefStack map probe per reference —
+a significant win for parameter-heavy bodies.
+
+### 5.6 Recursion
+
+Recursion is trivial in this model because user fns are
+addressable by `fn_id`. A recursive `factorial`:
+
+```
+def factorial fn [
+  [Integer] [Integer]
+  [dup 1 lte [drop 1] [dup 1 sub factorial mul] if]
+]
+```
+
+Compiles to a `CompiledFn` whose body contains `CALL_USER
+factorial_id` — a direct reference to itself. The checker's
+fixed-point analysis has already computed the return type;
+registration happens once, before the body is lowered, so the
+self-reference resolves.
+
+What the bytecode VM does *not* need to do for recursion:
+
+- No tail-call optimisation in v1 — user calls push a frame; very
+  deep recursion hits a stack limit. (Forth and Lua take the
+  same approach; TCO can be added later by detecting a `RET` that
+  immediately follows a `CALL_USER` and emitting `TAIL_CALL_USER`
+  instead.)
+- No trampolining — the operand stack and frame stack are
+  separate; frames are small (a return PC, a locals pointer, and
+  a parent pointer).
+
+### 5.7 Polymorphic recursion
+
+`factorial` above is monomorphic (Integer → Integer). A
+polymorphic fn, e.g. a generic `length` over lists of varying
+element types, needs either:
+
+- **Per-instantiation specialisation.** Each observed input type
+  produces its own `CompiledFn`. Works well because typed lists
+  only have a handful of concrete element types per program.
+- **A single generic implementation.** Carry element type as a
+  runtime operand and dispatch inside. Loses some of the
+  fixed-arity benefit.
+
+The first strategy is cleaner and aligns with how the carrier
+checker already operates (it analyses each call-site input
+separately). The number of specialisations is bounded by the
+checker's disjunct widening, so code blow-up is controlled.
+
+### 5.8 Summary of §5
+
+User fns compile cleanly because `def`/`fn` are already
+`RunInCheckMode`: the compiler's checker pass registers them in
+the shared registry, so the compile-side CALL emitter sees every
+binding. Literal defs inline or promote to `CompiledFn`. Multi-
+signature fns become `CompiledFnSet` dispatch tables, with the
+vast majority of call sites resolving to a single signature at
+compile time. Named parameters become slot indices. Recursion is
+a plain `CALL_USER` to the same `fn_id`.
+
+---
+
+## 6. Interaction with `RunInCheckMode` words
+
+`RunInCheckMode` is the escape valve that lets certain words
+execute their side effects during the carrier pass so subsequent
+analysis has complete information. The list today:
+
+- `def` — installs a DefStack binding.
+- `undef` — removes one.
+- `fn` — builds a function value (and installs it when paired
+  with `def`).
+- `type` / `typedef` — adds a type to the registry.
+- `import` / `export` — cross-module linkage.
+- `module` — creates a sub-engine with an isolated registry.
+- `var` — installs a context variable.
+- Possibly `record`, `table`, `object`, `resource` — schema
+  installers.
+
+Every one of these is a **compile-time-only** operation from the
+bytecode VM's perspective. They manipulate the registry that
+drives dispatch; by the time the bytecode is running, the
+registry is frozen (or at most changed by plain runtime-visible
+`def`/`undef` pairs — see §6.4).
+
+### 6.1 Compile-time execution
+
+During the compile pass (which is the checker pass with a
+recording side effect), every `RunInCheckMode` signature runs
+normally. That is:
+
+- `def foo 1` installs `foo → Value(1)` in the registry.
+- `def doubled [dup add]` installs the body.
+- `fn [[I] [I] [dup mul]]` builds and returns an `FnDefInfo`.
+- `type Point record [x:Number, y:Number]` adds a record type.
+- `import utils` loads and analyses the module.
+
+The compiler sees the result on the carrier stack (where
+applicable) and records whatever it needs into its own tables —
+inlining tables, user-fn tables, type tables, import graphs.
+**No runtime bytecode is emitted for these operations** in the
+monomorphic common case.
+
+### 6.2 Module imports
+
+`import utils` compiles the imported module once. The compiler
+maintains an import cache (already present for the checker) and
+merges the module's exported fn_ids, constants, and type ids
+into the current program's tables with a namespace prefix.
+
+Cross-module `CALL_USER utils.helper_id` is just another entry
+in the `UserFns` table; dispatch cost is identical to in-module
+calls. Modules with cyclic imports need the same fixed-point
+treatment as recursive fns — register stubs for declarations
+first, then compile bodies.
+
+### 6.3 `type`, `record`, `table`
+
+Type installers produce tables entries at compile time. Runtime
+type checks (`TYPE_CHECK t_id`) reference these tables. The
+bytecode program carries its own `Types []Type` table so
+deployed bytecode is self-contained — you don't need the
+original source to know what `Point` is.
+
+### 6.4 Runtime `def`
+
+AQL allows a `def` inside a loop body or conditional branch:
+
+```
+for 10 [i dup def current_i ...]
+```
+
+This is a runtime mutation of the DefStack. Under compilation
+there are two sensible strategies:
+
+1. **Promote to a local.** If the checker can prove the binding
+   is used only within the enclosing scope, compile `def x body`
+   to `STORE_LOCAL x_slot`. This is the overwhelmingly common
+   case and should be the default.
+2. **Emit registry ops.** For `def` that leaks to enclosing
+   scopes (possible via `each`/`fold` sub-engines sharing the
+   registry), emit `REG_DEF_PUSH name_id` / `REG_DEF_POP
+   name_id`. The VM mutates the runtime registry on the fly.
+   Slower, but semantically identical to the interpreter.
+
+The compiler picks strategy 1 by default; the carrier checker's
+def-binding state tracks which names are scope-local. Only
+`def`s that the checker had to treat as producing disjuncts
+across scopes fall back to strategy 2.
+
+### 6.5 `do` and the dynamic escape hatch
+
+`do body` evaluates `body` as code. If `body` is a literal list,
+the compiler lowers it inline (it is just another code fragment).
+If `body` is computed — `ops at 0 do` — the compiler cannot
+know what code it names. The checker already widens these to
+`Carrier<Any>` and logs a diagnostic; the compiler emits
+`FALLBACK_INTERP span_id` and a recorded token span, and the
+runtime hands off to an engine instance. The engine runs in
+pure interpreter mode over the computed list, then returns
+control. Expensive, but only at the genuinely dynamic sites.
+
+A useful property: because both modes share the same `[]Value`
+stack representation, the handoff is just passing the current
+stack slice. No marshalling.
+
+### 6.6 Registry freezing at runtime
+
+Once compilation is complete, the runtime registry is frozen
+for everything the compiled program will resolve statically:
+fn_ids are fixed, sig_ids are fixed, constant pool is fixed.
+The only runtime-mutable part is DefStacks (for runtime
+`def`/`undef`), context variables, and module load state.
+
+This enables a further optimisation: the VM can memoise parts
+of dispatch (e.g., type tag → sig_id in a `CALL_NATIVE_POLY`
+table) because the mapping is known to be stable for the run.
+
+### 6.7 Summary of §6
+
+`RunInCheckMode` words are compile-time primitives. The
+compiler executes them during the carrier pass, captures their
+effects in compile-time tables, and emits nothing (or almost
+nothing) in the runtime bytecode. Runtime `def`/`undef`
+promote to locals where possible, falling back to registry
+mutation ops otherwise. `do` on computed code is the only
+construct that forces a true interpreter fallback — the same
+boundary the carrier checker already draws.
+
+The next instalment will cover performance analysis — expected
+speed-ups per construct, benchmarking methodology, memory
+behaviour, and the specific costs that fixed-arity cannot
+eliminate (allocation, boxing, I/O).
