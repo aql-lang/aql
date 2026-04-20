@@ -361,3 +361,381 @@ annotations split them into monomorphic variants.
 The next instalment will cover the instruction set sketch, the
 encoding of branches and loops (replacing mark/move), and how
 user-defined functions get compiled with their own frames.
+
+---
+
+## 3. Instruction set
+
+This section sketches the instruction set. It is a proposal, not
+a spec — the exact opcodes will shake out in implementation — but
+it is enumerated here so the remaining sections can refer to
+specific ops.
+
+### 3.1 Design principles
+
+- **Fixed-width, single-word instructions.** Each `Instr` is a
+  small struct `{Code uint8, Arg int32}` so the program is a
+  cache-friendly `[]Instr`. Complex operands (constant table
+  indices, sig_ids, label offsets) fit in the 32-bit `Arg`.
+- **No type tags on opcodes for monomorphic sites.** `CALL_NATIVE`
+  covers every statically-resolved call; the sig_id table holds
+  the arity and handler. This keeps the opcode alphabet small.
+- **Specialised ops only where the shape is ubiquitous.** `PICK`,
+  `ROLL`, `DUP`, `SWAP`, `DROP` already dominate Forth-style
+  execution and deserve native opcodes. `OpCallNative1_1` and
+  `OpCallNative2_1` (arity 1 and 2, one result) cover >90% of
+  arithmetic and comparison sites.
+- **Labels resolved at emit time.** Branches carry absolute PCs;
+  no runtime label lookup.
+- **Constant pool is flat.** A `[]Value` constants table indexed by
+  `PUSH_CONST`. Interning makes literal `1`, `true`, `""` share
+  slots across the program.
+
+### 3.2 Opcodes
+
+**Stack manipulation** (direct Forth heritage):
+
+- `PUSH_CONST k` — push constants[k].
+- `DUP`, `DROP`, `SWAP`, `OVER`, `NIP`, `TUCK`, `ROT`
+- `PICK n`, `ROLL n` — with `n` from the arg field.
+- `2DUP`, `2DROP`, `2SWAP`, `2OVER`
+
+**Locals** (for compiled `def` bindings):
+
+- `PUSH_LOCAL slot` — push frame[slot].
+- `STORE_LOCAL slot` — pop and store into frame[slot].
+- `ENTER_SCOPE n`, `EXIT_SCOPE n` — reserve / release n slots.
+
+**Calls**:
+
+- `CALL_NATIVE sig_id` — arity in sig table.
+- `CALL_NATIVE1_1 sig_id` — 1-in, 1-out fast path.
+- `CALL_NATIVE2_1 sig_id` — 2-in, 1-out fast path.
+- `CALL_NATIVE_FULL sig_id` — for `FullStack` signatures (`depth`,
+  `pick`, `roll`, `stack`). Handler receives the full stack view.
+- `CALL_NATIVE_POLY disp_id` — small table-driven dispatch for
+  residual disjuncts (§2.4).
+- `CALL_USER fn_id` — user-defined fn; arity in fn table.
+- `RET` — return from user fn.
+
+**Control flow**:
+
+- `JMP pc`
+- `JMP_IF_FALSE pc` — pop top, jump if falsy.
+- `JMP_IF_TRUE pc`
+
+**Loop support** (replacing mark/move for `for`, `each`, `fold`,
+`scan`):
+
+- `FOR_SETUP` — pop range spec, push iterator state record.
+- `FOR_NEXT body_pc end_pc` — if iterator exhausted, jump to
+  end_pc; else bind iterator value (into a known local slot) and
+  jump to body_pc.
+- `EACH_SETUP` / `EACH_NEXT` — iterate a list.
+- `FOLD_SETUP` / `FOLD_NEXT` — iterate a list with an accumulator
+  slot.
+
+**Structure builders**:
+
+- `MAKE_LIST n` — pop n values, push a list.
+- `MAKE_MAP n` — pop 2n values (alternating keys/values), push
+  a map.
+- `MAKE_TYPED_LIST t_id n` — same, but with element type fixed.
+- `LIST_APPEND` — in-place append for fold-style builders.
+
+**Type ops**:
+
+- `TYPE_TAG` — push the VType of top-of-stack as a type literal.
+- `TYPE_CHECK t_id` — assert top-of-stack matches type; emit only
+  at disjunct narrowing points, raise a typed error on mismatch.
+- `TYPE_COERCE t_id` — narrow at a checked boundary (e.g. after
+  a guard `if [x is Integer]`).
+
+**Def / registry plumbing** (rare at runtime, used for runtime
+`def` rebinding):
+
+- `REG_DEF_PUSH name_id, sig_id` — push a compiled fn onto a
+  DefStack at runtime.
+- `REG_DEF_POP name_id` — remove the top binding.
+
+**Fallback**:
+
+- `FALLBACK_INTERP span_id` — resume interpretation over a
+  recorded token span (§1.5). The VM hands the current stack to
+  an engine instance, lets it run, and resumes with the resulting
+  stack.
+
+**Halt / errors**:
+
+- `RETURN_TOP` — program's top-level result.
+- `HALT`
+- `RAISE err_id` — raise a structured error with interned
+  message.
+
+That's ~35 opcodes. A 6-bit opcode field with a 26-bit operand
+would leave plenty of room; a byte-wide opcode with a 32-bit
+operand fits Go's `struct{Code uint8; Arg int32}` naturally.
+
+### 3.3 Encoding and layout
+
+The program is a value `Program` with:
+
+```go
+type Program struct {
+    Code      []Instr            // flat instruction stream
+    Constants []Value            // interned literals
+    Sigs      []*Signature       // sig_id → signature
+    PolyDisp  []PolyDispTable    // disp_id → dispatch table
+    UserFns   []CompiledFn       // fn_id → compiled fn
+    DebugInfo []SrcSpan          // pc → source span (optional)
+    MaxStack  int                // pre-size the runtime stack
+    MaxLocals int                // pre-size the locals frame
+}
+```
+
+`CompiledFn` has its own `Code`, `MaxStack`, `MaxLocals`, and
+param/return arity. User-fn call semantics are a classic frame
+push: push return PC, push locals frame pointer, set `pc = fn.Code`
+start. `RET` unwinds.
+
+### 3.4 Example lowering
+
+Source:
+
+```
+def square fn [[Integer] [Integer] [dup mul]]
+5 square
+```
+
+After compile:
+
+```
+; User fn registration runs at compile time (RunInCheckMode).
+; The body is compiled to CompiledFn{Code: [DUP, CALL_NATIVE2_1 mul_i_i, RET], ...}
+; At runtime, only the body below executes.
+
+PUSH_CONST   0          ; constants[0] = Integer(5)
+CALL_USER    square_fn
+RETURN_TOP
+```
+
+The `square` call site is a single `CALL_USER`. `dup mul` inside
+the body is two instructions. Comparable interpreter execution is
+roughly: parse `5` → push; resolve `square` → DefStack lookup →
+splice body tokens → step through `dup` → matchSignature → splice
+→ step through `mul` → matchSignature → splice. The bytecode
+path is 3 ops total.
+
+---
+
+## 4. Replacing mark/move with static branches
+
+Mark/move is the runtime mechanism AQL uses for `if`, `for`, and
+similar words that splice new tokens onto the stack for later
+evaluation. `if`'s 3-arg handler (`conditional.go:61-85`) returns
+a token sequence `[Mark, condTokens..., MoveIf{Then, Else}]`;
+the engine loop processes the mark, runs the condition tokens,
+hits the move, evaluates the result, and splices one of the
+branches in place. This is elegant for an interpreter — the main
+loop stays oblivious to control flow — but it relies on mutating
+the token stream, which a bytecode VM cannot do cheaply.
+
+Every mark/move site can be statically lowered because the
+compile-time checker already knows which branches exist, what
+their bodies are, and when they rejoin.
+
+### 4.1 `if` → conditional branch
+
+Source:
+
+```
+if [x lt 10] [x 2 mul] [x 3 mul]
+```
+
+Compile:
+
+```
+PUSH_LOCAL   x_slot
+PUSH_CONST   10                ; 10
+CALL_NATIVE2_1 lt_i_i          ; x < 10
+JMP_IF_FALSE else_label
+
+; then branch
+PUSH_LOCAL   x_slot
+PUSH_CONST   2
+CALL_NATIVE2_1 mul_i_i
+JMP          end_label
+
+else_label:
+PUSH_LOCAL   x_slot
+PUSH_CONST   3
+CALL_NATIVE2_1 mul_i_i
+
+end_label:
+```
+
+Key points:
+
+- **The condition is just code.** Any list body used as an `if`
+  condition becomes a sequence of instructions that leaves one
+  value on the stack. The condition list's `NoEvalArgs` flag at
+  the interpreter becomes implicit in the bytecode lowering —
+  the body's tokens are simply emitted here.
+- **The result type is a disjunct** of the two branches' top-of-
+  stack carrier types, unified by the checker. If the checker
+  widens to `Any`, the compiler may emit a `TYPE_TAG` at the end
+  for downstream dispatchers, but monomorphic joins need no
+  extra op.
+- **2-arg `if` with no else** emits `JMP_IF_FALSE end_label`
+  directly with no `JMP` between branches. If the checker
+  detects that the then-branch produces a value the enclosing
+  context consumes, it must emit a `PUSH_CONST none` on the false
+  path to preserve stack arity.
+
+### 4.2 Condition body with side effects
+
+The condition list may itself contain calls (`if [x is Integer
+and [y gt 0]] ...`). These compile straight: the condition's
+instruction sequence runs, leaves a boolean on top, `JMP_IF_FALSE`
+consumes it. No mark/move bookkeeping is needed because the
+condition's own bytecode already leaves the stack in the expected
+shape — the compiler verifies this against the carrier stack at
+emission time.
+
+### 4.3 `for` → counted loop
+
+Source:
+
+```
+for 10 [i print]
+```
+
+Compile:
+
+```
+PUSH_CONST   10                 ; n
+FOR_SETUP                       ; pops n, pushes iterator state; reserves i_slot
+body_label:
+FOR_NEXT     end_label          ; if exhausted → end_label; else store i into i_slot
+PUSH_LOCAL   i_slot
+CALL_NATIVE1_0 print_any        ; side-effect print; 0 returns
+JMP          body_label
+end_label:
+; iterator state popped by FOR_NEXT when it exits; for-result list
+; is synthesised by FOR_SETUP/FOR_NEXT (they maintain a hidden accum).
+```
+
+A few notes:
+
+- **Iterator state is a hidden slot.** `FOR_SETUP` allocates an
+  iteration record in the locals frame. `FOR_NEXT` increments
+  and checks. The iterator variable `i` is a named local in the
+  scope — the compiler knows its slot from the `for` signature's
+  convention (`ReturnsFn` already binds the iterator name `"i"`
+  during the carrier pass, `forloop.go:60`).
+- **`break` and `continue`** become `JMP end_label` and
+  `JMP body_label` respectively. Their current sentinel-error
+  mechanism in the runtime engine is unnecessary in the bytecode
+  VM.
+- **Range variants** (`for [1,10]`, `for [0,10,2]`) compile to
+  the same opcodes; only the initial values on the stack differ.
+  `FOR_SETUP` pops whatever the range descriptor is and
+  normalises to a `{start, end, step}` record.
+- **The per-iteration accumulator list.** `for` produces a list of
+  per-iteration top-of-stack values. The compiler emits a
+  hidden `LIST_APPEND` into an accumulator slot at each
+  iteration end. `FOR_NEXT`'s exit path leaves the accumulator
+  on the runtime stack. The checker's carrier already types this
+  as a typed-list whose element type is the body's top-of-stack
+  — that type becomes the `MAKE_TYPED_LIST`'s element parameter.
+
+### 4.4 `each` / `fold` / `scan`
+
+These higher-order words take a list and a code body. Because
+the body is a literal list at most call sites (the checker
+already flags non-literal bodies as hard-to-type), the compiler
+can inline the body and emit a small loop:
+
+```
+each [l] [body]   →
+  PUSH_CONST   l_id            ; the list
+  EACH_SETUP                   ; pops list, sets up iter + accum
+body_label:
+  EACH_NEXT    end_label       ; store element into elem_slot; exit if done
+  ; inline body: pushes 0+ results; the last N values (from sig) are accum
+  ...body bytecode...
+  LIST_APPEND                  ; accum.append(top)
+  JMP          body_label
+end_label:
+```
+
+`fold` differs only in that its accumulator is user-visible and
+initialised from an earlier stack value:
+
+```
+fold [[l] [init] [body]]   →
+  ...init bytecode → leaves init on stack...
+  STORE_LOCAL accum_slot
+  PUSH_CONST  l_id
+  FOLD_SETUP
+body_label:
+  FOLD_NEXT   end_label        ; exits when list exhausted
+  PUSH_LOCAL  accum_slot
+  PUSH_LOCAL  elem_slot
+  ...body bytecode...          ; pops two, pushes one new accum
+  STORE_LOCAL accum_slot
+  JMP         body_label
+end_label:
+  PUSH_LOCAL  accum_slot
+```
+
+The checker already computes the body's effect as a function
+from `(accum_type, elem_type) → accum_type'`, iterating to a
+fixed point (`CARRIER-STATIC-TYPECHECK-REPORT.md` §"Loop and
+recursion termination"). At compile time the same fixed-point
+iteration tells us what `accum_slot`'s type is, which in turn
+drives any type tagging the VM needs.
+
+### 4.5 Mark/move → no runtime artefact
+
+Under bytecode compilation the following mechanisms **disappear
+entirely** from runtime:
+
+- `NewMark`, `NewMoveIf`, `NewMoveFor`, `stepMark`, `stepMove`
+- `ForCont`, `IfCont` continuation records
+- The `NextMarkID` counter
+- `handleLoopBreak` / `handleLoopContinue` (replaced by static
+  `JMP` targets)
+- Body token splicing via `spliceArg` (the body is already
+  bytecode)
+
+The interpreter retains all of these for the interpreted mode,
+but the compiled code never touches them. This removes a
+significant slice of per-step engine overhead on branch- or
+loop-heavy code.
+
+### 4.6 What survives: error handling and errors with source
+
+Bytecode branches change what a runtime error looks like.
+Currently, errors pinpoint a token by its `Pos` field. In the
+VM, errors pinpoint a `pc`. The `DebugInfo []SrcSpan` table
+maps pc → source span for exactly this reason. When
+`CALL_NATIVE` returns an error, the VM wraps it with
+`DebugInfo[pc]`, giving error messages identical in precision
+to the interpreter's.
+
+### 4.7 Summary of §§3–4
+
+The instruction set is small (~35 opcodes) and dominated by
+stack manipulation, fixed-arity calls, and conditional branches.
+Mark/move — AQL's most interpreter-flavoured mechanism — lowers
+cleanly to static branches and loops because the carrier
+checker has already resolved every branch and every iteration
+shape. `break`/`continue` become `JMP`. Higher-order words with
+literal bodies become inline loops with an accumulator slot.
+
+The next instalment will cover user-defined functions (frame
+discipline, multiple-signature dispatch, recursion), the
+register / constants layout, and how the compiler interacts
+with the `RunInCheckMode` words that already run during the
+carrier pass.
