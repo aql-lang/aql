@@ -1475,3 +1475,202 @@ Next pass: expand each severe and moderate item into a full
 subsection with a concrete failure scenario and the specific
 mitigation. Low-priority items stay as a short checklist in the
 final document.
+
+---
+
+## 9. Severe gotchas expanded
+
+Each of the five severe gotchas is covered with a concrete
+failure scenario, the diagnostic symptom, and the specific
+mitigation. These are the items where getting the design wrong
+produces silent wrong answers (not just slow or annoying ones).
+
+### 9.1 Interpreter/compiled divergence on checker-unsound sites
+
+**Scenario.** A program contains `ops at 0 do` where `ops` is
+built up conditionally earlier. The carrier checker widens the
+result of `ops at 0` to `Carrier<Any>` and the downstream `do`
+is marked as a fallback region. The compiler emits
+`FALLBACK_INTERP span_id` for exactly the `do`. But subtle
+corner: if the value produced by the fallback is consumed by a
+subsequent compiled call, the carrier the compiler assumed for
+the consumer may not match the actual runtime value.
+
+**Symptom.** A compiled `CALL_NATIVE2_1 add_i_i` executes
+against a `Value{VType: TString, Data: "foo"}` that came out
+of the fallback. `AsInteger()` returns 0 silently (or panics,
+depending on the unbox helper). The interpreter would have
+errored with a dispatch mismatch.
+
+**Mitigation.** Two complementary measures:
+
+1. **Insert a `TYPE_CHECK t_id` at every fallback/compiled
+   boundary**, matching the checker's widened carrier. A
+   `FALLBACK_INTERP` that produced `Carrier<Any>` emits
+   `TYPE_CHECK t_id` for the next consumer's expected type; on
+   mismatch, the VM raises the same dispatch error the
+   interpreter would have.
+2. **Differential-execution harness in CI.** Run every test in
+   both modes, assert byte-identical results, fail the build on
+   any divergence. The carrier checker already defines which
+   sites are "safe to compile"; this harness verifies the
+   definition in practice.
+
+The boundary check is cheap (one VType compare) and only
+triggers at the (already-slow) fallback frontier.
+
+### 9.2 Stale bytecode after source edit
+
+**Scenario.** A `.aqlc` file is cached from a previous run. The
+user edits `foo.aql` — adds a new signature to a user fn, or
+changes a `def` body. They run the program and get behaviour
+from the old compiled fn.
+
+**Symptom.** Old dispatch choices persist; new signatures
+invisible; errors point at source lines that no longer exist.
+
+**Mitigation.**
+
+1. **Hash the full compilation input** into the bytecode file
+   header: source files, import closure, their mtimes (or
+   content hashes), compiler version, Go build tag. On load,
+   re-check; any mismatch triggers recompile.
+2. **Default to eager compile at load, not persist.** Unless
+   the user explicitly opts into `.aqlc` files, compile in
+   memory per run. Cheap (milliseconds) and eliminates the
+   staleness class.
+3. **Partial recompilation is out of scope for v1.** Any source
+   change recompiles the whole program. Fine for typical AQL
+   sizes; revisit only if compile latency becomes a complaint.
+
+Corollary: the compiler emits a monotonic format-version byte
+in the `.aqlc` header. Older CLI versions refuse forward-version
+files rather than silently misinterpret them.
+
+### 9.3 Registry mutation the compiler assumed frozen
+
+**Scenario.** The compiler observes a `def x 1` at top level
+and promotes `x` to a local slot. But inside a later `for` body,
+the code does `def x 2` without ever un-defining it. The
+interpreter's DefStack would end up with two entries — the
+inner `x` shadows the outer — but the compiler promoted the
+outer to a local, so subsequent references to `x` outside the
+`for` body still see the local value `1` (correct), while
+references inside the `for` body that the compiler wired to
+the same slot see `2` (also correct, as long as shadowing was
+recognised).
+
+**Symptom.** If the compiler misses the nested `def`, the inner
+`def` silently overwrites the outer local slot, leaking the new
+value past the body. The interpreter would have popped the
+shadow.
+
+**Mitigation.**
+
+1. **Scope analysis is a prerequisite.** Before emitting
+   `STORE_LOCAL`, the compiler runs a scope pass that matches
+   each `def` to its implicit scope boundary (end of `for`,
+   `each`, `fold`, `fn` body, etc.) and emits `DEF_PUSH` /
+   `DEF_POP` bracketing — either as real registry ops for
+   leaky defs, or as distinct slot allocations per scope for
+   locally-contained defs.
+2. **Conservative fallback.** Any `def` the scope pass cannot
+   statically scope (e.g. inside a fallback span, or inside a
+   computed `do`) falls back to `REG_DEF_PUSH` / `REG_DEF_POP`.
+   Slower but correct.
+3. **Def-leak lint.** A compile-time warning when a `def`'s
+   visibility is unclear, pointing the user at the ambiguity.
+   Turns a silent correctness risk into a visible warning.
+
+### 9.4 Value-dependent return types that aren't split
+
+**Scenario.** `add [Number,Number]` returns `Integer` when
+both inputs are `Integer`, else `Decimal`
+(`native_helpers.go:50-79`). A single `NativeSig` covers both
+cases; the `ReturnsFn` branches on input types.
+
+If the compiler naively emits `CALL_NATIVE2_1 add_num_num`, the
+downstream consumer sees `Carrier<Integer|Decimal>` and cannot
+specialise. Every downstream arithmetic site inherits the
+disjunct, and the speed-up dissolves.
+
+**Symptom.** Performance regression on arithmetic chains. The
+compiled code is no faster than the interpreter because every
+site emits `CALL_NATIVE_POLY` or falls back. Benchmarks miss
+the point because they test a single op in isolation, where the
+disjunct hasn't had room to cascade.
+
+**Mitigation.**
+
+1. **Split at sig-id registration time.** The compiler's sig
+   table generator recognises `ReturnsFn` signatures and
+   auto-generates monomorphic specialised sig_ids: `add_i_i`,
+   `add_i_d`, `add_d_i`, `add_d_d`. Each has a fixed Returns
+   type. The generic `add_num_num` remains for `CALL_NATIVE_POLY`
+   fallback.
+2. **Dispatch by carrier at emit time.** If both operands are
+   monomorphic carriers, emit the specialised sig_id. If either
+   is a disjunct, emit the poly dispatch. This keeps monomorphic
+   chains monomorphic.
+3. **Benchmarks that include chains.** `a add b add c add d`
+   with four integer operands should produce four
+   `CALL_NATIVE2_1 add_i_i` instructions and no disjunct. If it
+   doesn't, the specialisation logic is broken — regression-test
+   for exactly this pattern.
+
+This is the single most important gotcha for hitting the
+predicted speed-ups in §7.
+
+### 9.5 Sub-engine registry sharing
+
+**Scenario.** `each` creates a sub-engine per iteration (`New(reg)`
+in `native_array_higher.go:29`). Sub-engines share the parent's
+registry, including DefStacks. A `def` inside an `each` body
+mutates shared state visible to subsequent iterations and to
+the parent scope after the loop.
+
+A compiler that treats the `each` body as an isolated inner
+function with its own locals would break this: the loop's
+`def total` would go into a per-iteration local, not the
+shared DefStack, and the accumulated total would vanish after
+each iteration.
+
+**Symptom.** Classic shared-accumulator patterns produce wrong
+answers. Tests pass for self-contained body code but fail for
+bodies that use `def` to communicate across iterations or out
+of the loop.
+
+**Mitigation.**
+
+1. **Model `each`/`fold` body scope explicitly in the checker
+   and compiler.** The sub-engine shares the parent registry;
+   a `def` in the body is parent-scoped unless subsequently
+   `undef`'d inside the same body. The compiler's scope pass
+   must match the interpreter's behaviour exactly.
+2. **Promote parent-scoped `def`s to parent locals.** If the
+   checker proves the `def` is still in scope after the loop,
+   the compiler allocates a parent-frame local and emits
+   `STORE_LOCAL` inside the body. If it can't prove, use
+   registry ops.
+3. **Preferred idiom: `fold`.** `fold` has an explicit
+   accumulator; its types are clean and it compiles without
+   registry mutation. The compiler (or a linter) can suggest
+   `fold` where a `def total 0; each [...] total add` pattern
+   appears.
+
+A specific test-case class: "loop-accumulator" patterns with
+both explicit `fold` and implicit-via-`def` variants. Both must
+produce identical results under compilation.
+
+### 9.6 Summary of §9
+
+The five severe gotchas cluster around two themes: **silent
+divergence** between the compiled and interpreted semantics,
+and **missed opportunities** that turn into performance
+regressions (9.4 especially). The mitigations are all
+implementable and most of them are single-commit changes:
+boundary type-checks, hash-based cache invalidation, a scope
+pass, sig-id splitting, and shared-registry modelling. The
+hard work is covering them systematically in a differential-
+execution harness so new dispatches don't reintroduce silent
+divergence as the language grows.
