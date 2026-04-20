@@ -1,14 +1,29 @@
 # AQL Bytecode Compilation — Full Report
 
-This is the expanded version of `aql-bytecode-outline.md`, written
-one step at a time. This first instalment covers:
+This report evaluates compiling AQL to a bytecode for a simple
+stack VM in Go, driven by the existing carrier-based static type
+checker. The shape of the argument: the checker already resolves
+every dispatch decision statically in typed regions, so the same
+pass can record those decisions as bytecode and drop the
+text-stream interpreter's per-token overhead in the compiled
+regions. Dynamic corners (`do` on computed code, unresolvable
+`context get`) fall back to the interpreter over the same stack
+representation — no marshalling boundary.
 
-1. **Using a carrier-style checker to extract a bytecode mapping**
-2. **Fixed-arity function calls as the compilation target**
+## Contents
 
-Subsequent instalments will cover the instruction set, branches and
-loops, user-defined functions, escape hatches, performance analysis,
-and prior art.
+1. Carrier-driven compilation
+2. Fixed-arity function calls
+3. Instruction set
+4. Replacing mark/move with static branches
+5. User-defined functions
+6. Interaction with `RunInCheckMode` words
+7. Performance analysis
+8. Gotcha inventory
+9. Severe gotchas expanded
+10. Moderate gotchas expanded
+11. Prior art and comparison
+12. Verdict
 
 ---
 
