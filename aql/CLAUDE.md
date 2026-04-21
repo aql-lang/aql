@@ -96,7 +96,9 @@ Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context
 - `convertDataValue()` / `convertMapData()` — data context (atoms, not strings)
 - `convertWordList()` / `convertDataList()` — lists (word context, Eval=true)
-- `expandDottedWord()` — transforms `foo.a.b` into `( foo get a get b )`
+- `convertTopLevelItems()` — maps the `.` token to the `get` word and
+  the `!` `.` pair to `getr`, so `foo.a.b` reaches the engine as
+  `foo get a get b` without a separate rewriting pass
 
 ## Argument Ordering (CRITICAL)
 

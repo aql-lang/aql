@@ -93,9 +93,11 @@ Relevant architectural facts, gathered from `aql/CLAUDE.md` and
 - **Scope chain.** `DefStacks` is a stack of maps keyed by word
   name strings. No pre-resolution: every reference re-walks and
   re-hashes.
-- **Dotted access.** `expandDottedWord` rewrites `foo.a.b` into
-  `( foo get a get b )` at parse time. Each `get` is a generic
-  `OrderedMap` string-keyed lookup at runtime.
+- **Dotted access.** The `.` and `!` `.` token pairs are mapped to
+  the `get` and `getr` words during `convertTopLevelItems`
+  (`parser/parse.go:166`), so `foo.a.b` reaches the engine as
+  `foo get a get b`. Each `get` is still a generic `OrderedMap`
+  string-keyed lookup at runtime.
 - **Auto-evaluation.** Lists marked `Eval=true` run `autoEvalList`
   every time they are consumed as an argument, re-walking the
   element list and resolving `Word` atoms through `DefStacks`.
