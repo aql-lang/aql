@@ -93,7 +93,8 @@ func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 // DefStack entry containing a matching signature, then rebuilds the
 // Function.Signatures slice from the remaining entries.
 func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
-	stack := r.DefStacks[name]
+	sym := Intern(name)
+	stack := r.DefStacks[sym]
 	if len(stack) == 0 {
 		return
 	}
@@ -119,11 +120,11 @@ func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		}
 	}
 
-	r.DefStacks[name] = stack
+	r.DefStacks[sym] = stack
 
 	// If no DefStack entries remain, clean up entirely.
 	if len(stack) == 0 {
-		delete(r.DefStacks, name)
+		delete(r.DefStacks, sym)
 		return
 	}
 

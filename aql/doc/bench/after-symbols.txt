@@ -1,0 +1,26 @@
+goos: linux
+goarch: amd64
+pkg: github.com/metsitaba/voxgig-exp/aql/internal/engine
+cpu: INTEL(R) XEON(R) PLATINUM 8581C CPU @ 2.10GHz
+BenchmarkDispatchAddChain100-16        	    2796	    831366 ns/op	  378283 B/op	    5772 allocs/op
+BenchmarkDispatchAddChain100-16        	    2919	    868530 ns/op	  378278 B/op	    5772 allocs/op
+BenchmarkDispatchAddChain100-16        	    2841	    866406 ns/op	  378281 B/op	    5772 allocs/op
+BenchmarkDispatchAddChain100-16        	    2490	    841654 ns/op	  378287 B/op	    5772 allocs/op
+BenchmarkDispatchAddChain100-16        	    2864	    817923 ns/op	  378288 B/op	    5772 allocs/op
+BenchmarkDispatchMixedOps100-16        	    2880	    794558 ns/op	  375272 B/op	    5602 allocs/op
+BenchmarkDispatchMixedOps100-16        	    3003	    809009 ns/op	  375272 B/op	    5602 allocs/op
+BenchmarkDispatchMixedOps100-16        	    3084	    813850 ns/op	  375270 B/op	    5602 allocs/op
+BenchmarkDispatchMixedOps100-16        	    2716	    823259 ns/op	  375273 B/op	    5602 allocs/op
+BenchmarkDispatchMixedOps100-16        	    2930	    843700 ns/op	  375274 B/op	    5602 allocs/op
+BenchmarkDispatchDefLookup100-16       	    2736	    880510 ns/op	  394403 B/op	    5873 allocs/op
+BenchmarkDispatchDefLookup100-16       	    2788	    857221 ns/op	  394402 B/op	    5873 allocs/op
+BenchmarkDispatchDefLookup100-16       	    2322	    923091 ns/op	  394403 B/op	    5873 allocs/op
+BenchmarkDispatchDefLookup100-16       	    2760	    872615 ns/op	  394400 B/op	    5873 allocs/op
+BenchmarkDispatchDefLookup100-16       	    2954	    876256 ns/op	  394406 B/op	    5873 allocs/op
+BenchmarkDispatchFactorialDirect-16    	   38086	     61791 ns/op	   32229 B/op	     437 allocs/op
+BenchmarkDispatchFactorialDirect-16    	   38368	     59087 ns/op	   32229 B/op	     437 allocs/op
+BenchmarkDispatchFactorialDirect-16    	   40960	     59522 ns/op	   32229 B/op	     437 allocs/op
+BenchmarkDispatchFactorialDirect-16    	   36891	     59061 ns/op	   32229 B/op	     437 allocs/op
+BenchmarkDispatchFactorialDirect-16    	   38062	     60093 ns/op	   32229 B/op	     437 allocs/op
+PASS
+ok  	github.com/metsitaba/voxgig-exp/aql/internal/engine	51.804s

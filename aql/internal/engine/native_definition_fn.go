@@ -454,7 +454,7 @@ func lookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
 	}
-	stack := r.DefStacks[name]
+	stack := r.DefStacks[Intern(name)]
 	if len(stack) == 0 {
 		return nil
 	}
@@ -673,7 +673,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Snapshot DefStacks lengths after installing named params
 			// so we can clean up any defs created during body execution
 			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := make(map[string]int, len(r.DefStacks))
+			defSnapshot := make(map[*Symbol]int, len(r.DefStacks))
 			for dname, dstack := range r.DefStacks {
 				defSnapshot[dname] = len(dstack)
 			}
@@ -840,9 +840,9 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// Snapshot DefStacks lengths before body execution so we can
 	// clean up any defs created during body execution (Issue 2
 	// from AQL-DX-REPORT: def leakage from fn bodies).
-	defSnapshot := make(map[string]int, len(r.DefStacks))
-	for name, stack := range r.DefStacks {
-		defSnapshot[name] = len(stack)
+	defSnapshot := make(map[*Symbol]int, len(r.DefStacks))
+	for sym, stack := range r.DefStacks {
+		defSnapshot[sym] = len(stack)
 	}
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
@@ -863,19 +863,19 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// to avoid mutating DefStacks during iteration (uninstallDef
 	// triggers installFnDef → Register → upsertFnDef which can
 	// modify DefStacks entries for other names).
-	var toClean []string
-	for name := range r.DefStacks {
-		if len(r.DefStacks[name]) > defSnapshot[name] {
-			toClean = append(toClean, name)
+	var toClean []*Symbol
+	for sym := range r.DefStacks {
+		if len(r.DefStacks[sym]) > defSnapshot[sym] {
+			toClean = append(toClean, sym)
 		}
 	}
-	for _, name := range toClean {
-		target := defSnapshot[name]
+	for _, sym := range toClean {
+		target := defSnapshot[sym]
 		// Pop entries down to the snapshot length. Use a bounded
 		// loop to avoid infinite looping if uninstallDef's rebuild
 		// creates new entries.
-		for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
-			uninstallDef(r, name)
+		for attempts := 0; attempts < 100 && len(r.DefStacks[sym]) > target; attempts++ {
+			uninstallDef(r, sym.Name)
 		}
 	}
 

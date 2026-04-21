@@ -449,8 +449,14 @@ type ModuleDesc struct {
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
+//
+// Sym is the interned form of Name. Both are always populated by the
+// NewWord/NewWordModified constructors; equality on *Symbol is a
+// pointer compare, which avoids string hashing on the dispatch hot
+// path (DefStacks lookup, token comparisons).
 type WordInfo struct {
 	Name         string
+	Sym          *Symbol
 	ArgCount     int  // -1 = unspecified
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
@@ -645,13 +651,14 @@ func NewTypeLiteral(t Type) Value {
 
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
-	return newValue(TWord, WordInfo{Name: name, ArgCount: -1})
+	return newValue(TWord, WordInfo{Name: name, Sym: Intern(name), ArgCount: -1})
 }
 
 // NewWordModified creates a word value with explicit modifiers.
 func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
 	return newValue(TWord, WordInfo{
 		Name:         name,
+		Sym:          Intern(name),
 		ArgCount:     argCount,
 		ForceStack:   forceStack,
 		ForceForward: forceForward,
@@ -742,7 +749,7 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 // execution. When the engine encounters a DefCleanup marker, it pops any
 // defs that were added during body execution back to the snapshot state.
 type DefCleanupInfo struct {
-	Snapshot map[string]int
+	Snapshot map[*Symbol]int
 	Registry *Registry
 }
 

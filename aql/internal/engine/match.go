@@ -42,7 +42,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		next := e.stack[e.pointer+1]
 		if next.IsWord() {
 			nw, _ := next.AsWord()
-			if len(e.registry.DefStacks[nw.Name]) > 0 {
+			if len(e.registry.DefStacks[nw.Sym]) > 0 {
 				preferWordSig = true
 			}
 		}
@@ -143,7 +143,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// Defined word: resolves to its def type.
-					if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
+					if ds := e.registry.DefStacks[ww.Sym]; len(ds) > 0 {
 						top := ds[len(ds)-1]
 						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx

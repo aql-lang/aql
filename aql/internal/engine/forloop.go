@@ -99,16 +99,17 @@ func registerFor(r *Registry) {
 // then popped. Returns a typed list whose element type mirrors the
 // body's residual top-of-stack.
 func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc {
+	iterSym := Intern(iterName)
 	return func(args []Value) []Value {
 		// body is always the last arg (Integer,List or List,List).
 		body := args[len(args)-1]
-		r.DefStacks[iterName] = append(r.DefStacks[iterName], NewCarrier(iterType))
+		r.DefStacks[iterSym] = append(r.DefStacks[iterSym], NewCarrier(iterType))
 		stk, _ := runCarrierBodyWithDefs(r, body)
 		// Pop the iterator binding.
-		if ds := r.DefStacks[iterName]; len(ds) > 0 {
-			r.DefStacks[iterName] = ds[:len(ds)-1]
-			if len(r.DefStacks[iterName]) == 0 {
-				delete(r.DefStacks, iterName)
+		if ds := r.DefStacks[iterSym]; len(ds) > 0 {
+			r.DefStacks[iterSym] = ds[:len(ds)-1]
+			if len(r.DefStacks[iterSym]) == 0 {
+				delete(r.DefStacks, iterSym)
 			}
 		}
 		if len(stk) == 0 {

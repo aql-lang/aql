@@ -11,7 +11,7 @@ import (
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	DefStacks         map[*Symbol][]Value                                // stacked bodies for def-defined words (keyed by interned symbol)
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -158,7 +158,7 @@ func NewRegistry() (*Registry, error) {
 	}
 
 	r := &Registry{
-		DefStacks:      make(map[string][]Value),
+		DefStacks:      make(map[*Symbol][]Value),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,
@@ -329,7 +329,8 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
 // is pushed.
 func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
-	stack := r.DefStacks[name]
+	sym := Intern(name)
+	stack := r.DefStacks[sym]
 	// If the top of the stack is already a FnDefInfo, update it in place.
 	if len(stack) > 0 {
 		if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
@@ -349,7 +350,7 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+	r.DefStacks[sym] = append(r.DefStacks[sym], NewFnDef(fnDef))
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args needed
@@ -378,7 +379,7 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // recorded by the engine.stepWord paths (simple-value substitution
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
-	stack := r.DefStacks[name]
+	stack := r.DefStacks[Intern(name)]
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			return &fnDef
@@ -401,7 +402,7 @@ func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *Mat
 // DefStacks[name] to only the Fallback entries (if any). Used during
 // rebuild after overlap filtering or undef.
 func (r *Registry) clearSigsKeepFallback(name string) {
-	stack := r.DefStacks[name]
+	stack := r.DefStacks[Intern(name)]
 	if len(stack) == 0 {
 		return
 	}

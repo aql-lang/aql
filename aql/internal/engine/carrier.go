@@ -536,7 +536,7 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 // Only per-name "net additions" are reported. If a branch both
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
-func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
+func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[*Symbol]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -546,7 +546,7 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	}
 
 	// Snapshot def-stack depths (all known names).
-	snapshot := make(map[string]int, len(r.DefStacks))
+	snapshot := make(map[*Symbol]int, len(r.DefStacks))
 	for k, v := range r.DefStacks {
 		snapshot[k] = len(v)
 	}
@@ -565,7 +565,7 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
-	adds := map[string]Value{}
+	adds := map[*Symbol]Value{}
 	for k, ds := range r.DefStacks {
 		before := snapshot[k] // zero for names not present before
 		if len(ds) > before {
@@ -585,8 +585,8 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 // pushed. If only one branch defined it, that def is pushed back —
 // but joined with the pre-branch carrier (if any) since the other
 // branch's path kept the original binding.
-func installJoinedDefs(r *Registry, then, else_ map[string]Value) {
-	seen := make(map[string]bool)
+func installJoinedDefs(r *Registry, then, else_ map[*Symbol]Value) {
+	seen := make(map[*Symbol]bool)
 	for k, tv := range then {
 		seen[k] = true
 		if ev, ok := else_[k]; ok {
@@ -766,7 +766,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		tv := elems[i+2]
 		if tv.Data != nil && tv.VType.Equal(TWord) {
 			inner, _ := tv.AsWord()
-			if ds := r.DefStacks[inner.Name]; len(ds) > 0 {
+			if ds := r.DefStacks[inner.Sym]; len(ds) > 0 {
 				tv = ds[len(ds)-1]
 			}
 		}
@@ -838,16 +838,18 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	for _, c := range clauses {
-		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], NewCarrier(c.Type))
+		sym := Intern(c.Name)
+		r.DefStacks[sym] = append(r.DefStacks[sym], NewCarrier(c.Type))
 	}
 	return func() {
 		for _, c := range clauses {
-			ds := r.DefStacks[c.Name]
+			sym := Intern(c.Name)
+			ds := r.DefStacks[sym]
 			if len(ds) > 0 {
-				r.DefStacks[c.Name] = ds[:len(ds)-1]
+				r.DefStacks[sym] = ds[:len(ds)-1]
 			}
-			if len(r.DefStacks[c.Name]) == 0 {
-				delete(r.DefStacks, c.Name)
+			if len(r.DefStacks[sym]) == 0 {
+				delete(r.DefStacks, sym)
 			}
 		}
 	}
@@ -868,10 +870,11 @@ func applyComplementNarrowing(r *Registry, condList Value) func() {
 	if len(clauses) == 0 {
 		return noop
 	}
-	type applied struct{ name string }
+	type applied struct{ sym *Symbol }
 	var pushed []applied
 	for _, c := range clauses {
-		ds := r.DefStacks[c.Name]
+		sym := Intern(c.Name)
+		ds := r.DefStacks[sym]
 		if len(ds) == 0 {
 			continue
 		}
@@ -901,20 +904,20 @@ func applyComplementNarrowing(r *Registry, condList Value) func() {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
 		}
-		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], narrowed)
-		pushed = append(pushed, applied{name: c.Name})
+		r.DefStacks[sym] = append(r.DefStacks[sym], narrowed)
+		pushed = append(pushed, applied{sym: sym})
 	}
 	if len(pushed) == 0 {
 		return noop
 	}
 	return func() {
 		for _, p := range pushed {
-			ds := r.DefStacks[p.name]
+			ds := r.DefStacks[p.sym]
 			if len(ds) > 0 {
-				r.DefStacks[p.name] = ds[:len(ds)-1]
+				r.DefStacks[p.sym] = ds[:len(ds)-1]
 			}
-			if len(r.DefStacks[p.name]) == 0 {
-				delete(r.DefStacks, p.name)
+			if len(r.DefStacks[p.sym]) == 0 {
+				delete(r.DefStacks, p.sym)
 			}
 		}
 	}
@@ -961,7 +964,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 
 	// Snapshot def-stack depths so we can unwind any defs the body
 	// or parameter binding created.
-	snapshot := make(map[string]int, len(r.DefStacks))
+	snapshot := make(map[*Symbol]int, len(r.DefStacks))
 	for k, v := range r.DefStacks {
 		snapshot[k] = len(v)
 	}
@@ -971,7 +974,8 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	var input []Value
 	for i, arg := range args {
 		if i < len(paramNames) && paramNames[i] != "" {
-			r.DefStacks[paramNames[i]] = append(r.DefStacks[paramNames[i]], arg)
+			sym := Intern(paramNames[i])
+			r.DefStacks[sym] = append(r.DefStacks[sym], arg)
 		} else {
 			input = append(input, arg)
 		}

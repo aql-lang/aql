@@ -105,7 +105,7 @@ func registerDo(r *Registry) {
 					body := args[0]
 					if body.IsWord() {
 						w, _ := body.AsWord()
-						if ds := r.DefStacks[w.Name]; len(ds) > 0 {
+						if ds := r.DefStacks[w.Sym]; len(ds) > 0 {
 							body = ds[len(ds)-1]
 						}
 					}

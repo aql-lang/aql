@@ -6,7 +6,7 @@ func registerInspect(r *Registry) {
 		name := _as0.Name
 
 		// If the word names a user-defined type, return a type inspection.
-		if stack := r.DefStacks[name]; len(stack) > 0 {
+		if stack := r.DefStacks[_as0.Sym]; len(stack) > 0 {
 			top := stack[len(stack)-1]
 			if isTypeValue(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
@@ -18,7 +18,7 @@ func registerInspect(r *Registry) {
 	// Atom (now Scalar/Atom): inspect by name, same as words.
 	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name, _ := args[0].AsAtom()
-		if stack := r.DefStacks[name]; len(stack) > 0 {
+		if stack := r.DefStacks[Intern(name)]; len(stack) > 0 {
 			top := stack[len(stack)-1]
 			if isTypeValue(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
@@ -68,7 +68,7 @@ func buildInspection(r *Registry, name string) Value {
 	fn := r.Lookup(name)
 	if fn == nil {
 		// No registered function — check if it's a simple def (list body).
-		if len(r.DefStacks[name]) > 0 {
+		if len(r.DefStacks[Intern(name)]) > 0 {
 			result.Set("kind", NewAtom("defined"))
 			result.Set("signatures", NewList(nil))
 			return newValue(TInspect, result)

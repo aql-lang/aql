@@ -622,7 +622,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	} else {
 		return v
 	}
-	stack := modReg.DefStacks[name]
+	stack := modReg.DefStacks[Intern(name)]
 	if len(stack) > 0 {
 		val := stack[len(stack)-1]
 		// Tag FnDef values with the module's registry so they can

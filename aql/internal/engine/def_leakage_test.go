@@ -38,7 +38,7 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 	}
 
 	// Verify 'localvar' does NOT leak into DefStacks after fn returns.
-	if stack := r.DefStacks["localvar"]; len(stack) > 0 {
+	if stack := r.DefStacks[Intern("localvar")]; len(stack) > 0 {
 		t.Errorf("localvar leaked into DefStacks: %v", stack)
 	}
 }
@@ -83,7 +83,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	}
 
 	// 'op' must not leak. Verify DefStacks is clean.
-	if stack := r.DefStacks["op"]; len(stack) > 0 {
+	if stack := r.DefStacks[Intern("op")]; len(stack) > 0 {
 		t.Errorf("'op' leaked into DefStacks after process returned: %v", stack)
 	}
 
@@ -136,7 +136,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 		}
 	}
 
-	if stack := r.DefStacks["tmp"]; len(stack) > 0 {
+	if stack := r.DefStacks[Intern("tmp")]; len(stack) > 0 {
 		t.Errorf("tmp leaked after %d calls: stack len = %d", 5, len(stack))
 	}
 }

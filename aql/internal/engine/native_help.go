@@ -59,7 +59,7 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 	fn := r.Lookup(name)
 	if fn == nil {
 		// Check if it's a simple def (not a function)
-		if ds := r.DefStacks[name]; len(ds) > 0 {
+		if ds := r.DefStacks[Intern(name)]; len(ds) > 0 {
 			return &help.FuncInfo{
 				Name:  name,
 				Entry: help.Lookup(name),

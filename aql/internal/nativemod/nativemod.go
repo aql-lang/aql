@@ -47,7 +47,8 @@ func InstallMathExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+		sym := engine.Intern(name)
+		r.DefStacks[sym] = append(r.DefStacks[sym], engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -59,7 +60,8 @@ func InstallTimeExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+		sym := engine.Intern(name)
+		r.DefStacks[sym] = append(r.DefStacks[sym], engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -71,7 +73,8 @@ func InstallMatrixExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+		sym := engine.Intern(name)
+		r.DefStacks[sym] = append(r.DefStacks[sym], engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -83,7 +86,8 @@ func InstallDecisionExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+		sym := engine.Intern(name)
+		r.DefStacks[sym] = append(r.DefStacks[sym], engine.NewMap(exportMap))
 	}
 	return nil
 }

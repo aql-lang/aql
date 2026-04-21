@@ -82,7 +82,7 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if !ok {
 		return v
 	}
-	if ds := reg.DefStacks[name]; len(ds) > 0 {
+	if ds := reg.DefStacks[Intern(name)]; len(ds) > 0 {
 		top := ds[len(ds)-1]
 		if top.IsObjectType() {
 			return top
@@ -651,7 +651,7 @@ func (e *Engine) stepWord(val Value) error {
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
-		if stack, ok := e.registry.DefStacks[w.Name]; ok {
+		if stack, ok := e.registry.DefStacks[w.Sym]; ok {
 			for i := len(stack) - 1; i >= 0; i-- {
 				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 					e.stack[e.pointer] = NewFunction(fnDef)
@@ -665,7 +665,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
-	if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
+	if ds := e.registry.DefStacks[w.Sym]; len(ds) > 0 {
 		top := ds[len(ds)-1]
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
@@ -1389,7 +1389,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 
 	resolved := e.effectiveResolved()
-	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+	w := WordInfo{Name: fnDef.Name, Sym: Intern(fnDef.Name), ArgCount: -1}
 
 	// Use matchSignature for forward collection only.
 	matchedSig, positions := e.matchSignature(fn, w, resolved)
@@ -1740,11 +1740,11 @@ func (e *Engine) stepEnd() error {
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := val.AsDefCleanup()
 	reg := info.Registry
-	for name, stack := range reg.DefStacks {
-		prevLen := info.Snapshot[name] // 0 for names not in snapshot
+	for sym, stack := range reg.DefStacks {
+		prevLen := info.Snapshot[sym] // 0 for names not in snapshot
 		for len(stack) > prevLen {
-			uninstallDef(reg, name)
-			stack = reg.DefStacks[name]
+			uninstallDef(reg, sym.Name)
+			stack = reg.DefStacks[sym]
 		}
 	}
 }
@@ -2259,7 +2259,7 @@ func (e *Engine) peekForwardValue() Value {
 			return NewBoolean(false)
 		default:
 			// If the word has a FnDef in DefStacks, peek as TFunction.
-			if stack, ok := e.registry.DefStacks[nw.Name]; ok {
+			if stack, ok := e.registry.DefStacks[nw.Sym]; ok {
 				for i := len(stack) - 1; i >= 0; i-- {
 					if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 						return NewFunction(fnDef)
@@ -2334,7 +2334,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 			resolved = append(resolved, v)
 		}
 
-		testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
+		testW := WordInfo{Name: w.Name, Sym: w.Sym, ArgCount: -1, ForceStack: true}
 
 		// For forward-precedence functions, rearrange values so forward
 		// args are first and stack args are reversed before matching.

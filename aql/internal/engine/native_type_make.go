@@ -750,7 +750,7 @@ func resolveFieldType(r *Registry, v Value) Value {
 		} else {
 			name, _ = v.AsString()
 		}
-		stack := r.DefStacks[name]
+		stack := r.DefStacks[Intern(name)]
 		if len(stack) > 0 {
 			top := stack[len(stack)-1]
 			if isTypeValue(top) {
