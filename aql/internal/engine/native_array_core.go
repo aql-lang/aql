@@ -6,7 +6,7 @@ import (
 )
 
 // iota: [TInteger] -> [TList]
-func registerIota(r *Registry) {
+func RegisterIota(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "iota",
 		ForwardPrecedence: true,
@@ -32,7 +32,7 @@ func registerIota(r *Registry) {
 }
 
 // shape: [TList] -> [TList]
-func registerShape(r *Registry) {
+func RegisterShape(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "shape",
 		ForwardPrecedence: true,
@@ -78,7 +78,7 @@ func computeShape(v Value) []int {
 }
 
 // rank: [TList] -> [TInteger]
-func registerRank(r *Registry) {
+func RegisterRank(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "rank",
 		ForwardPrecedence: true,
@@ -97,7 +97,7 @@ func registerRank(r *Registry) {
 }
 
 // length: [TList] -> [TInteger]
-func registerLength(r *Registry) {
+func RegisterLength(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "length",
 		ForwardPrecedence: true,
@@ -117,7 +117,7 @@ func registerLength(r *Registry) {
 
 // reshape: [TList, TList] -> [TList]
 // Args[0] = shape, Args[1] = data
-func registerReshape(r *Registry) {
+func RegisterReshape(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "reshape",
 		ForwardPrecedence: true,
@@ -197,7 +197,7 @@ func buildNested(flat []Value, dims []int) Value {
 }
 
 // arr-flatten: [TList] -> [TList]
-func registerArrFlatten(r *Registry) {
+func RegisterArrFlatten(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "arr-flatten",
 		ForwardPrecedence: true,
@@ -216,7 +216,7 @@ func registerArrFlatten(r *Registry) {
 }
 
 // arr-transpose: [TList] -> [TList]
-func registerArrTranspose(r *Registry) {
+func RegisterArrTranspose(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "arr-transpose",
 		ForwardPrecedence: true,
@@ -258,7 +258,7 @@ func registerArrTranspose(r *Registry) {
 }
 
 // reverse: [TList] -> [TList]
-func registerReverse(r *Registry) {
+func RegisterReverse(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "reverse",
 		ForwardPrecedence: true,
@@ -283,7 +283,7 @@ func registerReverse(r *Registry) {
 
 // take: [TInteger, TList] -> [TList]
 // Args[0] = count, Args[1] = data
-func registerTake(r *Registry) {
+func RegisterTake(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "take",
 		ForwardPrecedence: true,
@@ -325,7 +325,7 @@ func registerTake(r *Registry) {
 
 // shed: [TInteger, TList] -> [TList]
 // Args[0] = count, Args[1] = data
-func registerShed(r *Registry) {
+func RegisterShed(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "shed",
 		ForwardPrecedence: true,
@@ -366,7 +366,7 @@ func registerShed(r *Registry) {
 }
 
 // where: [TList] -> [TList]
-func registerWhere(r *Registry) {
+func RegisterWhere(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "where",
 		ForwardPrecedence: true,
@@ -395,7 +395,7 @@ func registerWhere(r *Registry) {
 }
 
 // unique: [TList] -> [TList]
-func registerUnique(r *Registry) {
+func RegisterUnique(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "unique",
 		ForwardPrecedence: true,
@@ -427,7 +427,7 @@ func registerUnique(r *Registry) {
 }
 
 // grade: [TList] -> [TList]
-func registerGrade(r *Registry) {
+func RegisterGrade(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "grade",
 		ForwardPrecedence: true,
@@ -479,7 +479,7 @@ func arrCompareValues(a, b Value) int {
 
 // at: [TList, TList] -> [TList]
 // Args[0] = indices, Args[1] = data
-func registerAt(r *Registry) {
+func RegisterAt(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "at",
 		ForwardPrecedence: true,
@@ -513,7 +513,7 @@ func registerAt(r *Registry) {
 
 // sortby: [TList, TList] -> [TList]
 // Args[0] = keys, Args[1] = data
-func registerSortby(r *Registry) {
+func RegisterSortby(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "sortby",
 		ForwardPrecedence: true,
@@ -552,7 +552,7 @@ func registerSortby(r *Registry) {
 
 // member: [TList, TList] -> [TList]
 // Args[0] = needles, Args[1] = haystack
-func registerMember(r *Registry) {
+func RegisterMember(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "member",
 		ForwardPrecedence: true,
@@ -584,7 +584,7 @@ func registerMember(r *Registry) {
 
 // arr-indexof: [TList, TList] -> [TList]
 // Args[0] = needles, Args[1] = haystack
-func registerArrIndexof(r *Registry) {
+func RegisterArrIndexof(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "arr-indexof",
 		ForwardPrecedence: true,
@@ -626,7 +626,7 @@ func registerArrIndexof(r *Registry) {
 // group: two signatures
 // [TList, TList] -> [TMap] — group values by keys
 // [TList] -> [TMap] — group by value, returning map of value to list of indices
-func registerGroup(r *Registry) {
+func RegisterGroup(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "group",
 		ForwardPrecedence: true,
@@ -694,7 +694,7 @@ func registerGroup(r *Registry) {
 
 // replicate: [TList, TList] -> [TList]
 // Args[0] = counts, Args[1] = data
-func registerReplicate(r *Registry) {
+func RegisterReplicate(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "replicate",
 		ForwardPrecedence: true,
@@ -736,7 +736,7 @@ func registerReplicate(r *Registry) {
 
 // expand: [TList, TList] -> [TList]
 // Args[0] = mask (booleans), Args[1] = data
-func registerExpand(r *Registry) {
+func RegisterExpand(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "expand",
 		ForwardPrecedence: true,
@@ -773,7 +773,7 @@ func registerExpand(r *Registry) {
 
 // window: [TInteger, TList] -> [TList]
 // Args[0] = size, Args[1] = data
-func registerWindow(r *Registry) {
+func RegisterWindow(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "window",
 		ForwardPrecedence: true,
@@ -815,7 +815,7 @@ func registerWindow(r *Registry) {
 }
 
 // pairs: [TList] -> [TList]
-func registerPairs(r *Registry) {
+func RegisterPairs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "pairs",
 		ForwardPrecedence: true,

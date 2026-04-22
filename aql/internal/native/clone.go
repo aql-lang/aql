@@ -10,8 +10,8 @@ import (
 // cloneFunc returns the "clone" native function definition.
 // clone is stack-only and has one signature:
 //   - [any] — deep-clones the value
-func cloneFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterClone(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "clone",
 		ForwardPrecedence: false,
 		Signatures: []engine.NativeSig{
@@ -20,7 +20,7 @@ func cloneFunc() engine.NativeFunc {
 				Handler: cloneHandler,
 			},
 		},
-	}
+	})
 }
 
 // cloneHandler calls voxgigstruct.Clone to produce a deep copy.

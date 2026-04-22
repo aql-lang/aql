@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerReplace(r *Registry) {
+func RegisterReplace(r *Registry) {
 	// replace: [string, string, string] -> [string]
 	replaceHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as2, _ := args[0].AsString()

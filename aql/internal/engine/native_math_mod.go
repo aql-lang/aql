@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-func registerMod(r *Registry) {
+func RegisterMod(r *Registry) {
 	registerBinaryMathWord(r, "mod",
 		func(a, b float64) (Value, error) {
 			if b == 0 {

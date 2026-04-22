@@ -2,6 +2,6 @@ package engine
 
 import "strings"
 
-func registerLower(r *Registry) {
+func RegisterLower(r *Registry) {
 	registerUnaryStringWord(r, "lower", strings.ToLower)
 }

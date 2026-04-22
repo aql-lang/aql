@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// registerTimeout registers the "timeout" word.
+// RegisterTimeout registers the "timeout" word.
 // timeout: [Integer, (List/q or Word/q)] -> [Timeout]
 // Schedules callback execution after the specified milliseconds.
 // The callback is executed with do semantics in a new sub-engine.
-func registerTimeout(r *Registry) {
+func RegisterTimeout(r *Registry) {
 	makeHandler := func(isList bool) Handler {
 		return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			ms, _ := args[0].AsInteger()
@@ -20,7 +20,7 @@ func registerTimeout(r *Registry) {
 
 			id := GenerateID("T_")
 			timer := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() {
-				runTimerCallback(r, callback, isList)
+				RunTimerCallback(r, callback, isList)
 			})
 
 			info := &TimeoutInfo{
@@ -52,10 +52,10 @@ func registerTimeout(r *Registry) {
 	})
 }
 
-// runTimerCallback executes a timer callback with do semantics.
+// RunTimerCallback executes a timer callback with do semantics.
 // For lists, it runs the list elements as a sub-program.
 // For words/atoms, it looks up the word and executes it.
-func runTimerCallback(r *Registry, callback Value, isList bool) {
+func RunTimerCallback(r *Registry, callback Value, isList bool) {
 	sub := New(r)
 	var input []Value
 	if isList {

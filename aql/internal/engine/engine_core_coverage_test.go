@@ -1348,35 +1348,35 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 }
 
 // =============================================================================
-// TestEngineCoreResolveFieldType — covers resolveFieldType branches
+// TestEngineCoreResolveFieldType — covers ResolveFieldType branches
 // =============================================================================
 
 func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Non-string, non-list value should pass through
-	v := resolveFieldType(r, NewTypeLiteral(TNumber))
+	v := ResolveFieldType(r, NewTypeLiteral(TNumber))
 	if !v.VType.Equal(TNumber) {
-		t.Errorf("resolveFieldType passthrough = %v, want Number", v)
+		t.Errorf("ResolveFieldType passthrough = %v, want Number", v)
 	}
 }
 
 func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Define a type, then resolveFieldType should find it
+	// Define a type, then ResolveFieldType should find it
 	installDef(r, "MyType", NewTypeLiteral(TString))
-	v := resolveFieldType(r, NewString("MyType"))
+	v := ResolveFieldType(r, NewString("MyType"))
 	if !v.VType.Equal(TString) {
-		t.Errorf("resolveFieldType string ref = %v, want String type literal", v)
+		t.Errorf("ResolveFieldType string ref = %v, want String type literal", v)
 	}
 	uninstallDef(r, "MyType")
 }
 
 func TestEngineCoreResolveFieldTypeStringNoRef(t *testing.T) {
 	r, _ := DefaultRegistry()
-	v := resolveFieldType(r, NewString("NoSuchType"))
+	v := ResolveFieldType(r, NewString("NoSuchType"))
 	_as49, _ := v.AsString()
 	if _as49 != "NoSuchType" {
-		t.Errorf("resolveFieldType unresolved string = %v, want 'NoSuchType'", v)
+		t.Errorf("ResolveFieldType unresolved string = %v, want 'NoSuchType'", v)
 	}
 }
 
@@ -1384,11 +1384,11 @@ func TestEngineCoreResolveFieldTypeList(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// A list like [string or none] should be evaluated as code
 	list := NewList([]Value{NewString("string"), NewString("or"), NewString("none")})
-	v := resolveFieldType(r, list)
+	v := ResolveFieldType(r, list)
 	// Should produce a disjunction
 	if !v.IsDisjunct() {
 		// If it didn't produce a disjunction, at least it shouldn't crash
-		t.Logf("resolveFieldType list = %v (type %s)", v, v.VType)
+		t.Logf("ResolveFieldType list = %v (type %s)", v, v.VType)
 	}
 }
 

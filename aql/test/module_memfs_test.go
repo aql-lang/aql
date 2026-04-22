@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -14,7 +15,7 @@ import (
 func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) ([]engine.Value, error) {
 	t.Helper()
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

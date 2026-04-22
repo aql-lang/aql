@@ -1,19 +1,20 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 )
 
 // --- Basic context set/get ---
 
 func TestContextSetGetString(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(42),
-		NewWord("context"), NewWord("get"), NewString("x"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(42),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
 	_as0, _ := result[0].AsInteger()
 	if len(result) != 1 || _as0 != 42 {
@@ -22,13 +23,13 @@ func TestContextSetGetString(t *testing.T) {
 }
 
 func TestContextSetGetWordKey(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewWord("foo"), engine.NewInteger(99),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("foo"),
 	})
 	_as1, _ := result[0].AsInteger()
 	if len(result) != 1 || _as1 != 99 {
@@ -37,14 +38,14 @@ func TestContextSetGetWordKey(t *testing.T) {
 }
 
 func TestContextSetOverwrite(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
-		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
-		NewWord("context"), NewWord("get"), NewString("k"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("k"), engine.NewInteger(1),
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("k"), engine.NewInteger(2),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("k"),
 	})
 	_as2, _ := result[0].AsInteger()
 	if len(result) != 1 || _as2 != 2 {
@@ -55,13 +56,13 @@ func TestContextSetOverwrite(t *testing.T) {
 // --- Unknown key returns none ---
 
 func TestContextGetUnknownKeyReturnsError(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := New(r)
-	_, err = e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewString("missing"),
+	e := engine.New(r)
+	_, err = e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("missing"),
 	})
 	if err == nil {
 		t.Fatal("expected error for unknown key, got nil")
@@ -71,15 +72,15 @@ func TestContextGetUnknownKeyReturnsError(t *testing.T) {
 // --- Sub-engine inheritance via do ---
 
 func TestContextSubEngineInherits(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Set in parent, read in sub-engine via do
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(10),
-		NewWord("do"), NewList([]Value{
-			NewWord("context"), NewWord("get"), NewString("x"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(10),
+		engine.NewWord("do"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 		}),
 	})
 	_as3, _ := result[0].AsInteger()
@@ -91,17 +92,17 @@ func TestContextSubEngineInherits(t *testing.T) {
 // --- Sub-engine isolation: writes don't affect parent ---
 
 func TestContextSubEngineIsolation(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Set in parent, override in sub-engine, check parent still has original
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
-		NewWord("do"), NewList([]Value{
-			NewWord("context"), NewWord("set"), NewString("x"), NewInteger(999),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(1),
+		engine.NewWord("do"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(999),
 		}),
-		NewWord("context"), NewWord("get"), NewString("x"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
 	_as4, _ := result[0].AsInteger()
 	if len(result) != 1 || _as4 != 1 {
@@ -112,16 +113,16 @@ func TestContextSubEngineIsolation(t *testing.T) {
 // --- Sub-engine new key doesn't leak to parent ---
 
 func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := New(r)
-	_, err = e.Run([]Value{
-		NewWord("do"), NewList([]Value{
-			NewWord("context"), NewWord("set"), NewString("secret"), NewInteger(42),
+	e := engine.New(r)
+	_, err = e.Run([]engine.Value{
+		engine.NewWord("do"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("set"), engine.NewString("secret"), engine.NewInteger(42),
 		}),
-		NewWord("context"), NewWord("get"), NewString("secret"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("secret"),
 	})
 	if err == nil {
 		t.Fatal("expected error: sub-engine key should not leak to parent")
@@ -131,7 +132,7 @@ func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
 // --- Nested 3-level sub-engines ---
 
 func TestContextNestedThreeLevels(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,17 +141,17 @@ func TestContextNestedThreeLevels(t *testing.T) {
 	// Level 2 (do do): read level → should see 1, set level=2
 	// Back at level 1: read level → should see 1
 	// Back at level 0: read level → should see 0
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("level"), NewInteger(0),
-		NewWord("do"), NewList([]Value{
-			NewWord("context"), NewWord("set"), NewString("level"), NewInteger(1),
-			NewWord("do"), NewList([]Value{
-				NewWord("context"), NewWord("get"), NewString("level"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("level"), engine.NewInteger(0),
+		engine.NewWord("do"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("set"), engine.NewString("level"), engine.NewInteger(1),
+			engine.NewWord("do"), engine.NewList([]engine.Value{
+				engine.NewWord("context"), engine.NewWord("get"), engine.NewString("level"),
 				// This should be 1 (inherited from level 1)
 			}),
 		}),
 		// do returns the innermost result (1), now check parent level
-		NewWord("context"), NewWord("get"), NewString("level"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("level"),
 	})
 	// Stack should have: [1, 0]
 	// The do returns inner do's result (1), then we get parent level (0)
@@ -170,19 +171,19 @@ func TestContextNestedThreeLevels(t *testing.T) {
 // --- Multiple keys ---
 
 func TestContextMultipleKeys(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("a"), NewInteger(1),
-		NewWord("context"), NewWord("set"), NewString("b"), NewInteger(2),
-		NewWord("context"), NewWord("set"), NewString("c"), NewInteger(3),
-		NewWord("context"), NewWord("get"), NewString("a"),
-		NewWord("context"), NewWord("get"), NewString("b"),
-		NewWord("add"),
-		NewWord("context"), NewWord("get"), NewString("c"),
-		NewWord("add"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("a"), engine.NewInteger(1),
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("b"), engine.NewInteger(2),
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("c"), engine.NewInteger(3),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("a"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("b"),
+		engine.NewWord("add"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("c"),
+		engine.NewWord("add"),
 	})
 	_as7, _ := result[0].AsInteger()
 	if len(result) != 1 || _as7 != 6 {
@@ -193,7 +194,7 @@ func TestContextMultipleKeys(t *testing.T) {
 // --- Context with different value types ---
 
 func TestContextDifferentValueTypes(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,30 +202,30 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	// don't get consumed by the next get (stack-preference rule: when
 	// a String result is on the stack, context-get would take it as
 	// its key instead of forward-collecting the intended key).
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("str"), NewString("hello"),
-		NewWord("end"),
-		NewWord("context"), NewWord("set"), NewString("num"), NewInteger(42),
-		NewWord("end"),
-		NewWord("context"), NewWord("set"), NewString("bool"), NewBoolean(true),
-		NewWord("end"),
-		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("str"), NewWord(")"),
-		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("num"), NewWord(")"),
-		NewOpenParen(), NewWord("context"), NewWord("get"), NewString("bool"), NewWord(")"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("str"), engine.NewString("hello"),
+		engine.NewWord("end"),
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("num"), engine.NewInteger(42),
+		engine.NewWord("end"),
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("bool"), engine.NewBoolean(true),
+		engine.NewWord("end"),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("str"), engine.NewWord(")"),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("num"), engine.NewWord(")"),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("bool"), engine.NewWord(")"),
 	})
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(result))
 	}
 	_as8, _ := result[0].AsString()
-	if !result[0].VType.Matches(TString) || _as8 != "hello" {
+	if !result[0].VType.Matches(engine.TString) || _as8 != "hello" {
 		t.Errorf("string value = %v, want hello", result[0])
 	}
 	_as9, _ := result[1].AsInteger()
-	if !result[1].VType.Matches(TInteger) || _as9 != 42 {
+	if !result[1].VType.Matches(engine.TInteger) || _as9 != 42 {
 		t.Errorf("integer value = %v, want 42", result[1])
 	}
 	_as10, _ := result[2].AsBoolean()
-	if !result[2].VType.Matches(TBoolean) || _as10 != true {
+	if !result[2].VType.Matches(engine.TBoolean) || _as10 != true {
 		t.Errorf("boolean value = %v, want true", result[2])
 	}
 }
@@ -232,17 +233,17 @@ func TestContextDifferentValueTypes(t *testing.T) {
 // --- Values are copied by reference (maps are shared, not deep-copied) ---
 
 func TestContextValuesByReference(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Store a map in context, retrieve it in sub-engine — should be the same map
-	m := NewOrderedMap()
-	m.Set("key", NewInteger(100))
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("mymap"), NewMap(m),
-		NewWord("do"), NewList([]Value{
-			NewWord("context"), NewWord("get"), NewString("mymap"),
+	m := engine.NewOrderedMap()
+	m.Set("key", engine.NewInteger(100))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("mymap"), engine.NewMap(m),
+		engine.NewWord("do"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("get"), engine.NewString("mymap"),
 		}),
 	})
 	if len(result) != 1 {
@@ -259,20 +260,20 @@ func TestContextValuesByReference(t *testing.T) {
 // --- Module inherits parent context ---
 
 func TestContextModuleInherits(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("parent_val"), NewInteger(77),
-		NewWord("module"), NewList([]Value{
-			NewWord("export"), NewWord("result"),
-			NewMap(func() *OrderedMap {
-				m := NewOrderedMap()
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("parent_val"), engine.NewInteger(77),
+		engine.NewWord("module"), engine.NewList([]engine.Value{
+			engine.NewWord("export"), engine.NewWord("result"),
+			engine.NewMap(func() *engine.OrderedMap {
+				m := engine.NewOrderedMap()
 				// We can't call "context get" inside a map literal directly.
 				// Instead, test by checking the module can read context in its body.
-				m.Set("val", NewList([]Value{
-					NewWord("context"), NewWord("get"), NewString("parent_val"),
+				m.Set("val", engine.NewList([]engine.Value{
+					engine.NewWord("context"), engine.NewWord("get"), engine.NewString("parent_val"),
 				}))
 				return m
 			}()),
@@ -287,23 +288,23 @@ func TestContextModuleInherits(t *testing.T) {
 // --- Module writes don't affect parent ---
 
 func TestContextModuleIsolation(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
-		NewWord("module"), NewList([]Value{
-			NewWord("context"), NewWord("set"), NewString("x"), NewInteger(999),
-			NewWord("export"), NewWord("dummy"),
-			NewMap(func() *OrderedMap {
-				m := NewOrderedMap()
-				m.Set("v", NewInteger(0))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(1),
+		engine.NewWord("module"), engine.NewList([]engine.Value{
+			engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(999),
+			engine.NewWord("export"), engine.NewWord("dummy"),
+			engine.NewMap(func() *engine.OrderedMap {
+				m := engine.NewOrderedMap()
+				m.Set("v", engine.NewInteger(0))
 				return m
 			}()),
 		}),
-		NewWord("drop"), // drop module desc
-		NewWord("context"), NewWord("get"), NewString("x"),
+		engine.NewWord("drop"), // drop module desc
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
 	_as12, _ := result[0].AsInteger()
 	if len(result) != 1 || _as12 != 1 {
@@ -314,7 +315,7 @@ func TestContextModuleIsolation(t *testing.T) {
 // --- Direct unit tests for PushContext/PopContext/Context ---
 
 func TestRegistryContextStackMethods(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := engine.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +336,7 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	}
 
 	// Write to context store
-	store.Set("key1", NewInteger(1))
+	store.Set("key1", engine.NewInteger(1))
 
 	// Push child — should inherit key1 via prototype
 	r.PushContext(store)
@@ -347,8 +348,8 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	}
 
 	// Write to child doesn't affect parent
-	childStore.Set("key1", NewInteger(99))
-	childStore.Set("key2", NewInteger(2))
+	childStore.Set("key1", engine.NewInteger(99))
+	childStore.Set("key2", engine.NewInteger(2))
 
 	// Pop child
 	r.PopContext()
@@ -372,15 +373,15 @@ func TestRegistryContextStackMethods(t *testing.T) {
 // --- If condition sub-engine inherits context ---
 
 func TestContextIfSubEngineInherits(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{
-		NewWord("context"), NewWord("set"), NewString("val"), NewInteger(5),
-		NewWord("if"), NewList([]Value{NewBoolean(true)}),
-		NewList([]Value{NewWord("context"), NewWord("get"), NewString("val")}),
-		NewList([]Value{NewInteger(0)}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("val"), engine.NewInteger(5),
+		engine.NewWord("if"), engine.NewList([]engine.Value{engine.NewBoolean(true)}),
+		engine.NewList([]engine.Value{engine.NewWord("context"), engine.NewWord("get"), engine.NewString("val")}),
+		engine.NewList([]engine.Value{engine.NewInteger(0)}),
 	})
 	_as15, _ := result[0].AsInteger()
 	if len(result) != 1 || _as15 != 5 {

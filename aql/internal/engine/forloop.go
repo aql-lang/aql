@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerFor registers the "for" word for numeric iteration.
+// RegisterFor registers the "for" word for numeric iteration.
 //
 // for takes two arguments: a range specification and a body list.
 //
@@ -22,7 +22,7 @@ import "fmt"
 //
 // Break and continue use sentinel errors caught by the engine's Run loop,
 // which delegates to handleLoopBreak/handleLoopContinue.
-func registerFor(r *Registry) {
+func RegisterFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
 	forCountHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		n, _ := args[0].AsInteger()

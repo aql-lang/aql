@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerSplit(r *Registry) {
+func RegisterSplit(r *Registry) {
 	// split: [string, string] -> [list]
 	splitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as1, _ := args[0].AsString()

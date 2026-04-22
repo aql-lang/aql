@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func registerRepeat(r *Registry) {
+func RegisterRepeat(r *Registry) {
 	// repeat: [string, integer] -> [string]
 	repeatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as1, _ := args[0].AsString()

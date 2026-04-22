@@ -12,12 +12,14 @@ import (
 )
 
 func TestFetchFunc(t *testing.T) {
-	fn := fetchFunc()
-	if fn.Name != "fetch" {
-		t.Errorf("expected name 'fetch', got %q", fn.Name)
+	r, err := engine.NewRegistry()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !fn.ForwardPrecedence {
-		t.Error("expected ForwardPrecedence to be true")
+	RegisterFetch(r)
+	fn := r.Lookup("fetch")
+	if fn == nil {
+		t.Fatal("expected word 'fetch' to be registered")
 	}
 	if len(fn.Signatures) != 3 {
 		t.Errorf("expected 3 signatures, got %d", len(fn.Signatures))

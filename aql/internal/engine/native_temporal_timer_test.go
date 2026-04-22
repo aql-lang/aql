@@ -1,6 +1,7 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,14 +12,14 @@ import (
 // =============================================================================
 
 func TestSleepBasic(t *testing.T) {
-	reg, err := DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := NewTop(reg)
+	e := engine.NewTop(reg)
 	start := time.Now()
-	result, err := e.Run([]Value{
-		NewInteger(50), NewWord("sleep"),
+	result, err := e.Run([]engine.Value{
+		engine.NewInteger(50), engine.NewWord("sleep"),
 	})
 	elapsed := time.Since(start)
 	if err != nil {
@@ -33,10 +34,10 @@ func TestSleepBasic(t *testing.T) {
 }
 
 func TestSleepNegativeErrors(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	_, err := e.Run([]Value{
-		NewInteger(-1), NewWord("sleep"),
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	_, err := e.Run([]engine.Value{
+		engine.NewInteger(-1), engine.NewWord("sleep"),
 	})
 	if err == nil {
 		t.Fatal("expected error for negative milliseconds")
@@ -44,10 +45,10 @@ func TestSleepNegativeErrors(t *testing.T) {
 }
 
 func TestSleepZero(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	result, err := e.Run([]Value{
-		NewInteger(0), NewWord("sleep"),
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	result, err := e.Run([]engine.Value{
+		engine.NewInteger(0), engine.NewWord("sleep"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -62,12 +63,12 @@ func TestSleepZero(t *testing.T) {
 // =============================================================================
 
 func TestTimeoutReturnType(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	body := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2)})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(100), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(100), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -85,23 +86,23 @@ func TestTimeoutReturnType(t *testing.T) {
 }
 
 func TestTimeoutCallbackExecutes(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	// Register a custom word that sets an atomic flag when called.
 	var flag atomic.Int32
-	reg.RegisterStackOnly("testflag", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	reg.RegisterStackOnly("testflag", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
 		},
 	})
 
-	e := NewTop(reg)
-	body := NewList([]Value{NewWord("testflag")})
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewWord("testflag")})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(20), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(20), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -119,21 +120,21 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 }
 
 func TestTimeoutWithWordCallback(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	var flag atomic.Int32
-	reg.RegisterStackOnly("testflag", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	reg.RegisterStackOnly("testflag", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
 		},
 	})
 
-	e := NewTop(reg)
+	e := engine.NewTop(reg)
 	// timeout 20 testflag — word callback (quoted to atom)
-	result, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(20), NewAtom("testflag"),
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(20), engine.NewAtom("testflag"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -149,12 +150,12 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 }
 
 func TestTimeoutNegativeErrors(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	body := NewList([]Value{NewInteger(1)})
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewInteger(1)})
 	body.Quoted = true
-	_, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(-1), body,
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(-1), body,
 	})
 	if err == nil {
 		t.Fatal("expected error for negative milliseconds")
@@ -166,12 +167,12 @@ func TestTimeoutNegativeErrors(t *testing.T) {
 // =============================================================================
 
 func TestIntervalReturnType(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	body := NewList([]Value{NewInteger(1)})
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewInteger(1)})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("interval"), NewInteger(100), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("interval"), engine.NewInteger(100), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -190,22 +191,22 @@ func TestIntervalReturnType(t *testing.T) {
 }
 
 func TestIntervalCallbackRepeats(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	var counter atomic.Int32
-	reg.RegisterStackOnly("testinc", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	reg.RegisterStackOnly("testinc", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			counter.Add(1)
 			return nil, nil
 		},
 	})
 
-	e := NewTop(reg)
-	body := NewList([]Value{NewWord("testinc")})
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewWord("testinc")})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("interval"), NewInteger(20), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("interval"), engine.NewInteger(20), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -226,12 +227,12 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 }
 
 func TestIntervalZeroErrors(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	body := NewList([]Value{NewInteger(1)})
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewInteger(1)})
 	body.Quoted = true
-	_, err := e.Run([]Value{
-		NewWord("interval"), NewInteger(0), body,
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("interval"), engine.NewInteger(0), body,
 	})
 	if err == nil {
 		t.Fatal("expected error for zero milliseconds")
@@ -243,30 +244,30 @@ func TestIntervalZeroErrors(t *testing.T) {
 // =============================================================================
 
 func TestCancelTimeout(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	var flag atomic.Int32
-	reg.RegisterStackOnly("testflag", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	reg.RegisterStackOnly("testflag", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
 		},
 	})
 
-	e := NewTop(reg)
-	body := NewList([]Value{NewWord("testflag")})
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewWord("testflag")})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(50), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(50), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Cancel immediately.
-	e2 := NewTop(reg)
-	_, err = e2.Run([]Value{result[0], NewWord("cancel")})
+	e2 := engine.NewTop(reg)
+	_, err = e2.Run([]engine.Value{result[0], engine.NewWord("cancel")})
 	if err != nil {
 		t.Fatalf("cancel error: %v", err)
 	}
@@ -279,22 +280,22 @@ func TestCancelTimeout(t *testing.T) {
 }
 
 func TestCancelInterval(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	var counter atomic.Int32
-	reg.RegisterStackOnly("testinc", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	reg.RegisterStackOnly("testinc", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			counter.Add(1)
 			return nil, nil
 		},
 	})
 
-	e := NewTop(reg)
-	body := NewList([]Value{NewWord("testinc")})
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewWord("testinc")})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("interval"), NewInteger(20), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("interval"), engine.NewInteger(20), body,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -304,8 +305,8 @@ func TestCancelInterval(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 
 	// Cancel.
-	e2 := NewTop(reg)
-	_, err = e2.Run([]Value{result[0], NewWord("cancel")})
+	e2 := engine.NewTop(reg)
+	_, err = e2.Run([]engine.Value{result[0], engine.NewWord("cancel")})
 	if err != nil {
 		t.Fatalf("cancel error: %v", err)
 	}
@@ -327,12 +328,12 @@ func TestCancelInterval(t *testing.T) {
 }
 
 func TestCancelIdempotent(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
-	body := NewList([]Value{NewInteger(1)})
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
+	body := engine.NewList([]engine.Value{engine.NewInteger(1)})
 	body.Quoted = true
-	result, err := e.Run([]Value{
-		NewWord("timeout"), NewInteger(1000), body,
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("timeout"), engine.NewInteger(1000), body,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -340,8 +341,8 @@ func TestCancelIdempotent(t *testing.T) {
 
 	// Cancel twice should not panic.
 	for i := 0; i < 2; i++ {
-		e2 := NewTop(reg)
-		_, err = e2.Run([]Value{result[0], NewWord("cancel")})
+		e2 := engine.NewTop(reg)
+		_, err = e2.Run([]engine.Value{result[0], engine.NewWord("cancel")})
 		if err != nil {
 			t.Fatalf("cancel #%d error: %v", i+1, err)
 		}
@@ -353,8 +354,8 @@ func TestCancelIdempotent(t *testing.T) {
 // =============================================================================
 
 func TestTimeoutString(t *testing.T) {
-	info := &TimeoutInfo{ID: "T_test12345678", Ms: 100}
-	v := NewTimeout(info)
+	info := &engine.TimeoutInfo{ID: "T_test12345678", Ms: 100}
+	v := engine.NewTimeout(info)
 	s := v.String()
 	if s != "Timeout(T_test12345678,100ms)" {
 		t.Errorf("got %q", s)
@@ -362,8 +363,8 @@ func TestTimeoutString(t *testing.T) {
 }
 
 func TestIntervalString(t *testing.T) {
-	info := &IntervalInfo{ID: "T_test12345678", Ms: 50}
-	v := NewInterval(info)
+	info := &engine.IntervalInfo{ID: "T_test12345678", Ms: 50}
+	v := engine.NewInterval(info)
 	s := v.String()
 	if s != "Interval(T_test12345678,50ms)" {
 		t.Errorf("got %q", s)
@@ -375,7 +376,7 @@ func TestIntervalString(t *testing.T) {
 // =============================================================================
 
 func TestTimerTypeLiteralNoPanic(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 	for _, word := range []string{"cancel"} {
 		t.Run(word, func(t *testing.T) {
 			defer func() {
@@ -383,8 +384,8 @@ func TestTimerTypeLiteralNoPanic(t *testing.T) {
 					t.Fatalf("panic in %s: %v", word, r)
 				}
 			}()
-			e := NewTop(reg)
-			_, _ = e.Run([]Value{NewTypeLiteral(TTimeout), NewWord(word)})
+			e := engine.NewTop(reg)
+			_, _ = e.Run([]engine.Value{engine.NewTypeLiteral(engine.TTimeout), engine.NewWord(word)})
 		})
 	}
 }

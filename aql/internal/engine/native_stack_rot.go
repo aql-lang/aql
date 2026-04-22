@@ -1,6 +1,6 @@
 package engine
 
-func registerRot(r *Registry) {
+func RegisterRot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "rot",
 		ForwardPrecedence: false,

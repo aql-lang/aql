@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-func registerTrim(r *Registry) {
+func RegisterTrim(r *Registry) {
 	// trim: [string] -> [string]
 	trimHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as0, _ := args[0].AsString()

@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-func registerChangeCase(r *Registry) {
+func RegisterChangeCase(r *Registry) {
 	// changecase: [string] -> [string] (default: lower)
 	changeCaseHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as0, _ := args[0].AsString()

@@ -1,6 +1,6 @@
 package engine
 
-func registerOver(r *Registry) {
+func RegisterOver(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "over",
 		ForwardPrecedence: false,

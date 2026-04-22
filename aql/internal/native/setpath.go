@@ -14,8 +14,8 @@ import (
 //   - [any, string, any] — "setpath data path newVal" (all forward, data first)
 //
 // The handler is position-agnostic: it finds the string arg as the path.
-func setpathFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterSetpath(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "setpath",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -28,7 +28,7 @@ func setpathFunc() engine.NativeFunc {
 				Handler: setpathHandler,
 			},
 		},
-	}
+	})
 }
 
 // setpathHandler calls voxgigstruct.SetPath to set a nested value.

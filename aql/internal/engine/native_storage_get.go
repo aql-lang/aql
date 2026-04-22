@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// registerGet registers "get" for value access.
+// RegisterGet registers "get" for value access.
 //
 // get retrieves values from a Store, Node (Map/List), or Object.
 //
@@ -21,7 +21,7 @@ import (
 //	{a:1} get a        → 1   (stack container, forward key)
 //	a {a:1} get        → 1   (all stack)
 //	{a:{b:1}} get a get b → 1 (chained: get cannot pass get, matches stack)
-func registerGet(r *Registry) {
+func RegisterGet(r *Registry) {
 	// getKey extracts the key string from any key-typed value.
 	getKey := func(v Value) string {
 		if v.IsWord() {

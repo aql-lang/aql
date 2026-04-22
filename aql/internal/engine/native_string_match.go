@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerMatch(r *Registry) {
+func RegisterMatch(r *Registry) {
 	// match: [string, string] -> [map]
 	matchHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as1, _ := args[0].AsString()

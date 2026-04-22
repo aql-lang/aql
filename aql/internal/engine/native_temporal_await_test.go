@@ -1,6 +1,7 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,18 +13,18 @@ import (
 // =============================================================================
 
 func TestAwaitAllDefault(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// await [[1 add 2] [3 add 4]]
 	// Both branches succeed → [3, 7]
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewWord("add"), engine.NewInteger(4)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,18 +45,18 @@ func TestAwaitAllDefault(t *testing.T) {
 }
 
 func TestAwaitAllWithError(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// await [[1 add 2] [1 div 0]]
 	// Second branch errors → result is the error
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,19 +69,19 @@ func TestAwaitAllWithError(t *testing.T) {
 }
 
 func TestAwaitAllRunsInParallel(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// Each branch sleeps 50ms. If parallel, total should be ~50ms, not ~150ms.
-	inner := NewList([]Value{
-		NewList([]Value{NewWord("sleep"), NewInteger(50), NewInteger(1)}),
-		NewList([]Value{NewWord("sleep"), NewInteger(50), NewInteger(2)}),
-		NewList([]Value{NewWord("sleep"), NewInteger(50), NewInteger(3)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(50), engine.NewInteger(1)}),
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(50), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(50), engine.NewInteger(3)}),
 	})
 	inner.Quoted = true
 
 	start := time.Now()
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -100,12 +101,12 @@ func TestAwaitAllRunsInParallel(t *testing.T) {
 }
 
 func TestAwaitAllEmpty(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	inner := NewList([]Value{})
+	inner := engine.NewList([]engine.Value{})
 	inner.Quoted = true
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -123,21 +124,21 @@ func TestAwaitAllEmpty(t *testing.T) {
 // =============================================================================
 
 func TestAwaitFull(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// Build options: make Options {mode:'full}
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("full"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("full"))
+	optsVal := engine.NewOptionsType(optsFields)
 
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -189,31 +190,31 @@ func TestAwaitFull(t *testing.T) {
 // =============================================================================
 
 func TestAwaitFirst(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 
 	// Register a word that records call order.
 	var order atomic.Int32
-	reg.RegisterStackOnly("testorder", Signature{
-		Args: []Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return []Value{NewInteger(int64(order.Add(1)))}, nil
+	reg.RegisterStackOnly("testorder", engine.Signature{
+		Args: []engine.Type{},
+		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			return []engine.Value{engine.NewInteger(int64(order.Add(1)))}, nil
 		},
 	})
 
-	e := NewTop(reg)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("first"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("first"))
+	optsVal := engine.NewOptionsType(optsFields)
 
 	// First branch is fast (no sleep), second is slow.
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(42)}),
-		NewList([]Value{NewWord("sleep"), NewInteger(100), NewInteger(99)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(42)}),
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(100), engine.NewInteger(99)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -228,21 +229,21 @@ func TestAwaitFirst(t *testing.T) {
 }
 
 func TestAwaitFirstWithError(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("first"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("first"))
+	optsVal := engine.NewOptionsType(optsFields)
 
 	// First branch errors immediately, second succeeds but slowly.
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewWord("sleep"), NewInteger(50), NewInteger(99)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(50), engine.NewInteger(99)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,21 +258,21 @@ func TestAwaitFirstWithError(t *testing.T) {
 // =============================================================================
 
 func TestAwaitAny(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("any"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("any"))
+	optsVal := engine.NewOptionsType(optsFields)
 
 	// First branch errors, second succeeds.
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewInteger(42)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
+		engine.NewList([]engine.Value{engine.NewInteger(42)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,21 +287,21 @@ func TestAwaitAny(t *testing.T) {
 }
 
 func TestAwaitAnyAllReject(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("any"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("any"))
+	optsVal := engine.NewOptionsType(optsFields)
 
 	// All branches error.
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewInteger(2), NewWord("div"), NewInteger(0)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewWord("div"), engine.NewInteger(0)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -310,21 +311,21 @@ func TestAwaitAnyAllReject(t *testing.T) {
 }
 
 func TestAwaitAnyFirstSuccess(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("any"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("any"))
+	optsVal := engine.NewOptionsType(optsFields)
 
 	// First branch is slow error, second is fast success.
-	inner := NewList([]Value{
-		NewList([]Value{NewWord("sleep"), NewInteger(100), NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewInteger(7)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(100), engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
+		engine.NewList([]engine.Value{engine.NewInteger(7)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,18 +340,18 @@ func TestAwaitAnyFirstSuccess(t *testing.T) {
 // =============================================================================
 
 func TestAwaitWithSleep(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// Two branches that sleep then return a value.
 	// sleep 20 consumes 20 as forward arg. Then 1 remains on stack.
-	inner := NewList([]Value{
-		NewList([]Value{NewWord("sleep"), NewInteger(20), NewInteger(1)}),
-		NewList([]Value{NewWord("sleep"), NewInteger(40), NewInteger(2)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(20), engine.NewInteger(1)}),
+		engine.NewList([]engine.Value{engine.NewWord("sleep"), engine.NewInteger(40), engine.NewInteger(2)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -370,17 +371,17 @@ func TestAwaitWithSleep(t *testing.T) {
 // =============================================================================
 
 func TestAwaitAllMultipleErrors(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// All branches error — should return the first error in order.
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewWord("div"), NewInteger(0)}),
-		NewList([]Value{NewInteger(2), NewWord("div"), NewInteger(0)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewWord("div"), engine.NewInteger(0)}),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewWord("div"), engine.NewInteger(0)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -390,20 +391,20 @@ func TestAwaitAllMultipleErrors(t *testing.T) {
 }
 
 func TestAwaitFullAllSucceed(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("full"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("full"))
+	optsVal := engine.NewOptionsType(optsFields)
 
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(10)}),
-		NewList([]Value{NewInteger(20)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(10)}),
+		engine.NewList([]engine.Value{engine.NewInteger(20)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -428,19 +429,19 @@ func TestAwaitFullAllSucceed(t *testing.T) {
 // =============================================================================
 
 func TestAwaitInvalidMode(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
-	optsFields := NewOrderedMap()
-	optsFields.Set("mode", NewAtom("bogus"))
-	optsVal := NewOptionsType(optsFields)
+	optsFields := engine.NewOrderedMap()
+	optsFields.Set("mode", engine.NewAtom("bogus"))
+	optsVal := engine.NewOptionsType(optsFields)
 
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1)}),
 	})
 	inner.Quoted = true
 
-	_, err := e.Run([]Value{NewWord("await"), optsVal, inner})
+	_, err := e.Run([]engine.Value{engine.NewWord("await"), optsVal, inner})
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
 	}
@@ -454,15 +455,15 @@ func TestAwaitInvalidMode(t *testing.T) {
 // =============================================================================
 
 func TestAwaitTypeLiteralNoPanic(t *testing.T) {
-	reg, _ := DefaultRegistry()
+	reg, _ := engine.DefaultRegistry(native.Register)
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("panic: %v", r)
 		}
 	}()
-	e := NewTop(reg)
+	e := engine.NewTop(reg)
 	// Pass a type literal (Data==nil) — should error, not panic.
-	_, _ = e.Run([]Value{NewTypeLiteral(TList), NewWord("await")})
+	_, _ = e.Run([]engine.Value{engine.NewTypeLiteral(engine.TList), engine.NewWord("await")})
 }
 
 // =============================================================================
@@ -470,17 +471,17 @@ func TestAwaitTypeLiteralNoPanic(t *testing.T) {
 // =============================================================================
 
 func TestAwaitNonListElement(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// Non-list elements are returned as-is.
-	inner := NewList([]Value{
-		NewInteger(42),
-		NewString("hello"),
+	inner := engine.NewList([]engine.Value{
+		engine.NewInteger(42),
+		engine.NewString("hello"),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -505,17 +506,17 @@ func TestAwaitNonListElement(t *testing.T) {
 // =============================================================================
 
 func TestAwaitMultiValueBranch(t *testing.T) {
-	reg, _ := DefaultRegistry()
-	e := NewTop(reg)
+	reg, _ := engine.DefaultRegistry(native.Register)
+	e := engine.NewTop(reg)
 
 	// Branch that leaves multiple values on the stack: [1 2 3]
-	inner := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewList([]Value{NewInteger(42)}),
+	inner := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(42)}),
 	})
 	inner.Quoted = true
 
-	result, err := e.Run([]Value{NewWord("await"), inner})
+	result, err := e.Run([]engine.Value{engine.NewWord("await"), inner})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

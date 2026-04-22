@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bytes"
 	"strings"
 	"testing"
@@ -18,7 +19,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.Me
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +272,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["src.txt"] = []byte("the content")
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +319,7 @@ func TestWriteCRLF(t *testing.T) {
 // runWithStdio creates a registry with custom stdin/stdout/stderr and runs AQL.
 func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stack string, err error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +346,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 
 func TestStdinWord(t *testing.T) {
 	// stdin should push a special path string.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +370,7 @@ func TestStdinWord(t *testing.T) {
 }
 
 func TestStdoutWord(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +390,7 @@ func TestStdoutWord(t *testing.T) {
 }
 
 func TestStderrWord(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,8 +10,8 @@ import (
 // getpathFunc returns the "getpath" native function definition.
 // getpath has forward precedence and one signature:
 //   - [any, string] — retrieves a value at a dot-separated path from the data
-func getpathFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterGetpath(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "getpath",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -20,7 +20,7 @@ func getpathFunc() engine.NativeFunc {
 				Handler: getpathHandler,
 			},
 		},
-	}
+	})
 }
 
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.

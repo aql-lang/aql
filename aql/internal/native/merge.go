@@ -13,8 +13,8 @@ import (
 //   - [list, map] — create new list with map's integer keys replacing elements
 //   - [map, list] — create new list from list, appending map's in-range integer-keyed values
 //   - [any, any]  — deep-merges the second value into the first using voxgig struct Merge
-func mergeFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterMerge(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "merge",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -31,7 +31,7 @@ func mergeFunc() engine.NativeFunc {
 				Handler: mergeHandler,
 			},
 		},
-	}
+	})
 }
 
 // mergeHandler calls voxgigstruct.Merge on two values, returning the merged result.

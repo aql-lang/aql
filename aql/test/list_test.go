@@ -18,7 +18,7 @@ func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]e
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

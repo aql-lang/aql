@@ -1,6 +1,6 @@
 package engine
 
-func registerTuck(r *Registry) {
+func RegisterTuck(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "tuck",
 		ForwardPrecedence: false,

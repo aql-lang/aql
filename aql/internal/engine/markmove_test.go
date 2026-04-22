@@ -1,6 +1,7 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bytes"
 	"strings"
 	"testing"
@@ -10,30 +11,30 @@ import (
 // Equivalent to: [11, mark(A), 22, printstr "x", 33, move(A)]
 // Expected: prints "xx", stack result is [11, 22, 33]
 func TestMarkMoveBasic(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	id := NextMarkID()
+	id := engine.NextMarkID()
 	// printstr is forward-precedence: it collects arg from after the word.
 	// The body between mark and move is what gets replayed.
-	body := []Value{
-		NewInteger(22),
-		NewWord("printstr"),
-		NewString("x"),
-		NewInteger(33),
+	body := []engine.Value{
+		engine.NewInteger(22),
+		engine.NewWord("printstr"),
+		engine.NewString("x"),
+		engine.NewInteger(33),
 	}
-	input := []Value{
-		NewInteger(11),
-		NewMark(id, body...),
-		NewInteger(22),
-		NewWord("printstr"),
-		NewString("x"),
-		NewInteger(33),
-		NewMove(id, "test loop"),
+	input := []engine.Value{
+		engine.NewInteger(11),
+		engine.NewMark(id, body...),
+		engine.NewInteger(22),
+		engine.NewWord("printstr"),
+		engine.NewString("x"),
+		engine.NewInteger(33),
+		engine.NewMove(id, "test loop"),
 	}
 
 	result := runAQL(t, r, input)
@@ -48,15 +49,15 @@ func TestMarkMoveBasic(t *testing.T) {
 		t.Fatalf("expected 3 values on stack, got %d: %v", len(result), result)
 	}
 	_as0, _ := result[0].AsInteger()
-	if !result[0].VType.Matches(TInteger) || _as0 != 11 {
+	if !result[0].VType.Matches(engine.TInteger) || _as0 != 11 {
 		t.Errorf("result[0] = %v, want 11", result[0])
 	}
 	_as1, _ := result[1].AsInteger()
-	if !result[1].VType.Matches(TInteger) || _as1 != 22 {
+	if !result[1].VType.Matches(engine.TInteger) || _as1 != 22 {
 		t.Errorf("result[1] = %v, want 22", result[1])
 	}
 	_as2, _ := result[2].AsInteger()
-	if !result[2].VType.Matches(TInteger) || _as2 != 33 {
+	if !result[2].VType.Matches(engine.TInteger) || _as2 != 33 {
 		t.Errorf("result[2] = %v, want 33", result[2])
 	}
 }
@@ -64,24 +65,24 @@ func TestMarkMoveBasic(t *testing.T) {
 // TestMarkMoveOneShotRemoval verifies mark/move are removed after one trigger,
 // preventing infinite loops.
 func TestMarkMoveOneShotRemoval(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	id := NextMarkID()
+	id := engine.NextMarkID()
 	// mark, printstr "a", move → prints "aa", then mark/move gone, no infinite loop.
-	body := []Value{
-		NewWord("printstr"),
-		NewString("a"),
+	body := []engine.Value{
+		engine.NewWord("printstr"),
+		engine.NewString("a"),
 	}
-	input := []Value{
-		NewMark(id, body...),
-		NewWord("printstr"),
-		NewString("a"),
-		NewMove(id, "one-shot test"),
+	input := []engine.Value{
+		engine.NewMark(id, body...),
+		engine.NewWord("printstr"),
+		engine.NewString("a"),
+		engine.NewMove(id, "one-shot test"),
 	}
 
 	result := runAQL(t, r, input)
@@ -99,12 +100,12 @@ func TestMarkMoveOneShotRemoval(t *testing.T) {
 
 // TestMarkMoveNotFound tests error when move references nonexistent mark.
 func TestMarkMoveNotFound(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := []Value{
-		NewMove("nonexistent", "test: dangling move"),
+	input := []engine.Value{
+		engine.NewMove("nonexistent", "test: dangling move"),
 	}
 
 	err = runAQLError(t, r, input)
@@ -121,15 +122,15 @@ func TestMarkMoveNotFound(t *testing.T) {
 
 // TestMarkMoveMultiplePairs tests multiple independent mark/move pairs.
 func TestMarkMoveMultiplePairs(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	id1 := NextMarkID()
-	id2 := NextMarkID()
+	id1 := engine.NextMarkID()
+	id2 := engine.NextMarkID()
 	// Two nested mark/move pairs:
 	// mark(A), mark(B), printstr "x", move(B), printstr "y", move(A)
 	// First pass: prints "x", hits move(B) → jump to after mark(B), removes B pair
@@ -149,17 +150,17 @@ func TestMarkMoveMultiplePairs(t *testing.T) {
 	// Total output: "x" "y" "y" "x" "y" = "xyyx y"... this is getting complex.
 
 	// Simpler test: two sequential (non-nested) mark/move pairs.
-	body1 := []Value{NewWord("printstr"), NewString("a")}
-	body2 := []Value{NewWord("printstr"), NewString("b")}
-	input := []Value{
-		NewMark(id1, body1...),
-		NewWord("printstr"),
-		NewString("a"),
-		NewMove(id1, "first loop"),
-		NewMark(id2, body2...),
-		NewWord("printstr"),
-		NewString("b"),
-		NewMove(id2, "second loop"),
+	body1 := []engine.Value{engine.NewWord("printstr"), engine.NewString("a")}
+	body2 := []engine.Value{engine.NewWord("printstr"), engine.NewString("b")}
+	input := []engine.Value{
+		engine.NewMark(id1, body1...),
+		engine.NewWord("printstr"),
+		engine.NewString("a"),
+		engine.NewMove(id1, "first loop"),
+		engine.NewMark(id2, body2...),
+		engine.NewWord("printstr"),
+		engine.NewString("b"),
+		engine.NewMove(id2, "second loop"),
 	}
 
 	result := runAQL(t, r, input)
@@ -176,22 +177,22 @@ func TestMarkMoveMultiplePairs(t *testing.T) {
 
 // TestMarkMoveWithLiterals tests that literals between mark/move survive.
 func TestMarkMoveWithLiterals(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	id := NextMarkID()
+	id := engine.NextMarkID()
 	// [1, mark, 2, 3, add, move] → first pass: 2+3=5, move triggers,
 	// replays body (2, 3, add) replacing mark..move range → 2+3=5, result is [1, 5]
-	body := []Value{NewInteger(2), NewInteger(3), NewWord("add")}
-	input := []Value{
-		NewInteger(1),
-		NewMark(id, body...),
-		NewInteger(2),
-		NewInteger(3),
-		NewWord("add"),
-		NewMove(id, "literal test"),
+	body := []engine.Value{engine.NewInteger(2), engine.NewInteger(3), engine.NewWord("add")}
+	input := []engine.Value{
+		engine.NewInteger(1),
+		engine.NewMark(id, body...),
+		engine.NewInteger(2),
+		engine.NewInteger(3),
+		engine.NewWord("add"),
+		engine.NewMove(id, "literal test"),
 	}
 
 	result := runAQL(t, r, input)
@@ -214,12 +215,12 @@ func TestMarkMoveWithLiterals(t *testing.T) {
 
 // TestMarkMoveString tests Value.String() for mark and move.
 func TestMarkMoveString(t *testing.T) {
-	m := NewMark("test123", NewInteger(1))
+	m := engine.NewMark("test123", engine.NewInteger(1))
 	if got := m.String(); got != "mark(test123)" {
 		t.Errorf("mark string = %q, want %q", got, "mark(test123)")
 	}
 
-	mv := NewMove("test123", "for loop")
+	mv := engine.NewMove("test123", "for loop")
 	if got := mv.String(); got != "move(test123,for loop)" {
 		t.Errorf("move string = %q, want %q", got, "move(test123,for loop)")
 	}
@@ -227,7 +228,7 @@ func TestMarkMoveString(t *testing.T) {
 
 // TestMarkMoveIsMethods tests IsMark/IsMove type checks.
 func TestMarkMoveIsMethods(t *testing.T) {
-	m := NewMark("x", NewInteger(1))
+	m := engine.NewMark("x", engine.NewInteger(1))
 	if !m.IsMark() {
 		t.Error("NewMark should be IsMark()")
 	}
@@ -235,7 +236,7 @@ func TestMarkMoveIsMethods(t *testing.T) {
 		t.Error("NewMark should not be IsMove()")
 	}
 
-	mv := NewMove("x", "reason")
+	mv := engine.NewMove("x", "reason")
 	if !mv.IsMove() {
 		t.Error("NewMove should be IsMove()")
 	}
@@ -244,10 +245,10 @@ func TestMarkMoveIsMethods(t *testing.T) {
 	}
 
 	// Marks and moves should match "any" (Any matches everything now)
-	if !m.VType.Matches(TAny) {
+	if !m.VType.Matches(engine.TAny) {
 		t.Error("mark should match TAny")
 	}
-	if !mv.VType.Matches(TAny) {
+	if !mv.VType.Matches(engine.TAny) {
 		t.Error("move should match TAny")
 	}
 }
@@ -256,7 +257,7 @@ func TestMarkMoveIsMethods(t *testing.T) {
 func TestNextMarkIDUnique(t *testing.T) {
 	ids := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		id := NextMarkID()
+		id := engine.NextMarkID()
 		if ids[id] {
 			t.Fatalf("duplicate mark ID: %s", id)
 		}
@@ -266,14 +267,14 @@ func TestNextMarkIDUnique(t *testing.T) {
 
 // TestHaltOnUndefinedStackEntry tests that the engine halts on a zero-value entry.
 func TestHaltOnUndefinedStackEntry(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := []Value{
-		NewInteger(1),
+	input := []engine.Value{
+		engine.NewInteger(1),
 		{}, // undefined/zero Value
-		NewInteger(3),
+		engine.NewInteger(3),
 	}
 
 	err = runAQLError(t, r, input)

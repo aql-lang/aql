@@ -1,20 +1,21 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-func setupMemFSForIO(t *testing.T, r *Registry) *fileops.MemFileOps {
+func setupMemFSForIO(t *testing.T, r *engine.Registry) *fileops.MemFileOps {
 	t.Helper()
 	mem := fileops.NewMem()
 	r.MemOps = mem
-	e := New(r)
-	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
-		NewWord("set"), NewWord("mem"), NewBoolean(true),
+	e := engine.New(r)
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("fs"),
+		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("enable mem fs: %v", err)
@@ -25,12 +26,12 @@ func setupMemFSForIO(t *testing.T, r *Registry) *fileops.MemFileOps {
 // --- write with Path ---
 
 func TestWriteWithPath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"data", "test.txt"}, false)
-	result := runAQL(t, r, []Value{
-		NewWord("write"), path, NewString("hello world"),
+	path := engine.NewPath([]string{"data", "test.txt"}, false)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("write"), path, engine.NewString("hello world"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
@@ -48,12 +49,12 @@ func TestWriteWithPath(t *testing.T) {
 }
 
 func TestWriteWithAbsPath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"tmp", "out.txt"}, true)
-	result := runAQL(t, r, []Value{
-		NewWord("write"), path, NewString("abs content"),
+	path := engine.NewPath([]string{"tmp", "out.txt"}, true)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("write"), path, engine.NewString("abs content"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
@@ -66,13 +67,13 @@ func TestWriteWithAbsPath(t *testing.T) {
 // --- read with Path ---
 
 func TestReadWithPath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["greeting.txt"] = []byte("hello")
 
-	path := NewPath([]string{"greeting.txt"}, false)
-	result := runAQL(t, r, []Value{
-		NewWord("read"), path,
+	path := engine.NewPath([]string{"greeting.txt"}, false)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("read"), path,
 	})
 	_as2, _ := result[0].AsString()
 	if len(result) != 1 || _as2 != "hello" {
@@ -81,13 +82,13 @@ func TestReadWithPath(t *testing.T) {
 }
 
 func TestReadWithAbsPath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["/etc/config"] = []byte("key=val")
 
-	path := NewPath([]string{"etc", "config"}, true)
-	result := runAQL(t, r, []Value{
-		NewWord("read"), path,
+	path := engine.NewPath([]string{"etc", "config"}, true)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("read"), path,
 	})
 	_as3, _ := result[0].AsString()
 	if len(result) != 1 || _as3 != "key=val" {
@@ -98,15 +99,15 @@ func TestReadWithAbsPath(t *testing.T) {
 // --- write then read roundtrip with Path ---
 
 func TestWriteReadRoundtripPath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"roundtrip.txt"}, false)
-	runAQL(t, r, []Value{
-		NewWord("write"), path, NewString("round and round"),
+	path := engine.NewPath([]string{"roundtrip.txt"}, false)
+	runAQL(t, r, []engine.Value{
+		engine.NewWord("write"), path, engine.NewString("round and round"),
 	})
-	result := runAQL(t, r, []Value{
-		NewWord("read"), path,
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("read"), path,
 	})
 	_as4, _ := result[0].AsString()
 	if len(result) != 1 || _as4 != "round and round" {
@@ -117,14 +118,14 @@ func TestWriteReadRoundtripPath(t *testing.T) {
 // --- write with Path and options ---
 
 func TestWriteWithPathAndOptions(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"log.txt"}, false)
-	opts := NewOrderedMap()
-	opts.Set("mode", NewString("write"))
-	result := runAQL(t, r, []Value{
-		NewWord("write"), path, NewString("line1"), NewMap(opts),
+	path := engine.NewPath([]string{"log.txt"}, false)
+	opts := engine.NewOrderedMap()
+	opts.Set("mode", engine.NewString("write"))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("write"), path, engine.NewString("line1"), engine.NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -138,15 +139,15 @@ func TestWriteWithPathAndOptions(t *testing.T) {
 // --- read with Path and options ---
 
 func TestReadWithPathAndOptions(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["data.txt"] = []byte("content here")
 
-	path := NewPath([]string{"data.txt"}, false)
-	opts := NewOrderedMap()
-	opts.Set("fmt", NewString("text"))
-	result := runAQL(t, r, []Value{
-		NewWord("read"), path, NewMap(opts),
+	path := engine.NewPath([]string{"data.txt"}, false)
+	opts := engine.NewOrderedMap()
+	opts.Set("fmt", engine.NewString("text"))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("read"), path, engine.NewMap(opts),
 	})
 	_as5, _ := result[0].AsString()
 	if len(result) != 1 || _as5 != "content here" {
@@ -157,11 +158,11 @@ func TestReadWithPathAndOptions(t *testing.T) {
 // --- String paths still work (backward compat) ---
 
 func TestWriteStringPathStillWorks(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("write"), NewString("old.txt"), NewString("old style"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("write"), engine.NewString("old.txt"), engine.NewString("old style"),
 	})
 	_as6, _ := result[0].AsString()
 	if len(result) != 1 || _as6 != "old.txt" {
@@ -174,12 +175,12 @@ func TestWriteStringPathStillWorks(t *testing.T) {
 }
 
 func TestReadStringPathStillWorks(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["compat.txt"] = []byte("compat")
 
-	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("compat.txt"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("read"), engine.NewString("compat.txt"),
 	})
 	_as7, _ := result[0].AsString()
 	if len(result) != 1 || _as7 != "compat" {

@@ -189,7 +189,7 @@ func TestCheckUpperReturnsString(t *testing.T) {
 // TestCheckIfJoinsBranches verifies the branch-aware `if` checker:
 // both branches are analysed in a sub-engine and their top-of-stack
 // carriers are joined. Two integer literals (42, 99) collapse to
-// Scalar/Number/Integer via commonAncestorType.
+// Scalar/Number/Integer via CommonAncestorType.
 func TestCheckIfJoinsBranches(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
@@ -609,7 +609,7 @@ func TestCheckConditionalDefJoin(t *testing.T) {
 }
 
 // TestCheckConditionalDefSameBranch verifies sibling integer values
-// across branches collapse via commonAncestorType (Integer, not a
+// across branches collapse via CommonAncestorType (Integer, not a
 // disjunction of literal subtypes).
 func TestCheckConditionalDefSameBranch(t *testing.T) {
 	a, err := aql.New()

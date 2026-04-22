@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerContains(r *Registry) {
+func RegisterContains(r *Registry) {
 	// contains: [string, string] -> [boolean]
 	containsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as1, _ := args[0].AsString()

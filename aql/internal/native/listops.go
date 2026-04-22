@@ -11,8 +11,8 @@ import (
 //
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
-func pushFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterPush(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "push",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -21,7 +21,7 @@ func pushFunc() engine.NativeFunc {
 				Handler: pushHandler,
 			},
 		},
-	}
+	})
 }
 
 func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
@@ -44,8 +44,8 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 //
 //	pop [a,b,c] → [a,b] c
 //	[a,b,c] pop → [a,b] c
-func popFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterPop(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "pop",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -54,7 +54,7 @@ func popFunc() engine.NativeFunc {
 				Handler: popHandler,
 			},
 		},
-	}
+	})
 }
 
 func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
@@ -75,8 +75,8 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 //
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
-func unshiftFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterUnshift(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "unshift",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -85,7 +85,7 @@ func unshiftFunc() engine.NativeFunc {
 				Handler: unshiftHandler,
 			},
 		},
-	}
+	})
 }
 
 func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
@@ -108,8 +108,8 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 //
 //	shift [a,b,c] → [b,c] a
 //	[a,b,c] shift → [b,c] a
-func shiftFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterShift(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "shift",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -118,7 +118,7 @@ func shiftFunc() engine.NativeFunc {
 				Handler: shiftHandler,
 			},
 		},
-	}
+	})
 }
 
 func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {

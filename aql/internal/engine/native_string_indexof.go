@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerIndexOf(r *Registry) {
+func RegisterIndexOf(r *Registry) {
 	// indexof: [string, string] -> [integer]
 	indexOfHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as1, _ := args[0].AsString()

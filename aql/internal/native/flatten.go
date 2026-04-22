@@ -11,8 +11,8 @@ import (
 // flatten has forward precedence and two signatures:
 //   - [list, integer] — flattens the list to the given depth
 //   - [list]          — flattens the list by one level
-func flattenFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterFlatten(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "flatten",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -25,7 +25,7 @@ func flattenFunc() engine.NativeFunc {
 				Handler: flattenDefaultHandler,
 			},
 		},
-	}
+	})
 }
 
 // flattenDefaultHandler calls voxgigstruct.Flatten with default depth (1).

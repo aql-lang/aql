@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerRoll(r *Registry) {
+func RegisterRoll(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "roll",
 		ForwardPrecedence: false,
@@ -36,7 +36,7 @@ func registerRoll(r *Registry) {
 				out := append([]Value(nil), stack...)
 				t := stack[0].VType
 				for i := 1; i < len(stack); i++ {
-					t = commonAncestorType(t, stack[i].VType)
+					t = CommonAncestorType(t, stack[i].VType)
 				}
 				out[len(out)-1] = NewCarrier(t)
 				return out

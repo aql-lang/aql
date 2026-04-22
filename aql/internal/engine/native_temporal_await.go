@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// registerAwait registers the "await" word.
+// RegisterAwait registers the "await" word.
 //
 // await: [(make Options {mode:'all'})? parallels:[:Any]/q] → results
 //
@@ -23,7 +23,7 @@ import (
 //     whether success or error.
 //   - 'any: returns the first successful result. If all reject, returns
 //     the last error.
-func registerAwait(r *Registry) {
+func RegisterAwait(r *Registry) {
 	awaitHandler := func(mode string, parallels Value) ([]Value, error) {
 		if parallels.Data == nil {
 			return nil, fmt.Errorf("await: parallels must be a concrete list, got type literal")

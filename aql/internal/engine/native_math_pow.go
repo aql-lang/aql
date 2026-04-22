@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-func registerPow(r *Registry) {
+func RegisterPow(r *Registry) {
 	registerBinaryMathWord(r, "pow",
 		func(base, exp float64) (Value, error) { return NewDecimal(math.Pow(base, exp)), nil },
 		func(base, exp int64) (Value, error) {

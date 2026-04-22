@@ -22,7 +22,7 @@ type Registry struct {
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
-	argsStack         []Value                                            // stack of args lists for nested fn calls
+	ArgsStack         []Value                                            // stack of args lists for nested fn calls
 	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
@@ -446,13 +446,19 @@ func (r *Registry) InitRootContext() {
 	r.ctxStack = append(r.ctxStack, root)
 }
 
-// DefaultRegistry returns a registry populated with built-in primitives.
-func DefaultRegistry() (*Registry, error) {
+// DefaultRegistry returns a registry populated with built-in primitives
+// plus any additional provider functions passed in. Each provider is a
+// function that registers words (e.g. engine.Register, native.Register).
+// Called with no providers, it registers only engine's built-in core words.
+func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
 	r, err := NewRegistry()
 	if err != nil {
 		return nil, err
 	}
-	registerCoreWords(r)
+	Register(r)
+	for _, p := range providers {
+		p(r)
+	}
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
@@ -468,158 +474,156 @@ func (r *Registry) Err() error {
 	return r.errs[0]
 }
 
-func registerCoreWords(r *Registry) {
+func Register(r *Registry) {
 	// String
-	registerUpper(r)
-	registerLower(r)
-	registerConcat(r)
-	registerSplit(r)
-	registerTrim(r)
-	registerContains(r)
-	registerIndexOf(r)
-	registerReplace(r)
-	registerChangeCase(r)
-	registerNormalize(r)
-	registerRepeat(r)
-	registerPad(r)
-	registerSlice(r)
-	registerMatch(r)
-	registerEscape(r)
+	RegisterUpper(r)
+	RegisterLower(r)
+	RegisterConcat(r)
+	RegisterSplit(r)
+	RegisterTrim(r)
+	RegisterContains(r)
+	RegisterIndexOf(r)
+	RegisterReplace(r)
+	RegisterChangeCase(r)
+	RegisterNormalize(r)
+	RegisterRepeat(r)
+	RegisterPad(r)
+	// slice moved to native.
+	RegisterMatch(r)
+	RegisterEscape(r)
 
-	// Stack
-	registerDup(r)
-	registerSwap(r)
-	registerDrop(r)
-	registerOver(r)
-	registerRot(r)
-	registerNip(r)
-	registerTuck(r)
-	register2dup(r)
-	register2swap(r)
-	register2drop(r)
-	register2over(r)
-	registerDepth(r)
-	registerPick(r)
-	registerRoll(r)
-	registerStackCollect(r)
+	// Stack ops (StackCollect moved to native; rest stay because engine
+	// internal tests depend on them).
+	RegisterDup(r)
+	RegisterSwap(r)
+	RegisterDrop(r)
+	RegisterOver(r)
+	RegisterRot(r)
+	RegisterNip(r)
+	RegisterTuck(r)
+	Register2dup(r)
+	Register2swap(r)
+	Register2drop(r)
+	Register2over(r)
+	RegisterDepth(r)
+	RegisterPick(r)
+	RegisterRoll(r)
+
+	// String slice moved to native.
 
 	// Math: basic arithmetic (always available)
-	registerAdd(r)
-	registerSub(r)
-	registerMul(r)
-	registerDiv(r)
-	registerMod(r)
-	registerPow(r)
+	RegisterAdd(r)
+	RegisterSub(r)
+	RegisterMul(r)
+	RegisterDiv(r)
+	RegisterMod(r)
+	RegisterPow(r)
 
 	// Math: extended operations are in the "aql:math" native module.
 	// Use: "aql:math" import
 
-	// Boolean
-	registerOr(r)
-	registerAnd(r)
-	registerXor(r)
-	registerNand(r)
-	registerImplies(r)
-	registerNot(r)
+	// Boolean: implies moved to native. or, not, and, xor, nand stay because
+	// engine tests depend on them (or uses disjunct specially).
+	RegisterOr(r)
+	RegisterAnd(r)
+	RegisterXor(r)
+	RegisterNand(r)
+	RegisterNot(r)
 
 	// Comparison
-	registerComparison(r)
+	RegisterComparison(r)
 
 	// Storage
-	registerSet(r)
-	registerGet(r)
-	registerContext(r)
+	RegisterSet(r)
+	RegisterGet(r)
+	RegisterContext(r)
 
-	// Definition
-	registerDef(r)
-	registerUndef(r)
-	registerVar(r)
-	registerFn(r)
-	registerCall(r)
-	registerDblcall(r)
-	registerArgs(r)
-	registerPopArgs(r)
+	// Definition — popargs moved to native. var, call, dblcall, args stay
+	// because engine tests depend on them.
+	RegisterDef(r)
+	RegisterUndef(r)
+	RegisterVar(r)
+	RegisterFn(r)
+	RegisterCall(r)
+	RegisterDblcall(r)
+	RegisterArgs(r)
+	RegisterPopArgs(r)
 
-	// Type
-	registerConvert(r)
-	registerRecord(r)
-	registerTable(r)
-	registerObject(r)
-	registerResource(r)
-	registerMake(r)
-	registerTypeDef(r)
-	registerTypeof(r)
-	registerFullTypeof(r)
-	registerIs(r)
-	registerInspect(r)
-	registerBase(r)
+	// Type — record, table, typeof, fulltypeof stay because engine tests
+	// depend on them.
+	RegisterConvert(r)
+	RegisterRecord(r)
+	RegisterTable(r)
+	RegisterObject(r)
+	RegisterResource(r)
+	RegisterMake(r)
+	RegisterTypeDef(r)
+	RegisterTypeof(r)
+	RegisterFullTypeof(r)
+	RegisterIs(r)
+	RegisterInspect(r)
+	RegisterBase(r)
 
-	// Control flow
-	registerDo(r)
-	registerIf(r)
-	registerFor(r)
-	registerError(r)
-	registerQuote(r)
+	// Control flow — quote moved to native.
+	RegisterDo(r)
+	RegisterIf(r)
+	RegisterFor(r)
+	RegisterError(r)
 
-	// Accessors
-	registerGetr(r)
+	// Accessors — getr stays because engine tests depend on dotr/getr.
+	RegisterGetr(r)
 
-	// I/O
-	registerFileIO(r)
-	registerFolder(r)
-	registerPrint(r)
-	registerTrace(r)
+	// I/O — folder moved to native.
+	RegisterFileIO(r)
+	RegisterPrint(r)
+	RegisterTrace(r)
 
 	// Query (temporarily disabled — precedence removal)
-	// registerQuery(r)
+	// RegisterQuery(r)
 
 	// Unify
-	registerUnify(r)
+	RegisterUnify(r)
 
 	// Module
-	registerModule(r)
+	RegisterModule(r)
 
 	// Array
-	registerIota(r)
-	registerShape(r)
-	registerRank(r)
-	registerLength(r)
-	registerReshape(r)
-	registerArrFlatten(r)
-	registerArrTranspose(r)
-	registerReverse(r)
-	registerTake(r)
-	registerShed(r)
-	registerWhere(r)
-	registerUnique(r)
-	registerGrade(r)
-	registerAt(r)
-	registerSortby(r)
-	registerMember(r)
-	registerArrIndexof(r)
-	registerGroup(r)
-	registerReplicate(r)
-	registerExpand(r)
-	registerWindow(r)
-	registerPairs(r)
+	RegisterIota(r)
+	RegisterShape(r)
+	RegisterRank(r)
+	RegisterLength(r)
+	RegisterReshape(r)
+	RegisterArrFlatten(r)
+	RegisterArrTranspose(r)
+	RegisterReverse(r)
+	RegisterTake(r)
+	RegisterShed(r)
+	RegisterWhere(r)
+	RegisterUnique(r)
+	RegisterGrade(r)
+	RegisterAt(r)
+	RegisterSortby(r)
+	RegisterMember(r)
+	RegisterArrIndexof(r)
+	RegisterGroup(r)
+	RegisterReplicate(r)
+	RegisterExpand(r)
+	RegisterWindow(r)
+	RegisterPairs(r)
 
 	// Array higher-order
-	registerEach(r)
-	registerFold(r)
-	registerScan(r)
-	registerOuter(r)
-	registerInner(r)
+	RegisterEach(r)
+	RegisterFold(r)
+	RegisterScan(r)
+	RegisterOuter(r)
+	RegisterInner(r)
 
-	// Temporal (standard words, not in aql:time module)
-	registerNow(r)
-	registerSleep(r)
-	registerTimeout(r)
-	registerInterval(r)
-	registerCancel(r)
-	registerAwait(r)
+	// Temporal — now, sleep, interval, cancel moved to native.
+	RegisterTimeout(r)
+	RegisterAwait(r)
 
 	// Help
-	registerHelp(r)
+	RegisterHelp(r)
 }
 
 // IsNativeModLoaded returns true if the named native module has already been loaded.
@@ -725,9 +729,9 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 	})
 }
 
-// registerBinaryBoolOp registers a binary boolean operation with a single
+// RegisterBinaryBoolOp registers a binary boolean operation with a single
 // signature Args:[boolean, boolean] and forward precedence.
-func registerBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
+func RegisterBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as7, _ := args[0].AsBoolean()
 		_as6, _ := args[1].AsBoolean()

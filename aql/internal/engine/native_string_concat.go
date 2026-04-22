@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func registerConcat(r *Registry) {
+func RegisterConcat(r *Registry) {
 	// concat: [list] -> [string]
 	concatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return doConcat(args[0], strOpts{})

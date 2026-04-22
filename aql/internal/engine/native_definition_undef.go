@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerUndef registers the "undef" word for removing word definitions.
+// RegisterUndef registers the "undef" word for removing word definitions.
 // undef removes the most recent definition, potentially revealing a
 // shadowed one.
 //
@@ -14,7 +14,7 @@ import "fmt"
 //	[TAtom/q, TFnUndef]   – undef name fn [spec]
 //
 // Forward precedence handles all orderings without infix signatures.
-func registerUndef(r *Registry) {
+func RegisterUndef(r *Registry) {
 	undefHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		uninstallDef(r, name)

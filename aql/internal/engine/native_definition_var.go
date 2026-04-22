@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerVar registers the "var" word for scoped variable definitions.
+// RegisterVar registers the "var" word for scoped variable definitions.
 //
 // var takes one list argument. The first element is a list of variable
 // declarations. The remaining elements form the body. After the body,
@@ -14,7 +14,7 @@ import "fmt"
 //
 // Example: var [[x] x mul x]  means  def x end x mul x undef x
 // Example: var [[[x 2] y] x add y]  means  def x 2 end def y end x add y undef y undef x
-func registerVar(r *Registry) {
+func RegisterVar(r *Registry) {
 	varHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		list := args[0]
 		if !list.VType.Equal(TList) {

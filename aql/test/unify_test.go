@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bufio"
 	"fmt"
 	"os"
@@ -59,7 +60,7 @@ func TestUnify(t *testing.T) {
 			}
 
 			// Build and run the unify expression: left unify right
-			reg, err := engine.DefaultRegistry()
+			reg, err := engine.DefaultRegistry(native.Register)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -108,7 +109,7 @@ func evalSingle(expr string) (engine.Value, error) {
 		return engine.Value{}, fmt.Errorf("parse %q: %w", expr, err)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		return engine.Value{}, fmt.Errorf("registry: %w", err)
 	}

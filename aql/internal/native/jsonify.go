@@ -11,8 +11,8 @@ import (
 // jsonify has forward precedence and two signatures:
 //   - [any, map] — converts the value to a JSON string with flags (indent, offset)
 //   - [any]      — converts the value to a JSON string with defaults
-func jsonifyFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterJsonify(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "jsonify",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -25,7 +25,7 @@ func jsonifyFunc() engine.NativeFunc {
 				Handler: jsonifyDefaultHandler,
 			},
 		},
-	}
+	})
 }
 
 // jsonifyDefaultHandler calls voxgigstruct.Jsonify with default settings.

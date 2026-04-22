@@ -450,7 +450,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	om.Set("a", engine.NewInteger(1))
 	om.Set("b", engine.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,7 +503,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	om.Set("a", engine.NewMap(inner))
 	om.Set("b", engine.NewInteger(3))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +557,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 	om.Set("a", engine.NewInteger(1))
 	om.Set("b", engine.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -599,7 +599,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	om.Set("a", engine.NewInteger(1))
 	om.Set("b", engine.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +649,7 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	om.Set("a", engine.NewInteger(1))
 	om.Set("b", engine.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +713,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	om.Set("a", engine.NewInteger(1))
 	om.Set("b", engine.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -768,7 +768,7 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	om.Set("a", engine.NewMap(innerMap))
 	om.Set("b", engine.NewInteger(3))
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

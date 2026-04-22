@@ -1,23 +1,24 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"os"
 	"testing"
 )
 
 func TestTraceDemo(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Output = os.Stderr // so it shows with -v
 
 	// trace [1 add 2 mul 3]
-	e := NewTop(r)
-	result, err := e.Run([]Value{
-		NewWord("trace"),
-		NewList([]Value{
-			NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
+	e := engine.NewTop(r)
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("trace"),
+		engine.NewList([]engine.Value{
+			engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2), engine.NewWord("mul"), engine.NewInteger(3),
 		}),
 	})
 	if err != nil {
@@ -30,18 +31,18 @@ func TestTraceDemo(t *testing.T) {
 }
 
 func TestTraceDemoStringOps(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Output = os.Stderr
 
 	// trace ["hello" upper add " WORLD"]
-	e := NewTop(r)
-	result, err := e.Run([]Value{
-		NewWord("trace"),
-		NewList([]Value{
-			NewString("hello"), NewWord("upper"), NewWord("add"), NewString(" WORLD"),
+	e := engine.NewTop(r)
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("trace"),
+		engine.NewList([]engine.Value{
+			engine.NewString("hello"), engine.NewWord("upper"), engine.NewWord("add"), engine.NewString(" WORLD"),
 		}),
 	})
 	if err != nil {
@@ -54,19 +55,19 @@ func TestTraceDemoStringOps(t *testing.T) {
 }
 
 func TestTraceDemoStackOps(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Output = os.Stderr
 
 	// trace [1 2 3 rot add mul]
-	e := NewTop(r)
-	result, err := e.Run([]Value{
-		NewWord("trace"),
-		NewList([]Value{
-			NewInteger(1), NewInteger(2), NewInteger(3),
-			NewWord("rot"), NewWord("add"), NewWord("mul"),
+	e := engine.NewTop(r)
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("trace"),
+		engine.NewList([]engine.Value{
+			engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3),
+			engine.NewWord("rot"), engine.NewWord("add"), engine.NewWord("mul"),
 		}),
 	})
 	if err != nil {

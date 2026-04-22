@@ -1,9 +1,10 @@
 //go:build query
 // +build query
 
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 )
@@ -13,26 +14,26 @@ import (
 // ========================
 
 // makeProductsTable creates a "products" table with id, name, price, category.
-func makeProductsTable(r *Registry) {
-	fields := NewOrderedMap()
-	fields.Set("id", NewTypeLiteral(TInteger))
-	fields.Set("name", NewTypeLiteral(TString))
-	fields.Set("price", NewTypeLiteral(TNumber))
-	fields.Set("category", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+func makeProductsTable(r *engine.Registry) {
+	fields := engine.NewOrderedMap()
+	fields.Set("id", engine.NewTypeLiteral(engine.TInteger))
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("price", engine.NewTypeLiteral(engine.TNumber))
+	fields.Set("category", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	mkRow := func(id int64, name string, price int64, category string) Value {
-		om := NewOrderedMap()
-		om.Set("id", NewInteger(id))
-		om.Set("name", NewString(name))
-		om.Set("price", NewInteger(price))
-		om.Set("category", NewString(category))
-		return NewMap(om)
+	mkRow := func(id int64, name string, price int64, category string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("id", engine.NewInteger(id))
+		om.Set("name", engine.NewString(name))
+		om.Set("price", engine.NewInteger(price))
+		om.Set("category", engine.NewString(category))
+		return engine.NewMap(om)
 	}
 
-	td := TableData{
+	td := engine.TableData{
 		Record: rec,
-		Rows: []Value{
+		Rows: []engine.Value{
 			mkRow(1, "Widget", 10, "hardware"),
 			mkRow(2, "Gadget", 25, "hardware"),
 			mkRow(3, "Gizmo", 15, "electronics"),
@@ -40,81 +41,81 @@ func makeProductsTable(r *Registry) {
 			mkRow(5, "Thingamajig", 5, "misc"),
 		},
 	}
-	r.ContextSet("products", Value{VType: TList, Data: td})
+	r.ContextSet("products", engine.Value{VType: engine.TList, Data: td})
 }
 
 // makeOrdersTable creates an "orders" table with order_id, product_id, qty.
-func makeOrdersTable(r *Registry) {
-	fields := NewOrderedMap()
-	fields.Set("order_id", NewTypeLiteral(TInteger))
-	fields.Set("product_id", NewTypeLiteral(TInteger))
-	fields.Set("qty", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: fields}
+func makeOrdersTable(r *engine.Registry) {
+	fields := engine.NewOrderedMap()
+	fields.Set("order_id", engine.NewTypeLiteral(engine.TInteger))
+	fields.Set("product_id", engine.NewTypeLiteral(engine.TInteger))
+	fields.Set("qty", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	mkRow := func(orderID, productID, qty int64) Value {
-		om := NewOrderedMap()
-		om.Set("order_id", NewInteger(orderID))
-		om.Set("product_id", NewInteger(productID))
-		om.Set("qty", NewInteger(qty))
-		return NewMap(om)
+	mkRow := func(orderID, productID, qty int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("order_id", engine.NewInteger(orderID))
+		om.Set("product_id", engine.NewInteger(productID))
+		om.Set("qty", engine.NewInteger(qty))
+		return engine.NewMap(om)
 	}
 
-	td := TableData{
+	td := engine.TableData{
 		Record: rec,
-		Rows: []Value{
+		Rows: []engine.Value{
 			mkRow(100, 1, 3),
 			mkRow(101, 2, 1),
 			mkRow(102, 3, 5),
 			mkRow(103, 1, 2),
 		},
 	}
-	r.ContextSet("orders", Value{VType: TList, Data: td})
+	r.ContextSet("orders", engine.Value{VType: engine.TList, Data: td})
 }
 
 // makeCitiesTable creates a "cities" table with city, country.
-func makeCitiesTable(r *Registry) {
-	fields := NewOrderedMap()
-	fields.Set("city", NewTypeLiteral(TString))
-	fields.Set("country", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+func makeCitiesTable(r *engine.Registry) {
+	fields := engine.NewOrderedMap()
+	fields.Set("city", engine.NewTypeLiteral(engine.TString))
+	fields.Set("country", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	mkRow := func(city, country string) Value {
-		om := NewOrderedMap()
-		om.Set("city", NewString(city))
-		om.Set("country", NewString(country))
-		return NewMap(om)
+	mkRow := func(city, country string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("city", engine.NewString(city))
+		om.Set("country", engine.NewString(country))
+		return engine.NewMap(om)
 	}
 
-	td := TableData{
+	td := engine.TableData{
 		Record: rec,
-		Rows: []Value{
+		Rows: []engine.Value{
 			mkRow("Paris", "France"),
 			mkRow("London", "UK"),
 			mkRow("Berlin", "Germany"),
 		},
 	}
-	r.ContextSet("cities", Value{VType: TList, Data: td})
+	r.ContextSet("cities", engine.Value{VType: engine.TList, Data: td})
 }
 
 // makeSalesTable creates a "sales" table with region, product, amount.
-func makeSalesTable(r *Registry) {
-	fields := NewOrderedMap()
-	fields.Set("region", NewTypeLiteral(TString))
-	fields.Set("product", NewTypeLiteral(TString))
-	fields.Set("amount", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: fields}
+func makeSalesTable(r *engine.Registry) {
+	fields := engine.NewOrderedMap()
+	fields.Set("region", engine.NewTypeLiteral(engine.TString))
+	fields.Set("product", engine.NewTypeLiteral(engine.TString))
+	fields.Set("amount", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	mkRow := func(region, product string, amount int64) Value {
-		om := NewOrderedMap()
-		om.Set("region", NewString(region))
-		om.Set("product", NewString(product))
-		om.Set("amount", NewInteger(amount))
-		return NewMap(om)
+	mkRow := func(region, product string, amount int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("region", engine.NewString(region))
+		om.Set("product", engine.NewString(product))
+		om.Set("amount", engine.NewInteger(amount))
+		return engine.NewMap(om)
 	}
 
-	td := TableData{
+	td := engine.TableData{
 		Record: rec,
-		Rows: []Value{
+		Rows: []engine.Value{
 			mkRow("east", "A", 100),
 			mkRow("east", "B", 200),
 			mkRow("west", "A", 150),
@@ -122,16 +123,16 @@ func makeSalesTable(r *Registry) {
 			mkRow("east", "A", 300),
 		},
 	}
-	r.ContextSet("sales", Value{VType: TList, Data: td})
+	r.ContextSet("sales", engine.Value{VType: engine.TList, Data: td})
 }
 
 // extractTD extracts TableData from a result Value (either TableData or QueryBuilder).
-func extractTD(t *testing.T, v Value) TableData {
+func extractTD(t *testing.T, v engine.Value) engine.TableData {
 	t.Helper()
-	if td, ok := v.Data.(TableData); ok {
+	if td, ok := v.Data.(engine.TableData); ok {
 		return td
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := v.Data.(engine.QueryBuilder); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			t.Fatalf("materialize error: %v", err)
@@ -139,7 +140,7 @@ func extractTD(t *testing.T, v Value) TableData {
 		return td
 	}
 	t.Fatalf("expected TableData or QueryBuilder, got %T", v.Data)
-	return TableData{}
+	return engine.TableData{}
 }
 
 // ========================
@@ -147,19 +148,19 @@ func extractTD(t *testing.T, v Value) TableData {
 // ========================
 
 func TestQueryCovSelectColumnRename(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [[name product_name] [price cost]] from products
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{
-			NewList([]Value{NewAtom("name"), NewAtom("product_name")}),
-			NewList([]Value{NewAtom("price"), NewAtom("cost")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{
+			engine.NewList([]engine.Value{engine.NewAtom("name"), engine.NewAtom("product_name")}),
+			engine.NewList([]engine.Value{engine.NewAtom("price"), engine.NewAtom("cost")}),
 		}),
-		NewWord("from"), NewWord("products"),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -182,17 +183,17 @@ func TestQueryCovSelectColumnRename(t *testing.T) {
 }
 
 func TestQueryCovSelectCastNoAlias(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [[cast price real]] from products — cast without explicit alias
-	castSpec := NewList([]Value{NewAtom("cast"), NewAtom("price"), NewAtom("real")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{castSpec}),
-		NewWord("from"), NewWord("products"),
+	castSpec := engine.NewList([]engine.Value{engine.NewAtom("cast"), engine.NewAtom("price"), engine.NewAtom("real")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{castSpec}),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -204,17 +205,17 @@ func TestQueryCovSelectCastNoAlias(t *testing.T) {
 }
 
 func TestQueryCovSelectSumAggregate(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [[sum price total_price]] from products
-	sumSpec := NewList([]Value{NewAtom("sum"), NewAtom("price"), NewAtom("total_price")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{sumSpec}),
-		NewWord("from"), NewWord("products"),
+	sumSpec := engine.NewList([]engine.Value{engine.NewAtom("sum"), engine.NewAtom("price"), engine.NewAtom("total_price")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{sumSpec}),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -236,17 +237,17 @@ func TestQueryCovSelectSumAggregate(t *testing.T) {
 }
 
 func TestQueryCovSelectAvgAggregate(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [[avg price]] from products — aggregate without explicit alias
-	avgSpec := NewList([]Value{NewAtom("avg"), NewAtom("price")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{avgSpec}),
-		NewWord("from"), NewWord("products"),
+	avgSpec := engine.NewList([]engine.Value{engine.NewAtom("avg"), engine.NewAtom("price")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{avgSpec}),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -258,18 +259,18 @@ func TestQueryCovSelectAvgAggregate(t *testing.T) {
 }
 
 func TestQueryCovSelectMinMax(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [[min price cheapest] [max price most_expensive]] from products
-	minSpec := NewList([]Value{NewAtom("min"), NewAtom("price"), NewAtom("cheapest")})
-	maxSpec := NewList([]Value{NewAtom("max"), NewAtom("price"), NewAtom("most_expensive")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{minSpec, maxSpec}),
-		NewWord("from"), NewWord("products"),
+	minSpec := engine.NewList([]engine.Value{engine.NewAtom("min"), engine.NewAtom("price"), engine.NewAtom("cheapest")})
+	maxSpec := engine.NewList([]engine.Value{engine.NewAtom("max"), engine.NewAtom("price"), engine.NewAtom("most_expensive")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{minSpec, maxSpec}),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -289,16 +290,16 @@ func TestQueryCovSelectMinMax(t *testing.T) {
 }
 
 func TestQueryCovSelectColumnWithStringNames(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select ["name" "price"] from products — columns as strings
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewString("name"), NewString("price")}),
-		NewWord("from"), NewWord("products"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewString("name"), engine.NewString("price")}),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -314,18 +315,18 @@ func TestQueryCovSelectColumnWithStringNames(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereEq(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// from products where [category eq "hardware"] select star
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("category"), NewAtom("eq"), NewString("hardware"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("hardware"),
 		}),
 	})
 	if len(result) != 1 {
@@ -338,17 +339,17 @@ func TestQueryCovWhereEq(t *testing.T) {
 }
 
 func TestQueryCovWhereNeq(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("category"), NewAtom("neq"), NewString("misc"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("category"), engine.NewAtom("neq"), engine.NewString("misc"),
 		}),
 	})
 	if len(result) != 1 {
@@ -361,18 +362,18 @@ func TestQueryCovWhereNeq(t *testing.T) {
 }
 
 func TestQueryCovWhereLtGt(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// price < 15
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("lt"), NewInteger(15),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("lt"), engine.NewInteger(15),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -381,11 +382,11 @@ func TestQueryCovWhereLtGt(t *testing.T) {
 	}
 
 	// price > 20
-	result = runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("gt"), NewInteger(20),
+	result = runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(20),
 		}),
 	})
 	td = extractTD(t, result[0])
@@ -395,18 +396,18 @@ func TestQueryCovWhereLtGt(t *testing.T) {
 }
 
 func TestQueryCovWhereLike(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// name like "G%"
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("name"), NewAtom("like"), NewString("G%"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("name"), engine.NewAtom("like"), engine.NewString("G%"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -416,24 +417,24 @@ func TestQueryCovWhereLike(t *testing.T) {
 }
 
 func TestQueryCovWhereAndOr(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// (category eq "hardware" and price gt 15) or category eq "misc"
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewList([]Value{
-				NewAtom("category"), NewAtom("eq"), NewString("hardware"),
-				NewAtom("and"),
-				NewAtom("price"), NewAtom("gt"), NewInteger(15),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewList([]engine.Value{
+				engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("hardware"),
+				engine.NewAtom("and"),
+				engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(15),
 			}),
-			NewAtom("or"),
-			NewAtom("category"), NewAtom("eq"), NewString("misc"),
+			engine.NewAtom("or"),
+			engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("misc"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -444,19 +445,19 @@ func TestQueryCovWhereAndOr(t *testing.T) {
 }
 
 func TestQueryCovWhereIn(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// id in [1 3 5]
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("id"), NewAtom("in"),
-			NewList([]Value{NewInteger(1), NewInteger(3), NewInteger(5)}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("id"), engine.NewAtom("in"),
+			engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(3), engine.NewInteger(5)}),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -466,19 +467,19 @@ func TestQueryCovWhereIn(t *testing.T) {
 }
 
 func TestQueryCovWhereNotIn(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// id not in [1 2]
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("id"), NewAtom("not"), NewAtom("in"),
-			NewList([]Value{NewInteger(1), NewInteger(2)}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("id"), engine.NewAtom("not"), engine.NewAtom("in"),
+			engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -488,18 +489,18 @@ func TestQueryCovWhereNotIn(t *testing.T) {
 }
 
 func TestQueryCovWhereNotBetween(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// price not between 10 25
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("not"), NewAtom("between"), NewInteger(10), NewInteger(25),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("not"), engine.NewAtom("between"), engine.NewInteger(10), engine.NewInteger(25),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -510,36 +511,36 @@ func TestQueryCovWhereNotBetween(t *testing.T) {
 }
 
 func TestQueryCovWhereIsNull(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create a table with a nullable column
-	fields := NewOrderedMap()
-	fields.Set("name", NewTypeLiteral(TString))
-	fields.Set("note", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("note", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	row1 := NewOrderedMap()
-	row1.Set("name", NewString("a"))
-	row1.Set("note", NewString("has note"))
-	row2 := NewOrderedMap()
-	row2.Set("name", NewString("b"))
-	row2.Set("note", Value{VType: TNone})
+	row1 := engine.NewOrderedMap()
+	row1.Set("name", engine.NewString("a"))
+	row1.Set("note", engine.NewString("has note"))
+	row2 := engine.NewOrderedMap()
+	row2.Set("name", engine.NewString("b"))
+	row2.Set("note", engine.Value{VType: engine.TNone})
 
-	td := TableData{
+	td := engine.TableData{
 		Record: rec,
-		Rows:   []Value{NewMap(row1), NewMap(row2)},
+		Rows:   []engine.Value{engine.NewMap(row1), engine.NewMap(row2)},
 	}
-	r.ContextSet("items", Value{VType: TList, Data: td})
+	r.ContextSet("items", engine.Value{VType: engine.TList, Data: td})
 
 	// where [note is null]
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("items"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("note"), NewAtom("is"), NewAtom("null"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("items"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("note"), engine.NewAtom("is"), engine.NewAtom("null"),
 		}),
 	})
 	td2 := extractTD(t, result[0])
@@ -549,19 +550,19 @@ func TestQueryCovWhereIsNull(t *testing.T) {
 }
 
 func TestQueryCovWhereNotGroup(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// not [category eq "misc"]
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("not"),
-			NewList([]Value{NewAtom("category"), NewAtom("eq"), NewString("misc")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("not"),
+			engine.NewList([]engine.Value{engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("misc")}),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -571,18 +572,18 @@ func TestQueryCovWhereNotGroup(t *testing.T) {
 }
 
 func TestQueryCovWhereNotSingle(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// not category eq "misc"
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("not"), NewAtom("category"), NewAtom("eq"), NewString("misc"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("not"), engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("misc"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -592,21 +593,21 @@ func TestQueryCovWhereNotSingle(t *testing.T) {
 }
 
 func TestQueryCovWhereNotGroupAndMore(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// not [category eq "misc"] and price gt 10
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("not"),
-			NewList([]Value{NewAtom("category"), NewAtom("eq"), NewString("misc")}),
-			NewAtom("and"),
-			NewAtom("price"), NewAtom("gt"), NewInteger(10),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("not"),
+			engine.NewList([]engine.Value{engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("misc")}),
+			engine.NewAtom("and"),
+			engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(10),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -617,20 +618,20 @@ func TestQueryCovWhereNotGroupAndMore(t *testing.T) {
 }
 
 func TestQueryCovWhereNotSingleAndMore(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// not category eq "misc" and price gt 10
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("not"), NewAtom("category"), NewAtom("eq"), NewString("misc"),
-			NewAtom("and"),
-			NewAtom("price"), NewAtom("gt"), NewInteger(10),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("not"), engine.NewAtom("category"), engine.NewAtom("eq"), engine.NewString("misc"),
+			engine.NewAtom("and"),
+			engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(10),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -644,45 +645,45 @@ func TestQueryCovWhereNotSingleAndMore(t *testing.T) {
 // ========================
 
 func TestQueryCovJoinUsing(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create two tables with a shared "pid" column for USING join
-	f1 := NewOrderedMap()
-	f1.Set("pid", NewTypeLiteral(TInteger))
-	f1.Set("oname", NewTypeLiteral(TString))
-	rec1 := RecordTypeInfo{Fields: f1}
+	f1 := engine.NewOrderedMap()
+	f1.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f1.Set("oname", engine.NewTypeLiteral(engine.TString))
+	rec1 := engine.RecordTypeInfo{Fields: f1}
 
-	f2 := NewOrderedMap()
-	f2.Set("pid", NewTypeLiteral(TInteger))
-	f2.Set("pname", NewTypeLiteral(TString))
-	rec2 := RecordTypeInfo{Fields: f2}
+	f2 := engine.NewOrderedMap()
+	f2.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f2.Set("pname", engine.NewTypeLiteral(engine.TString))
+	rec2 := engine.RecordTypeInfo{Fields: f2}
 
-	mk1 := func(pid int64, oname string) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("oname", NewString(oname))
-		return NewMap(om)
+	mk1 := func(pid int64, oname string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("oname", engine.NewString(oname))
+		return engine.NewMap(om)
 	}
-	mk2 := func(pid int64, pname string) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("pname", NewString(pname))
-		return NewMap(om)
+	mk2 := func(pid int64, pname string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("pname", engine.NewString(pname))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "order1"), mk1(2, "order2"), mk1(1, "order3")}}
-	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "Widget"), mk2(2, "Gadget"), mk2(3, "Gizmo")}}
-	r.ContextSet("jorders", Value{VType: TList, Data: td1})
-	r.ContextSet("jproducts", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec1, Rows: []engine.Value{mk1(1, "order1"), mk1(2, "order2"), mk1(1, "order3")}}
+	td2 := engine.TableData{Record: rec2, Rows: []engine.Value{mk2(1, "Widget"), mk2(2, "Gadget"), mk2(3, "Gizmo")}}
+	r.ContextSet("jorders", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("jproducts", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("jorders"),
-		NewWord("join"), NewWord("jproducts"),
-		NewWord("using"), NewList([]Value{NewAtom("pid")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("jorders"),
+		engine.NewWord("join"), engine.NewWord("jproducts"),
+		engine.NewWord("using"), engine.NewList([]engine.Value{engine.NewAtom("pid")}),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -694,45 +695,45 @@ func TestQueryCovJoinUsing(t *testing.T) {
 }
 
 func TestQueryCovLeftJoin(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create tables with a shared column for USING
-	f1 := NewOrderedMap()
-	f1.Set("pid", NewTypeLiteral(TInteger))
-	f1.Set("pname", NewTypeLiteral(TString))
-	rec1 := RecordTypeInfo{Fields: f1}
+	f1 := engine.NewOrderedMap()
+	f1.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f1.Set("pname", engine.NewTypeLiteral(engine.TString))
+	rec1 := engine.RecordTypeInfo{Fields: f1}
 
-	f2 := NewOrderedMap()
-	f2.Set("pid", NewTypeLiteral(TInteger))
-	f2.Set("qty", NewTypeLiteral(TInteger))
-	rec2 := RecordTypeInfo{Fields: f2}
+	f2 := engine.NewOrderedMap()
+	f2.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f2.Set("qty", engine.NewTypeLiteral(engine.TInteger))
+	rec2 := engine.RecordTypeInfo{Fields: f2}
 
-	mk1 := func(pid int64, pname string) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("pname", NewString(pname))
-		return NewMap(om)
+	mk1 := func(pid int64, pname string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("pname", engine.NewString(pname))
+		return engine.NewMap(om)
 	}
-	mk2 := func(pid, qty int64) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("qty", NewInteger(qty))
-		return NewMap(om)
+	mk2 := func(pid, qty int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("qty", engine.NewInteger(qty))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "A"), mk1(2, "B"), mk1(3, "C")}}
-	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 10), mk2(1, 20)}}
-	r.ContextSet("ljProducts", Value{VType: TList, Data: td1})
-	r.ContextSet("ljOrders", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec1, Rows: []engine.Value{mk1(1, "A"), mk1(2, "B"), mk1(3, "C")}}
+	td2 := engine.TableData{Record: rec2, Rows: []engine.Value{mk2(1, 10), mk2(1, 20)}}
+	r.ContextSet("ljProducts", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("ljOrders", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("ljProducts"),
-		NewWord("leftjoin"), NewWord("ljOrders"),
-		NewWord("using"), NewList([]Value{NewAtom("pid")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("ljProducts"),
+		engine.NewWord("leftjoin"), engine.NewWord("ljOrders"),
+		engine.NewWord("using"), engine.NewList([]engine.Value{engine.NewAtom("pid")}),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -745,34 +746,34 @@ func TestQueryCovLeftJoin(t *testing.T) {
 }
 
 func TestQueryCovCrossJoin(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Small tables for cross join
-	f1 := NewOrderedMap()
-	f1.Set("x", NewTypeLiteral(TInteger))
-	r1 := NewOrderedMap()
-	r1.Set("x", NewInteger(1))
-	r2 := NewOrderedMap()
-	r2.Set("x", NewInteger(2))
-	td1 := TableData{Record: RecordTypeInfo{Fields: f1}, Rows: []Value{NewMap(r1), NewMap(r2)}}
-	r.ContextSet("tblA", Value{VType: TList, Data: td1})
+	f1 := engine.NewOrderedMap()
+	f1.Set("x", engine.NewTypeLiteral(engine.TInteger))
+	r1 := engine.NewOrderedMap()
+	r1.Set("x", engine.NewInteger(1))
+	r2 := engine.NewOrderedMap()
+	r2.Set("x", engine.NewInteger(2))
+	td1 := engine.TableData{Record: engine.RecordTypeInfo{Fields: f1}, Rows: []engine.Value{engine.NewMap(r1), engine.NewMap(r2)}}
+	r.ContextSet("tblA", engine.Value{VType: engine.TList, Data: td1})
 
-	f2 := NewOrderedMap()
-	f2.Set("y", NewTypeLiteral(TString))
-	ra := NewOrderedMap()
-	ra.Set("y", NewString("a"))
-	rb := NewOrderedMap()
-	rb.Set("y", NewString("b"))
-	td2 := TableData{Record: RecordTypeInfo{Fields: f2}, Rows: []Value{NewMap(ra), NewMap(rb)}}
-	r.ContextSet("tblB", Value{VType: TList, Data: td2})
+	f2 := engine.NewOrderedMap()
+	f2.Set("y", engine.NewTypeLiteral(engine.TString))
+	ra := engine.NewOrderedMap()
+	ra.Set("y", engine.NewString("a"))
+	rb := engine.NewOrderedMap()
+	rb.Set("y", engine.NewString("b"))
+	td2 := engine.TableData{Record: engine.RecordTypeInfo{Fields: f2}, Rows: []engine.Value{engine.NewMap(ra), engine.NewMap(rb)}}
+	r.ContextSet("tblB", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("tblA"),
-		NewWord("crossjoin"), NewWord("tblB"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("tblA"),
+		engine.NewWord("crossjoin"), engine.NewWord("tblB"),
 	})
 	td := extractTD(t, result[0])
 	// 2 x 2 = 4 rows
@@ -786,33 +787,33 @@ func TestQueryCovCrossJoin(t *testing.T) {
 // ========================
 
 func TestQueryCovUnion(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Two simple single-column tables
-	f := NewOrderedMap()
-	f.Set("val", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: f}
+	f := engine.NewOrderedMap()
+	f.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: f}
 
-	mkRow := func(v int64) Value {
-		om := NewOrderedMap()
-		om.Set("val", NewInteger(v))
-		return NewMap(om)
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
-	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("setA", Value{VType: TList, Data: td1})
-	r.ContextSet("setB", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(1), mkRow(2), mkRow(3)}}
+	td2 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(2), mkRow(3), mkRow(4)}}
+	r.ContextSet("setA", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("setB", engine.Value{VType: engine.TList, Data: td2})
 
 	// from setA union from setB select star — UNION removes duplicates
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("setA"),
-		NewWord("union"),
-		NewWord("from"), NewWord("setB"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("setA"),
+		engine.NewWord("union"),
+		engine.NewWord("from"), engine.NewWord("setB"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 4 {
@@ -821,30 +822,30 @@ func TestQueryCovUnion(t *testing.T) {
 }
 
 func TestQueryCovUnionAll(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	f := NewOrderedMap()
-	f.Set("val", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: f}
-	mkRow := func(v int64) Value {
-		om := NewOrderedMap()
-		om.Set("val", NewInteger(v))
-		return NewMap(om)
+	f := engine.NewOrderedMap()
+	f.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: f}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2)}}
-	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3)}}
-	r.ContextSet("uaA", Value{VType: TList, Data: td1})
-	r.ContextSet("uaB", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(1), mkRow(2)}}
+	td2 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(2), mkRow(3)}}
+	r.ContextSet("uaA", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("uaB", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("uaA"),
-		NewWord("unionall"),
-		NewWord("from"), NewWord("uaB"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("uaA"),
+		engine.NewWord("unionall"),
+		engine.NewWord("from"), engine.NewWord("uaB"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 4 {
@@ -853,30 +854,30 @@ func TestQueryCovUnionAll(t *testing.T) {
 }
 
 func TestQueryCovIntersect(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	f := NewOrderedMap()
-	f.Set("val", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: f}
-	mkRow := func(v int64) Value {
-		om := NewOrderedMap()
-		om.Set("val", NewInteger(v))
-		return NewMap(om)
+	f := engine.NewOrderedMap()
+	f.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: f}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
-	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("isA", Value{VType: TList, Data: td1})
-	r.ContextSet("isB", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(1), mkRow(2), mkRow(3)}}
+	td2 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(2), mkRow(3), mkRow(4)}}
+	r.ContextSet("isA", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("isB", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("isA"),
-		NewWord("intersect"),
-		NewWord("from"), NewWord("isB"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("isA"),
+		engine.NewWord("intersect"),
+		engine.NewWord("from"), engine.NewWord("isB"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 2 {
@@ -885,30 +886,30 @@ func TestQueryCovIntersect(t *testing.T) {
 }
 
 func TestQueryCovExcept(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	f := NewOrderedMap()
-	f.Set("val", NewTypeLiteral(TInteger))
-	rec := RecordTypeInfo{Fields: f}
-	mkRow := func(v int64) Value {
-		om := NewOrderedMap()
-		om.Set("val", NewInteger(v))
-		return NewMap(om)
+	f := engine.NewOrderedMap()
+	f.Set("val", engine.NewTypeLiteral(engine.TInteger))
+	rec := engine.RecordTypeInfo{Fields: f}
+	mkRow := func(v int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("val", engine.NewInteger(v))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
-	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("exA", Value{VType: TList, Data: td1})
-	r.ContextSet("exB", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(1), mkRow(2), mkRow(3)}}
+	td2 := engine.TableData{Record: rec, Rows: []engine.Value{mkRow(2), mkRow(3), mkRow(4)}}
+	r.ContextSet("exA", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("exB", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("exA"),
-		NewWord("except"),
-		NewWord("from"), NewWord("exB"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("exA"),
+		engine.NewWord("except"),
+		engine.NewWord("from"), engine.NewWord("exB"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 1 {
@@ -921,16 +922,16 @@ func TestQueryCovExcept(t *testing.T) {
 // ========================
 
 func TestQueryCovOrderByDesc(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("order"), NewList([]Value{NewAtom("price"), NewAtom("desc")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("order"), engine.NewList([]engine.Value{engine.NewAtom("price"), engine.NewAtom("desc")}),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 5 {
@@ -946,19 +947,19 @@ func TestQueryCovOrderByDesc(t *testing.T) {
 }
 
 func TestQueryCovOrderByMultiple(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// order by [category asc price desc]
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("order"), NewList([]Value{
-			NewAtom("category"), NewAtom("asc"),
-			NewAtom("price"), NewAtom("desc"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("order"), engine.NewList([]engine.Value{
+			engine.NewAtom("category"), engine.NewAtom("asc"),
+			engine.NewAtom("price"), engine.NewAtom("desc"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -968,18 +969,18 @@ func TestQueryCovOrderByMultiple(t *testing.T) {
 }
 
 func TestQueryCovGroupByWithSum(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeSalesTable(r)
 
 	// select [region [sum amount total]] from sales group by [region]
-	sumSpec := NewList([]Value{NewAtom("sum"), NewAtom("amount"), NewAtom("total")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewAtom("region"), sumSpec}),
-		NewWord("from"), NewWord("sales"),
-		NewWord("group"), NewWord("by"), NewList([]Value{NewAtom("region")}),
+	sumSpec := engine.NewList([]engine.Value{engine.NewAtom("sum"), engine.NewAtom("amount"), engine.NewAtom("total")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("region"), sumSpec}),
+		engine.NewWord("from"), engine.NewWord("sales"),
+		engine.NewWord("group"), engine.NewWord("by"), engine.NewList([]engine.Value{engine.NewAtom("region")}),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 2 {
@@ -988,18 +989,18 @@ func TestQueryCovGroupByWithSum(t *testing.T) {
 }
 
 func TestQueryCovGroupByAtom(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeSalesTable(r)
 
 	// select [region [count * cnt]] from sales group region
-	countSpec := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("cnt")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewAtom("region"), countSpec}),
-		NewWord("from"), NewWord("sales"),
-		NewWord("group"), NewWord("region"),
+	countSpec := engine.NewList([]engine.Value{engine.NewAtom("count"), engine.NewAtom("*"), engine.NewAtom("cnt")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("region"), countSpec}),
+		engine.NewWord("from"), engine.NewWord("sales"),
+		engine.NewWord("group"), engine.NewWord("region"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 2 {
@@ -1008,18 +1009,18 @@ func TestQueryCovGroupByAtom(t *testing.T) {
 }
 
 func TestQueryCovGroupByMultiple(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeSalesTable(r)
 
 	// group by [region product]
-	countSpec := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("cnt")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewAtom("region"), NewAtom("product"), countSpec}),
-		NewWord("from"), NewWord("sales"),
-		NewWord("group"), NewWord("by"), NewList([]Value{NewAtom("region"), NewAtom("product")}),
+	countSpec := engine.NewList([]engine.Value{engine.NewAtom("count"), engine.NewAtom("*"), engine.NewAtom("cnt")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("region"), engine.NewAtom("product"), countSpec}),
+		engine.NewWord("from"), engine.NewWord("sales"),
+		engine.NewWord("group"), engine.NewWord("by"), engine.NewList([]engine.Value{engine.NewAtom("region"), engine.NewAtom("product")}),
 	})
 	td := extractTD(t, result[0])
 	// east/A: 2, east/B: 1, west/A: 1, west/B: 1 => 4 groups
@@ -1029,20 +1030,20 @@ func TestQueryCovGroupByMultiple(t *testing.T) {
 }
 
 func TestQueryCovHaving(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeSalesTable(r)
 
 	// select [region [sum amount total]] from sales group by [region] having [total gt 300]
-	sumSpec := NewList([]Value{NewAtom("sum"), NewAtom("amount"), NewAtom("total")})
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewAtom("region"), sumSpec}),
-		NewWord("from"), NewWord("sales"),
-		NewWord("group"), NewWord("by"), NewList([]Value{NewAtom("region")}),
-		NewWord("having"), NewList([]Value{
-			NewAtom("total"), NewAtom("gt"), NewInteger(300),
+	sumSpec := engine.NewList([]engine.Value{engine.NewAtom("sum"), engine.NewAtom("amount"), engine.NewAtom("total")})
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("region"), sumSpec}),
+		engine.NewWord("from"), engine.NewWord("sales"),
+		engine.NewWord("group"), engine.NewWord("by"), engine.NewList([]engine.Value{engine.NewAtom("region")}),
+		engine.NewWord("having"), engine.NewList([]engine.Value{
+			engine.NewAtom("total"), engine.NewAtom("gt"), engine.NewInteger(300),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1057,7 +1058,7 @@ func TestQueryCovHaving(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereInSubquery(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1066,15 +1067,15 @@ func TestQueryCovWhereInSubquery(t *testing.T) {
 
 	// from products where [id in (select [product_id] from orders)] select star
 	// The "(" and ")" are words used as parentheses for subquery evaluation
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("id"), NewAtom("in"),
-			NewWord("("),
-			NewWord("select"), NewList([]Value{NewAtom("product_id")}),
-			NewWord("from"), NewWord("orders"),
-			NewWord(")"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("id"), engine.NewAtom("in"),
+			engine.NewWord("("),
+			engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("product_id")}),
+			engine.NewWord("from"), engine.NewWord("orders"),
+			engine.NewWord(")"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1089,28 +1090,28 @@ func TestQueryCovWhereInSubquery(t *testing.T) {
 // ========================
 
 func TestQueryCovSelectScalarSubquery(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// select [name [(select [[max price]] from products) max_price]] from products limit 1
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{
-			NewAtom("name"),
-			NewList([]Value{
-				NewWord("("),
-				NewWord("select"), NewList([]Value{
-					NewList([]Value{NewAtom("max"), NewAtom("price")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{
+			engine.NewAtom("name"),
+			engine.NewList([]engine.Value{
+				engine.NewWord("("),
+				engine.NewWord("select"), engine.NewList([]engine.Value{
+					engine.NewList([]engine.Value{engine.NewAtom("max"), engine.NewAtom("price")}),
 				}),
-				NewWord("from"), NewWord("products"),
-				NewWord(")"),
-				NewAtom("max_price"),
+				engine.NewWord("from"), engine.NewWord("products"),
+				engine.NewWord(")"),
+				engine.NewAtom("max_price"),
 			}),
 		}),
-		NewWord("from"), NewWord("products"),
-		NewWord("limit"), NewInteger(1),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("limit"), engine.NewInteger(1),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -1126,16 +1127,16 @@ func TestQueryCovSelectScalarSubquery(t *testing.T) {
 // ========================
 
 func TestQueryCovDistinctValues(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewList([]Value{NewAtom("category")}),
-		NewWord("from"), NewWord("products"),
-		NewWord("distinct"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("category")}),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("distinct"),
 	})
 	td := extractTD(t, result[0])
 	// 3 distinct categories: hardware, electronics, misc
@@ -1149,13 +1150,13 @@ func TestQueryCovDistinctValues(t *testing.T) {
 // ========================
 
 func TestQueryCovFromUnknownTable(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = runAQLError(t, r, []Value{
-		NewWord("from"), NewWord("nonexistent_table"),
+	err = runAQLError(t, r, []engine.Value{
+		engine.NewWord("from"), engine.NewWord("nonexistent_table"),
 	})
 	if err == nil {
 		t.Error("expected error for unknown table")
@@ -1163,15 +1164,15 @@ func TestQueryCovFromUnknownTable(t *testing.T) {
 }
 
 func TestQueryCovFromNonTable(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Store a non-table value
-	r.ContextSet("notatable", NewInteger(42))
+	r.ContextSet("notatable", engine.NewInteger(42))
 
-	err = runAQLError(t, r, []Value{
-		NewWord("from"), NewWord("notatable"),
+	err = runAQLError(t, r, []engine.Value{
+		engine.NewWord("from"), engine.NewWord("notatable"),
 	})
 	if err == nil {
 		t.Error("expected error for non-table value")
@@ -1183,48 +1184,48 @@ func TestQueryCovFromNonTable(t *testing.T) {
 // ========================
 
 func TestQueryCovCloneWithJoinsAndSetOps(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create tables with shared "pid" column for USING join
-	f1 := NewOrderedMap()
-	f1.Set("pid", NewTypeLiteral(TInteger))
-	f1.Set("price", NewTypeLiteral(TInteger))
-	rec1 := RecordTypeInfo{Fields: f1}
+	f1 := engine.NewOrderedMap()
+	f1.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f1.Set("price", engine.NewTypeLiteral(engine.TInteger))
+	rec1 := engine.RecordTypeInfo{Fields: f1}
 
-	f2 := NewOrderedMap()
-	f2.Set("pid", NewTypeLiteral(TInteger))
-	f2.Set("qty", NewTypeLiteral(TInteger))
-	rec2 := RecordTypeInfo{Fields: f2}
+	f2 := engine.NewOrderedMap()
+	f2.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f2.Set("qty", engine.NewTypeLiteral(engine.TInteger))
+	rec2 := engine.RecordTypeInfo{Fields: f2}
 
-	mk1 := func(pid, price int64) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("price", NewInteger(price))
-		return NewMap(om)
+	mk1 := func(pid, price int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("price", engine.NewInteger(price))
+		return engine.NewMap(om)
 	}
-	mk2 := func(pid, qty int64) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("qty", NewInteger(qty))
-		return NewMap(om)
+	mk2 := func(pid, qty int64) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("qty", engine.NewInteger(qty))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, 10), mk1(2, 20)}}
-	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 5), mk2(2, 3)}}
-	r.ContextSet("cloneP", Value{VType: TList, Data: td1})
-	r.ContextSet("cloneO", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec1, Rows: []engine.Value{mk1(1, 10), mk1(2, 20)}}
+	td2 := engine.TableData{Record: rec2, Rows: []engine.Value{mk2(1, 5), mk2(2, 3)}}
+	r.ContextSet("cloneP", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("cloneO", engine.Value{VType: engine.TList, Data: td2})
 
 	// Build a query with join AND then clone it via the where word
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("cloneP"),
-		NewWord("join"), NewWord("cloneO"),
-		NewWord("using"), NewList([]Value{NewAtom("pid")}),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("gt"), NewInteger(5),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("cloneP"),
+		engine.NewWord("join"), engine.NewWord("cloneO"),
+		engine.NewWord("using"), engine.NewList([]engine.Value{engine.NewAtom("pid")}),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(5),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1238,18 +1239,18 @@ func TestQueryCovCloneWithJoinsAndSetOps(t *testing.T) {
 // ========================
 
 func TestQueryCovBuildInListSingleValue(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// where [id in 1] — single value, not a list
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("id"), NewAtom("in"), NewInteger(1),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("id"), engine.NewAtom("in"), engine.NewInteger(1),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1263,18 +1264,18 @@ func TestQueryCovBuildInListSingleValue(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereWithBooleanValue(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// where [id eq 1] — boolean comparison should work
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("id"), NewAtom("eq"), NewInteger(1),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("id"), engine.NewAtom("eq"), engine.NewInteger(1),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1288,45 +1289,45 @@ func TestQueryCovWhereWithBooleanValue(t *testing.T) {
 // ========================
 
 func TestQueryCovMergedSchemaOnJoin(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Two tables with different columns, shared "pid"
-	f1 := NewOrderedMap()
-	f1.Set("pid", NewTypeLiteral(TInteger))
-	f1.Set("oname", NewTypeLiteral(TString))
-	rec1 := RecordTypeInfo{Fields: f1}
+	f1 := engine.NewOrderedMap()
+	f1.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f1.Set("oname", engine.NewTypeLiteral(engine.TString))
+	rec1 := engine.RecordTypeInfo{Fields: f1}
 
-	f2 := NewOrderedMap()
-	f2.Set("pid", NewTypeLiteral(TInteger))
-	f2.Set("pname", NewTypeLiteral(TString))
-	rec2 := RecordTypeInfo{Fields: f2}
+	f2 := engine.NewOrderedMap()
+	f2.Set("pid", engine.NewTypeLiteral(engine.TInteger))
+	f2.Set("pname", engine.NewTypeLiteral(engine.TString))
+	rec2 := engine.RecordTypeInfo{Fields: f2}
 
-	mk1 := func(pid int64, oname string) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("oname", NewString(oname))
-		return NewMap(om)
+	mk1 := func(pid int64, oname string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("oname", engine.NewString(oname))
+		return engine.NewMap(om)
 	}
-	mk2 := func(pid int64, pname string) Value {
-		om := NewOrderedMap()
-		om.Set("pid", NewInteger(pid))
-		om.Set("pname", NewString(pname))
-		return NewMap(om)
+	mk2 := func(pid int64, pname string) engine.Value {
+		om := engine.NewOrderedMap()
+		om.Set("pid", engine.NewInteger(pid))
+		om.Set("pname", engine.NewString(pname))
+		return engine.NewMap(om)
 	}
 
-	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "o1")}}
-	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "p1")}}
-	r.ContextSet("msOrders", Value{VType: TList, Data: td1})
-	r.ContextSet("msProducts", Value{VType: TList, Data: td2})
+	td1 := engine.TableData{Record: rec1, Rows: []engine.Value{mk1(1, "o1")}}
+	td2 := engine.TableData{Record: rec2, Rows: []engine.Value{mk2(1, "p1")}}
+	r.ContextSet("msOrders", engine.Value{VType: engine.TList, Data: td1})
+	r.ContextSet("msProducts", engine.Value{VType: engine.TList, Data: td2})
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("msOrders"),
-		NewWord("join"), NewWord("msProducts"),
-		NewWord("using"), NewList([]Value{NewAtom("pid")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("msOrders"),
+		engine.NewWord("join"), engine.NewWord("msProducts"),
+		engine.NewWord("using"), engine.NewList([]engine.Value{engine.NewAtom("pid")}),
 	})
 	td := extractTD(t, result[0])
 	cols := td.Record.Fields.Keys()
@@ -1341,7 +1342,7 @@ func TestQueryCovMergedSchemaOnJoin(t *testing.T) {
 
 func TestQueryCovSelectBadColumnSpecType(t *testing.T) {
 	// Build a column list with an unsupported type (e.g., boolean)
-	colList := NewList([]Value{NewBoolean(true)})
+	colList := engine.NewList([]engine.Value{engine.NewBoolean(true)})
 	_, err := parseColumnSpec(colList)
 	if err == nil {
 		t.Error("expected error for boolean in column spec")
@@ -1353,7 +1354,7 @@ func TestQueryCovSelectBadColumnSpecType(t *testing.T) {
 
 func TestQueryCovSelectSubListTooShort(t *testing.T) {
 	// Column spec sub-list with only 1 element
-	colList := NewList([]Value{NewList([]Value{NewAtom("x")})})
+	colList := engine.NewList([]engine.Value{engine.NewList([]engine.Value{engine.NewAtom("x")})})
 	_, err := parseColumnSpec(colList)
 	if err == nil {
 		t.Error("expected error for sub-list with 1 element")
@@ -1362,8 +1363,8 @@ func TestQueryCovSelectSubListTooShort(t *testing.T) {
 
 func TestQueryCovSelectBadAliasLength(t *testing.T) {
 	// Column spec pair with 3 elements (not aggregate/cast) -> error
-	colList := NewList([]Value{
-		NewList([]Value{NewAtom("x"), NewAtom("y"), NewAtom("z")}),
+	colList := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("y"), engine.NewAtom("z")}),
 	})
 	_, err := parseColumnSpec(colList)
 	if err == nil {
@@ -1376,7 +1377,7 @@ func TestQueryCovSelectBadAliasLength(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereUnknownOperator(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("badop"), NewInteger(1)})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("badop"), engine.NewInteger(1)})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for unknown operator")
@@ -1384,7 +1385,7 @@ func TestQueryCovWhereUnknownOperator(t *testing.T) {
 }
 
 func TestQueryCovWhereIncompleteAfterColumn(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for incomplete condition")
@@ -1392,7 +1393,7 @@ func TestQueryCovWhereIncompleteAfterColumn(t *testing.T) {
 }
 
 func TestQueryCovWhereBetweenIncomplete(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("between"), NewInteger(1)})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("between"), engine.NewInteger(1)})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for incomplete between")
@@ -1400,7 +1401,7 @@ func TestQueryCovWhereBetweenIncomplete(t *testing.T) {
 }
 
 func TestQueryCovWhereInEmpty(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("in")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("in")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for in without list")
@@ -1408,7 +1409,7 @@ func TestQueryCovWhereInEmpty(t *testing.T) {
 }
 
 func TestQueryCovWhereIsNotBadToken(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("is"), NewAtom("bad")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("is"), engine.NewAtom("bad")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for 'is bad'")
@@ -1416,7 +1417,7 @@ func TestQueryCovWhereIsNotBadToken(t *testing.T) {
 }
 
 func TestQueryCovWhereIsNotNullMissing(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("is"), NewAtom("not"), NewAtom("bad")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("is"), engine.NewAtom("not"), engine.NewAtom("bad")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for 'is not bad' (expected null)")
@@ -1424,7 +1425,7 @@ func TestQueryCovWhereIsNotNullMissing(t *testing.T) {
 }
 
 func TestQueryCovWhereNotBadFollower(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("not"), NewAtom("badop")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("not"), engine.NewAtom("badop")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for 'not badop'")
@@ -1432,7 +1433,7 @@ func TestQueryCovWhereNotBadFollower(t *testing.T) {
 }
 
 func TestQueryCovWhereNotInNoList(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("not"), NewAtom("in")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("not"), engine.NewAtom("in")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for 'not in' without list")
@@ -1440,7 +1441,7 @@ func TestQueryCovWhereNotInNoList(t *testing.T) {
 }
 
 func TestQueryCovWhereNotBetweenIncomplete(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("not"), NewAtom("between"), NewInteger(1)})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("not"), engine.NewAtom("between"), engine.NewInteger(1)})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for incomplete 'not between'")
@@ -1448,7 +1449,7 @@ func TestQueryCovWhereNotBetweenIncomplete(t *testing.T) {
 }
 
 func TestQueryCovWhereEmpty(t *testing.T) {
-	cond := NewList([]Value{})
+	cond := engine.NewList([]engine.Value{})
 	clause, err := buildWhereClause(cond)
 	if err != nil {
 		t.Fatal(err)
@@ -1459,7 +1460,7 @@ func TestQueryCovWhereEmpty(t *testing.T) {
 }
 
 func TestQueryCovWhereIncompleteAfterOp(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("eq")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("eq")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for incomplete condition after operator")
@@ -1467,7 +1468,7 @@ func TestQueryCovWhereIncompleteAfterOp(t *testing.T) {
 }
 
 func TestQueryCovWhereNotIncomplete(t *testing.T) {
-	cond := NewList([]Value{NewAtom("not")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("not")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for standalone not")
@@ -1475,7 +1476,7 @@ func TestQueryCovWhereNotIncomplete(t *testing.T) {
 }
 
 func TestQueryCovWhereIsIncomplete(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("is")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("is")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for incomplete 'is'")
@@ -1483,7 +1484,7 @@ func TestQueryCovWhereIsIncomplete(t *testing.T) {
 }
 
 func TestQueryCovWhereIsNotIncomplete(t *testing.T) {
-	cond := NewList([]Value{NewAtom("x"), NewAtom("is"), NewAtom("not")})
+	cond := engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("is"), engine.NewAtom("not")})
 	_, err := buildWhereClause(cond)
 	if err == nil {
 		t.Error("expected error for 'is not' without null")
@@ -1495,7 +1496,7 @@ func TestQueryCovWhereIsNotIncomplete(t *testing.T) {
 // ========================
 
 func TestQueryCovBuildInListEmpty(t *testing.T) {
-	emptyList := NewList([]Value{})
+	emptyList := engine.NewList([]engine.Value{})
 	_, err := buildInList(emptyList)
 	if err == nil {
 		t.Error("expected error for empty IN list")
@@ -1508,7 +1509,7 @@ func TestQueryCovBuildInListEmpty(t *testing.T) {
 
 func TestQueryCovCastTooFewElements(t *testing.T) {
 	// [cast col] — only 2 elements, need at least 3
-	_, err := parseCastSpec([]Value{NewAtom("cast"), NewAtom("col")})
+	_, err := parseCastSpec([]engine.Value{engine.NewAtom("cast"), engine.NewAtom("col")})
 	if err == nil {
 		t.Error("expected error for cast with too few elements")
 	}
@@ -1516,7 +1517,7 @@ func TestQueryCovCastTooFewElements(t *testing.T) {
 
 func TestQueryCovCastTooManyElements(t *testing.T) {
 	// [cast col type alias extra] — 5 elements, max is 4
-	_, err := parseCastSpec([]Value{NewAtom("cast"), NewAtom("col"), NewAtom("int"), NewAtom("a"), NewAtom("b")})
+	_, err := parseCastSpec([]engine.Value{engine.NewAtom("cast"), engine.NewAtom("col"), engine.NewAtom("int"), engine.NewAtom("a"), engine.NewAtom("b")})
 	if err == nil {
 		t.Error("expected error for cast with too many elements")
 	}
@@ -1534,7 +1535,7 @@ func TestQueryCovAggregateNoArgs(t *testing.T) {
 }
 
 func TestQueryCovAggregateTooManyArgs(t *testing.T) {
-	_, err := parseAggregateSpec("count", []Value{NewAtom("a"), NewAtom("b"), NewAtom("c")})
+	_, err := parseAggregateSpec("count", []engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("c")})
 	if err == nil {
 		t.Error("expected error for aggregate with 3 args")
 	}
@@ -1546,45 +1547,45 @@ func TestQueryCovAggregateTooManyArgs(t *testing.T) {
 
 func TestQueryCovValueToSQLTypes(t *testing.T) {
 	// Test each supported type
-	s, err := valueToSQL(NewString("hello"))
+	s, err := valueToSQL(engine.NewString("hello"))
 	if err != nil || s != "'hello'" {
 		t.Errorf("string: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(NewInteger(42))
+	s, err = valueToSQL(engine.NewInteger(42))
 	if err != nil || s != "42" {
 		t.Errorf("integer: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(NewBoolean(true))
+	s, err = valueToSQL(engine.NewBoolean(true))
 	if err != nil || s != "'true'" {
 		t.Errorf("boolean true: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(NewBoolean(false))
+	s, err = valueToSQL(engine.NewBoolean(false))
 	if err != nil || s != "'false'" {
 		t.Errorf("boolean false: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(NewAtom("test"))
+	s, err = valueToSQL(engine.NewAtom("test"))
 	if err != nil || s != "'test'" {
 		t.Errorf("atom: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(Value{VType: TNone})
+	s, err = valueToSQL(engine.Value{VType: engine.TNone})
 	if err != nil || s != "NULL" {
 		t.Errorf("none: %v %v", s, err)
 	}
 
 	// Unsupported type
-	_, err = valueToSQL(NewList([]Value{NewInteger(1)}))
+	_, err = valueToSQL(engine.NewList([]engine.Value{engine.NewInteger(1)}))
 	if err == nil {
 		t.Error("expected error for unsupported type in valueToSQL")
 	}
 }
 
 func TestQueryCovValueToSQLEscaping(t *testing.T) {
-	s, err := valueToSQL(NewString("it's"))
+	s, err := valueToSQL(engine.NewString("it's"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1598,17 +1599,17 @@ func TestQueryCovValueToSQLEscaping(t *testing.T) {
 // ========================
 
 func TestQueryCovOrderByAtom(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// from products order price select star — single atom order
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("order"), NewWord("price"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("order"), engine.NewWord("price"),
 	})
 	td := extractTD(t, result[0])
 	if len(td.Rows) != 5 {
@@ -1621,16 +1622,16 @@ func TestQueryCovOrderByAtom(t *testing.T) {
 // ========================
 
 func TestQueryCovBuildSQLGroupByHaving(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	td := TableData{
-		Record: RecordTypeInfo{Fields: NewOrderedMap()},
+	td := engine.TableData{
+		Record: engine.RecordTypeInfo{Fields: engine.NewOrderedMap()},
 	}
-	qb := NewQueryBuilder(r, td)
+	qb := engine.NewQueryBuilder(r, td)
 	qb.GroupBy = `"category"`
 	qb.Having = `COUNT(*) > 1`
 	qb.Distinct = true
@@ -1656,18 +1657,18 @@ func TestQueryCovBuildSQLGroupByHaving(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereCollateBinary(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("name"), NewAtom("eq"), NewString("Widget"),
-			NewAtom("collate"), NewAtom("binary"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("name"), engine.NewAtom("eq"), engine.NewString("Widget"),
+			engine.NewAtom("collate"), engine.NewAtom("binary"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1677,18 +1678,18 @@ func TestQueryCovWhereCollateBinary(t *testing.T) {
 }
 
 func TestQueryCovWhereCollateRtrim(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("name"), NewAtom("eq"), NewString("Widget"),
-			NewAtom("collate"), NewAtom("rtrim"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("name"), engine.NewAtom("eq"), engine.NewString("Widget"),
+			engine.NewAtom("collate"), engine.NewAtom("rtrim"),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1698,9 +1699,9 @@ func TestQueryCovWhereCollateRtrim(t *testing.T) {
 }
 
 func TestQueryCovWhereCollateBadType(t *testing.T) {
-	cond := NewList([]Value{
-		NewAtom("x"), NewAtom("eq"), NewString("y"),
-		NewAtom("collate"), NewAtom("badcollation"),
+	cond := engine.NewList([]engine.Value{
+		engine.NewAtom("x"), engine.NewAtom("eq"), engine.NewString("y"),
+		engine.NewAtom("collate"), engine.NewAtom("badcollation"),
 	})
 	_, err := buildWhereClause(cond)
 	if err == nil {
@@ -1709,9 +1710,9 @@ func TestQueryCovWhereCollateBadType(t *testing.T) {
 }
 
 func TestQueryCovWhereCollateMissingType(t *testing.T) {
-	cond := NewList([]Value{
-		NewAtom("x"), NewAtom("eq"), NewString("y"),
-		NewAtom("collate"),
+	cond := engine.NewList([]engine.Value{
+		engine.NewAtom("x"), engine.NewAtom("eq"), engine.NewString("y"),
+		engine.NewAtom("collate"),
 	})
 	_, err := buildWhereClause(cond)
 	if err == nil {
@@ -1753,15 +1754,15 @@ func TestQueryCovAqlTypenameToSQLType(t *testing.T) {
 // ========================
 
 func TestQueryCovOnWithoutJoin(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	err = runAQLError(t, r, []Value{
-		NewWord("from"), NewWord("products"),
-		NewWord("on"), NewList([]Value{NewAtom("x"), NewAtom("eq"), NewAtom("y")}),
+	err = runAQLError(t, r, []engine.Value{
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("on"), engine.NewList([]engine.Value{engine.NewAtom("x"), engine.NewAtom("eq"), engine.NewAtom("y")}),
 	})
 	if err == nil {
 		t.Error("expected error for on without preceding join")
@@ -1769,15 +1770,15 @@ func TestQueryCovOnWithoutJoin(t *testing.T) {
 }
 
 func TestQueryCovUsingWithoutJoin(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	err = runAQLError(t, r, []Value{
-		NewWord("from"), NewWord("products"),
-		NewWord("using"), NewList([]Value{NewAtom("id")}),
+	err = runAQLError(t, r, []engine.Value{
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("using"), engine.NewList([]engine.Value{engine.NewAtom("id")}),
 	})
 	if err == nil {
 		t.Error("expected error for using without preceding join")
@@ -1790,7 +1791,7 @@ func TestQueryCovUsingWithoutJoin(t *testing.T) {
 
 func TestQueryCovSelectColumnWithWordValues(t *testing.T) {
 	// parseColumnSpec should handle word values as column names
-	colList := NewList([]Value{NewWord("mycolumn")})
+	colList := engine.NewList([]engine.Value{engine.NewWord("mycolumn")})
 	specs, err := parseColumnSpec(colList)
 	if err != nil {
 		t.Fatal(err)
@@ -1805,20 +1806,20 @@ func TestQueryCovSelectColumnWithWordValues(t *testing.T) {
 // ========================
 
 func TestQueryCovResolveWhereNestedList(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// where [[price gt 10] and [price lt 30]] — nested condition groups
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewList([]Value{NewAtom("price"), NewAtom("gt"), NewInteger(10)}),
-			NewAtom("and"),
-			NewList([]Value{NewAtom("price"), NewAtom("lt"), NewInteger(30)}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewList([]engine.Value{engine.NewAtom("price"), engine.NewAtom("gt"), engine.NewInteger(10)}),
+			engine.NewAtom("and"),
+			engine.NewList([]engine.Value{engine.NewAtom("price"), engine.NewAtom("lt"), engine.NewInteger(30)}),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1833,25 +1834,25 @@ func TestQueryCovResolveWhereNestedList(t *testing.T) {
 // ========================
 
 func TestQueryCovEnsureSourceAlreadySQLite(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// First select materializes, the result has SQLite=true
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
 	})
 	td := extractTD(t, result[0])
 
 	// Store the result back and query it again (already SQLite)
-	r.ContextSet("products_sq", Value{VType: TList, Data: td})
+	r.ContextSet("products_sq", engine.Value{VType: engine.TList, Data: td})
 
-	result = runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products_sq"),
+	result = runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products_sq"),
 	})
 	td2 := extractTD(t, result[0])
 	if len(td2.Rows) != 5 {
@@ -1864,20 +1865,20 @@ func TestQueryCovEnsureSourceAlreadySQLite(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereGteLte(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
 	// price >= 15 and price <= 25
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("gte"), NewInteger(15),
-			NewAtom("and"),
-			NewAtom("price"), NewAtom("lte"), NewInteger(25),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("gte"), engine.NewInteger(15),
+			engine.NewAtom("and"),
+			engine.NewAtom("price"), engine.NewAtom("lte"), engine.NewInteger(25),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1892,17 +1893,17 @@ func TestQueryCovWhereGteLte(t *testing.T) {
 // ========================
 
 func TestQueryCovWhereBetween(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 	makeProductsTable(r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("select"), NewWord("star"),
-		NewWord("from"), NewWord("products"),
-		NewWord("where"), NewList([]Value{
-			NewAtom("price"), NewAtom("between"), NewInteger(10), NewInteger(20),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("select"), engine.NewWord("star"),
+		engine.NewWord("from"), engine.NewWord("products"),
+		engine.NewWord("where"), engine.NewList([]engine.Value{
+			engine.NewAtom("price"), engine.NewAtom("between"), engine.NewInteger(10), engine.NewInteger(20),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1917,13 +1918,13 @@ func TestQueryCovWhereBetween(t *testing.T) {
 // ========================
 
 func TestQueryCovBuildSQLWithAlias(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	td := TableData{Record: RecordTypeInfo{Fields: NewOrderedMap()}}
-	qb := NewQueryBuilder(r, td)
+	td := engine.TableData{Record: engine.RecordTypeInfo{Fields: engine.NewOrderedMap()}}
+	qb := engine.NewQueryBuilder(r, td)
 	qb.Alias = "t"
 	qb.Where = `"x" > 1`
 

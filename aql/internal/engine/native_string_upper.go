@@ -2,6 +2,6 @@ package engine
 
 import "strings"
 
-func registerUpper(r *Registry) {
+func RegisterUpper(r *Registry) {
 	registerUnaryStringWord(r, "upper", strings.ToUpper)
 }

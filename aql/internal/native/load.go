@@ -11,12 +11,12 @@ import (
 //   - [map(kind:"api")] — loads a single entity via the SDK
 //   - [table, map]      — finds a single record by matching the map's key-value pairs (typically {id:"..."})
 //   - [map, map]        — record type + filter: returns empty map
-func loadFunc() engine.NativeFunc {
+func RegisterLoad(r *engine.Registry) {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "load",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -48,7 +48,7 @@ func loadFunc() engine.NativeFunc {
 				Handler: loadRecordHandler,
 			},
 		},
-	}
+	})
 }
 
 // loadEntityHandler handles load with an Entity object instance.

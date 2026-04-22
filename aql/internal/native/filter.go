@@ -10,8 +10,8 @@ import (
 // filterFunc returns the "filter" native function definition.
 // filter has forward precedence and one signature:
 //   - [any, function] — filters the value using the callback as predicate
-func filterFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterFilter(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "filter",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -20,7 +20,7 @@ func filterFunc() engine.NativeFunc {
 				Handler: filterHandler,
 			},
 		},
-	}
+	})
 }
 
 // filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.

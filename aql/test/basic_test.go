@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bufio"
 	"fmt"
 	"os"
@@ -47,7 +48,7 @@ func TestBasic(t *testing.T) {
 			}
 
 			// Run through the engine with a fresh registry.
-			reg, err := engine.DefaultRegistry()
+			reg, err := engine.DefaultRegistry(native.Register)
 			if err != nil {
 				t.Fatal(err)
 			}

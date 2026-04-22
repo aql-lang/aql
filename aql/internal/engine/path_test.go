@@ -1,14 +1,16 @@
-package engine
-
-import "testing"
-
+package engine_test
+import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"testing"
+)
 // --- make Path from list ---
 
 func TestMakePathFromList(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"),
-		NewList([]Value{NewString("usr"), NewString("local"), NewString("bin")}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"),
+		engine.NewList([]engine.Value{engine.NewString("usr"), engine.NewString("local"), engine.NewString("bin")}),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -23,10 +25,10 @@ func TestMakePathFromList(t *testing.T) {
 }
 
 func TestMakePathFromListAtoms(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"),
-		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("c")}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"),
+		engine.NewList([]engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("c")}),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -41,9 +43,9 @@ func TestMakePathFromListAtoms(t *testing.T) {
 // --- make Path from string ---
 
 func TestMakePathFromString(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"), NewString("usr/local/bin"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("usr/local/bin"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -58,9 +60,9 @@ func TestMakePathFromString(t *testing.T) {
 }
 
 func TestMakePathFromAbsString(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"), NewString("/usr/local/bin"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("/usr/local/bin"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -77,12 +79,12 @@ func TestMakePathFromAbsString(t *testing.T) {
 // --- make Path with abs option ---
 
 func TestMakePathAbsOption(t *testing.T) {
-	r, _ := DefaultRegistry()
-	opts := NewOrderedMap()
-	opts.Set("abs", NewBoolean(true))
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"), NewMap(opts),
-		NewList([]Value{NewString("x"), NewString("y")}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	opts := engine.NewOrderedMap()
+	opts.Set("abs", engine.NewBoolean(true))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts),
+		engine.NewList([]engine.Value{engine.NewString("x"), engine.NewString("y")}),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -97,11 +99,11 @@ func TestMakePathAbsOption(t *testing.T) {
 }
 
 func TestMakePathAbsOptionString(t *testing.T) {
-	r, _ := DefaultRegistry()
-	opts := NewOrderedMap()
-	opts.Set("abs", NewBoolean(true))
-	result := runAQL(t, r, []Value{
-		NewWord("make"), NewWord("Path"), NewMap(opts), NewString("x/y"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	opts := engine.NewOrderedMap()
+	opts.Set("abs", engine.NewBoolean(true))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts), engine.NewString("x/y"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -116,28 +118,28 @@ func TestMakePathAbsOptionString(t *testing.T) {
 // --- Path string representation ---
 
 func TestPathStringRelative(t *testing.T) {
-	p := NewPath([]string{"a", "b"}, false)
+	p := engine.NewPath([]string{"a", "b"}, false)
 	if p.String() != "a/b" {
 		t.Errorf("got %q, want %q", p.String(), "a/b")
 	}
 }
 
 func TestPathStringAbsolute(t *testing.T) {
-	p := NewPath([]string{"a", "b"}, true)
+	p := engine.NewPath([]string{"a", "b"}, true)
 	if p.String() != "/a/b" {
 		t.Errorf("got %q, want %q", p.String(), "/a/b")
 	}
 }
 
 func TestPathStringEmpty(t *testing.T) {
-	p := NewPath(nil, false)
+	p := engine.NewPath(nil, false)
 	if p.String() != "" {
 		t.Errorf("got %q, want %q", p.String(), "")
 	}
 }
 
 func TestPathStringRoot(t *testing.T) {
-	p := NewPath(nil, true)
+	p := engine.NewPath(nil, true)
 	if p.String() != "/" {
 		t.Errorf("got %q, want %q", p.String(), "/")
 	}
@@ -146,14 +148,14 @@ func TestPathStringRoot(t *testing.T) {
 // --- Path type identity ---
 
 func TestPathIsScalar(t *testing.T) {
-	p := NewPath([]string{"a"}, false)
-	if !p.VType.Matches(TScalar) {
+	p := engine.NewPath([]string{"a"}, false)
+	if !p.VType.Matches(engine.TScalar) {
 		t.Error("Path should match Scalar")
 	}
-	if !p.VType.Matches(TPath) {
+	if !p.VType.Matches(engine.TPath) {
 		t.Error("Path should match Path")
 	}
-	if p.VType.Matches(TString) {
+	if p.VType.Matches(engine.TString) {
 		t.Error("Path should not match String")
 	}
 }

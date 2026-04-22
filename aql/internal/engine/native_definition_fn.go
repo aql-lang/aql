@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// registerFn registers the "fn" word, which parses a list of signature
+// RegisterFn registers the "fn" word, which parses a list of signature
 // triples into a function value (lambda). Used standalone as a lambda:
 //
 //	(fn [[x:number] [number] [x mul x]])
@@ -16,7 +16,7 @@ import (
 //
 // When the list length is divisible by 2 but not 3, it is parsed as pairs
 // (input+output, no body) producing a FnUndefInfo for targeted undef.
-func registerFn(r *Registry) {
+func RegisterFn(r *Registry) {
 	fnHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		list := args[0]
 		if !list.VType.Equal(TList) {
@@ -651,7 +651,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
-			r.argsStack = append(r.argsStack, argsList)
+			r.ArgsStack = append(r.ArgsStack, argsList)
 
 			unnamedCount := 0
 			for i, p := range s.Params {
@@ -819,7 +819,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
-	r.argsStack = append(r.argsStack, argsList)
+	r.ArgsStack = append(r.ArgsStack, argsList)
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -851,8 +851,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 
 	// Cleanup: pop args stack, undef named params, then clean up
 	// any defs that were created during body execution.
-	if len(r.argsStack) > 0 {
-		r.argsStack = r.argsStack[:len(r.argsStack)-1]
+	if len(r.ArgsStack) > 0 {
+		r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
 	}
 	for i := len(names) - 1; i >= 0; i-- {
 		uninstallDef(r, names[i])

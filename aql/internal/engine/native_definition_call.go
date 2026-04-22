@@ -2,13 +2,13 @@ package engine
 
 import "fmt"
 
-// registerCall registers "call", which takes a list and splices its contents
+// RegisterCall registers "call", which takes a list and splices its contents
 // onto the engine stack as code to execute (wrapped in a paren scope).
 // This enables higher-order functions defined with def fn to invoke callback
 // parameters.
 //
 //	[dup mul] call   => (evaluates "dup mul" on whatever is on the stack)
-func registerCall(r *Registry) {
+func RegisterCall(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "call",
 		ForwardPrecedence: true,

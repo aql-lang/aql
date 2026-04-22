@@ -15,7 +15,7 @@ import (
 // TestHelpAllWords checks that every registered word produces valid
 // dynamic help output with the expected sections.
 func TestHelpAllWords(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestHelpAllWords(t *testing.T) {
 // the result matches the documented output. Uses in-memory filesystem
 // for read/write validation.
 func TestHelpExamplesCorrect(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

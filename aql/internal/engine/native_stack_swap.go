@@ -1,6 +1,6 @@
 package engine
 
-func registerSwap(r *Registry) {
+func RegisterSwap(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "swap",
 		ForwardPrecedence: false,

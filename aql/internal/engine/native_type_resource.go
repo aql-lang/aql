@@ -1,13 +1,13 @@
 package engine
 
-// registerResource registers the builtin Resource and Entity object types.
+// RegisterResource registers the builtin Resource and Entity object types.
 //
 //   - Object/Resource has field kind:String
 //   - Object/Resource/Entity inherits kind from Resource and adds spec:String, entity:String
 //
 // These are registered via installDef so they get proper handler resolution
 // and can be referenced by name in AQL code (e.g. make Entity {...}).
-func registerResource(r *Registry) {
+func RegisterResource(r *Registry) {
 	// --- Resource: {kind:String} ---
 	resourceFields := NewOrderedMap()
 	resourceFields.Set("kind", NewTypeLiteral(TString))

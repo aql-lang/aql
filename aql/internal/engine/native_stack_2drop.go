@@ -1,6 +1,6 @@
 package engine
 
-func register2drop(r *Registry) {
+func Register2drop(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "2drop",
 		ForwardPrecedence: false,

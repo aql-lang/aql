@@ -15,7 +15,7 @@ func isTypeLike(v Value) bool {
 	return v.IsRecordType() || v.IsOptionsType() || v.IsTableType() || v.IsObjectType()
 }
 
-func registerMake(r *Registry) {
+func RegisterMake(r *Registry) {
 	// makeRecord creates a record instance from a source value and options.
 	makeRecord := func(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
 		fieldKeys := recType.Fields.Keys()
@@ -726,7 +726,7 @@ func resolveWordValue(v Value) Value {
 	}
 }
 
-// resolveFieldType resolves a record field's type constraint value.
+// ResolveFieldType resolves a record field's type constraint value.
 //
 // Three resolution strategies:
 //  1. String matching a user-defined type name in DefStacks → replaced
@@ -740,7 +740,7 @@ func resolveWordValue(v Value) Value {
 //	type OptStr (string or none)
 //	record [x:number y:OptStr]              => record{x:number,y:string|none}
 //	record [x:number y:[string or none]]    => record{x:number,y:string|none}
-func resolveFieldType(r *Registry, v Value) Value {
+func ResolveFieldType(r *Registry, v Value) Value {
 	// Strategy 1: string, atom, or word matching a defined type name.
 	if v.Data != nil && (v.VType.Matches(TString) || v.VType.Matches(TAtom) || v.IsWord()) {
 		var name string

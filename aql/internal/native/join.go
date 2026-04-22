@@ -11,8 +11,8 @@ import (
 // join has forward precedence and two signatures:
 //   - [list, string] — joins the list elements with the given separator
 //   - [list]         — joins the list elements with a comma
-func joinFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterJoin(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "join",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -25,7 +25,7 @@ func joinFunc() engine.NativeFunc {
 				Handler: joinDefaultHandler,
 			},
 		},
-	}
+	})
 }
 
 // joinDefaultHandler calls voxgigstruct.Join with default separator (comma).

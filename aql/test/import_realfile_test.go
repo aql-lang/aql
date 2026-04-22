@@ -40,7 +40,7 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value,
 		t.Fatal(err)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

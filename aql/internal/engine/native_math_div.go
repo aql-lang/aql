@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerDiv(r *Registry) {
+func RegisterDiv(r *Registry) {
 	registerBinaryMathWord(r, "div",
 		func(a, b float64) (Value, error) {
 			if b == 0 {

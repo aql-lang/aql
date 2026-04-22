@@ -1,6 +1,6 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"testing"
 )
 
@@ -9,25 +9,25 @@ import (
 // a program that would normally take many engine steps. The check
 // loop must emit step_budget_exceeded and halt.
 func TestCheckStepBudgetTrip(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := engine.NewRegistry()
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
 	r.InitRootContext()
-	registerAdd(r)
+	engine.RegisterAdd(r)
 
 	r.CheckMode = true
 	r.CheckStepBudget = 5 // tiny — any non-trivial program trips
 
 	// A small arithmetic program: in check mode this takes more
 	// than 5 engine steps.
-	input := []Value{
-		NewInteger(1), NewWord("add"), NewInteger(2),
-		NewWord("add"), NewInteger(3),
-		NewWord("add"), NewInteger(4),
+	input := []engine.Value{
+		engine.NewInteger(1), engine.NewWord("add"), engine.NewInteger(2),
+		engine.NewWord("add"), engine.NewInteger(3),
+		engine.NewWord("add"), engine.NewInteger(4),
 	}
-	input = StripToCarriers(input)
-	eng := NewTop(r)
+	input = engine.StripToCarriers(input)
+	eng := engine.NewTop(r)
 	_, err = eng.Run(input)
 	if err != nil {
 		t.Fatalf("run: %v", err)

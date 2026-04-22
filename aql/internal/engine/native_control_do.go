@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerDo registers the "do" word.
+// RegisterDo registers the "do" word.
 //
 // For lists, do evaluates the list as a sub-program:
 //
@@ -15,7 +15,7 @@ import "fmt"
 //	do {r:rv}                  →  {r:10}    (word resolved by autoEvalMap)
 //	do {x:[3 add 4]}          →  {x:7}     (list evaluated, single result unwrapped)
 //	do {r:255, g:136, b:0}    →  {r:255, g:136, b:0}  (literals pass through)
-func registerDo(r *Registry) {
+func RegisterDo(r *Registry) {
 	// promoteToWord converts a string or atom value to a word if it
 	// names a registered function. With the current parser, list elements
 	// inside maps are already words (word context), so this mainly

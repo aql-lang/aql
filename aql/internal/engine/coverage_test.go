@@ -4028,7 +4028,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 }
 
 // ========================
-// registerDblcall tests
+// RegisterDblcall tests
 // ========================
 
 func TestDblcallBasic(t *testing.T) {
@@ -4080,7 +4080,7 @@ func TestDblcallEmptyBody(t *testing.T) {
 }
 
 // ========================
-// registerCall tests
+// RegisterCall tests
 // ========================
 
 func TestCallBasic(t *testing.T) {
@@ -4118,7 +4118,7 @@ func TestCallEmptyList(t *testing.T) {
 }
 
 // ========================
-// registerArgs tests
+// RegisterArgs tests
 // ========================
 
 func TestArgsInsideFn(t *testing.T) {
@@ -4155,7 +4155,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Directly exercise the args stack by pushing and calling
-	r.argsStack = append(r.argsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
+	r.ArgsStack = append(r.ArgsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
 	e := New(r)
 	result, err := e.Run([]Value{NewWord("args")})
 	if err != nil {
@@ -4169,7 +4169,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}
 	// Clean up
-	r.argsStack = r.argsStack[:len(r.argsStack)-1]
+	r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
 }
 
 func TestArgsOutsideFnErrors(t *testing.T) {
@@ -4231,7 +4231,7 @@ func TestResolveOrphanedForwardsMultipleValues(t *testing.T) {
 }
 
 // ========================
-// resolveFieldType tests
+// ResolveFieldType tests
 // ========================
 
 func TestResolveFieldTypeString(t *testing.T) {
@@ -4245,8 +4245,8 @@ func TestResolveFieldTypeString(t *testing.T) {
 		NewWord("type"), NewWord("MyNum"), NewWord("Number"),
 	})
 
-	// resolveFieldType should resolve "MyNum" string to the type value
-	result := resolveFieldType(r, NewString("MyNum"))
+	// ResolveFieldType should resolve "MyNum" string to the type value
+	result := ResolveFieldType(r, NewString("MyNum"))
 	if !isTypeValue(result) {
 		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
 	}
@@ -4260,7 +4260,7 @@ func TestResolveFieldTypeStringUnknown(t *testing.T) {
 
 	// Unknown name should pass through
 	v := NewString("NotAType")
-	result := resolveFieldType(r, v)
+	result := ResolveFieldType(r, v)
 	_as63, _ := result.AsString()
 	if _as63 != "NotAType" {
 		t.Errorf("expected pass-through, got %v", result)
@@ -4274,7 +4274,7 @@ func TestResolveFieldTypeList(t *testing.T) {
 	}
 
 	// [String or None] as code should evaluate to a disjunct
-	result := resolveFieldType(r, NewList([]Value{
+	result := ResolveFieldType(r, NewList([]Value{
 		NewWord("String"), NewWord("or"), NewWord("None"),
 	}))
 	// Should be a disjunct type, not a raw list
@@ -4291,7 +4291,7 @@ func TestResolveFieldTypePassthrough(t *testing.T) {
 
 	// A type literal should pass through unchanged
 	v := NewTypeLiteral(TNumber)
-	result := resolveFieldType(r, v)
+	result := ResolveFieldType(r, v)
 	if !result.VType.Equal(v.VType) {
 		t.Errorf("expected pass-through, got %v", result)
 	}
@@ -4494,7 +4494,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 }
 
 // ========================
-// registerFn error paths
+// RegisterFn error paths
 // ========================
 
 func TestRegisterFnNonList(t *testing.T) {

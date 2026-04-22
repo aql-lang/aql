@@ -99,7 +99,7 @@ func dataListElemTypeFromValue(data Value) Type {
 	}
 	t := list.Get(0).VType
 	for i := 1; i < list.Len(); i++ {
-		t = commonAncestorType(t, list.Get(i).VType)
+		t = CommonAncestorType(t, list.Get(i).VType)
 		if t.Equal(TAny) {
 			break
 		}
@@ -236,11 +236,11 @@ func ReturnsNumericBinary() ReturnsFunc {
 	}
 }
 
-// commonAncestorType returns the longest common prefix of two type
+// CommonAncestorType returns the longest common prefix of two type
 // paths, as a new Type. For example, given Number/Integer/42 and
 // Number/Integer/99, returns Number/Integer. Returns TAny if there is
 // no shared prefix.
-func commonAncestorType(a, b Type) Type {
+func CommonAncestorType(a, b Type) Type {
 	n := len(a.Parts)
 	if len(b.Parts) < n {
 		n = len(b.Parts)
@@ -311,7 +311,7 @@ func JoinCarriers(a, b Value) Value {
 		// Check for a non-trivial common ancestor (shared prefix of at
 		// least one part). This collapses value-tagged literals (e.g.
 		// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
-		anc := commonAncestorType(a.VType, b.VType)
+		anc := CommonAncestorType(a.VType, b.VType)
 		if len(anc.Parts) > 0 && !anc.Equal(TAny) {
 			return NewCarrier(anc)
 		}
@@ -328,7 +328,7 @@ func JoinCarriers(a, b Value) Value {
 	if len(alts) > CarrierDisjunctCap {
 		t := alts[0].VType
 		for i := 1; i < len(alts); i++ {
-			t = commonAncestorType(t, alts[i].VType)
+			t = CommonAncestorType(t, alts[i].VType)
 		}
 		return NewCarrier(t)
 	}

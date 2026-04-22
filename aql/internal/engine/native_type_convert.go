@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func registerConvert(r *Registry) {
+func RegisterConvert(r *Registry) {
 	// convertTo performs the actual conversion.
 	convertTo := func(src Value, targetType Type, base string) (Value, error) {
 		switch {

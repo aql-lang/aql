@@ -13,8 +13,8 @@ import (
 //	data transform {spec}   — spec (Map) forward-collected → args[0], data from stack → args[1]
 //
 // The spec (transform template) is always the Map at sig[0].
-func transformFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterTransform(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "transform",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -23,7 +23,7 @@ func transformFunc() engine.NativeFunc {
 				Handler: transformHandler,
 			},
 		},
-	}
+	})
 }
 
 // transformHandler calls voxgig struct Transform.

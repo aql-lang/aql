@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -11,7 +12,7 @@ import (
 // (not modules) can be accessed and invoked via get, just like module
 // functions.
 func TestMapFunctionAccess(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

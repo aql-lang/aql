@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 // returning the result of the last step.
 func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +283,7 @@ func TestCurryConvert(t *testing.T) {
 
 func TestCurryNoOuterForwardErrors(t *testing.T) {
 	// Without an outer forward context, insufficient args should error.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

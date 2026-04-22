@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerTable(r *Registry) {
+func RegisterTable(r *Registry) {
 	tableHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		target := args[0]
 		if !target.IsRecordType() {

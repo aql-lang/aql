@@ -207,8 +207,8 @@ func valueToJsonic(v Value) string {
 	}
 }
 
-// registerFileIO registers the read and write words.
-func registerFileIO(r *Registry) {
+// RegisterFileIO registers the read and write words.
+func RegisterFileIO(r *Registry) {
 	// extractPath returns the path string from a String or Path value.
 	extractPath := func(v Value) string {
 		if v.IsPath() {

@@ -1,6 +1,6 @@
 package engine
 
-func registerSub(r *Registry) {
+func RegisterSub(r *Registry) {
 	// Temporal: Date sub CalDuration → Date
 	subDateCalHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		t := args[1].AsDate()

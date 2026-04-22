@@ -25,7 +25,7 @@ func defStackOnly(v Value) bool {
 	return false
 }
 
-// registerDef registers the "def" word for defining new words.
+// RegisterDef registers the "def" word for defining new words.
 //
 // def creates literal substitutions: the body replaces the word during
 // evaluation. If the body is a list, its elements are spliced into the
@@ -40,7 +40,7 @@ func defStackOnly(v Value) bool {
 // Atoms for matching, and captured without evaluation during forward
 // collection. Forward precedence rules handle all orderings (forward,
 // infix, postfix) without separate infix signatures.
-func registerDef(r *Registry) {
+func RegisterDef(r *Registry) {
 	defHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
 		stackOnly := defStackOnly(args[0])

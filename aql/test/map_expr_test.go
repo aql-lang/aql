@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 
@@ -15,7 +16,7 @@ func runExpr(t *testing.T, expr string) ([]engine.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

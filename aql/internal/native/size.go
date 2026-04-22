@@ -8,8 +8,8 @@ import (
 // sizeFunc returns the "size" native function definition.
 // size has forward precedence and one signature:
 //   - [any] — returns the size/length of the value
-func sizeFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterSize(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "size",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -18,7 +18,7 @@ func sizeFunc() engine.NativeFunc {
 				Handler: sizeHandler,
 			},
 		},
-	}
+	})
 }
 
 // sizeHandler calls voxgigstruct.Size to get the size of a value.

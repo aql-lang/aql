@@ -337,7 +337,7 @@ func inferUnaryMathReturns(name string, sig Signature) []string {
 	}
 }
 
-func registerHelp(r *Registry) {
+func RegisterHelp(r *Registry) {
 	// help: [] -> [] (print self-help)
 	selfHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		fmt.Fprintln(r.Output, "help — Show help for an AQL word.")

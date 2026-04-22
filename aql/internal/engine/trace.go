@@ -97,13 +97,13 @@ func traceVisibleLen(s string) int {
 	return n
 }
 
-// registerTrace registers the "trace" word for debugging.
+// RegisterTrace registers the "trace" word for debugging.
 //
 // trace operates like do: it takes a list, evaluates it in a sub-engine,
 // and prints a step-by-step trace of the stack evolution.
 //
 //	trace [1 add 2 mul 3]
-func registerTrace(r *Registry) {
+func RegisterTrace(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "trace",
 		ForwardPrecedence: true,

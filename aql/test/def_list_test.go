@@ -18,7 +18,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

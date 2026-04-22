@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerPick(r *Registry) {
+func RegisterPick(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "pick",
 		ForwardPrecedence: false,
@@ -27,7 +27,7 @@ func registerPick(r *Registry) {
 				}
 				t := stack[0].VType
 				for i := 1; i < len(stack); i++ {
-					t = commonAncestorType(t, stack[i].VType)
+					t = CommonAncestorType(t, stack[i].VType)
 					if t.Equal(TAny) {
 						break
 					}

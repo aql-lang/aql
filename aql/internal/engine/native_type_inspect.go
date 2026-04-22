@@ -1,6 +1,6 @@
 package engine
 
-func registerInspect(r *Registry) {
+func RegisterInspect(r *Registry) {
 	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as0, _ := args[0].AsWord()
 		name := _as0.Name

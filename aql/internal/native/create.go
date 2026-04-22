@@ -11,12 +11,12 @@ import (
 //   - [map(kind:"api")] — creates an entity via the SDK
 //   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
 //   - [map, map]        — record type + record: returns empty table
-func createFunc() engine.NativeFunc {
+func RegisterCreate(r *engine.Registry) {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "create",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -48,7 +48,7 @@ func createFunc() engine.NativeFunc {
 				Handler: createRecordHandler,
 			},
 		},
-	}
+	})
 }
 
 // createEntityHandler handles create with an Entity object instance.

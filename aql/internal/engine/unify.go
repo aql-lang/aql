@@ -751,8 +751,8 @@ func resolveWordsDeep(v Value) Value {
 	return v
 }
 
-// registerUnify registers the "unify" word in the given registry.
-func registerUnify(r *Registry) {
+// RegisterUnify registers the "unify" word in the given registry.
+func RegisterUnify(r *Registry) {
 	unifyHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		unified, ok := Unify(args[0], args[1])
 		if ok {

@@ -1,21 +1,22 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
 // helper: enable in-memory FS and return the MemFileOps
-func setupMemFS(t *testing.T, r *Registry) *fileops.MemFileOps {
+func setupMemFS(t *testing.T, r *engine.Registry) *fileops.MemFileOps {
 	t.Helper()
 	mem := fileops.NewMem()
 	r.MemOps = mem
-	e := New(r)
-	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
-		NewWord("set"), NewWord("mem"), NewBoolean(true),
+	e := engine.New(r)
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("fs"),
+		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("enable mem fs: %v", err)
@@ -26,11 +27,11 @@ func setupMemFS(t *testing.T, r *Registry) *fileops.MemFileOps {
 // --- folder with Path ---
 
 func TestFolderCreatesDir(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFS(t, r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"a", "b", "c"}, false),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"), engine.NewPath([]string{"a", "b", "c"}, false),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
@@ -48,11 +49,11 @@ func TestFolderCreatesDir(t *testing.T) {
 }
 
 func TestFolderAbsolutePath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFS(t, r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"tmp", "data"}, true),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"), engine.NewPath([]string{"tmp", "data"}, true),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -68,13 +69,13 @@ func TestFolderAbsolutePath(t *testing.T) {
 }
 
 func TestFolderIdempotent(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	setupMemFS(t, r)
 
-	path := NewPath([]string{"x", "y"}, false)
+	path := engine.NewPath([]string{"x", "y"}, false)
 	// Create twice — should not error
-	runAQL(t, r, []Value{NewWord("folder"), path})
-	result := runAQL(t, r, []Value{NewWord("folder"), path})
+	runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
+	result := runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("idempotent call failed: got %v", result)
 	}
@@ -83,13 +84,13 @@ func TestFolderIdempotent(t *testing.T) {
 // --- folder with Options ---
 
 func TestFolderWithParentsTrue(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFS(t, r)
 
-	opts := NewOrderedMap()
-	opts.Set("parents", NewBoolean(true))
-	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewOptionsType(opts), NewPath([]string{"deep", "nested", "dir"}, false),
+	opts := engine.NewOrderedMap()
+	opts.Set("parents", engine.NewBoolean(true))
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"deep", "nested", "dir"}, false),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -101,14 +102,14 @@ func TestFolderWithParentsTrue(t *testing.T) {
 }
 
 func TestFolderWithParentsFalse(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	setupMemFS(t, r)
 
-	opts := NewOrderedMap()
-	opts.Set("parents", NewBoolean(false))
+	opts := engine.NewOrderedMap()
+	opts.Set("parents", engine.NewBoolean(false))
 	// Even with parents=false, MkdirAll is used (idempotent single dir)
-	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewOptionsType(opts), NewPath([]string{"single"}, false),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"single"}, false),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -118,15 +119,15 @@ func TestFolderWithParentsFalse(t *testing.T) {
 // --- folder with make Path ---
 
 func TestFolderWithMakePath(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFS(t, r)
 
-	result := runAQL(t, r, []Value{
-		NewWord("folder"),
-		NewWord("("),
-		NewWord("make"), NewWord("Path"),
-		NewList([]Value{NewString("foo"), NewString("bar")}),
-		NewWord(")"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"),
+		engine.NewWord("("),
+		engine.NewWord("make"), engine.NewWord("Path"),
+		engine.NewList([]engine.Value{engine.NewString("foo"), engine.NewString("bar")}),
+		engine.NewWord(")"),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
@@ -140,11 +141,11 @@ func TestFolderWithMakePath(t *testing.T) {
 // --- folder creates parent dirs ---
 
 func TestFolderCreatesParentDirs(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	mem := setupMemFS(t, r)
 
-	runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"a", "b", "c"}, false),
+	runAQL(t, r, []engine.Value{
+		engine.NewWord("folder"), engine.NewPath([]string{"a", "b", "c"}, false),
 	})
 	// Parent dirs should also be recorded
 	resolvedA, _ := mem.ResolvePath("a")

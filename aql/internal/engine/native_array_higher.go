@@ -2,10 +2,10 @@ package engine
 
 import "fmt"
 
-// registerEach registers the "each" word.
+// RegisterEach registers the "each" word.
 // each applies a quoted code body to each element of a data list, collecting results.
 //   each [dup add] [1 2 3]  →  [2 4 6]
-func registerEach(r *Registry) {
+func RegisterEach(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "each",
 		ForwardPrecedence: true,
@@ -60,7 +60,7 @@ func registerEach(r *Registry) {
 //  1. Typed-list carrier (ChildTypeInfo{Child: ...}): return the
 //     child carrier's VType directly.
 //  2. Concrete list with real elements: join all element VTypes
-//     via commonAncestorType.
+//     via CommonAncestorType.
 //  3. Empty / non-concrete / nil-data list: TAny.
 func dataListElemType(data Value) Type {
 	if data.Data == nil {
@@ -75,7 +75,7 @@ func dataListElemType(data Value) Type {
 	}
 	t := list.Get(0).VType
 	for i := 1; i < list.Len(); i++ {
-		t = commonAncestorType(t, list.Get(i).VType)
+		t = CommonAncestorType(t, list.Get(i).VType)
 		if t.Equal(TAny) {
 			break
 		}
@@ -114,10 +114,10 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...Type) []Value {
 	return result
 }
 
-// registerFold registers the "fold" word with two signatures.
+// RegisterFold registers the "fold" word with two signatures.
 // With initial value:  0 fold [add] [1 2 3]  →  6
 // Without initial:     fold [add] [1 2 3]    →  6  (uses first element as init)
-func registerFold(r *Registry) {
+func RegisterFold(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fold",
 		ForwardPrecedence: true,
@@ -210,11 +210,11 @@ func doFold(reg *Registry, acc Value, bodySlice []Value, data ReadList) ([]Value
 	return []Value{acc}, nil
 }
 
-// registerScan registers the "scan" word.
+// RegisterScan registers the "scan" word.
 // scan is a running reduction: first element is the initial accumulator,
 // each step produces an intermediate result.
 //   scan [add] [1 2 3 4]  →  [1 3 6 10]
-func registerScan(r *Registry) {
+func RegisterScan(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "scan",
 		ForwardPrecedence: true,
@@ -267,11 +267,11 @@ func registerScan(r *Registry) {
 	})
 }
 
-// registerOuter registers the "outer" word.
+// RegisterOuter registers the "outer" word.
 // outer applies an operation body to every pair (l, r) from left and right arrays,
 // producing a 2D nested list.
 //   outer [add] [1 2] [10 20]  →  [[11 21] [12 22]]
-func registerOuter(r *Registry) {
+func RegisterOuter(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "outer",
 		ForwardPrecedence: true,
@@ -325,12 +325,12 @@ func registerOuter(r *Registry) {
 	})
 }
 
-// registerInner registers the "inner" word.
+// RegisterInner registers the "inner" word.
 // inner performs an inner-product-style operation using a pair-op and an aggregate-op.
 // For 1D vectors: zip with pair-op, then fold with agg-op.
 // For 2D matrices: matrix inner product (left rows × right columns).
 //   inner [mul] [add] [1 2 3] [4 5 6]  →  32  (dot product)
-func registerInner(r *Registry) {
+func RegisterInner(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "inner",
 		ForwardPrecedence: true,

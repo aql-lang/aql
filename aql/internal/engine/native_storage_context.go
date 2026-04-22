@@ -2,12 +2,12 @@ package engine
 
 import "fmt"
 
-// registerContext registers the "context" word that pushes the current
+// RegisterContext registers the "context" word that pushes the current
 // context Store onto the stack.
 //
 // The context is a Store (Object/Store), allowing get/set to operate on it
 // directly and prototype chain resolution for nested scopes.
-func registerContext(r *Registry) {
+func RegisterContext(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "context",
 		ForwardPrecedence: true,

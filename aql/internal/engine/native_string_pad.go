@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func registerPad(r *Registry) {
+func RegisterPad(r *Registry) {
 	// pad: [integer, string] -> [string]
 	// Forward-first: args[0]=width (forward), args[1]=string (stack).
 	// Usage: "ab" pad 5 → "ab   "

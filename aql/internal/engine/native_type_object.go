@@ -2,14 +2,14 @@ package engine
 
 import "fmt"
 
-func registerObject(r *Registry) {
+func RegisterObject(r *Registry) {
 	// parseObjectFields converts a map of field definitions into an OrderedMap
 	// of field name → type-constraint Value, resolving type references.
 	parseObjectFields := func(fieldsMap *OrderedMap) *OrderedMap {
 		fields := NewOrderedMap()
 		for _, key := range fieldsMap.Keys() {
 			val, _ := fieldsMap.Get(key)
-			val = resolveFieldType(r, val)
+			val = ResolveFieldType(r, val)
 			fields.Set(key, val)
 		}
 		return fields

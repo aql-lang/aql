@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerSet registers the "set" word for storing values in a Store,
+// RegisterSet registers the "set" word for storing values in a Store,
 // mutating fields on an Object instance, or setting Array elements.
 //
 // Store signatures (copy-on-write, forward precedence):
@@ -22,7 +22,7 @@ import "fmt"
 // Store set is copy-on-write: a new Store layer is created (prototype =
 // old Store) and propagated up through parent Stores to the ctxStack.
 // Nodes (Map, List) are immutable and cannot be used with set.
-func registerSet(r *Registry) {
+func RegisterSet(r *Registry) {
 	storeHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 		store := args[2].AsStore()
 		if store == nil {

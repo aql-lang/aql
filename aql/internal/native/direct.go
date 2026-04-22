@@ -9,12 +9,12 @@ import (
 // directFunc returns the "direct" native function definition.
 // direct has forward precedence and one signature:
 //   - [map(kind:"api")] — makes an HTTP request via the SDK
-func directFunc() engine.NativeFunc {
+func RegisterDirect(r *engine.Registry) {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "direct",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -24,7 +24,7 @@ func directFunc() engine.NativeFunc {
 				Patterns: map[int]engine.Value{0: apiPatternVal},
 			},
 		},
-	}
+	})
 }
 
 // directAPIHandler handles direct with {kind:"api", spec:String, path:String, method:String, ...}.

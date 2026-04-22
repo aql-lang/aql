@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -18,7 +19,7 @@ func runAQLText(t *testing.T, r *engine.Registry, src string) ([]engine.Value, e
 }
 
 func TestDotVerify(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

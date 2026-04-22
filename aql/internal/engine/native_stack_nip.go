@@ -1,6 +1,6 @@
 package engine
 
-func registerNip(r *Registry) {
+func RegisterNip(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "nip",
 		ForwardPrecedence: false,

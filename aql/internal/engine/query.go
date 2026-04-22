@@ -351,10 +351,10 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 	return tmpNames, nil
 }
 
-// registerQuery registers the select, from, star, where, order, by, limit,
+// RegisterQuery registers the select, from, star, where, order, by, limit,
 // offset, distinct, groupby, having, join, on, using, union, intersect,
 // except, cast, and aggregate words.
-func registerQuery(r *Registry) {
+func RegisterQuery(r *Registry) {
 	// star: [] -> [atom("*")]
 	r.RegisterStackOnly("star", Signature{
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -718,10 +718,10 @@ func registerQuery(r *Registry) {
 
 	// join: [atom(forward), table/query(prefix)] -> [query-builder]
 	// Usage: from orders join products on [...]
-	registerJoinWord(r, "join", "JOIN")
-	registerJoinWord(r, "innerjoin", "JOIN")
-	registerJoinWord(r, "leftjoin", "LEFT JOIN")
-	registerJoinWord(r, "crossjoin", "CROSS JOIN")
+	RegisterJoinWord(r, "join", "JOIN")
+	RegisterJoinWord(r, "innerjoin", "JOIN")
+	RegisterJoinWord(r, "leftjoin", "LEFT JOIN")
+	RegisterJoinWord(r, "crossjoin", "CROSS JOIN")
 
 	// on: [condition(forward), table/query(prefix)] -> [query-builder]
 	// Sets the ON condition for the most recent join.
@@ -790,10 +790,10 @@ func registerQuery(r *Registry) {
 	)
 
 	// Set operations: union, unionall, intersect, except
-	registerSetOpWord(r, "union", "UNION")
-	registerSetOpWord(r, "unionall", "UNION ALL")
-	registerSetOpWord(r, "intersect", "INTERSECT")
-	registerSetOpWord(r, "except", "EXCEPT")
+	RegisterSetOpWord(r, "union", "UNION")
+	RegisterSetOpWord(r, "unionall", "UNION ALL")
+	RegisterSetOpWord(r, "intersect", "INTERSECT")
+	RegisterSetOpWord(r, "except", "EXCEPT")
 
 	// Aggregate functions (count, sum, avg, min, max) and CAST are handled
 	// directly in parseColumnSpec when they appear as the first element of a
@@ -802,8 +802,8 @@ func registerQuery(r *Registry) {
 	//   select [[cast age integer]] from people
 }
 
-// registerJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
-func registerJoinWord(r *Registry, name string, joinType string) {
+// RegisterJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
+func RegisterJoinWord(r *Registry, name string, joinType string) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
 		tableName, _ := args[1].AsAtom()
@@ -828,8 +828,8 @@ func registerJoinWord(r *Registry, name string, joinType string) {
 	)
 }
 
-// registerSetOpWord registers a set operation word (union, unionall, intersect, except).
-func registerSetOpWord(r *Registry, name string, op string) {
+// RegisterSetOpWord registers a set operation word (union, unionall, intersect, except).
+func RegisterSetOpWord(r *Registry, name string, op string) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		left := args[0]
 		right := args[1]

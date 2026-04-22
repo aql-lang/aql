@@ -1,6 +1,9 @@
-package engine
+package native
 
-// registerQuote registers the "quote" word.
+import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+)
+// RegisterQuote registers the "quote" word.
 //
 // quote prevents auto-evaluation of its argument and returns it as-is.
 // It has forward precedence and takes a single argument:
@@ -16,35 +19,35 @@ package engine
 //
 // For signature matching purposes, quote is transparent: it returns
 // the type of the quotation target (atom for words, identity for rest).
-func registerQuote(r *Registry) {
+func RegisterQuote(r *engine.Registry) {
 	// TWord signature: captures words as literals via
 	// hasPendingForwardExpectingWord(), preventing execution.
 	// Converts the word to an atom.
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "quote",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
-				Args: []Type{TWord},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Args: []engine.Type{engine.TWord},
+				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					w, _ := args[0].AsWord()
-					v := NewAtom(w.Name)
+					v := engine.NewAtom(w.Name)
 					v.Quoted = true
-					return []Value{v}, nil
+					return []engine.Value{v}, nil
 				},
-				Returns: []Type{TAtom},
+				Returns: []engine.Type{engine.TAtom},
 			},
 			// TAny signature: catches all non-word values (lists, maps,
 			// scalars). Returns the value with Quoted=true to prevent
 			// auto-evaluation at end of execution. NoEvalArgs prevents
 			// list auto-evaluation before the handler runs.
 			{
-				Args:       []Type{TAny},
+				Args:       []engine.Type{engine.TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					v := args[0]
 					v.Quoted = true
-					return []Value{v}, nil
+					return []engine.Value{v}, nil
 				},
 				// quote has a semantic side-effect — Quoted=true
 				// prevents downstream auto-evaluation. Run the
@@ -53,7 +56,7 @@ func registerQuote(r *Registry) {
 				// simple-value substitution would expand the
 				// list and drop the do-ability.
 				RunInCheckMode: true,
-				ReturnsFn:      ReturnsIdentity(0),
+				ReturnsFn:      engine.ReturnsIdentity(0),
 			},
 		},
 	})

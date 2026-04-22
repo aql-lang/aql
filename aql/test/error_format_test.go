@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func runWithSource(t *testing.T, src string) error {
 	if err != nil {
 		return err
 	}
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

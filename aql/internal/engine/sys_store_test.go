@@ -1,6 +1,7 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
@@ -9,7 +10,7 @@ import (
 // --- __sys structure: all containers are Stores ---
 
 func TestSysStoreStructure(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	store := r.ContextStore()
 	if store == nil {
 		t.Fatal("no context store")
@@ -20,7 +21,7 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys not found in root context")
 	}
-	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
+	sysStore, ok := sysVal.Data.(*engine.StoreInstanceInfo)
 	if !ok {
 		t.Fatalf("__sys is %T, want *StoreInstanceInfo", sysVal.Data)
 	}
@@ -30,7 +31,7 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys.fs not found")
 	}
-	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
+	fsStore, ok := fsVal.Data.(*engine.StoreInstanceInfo)
 	if !ok {
 		t.Fatalf("__sys.fs is %T, want *StoreInstanceInfo", fsVal.Data)
 	}
@@ -51,7 +52,7 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys.fs.impl not found")
 	}
-	if !implVal.VType.Equal(TNone) {
+	if !implVal.VType.Equal(engine.TNone) {
 		t.Errorf("__sys.fs.impl type = %s, want None", implVal.VType)
 	}
 
@@ -60,7 +61,7 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys.__val not found")
 	}
-	if _, ok := valVal.Data.(*StoreInstanceInfo); !ok {
+	if _, ok := valVal.Data.(*engine.StoreInstanceInfo); !ok {
 		t.Fatalf("__sys.__val is %T, want *StoreInstanceInfo", valVal.Data)
 	}
 }
@@ -68,7 +69,7 @@ func TestSysStoreStructure(t *testing.T) {
 // --- fs.mem flag switches between OS and in-memory file ops ---
 
 func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	ops := r.EffectiveFileOps()
 	if _, ok := ops.(*fileops.OSFileOps); !ok {
 		t.Fatalf("default EffectiveFileOps is %T, want *OSFileOps", ops)
@@ -76,16 +77,16 @@ func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
 }
 
 func TestEffectiveFileOpsMemTrue(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 
 	// Set __sys.fs.mem = true via AQL
-	e := New(r)
-	_, err := e.Run([]Value{
+	e := engine.New(r)
+	_, err := e.Run([]engine.Value{
 		// Get the fs Store from __sys
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("fs"),
 		// Set mem = true on it
-		NewWord("set"), NewWord("mem"), NewBoolean(true),
+		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -98,14 +99,14 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 }
 
 func TestMemFileOpsReadWrite(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 
 	// Enable in-memory fs
-	e := New(r)
-	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
-		NewWord("set"), NewWord("mem"), NewBoolean(true),
+	e := engine.New(r)
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("fs"),
+		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("error enabling mem: %v", err)
@@ -130,14 +131,14 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 }
 
 func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 
 	// Enable mem fs
-	e := New(r)
-	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
-		NewWord("set"), NewWord("mem"), NewBoolean(true),
+	e := engine.New(r)
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("fs"),
+		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -154,24 +155,24 @@ func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
 // --- __val Store ---
 
 func TestSysValStoreSetGet(t *testing.T) {
-	r, _ := DefaultRegistry()
-	e := New(r)
+	r, _ := engine.DefaultRegistry(native.Register)
+	e := engine.New(r)
 
 	// Set a value in __sys.__val
-	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("__val"),
-		NewWord("set"), NewWord("x"), NewInteger(42),
+	_, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("__val"),
+		engine.NewWord("set"), engine.NewWord("x"), engine.NewInteger(42),
 	})
 	if err != nil {
 		t.Fatalf("error setting __val.x: %v", err)
 	}
 
 	// Read it back
-	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("__val"),
-		NewWord("get"), NewWord("x"),
+	result, err := e.Run([]engine.Value{
+		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
+		engine.NewWord("get"), engine.NewWord("__val"),
+		engine.NewWord("get"), engine.NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("error getting __val.x: %v", err)

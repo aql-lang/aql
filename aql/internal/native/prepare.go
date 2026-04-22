@@ -9,12 +9,12 @@ import (
 // prepareFunc returns the "prepare" native function definition.
 // prepare has forward precedence and one signature:
 //   - [map(kind:"api")] — prepares a fetch definition via the SDK
-func prepareFunc() engine.NativeFunc {
+func RegisterPrepare(r *engine.Registry) {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "prepare",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -24,7 +24,7 @@ func prepareFunc() engine.NativeFunc {
 				Patterns: map[int]engine.Value{0: apiPatternVal},
 			},
 		},
-	}
+	})
 }
 
 // prepareAPIHandler handles prepare with {kind:"api", spec:String, path:String, method:String, ...}.

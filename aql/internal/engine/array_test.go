@@ -1,14 +1,15 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 )
 
 // --- iota ---
 
 func TestIota(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(5)})
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{engine.NewWord("iota"), engine.NewInteger(5)})
 	list := result[0].AsList()
 	if list.Len() != 5 {
 		t.Fatalf("iota 5: length = %d, want 5", list.Len())
@@ -23,8 +24,8 @@ func TestIota(t *testing.T) {
 }
 
 func TestIotaZero(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(0)})
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{engine.NewWord("iota"), engine.NewInteger(0)})
 	list := result[0].AsList()
 	if list.Len() != 0 {
 		t.Errorf("iota 0: length = %d, want 0", list.Len())
@@ -34,10 +35,10 @@ func TestIotaZero(t *testing.T) {
 // --- shape ---
 
 func TestShapeFlat(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewWord("shape"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewWord("shape"),
 	})
 	list := result[0].AsList()
 	_as2, _ := list.Get(0).AsInteger()
@@ -47,13 +48,13 @@ func TestShapeFlat(t *testing.T) {
 }
 
 func TestShapeNested(t *testing.T) {
-	r, _ := DefaultRegistry()
-	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
-		NewList([]Value{NewInteger(5), NewInteger(6)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	input := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
+		engine.NewList([]engine.Value{engine.NewInteger(5), engine.NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("shape")})
+	result := runAQL(t, r, []engine.Value{input, engine.NewWord("shape")})
 	list := result[0].AsList()
 	_as4, _ := list.Get(0).AsInteger()
 	_as3, _ := list.Get(1).AsInteger()
@@ -65,10 +66,10 @@ func TestShapeNested(t *testing.T) {
 // --- rank ---
 
 func TestRank(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewWord("rank"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewWord("rank"),
 	})
 	_as5, _ := result[0].AsInteger()
 	if _as5 != 1 {
@@ -76,11 +77,11 @@ func TestRank(t *testing.T) {
 		t.Errorf("rank [1,2] = %d, want 1", _as6)
 	}
 
-	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+	input := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	result = runAQL(t, r, []Value{input, NewWord("rank")})
+	result = runAQL(t, r, []engine.Value{input, engine.NewWord("rank")})
 	_as7, _ := result[0].AsInteger()
 	if _as7 != 2 {
 		_as8, _ := result[0].AsInteger()
@@ -91,10 +92,10 @@ func TestRank(t *testing.T) {
 // --- length ---
 
 func TestLength(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
-		NewWord("length"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30)}),
+		engine.NewWord("length"),
 	})
 	_as9, _ := result[0].AsInteger()
 	if _as9 != 3 {
@@ -106,11 +107,11 @@ func TestLength(t *testing.T) {
 // --- reshape ---
 
 func TestReshape(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("reshape"),
-		NewList([]Value{NewInteger(2), NewInteger(3)}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewInteger(5), NewInteger(6)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("reshape"),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4), engine.NewInteger(5), engine.NewInteger(6)}),
 	})
 	outer := result[0].AsList()
 	if outer.Len() != 2 {
@@ -127,12 +128,12 @@ func TestReshape(t *testing.T) {
 // --- arr-flatten ---
 
 func TestArrFlatten(t *testing.T) {
-	r, _ := DefaultRegistry()
-	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	input := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-flatten")})
+	result := runAQL(t, r, []engine.Value{input, engine.NewWord("arr-flatten")})
 	list := result[0].AsList()
 	if list.Len() != 4 {
 		t.Fatalf("arr-flatten length = %d, want 4", list.Len())
@@ -149,12 +150,12 @@ func TestArrFlatten(t *testing.T) {
 // --- arr-transpose ---
 
 func TestArrTranspose(t *testing.T) {
-	r, _ := DefaultRegistry()
-	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewList([]Value{NewInteger(4), NewInteger(5), NewInteger(6)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	input := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(4), engine.NewInteger(5), engine.NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-transpose")})
+	result := runAQL(t, r, []engine.Value{input, engine.NewWord("arr-transpose")})
 	outer := result[0].AsList()
 	if outer.Len() != 3 {
 		t.Fatalf("transpose rows = %d, want 3", outer.Len())
@@ -171,10 +172,10 @@ func TestArrTranspose(t *testing.T) {
 // --- reverse ---
 
 func TestReverse(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewWord("reverse"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewWord("reverse"),
 	})
 	list := result[0].AsList()
 	_as19, _ := list.Get(0).AsInteger()
@@ -188,10 +189,10 @@ func TestReverse(t *testing.T) {
 // --- take ---
 
 func TestTake(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("take"), NewInteger(2),
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("take"), engine.NewInteger(2),
+		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
 	_as21, _ := list.Get(0).AsInteger()
@@ -202,10 +203,10 @@ func TestTake(t *testing.T) {
 }
 
 func TestTakeNegative(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("take"), NewInteger(-2),
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("take"), engine.NewInteger(-2),
+		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
 	_as23, _ := list.Get(0).AsInteger()
@@ -218,10 +219,10 @@ func TestTakeNegative(t *testing.T) {
 // --- shed ---
 
 func TestShed(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("shed"), NewInteger(1),
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("shed"), engine.NewInteger(1),
+		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
 	_as24, _ := list.Get(0).AsInteger()
@@ -233,10 +234,10 @@ func TestShed(t *testing.T) {
 // --- where ---
 
 func TestWhere(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
-		NewWord("where"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewBoolean(true), engine.NewBoolean(false), engine.NewBoolean(true), engine.NewBoolean(false), engine.NewBoolean(true)}),
+		engine.NewWord("where"),
 	})
 	list := result[0].AsList()
 	_as27, _ := list.Get(0).AsInteger()
@@ -250,10 +251,10 @@ func TestWhere(t *testing.T) {
 // --- unique ---
 
 func TestUnique(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(4), NewInteger(1), NewInteger(5)}),
-		NewWord("unique"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(1), engine.NewInteger(4), engine.NewInteger(1), engine.NewInteger(5)}),
+		engine.NewWord("unique"),
 	})
 	list := result[0].AsList()
 	if list.Len() != 4 {
@@ -272,10 +273,10 @@ func TestUnique(t *testing.T) {
 // --- grade ---
 
 func TestGrade(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(30), NewInteger(10), NewInteger(40), NewInteger(20)}),
-		NewWord("grade"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(30), engine.NewInteger(10), engine.NewInteger(40), engine.NewInteger(20)}),
+		engine.NewWord("grade"),
 	})
 	list := result[0].AsList()
 	// Sorted order: 10(1), 20(3), 30(0), 40(2)
@@ -292,11 +293,11 @@ func TestGrade(t *testing.T) {
 // --- at ---
 
 func TestAt(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("at"),
-		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(1)}),
-		NewList([]Value{NewString("a"), NewString("b"), NewString("c")}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("at"),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(0), engine.NewInteger(1)}),
+		engine.NewList([]engine.Value{engine.NewString("a"), engine.NewString("b"), engine.NewString("c")}),
 	})
 	list := result[0].AsList()
 	_as34, _ := list.Get(0).AsString()
@@ -310,11 +311,11 @@ func TestAt(t *testing.T) {
 // --- sortby ---
 
 func TestSortby(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("sortby"),
-		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewString("c"), NewString("a"), NewString("b")}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("sortby"),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewString("c"), engine.NewString("a"), engine.NewString("b")}),
 	})
 	list := result[0].AsList()
 	_as37, _ := list.Get(0).AsString()
@@ -328,11 +329,11 @@ func TestSortby(t *testing.T) {
 // --- member ---
 
 func TestMember(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("member"),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewList([]Value{NewInteger(2), NewInteger(4), NewInteger(6)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("member"),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(4), engine.NewInteger(6)}),
 	})
 	list := result[0].AsList()
 	_as38, _ := list.Get(1).AsBoolean()
@@ -348,10 +349,10 @@ func TestMember(t *testing.T) {
 // --- window ---
 
 func TestWindow(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("window"), NewInteger(2),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("window"), engine.NewInteger(2),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	list := result[0].AsList()
 	if list.Len() != 3 {
@@ -368,10 +369,10 @@ func TestWindow(t *testing.T) {
 // --- pairs ---
 
 func TestPairs(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
-		NewWord("pairs"),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
+		engine.NewWord("pairs"),
 	})
 	list := result[0].AsList()
 	if list.Len() != 3 {
@@ -382,11 +383,11 @@ func TestPairs(t *testing.T) {
 // --- replicate ---
 
 func TestReplicate(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("replicate"),
-		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(3)}),
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("replicate"),
+		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(0), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30)}),
 	})
 	list := result[0].AsList()
 	// [10,10,30,30,30]
@@ -406,11 +407,11 @@ func TestReplicate(t *testing.T) {
 // --- group ---
 
 func TestGroupTwoArgs(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("group"),
-		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("a")}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("group"),
+		engine.NewList([]engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("a")}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 	})
 	m := result[0].AsMap()
 	aVal, ok := m.Get("a")
@@ -428,11 +429,11 @@ func TestGroupTwoArgs(t *testing.T) {
 // --- each (higher-order) ---
 
 func TestEach(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("each"),
-		NewList([]Value{NewWord("mul"), NewInteger(2)}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("each"),
+		engine.NewList([]engine.Value{engine.NewWord("mul"), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 	})
 	list := result[0].AsList()
 	expected := []int64{2, 4, 6}
@@ -448,11 +449,11 @@ func TestEach(t *testing.T) {
 // --- fold ---
 
 func TestFoldSum(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("fold"),
-		NewList([]Value{NewWord("add")}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("fold"),
+		engine.NewList([]engine.Value{engine.NewWord("add")}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	_as48, _ := result[0].AsInteger()
 	if _as48 != 10 {
@@ -461,11 +462,11 @@ func TestFoldSum(t *testing.T) {
 }
 
 func TestFoldProduct(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("fold"),
-		NewList([]Value{NewWord("mul")}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("fold"),
+		engine.NewList([]engine.Value{engine.NewWord("mul")}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	_as49, _ := result[0].AsInteger()
 	if _as49 != 24 {
@@ -476,11 +477,11 @@ func TestFoldProduct(t *testing.T) {
 // --- scan ---
 
 func TestScan(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("scan"),
-		NewList([]Value{NewWord("add")}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("scan"),
+		engine.NewList([]engine.Value{engine.NewWord("add")}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	list := result[0].AsList()
 	expected := []int64{1, 3, 6, 10}
@@ -496,12 +497,12 @@ func TestScan(t *testing.T) {
 // --- outer ---
 
 func TestOuterMul(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewWord("outer"),
-		NewList([]Value{NewWord("mul")}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("outer"),
+		engine.NewList([]engine.Value{engine.NewWord("mul")}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	// [[1,2,3,4],[2,4,6,8],[3,6,9,12]]
 	outer := result[0].AsList()
@@ -525,19 +526,19 @@ func TestOuterMul(t *testing.T) {
 // --- inner (matrix multiply) ---
 
 func TestInnerMatMul(t *testing.T) {
-	r, _ := DefaultRegistry()
-	left := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+	r, _ := engine.DefaultRegistry(native.Register)
+	left := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
+		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	right := NewList([]Value{
-		NewList([]Value{NewInteger(5), NewInteger(6)}),
-		NewList([]Value{NewInteger(7), NewInteger(8)}),
+	right := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewInteger(5), engine.NewInteger(6)}),
+		engine.NewList([]engine.Value{engine.NewInteger(7), engine.NewInteger(8)}),
 	})
-	result := runAQL(t, r, []Value{
-		NewWord("inner"),
-		NewList([]Value{NewWord("mul")}),
-		NewList([]Value{NewWord("add")}),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("inner"),
+		engine.NewList([]engine.Value{engine.NewWord("mul")}),
+		engine.NewList([]engine.Value{engine.NewWord("add")}),
 		left, right,
 	})
 	// [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]] = [[19,22],[43,50]]
@@ -563,17 +564,17 @@ func TestInnerMatMul(t *testing.T) {
 // --- composition: fold [add] each [dup mul] iota 5 => sum of squares 0+1+4+9+16=30 ---
 
 func TestCompositionSumOfSquares(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r, _ := engine.DefaultRegistry(native.Register)
 	// (each [dup mul] (iota 5)) produces [0,1,4,9,16]
 	// fold [add] over that produces 30
-	result := runAQL(t, r, []Value{
-		NewWord("fold"),
-		NewList([]Value{NewWord("add")}),
-		NewWord("("),
-		NewWord("each"),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
-		NewWord("("), NewWord("iota"), NewInteger(5), NewWord(")"),
-		NewWord(")"),
+	result := runAQL(t, r, []engine.Value{
+		engine.NewWord("fold"),
+		engine.NewList([]engine.Value{engine.NewWord("add")}),
+		engine.NewWord("("),
+		engine.NewWord("each"),
+		engine.NewList([]engine.Value{engine.NewWord("dup"), engine.NewWord("mul")}),
+		engine.NewWord("("), engine.NewWord("iota"), engine.NewInteger(5), engine.NewWord(")"),
+		engine.NewWord(")"),
 	})
 	_as64, _ := result[0].AsInteger()
 	if _as64 != 30 {

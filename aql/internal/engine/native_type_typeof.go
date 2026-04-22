@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerTypeof(r *Registry) {
+func RegisterTypeof(r *Registry) {
 	typeofHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		parts := v.VType.Parts
@@ -41,7 +41,7 @@ func registerTypeof(r *Registry) {
 	})
 }
 
-func registerFullTypeof(r *Registry) {
+func RegisterFullTypeof(r *Registry) {
 	fulltypeofHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		parts := v.VType.Parts

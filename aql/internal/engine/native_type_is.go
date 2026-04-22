@@ -1,6 +1,6 @@
 package engine
 
-func registerIs(r *Registry) {
+func RegisterIs(r *Registry) {
 	// is: [any, any] -> [boolean]
 	// Returns true if a unifies with b and the result equals a.
 	// This is a type/value check: "42 is Number" → true, "42 is String" → false.

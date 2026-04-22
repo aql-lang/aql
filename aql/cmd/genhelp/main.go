@@ -19,12 +19,11 @@ import (
 )
 
 func main() {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "genhelp: %v\n", err)
 		os.Exit(1)
 	}
-	native.Register(reg)
 	reg.SetParseFunc(parser.Parse)
 
 	// Collect all example expressions across all words.
@@ -41,12 +40,11 @@ func main() {
 		exprs := help.ExampleExprs(*info)
 
 		// Fresh registry per word.
-		wordReg, err := engine.DefaultRegistry()
+		wordReg, err := engine.DefaultRegistry(native.Register)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genhelp: %v\n", err)
 			os.Exit(1)
 		}
-		native.Register(wordReg)
 		wordReg.SetParseFunc(parser.Parse)
 
 		for _, expr := range exprs {

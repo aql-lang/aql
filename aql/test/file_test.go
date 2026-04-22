@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 // Files are resolved relative to the test package directory (aql/test/).
 func runWithOSFiles(t *testing.T, expr string) ([]engine.Value, error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +221,7 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 // --- Print with file-loaded tables ---
 
 func TestFileReadCSVPrint(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +260,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 }
 
 func TestFileReadTSVPrint(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

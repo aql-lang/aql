@@ -179,9 +179,8 @@ func runHelp(args []string, w io.Writer) int {
 	name := args[0]
 
 	// Build a registry to get dynamic signature data.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err == nil {
-		native.Register(reg)
 		if info := engine.BuildFuncInfo(reg, name); info != nil {
 			fmt.Fprint(w, help.FormatDynamic(*info))
 			return 0

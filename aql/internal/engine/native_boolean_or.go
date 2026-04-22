@@ -1,6 +1,6 @@
 package engine
 
-func registerOr(r *Registry) {
+func RegisterOr(r *Registry) {
 	// Boolean or: needs BarrierPos to match the disjunction signature's
 	// BarrierPos bonus in scoring. TBoolean specificity still wins over TAny.
 	boolHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerError registers the "error" word.
+// RegisterError registers the "error" word.
 //
 // error consumes an Error value and a handler list from the stack,
 // then evaluates the list with the error value left on the stack
@@ -14,7 +14,7 @@ import "fmt"
 //
 //	do [1 div 0] error [print]          # prints "division by zero"
 //	do [1 div 0] error [drop 42]        # recovers with 42
-func registerError(r *Registry) {
+func RegisterError(r *Registry) {
 	// [List, Error] — evaluate the list with the error on the stack.
 	// With ForwardPrecedence, the list (forward) fills sig[0],
 	// the error (stack) fills sig[1].

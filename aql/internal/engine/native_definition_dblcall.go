@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-// registerDblcall registers "dblcall", an example function that takes an
+// RegisterDblcall registers "dblcall", an example function that takes an
 // integer and a callback (list body). It doubles the integer, then invokes
 // the callback with the doubled value on the stack.
 //
@@ -12,7 +12,7 @@ import "fmt"
 //
 //	dblcall 5 [dup mul]   => 100  (doubles 5→10, then callback: 10 dup mul → 100)
 //	3 dblcall [add 1]     => 7    (doubles 3→6, then callback: 6 add 1 → 7)
-func registerDblcall(r *Registry) {
+func RegisterDblcall(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "dblcall",
 		ForwardPrecedence: true,

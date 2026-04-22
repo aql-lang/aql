@@ -4,6 +4,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
@@ -13,7 +14,7 @@ import (
 // runQuery sets up a registry, loads a CSV file, stores it, and runs a query.
 func runQuery(t *testing.T, setup string, query string) ([]engine.Value, error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +169,7 @@ func TestSelectWithAlias(t *testing.T) {
 func TestSelectAgainstInternalTable(t *testing.T) {
 	t.Skip("query words disabled")
 	// Build a table manually without SQLite backing.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +252,7 @@ func TestStarWord(t *testing.T) {
 func TestCurriedFrom(t *testing.T) {
 	t.Skip("query words disabled")
 	// def from01 from people end; select * from01
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +287,7 @@ func TestCurriedFrom(t *testing.T) {
 func TestCurriedSelect(t *testing.T) {
 	t.Skip("query words disabled")
 	// def select01 select star end; select01 from people
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +320,7 @@ func TestCurriedSelect(t *testing.T) {
 func TestCurriedBoth(t *testing.T) {
 	t.Skip("query words disabled")
 	// def select01 select star end; def from01 from people end; select01 from01
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +356,7 @@ func TestCurriedBoth(t *testing.T) {
 func TestCurriedSelectCols(t *testing.T) {
 	t.Skip("query words disabled")
 	// def sel_name select [name] end; sel_name from people
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -747,7 +748,7 @@ func TestOrderAndLimit(t *testing.T) {
 
 func TestWhereOnInternalTable(t *testing.T) {
 	t.Skip("query words disabled")
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -863,7 +864,7 @@ func TestDistinct(t *testing.T) {
 func TestDistinctDuplicates(t *testing.T) {
 	t.Skip("query words disabled")
 	// Build a table with duplicate values.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +906,7 @@ func TestDistinctDuplicates(t *testing.T) {
 func TestOrderNullsFirst(t *testing.T) {
 	t.Skip("query words disabled")
 	// Build a table with some NULL values.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -990,7 +991,7 @@ func TestOrderByPositionDesc(t *testing.T) {
 // --- is null / is not null ---
 
 func TestWhereIsNull(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1237,7 +1238,7 @@ func TestWhereGlobCaseSensitive(t *testing.T) {
 
 func TestTypedIntegerColumn(t *testing.T) {
 	// Create a table where "age" is TInteger, not TString.
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1305,7 +1306,7 @@ func TestTypedIntegerColumn(t *testing.T) {
 }
 
 func TestTypedBooleanColumn(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1364,7 +1365,7 @@ func TestTypedBooleanColumn(t *testing.T) {
 func TestTypedIntegerOrdering(t *testing.T) {
 	// This test verifies that INTEGER columns sort numerically, not lexically.
 	// With TEXT: "9" > "25" > "100" (wrong). With INTEGER: 9 < 25 < 100 (correct).
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1578,7 +1579,7 @@ func TestWhereRegexpDigits(t *testing.T) {
 // --- GROUP BY / HAVING ---
 
 func TestGroupByWithCount(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1645,7 +1646,7 @@ func TestGroupByWithCount(t *testing.T) {
 }
 
 func TestHaving(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1715,7 +1716,7 @@ func TestFromAlias(t *testing.T) {
 // --- JOINs ---
 
 func TestInnerJoin(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1795,7 +1796,7 @@ func TestInnerJoin(t *testing.T) {
 }
 
 func TestLeftJoin(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1869,7 +1870,7 @@ func TestLeftJoin(t *testing.T) {
 // --- Set operations ---
 
 func TestUnion(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1908,7 +1909,7 @@ func TestUnion(t *testing.T) {
 }
 
 func TestUnionAll(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1947,7 +1948,7 @@ func TestUnionAll(t *testing.T) {
 }
 
 func TestIntersect(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1991,7 +1992,7 @@ func TestIntersect(t *testing.T) {
 }
 
 func TestExcept(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2087,7 +2088,7 @@ func TestCountStar(t *testing.T) {
 }
 
 func TestSumAggregate(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2134,7 +2135,7 @@ func TestSumAggregate(t *testing.T) {
 // --- JOIN with ON condition (covers buildJoinCondition, quoteJoinCol) ---
 
 func TestJoinWithOnCondition(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2204,7 +2205,7 @@ func TestJoinWithOnCondition(t *testing.T) {
 }
 
 func TestJoinWithOnMultipleConditions(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2273,7 +2274,7 @@ func TestJoinWithOnDotQualified(t *testing.T) {
 // --- CROSS JOIN ---
 
 func TestCrossJoin(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2327,7 +2328,7 @@ func TestCastToReal(t *testing.T) {
 }
 
 func TestCastToText(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2395,7 +2396,7 @@ func TestCastWithoutAlias(t *testing.T) {
 // --- Aggregate edge cases ---
 
 func TestAvgAggregate(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2438,7 +2439,7 @@ func TestAvgAggregate(t *testing.T) {
 }
 
 func TestMinMaxAggregate(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2513,7 +2514,7 @@ func TestAggregateWithoutAlias(t *testing.T) {
 
 func TestWhereIsNullActual(t *testing.T) {
 	// Test IS NULL with actual NULL values (not just empty strings).
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2564,7 +2565,7 @@ func TestWhereIsNullActual(t *testing.T) {
 // --- Multi-column GROUP BY ---
 
 func TestMultiColumnGroupBy(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2619,7 +2620,7 @@ func TestMultiColumnGroupBy(t *testing.T) {
 // --- ORDER BY NULLS LAST ---
 
 func TestOrderNullsLast(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2672,7 +2673,7 @@ func TestOrderNullsLast(t *testing.T) {
 // --- innerjoin keyword ---
 
 func TestInnerJoinKeyword(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2877,7 +2878,7 @@ func TestWhereLikeCollateNocase(t *testing.T) {
 // --- GROUP BY with single atom (group name) ---
 
 func TestGroupByAtom(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2917,7 +2918,7 @@ func TestGroupByAtom(t *testing.T) {
 // --- WHERE with integer comparison (covers valueToSQL integer branch) ---
 
 func TestWhereIntegerComparison(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2958,7 +2959,7 @@ func TestWhereIntegerComparison(t *testing.T) {
 // --- WHERE with boolean/none values (covers valueToSQL branches) ---
 
 func TestWhereBooleanValue(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2995,7 +2996,7 @@ func TestWhereBooleanValue(t *testing.T) {
 // --- Mixed type table (covers more aqlValueToSQLParam and sqlResultToAQLValue branches) ---
 
 func TestMixedTypeStorage(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3128,7 +3129,7 @@ func TestSelectStringColumns(t *testing.T) {
 // --- WHERE with BETWEEN using integer values ---
 
 func TestWhereBetweenIntegers(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3185,7 +3186,7 @@ func TestWhereInSingleValue(t *testing.T) {
 // --- CAST with bool type alias (covers aqlTypenameToSQLType "bool" branch) ---
 
 func TestCastBool(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3219,7 +3220,7 @@ func TestCastBool(t *testing.T) {
 // --- WHERE with boolean literal (covers valueToSQL boolean branch) ---
 
 func TestWhereWithBoolLiteral(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

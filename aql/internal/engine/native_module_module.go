@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// registerModule registers the "module", "export", and "import" words.
+// RegisterModule registers the "module", "export", and "import" words.
 //
 // module works like do but with a completely fresh, isolated sub-engine
 // (new registry, new bus). Inside a module the "export" word is available
@@ -27,7 +27,7 @@ import (
 // Bare module names (strings without /, ./, ../ prefix) are resolved by
 // searching for .aql/<name>/index.aql starting from the working directory
 // and walking up parent directories (CommonJS-style resolution).
-func registerModule(r *Registry) {
+func RegisterModule(r *Registry) {
 	// module: [list] -> [module-desc]
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "module",

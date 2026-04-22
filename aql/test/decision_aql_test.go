@@ -314,7 +314,7 @@ func runDecisionTest(t *testing.T, tc decisionTestCase, reg *engine.Registry) {
 
 func nativeDecisionRegistry(t *testing.T) *engine.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestNativeDecision(t *testing.T) {
 
 func inlineDecisionRegistry(t *testing.T) *engine.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

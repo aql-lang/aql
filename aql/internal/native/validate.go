@@ -10,8 +10,8 @@ import (
 // validateFunc returns the "validate" native function definition.
 // validate has forward precedence and one signature:
 //   - [any, map] — validates data against a spec using voxgig struct Validate
-func validateFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterValidate(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "validate",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -20,7 +20,7 @@ func validateFunc() engine.NativeFunc {
 				Handler: validateHandler,
 			},
 		},
-	}
+	})
 }
 
 // validateHandler calls voxgigstruct.Validate on data with the given spec.

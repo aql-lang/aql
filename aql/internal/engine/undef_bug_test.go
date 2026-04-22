@@ -1,9 +1,11 @@
-package engine
-
-import "testing"
-
+package engine_test
+import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
+	"testing"
+)
 func TestUndefBugNamedStringParams(t *testing.T) {
-	r, err := DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -11,23 +13,23 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	// Named string params: body concatenates a+b+c via add.
 	// All prefix: "A" "B" "C" joiner → nearest to joiner is "C"→sig[0](a),
 	// "B"→sig[1](b), "A"→sig[2](c). Body: a b add c add → "CB" + "A" → "CBA".
-	aParam := NewOrderedMap()
-	aParam.Set("a", NewWord("String"))
-	bParam := NewOrderedMap()
-	bParam.Set("b", NewWord("String"))
-	cParam := NewOrderedMap()
-	cParam.Set("c", NewWord("String"))
+	aParam := engine.NewOrderedMap()
+	aParam.Set("a", engine.NewWord("String"))
+	bParam := engine.NewOrderedMap()
+	bParam.Set("b", engine.NewWord("String"))
+	cParam := engine.NewOrderedMap()
+	cParam.Set("c", engine.NewWord("String"))
 
-	fnBody := NewList([]Value{
-		NewList([]Value{NewImplicitMap(aParam), NewImplicitMap(bParam), NewImplicitMap(cParam)}),
-		NewList([]Value{NewWord("String")}),
-		NewList([]Value{NewWord("a"), NewWord("b"), NewWord("add"), NewWord("c"), NewWord("add")}),
+	fnBody := engine.NewList([]engine.Value{
+		engine.NewList([]engine.Value{engine.NewImplicitMap(aParam), engine.NewImplicitMap(bParam), engine.NewImplicitMap(cParam)}),
+		engine.NewList([]engine.Value{engine.NewWord("String")}),
+		engine.NewList([]engine.Value{engine.NewWord("a"), engine.NewWord("b"), engine.NewWord("add"), engine.NewWord("c"), engine.NewWord("add")}),
 	})
-	tokens := []Value{
-		NewWord("def"), NewWord("joiner"), NewWord("fn"), fnBody, NewWord("end"),
-		NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
+	tokens := []engine.Value{
+		engine.NewWord("def"), engine.NewWord("joiner"), engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewString("A"), engine.NewString("B"), engine.NewString("C"), engine.NewWord("joiner"),
 	}
-	result, err := NewTop(r).Run(tokens)
+	result, err := engine.NewTop(r).Run(tokens)
 	if err != nil {
 		t.Fatalf("bug confirmed: %v", err)
 	}

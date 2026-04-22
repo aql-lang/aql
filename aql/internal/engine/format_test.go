@@ -1,6 +1,6 @@
-package engine
-
+package engine_test
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"strings"
 	"testing"
 
@@ -10,7 +10,7 @@ import (
 )
 
 func TestTextFormatDecode(t *testing.T) {
-	f := &TextFormat{}
+	f := &engine.TextFormat{}
 	result, err := f.Decode("hello world")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -22,8 +22,8 @@ func TestTextFormatDecode(t *testing.T) {
 }
 
 func TestTextFormatEncode(t *testing.T) {
-	f := &TextFormat{}
-	s, err := f.Encode(NewString("hello"))
+	f := &engine.TextFormat{}
+	s, err := f.Encode(engine.NewString("hello"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestTextFormatEncode(t *testing.T) {
 	}
 
 	// Non-string uses String()
-	s, err = f.Encode(NewInteger(42))
+	s, err = f.Encode(engine.NewInteger(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestTextFormatEncode(t *testing.T) {
 }
 
 func TestJSONFormatDecode(t *testing.T) {
-	f := &JSONFormat{}
+	f := &engine.JSONFormat{}
 	result, err := f.Decode(`{"x":1}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -50,13 +50,13 @@ func TestJSONFormatDecode(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	if !result[0].VType.Equal(TMap) {
+	if !result[0].VType.Equal(engine.TMap) {
 		t.Errorf("expected map, got %s", result[0].VType)
 	}
 }
 
 func TestJSONFormatDecodeError(t *testing.T) {
-	f := &JSONFormat{}
+	f := &engine.JSONFormat{}
 	_, err := f.Decode(`{invalid`)
 	if err == nil {
 		t.Error("expected error for invalid JSON")
@@ -64,8 +64,8 @@ func TestJSONFormatDecodeError(t *testing.T) {
 }
 
 func TestJSONFormatEncode(t *testing.T) {
-	f := &JSONFormat{}
-	s, err := f.Encode(NewInteger(42))
+	f := &engine.JSONFormat{}
+	s, err := f.Encode(engine.NewInteger(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,29 +75,29 @@ func TestJSONFormatEncode(t *testing.T) {
 }
 
 func TestJsonicFormatDecode(t *testing.T) {
-	f := &JsonicFormat{}
+	f := &engine.JsonicFormat{}
 	result, err := f.Decode(`{x:1}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].VType.Equal(engine.TMap) {
 		t.Errorf("expected map, got %v", result)
 	}
 }
 
 func TestJsonicFormatDecodeNull(t *testing.T) {
-	f := &JsonicFormat{}
+	f := &engine.JsonicFormat{}
 	result, err := f.Decode(`null`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].VType.Equal(engine.TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
 
 func TestJsonicFormatDecodeError(t *testing.T) {
-	f := &JsonicFormat{}
+	f := &engine.JsonicFormat{}
 	_, err := f.Decode(`{{{`)
 	if err == nil {
 		t.Error("expected error for invalid jsonic")
@@ -105,8 +105,8 @@ func TestJsonicFormatDecodeError(t *testing.T) {
 }
 
 func TestJsonicFormatEncode(t *testing.T) {
-	f := &JsonicFormat{}
-	s, err := f.Encode(NewString("hi"))
+	f := &engine.JsonicFormat{}
+	s, err := f.Encode(engine.NewString("hi"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestJsonicFormatEncode(t *testing.T) {
 }
 
 func TestLinesFormatDecode(t *testing.T) {
-	f := &LinesFormat{}
+	f := &engine.LinesFormat{}
 	result, err := f.Decode("a\nb\nc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,8 +137,8 @@ func TestLinesFormatDecode(t *testing.T) {
 }
 
 func TestLinesFormatEncode(t *testing.T) {
-	f := &LinesFormat{}
-	list := NewList([]Value{NewString("x"), NewString("y")})
+	f := &engine.LinesFormat{}
+	list := engine.NewList([]engine.Value{engine.NewString("x"), engine.NewString("y")})
 	s, err := f.Encode(list)
 	if err != nil {
 		t.Fatal(err)
@@ -149,8 +149,8 @@ func TestLinesFormatEncode(t *testing.T) {
 }
 
 func TestLinesFormatEncodeNonString(t *testing.T) {
-	f := &LinesFormat{}
-	list := NewList([]Value{NewInteger(1), NewInteger(2)})
+	f := &engine.LinesFormat{}
+	list := engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)})
 	s, err := f.Encode(list)
 	if err != nil {
 		t.Fatal(err)
@@ -161,8 +161,8 @@ func TestLinesFormatEncodeNonString(t *testing.T) {
 }
 
 func TestLinesFormatEncodeNonList(t *testing.T) {
-	f := &LinesFormat{}
-	s, err := f.Encode(NewString("hello"))
+	f := &engine.LinesFormat{}
+	s, err := f.Encode(engine.NewString("hello"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestLinesFormatEncodeNonList(t *testing.T) {
 }
 
 func TestDefaultFormats(t *testing.T) {
-	fmts := DefaultFormats()
+	fmts := engine.DefaultFormats()
 	for _, name := range []string{"text", "json", "jsonic", "lines", "csv", "tsv"} {
 		if _, ok := fmts[name]; !ok {
 			t.Errorf("missing format: %s", name)
@@ -183,7 +183,7 @@ func TestDefaultFormats(t *testing.T) {
 // --- CSV format tests ---
 
 func TestCSVFormatDecode(t *testing.T) {
-	f := &CSVFormat{}
+	f := &engine.CSVFormat{}
 	result, err := f.Decode("name,age\nAlice,30\nBob,25")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -234,7 +234,7 @@ func TestCSVFormatDecode(t *testing.T) {
 }
 
 func TestCSVFormatDecodeEmpty(t *testing.T) {
-	f := &CSVFormat{}
+	f := &engine.CSVFormat{}
 	result, err := f.Decode("name,age\n")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -249,7 +249,7 @@ func TestCSVFormatDecodeEmpty(t *testing.T) {
 }
 
 func TestCSVFormatDecodeQuoted(t *testing.T) {
-	f := &CSVFormat{}
+	f := &engine.CSVFormat{}
 	result, err := f.Decode("a,b\n\"hello, world\",2\n")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -268,7 +268,7 @@ func TestCSVFormatDecodeQuoted(t *testing.T) {
 }
 
 func TestCSVFormatDecodeTableSchema(t *testing.T) {
-	f := &CSVFormat{}
+	f := &engine.CSVFormat{}
 	result, err := f.Decode("x,y\n1,2")
 	if err != nil {
 		t.Fatal(err)
@@ -283,29 +283,29 @@ func TestCSVFormatDecodeTableSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("expected field 'x'")
 	}
-	if !xType.VType.Equal(TString) {
+	if !xType.VType.Equal(engine.TString) {
 		t.Errorf("expected string type for x, got %s", xType.VType)
 	}
 }
 
 func TestCSVFormatEncode(t *testing.T) {
-	f := &CSVFormat{}
+	f := &engine.CSVFormat{}
 	// Create a table data value
-	fields := NewOrderedMap()
-	fields.Set("name", NewTypeLiteral(TString))
-	fields.Set("age", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+	fields := engine.NewOrderedMap()
+	fields.Set("name", engine.NewTypeLiteral(engine.TString))
+	fields.Set("age", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	r0 := NewOrderedMap()
-	r0.Set("age", NewString("30"))
-	r0.Set("name", NewString("Alice"))
-	r1 := NewOrderedMap()
-	r1.Set("age", NewString("25"))
-	r1.Set("name", NewString("Bob"))
+	r0 := engine.NewOrderedMap()
+	r0.Set("age", engine.NewString("30"))
+	r0.Set("name", engine.NewString("Alice"))
+	r1 := engine.NewOrderedMap()
+	r1.Set("age", engine.NewString("25"))
+	r1.Set("name", engine.NewString("Bob"))
 
-	table := Value{VType: TList, Data: TableData{
+	table := engine.Value{VType: engine.TList, Data: engine.TableData{
 		Record: rec,
-		Rows:   []Value{NewMap(r0), NewMap(r1)},
+		Rows:   []engine.Value{engine.NewMap(r0), engine.NewMap(r1)},
 	}}
 
 	s, err := f.Encode(table)
@@ -321,16 +321,16 @@ func TestCSVFormatEncode(t *testing.T) {
 }
 
 func TestCSVFormatEncodeQuoted(t *testing.T) {
-	f := &CSVFormat{}
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+	f := &engine.CSVFormat{}
+	fields := engine.NewOrderedMap()
+	fields.Set("a", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	r0 := NewOrderedMap()
-	r0.Set("a", NewString("hello, world"))
-	table := Value{VType: TList, Data: TableData{
+	r0 := engine.NewOrderedMap()
+	r0.Set("a", engine.NewString("hello, world"))
+	table := engine.Value{VType: engine.TList, Data: engine.TableData{
 		Record: rec,
-		Rows:   []Value{NewMap(r0)},
+		Rows:   []engine.Value{engine.NewMap(r0)},
 	}}
 	s, err := f.Encode(table)
 	if err != nil {
@@ -344,7 +344,7 @@ func TestCSVFormatEncodeQuoted(t *testing.T) {
 // --- TSV format tests ---
 
 func TestTSVFormatDecode(t *testing.T) {
-	f := &TSVFormat{}
+	f := &engine.TSVFormat{}
 	result, err := f.Decode("name\tage\nAlice\t30\nBob\t25")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -373,18 +373,18 @@ func TestTSVFormatDecode(t *testing.T) {
 }
 
 func TestTSVFormatEncode(t *testing.T) {
-	f := &TSVFormat{}
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TString))
-	fields.Set("b", NewTypeLiteral(TString))
-	rec := RecordTypeInfo{Fields: fields}
+	f := &engine.TSVFormat{}
+	fields := engine.NewOrderedMap()
+	fields.Set("a", engine.NewTypeLiteral(engine.TString))
+	fields.Set("b", engine.NewTypeLiteral(engine.TString))
+	rec := engine.RecordTypeInfo{Fields: fields}
 
-	r0 := NewOrderedMap()
-	r0.Set("a", NewString("x"))
-	r0.Set("b", NewString("y"))
-	table := Value{VType: TList, Data: TableData{
+	r0 := engine.NewOrderedMap()
+	r0.Set("a", engine.NewString("x"))
+	r0.Set("b", engine.NewString("y"))
+	table := engine.Value{VType: engine.TList, Data: engine.TableData{
 		Record: rec,
-		Rows:   []Value{NewMap(r0)},
+		Rows:   []engine.Value{engine.NewMap(r0)},
 	}}
 	s, err := f.Encode(table)
 	if err != nil {
@@ -405,8 +405,8 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["part.jsonic"] = []byte(`{x:1}`)
 
-	f := &JsonicFormat{
-		Resolver: MakeFileOpsResolver(mem),
+	f := &engine.JsonicFormat{
+		Resolver: engine.MakeFileOpsResolver(mem),
 	}
 
 	// The @"part.jsonic" reference should be resolved and merged.
@@ -442,8 +442,8 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	mem.Files["b.jsonic"] = []byte(`{nested: true}`)
 	mem.Files["a.jsonic"] = []byte(`{@"b.jsonic", top: 1}`)
 
-	f := &JsonicFormat{
-		Resolver: MakeFileOpsResolver(mem),
+	f := &engine.JsonicFormat{
+		Resolver: engine.MakeFileOpsResolver(mem),
 	}
 
 	result, err := f.Decode(`{@"a.jsonic", outer: 99}`)
@@ -483,19 +483,19 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 func TestJsonicFormatWithoutResolverNoMultisource(t *testing.T) {
 	// Without a resolver, the jsonic format should work as before
 	// (no multisource, just plain jsonic parsing).
-	f := &JsonicFormat{}
+	f := &engine.JsonicFormat{}
 	result, err := f.Decode(`{a:1, b:2}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].VType.Equal(engine.TMap) {
 		t.Errorf("expected map, got %v", result)
 	}
 }
 
 func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
 	// JSONFormat must NOT use multisource — it's strict JSON only.
-	f := &JSONFormat{}
+	f := &engine.JSONFormat{}
 	// This is valid JSON with an @ in a key — should parse as-is.
 	result, err := f.Decode(`{"@ref": "value"}`)
 	if err != nil {
@@ -515,7 +515,7 @@ func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
 
 func TestJsonicFormatMultisourceNotUsedForText(t *testing.T) {
 	// TextFormat must NOT use multisource.
-	f := &TextFormat{}
+	f := &engine.TextFormat{}
 	result, err := f.Decode(`@"somefile.jsonic"`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -532,7 +532,7 @@ func TestMakeFileOpsResolverFindsFile(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["data.jsonic"] = []byte(`{found:true}`)
 
-	resolver := MakeFileOpsResolver(mem)
+	resolver := engine.MakeFileOpsResolver(mem)
 	spec := multisource.PathSpec{
 		Full: "data.jsonic",
 		Kind: "jsonic",
@@ -548,7 +548,7 @@ func TestMakeFileOpsResolverFindsFile(t *testing.T) {
 
 func TestMakeFileOpsResolverNotFound(t *testing.T) {
 	mem := fileops.NewMem()
-	resolver := MakeFileOpsResolver(mem)
+	resolver := engine.MakeFileOpsResolver(mem)
 	spec := multisource.PathSpec{
 		Full: "missing.jsonic",
 		Kind: "jsonic",
@@ -563,7 +563,7 @@ func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["config.jsonic"] = []byte(`{ok:true}`)
 
-	resolver := MakeFileOpsResolver(mem)
+	resolver := engine.MakeFileOpsResolver(mem)
 	spec := multisource.PathSpec{
 		Full: "config",
 		Kind: "", // no extension → try implicit
@@ -581,11 +581,11 @@ func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
 }
 
 func TestRegistryJsonicFormatHasResolver(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := engine.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	jf, ok := r.Formats["jsonic"].(*JsonicFormat)
+	jf, ok := r.Formats["jsonic"].(*engine.JsonicFormat)
 	if !ok {
 		t.Fatal("jsonic format should be *JsonicFormat")
 	}
@@ -595,19 +595,19 @@ func TestRegistryJsonicFormatHasResolver(t *testing.T) {
 }
 
 func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := engine.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// JSON format should remain unchanged — no multisource.
-	_, ok := r.Formats["json"].(*JSONFormat)
+	_, ok := r.Formats["json"].(*engine.JSONFormat)
 	if !ok {
 		t.Fatal("json format should be *JSONFormat, not modified")
 	}
 }
 
 func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := engine.NewRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,7 +616,7 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 	mem.Files["test.jsonic"] = []byte(`{val:42}`)
 	r.SetFileOps(mem)
 
-	jf := r.Formats["jsonic"].(*JsonicFormat)
+	jf := r.Formats["jsonic"].(*engine.JsonicFormat)
 	if jf.Resolver == nil {
 		t.Fatal("expected resolver to be updated after SetFileOps")
 	}

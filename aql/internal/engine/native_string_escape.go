@@ -2,7 +2,7 @@ package engine
 
 import "strings"
 
-func registerEscape(r *Registry) {
+func RegisterEscape(r *Registry) {
 	// escape: [string] -> [string]
 	escapeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as0, _ := args[0].AsString()

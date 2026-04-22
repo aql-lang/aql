@@ -1,24 +1,25 @@
-package engine
-
-import "testing"
-
+package engine_test
+import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"testing"
+)
 func TestValueStringTypes(t *testing.T) {
 	tests := []struct {
 		name string
-		val  Value
+		val  engine.Value
 		want string
 	}{
-		{"integer", NewInteger(42), "42"},
-		{"string", NewString("hello"), "'hello'"},
-		{"empty_string", NewString(""), "''"},
-		{"bool_true", NewBoolean(true), "true"},
-		{"bool_false", NewBoolean(false), "false"},
-		{"atom", NewAtom("foo"), "foo"},
-		{"none_literal", NewTypeLiteral(TNone), "None"},
-		{"number_literal", NewTypeLiteral(TNumber), "Scalar/Number"},
-		{"string_literal", NewTypeLiteral(TString), "Scalar/String"},
-		{"word", NewWord("upper"), "word(upper)"},
-		{"open_paren", NewOpenParen(), "("},
+		{"integer", engine.NewInteger(42), "42"},
+		{"string", engine.NewString("hello"), "'hello'"},
+		{"empty_string", engine.NewString(""), "''"},
+		{"bool_true", engine.NewBoolean(true), "true"},
+		{"bool_false", engine.NewBoolean(false), "false"},
+		{"atom", engine.NewAtom("foo"), "foo"},
+		{"none_literal", engine.NewTypeLiteral(engine.TNone), "None"},
+		{"number_literal", engine.NewTypeLiteral(engine.TNumber), "Scalar/Number"},
+		{"string_literal", engine.NewTypeLiteral(engine.TString), "Scalar/String"},
+		{"word", engine.NewWord("upper"), "word(upper)"},
+		{"open_paren", engine.NewOpenParen(), "("},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -31,7 +32,7 @@ func TestValueStringTypes(t *testing.T) {
 }
 
 func TestValueStringListOrig(t *testing.T) {
-	v := NewList([]Value{NewInteger(1), NewString("a")})
+	v := engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewString("a")})
 	got := v.String()
 	if got != "[1,'a']" {
 		t.Errorf("got %q, want %q", got, "[1,'a']")
@@ -39,10 +40,10 @@ func TestValueStringListOrig(t *testing.T) {
 }
 
 func TestValueStringMapOrig(t *testing.T) {
-	m := NewOrderedMap()
-	m.Set("x", NewInteger(1))
-	m.Set("y", NewString("hi"))
-	v := NewMap(m)
+	m := engine.NewOrderedMap()
+	m.Set("x", engine.NewInteger(1))
+	m.Set("y", engine.NewString("hi"))
+	v := engine.NewMap(m)
 	got := v.String()
 	if got != "{x:1,y:'hi'}" {
 		t.Errorf("got %q, want %q", got, "{x:1,y:'hi'}")
@@ -50,7 +51,7 @@ func TestValueStringMapOrig(t *testing.T) {
 }
 
 func TestValueStringTypedListOrig(t *testing.T) {
-	v := NewTypedList(NewTypeLiteral(TString))
+	v := engine.NewTypedList(engine.NewTypeLiteral(engine.TString))
 	got := v.String()
 	if got != "[:Scalar/String]" {
 		t.Errorf("got %q, want %q", got, "[:Scalar/String]")
@@ -58,7 +59,7 @@ func TestValueStringTypedListOrig(t *testing.T) {
 }
 
 func TestValueStringTypedMapOrig(t *testing.T) {
-	v := NewTypedMap(NewTypeLiteral(TNumber))
+	v := engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber))
 	got := v.String()
 	if got != "{:Scalar/Number}" {
 		t.Errorf("got %q, want %q", got, "{:Scalar/Number}")
@@ -66,10 +67,10 @@ func TestValueStringTypedMapOrig(t *testing.T) {
 }
 
 func TestValueStringRecordTypeOrig(t *testing.T) {
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TNumber))
-	fields.Set("y", NewTypeLiteral(TString))
-	v := NewRecordType(fields)
+	fields := engine.NewOrderedMap()
+	fields.Set("x", engine.NewTypeLiteral(engine.TNumber))
+	fields.Set("y", engine.NewTypeLiteral(engine.TString))
+	v := engine.NewRecordType(fields)
 	got := v.String()
 	if got != "record{x:Scalar/Number,y:Scalar/String}" {
 		t.Errorf("got %q, want %q", got, "record{x:Scalar/Number,y:Scalar/String}")
@@ -77,9 +78,9 @@ func TestValueStringRecordTypeOrig(t *testing.T) {
 }
 
 func TestValueStringTableTypeOrig(t *testing.T) {
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TNumber))
-	v := NewTableType(RecordTypeInfo{Fields: fields})
+	fields := engine.NewOrderedMap()
+	fields.Set("a", engine.NewTypeLiteral(engine.TNumber))
+	v := engine.NewTableType(engine.RecordTypeInfo{Fields: fields})
 	got := v.String()
 	if got != "table{a:Scalar/Number}" {
 		t.Errorf("got %q, want %q", got, "table{a:Scalar/Number}")
@@ -87,7 +88,7 @@ func TestValueStringTableTypeOrig(t *testing.T) {
 }
 
 func TestValueStringDisjunctOrig(t *testing.T) {
-	v := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
+	v := engine.NewDisjunct([]engine.Value{engine.NewTypeLiteral(engine.TString), engine.NewTypeLiteral(engine.TNone)})
 	got := v.String()
 	if got != "Scalar/String|None" {
 		t.Errorf("got %q, want %q", got, "Scalar/String|None")
@@ -95,7 +96,7 @@ func TestValueStringDisjunctOrig(t *testing.T) {
 }
 
 func TestValueStringForward(t *testing.T) {
-	v := NewForward(ForwardInfo{FuncName: "add", CollectedArgs: 1, ExpectedArgs: 2})
+	v := engine.NewForward(engine.ForwardInfo{FuncName: "add", CollectedArgs: 1, ExpectedArgs: 2})
 	got := v.String()
 	if got != "forward(add,1/2)" {
 		t.Errorf("got %q, want %q", got, "forward(add,1/2)")
@@ -103,14 +104,14 @@ func TestValueStringForward(t *testing.T) {
 }
 
 func TestNewFnDef(t *testing.T) {
-	v := NewFnDef(FnDefInfo{})
-	if !v.VType.Equal(TFnDef) {
+	v := engine.NewFnDef(engine.FnDefInfo{})
+	if !v.VType.Equal(engine.TFnDef) {
 		t.Errorf("expected fndef type, got %s", v.VType)
 	}
 }
 
 func TestNewDisjunct(t *testing.T) {
-	v := NewDisjunct([]Value{NewTypeLiteral(TString)})
+	v := engine.NewDisjunct([]engine.Value{engine.NewTypeLiteral(engine.TString)})
 	if !v.IsDisjunct() {
 		t.Error("expected IsDisjunct to be true")
 	}
@@ -121,21 +122,21 @@ func TestNewDisjunct(t *testing.T) {
 }
 
 func TestIsBoolean(t *testing.T) {
-	if !NewBoolean(true).IsBoolean() {
+	if !engine.NewBoolean(true).IsBoolean() {
 		t.Error("expected true to be boolean")
 	}
-	if !NewBoolean(false).IsBoolean() {
+	if !engine.NewBoolean(false).IsBoolean() {
 		t.Error("expected false to be boolean")
 	}
-	if NewInteger(1).IsBoolean() {
+	if engine.NewInteger(1).IsBoolean() {
 		t.Error("integer should not be boolean")
 	}
 }
 
 func TestAsTableType(t *testing.T) {
-	fields := NewOrderedMap()
-	fields.Set("x", NewTypeLiteral(TNumber))
-	v := NewTableType(RecordTypeInfo{Fields: fields})
+	fields := engine.NewOrderedMap()
+	fields.Set("x", engine.NewTypeLiteral(engine.TNumber))
+	v := engine.NewTableType(engine.RecordTypeInfo{Fields: fields})
 	tt, _ := v.AsTableType()
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("expected 1 field, got %d", tt.Record.Fields.Len())
@@ -143,18 +144,18 @@ func TestAsTableType(t *testing.T) {
 }
 
 func TestAsChildType(t *testing.T) {
-	v := NewTypedList(NewTypeLiteral(TString))
+	v := engine.NewTypedList(engine.NewTypeLiteral(engine.TString))
 	ct, _ := v.AsChildType()
-	if !ct.Child.VType.Equal(TString) {
+	if !ct.Child.VType.Equal(engine.TString) {
 		t.Errorf("expected string child, got %s", ct.Child.VType)
 	}
 }
 
 func TestOrderedMapSortedKeys(t *testing.T) {
-	m := NewOrderedMap()
-	m.Set("c", NewInteger(3))
-	m.Set("a", NewInteger(1))
-	m.Set("b", NewInteger(2))
+	m := engine.NewOrderedMap()
+	m.Set("c", engine.NewInteger(3))
+	m.Set("a", engine.NewInteger(1))
+	m.Set("b", engine.NewInteger(2))
 
 	keys := m.SortedKeys()
 	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {

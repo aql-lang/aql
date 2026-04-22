@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-func registerNormalize(r *Registry) {
+func RegisterNormalize(r *Registry) {
 	// normalize: [string] -> [string]
 	normalizeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		_as0, _ := args[0].AsString()

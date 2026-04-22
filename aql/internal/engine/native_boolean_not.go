@@ -1,6 +1,6 @@
 package engine
 
-func registerNot(r *Registry) {
+func RegisterNot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "not",
 		ForwardPrecedence: true,

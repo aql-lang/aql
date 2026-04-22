@@ -71,7 +71,7 @@ var typeNamesByTypeID = func() map[string]string {
 
 // ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
 // a richer definition in the registry's DefStacks (e.g. an ObjectTypeInfo
-// installed by registerResource). If so it returns that value; otherwise it
+// installed by RegisterResource). If so it returns that value; otherwise it
 // returns the original value unchanged. This lets the parser eagerly resolve
 // all type names while the engine still picks up installed ObjectType defs.
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
@@ -1602,7 +1602,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.argsStack = append(e.registry.argsStack, NewList(argsCopy))
+	e.registry.ArgsStack = append(e.registry.ArgsStack, NewList(argsCopy))
 
 	var names []string
 	unnamedCount := 0

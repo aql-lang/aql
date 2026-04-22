@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerBase(r *Registry) {
+func RegisterBase(r *Registry) {
 	baseHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		t := v.VType

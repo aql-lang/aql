@@ -11,8 +11,8 @@ import (
 // inject has forward precedence and one signature:
 //   - [any, any] — resolves backtick-escaped path references in the first value
 //     using the second value as the store
-func injectFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterInject(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "inject",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -21,7 +21,7 @@ func injectFunc() engine.NativeFunc {
 				Handler: injectHandler,
 			},
 		},
-	}
+	})
 }
 
 // injectHandler calls voxgigstruct.Inject to resolve path references.

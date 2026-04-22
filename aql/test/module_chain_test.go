@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"strings"
 	"testing"
 
@@ -420,7 +421,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export M {x:1}`)
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +443,7 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export M {x:1}`)
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -826,7 +827,7 @@ func TestMultiRenameWithStringNames(t *testing.T) {
 // =====================================================================
 
 func TestSetParseFuncNil(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -837,7 +838,7 @@ func TestSetParseFuncNil(t *testing.T) {
 }
 
 func TestSetParseFuncRoundTrip(t *testing.T) {
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

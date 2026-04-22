@@ -12,8 +12,8 @@ import (
 // Signatures use [Integer, Integer, Any] ordering so that forward-first
 // rearrangement (forward args at positions 0..F-1, stack data last) aligns
 // with positional matching.
-func sliceFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterSlice(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "slice",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -30,7 +30,7 @@ func sliceFunc() engine.NativeFunc {
 				Handler: sliceAllHandler,
 			},
 		},
-	}
+	})
 }
 
 // sliceAllHandler calls voxgigstruct.Slice with no start/end arguments.

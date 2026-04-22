@@ -11,12 +11,12 @@ import (
 //   - [map(kind:"api")] — removes an entity via the SDK
 //   - [table, map]      — removes the record whose "id" matches the map's "id" field
 //   - [map, map]        — record type + filter: returns empty table
-func removeFunc() engine.NativeFunc {
+func RegisterRemove(r *engine.Registry) {
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "remove",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -48,7 +48,7 @@ func removeFunc() engine.NativeFunc {
 				Handler: removeRecordHandler,
 			},
 		},
-	}
+	})
 }
 
 // removeEntityHandler handles remove with an Entity object instance.

@@ -25,7 +25,7 @@ var newReadline = func(cfg *readline.Config) (readliner, error) {
 }
 
 var newRegistry = func() (*engine.Registry, error) {
-	return engine.DefaultRegistry()
+	return engine.DefaultRegistry(native.Register)
 }
 
 // readliner abstracts the readline interface for testing.
@@ -58,7 +58,6 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 		return
 	}
 	registry.SetParseFunc(parser.Parse)
-	native.Register(registry)
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": registryPath,

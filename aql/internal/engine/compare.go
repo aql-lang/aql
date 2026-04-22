@@ -192,7 +192,7 @@ func deepEqual(a, b Value) bool {
 	return false
 }
 
-func registerComparison(r *Registry) {
+func RegisterComparison(r *Registry) {
 	// lt: [any, any] -> [boolean] — less than
 	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
 	r.RegisterNativeFunc(NativeFunc{

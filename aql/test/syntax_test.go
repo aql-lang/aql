@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bufio"
 	"fmt"
 	"os"
@@ -63,7 +64,7 @@ func TestSyntax(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 
-			reg, err := engine.DefaultRegistry()
+			reg, err := engine.DefaultRegistry(native.Register)
 			if err != nil {
 				t.Fatal(err)
 			}

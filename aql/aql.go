@@ -110,13 +110,12 @@ func New(opts ...Options) (*AQL, error) {
 		engine.SetIDSeed(o.Seed)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
 	reg.NativeModResolver = nativemod.Resolve
-	native.Register(reg)
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": o.Registry,

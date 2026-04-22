@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 )
 
 // timeRegistry returns a registry with the aql:time module loaded.
@@ -449,7 +450,7 @@ func TestTimeAddYears(t *testing.T) {
 // --- Standard now word (non-module) ---
 
 func TestNowStandardWord(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := engine.DefaultRegistry(native.Register)
 	if err != nil {
 		t.Fatal(err)
 	}

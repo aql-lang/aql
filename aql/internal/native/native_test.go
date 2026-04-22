@@ -20,27 +20,7 @@ func newList(vals ...engine.Value) engine.Value {
 	return engine.NewList(vals)
 }
 
-// --- All / Register ---
-
-func TestAll(t *testing.T) {
-	fns := All()
-	if len(fns) == 0 {
-		t.Fatal("expected at least one native function")
-	}
-	names := make(map[string]bool)
-	for _, fn := range fns {
-		if fn.Name == "" {
-			t.Error("empty function name")
-		}
-		if names[fn.Name] {
-			t.Errorf("duplicate function name: %s", fn.Name)
-		}
-		names[fn.Name] = true
-		if len(fn.Signatures) == 0 {
-			t.Errorf("function %s has no signatures", fn.Name)
-		}
-	}
-}
+// --- Register ---
 
 func TestRegister(t *testing.T) {
 	r, err := engine.NewRegistry()
@@ -477,46 +457,51 @@ func TestWalkHandlerEmpty(t *testing.T) {
 	}
 }
 
-// --- *Func definitions ---
+// --- Register functions ---
 
-func TestFuncDefinitions(t *testing.T) {
+func TestRegisterFunctions(t *testing.T) {
 	tests := []struct {
 		name string
-		fn   func() engine.NativeFunc
+		fn   func(*engine.Registry)
 	}{
-		{"clone", cloneFunc},
-		{"create", createFunc},
-		{"filter", filterFunc},
-		{"flatten", flattenFunc},
-		{"getpath", getpathFunc},
-		{"inject", injectFunc},
-		{"items", itemsFunc},
-		{"join", joinFunc},
-		{"jsonify", jsonifyFunc},
-		{"list", listFunc},
-		{"load", loadFunc},
-		{"merge", mergeFunc},
-		{"pad", padFunc},
-		{"remove", removeFunc},
-		{"selector", selectorFunc},
-		{"setpath", setpathFunc},
-		{"size", sizeFunc},
-		{"slice", sliceFunc},
-		{"transform", transformFunc},
-		{"update", updateFunc},
-		{"validate", validateFunc},
-		{"walk", walkFunc},
+		{"clone", RegisterClone},
+		{"create", RegisterCreate},
+		{"filter", RegisterFilter},
+		{"flatten", RegisterFlatten},
+		{"getpath", RegisterGetpath},
+		{"inject", RegisterInject},
+		{"items", RegisterItems},
+		{"join", RegisterJoin},
+		{"jsonify", RegisterJsonify},
+		{"list", RegisterList},
+		{"load", RegisterLoad},
+		{"merge", RegisterMerge},
+		{"pad", RegisterPad},
+		{"remove", RegisterRemove},
+		{"selector", RegisterSelector},
+		{"setpath", RegisterSetpath},
+		{"size", RegisterSize},
+		{"slice", RegisterSlice},
+		{"transform", RegisterTransform},
+		{"update", RegisterUpdate},
+		{"validate", RegisterValidate},
+		{"walk", RegisterWalk},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nf := tt.fn()
-			if nf.Name != tt.name {
-				t.Errorf("expected name %s, got %s", tt.name, nf.Name)
+			r, err := engine.NewRegistry()
+			if err != nil {
+				t.Fatal(err)
 			}
-			if len(nf.Signatures) == 0 {
+			tt.fn(r)
+			fn := r.Lookup(tt.name)
+			if fn == nil {
+				t.Fatalf("expected word %q to be registered", tt.name)
+			}
+			if len(fn.Signatures) == 0 {
 				t.Error("expected at least one signature")
 			}
-			for i, sig := range nf.Signatures {
+			for i, sig := range fn.Signatures {
 				if sig.Handler == nil {
 					t.Errorf("signature %d has nil handler", i)
 				}

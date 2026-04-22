@@ -9,8 +9,8 @@ import (
 // pad has forward precedence and two signatures:
 //   - [any, integer] — pads the string representation to the given width
 //   - [any]          — pads the string representation to the default width
-func padFunc() engine.NativeFunc {
-	return engine.NativeFunc{
+func RegisterPad(r *engine.Registry) {
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "pad",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -23,7 +23,7 @@ func padFunc() engine.NativeFunc {
 				Handler: padDefaultHandler,
 			},
 		},
-	}
+	})
 }
 
 // padDefaultHandler calls voxgigstruct.Pad with default width.

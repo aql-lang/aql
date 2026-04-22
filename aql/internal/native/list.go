@@ -12,13 +12,13 @@ import (
 //   - [table]       — returns all records from the table
 //   - [map, map]    — record type + filter: returns empty table
 //   - [map]         — record type: returns empty table
-func listFunc() engine.NativeFunc {
+func RegisterList(r *engine.Registry) {
 	// Pattern for {kind:"api", ...} — matches maps where kind is literal "api".
 	apiPattern := engine.NewOrderedMap()
 	apiPattern.Set("kind", engine.NewString("api"))
 	apiPatternVal := engine.NewMap(apiPattern)
 
-	return engine.NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:             "list",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
@@ -58,7 +58,7 @@ func listFunc() engine.NativeFunc {
 				Handler: listRecordAllHandler,
 			},
 		},
-	}
+	})
 }
 
 // listEntityHandler handles list with an Entity object instance.

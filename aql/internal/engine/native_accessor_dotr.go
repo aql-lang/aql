@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// registerGetr registers "getr" — a strict variant of get that returns an
+// RegisterGetr registers "getr" — a strict variant of get that returns an
 // error when the parent is none or the key/index is missing, instead of
 // silently returning none.
 //
@@ -17,7 +17,7 @@ import (
 //	{a:1} b getr       → ERROR (key not found)
 //	none a getr        → ERROR (parent is none)
 //	[10,20] 5 getr     → ERROR (index out of bounds)
-func registerGetr(r *Registry) {
+func RegisterGetr(r *Registry) {
 	getKey := func(v Value) string {
 		if v.IsWord() {
 			_as0, _ := v.AsWord()

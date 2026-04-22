@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func registerTypeDef(r *Registry) {
+func RegisterTypeDef(r *Registry) {
 	validateAndInstall := func(name string, body Value) error {
 		if !isTypeValue(body) {
 			return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())

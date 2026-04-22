@@ -1,6 +1,6 @@
 package engine
 
-func registerDepth(r *Registry) {
+func RegisterDepth(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "depth",
 		ForwardPrecedence: false,

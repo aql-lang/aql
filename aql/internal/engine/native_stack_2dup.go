@@ -1,6 +1,6 @@
 package engine
 
-func register2dup(r *Registry) {
+func Register2dup(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "2dup",
 		ForwardPrecedence: false,

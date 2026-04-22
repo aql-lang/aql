@@ -2,7 +2,7 @@ package engine
 
 import "fmt"
 
-func registerRecord(r *Registry) {
+func RegisterRecord(r *Registry) {
 	recordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		list := args[0]
 		if !list.VType.Equal(TList) {
@@ -26,7 +26,7 @@ func registerRecord(r *Registry) {
 			}
 			for _, key := range m.Keys() {
 				val, _ := m.Get(key)
-				val = resolveFieldType(r, val)
+				val = ResolveFieldType(r, val)
 				fields.Set(key, val)
 			}
 		}

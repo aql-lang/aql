@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-// registerPrint registers the "print" and "printstr" words.
+// RegisterPrint registers the "print" and "printstr" words.
 // print consumes one value from the stack and writes its formatted
 // representation to the registry's Output writer followed by a newline.
 // printstr does the same but without a trailing newline.
 //   - strings: printed as-is
 //   - maps/lists: printed as JSON-like text
 //   - tables: printed as a formatted table with column headers
-func registerPrint(r *Registry) {
+func RegisterPrint(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
 		out := formatForPrint(v)

@@ -1,24 +1,24 @@
-package engine
-
+package native
 import (
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"fmt"
 	"time"
 )
 
-// registerInterval registers the "interval" word.
+// RegisterInterval registers the "interval" word.
 // interval: [Integer, (List/q or Word/q)] -> [Interval]
 // Schedules repeated callback execution at the specified millisecond interval.
 // The callback is executed with do semantics in a new sub-engine each tick.
-func registerInterval(r *Registry) {
-	makeHandler := func(isList bool) Handler {
-		return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func RegisterInterval(r *engine.Registry) {
+	makeHandler := func(isList bool) engine.Handler {
+		return func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			ms, _ := args[0].AsInteger()
 			if ms <= 0 {
 				return nil, fmt.Errorf("interval: milliseconds must be positive, got %d", ms)
 			}
 			callback := args[1]
 
-			id := GenerateID("T_")
+			id := engine.GenerateID("T_")
 			ticker := time.NewTicker(time.Duration(ms) * time.Millisecond)
 			done := make(chan struct{})
 
@@ -28,36 +28,36 @@ func registerInterval(r *Registry) {
 					case <-done:
 						return
 					case <-ticker.C:
-						runTimerCallback(r, callback, isList)
+						engine.RunTimerCallback(r, callback, isList)
 					}
 				}
 			}()
 
-			info := &IntervalInfo{
+			info := &engine.IntervalInfo{
 				ID:     id,
 				Ms:     ms,
 				Ticker: ticker,
 				Done:   done,
 			}
-			return []Value{NewInterval(info)}, nil
+			return []engine.Value{engine.NewInterval(info)}, nil
 		}
 	}
 
-	r.RegisterNativeFunc(NativeFunc{
+	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "interval",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
+		Signatures: []engine.NativeSig{
 			{
-				Args:      []Type{TInteger, TList},
+				Args:      []engine.Type{engine.TInteger, engine.TList},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(true),
-				Returns:   []Type{TInterval},
+				Returns:   []engine.Type{engine.TInterval},
 			},
 			{
-				Args:      []Type{TInteger, TAtom},
+				Args:      []engine.Type{engine.TInteger, engine.TAtom},
 				QuoteArgs: map[int]bool{1: true},
 				Handler:   makeHandler(false),
-				Returns:   []Type{TInterval},
+				Returns:   []engine.Type{engine.TInterval},
 			},
 		},
 	})
