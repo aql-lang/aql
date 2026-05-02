@@ -20,6 +20,7 @@ var errorPatterns = map[string]string{
 	"division_by_zero": "division by zero",
 	"modulo_by_zero":   "modulo by zero",
 	"undefined_word":   "undefined_word",
+	"unify_error":      "cannot unify",
 }
 
 func TestSyntax(t *testing.T) {
