@@ -230,6 +230,10 @@ func inferExact(name string, sig Signature) []string {
 	case "tor":
 		return []string{"Any"}
 
+	// Type conjunction: tand merges/unifies two values.
+	case "tand":
+		return []string{"Any"}
+
 	// Help
 	case "help":
 		return nil

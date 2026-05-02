@@ -873,6 +873,20 @@ false or true	true
 true or true	true
 false or false	false
 
+# === tand - conjunction / map merge ===
+
+# Disjoint keys: combine
+{x:1} tand {y:Integer}	{x:1,y:Scalar/Number/Integer}
+
+# Overlapping keys: unify (concrete narrows type)
+{x:1} tand {x:Integer}	{x:1}
+
+# Three-way merge
+{x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
+
+# Scalar unification: type narrows to concrete
+1 tand Integer	1
+
 # === dblcall (callback function example) ===
 
 # dblcall doubles integer then invokes callback with result

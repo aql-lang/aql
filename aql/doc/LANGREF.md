@@ -1527,6 +1527,25 @@ string tor none                  => string|none
 number tor string tor boolean    => number|string|boolean
 ```
 
+#### `tand`
+
+Combine two values by conjunction. For two concrete maps, merges keys —
+keys present in only one side are kept as-is, keys present in both are
+unified. For other shapes, returns the unification of the arguments.
+
+*Signature:* `[any, any] -> [any]`
+*Precedence:* forward
+
+```
+{x:1} tand {y:Integer}           => {x:1,y:Integer}
+{x:1} tand {x:Integer}           => {x:1}
+{x:1} tand {y:2} tand {z:3}      => {x:1,y:2,z:3}
+1 tand Integer                   => 1
+```
+
+Errors when values cannot be combined (e.g. `{x:1} tand {x:2}` — two
+different concrete values for the same key).
+
 #### `unify`
 
 Attempt to unify two values. Pushes the unified value and a boolean

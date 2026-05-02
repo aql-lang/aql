@@ -564,6 +564,7 @@ func Register(r *Registry) {
 	RegisterInspect(r)
 	RegisterBase(r)
 	RegisterTor(r)
+	RegisterTand(r)
 
 	// Control flow — quote moved to native.
 	RegisterDo(r)

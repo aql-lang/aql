@@ -301,6 +301,7 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | | `[M, Any]` | `[Object]` | Object type with parent | — |
 | `record` | `[L]` | `[Record]` | Define record type from field list | `arg0: L` |
 | `table` | `[Any]` | `[Table]` | Define table from record type | — |
+| `tand` | `[Any, Any]` | `[Any]` | Conjunction: merges concrete maps; unifies otherwise | — |
 | `tor` | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
 | `type` | `[S, Any]` | `[]` | Register named type | — |
 | | `[A, Any]` /q | `[]` | | — |

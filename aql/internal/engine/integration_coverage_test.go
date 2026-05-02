@@ -1156,6 +1156,81 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	}
 }
 
+// === 9b. tand for conjunction ===
+
+func TestIntegTandMergeMaps(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// {x:1} tand {y:Integer} -> {x:1,y:Integer}
+	left := NewOrderedMap()
+	left.Set("x", NewInteger(1))
+	right := NewOrderedMap()
+	right.Set("y", NewTypeLiteral(TInteger))
+	result := runAQL(t, r, []Value{
+		NewMap(left), NewWord("tand"), NewMap(right),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	merged := result[0].AsMap()
+	if merged == nil {
+		t.Fatalf("expected merged map, got %v", result[0])
+	}
+	if merged.Len() != 2 {
+		t.Errorf("merged map should have 2 keys, got %d", merged.Len())
+	}
+	x, okX := merged.Get("x")
+	if !okX {
+		t.Fatalf("missing key x")
+	}
+	if xi, _ := x.AsInteger(); xi != 1 {
+		t.Errorf("x = %v, want 1", x)
+	}
+	y, okY := merged.Get("y")
+	if !okY {
+		t.Fatalf("missing key y")
+	}
+	if !y.VType.Equal(TInteger) || y.Data != nil {
+		t.Errorf("y = %v, want Integer type literal", y)
+	}
+}
+
+func TestIntegTandMergeOverlap(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// {x:1} tand {x:Integer} -> {x:1} (1 unifies with Integer to 1)
+	left := NewOrderedMap()
+	left.Set("x", NewInteger(1))
+	right := NewOrderedMap()
+	right.Set("x", NewTypeLiteral(TInteger))
+	result := runAQL(t, r, []Value{
+		NewMap(left), NewWord("tand"), NewMap(right),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	merged := result[0].AsMap()
+	if merged == nil || merged.Len() != 1 {
+		t.Fatalf("expected single-key merged map, got %v", result[0])
+	}
+	x, _ := merged.Get("x")
+	if xi, _ := x.AsInteger(); xi != 1 {
+		t.Errorf("x = %v, want 1", x)
+	}
+}
+
+func TestIntegTandUnifyScalars(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 tand Integer -> 1
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("tand"), NewTypeLiteral(TInteger),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if v, _ := result[0].AsInteger(); v != 1 {
+		t.Errorf("1 tand Integer = %v, want 1", result[0])
+	}
+}
+
 // === 10. context word ===
 
 func TestIntegContextSetGet(t *testing.T) {
@@ -1330,4 +1405,3 @@ func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 		t.Errorf("append to new file = %q, want 'fresh'", data)
 	}
 }
-

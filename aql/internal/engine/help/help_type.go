@@ -64,4 +64,13 @@ func init() {
 			"Use to build optional fields and union type literals " +
 			"(e.g. `string tor none`).",
 	})
+
+	register(&Entry{
+		Word:    "tand",
+		Summary: "Combine two values by conjunction.",
+		Description: "For two concrete maps, merges keys (unifying values for " +
+			"keys present in both). For other shapes, returns the unification " +
+			"of the two arguments. Errors if the values cannot be combined " +
+			"(e.g. conflicting concrete values for the same key).",
+	})
 }
