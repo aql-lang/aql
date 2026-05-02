@@ -116,10 +116,14 @@ def apply-op fn [[rhs:Any op:String] [Boolean] [if (op "is_true" eq) [rhs] [if (
 def eval-cond fn [[c:Map input:Map] [Boolean] [input.((c.field convert String)) c.op c.value apply-op]]
 
 # --- eval-pred helpers ---
+# eval-pred-all/any fold per-child eval-pred results with the matching
+# list-quantifier word. The earlier implementations used a manual
+# for-loop with a mutable result flag; the new versions rely on
+# each + all/any, which short-circuit at the quantifier.
 
-def eval-pred-all fn [[children:List input:Map] [Boolean] [def result true for (children length) [def idx i if (input (children idx get) eval-pred not) [def result false] []] end result]]
+def eval-pred-all fn [[children:List input:Map] [Boolean] [(children each [input swap eval-pred]) all]]
 
-def eval-pred-any fn [[children:List input:Map] [Boolean] [def result false for (children length) [def idx i if (input (children idx get) eval-pred) [def result true] []] end result]]
+def eval-pred-any fn [[children:List input:Map] [Boolean] [(children each [input swap eval-pred]) any]]
 
 def eval-pred-not fn [[children:Map input:Map] [Boolean] [input children eval-cond not]]
 def eval-pred-not fn [[children:List input:Map] [Boolean] [input (children 0 get) eval-pred not]]

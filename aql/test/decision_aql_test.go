@@ -255,6 +255,242 @@ var decisionTests = []decisionTestCase{
 		check: checkString("approved"),
 	},
 
+	// --- eval-cond (additional comparison ops) ---
+	{
+		name:  "EvalCondNeq",
+		expr:  `{status:"active"} {field:status,op:"neq",value:"inactive"} decision.eval-cond`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalCondLt",
+		expr:  `{age:10} {field:age,op:"lt",value:18} decision.eval-cond`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalCondLte",
+		expr:  `{age:18} {field:age,op:"lte",value:18} decision.eval-cond`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalCondGt",
+		expr:  `{age:25} {field:age,op:"gt",value:18} decision.eval-cond`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalCondGtFalse",
+		expr:  `{age:5} {field:age,op:"gt",value:18} decision.eval-cond`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalCondUnknownOpReturnsFalse",
+		expr:  `{age:25} {field:age,op:"weird",value:18} decision.eval-cond`,
+		check: checkBool(false),
+	},
+
+	// --- eval-pred edge cases ---
+	{
+		name:  "EvalPredAllOfEmptyIsTrue",
+		setup: `def pred ([] decision.all-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalPredAnyOfEmptyIsFalse",
+		setup: `def pred ([] decision.any-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalPredAllOfSingleChildTrue",
+		setup: `def pred ([{field:age,op:"gte",value:18}] decision.all-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalPredAllOfSingleChildFalse",
+		setup: `def pred ([{field:age,op:"gte",value:18}] decision.all-of)`,
+		expr:  `{age:10} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalPredAnyOfAllFalse",
+		setup: `def pred ([{field:age,op:"gte",value:100} {field:age,op:"lt",value:0}] decision.any-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalPredAnyOfFirstTrueShortCircuits",
+		setup: `def pred ([{field:age,op:"gte",value:18} {field:never,op:"eq",value:"x"}] decision.any-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalPredAllOfThreeChildrenTrue",
+		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50} {field:active,op:"eq",value:true}] decision.all-of)`,
+		expr:  `{age:25,score:80,active:true} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name:  "EvalPredAllOfThreeChildrenOneFails",
+		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50} {field:active,op:"eq",value:true}] decision.all-of)`,
+		expr:  `{age:25,score:80,active:false} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+
+	// --- eval-pred nested compositions ---
+	{
+		name: "EvalPredAnyOfInsideAllOf",
+		setup: `def pred ([
+			{field:age,op:"gte",value:18}
+			{kind:"group",op:"any",children:[
+				{field:role,op:"eq",value:"admin"}
+				{field:role,op:"eq",value:"editor"}
+			]}
+		] decision.all-of)`,
+		expr:  `{age:25,role:"admin"} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name: "EvalPredAnyOfInsideAllOfRejects",
+		setup: `def pred ([
+			{field:age,op:"gte",value:18}
+			{kind:"group",op:"any",children:[
+				{field:role,op:"eq",value:"admin"}
+				{field:role,op:"eq",value:"editor"}
+			]}
+		] decision.all-of)`,
+		expr:  `{age:25,role:"viewer"} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name: "EvalPredAllOfInsideAnyOf",
+		setup: `def pred ([
+			{kind:"group",op:"all",children:[
+				{field:age,op:"gte",value:18}
+				{field:age,op:"lt",value:65}
+			]}
+			{field:vip,op:"eq",value:true}
+		] decision.any-of)`,
+		expr:  `{age:80,vip:true} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	{
+		name: "EvalPredNotOfGroup",
+		setup: `def pred ({kind:"group",op:"not",children:[{kind:"group",op:"any",children:[
+			{field:status,op:"eq",value:"banned"}
+			{field:status,op:"eq",value:"suspended"}
+		]}]} )`,
+		expr:  `{status:"active"} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+	// (Deeper-than-2-level group nesting hits a pre-existing scoping
+	// issue in eval-pred where `def children quote (pred get "children")`
+	// shadows the parent iteration's children. Tests at 2-level work.)
+
+	// --- eval-table: more hit-policy cases ---
+	{
+		name: "TableCollectNoMatch",
+		setup: `def rawtbl ([
+			{when:{field:age,op:"gt",value:100}, then:{x:1}}
+		] decision.make-table)
+		def tbl (rawtbl "collect" decision.with-policy)`,
+		expr:  `{age:25} tbl decision.eval-table`,
+		check: checkCollectLen(0),
+	},
+	{
+		name: "TableUniqueMultipleMatchesError",
+		setup: `def rawtbl ([
+			{when:{field:age,op:"gte",value:18}, then:{tag:"a"}}
+			{when:{field:age,op:"gte",value:21}, then:{tag:"b"}}
+		] decision.make-table)
+		def tbl (rawtbl "unique" decision.with-policy)`,
+		expr:  `{age:30} tbl decision.eval-table`,
+		check: checkMapField("error", "multiple-matches"),
+	},
+	{
+		name: "TablePriorityNoMatch",
+		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
+			{when:{field:age,op:"gt",value:100}, then:{tier:"X"}, priority:1}
+		]})`,
+		expr:  `{age:25} tbl decision.eval-table`,
+		check: checkMapField("error", "no-match"),
+	},
+	{
+		name: "TablePriorityMissingPriorityFieldDefaultsToZero",
+		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
+			{when:{field:age,op:"gte",value:18}, then:{tier:"plain"}}
+			{when:{field:age,op:"gte",value:21}, then:{tier:"vip"}, priority:5}
+		]})`,
+		expr:  `{age:25} tbl decision.eval-table`,
+		check: checkMapField("tier", "vip"),
+	},
+	{
+		name: "TableNestedAllChildren",
+		setup: `def tbl ({kind:"table", hit-policy:"first", rules:[
+			{when:{kind:"group",op:"all",children:[
+				{kind:"group",op:"any",children:[
+					{field:role,op:"eq",value:"admin"}
+					{field:role,op:"eq",value:"editor"}
+				]}
+				{field:active,op:"eq",value:true}
+			]}, then:{access:"granted"}}
+			{when:{field:active,op:"eq",value:true}, then:{access:"limited"}}
+		]})`,
+		expr:  `{role:"editor",active:true} tbl decision.eval-table`,
+		check: checkMapField("access", "granted"),
+	},
+
+	// --- eval-tree: error / edge cases ---
+	{
+		name: "TreeNoBranchMatch",
+		setup: `def tree ({kind:"tree", root:root, nodes:[
+			{id:root, kind:"branch", branches:[
+				{when:{field:age,op:"gt",value:100}, next:tooOld}
+			]}
+			{id:tooOld, kind:"leaf", result:"old"}
+		]})`,
+		expr:  `{age:25} tree decision.eval-tree`,
+		check: checkMapField("error", "no-branch-match"),
+	},
+	{
+		name: "TreeBrokenNextId",
+		setup: `def tree ({kind:"tree", root:root, nodes:[
+			{id:root, kind:"branch", branches:[
+				{when:{field:flag,op:"eq",value:true}, next:missing}
+			]}
+		]})`,
+		expr:  `{flag:true} tree decision.eval-tree`,
+		check: checkMapField("error", "node-not-found"),
+	},
+
+	// --- decide error case ---
+	{
+		name:  "DecideUnknownKind",
+		setup: `def model ({kind:"weird"})`,
+		expr:  `{x:5} model decision.decide`,
+		check: checkMapField("error", "unknown-model-kind"),
+	},
+
+	// --- eval-pred uses each + all/any (regression: short-circuit identity) ---
+	{
+		name:  "EvalPredAllOfFirstFails",
+		setup: `def pred ([{field:never,op:"eq",value:"x"} {field:age,op:"gte",value:18}] decision.all-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalPredAllOfLastFails",
+		setup: `def pred ([{field:age,op:"gte",value:18} {field:never,op:"eq",value:"x"}] decision.all-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(false),
+	},
+	{
+		name:  "EvalPredAnyOfLastTrue",
+		setup: `def pred ([{field:age,op:"gt",value:100} {field:age,op:"lt",value:0} {field:age,op:"gte",value:18}] decision.any-of)`,
+		expr:  `{age:25} pred decision.eval-pred`,
+		check: checkBool(true),
+	},
+
 	// --- decide (unified) ---
 	{
 		name: "DecideTable",
