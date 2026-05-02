@@ -222,12 +222,27 @@ func inferExact(name string, sig Signature) []string {
 	case "unify":
 		return []string{"Scalar/String", "Scalar/Boolean"}
 
-	// Boolean special: or with [Any,Any] → Disjunct
-	case "or":
+	// or/and short-circuit, returning the winning operand. The
+	// [Boolean, Boolean] sig keeps the result narrowed to Boolean;
+	// the [Any, Any] coerce sig returns the operand value as-is.
+	case "or", "and":
 		if nArgs == 2 && sig.Args[0].String() == "Any" {
 			return []string{"Any"}
 		}
 		return []string{"Scalar/Boolean"}
+
+	// Type union: tor builds a disjunct from any two values.
+	case "tor":
+		return []string{"Any"}
+
+	// Type conjunction: tand merges/unifies two values.
+	case "tand":
+		return []string{"Any"}
+
+	// List quantifiers: any/all return the winning element value;
+	// tany/tall return a folded disjunct or merged value.
+	case "any", "all", "tany", "tall":
+		return []string{"Any"}
 
 	// Help
 	case "help":
@@ -301,7 +316,7 @@ func isCompareWord(name string) bool {
 
 func isBoolWord(name string) bool {
 	switch name {
-	case "and", "or", "xor", "nand", "implies":
+	case "and", "or", "xor", "nand", "nor", "iff", "implies":
 		return true
 	}
 	return false

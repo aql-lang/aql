@@ -2023,12 +2023,12 @@ func TestEngineDisjunct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// string or none
+	// string tor none
 	result := runAQL(t, r, []Value{
-		NewTypeLiteral(TString), NewWord("or"), NewTypeLiteral(TNone),
+		NewTypeLiteral(TString), NewWord("tor"), NewTypeLiteral(TNone),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Errorf("string or none = %v, want disjunct", result)
+		t.Errorf("string tor none = %v, want disjunct", result)
 	}
 }
 

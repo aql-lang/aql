@@ -37,29 +37,29 @@ def Opts (make Options {x:1 y:2}) def f fn [[m:Opts] [Map] [m]] f {}	{}
 # --- Options with disjunct fields ---
 
 # Disjunct field — integer value matches
-def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
+def Opts (make Options {x:(Integer tor String)}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
 
 # Disjunct field — string value matches
-def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	{x:'hi'}
+def Opts (make Options {x:(Integer tor String)}) def f fn [[m:Opts] [Map] [m]] f {x:"hi"}	{x:'hi'}
 
 # Disjunct field — boolean value does not match
-def Opts (make Options {x:(Integer or String)}) def f fn [[m:Opts] [Map] [m]] f {x:true}	ERROR:signature_error
+def Opts (make Options {x:(Integer tor String)}) def f fn [[m:Opts] [Map] [m]] f {x:true}	ERROR:signature_error
 
 # Disjunct with None — integer value matches
-def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
+def Opts (make Options {x:(Integer tor None)}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
 
 # Disjunct with None — None value matches
-def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {x:None}	{x:None}
+def Opts (make Options {x:(Integer tor None)}) def f fn [[m:Opts] [Map] [m]] f {x:None}	{x:None}
 
 # Disjunct with None — absent field defaults to None
-def Opts (make Options {x:(Integer or None)}) def f fn [[m:Opts] [Map] [m]] f {}	{}
+def Opts (make Options {x:(Integer tor None)}) def f fn [[m:Opts] [Map] [m]] f {}	{}
 
 # --- Options with optional (?) fields ---
 
 # Optional field present — matches
 def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x:1 y:"hi"}	{x:1,y:'hi'}
 
-# Optional field absent — matches (? means or None, absence defaults to None)
+# Optional field absent — matches (? means tor None, absence defaults to None)
 def Opts (make Options {x:Integer y?:String}) def f fn [[m:Opts] [Map] [m]] f {x:1}	{x:1}
 
 # --- Empty Options ---
@@ -140,7 +140,7 @@ def Opts (make Options {x:1 y:2}) def f fn [[m?:Opts] [Map] [m]] f {x:10 y:20}	{
 def Opts (make Options {x:1 y:2}) def f fn [[m?:Opts] [Map] [m]] f	{}
 
 # Optional Options with disjunct-None fields — omitted
-def Opts (make Options {x:(Integer or None)}) def f fn [[m?:Opts] [Map] [m]] f	{}
+def Opts (make Options {x:(Integer tor None)}) def f fn [[m?:Opts] [Map] [m]] f	{}
 
 # Optional Options with type-only fields (no defaults) — omitted triggers error
 def Opts (make Options {x:Integer}) def f fn [[m?:Opts] [Map] [m]] f	ERROR:

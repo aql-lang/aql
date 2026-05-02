@@ -1,7 +1,6 @@
 package test
 
 import (
-	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"bufio"
 	"fmt"
 	"os"
@@ -9,22 +8,16 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 )
 
-// errorPatterns maps error codes used in syntax.tsv to substrings that must
-// appear in the actual error message.
-var errorPatterns = map[string]string{
-	"syntax_error":     "syntax_error",
-	"signature_error":  "signature_error",
-	"division_by_zero": "division by zero",
-	"modulo_by_zero":   "modulo by zero",
-	"undefined_word":   "undefined_word",
-	"unify_error":      "cannot unify",
-}
-
-func TestSyntax(t *testing.T) {
-	f, err := os.Open("syntax.tsv")
+// TestBoolean runs every line of boolean.tsv as a parse+run+compare
+// test. Format mirrors syntax.tsv:
+//
+//	<expr>\t<expected>[\t<error-code>]
+func TestBoolean(t *testing.T) {
+	f, err := os.Open("boolean.tsv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +31,6 @@ func TestSyntax(t *testing.T) {
 		lineNum++
 		line := scanner.Text()
 
-		// Skip empty lines and comments.
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -73,7 +65,6 @@ func TestSyntax(t *testing.T) {
 			result, err := eng.Run(values)
 
 			if errorCode != "" {
-				// We expect an error.
 				if err == nil {
 					t.Errorf("\n  expr: %s\n  expected error %q but got result: %s",
 						expr, errorCode, formatStack(result))
@@ -83,7 +74,6 @@ func TestSyntax(t *testing.T) {
 				return
 			}
 
-			// We expect success.
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
 			}
@@ -100,21 +90,8 @@ func TestSyntax(t *testing.T) {
 	}
 
 	if ran == 0 {
-		t.Fatal("no test cases found in syntax.tsv")
+		t.Fatal("no test cases found in boolean.tsv")
 	}
 
-	t.Logf("ran %d syntax test cases", ran)
-}
-
-// checkErrorCode verifies that the error message contains the expected pattern.
-func checkErrorCode(t *testing.T, expr string, err error, code string) {
-	t.Helper()
-	pattern, ok := errorPatterns[code]
-	if !ok {
-		t.Errorf("\n  expr: %s\n  unknown error code %q", expr, code)
-		return
-	}
-	if !strings.Contains(err.Error(), pattern) {
-		t.Errorf("\n  expr: %s\n  error: %v\n  expected error containing %q", expr, err, pattern)
-	}
+	t.Logf("ran %d boolean test cases", ran)
 }

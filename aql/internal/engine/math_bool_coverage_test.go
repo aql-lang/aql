@@ -161,9 +161,9 @@ func TestBoolImplies(t *testing.T) {
 	}
 }
 
-func TestBoolOrNonBoolean(t *testing.T) {
+func TestBoolTorNonBoolean(t *testing.T) {
 	r, _ := engine.DefaultRegistry(native.Register)
-	result := runAQL(t, r, []engine.Value{engine.NewInteger(1), engine.NewWord("or"), engine.NewInteger(2)})
+	result := runAQL(t, r, []engine.Value{engine.NewInteger(1), engine.NewWord("tor"), engine.NewInteger(2)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}

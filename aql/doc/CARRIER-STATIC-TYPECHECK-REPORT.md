@@ -64,7 +64,7 @@ AQL has:
 
 - `Unify(a,b)` rules for scalar/list/map compatibility and narrowing.
 - Disjunct handling (`unifyDisjunct`) for alternatives.
-- `or` behavior that forms disjunctions for non-boolean operands.
+- `tor` behavior that forms disjunctions from any two operands.
 
 Implication: the language already has the primitives needed to represent and merge uncertain static types.
 

@@ -1078,16 +1078,16 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	}
 }
 
-// === 9. or for disjuncts ===
+// === 9. tor for disjuncts ===
 
-func TestIntegOrDisjunctValues(t *testing.T) {
+func TestIntegTorDisjunctValues(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 1 or "hello" or true
+	// 1 tor "hello" tor true
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), NewString("hello"), NewWord("or"), NewBoolean(true),
+		NewInteger(1), NewWord("tor"), NewString("hello"), NewWord("tor"), NewBoolean(true),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("1 or 'hello' or true should be disjunct, got %v", result)
+		t.Fatalf("1 tor 'hello' tor true should be disjunct, got %v", result)
 	}
 	_as37, _ := result[0].AsDisjunct()
 	alts := _as37.Alternatives
@@ -1096,13 +1096,13 @@ func TestIntegOrDisjunctValues(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctTwoValues(t *testing.T) {
+func TestIntegTorDisjunctTwoValues(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewInteger(42), NewWord("or"), NewString("hello"),
+		NewInteger(42), NewWord("tor"), NewString("hello"),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("42 or 'hello' should be disjunct, got %v", result)
+		t.Fatalf("42 tor 'hello' should be disjunct, got %v", result)
 	}
 	_as38, _ := result[0].AsDisjunct()
 	alts := _as38.Alternatives
@@ -1111,14 +1111,14 @@ func TestIntegOrDisjunctTwoValues(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctFlattensLeft(t *testing.T) {
+func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Build a disjunct then or with another value
+	// Build a disjunct then tor with another value
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), NewInteger(2), NewWord("or"), NewInteger(3),
+		NewInteger(1), NewWord("tor"), NewInteger(2), NewWord("tor"), NewInteger(3),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("chained or should produce disjunct, got %v", result)
+		t.Fatalf("chained tor should produce disjunct, got %v", result)
 	}
 	_as39, _ := result[0].AsDisjunct()
 	alts := _as39.Alternatives
@@ -1127,15 +1127,15 @@ func TestIntegOrDisjunctFlattensLeft(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctFlattensRight(t *testing.T) {
+func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Pre-build a disjunct on the right side
 	rightDisjunct := NewDisjunct([]Value{NewInteger(2), NewInteger(3)})
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), rightDisjunct,
+		NewInteger(1), NewWord("tor"), rightDisjunct,
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("or with right disjunct should produce disjunct, got %v", result)
+		t.Fatalf("tor with right disjunct should produce disjunct, got %v", result)
 	}
 	_as40, _ := result[0].AsDisjunct()
 	alts := _as40.Alternatives
@@ -1153,6 +1153,148 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	_as41, _ := result[0].AsBoolean()
 	if len(result) != 1 || !_as41 {
 		t.Errorf("false or true = %v, want true", result)
+	}
+}
+
+func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 or 0 → 1 (first truthy wins)
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("or"), NewInteger(0),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if v, _ := result[0].AsInteger(); v != 1 {
+		t.Errorf("1 or 0 = %v, want 1", result[0])
+	}
+	// 0 or 5 → 5 (second wins because first is falsy)
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("or"), NewInteger(5),
+	})
+	if v, _ := result[0].AsInteger(); v != 5 {
+		t.Errorf("0 or 5 = %v, want 5", result[0])
+	}
+	// 0 or 0 → 0 (last falsy)
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("or"), NewInteger(0),
+	})
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("0 or 0 = %v, want 0", result[0])
+	}
+	// "" or "x" → "x"
+	result = runAQL(t, r, []Value{
+		NewString(""), NewWord("or"), NewString("x"),
+	})
+	if s, _ := result[0].AsString(); s != "x" {
+		t.Errorf("\"\" or \"x\" = %v, want \"x\"", result[0])
+	}
+}
+
+func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 and 2 → 2 (both truthy, last wins)
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("and"), NewInteger(2),
+	})
+	if v, _ := result[0].AsInteger(); v != 2 {
+		t.Errorf("1 and 2 = %v, want 2", result[0])
+	}
+	// 0 and 5 → 0 (first falsy short-circuits)
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("and"), NewInteger(5),
+	})
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("0 and 5 = %v, want 0", result[0])
+	}
+	// 1 and 0 → 0 (second is falsy)
+	result = runAQL(t, r, []Value{
+		NewInteger(1), NewWord("and"), NewInteger(0),
+	})
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("1 and 0 = %v, want 0", result[0])
+	}
+	// "x" and "y" → "y"
+	result = runAQL(t, r, []Value{
+		NewString("x"), NewWord("and"), NewString("y"),
+	})
+	if s, _ := result[0].AsString(); s != "y" {
+		t.Errorf("\"x\" and \"y\" = %v, want \"y\"", result[0])
+	}
+}
+
+// === 9b. tand for conjunction ===
+
+func TestIntegTandMergeMaps(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// {x:1} tand {y:Integer} -> {x:1,y:Integer}
+	left := NewOrderedMap()
+	left.Set("x", NewInteger(1))
+	right := NewOrderedMap()
+	right.Set("y", NewTypeLiteral(TInteger))
+	result := runAQL(t, r, []Value{
+		NewMap(left), NewWord("tand"), NewMap(right),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	merged := result[0].AsMap()
+	if merged == nil {
+		t.Fatalf("expected merged map, got %v", result[0])
+	}
+	if merged.Len() != 2 {
+		t.Errorf("merged map should have 2 keys, got %d", merged.Len())
+	}
+	x, okX := merged.Get("x")
+	if !okX {
+		t.Fatalf("missing key x")
+	}
+	if xi, _ := x.AsInteger(); xi != 1 {
+		t.Errorf("x = %v, want 1", x)
+	}
+	y, okY := merged.Get("y")
+	if !okY {
+		t.Fatalf("missing key y")
+	}
+	if !y.VType.Equal(TInteger) || y.Data != nil {
+		t.Errorf("y = %v, want Integer type literal", y)
+	}
+}
+
+func TestIntegTandMergeOverlap(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// {x:1} tand {x:Integer} -> {x:1} (1 unifies with Integer to 1)
+	left := NewOrderedMap()
+	left.Set("x", NewInteger(1))
+	right := NewOrderedMap()
+	right.Set("x", NewTypeLiteral(TInteger))
+	result := runAQL(t, r, []Value{
+		NewMap(left), NewWord("tand"), NewMap(right),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	merged := result[0].AsMap()
+	if merged == nil || merged.Len() != 1 {
+		t.Fatalf("expected single-key merged map, got %v", result[0])
+	}
+	x, _ := merged.Get("x")
+	if xi, _ := x.AsInteger(); xi != 1 {
+		t.Errorf("x = %v, want 1", x)
+	}
+}
+
+func TestIntegTandUnifyScalars(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 tand Integer -> 1
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("tand"), NewTypeLiteral(TInteger),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if v, _ := result[0].AsInteger(); v != 1 {
+		t.Errorf("1 tand Integer = %v, want 1", result[0])
 	}
 }
 
@@ -1330,4 +1472,3 @@ func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 		t.Errorf("append to new file = %q, want 'fresh'", data)
 	}
 }
-

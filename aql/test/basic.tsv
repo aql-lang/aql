@@ -104,45 +104,45 @@ type foo record [x:Number] type bar record [y:Number] (table foo) unify (table b
 List unify table record [x:Number]	'~unify-fail' false
 
 # Record with inline disjunct field (list evaluated as code)
-record [x:Number y:[String or None]]	record{x:Scalar/Number,y:Scalar/String|None}
+record [x:Number y:[String tor None]]	record{x:Scalar/Number,y:Scalar/String|None}
 
 # Record with inline disjunct - unification narrows
-record [x:Number y:[String or None]] unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
+record [x:Number y:[String tor None]] unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
 
 # Make record with inline disjunct - none value
-type foo record [x:Number y:[String or None]] make foo [42 None]	{x:42,y:None}
+type foo record [x:Number y:[String tor None]] make foo [42 None]	{x:42,y:None}
 
 # Make record with inline disjunct - string value
-type foo record [x:Number y:[String or None]] make foo [42 "hello"]	{x:42,y:'hello'}
+type foo record [x:Number y:[String tor None]] make foo [42 "hello"]	{x:42,y:'hello'}
 
 # Record with user-defined type field (disjunct for optional)
-type OptStr (String or None) type foo record [x:Number y:OptStr] foo	record{x:Scalar/Number,y:Scalar/String|None}
+type OptStr (String tor None) type foo record [x:Number y:OptStr] foo	record{x:Scalar/Number,y:Scalar/String|None}
 
 # Record with user-defined type - unification narrows disjunct
-type OptStr (String or None) type foo record [x:Number y:OptStr] foo unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
+type OptStr (String tor None) type foo record [x:Number y:OptStr] foo unify record [x:Number y:String]	record{x:Scalar/Number,y:Scalar/String} true
 
 # Make record with optional field - string value
-type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
+type OptStr (String tor None) type foo record [x:Number y:OptStr] make foo [42 "hello"]	{x:42,y:'hello'}
 
 # Make record with optional field - none value
-type OptStr (String or None) type foo record [x:Number y:OptStr] make foo [42 None]	{x:42,y:None}
+type OptStr (String tor None) type foo record [x:Number y:OptStr] make foo [42 None]	{x:42,y:None}
 
 # Def map with optional field - absence unifies as None
-def A {x:Integer y:(String or None)} A unify {x:1}	{x:1,y:None} true
-def A {x:Integer y:(String or None)} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
-def A {x:Integer y:(String or None)} A unify {x:1,y:None}	{x:1,y:None} true
+def A {x:Integer y:(String tor None)} A unify {x:1}	{x:1,y:None} true
+def A {x:Integer y:(String tor None)} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+def A {x:Integer y:(String tor None)} A unify {x:1,y:None}	{x:1,y:None} true
 
 # Make record from map - all fields provided
 type foo record [x:Number y:String] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field provided
-type foo record [x:Number y:[String or None]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
+type foo record [x:Number y:[String tor None]] make foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field omitted (defaults to none)
-type foo record [x:Number y:[String or None]] make foo {x:1}	{x:1,y:None}
+type foo record [x:Number y:[String tor None]] make foo {x:1}	{x:1,y:None}
 
 # Make record from named list - optional field omitted (defaults to none)
-type foo record [x:Number y:[String or None]] make foo [x:1]	{x:1,y:None}
+type foo record [x:Number y:[String tor None]] make foo [x:1]	{x:1,y:None}
 
 # Make record from map - missing required field is an error
 type foo record [x:Number y:String] make foo {x:1}	ERROR:make: missing field "y"
@@ -163,11 +163,11 @@ make Options {x:1,y:2}	options{x:1,y:2}
 (make Options {x:Integer}) unify {x:1}	{x:1} true
 
 # Options with disjunct
-def d (make Options {y:(Integer or String)}) d unify {y:1}	{y:1} true
-def d (make Options {y:(Integer or String)}) d unify {y:"Y"}	{y:'Y'} true
+def d (make Options {y:(Integer tor String)}) d unify {y:1}	{y:1} true
+def d (make Options {y:(Integer tor String)}) d unify {y:"Y"}	{y:'Y'} true
 
 # Options with None in disjunct - absence defaults to None
-def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
+def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
 
 # Options - extra keys fail
 (make Options {x:1}) unify {x:2,y:3}	'~unify-fail' false
@@ -178,7 +178,7 @@ def d (make Options {y:(Integer or None)}) d unify {}	{y:None} true
 # Options - all defaults
 (make Options {x:1,y:2}) unify {}	{x:1,y:2} true
 
-# Optional field syntax ? — sugar for (type or None)
+# Optional field syntax ? — sugar for (type tor None)
 {x?:Integer}	{x:Scalar/Number/Integer|None}
 
 # Computed key syntax {[key]:value} — uses defined variables
@@ -198,8 +198,8 @@ def A {x:Integer y?:String} A unify {x:1}	{x:1,y:None} true
 def A {x:Integer y?:String} A unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 
 # Optional function arguments — named optional param
-def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 5	5
-def add2 fn [[x:(Integer or None) y:Integer] [Integer] [x add y]] add2 10 5	15
+def add2 fn [[x:(Integer tor None) y:Integer] [Integer] [x add y]] add2 5	5
+def add2 fn [[x:(Integer tor None) y:Integer] [Integer] [x add y]] add2 10 5	15
 
 # Optional function arguments — named with ? list pair syntax
 def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 5	5
@@ -235,7 +235,7 @@ def flag fn [[v?:Boolean] [Boolean] [v]] flag	false
 def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
 
 # Table with optional field - mixed string and none values
-type OptStr (String or None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
+type OptStr (String tor None) type foo record [x:Number y:OptStr] type bar table foo make bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
 # Record with nested user-defined record type
 type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Scalar/Number,b:record{z:Scalar/String}}
@@ -252,11 +252,11 @@ do {x:1,y:2}	{x:1,y:2}
 # Map with paren expressions (inline evaluation)
 {x:(3 add 4),y:(upper "a")}	{x:7,y:'A'}
 
-# Disjunct - union types via or
-String or None	Scalar/String|None
-(String or None) unify "a"	'a' true
-(None or Boolean) unify None	None true
-({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+# Disjunct - union types via tor
+String tor None	Scalar/String|None
+(String tor None) unify "a"	'a' true
+(None tor Boolean) unify None	None true
+({x:1} tor {y:2}) unify {x:1,q:9}	{q:9,x:1} true
 
 # typeof - returns second type part (or first if single)
 typeof 42	Number
@@ -388,9 +388,9 @@ record [x:Number] eq record [x:Number y:String]	false
 type R record [x:Number] (table R) eq (table R)	true
 
 # eq/neq - disjunct types
-(String or None) eq (String or None)	true
-(String or None) eq (Number or None)	false
-(String or None) neq (Number or None)	true
+(String tor None) eq (String tor None)	true
+(String tor None) eq (Number tor None)	false
+(String tor None) neq (Number tor None)	true
 
 # eq/neq - user-defined types
 type Foo [:Number] type Bar [:Number] Foo eq Bar	true
@@ -418,7 +418,7 @@ type P record [x:Number y:String] make P {x:1} {base:true}	{x:1,y:''}
 type P record [x:Number y:String] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
 
 # make record with base:true - optional field gets base not none
-type P record [x:Number y:[String or None]] make P {x:1} {base:true}	{x:1,y:''}
+type P record [x:Number y:[String tor None]] make P {x:1} {base:true}	{x:1,y:''}
 
 # make record with base:true - boolean field
 type P record [x:Number y:Boolean] make P {x:1} {base:true}	{x:1,y:false}

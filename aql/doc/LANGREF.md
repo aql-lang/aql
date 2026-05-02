@@ -1043,54 +1043,73 @@ math-e log          => 1
 
 #### `or`
 
-Logical OR for booleans; disjunction (type union) for non-boolean
-values.
+Logical OR with traditional short-circuit semantics: returns the
+first operand if it is truthy, otherwise the second operand. The
+result is the actual operand value, not a coerced boolean. Truthiness
+is determined by the same rules as `convert boolean`: booleans pass
+through, numbers are non-zero, none/empty list/empty map are false,
+"true"/"false" parse literally, all other values are non-empty.
 
 *Signatures:*
-- `[boolean, boolean] -> [boolean]` — logical OR
-- `[any, any] -> [disjunct]` — type union
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [any]` — returns the winning operand
 
 ```
 true or false           => true
 false or false          => false
+1 or 0                  => 1
+0 or 5                  => 5
+0 or 0                  => 0
+"" or "x"               => 'x'
 ```
 
-**Disjunction (type union):** When used with non-boolean values, `or`
-creates a disjunct type that matches any of its alternatives.
-
-```
-string or none                  => string|none
-number or string or boolean     => number|string|boolean
-```
+For type union construction, see [`tor`](#tor).
 
 #### `and`
 
-Logical AND.
+Logical AND with traditional short-circuit semantics: returns the
+first operand if it is falsy, otherwise the second operand. The
+result is the actual operand value, not a coerced boolean. Truthiness
+rules are the same as for `or`.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [any]` — returns the winning operand
 
 ```
 true and false          => false
 true and true           => true
+1 and 2                 => 2
+0 and 5                 => 0
+1 and 0                 => 0
+"hello" and "world"     => 'world'
 true or false and false => true       # and binds first
 ```
 
 #### `not`
 
-Logical NOT (unary).
+Logical NOT (unary). Coerces non-boolean args via `convert boolean`
+rules, then negates.
 
-*Signature:* `[boolean] -> [boolean]`
+*Signatures:*
+- `[boolean] -> [boolean]`
+- `[any] -> [boolean]` — coerce, then negate
 
 ```
 true not                => false
 not false               => true
+1 not                   => false
+"" not                  => true
 ```
 
 #### `xor`
 
-Exclusive OR.
+Exclusive OR. Non-boolean arguments are coerced via `convert boolean`
+rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true xor false          => true
@@ -1099,25 +1118,111 @@ true xor true           => false
 
 #### `nand`
 
-Logical NAND (NOT AND).
+Logical NAND (NOT AND). Non-boolean arguments are coerced via
+`convert boolean` rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true nand true          => false
 true nand false         => true
 ```
 
+#### `nor`
+
+Logical NOR (NOT OR). Non-boolean arguments are coerced via
+`convert boolean` rules.
+
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
+
+```
+true nor true           => false
+false nor false         => true
+0 nor 0                 => true
+```
+
+#### `iff`
+
+Logical biconditional (XNOR / equivalence). True when both operands
+have the same truth value. Non-boolean arguments are coerced via
+`convert boolean` rules.
+
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
+
+```
+true iff true           => true
+true iff false          => false
+1 iff 1                 => true
+"" iff false            => true
+```
+
+#### `otherwise`
+
+Null-coalescing: returns the first operand when it is not `None`,
+otherwise returns the second operand. Distinct from `or`, which
+short-circuits on falsy values: `0 or 5` returns `5` (since `0` is
+falsy), but `0 otherwise 5` returns `0` (since `0` is not `None`).
+
+*Signature:* `[any, any] -> [any]`
+
+```
+None otherwise 5        => 5
+5 otherwise None        => 5
+0 otherwise 5           => 0
+"" otherwise "x"        => ''
+None otherwise None     => None
+```
+
 #### `implies`
 
 Logical implication (a → b). False only when the first argument is
-true and the second is false.
+true and the second is false. Non-boolean arguments are coerced via
+`convert boolean` rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true implies false      => false
 false implies true      => true
+```
+
+#### `any`
+
+Apply `or` semantics across a list, short-circuiting on the first
+truthy element. Returns the winning element value (the first truthy
+element, or the last falsy element if all are falsy). Returns `false`
+for an empty list.
+
+*Signature:* `[list] -> [any]`
+
+```
+[1 0 2] any             => 1
+[0 0 2] any             => 2
+[0 0 0] any             => 0
+[] any                  => false
+```
+
+#### `all`
+
+Apply `and` semantics across a list, short-circuiting on the first
+falsy element. Returns the winning element value (the first falsy
+element, or the last truthy element if all are truthy). Returns
+`true` for an empty list.
+
+*Signature:* `[list] -> [any]`
+
+```
+[1 2 3] all             => 3
+[1 0 3] all             => 0
+[] all                  => true
 ```
 
 ### Comparison Words
@@ -1520,6 +1625,72 @@ none . x                                  => none
 ```
 
 ### Type Words
+
+#### `tor`
+
+Construct a disjunct (union) type from two values. Flattens nested
+disjuncts and applies carrier widening. Use to build optional fields
+and union type literals.
+
+*Signature:* `[any, any] -> [disjunct]`
+*Precedence:* forward
+
+```
+string tor none                  => string|none
+number tor string tor boolean    => number|string|boolean
+```
+
+#### `tand`
+
+Combine two values by conjunction. For two concrete maps, merges keys —
+keys present in only one side are kept as-is, keys present in both are
+unified. For other shapes, returns the unification of the arguments.
+
+*Signature:* `[any, any] -> [any]`
+*Precedence:* forward
+
+```
+{x:1} tand {y:Integer}           => {x:1,y:Integer}
+{x:1} tand {x:Integer}           => {x:1}
+{x:1} tand {y:2} tand {z:3}      => {x:1,y:2,z:3}
+1 tand Integer                   => 1
+```
+
+Errors when values cannot be combined (e.g. `{x:1} tand {x:2}` — two
+different concrete values for the same key).
+
+#### `tany`
+
+Apply `tor` across a list, building a flattened disjunct of every
+element. Existing disjunct elements are flattened. A single-element
+list returns that element unchanged. Errors on an empty list.
+
+*Signature:* `[list] -> [any]`
+*Precedence:* forward
+
+```
+[String None] tany               => String|None
+[1 2 3] tany                     => 1|2|3
+[(String tor None) Number] tany  => String|None|Number
+[String] tany                    => String
+```
+
+#### `tall`
+
+Apply `tand` across a list, folding via map-merge / unify. Concrete
+maps are merged key-by-key (overlapping keys are unified); other
+shapes are unified pairwise. A single-element list returns that
+element unchanged. Errors on an empty list or unifiable failure.
+
+*Signature:* `[list] -> [any]`
+*Precedence:* forward
+
+```
+[{x:1} {y:2}] tall                => {x:1,y:2}
+[{x:1} {x:Integer}] tall          => {x:1}
+[1 Integer Number] tall           => 1
+[{a:1} {b:2} {c:3}] tall          => {a:1,b:2,c:3}
+```
 
 #### `unify`
 
@@ -1930,21 +2101,21 @@ as a list `[...]` is evaluated as code. This lets you write
 disjunctions directly inside the record definition:
 
 ```
-record [x:number y:[string or none]]
+record [x:number y:[string tor none]]
                                 => record{x:number,y:string|none}
 ```
 
 The disjunction narrows on unification:
 
 ```
-record [x:number y:[string or none]] unify record [x:number y:string]
+record [x:number y:[string tor none]] unify record [x:number y:string]
                                 => record{x:number,y:string} true
 ```
 
 `make` accepts `none` for optional fields:
 
 ```
-type Person record [name:string nick:[string or none]]
+type Person record [name:string nick:[string tor none]]
 make Person ["Alice" "ace"]     => {name:'Alice',nick:'ace'}
 make Person ["Bob" none]        => {name:'Bob',nick:none}
 ```
@@ -1953,7 +2124,7 @@ make Person ["Bob" none]        => {name:'Bob',nick:none}
 Missing fields are filled with `none` when the field type allows it:
 
 ```
-type Person record [name:string nick:[string or none]]
+type Person record [name:string nick:[string tor none]]
 make Person {name:"Alice" nick:"ace"}  => {name:'Alice',nick:'ace'}
 make Person {name:"Bob"}               => {name:'Bob',nick:none}
 ```
@@ -1980,7 +2151,7 @@ For disjunction fields, the base of the first non-none alternative
 is used:
 
 ```
-type Rec record [x:number y:[string or none]]
+type Rec record [x:number y:[string tor none]]
 make Rec {x:1} {base:true}            => {x:1,y:''}
 make Rec {x:1}                        => {x:1,y:none}
 ```
@@ -1989,7 +2160,7 @@ make Rec {x:1}                        => {x:1,y:none}
 a disjunction separately and reference it by name:
 
 ```
-type OptStr (string or none)
+type OptStr (string tor none)
 type Person record [name:string nick:OptStr]
 Person                          => record{name:string,nick:string|none}
 ```
@@ -2065,7 +2236,7 @@ table type, disjunct, type literal, typed list, or typed map. Unlike
 type Point record [x:number y:number]
 make Point [1 2]                           => {x:1,y:2}
 
-type OptNum (number or none)
+type OptNum (number tor none)
 OptNum unify 5                             => 5 true
 OptNum unify none                          => none true
 

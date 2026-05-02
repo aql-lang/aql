@@ -55,4 +55,40 @@ func init() {
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +
 			"0.0 for decimals, empty string for strings, false for booleans, empty list for lists.",
 	})
+
+	register(&Entry{
+		Word:    "tor",
+		Summary: "Construct a disjunct (union) type from two values.",
+		Description: "Returns a disjunct that matches either alternative. " +
+			"Flattens nested disjuncts and applies carrier widening. " +
+			"Use to build optional fields and union type literals " +
+			"(e.g. `string tor none`).",
+	})
+
+	register(&Entry{
+		Word:    "tand",
+		Summary: "Combine two values by conjunction.",
+		Description: "For two concrete maps, merges keys (unifying values for " +
+			"keys present in both). For other shapes, returns the unification " +
+			"of the two arguments. Errors if the values cannot be combined " +
+			"(e.g. conflicting concrete values for the same key).",
+	})
+
+	register(&Entry{
+		Word:    "tany",
+		Summary: "Apply `tor` across a list, building a flattened disjunct.",
+		Description: "Folds the list with `tor` semantics: every element becomes " +
+			"an alternative of the resulting disjunct. Existing disjunct elements " +
+			"are flattened. A single-element list returns that element unchanged. " +
+			"Errors on an empty list.",
+	})
+
+	register(&Entry{
+		Word:    "tall",
+		Summary: "Apply `tand` across a list, folding via map-merge / unify.",
+		Description: "Folds the list with `tand` semantics: concrete maps are " +
+			"merged key-by-key (overlapping keys are unified); other shapes are " +
+			"unified pairwise. A single-element list returns that element " +
+			"unchanged. Errors on an empty list or unifiable failure.",
+	})
 }
