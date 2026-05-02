@@ -528,7 +528,10 @@ func Register(r *Registry) {
 	RegisterAnd(r)
 	RegisterXor(r)
 	RegisterNand(r)
+	RegisterNor(r)
+	RegisterIff(r)
 	RegisterNot(r)
+	RegisterOtherwise(r)
 
 	// Comparison
 	RegisterComparison(r)

@@ -37,4 +37,26 @@ func init() {
 		Description: "Returns false only when the first is true and the second is false: " +
 			"a b implies computes (!a || b).",
 	})
+
+	register(&Entry{
+		Word:    "nor",
+		Summary: "Logical NOR (NOT OR).",
+		Description: "Returns true only when both operands are false. " +
+			"Non-boolean inputs are coerced via `convert boolean` rules.",
+	})
+
+	register(&Entry{
+		Word:    "iff",
+		Summary: "Logical biconditional (XNOR / equivalence).",
+		Description: "Returns true when both operands have the same truth value. " +
+			"Non-boolean inputs are coerced via `convert boolean` rules.",
+	})
+
+	register(&Entry{
+		Word:    "otherwise",
+		Summary: "Null-coalescing: returns left operand if not None, else right.",
+		Description: "Distinct from `or`, which short-circuits on falsy. " +
+			"`0 otherwise 5` returns 0 (since 0 is not None), but " +
+			"`0 or 5` returns 5 (since 0 is falsy).",
+	})
 }

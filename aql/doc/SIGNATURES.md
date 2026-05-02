@@ -194,14 +194,19 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 |------|--------------------------|---------|-------|----------|
 | `and` | `[B, B]` | `[B]` | Short-circuit AND: returns first falsy operand or last truthy | — |
 | | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
+| `iff` | `[B, B]` | `[B]` | Logical biconditional (XNOR) | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `implies` | `[B, B]` | `[B]` | `!args[1] \|\| args[0]` (reversed) | — |
 | | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `nand` | `[B, B]` | `[B]` | Logical NAND | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
+| `nor` | `[B, B]` | `[B]` | Logical NOR (NOT OR) | — |
 | | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `not` | `[B]` | `[B]` | Logical NOT | — |
 | | `[Any]` | `[B]` | Coerce arg (`convert boolean` rules), then negate | — |
 | `or` | `[B, B]` | `[B]` | Short-circuit OR: returns first truthy operand or last falsy | — |
 | | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
+| `otherwise` | `[Any, Any]` | `[Any]` | Null-coalescing: first arg if not None, else second | — |
 | `xor` | `[B, B]` | `[B]` | Logical XOR | — |
 | | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 

@@ -1130,6 +1130,55 @@ true nand true          => false
 true nand false         => true
 ```
 
+#### `nor`
+
+Logical NOR (NOT OR). Non-boolean arguments are coerced via
+`convert boolean` rules.
+
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
+
+```
+true nor true           => false
+false nor false         => true
+0 nor 0                 => true
+```
+
+#### `iff`
+
+Logical biconditional (XNOR / equivalence). True when both operands
+have the same truth value. Non-boolean arguments are coerced via
+`convert boolean` rules.
+
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
+
+```
+true iff true           => true
+true iff false          => false
+1 iff 1                 => true
+"" iff false            => true
+```
+
+#### `otherwise`
+
+Null-coalescing: returns the first operand when it is not `None`,
+otherwise returns the second operand. Distinct from `or`, which
+short-circuits on falsy values: `0 or 5` returns `5` (since `0` is
+falsy), but `0 otherwise 5` returns `0` (since `0` is not `None`).
+
+*Signature:* `[any, any] -> [any]`
+
+```
+None otherwise 5        => 5
+5 otherwise None        => 5
+0 otherwise 5           => 0
+"" otherwise "x"        => ''
+None otherwise None     => None
+```
+
 #### `implies`
 
 Logical implication (a → b). False only when the first argument is

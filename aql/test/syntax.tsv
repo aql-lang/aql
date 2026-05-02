@@ -671,6 +671,28 @@ true nand false	true
 false nand true	true
 false nand false	true
 
+# === nor ===
+true nor true	false
+true nor false	false
+false nor true	false
+false nor false	true
+
+# nor coerces non-boolean args
+1 nor 0	false
+0 nor 0	true
+
+# === iff (logical biconditional / equivalence) ===
+true iff true	true
+true iff false	false
+false iff true	false
+false iff false	true
+
+# iff coerces non-boolean args
+1 iff 1	true
+1 iff 0	false
+"hello" iff true	true
+"" iff false	true
+
 # implies
 true implies true	true
 true implies false	false
@@ -890,6 +912,13 @@ false or false	false
 "" and "x"	''
 "true" and 1	1
 "false" and 1	'false'
+
+# === otherwise (null-coalescing: first non-None) ===
+0 otherwise 5	0
+"" otherwise "x"	''
+None otherwise 5	5
+5 otherwise None	5
+None otherwise None	None
 
 # === tand - conjunction / map merge ===
 
