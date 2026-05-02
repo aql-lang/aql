@@ -1194,6 +1194,37 @@ true implies false      => false
 false implies true      => true
 ```
 
+#### `any`
+
+Apply `or` semantics across a list, short-circuiting on the first
+truthy element. Returns the winning element value (the first truthy
+element, or the last falsy element if all are falsy). Returns `false`
+for an empty list.
+
+*Signature:* `[list] -> [any]`
+
+```
+[1 0 2] any             => 1
+[0 0 2] any             => 2
+[0 0 0] any             => 0
+[] any                  => false
+```
+
+#### `all`
+
+Apply `and` semantics across a list, short-circuiting on the first
+falsy element. Returns the winning element value (the first falsy
+element, or the last truthy element if all are truthy). Returns
+`true` for an empty list.
+
+*Signature:* `[list] -> [any]`
+
+```
+[1 2 3] all             => 3
+[1 0 3] all             => 0
+[] all                  => true
+```
+
 ### Comparison Words
 
 Comparison words take two arguments with forward precedence.
@@ -1627,6 +1658,39 @@ unified. For other shapes, returns the unification of the arguments.
 
 Errors when values cannot be combined (e.g. `{x:1} tand {x:2}` — two
 different concrete values for the same key).
+
+#### `tany`
+
+Apply `tor` across a list, building a flattened disjunct of every
+element. Existing disjunct elements are flattened. A single-element
+list returns that element unchanged. Errors on an empty list.
+
+*Signature:* `[list] -> [any]`
+*Precedence:* forward
+
+```
+[String None] tany               => String|None
+[1 2 3] tany                     => 1|2|3
+[(String tor None) Number] tany  => String|None|Number
+[String] tany                    => String
+```
+
+#### `tall`
+
+Apply `tand` across a list, folding via map-merge / unify. Concrete
+maps are merged key-by-key (overlapping keys are unified); other
+shapes are unified pairwise. A single-element list returns that
+element unchanged. Errors on an empty list or unifiable failure.
+
+*Signature:* `[list] -> [any]`
+*Precedence:* forward
+
+```
+[{x:1} {y:2}] tall                => {x:1,y:2}
+[{x:1} {x:Integer}] tall          => {x:1}
+[1 Integer Number] tall           => 1
+[{a:1} {b:2} {c:3}] tall          => {a:1,b:2,c:3}
+```
 
 #### `unify`
 

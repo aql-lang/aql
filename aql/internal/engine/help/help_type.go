@@ -73,4 +73,22 @@ func init() {
 			"of the two arguments. Errors if the values cannot be combined " +
 			"(e.g. conflicting concrete values for the same key).",
 	})
+
+	register(&Entry{
+		Word:    "tany",
+		Summary: "Apply `tor` across a list, building a flattened disjunct.",
+		Description: "Folds the list with `tor` semantics: every element becomes " +
+			"an alternative of the resulting disjunct. Existing disjunct elements " +
+			"are flattened. A single-element list returns that element unchanged. " +
+			"Errors on an empty list.",
+	})
+
+	register(&Entry{
+		Word:    "tall",
+		Summary: "Apply `tand` across a list, folding via map-merge / unify.",
+		Description: "Folds the list with `tand` semantics: concrete maps are " +
+			"merged key-by-key (overlapping keys are unified); other shapes are " +
+			"unified pairwise. A single-element list returns that element " +
+			"unchanged. Errors on an empty list or unifiable failure.",
+	})
 }

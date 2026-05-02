@@ -239,6 +239,11 @@ func inferExact(name string, sig Signature) []string {
 	case "tand":
 		return []string{"Any"}
 
+	// List quantifiers: any/all return the winning element value;
+	// tany/tall return a folded disjunct or merged value.
+	case "any", "all", "tany", "tall":
+		return []string{"Any"}
+
 	// Help
 	case "help":
 		return nil

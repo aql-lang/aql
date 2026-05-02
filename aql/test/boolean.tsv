@@ -408,3 +408,165 @@ None otherwise None	None
 # Boolean coercion through type coercion.
 (1 convert Boolean) and (2 convert Boolean)	true
 (0 convert Boolean) or (false)	false
+
+# =====================================================================
+# 19. any — list-or, short-circuit, returns winning element
+# =====================================================================
+
+# Boolean lists.
+[true false true] any	true
+[false false false] any	false
+[true] any	true
+[false] any	false
+
+# Numeric lists — first truthy wins.
+[1 0 2] any	1
+[0 0 2] any	2
+[0 0 0] any	0
+[0 0 -3] any	-3
+
+# String lists.
+["" "" "x"] any	'x'
+["" "x" "y"] any	'x'
+["" "" ""] any	''
+
+# Mixed types.
+[0 "" "found"] any	'found'
+[None 0 false] any	false
+[None "x"] any	'x'
+
+# Empty list returns identity (false for OR).
+[] any	false
+
+# Coerced via convert-boolean rules: empty list inside list is falsy.
+[[] [1]] any	[1]
+[[] []] any	[]
+
+# =====================================================================
+# 20. all — list-and, short-circuit, returns winning element
+# =====================================================================
+
+# Boolean lists.
+[true true true] all	true
+[true false true] all	false
+[true] all	true
+[false] all	false
+
+# Numeric lists — first falsy wins, else last.
+[1 2 3] all	3
+[1 0 3] all	0
+[0 1 2] all	0
+[5] all	5
+
+# String lists.
+["a" "b" "c"] all	'c'
+["a" "" "c"] all	''
+
+# Mixed types.
+[1 "ok" true] all	true
+[1 "" 5] all	''
+
+# Empty list returns identity (true for AND).
+[] all	true
+
+# Empty inner list is falsy for `all`.
+[[1] []] all	[]
+[[1] [2]] all	[2]
+
+# =====================================================================
+# 21. any/all interactions with other words
+# =====================================================================
+
+# any/all over computed lists.
+[(1 add 1) 0] any	2
+[(1 sub 1) 0] any	0
+
+# Use any/all as a condition (wrap the quantifier in parens so its
+# result feeds into `if`, not the raw list).
+if ([0 0 1] any) [42] [99]	42
+if ([1 0 1] all) [42] [99]	99
+
+# Combine with otherwise — `any` returns 0 (last falsy), then otherwise
+# replaces only on None, not on falsy.
+[0 0 0] any otherwise 99	0
+[None None None] any otherwise 99	99
+
+# any over a list built from comparisons.
+[(1 lt 2) (2 lt 1) (3 eq 3)] any	true
+[(1 gt 2) (2 lt 1)] any	false
+
+# all over a list built from comparisons.
+[(1 lt 2) (2 lt 3) (3 lt 4)] all	true
+[(1 lt 2) (2 gt 3)] all	false
+
+# =====================================================================
+# 22. tany — list-tor, builds flattened disjunct
+# =====================================================================
+
+# Type literals.
+[String None] tany	Scalar/String|None
+[Number String Boolean] tany	Scalar/Number|Scalar/String|Scalar/Boolean
+
+# Single-element list returns the element unchanged.
+[String] tany	Scalar/String
+
+# Concrete values.
+[1 2 3] tany	1|2|3
+["a" "b"] tany	'a'|'b'
+
+# Existing disjuncts are flattened.
+[(String tor None) Number] tany	Scalar/String|None|Scalar/Number
+
+# Equivalent to chained tor.
+[String Number Boolean None] tany	Scalar/String|Scalar/Number|Scalar/Boolean|None
+String tor Number tor Boolean tor None	Scalar/String|Scalar/Number|Scalar/Boolean|None
+
+# Use a tany result with unify.
+([String None] tany) unify "hi"	'hi' true
+([String None] tany) unify None	None true
+([String None] tany) unify 42	'~unify-fail' false
+
+# =====================================================================
+# 23. tall — list-tand, merges/unifies all elements
+# =====================================================================
+
+# Map merges with disjoint keys.
+[{x:1} {y:2}] tall	{x:1,y:2}
+[{a:1} {b:2} {c:3}] tall	{a:1,b:2,c:3}
+
+# Map merges with overlapping keys (unify).
+[{x:1} {x:Integer}] tall	{x:1}
+[{x:Number y:2} {x:1 z:3}] tall	{x:1,y:2,z:3}
+
+# Single-element list returns the element unchanged.
+[{x:1}] tall	{x:1}
+[42] tall	42
+
+# Non-map values fall back to Unify.
+[1 Integer Number] tall	1
+["hi" String] tall	'hi'
+
+# Type literal narrowing across the list.
+[Number Integer] tall	Scalar/Number/Integer
+[Integer Number] tall	Scalar/Number/Integer
+
+# Equivalent to chained tand.
+[{x:1} {y:2} {z:3}] tall	{x:1,y:2,z:3}
+{x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
+
+# tall result used in unify.
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+
+# =====================================================================
+# 24. tany/tall interactions
+# =====================================================================
+
+# tany a list with computed disjuncts.
+[({x:1} tand {y:2}) {z:3}] tany	{x:1,y:2}|{z:3}
+
+# Use tall to fold a list of map schemas, then unify.
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+
+# tany an empty disjunct via single-element collapses.
+[String] tany unify "x"	'x' true
+[None] tany unify None	None true

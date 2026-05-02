@@ -532,6 +532,8 @@ func Register(r *Registry) {
 	RegisterIff(r)
 	RegisterNot(r)
 	RegisterOtherwise(r)
+	RegisterAny(r)
+	RegisterAll(r)
 
 	// Comparison
 	RegisterComparison(r)
@@ -568,6 +570,8 @@ func Register(r *Registry) {
 	RegisterBase(r)
 	RegisterTor(r)
 	RegisterTand(r)
+	RegisterTany(r)
+	RegisterTall(r)
 
 	// Control flow — quote moved to native.
 	RegisterDo(r)

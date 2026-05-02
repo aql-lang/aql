@@ -192,8 +192,10 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
+| `all` | `[L]` | `[Any]` | List-AND: short-circuits to first falsy element, else last; `[]` → true | — |
 | `and` | `[B, B]` | `[B]` | Short-circuit AND: returns first falsy operand or last truthy | — |
 | | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
+| `any` | `[L]` | `[Any]` | List-OR: short-circuits to first truthy element, else last; `[]` → false | — |
 | `iff` | `[B, B]` | `[B]` | Logical biconditional (XNOR) | — |
 | | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `implies` | `[B, B]` | `[B]` | `!args[1] \|\| args[0]` (reversed) | — |
@@ -312,7 +314,9 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | | `[M, Any]` | `[Object]` | Object type with parent | — |
 | `record` | `[L]` | `[Record]` | Define record type from field list | `arg0: L` |
 | `table` | `[Any]` | `[Table]` | Define table from record type | — |
+| `tall` | `[L]` | `[Any]` | List-tand: folds via map-merge / unify; errors on `[]` | — |
 | `tand` | `[Any, Any]` | `[Any]` | Conjunction: merges concrete maps; unifies otherwise | — |
+| `tany` | `[L]` | `[Any]` | List-tor: builds flattened disjunct of all elements; errors on `[]` | — |
 | `tor` | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
 | `type` | `[S, Any]` | `[]` | Register named type | — |
 | | `[A, Any]` /q | `[]` | | — |
