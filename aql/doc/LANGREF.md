@@ -1043,25 +1043,17 @@ math-e log          => 1
 
 #### `or`
 
-Logical OR for booleans; disjunction (type union) for non-boolean
-values.
+Logical OR for booleans.
 
 *Signatures:*
 - `[boolean, boolean] -> [boolean]` — logical OR
-- `[any, any] -> [disjunct]` — type union
 
 ```
 true or false           => true
 false or false          => false
 ```
 
-**Disjunction (type union):** When used with non-boolean values, `or`
-creates a disjunct type that matches any of its alternatives.
-
-```
-string or none                  => string|none
-number or string or boolean     => number|string|boolean
-```
+For type union construction, see [`tor`](#tor).
 
 #### `and`
 
@@ -1521,6 +1513,20 @@ none . x                                  => none
 
 ### Type Words
 
+#### `tor`
+
+Construct a disjunct (union) type from two values. Flattens nested
+disjuncts and applies carrier widening. Use to build optional fields
+and union type literals.
+
+*Signature:* `[any, any] -> [disjunct]`
+*Precedence:* forward
+
+```
+string tor none                  => string|none
+number tor string tor boolean    => number|string|boolean
+```
+
 #### `unify`
 
 Attempt to unify two values. Pushes the unified value and a boolean
@@ -1930,21 +1936,21 @@ as a list `[...]` is evaluated as code. This lets you write
 disjunctions directly inside the record definition:
 
 ```
-record [x:number y:[string or none]]
+record [x:number y:[string tor none]]
                                 => record{x:number,y:string|none}
 ```
 
 The disjunction narrows on unification:
 
 ```
-record [x:number y:[string or none]] unify record [x:number y:string]
+record [x:number y:[string tor none]] unify record [x:number y:string]
                                 => record{x:number,y:string} true
 ```
 
 `make` accepts `none` for optional fields:
 
 ```
-type Person record [name:string nick:[string or none]]
+type Person record [name:string nick:[string tor none]]
 make Person ["Alice" "ace"]     => {name:'Alice',nick:'ace'}
 make Person ["Bob" none]        => {name:'Bob',nick:none}
 ```
@@ -1953,7 +1959,7 @@ make Person ["Bob" none]        => {name:'Bob',nick:none}
 Missing fields are filled with `none` when the field type allows it:
 
 ```
-type Person record [name:string nick:[string or none]]
+type Person record [name:string nick:[string tor none]]
 make Person {name:"Alice" nick:"ace"}  => {name:'Alice',nick:'ace'}
 make Person {name:"Bob"}               => {name:'Bob',nick:none}
 ```
@@ -1980,7 +1986,7 @@ For disjunction fields, the base of the first non-none alternative
 is used:
 
 ```
-type Rec record [x:number y:[string or none]]
+type Rec record [x:number y:[string tor none]]
 make Rec {x:1} {base:true}            => {x:1,y:''}
 make Rec {x:1}                        => {x:1,y:none}
 ```
@@ -1989,7 +1995,7 @@ make Rec {x:1}                        => {x:1,y:none}
 a disjunction separately and reference it by name:
 
 ```
-type OptStr (string or none)
+type OptStr (string tor none)
 type Person record [name:string nick:OptStr]
 Person                          => record{name:string,nick:string|none}
 ```
@@ -2065,7 +2071,7 @@ table type, disjunct, type literal, typed list, or typed map. Unlike
 type Point record [x:number y:number]
 make Point [1 2]                           => {x:1,y:2}
 
-type OptNum (number or none)
+type OptNum (number tor none)
 OptNum unify 5                             => 5 true
 OptNum unify none                          => none true
 

@@ -204,7 +204,7 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 	fnBody := NewList([]Value{
 		NewList([]Value{NewImplicitMap(pairX)}),
 		NewList([]Value{NewTypeLiteral(TString)}), // expects String return
-		NewList([]Value{NewWord("x")}),             // but returns Number
+		NewList([]Value{NewWord("x")}),            // but returns Number
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("badReturn"),
@@ -1382,8 +1382,8 @@ func TestEngineCoreResolveFieldTypeStringNoRef(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypeList(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// A list like [string or none] should be evaluated as code
-	list := NewList([]Value{NewString("string"), NewString("or"), NewString("none")})
+	// A list like [string tor none] should be evaluated as code
+	list := NewList([]Value{NewString("string"), NewString("tor"), NewString("none")})
 	v := ResolveFieldType(r, list)
 	// Should produce a disjunction
 	if !v.IsDisjunct() {

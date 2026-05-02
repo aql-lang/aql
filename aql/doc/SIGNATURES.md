@@ -197,7 +197,6 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | `nand` | `[B, B]` | `[B]` | Logical NAND | — |
 | `not` | `[B]` | `[B]` | Logical NOT | — |
 | `or` | `[B, B]` | `[B]` | Logical OR | — |
-| | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
 | `xor` | `[B, B]` | `[B]` | Logical XOR | — |
 
 
@@ -302,6 +301,7 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | | `[M, Any]` | `[Object]` | Object type with parent | — |
 | `record` | `[L]` | `[Record]` | Define record type from field list | `arg0: L` |
 | `table` | `[Any]` | `[Table]` | Define table from record type | — |
+| `tor` | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
 | `type` | `[S, Any]` | `[]` | Register named type | — |
 | | `[A, Any]` /q | `[]` | | — |
 | `typeof` | `[Any]` | `[A]` | Short type name (e.g. `String`) | — |

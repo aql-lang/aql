@@ -1078,16 +1078,16 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	}
 }
 
-// === 9. or for disjuncts ===
+// === 9. tor for disjuncts ===
 
-func TestIntegOrDisjunctValues(t *testing.T) {
+func TestIntegTorDisjunctValues(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 1 or "hello" or true
+	// 1 tor "hello" tor true
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), NewString("hello"), NewWord("or"), NewBoolean(true),
+		NewInteger(1), NewWord("tor"), NewString("hello"), NewWord("tor"), NewBoolean(true),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("1 or 'hello' or true should be disjunct, got %v", result)
+		t.Fatalf("1 tor 'hello' tor true should be disjunct, got %v", result)
 	}
 	_as37, _ := result[0].AsDisjunct()
 	alts := _as37.Alternatives
@@ -1096,13 +1096,13 @@ func TestIntegOrDisjunctValues(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctTwoValues(t *testing.T) {
+func TestIntegTorDisjunctTwoValues(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewInteger(42), NewWord("or"), NewString("hello"),
+		NewInteger(42), NewWord("tor"), NewString("hello"),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("42 or 'hello' should be disjunct, got %v", result)
+		t.Fatalf("42 tor 'hello' should be disjunct, got %v", result)
 	}
 	_as38, _ := result[0].AsDisjunct()
 	alts := _as38.Alternatives
@@ -1111,14 +1111,14 @@ func TestIntegOrDisjunctTwoValues(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctFlattensLeft(t *testing.T) {
+func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Build a disjunct then or with another value
+	// Build a disjunct then tor with another value
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), NewInteger(2), NewWord("or"), NewInteger(3),
+		NewInteger(1), NewWord("tor"), NewInteger(2), NewWord("tor"), NewInteger(3),
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("chained or should produce disjunct, got %v", result)
+		t.Fatalf("chained tor should produce disjunct, got %v", result)
 	}
 	_as39, _ := result[0].AsDisjunct()
 	alts := _as39.Alternatives
@@ -1127,15 +1127,15 @@ func TestIntegOrDisjunctFlattensLeft(t *testing.T) {
 	}
 }
 
-func TestIntegOrDisjunctFlattensRight(t *testing.T) {
+func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Pre-build a disjunct on the right side
 	rightDisjunct := NewDisjunct([]Value{NewInteger(2), NewInteger(3)})
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("or"), rightDisjunct,
+		NewInteger(1), NewWord("tor"), rightDisjunct,
 	})
 	if len(result) != 1 || !result[0].IsDisjunct() {
-		t.Fatalf("or with right disjunct should produce disjunct, got %v", result)
+		t.Fatalf("tor with right disjunct should produce disjunct, got %v", result)
 	}
 	_as40, _ := result[0].AsDisjunct()
 	alts := _as40.Alternatives

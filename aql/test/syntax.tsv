@@ -784,9 +784,9 @@ type P record [x:Number y:Number] P make [1 2]	{x:1,y:2}
 type Vec record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
 
 # type with disjunct
-type OptNum (Number or None) OptNum unify 5	5 true
-type OptNum (Number or None) OptNum unify None	None true
-type OptNum (Number or None) OptNum unify "hi"	'~unify-fail' false
+type OptNum (Number tor None) OptNum unify 5	5 true
+type OptNum (Number tor None) OptNum unify None	None true
+type OptNum (Number tor None) OptNum unify "hi"	'~unify-fail' false
 
 # type with type alias
 type Num Number Num unify 42	42 true
@@ -825,47 +825,47 @@ do {a:[1 add 2],b:10}	{a:3,b:10}
 # do map: nested maps with list values
 do {m:{x:[5 mul 2]}}	{m:{x:10}}
 
-# === disjunct - union types via or ===
+# === disjunct - union types via tor ===
 
 # Disjunct creation: type literals
-String or Number	Scalar/String|Scalar/Number
-String or None	Scalar/String|None
-None or Boolean	None|Scalar/Boolean
+String tor Number	Scalar/String|Scalar/Number
+String tor None	Scalar/String|None
+None tor Boolean	None|Scalar/Boolean
 
 # Disjunct chaining (flattened)
-String or Number or Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
+String tor Number tor Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
 
 # Disjunct unify with scalar types
-(String or None) unify "a"	'a' true
-(String or None) unify None	None true
-(None or Boolean) unify None	None true
-(None or Boolean) unify true	true true
-(Number or String) unify 42	42 true
-(Number or String) unify "hi"	'hi' true
+(String tor None) unify "a"	'a' true
+(String tor None) unify None	None true
+(None tor Boolean) unify None	None true
+(None tor Boolean) unify true	true true
+(Number tor String) unify 42	42 true
+(Number tor String) unify "hi"	'hi' true
 
 # Disjunct unify: no match
-(String or Boolean) unify 42	'~unify-fail' false
-(Number or Boolean) unify "hi"	'~unify-fail' false
+(String tor Boolean) unify 42	'~unify-fail' false
+(Number tor Boolean) unify "hi"	'~unify-fail' false
 
 # Disjunct unify with type narrowing
-(String or Number) unify Number	Scalar/Number true
-(String or Number) unify String	Scalar/String true
-(Number or None) unify 5	5 true
-(Number or None) unify None	None true
+(String tor Number) unify Number	Scalar/Number true
+(String tor Number) unify String	Scalar/String true
+(Number tor None) unify 5	5 true
+(Number tor None) unify None	None true
 
 # Disjunct with any
-(String or Number) unify Any	Scalar/String|Scalar/Number true
+(String tor Number) unify Any	Scalar/String|Scalar/Number true
 
 # Disjunct with concrete maps (open matching)
-({x:1} or {y:2}) unify {x:1}	{x:1} true
-({x:1} or {y:2}) unify {y:2}	{y:2} true
-({x:1} or {y:2}) unify {x:1,q:9}	{q:9,x:1} true
-({x:1} or {y:2} or {z:3}) unify {y:2,q:9,x:8}	{q:9,x:8,y:2} true
-({x:1} or {y:2} or {z:3}) unify {q:9,z:3,x:1}	{q:9,x:1,z:3} true
+({x:1} tor {y:2}) unify {x:1}	{x:1} true
+({x:1} tor {y:2}) unify {y:2}	{y:2} true
+({x:1} tor {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+({x:1} tor {y:2} tor {z:3}) unify {y:2,q:9,x:8}	{q:9,x:8,y:2} true
+({x:1} tor {y:2} tor {z:3}) unify {q:9,z:3,x:1}	{q:9,x:1,z:3} true
 
 # Disjunct map: no match
-({x:1} or {y:2}) unify {z:3}	'~unify-fail' false
-({x:1} or {y:2}) unify {x:2}	'~unify-fail' false
+({x:1} tor {y:2}) unify {z:3}	'~unify-fail' false
+({x:1} tor {y:2}) unify {x:2}	'~unify-fail' false
 
 # Boolean or still works normally
 true or false	true

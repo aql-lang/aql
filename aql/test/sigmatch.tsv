@@ -143,14 +143,12 @@ def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
 
 # --- Deep type hierarchy precedence ---
 
-# boolean/true is more specific than boolean
-# or: [boolean,boolean] (specificity 202) vs [any,any] (specificity 202)
-# For boolean args, the boolean sig wins (registered first at equal score)
+# or is boolean-only
 true or false	true
 false or true	true
 
-# For non-boolean, or creates disjunct
-String or None	Scalar/String|None
+# tor creates disjunct from any two values
+String tor None	Scalar/String|None
 
 # --- Suffix with all args from future (no prefix args) ---
 

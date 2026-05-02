@@ -222,12 +222,13 @@ func inferExact(name string, sig Signature) []string {
 	case "unify":
 		return []string{"Scalar/String", "Scalar/Boolean"}
 
-	// Boolean special: or with [Any,Any] → Disjunct
+	// Boolean: or is boolean-only.
 	case "or":
-		if nArgs == 2 && sig.Args[0].String() == "Any" {
-			return []string{"Any"}
-		}
 		return []string{"Scalar/Boolean"}
+
+	// Type union: tor builds a disjunct from any two values.
+	case "tor":
+		return []string{"Any"}
 
 	// Help
 	case "help":

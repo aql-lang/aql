@@ -55,4 +55,13 @@ func init() {
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +
 			"0.0 for decimals, empty string for strings, false for booleans, empty list for lists.",
 	})
+
+	register(&Entry{
+		Word:    "tor",
+		Summary: "Construct a disjunct (union) type from two values.",
+		Description: "Returns a disjunct that matches either alternative. " +
+			"Flattens nested disjuncts and applies carrier widening. " +
+			"Use to build optional fields and union type literals " +
+			"(e.g. `string tor none`).",
+	})
 }

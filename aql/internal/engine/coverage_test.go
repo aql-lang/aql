@@ -4273,9 +4273,9 @@ func TestResolveFieldTypeList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// [String or None] as code should evaluate to a disjunct
+	// [String tor None] as code should evaluate to a disjunct
 	result := ResolveFieldType(r, NewList([]Value{
-		NewWord("String"), NewWord("or"), NewWord("None"),
+		NewWord("String"), NewWord("tor"), NewWord("None"),
 	}))
 	// Should be a disjunct type, not a raw list
 	if result.VType.Matches(TList) && !result.IsTypedList() {

@@ -302,7 +302,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		// Boolean ops with type literals
 		{"not-map", `Map not`},
 		{"and-map-map", `Map and Map`},
-		{"or-list-list", `List or List`},
+		{"tor-list-list", `List tor List`},
 
 		// Type checking with type literals
 		{"typeof-map", `Map typeof`},
