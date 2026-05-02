@@ -32,9 +32,20 @@ type Signature struct {
 	Patterns map[int]Value
 
 	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
-	// When set, a Word value at that position is treated as an Atom for
-	// matching purposes and is captured without evaluation during forward
-	// collection.
+	// /q is a FORWARD-ONLY language rule: it intervenes during forward arg
+	// collection so that an upcoming Word is captured as an Atom rather than
+	// being executed by stepWord. This is what makes `def name body`,
+	// `set foo 42 store`, `get a {a:1}`, etc. work without an explicit `quote`.
+	//
+	// /q has no effect on stack matching: by the time a value reaches the
+	// resolved stack it is no longer a Word — stepWord has either invoked a
+	// registered word, resolved a defined name, or converted an undefined
+	// Word to an Atom. The only way to put a name on the stack as a value
+	// is `quote name`, which produces an Atom; that Atom matches an
+	// [Atom/q, X] sig via the normal sigTypeMatches fall-through. So a
+	// single [Atom/q, X] sig covers BOTH the forward Word case and the
+	// explicit-Atom case — there is no need to declare a separate non-/q
+	// Atom sig.
 	QuoteArgs map[int]bool
 
 	// NoEvalArgs marks arg positions where list auto-evaluation should be
@@ -228,10 +239,16 @@ func sigTypeMatches(v Value, t Type) bool {
 // positionalMatch checks whether values match the signature's types in order.
 // Handles the /q modifier: a Word value at a QuoteArgs position is treated
 // as an Atom for type matching purposes.
+//
+// /q is a forward-only language rule (see Signature.QuoteArgs doc). The
+// Word→Atom branch below is reachable only through the forward-collection
+// path, where a raw Word can land at the sig position. For stack-only
+// matching the value is never a Word (stepWord has already resolved it),
+// so the branch falls through to the regular sigTypeMatches check.
 func positionalMatch(values []Value, sig *Signature) bool {
 	for i, t := range sig.Args {
 		v := values[i]
-		// /q modifier: treat Word as Atom for matching.
+		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
 			if !TAtom.Matches(t) {
 				return false

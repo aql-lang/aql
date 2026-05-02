@@ -298,6 +298,13 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			stackVal := resolved[ri]
 			sigIdx := fwd + j
 
+			// /q is a forward-only rule (see Signature.QuoteArgs doc).
+			// stackVal cannot be a Word in normal execution: stepWord
+			// has already resolved any Word at the pointer to a function
+			// call, defined value, or Atom, and quote produces Atoms.
+			// The branch below is defensive only — a stack Atom matches
+			// an [Atom/q, ...] sig via the regular sigTypeMatches path
+			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
 				if !TAtom.Matches(sig.Args[sigIdx]) {
 					allMatch = false

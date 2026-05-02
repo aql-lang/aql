@@ -15,6 +15,36 @@ Abbreviations: I=Integer, D=Decimal, N=Number, S=String, A=Atom,
 B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 /f=FullStack.
 
+### Language rule: `/q` is forward-args only
+
+The `/q` ("implicit quote") modifier on an argument position is a
+**forward-collection** rule. It tells the engine that, while collecting
+the next forward token, an upcoming Word must be captured as an Atom
+rather than executed. This is what lets `def name body`, `set foo 42 store`,
+`get a {a:1}`, etc. work without the user explicitly writing `quote`.
+
+The asymmetry between forward and stack args is intentional design:
+
+- **Forward side**: `/q` is meaningful. The engine intervenes at parse-
+  collection time to prevent the upcoming Word from being evaluated.
+- **Stack side**: `/q` is meaningless and **cannot match**. By the time a
+  value reaches the resolved stack it is no longer a Word — `stepWord`
+  has either invoked a registered word, resolved a defined name, or
+  converted an undefined Word to an Atom (with `Undefined=true`). The
+  only way to put a name on the stack as a value is `quote name`, which
+  produces an Atom. An Atom on the stack matches an `[A, ...]` /q sig
+  via the normal `sigTypeMatches` fall-through; no `/q` involvement is
+  required for stack matching.
+
+Consequences for sig design:
+
+1. A `[A/q, X]` signature handles **both** the Word-as-name forward case
+   (`set foo 42 store`) and the explicit-Atom case (`set 'foo 42 store`,
+   `'foo 42 store set`). Adding a separate `[A, X]` (no `/q`) sig is
+   redundant.
+2. There is no need to declare `/q` on a sig that is only ever reached
+   via stack matching — it would have no effect.
+
 
 ## Stack Manipulation
 
@@ -246,11 +276,11 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 |------|--------------------------|---------|-------|----------|
 | `context` | `[]` | `[Store]` | Push current context Store onto stack | — |
 | `get` / `.` | `[S, Store]` | `[Any]` | Store lookup (prototype chain) | — |
-| | `[A, Store]` /q | `[Any]` | | — |
-| | `[A, Node]` | `[Any]` | Map property access; None if missing | — |
+| | `[A, Store]` /q | `[Any]` | Forward Word/q→Atom; explicit Atom also matches | — |
+| | `[A, Node]` /q | `[Any]` | Map property access; None if missing | — |
 | | `[S, Node]` | `[Any]` | | — |
 | | `[I, Node]` | `[Any]` | List index or map key | — |
-| | `[A, Object]` | `[Any]` | Object field access | — |
+| | `[A, Object]` /q | `[Any]` | Object field access | — |
 | | `[S, Object]` | `[Any]` | | — |
 | | `[I, Object]` | `[Any]` | | — |
 | | `[Any, None]` | `[None]` | None propagation | — |
