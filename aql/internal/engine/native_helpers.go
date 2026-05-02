@@ -89,3 +89,26 @@ func singleResult(v Value, err error) ([]Value, error) {
 	}
 	return []Value{v}, nil
 }
+
+// coerceBoolean converts any value to a boolean using the same rules
+// as `convert boolean`: booleans pass through, numbers are non-zero,
+// "true"/"false" parse literally, all other values are non-empty.
+func coerceBoolean(v Value) bool {
+	switch {
+	case v.VType.Matches(TBoolean):
+		b, _ := v.AsBoolean()
+		return b
+	case v.VType.Matches(TNumber):
+		n, _ := v.AsNumber()
+		return n != 0
+	}
+	text := valToString(v)
+	switch text {
+	case "true":
+		return true
+	case "false", "":
+		return false
+	default:
+		return text != ""
+	}
+}

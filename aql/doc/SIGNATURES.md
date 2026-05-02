@@ -193,10 +193,12 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
 | `and` | `[B, B]` | `[B]` | Logical AND | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules), then AND | — |
 | `implies` | `[B, B]` | `[B]` | `!args[1] \|\| args[0]` (reversed) | — |
 | `nand` | `[B, B]` | `[B]` | Logical NAND | — |
 | `not` | `[B]` | `[B]` | Logical NOT | — |
 | `or` | `[B, B]` | `[B]` | Logical OR | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules), then OR | — |
 | `xor` | `[B, B]` | `[B]` | Logical XOR | — |
 
 

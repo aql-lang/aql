@@ -1043,27 +1043,39 @@ math-e log          => 1
 
 #### `or`
 
-Logical OR for booleans.
+Logical OR. Non-boolean arguments are coerced via the same rules as
+`convert boolean`: numbers are non-zero, "true"/"false" parse
+literally, all other values are non-empty.
 
 *Signatures:*
 - `[boolean, boolean] -> [boolean]` — logical OR
+- `[any, any] -> [boolean]` — coerce both args, then logical OR
 
 ```
 true or false           => true
 false or false          => false
+1 or 0                  => true
+0 or 0                  => false
+"" or "x"               => true
 ```
 
 For type union construction, see [`tor`](#tor).
 
 #### `and`
 
-Logical AND.
+Logical AND. Non-boolean arguments are coerced via the same rules as
+`convert boolean` (see `or`).
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]` — logical AND
+- `[any, any] -> [boolean]` — coerce both args, then logical AND
 
 ```
 true and false          => false
 true and true           => true
+1 and 1                 => true
+1 and 0                 => false
+"hello" and "world"     => true
 true or false and false => true       # and binds first
 ```
 

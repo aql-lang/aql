@@ -1156,6 +1156,59 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	}
 }
 
+func TestIntegOrCoercesNonBoolean(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 or 0 → true (numbers coerce: non-zero is true)
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("or"), NewInteger(0),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
+	}
+	if b, _ := result[0].AsBoolean(); !b {
+		t.Errorf("1 or 0 = %v, want true", result[0])
+	}
+	// 0 or 0 → false
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("or"), NewInteger(0),
+	})
+	if b, _ := result[0].AsBoolean(); b {
+		t.Errorf("0 or 0 = %v, want false", result[0])
+	}
+	// "" or "x" → true (strings coerce: non-empty is true)
+	result = runAQL(t, r, []Value{
+		NewString(""), NewWord("or"), NewString("x"),
+	})
+	if b, _ := result[0].AsBoolean(); !b {
+		t.Errorf("\"\" or \"x\" = %v, want true", result[0])
+	}
+}
+
+func TestIntegAndCoercesNonBoolean(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// 1 and 1 → true
+	result := runAQL(t, r, []Value{
+		NewInteger(1), NewWord("and"), NewInteger(1),
+	})
+	if b, _ := result[0].AsBoolean(); !b {
+		t.Errorf("1 and 1 = %v, want true", result[0])
+	}
+	// 1 and 0 → false
+	result = runAQL(t, r, []Value{
+		NewInteger(1), NewWord("and"), NewInteger(0),
+	})
+	if b, _ := result[0].AsBoolean(); b {
+		t.Errorf("1 and 0 = %v, want false", result[0])
+	}
+	// "x" and "y" → true
+	result = runAQL(t, r, []Value{
+		NewString("x"), NewWord("and"), NewString("y"),
+	})
+	if b, _ := result[0].AsBoolean(); !b {
+		t.Errorf("\"x\" and \"y\" = %v, want true", result[0])
+	}
+}
+
 // === 9b. tand for conjunction ===
 
 func TestIntegTandMergeMaps(t *testing.T) {

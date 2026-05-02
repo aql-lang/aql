@@ -873,6 +873,22 @@ false or true	true
 true or true	true
 false or false	false
 
+# or coerces non-boolean args (same rules as `convert boolean`)
+1 or 0	true
+0 or 0	false
+"" or "hello"	true
+"" or ""	false
+"true" or false	true
+"false" or false	false
+
+# and coerces non-boolean args
+1 and 1	true
+1 and 0	false
+"hello" and "world"	true
+"" and "x"	false
+"true" and 1	true
+"false" and 1	false
+
 # === tand - conjunction / map merge ===
 
 # Disjoint keys: combine
