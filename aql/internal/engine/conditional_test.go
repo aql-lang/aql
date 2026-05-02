@@ -25,9 +25,9 @@ func TestIsTruthy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isTruthy(tt.val)
+			got := CoerceBoolean(tt.val)
 			if got != tt.want {
-				t.Errorf("isTruthy(%s) = %v, want %v", tt.val, got, tt.want)
+				t.Errorf("CoerceBoolean(%s) = %v, want %v", tt.val, got, tt.want)
 			}
 		})
 	}
@@ -35,12 +35,12 @@ func TestIsTruthy(t *testing.T) {
 
 func TestIsTruthyMap(t *testing.T) {
 	empty := NewOrderedMap()
-	if isTruthy(NewMap(empty)) {
+	if CoerceBoolean(NewMap(empty)) {
 		t.Error("empty map should be falsy")
 	}
 	nonempty := NewOrderedMap()
 	nonempty.Set("x", NewInteger(1))
-	if !isTruthy(NewMap(nonempty)) {
+	if !CoerceBoolean(NewMap(nonempty)) {
 		t.Error("non-empty map should be truthy")
 	}
 }

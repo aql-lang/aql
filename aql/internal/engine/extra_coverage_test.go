@@ -748,37 +748,37 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 	}
 }
 
-// ── 8. isTruthy ─────────────────────────────────────────────────────────
+// ── 8. CoerceBoolean ─────────────────────────────────────────────────────────
 
 func TestExtraIsTruthyBoolean(t *testing.T) {
-	if !isTruthy(NewBoolean(true)) {
+	if !CoerceBoolean(NewBoolean(true)) {
 		t.Error("true should be truthy")
 	}
-	if isTruthy(NewBoolean(false)) {
+	if CoerceBoolean(NewBoolean(false)) {
 		t.Error("false should not be truthy")
 	}
 }
 
 func TestExtraIsTruthyInteger(t *testing.T) {
-	if !isTruthy(NewInteger(1)) {
+	if !CoerceBoolean(NewInteger(1)) {
 		t.Error("1 should be truthy")
 	}
-	if isTruthy(NewInteger(0)) {
+	if CoerceBoolean(NewInteger(0)) {
 		t.Error("0 should not be truthy")
 	}
 }
 
 func TestExtraIsTruthyNone(t *testing.T) {
-	if isTruthy(NewTypeLiteral(TNone)) {
+	if CoerceBoolean(NewTypeLiteral(TNone)) {
 		t.Error("none should not be truthy")
 	}
 }
 
 func TestExtraIsTruthyList(t *testing.T) {
-	if !isTruthy(NewList([]Value{NewInteger(1)})) {
+	if !CoerceBoolean(NewList([]Value{NewInteger(1)})) {
 		t.Error("non-empty list should be truthy")
 	}
-	if isTruthy(NewList([]Value{})) {
+	if CoerceBoolean(NewList([]Value{})) {
 		t.Error("empty list should not be truthy")
 	}
 }
@@ -786,41 +786,41 @@ func TestExtraIsTruthyList(t *testing.T) {
 func TestExtraIsTruthyMap(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("a", NewInteger(1))
-	if !isTruthy(NewMap(om)) {
+	if !CoerceBoolean(NewMap(om)) {
 		t.Error("non-empty map should be truthy")
 	}
-	if isTruthy(NewMap(NewOrderedMap())) {
+	if CoerceBoolean(NewMap(NewOrderedMap())) {
 		t.Error("empty map should not be truthy")
 	}
 }
 
 func TestExtraIsTruthyString(t *testing.T) {
-	if !isTruthy(NewString("hello")) {
+	if !CoerceBoolean(NewString("hello")) {
 		t.Error("non-empty string should be truthy")
 	}
-	if isTruthy(NewString("false")) {
+	if CoerceBoolean(NewString("false")) {
 		t.Error("string 'false' should not be truthy")
 	}
-	if isTruthy(NewString("")) {
+	if CoerceBoolean(NewString("")) {
 		t.Error("empty string should not be truthy")
 	}
-	if !isTruthy(NewString("true")) {
+	if !CoerceBoolean(NewString("true")) {
 		t.Error("string 'true' should be truthy")
 	}
 }
 
 func TestExtraIsTruthyAtom(t *testing.T) {
-	if !isTruthy(NewAtom("yes")) {
+	if !CoerceBoolean(NewAtom("yes")) {
 		t.Error("non-empty atom should be truthy")
 	}
-	if isTruthy(NewAtom("false")) {
+	if CoerceBoolean(NewAtom("false")) {
 		t.Error("atom 'false' should not be truthy")
 	}
 }
 
 func TestExtraIsTruthyDecimal(t *testing.T) {
 	// Decimals go through the default/string branch
-	if !isTruthy(NewDecimal(1.5)) {
+	if !CoerceBoolean(NewDecimal(1.5)) {
 		t.Error("non-zero decimal should be truthy")
 	}
 }
@@ -830,7 +830,7 @@ func TestExtraIsTruthyTableType(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TString))
 	table := NewTableType(RecordTypeInfo{Fields: fields})
-	if !isTruthy(table) {
+	if !CoerceBoolean(table) {
 		t.Error("table type should be truthy (non-[]Value list data)")
 	}
 }
@@ -840,7 +840,7 @@ func TestExtraIsTruthyRecordType(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TString))
 	rec := NewRecordType(fields)
-	if !isTruthy(rec) {
+	if !CoerceBoolean(rec) {
 		t.Error("record type should be truthy (non-*OrderedMap map data)")
 	}
 }

@@ -1156,56 +1156,70 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	}
 }
 
-func TestIntegOrCoercesNonBoolean(t *testing.T) {
+func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 1 or 0 → true (numbers coerce: non-zero is true)
+	// 1 or 0 → 1 (first truthy wins)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("or"), NewInteger(0),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if b, _ := result[0].AsBoolean(); !b {
-		t.Errorf("1 or 0 = %v, want true", result[0])
+	if v, _ := result[0].AsInteger(); v != 1 {
+		t.Errorf("1 or 0 = %v, want 1", result[0])
 	}
-	// 0 or 0 → false
+	// 0 or 5 → 5 (second wins because first is falsy)
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("or"), NewInteger(5),
+	})
+	if v, _ := result[0].AsInteger(); v != 5 {
+		t.Errorf("0 or 5 = %v, want 5", result[0])
+	}
+	// 0 or 0 → 0 (last falsy)
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("or"), NewInteger(0),
 	})
-	if b, _ := result[0].AsBoolean(); b {
-		t.Errorf("0 or 0 = %v, want false", result[0])
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("0 or 0 = %v, want 0", result[0])
 	}
-	// "" or "x" → true (strings coerce: non-empty is true)
+	// "" or "x" → "x"
 	result = runAQL(t, r, []Value{
 		NewString(""), NewWord("or"), NewString("x"),
 	})
-	if b, _ := result[0].AsBoolean(); !b {
-		t.Errorf("\"\" or \"x\" = %v, want true", result[0])
+	if s, _ := result[0].AsString(); s != "x" {
+		t.Errorf("\"\" or \"x\" = %v, want \"x\"", result[0])
 	}
 }
 
-func TestIntegAndCoercesNonBoolean(t *testing.T) {
+func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// 1 and 1 → true
+	// 1 and 2 → 2 (both truthy, last wins)
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("and"), NewInteger(1),
+		NewInteger(1), NewWord("and"), NewInteger(2),
 	})
-	if b, _ := result[0].AsBoolean(); !b {
-		t.Errorf("1 and 1 = %v, want true", result[0])
+	if v, _ := result[0].AsInteger(); v != 2 {
+		t.Errorf("1 and 2 = %v, want 2", result[0])
 	}
-	// 1 and 0 → false
+	// 0 and 5 → 0 (first falsy short-circuits)
+	result = runAQL(t, r, []Value{
+		NewInteger(0), NewWord("and"), NewInteger(5),
+	})
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("0 and 5 = %v, want 0", result[0])
+	}
+	// 1 and 0 → 0 (second is falsy)
 	result = runAQL(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(0),
 	})
-	if b, _ := result[0].AsBoolean(); b {
-		t.Errorf("1 and 0 = %v, want false", result[0])
+	if v, _ := result[0].AsInteger(); v != 0 {
+		t.Errorf("1 and 0 = %v, want 0", result[0])
 	}
-	// "x" and "y" → true
+	// "x" and "y" → "y"
 	result = runAQL(t, r, []Value{
 		NewString("x"), NewWord("and"), NewString("y"),
 	})
-	if b, _ := result[0].AsBoolean(); !b {
-		t.Errorf("\"x\" and \"y\" = %v, want true", result[0])
+	if s, _ := result[0].AsString(); s != "y" {
+		t.Errorf("\"x\" and \"y\" = %v, want \"y\"", result[0])
 	}
 }
 

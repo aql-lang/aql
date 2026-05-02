@@ -873,21 +873,23 @@ false or true	true
 true or true	true
 false or false	false
 
-# or coerces non-boolean args (same rules as `convert boolean`)
-1 or 0	true
-0 or 0	false
-"" or "hello"	true
-"" or ""	false
-"true" or false	true
+# or short-circuits and returns the winning value (first truthy, or last)
+1 or 0	1
+0 or 5	5
+0 or 0	0
+"" or "hello"	'hello'
+"" or ""	''
+"true" or false	'true'
 "false" or false	false
 
-# and coerces non-boolean args
-1 and 1	true
-1 and 0	false
-"hello" and "world"	true
-"" and "x"	false
-"true" and 1	true
-"false" and 1	false
+# and short-circuits and returns the winning value (first falsy, or last truthy)
+1 and 2	2
+0 and 5	0
+1 and 0	0
+"hello" and "world"	'world'
+"" and "x"	''
+"true" and 1	1
+"false" and 1	'false'
 
 # === tand - conjunction / map merge ===
 

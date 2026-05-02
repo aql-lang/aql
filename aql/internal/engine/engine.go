@@ -1902,7 +1902,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	}
 
 	// Evaluate truthiness and choose branch.
-	cond := isTruthy(condResult)
+	cond := CoerceBoolean(condResult)
 
 	var branch []Value
 	if cond {

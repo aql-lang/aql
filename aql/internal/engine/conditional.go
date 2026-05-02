@@ -1,45 +1,5 @@
 package engine
 
-// isTruthy converts a Value to a boolean using the same rules as convert boolean:
-// - booleans: direct value
-// - numbers: non-zero is true
-// - strings: "true" is true, "false" and "" are false, non-empty is true
-// - atoms: same as string conversion
-// - none: false
-// - lists/maps: non-empty is true
-func isTruthy(v Value) bool {
-	switch {
-	case v.VType.Matches(TBoolean):
-		_as0, _ := v.AsBoolean()
-		return _as0
-	case v.VType.Matches(TInteger):
-		_as1, _ := v.AsInteger()
-		return _as1 != 0
-	case v.VType.Equal(TNone):
-		return false
-	case v.VType.Equal(TList):
-		if elems, ok := v.Data.([]Value); ok {
-			return len(elems) > 0
-		}
-		return true
-	case v.VType.Equal(TMap):
-		if om, ok := v.Data.(*OrderedMap); ok {
-			return om.Len() > 0
-		}
-		return true
-	default:
-		text := valToString(v)
-		switch text {
-		case "true":
-			return true
-		case "false", "":
-			return false
-		default:
-			return text != ""
-		}
-	}
-}
-
 // spliceArg returns tokens for a branch value. If the value is a list,
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
@@ -78,7 +38,7 @@ func RegisterIf(r *Registry) {
 		}
 
 		// Scalar condition: evaluate immediately.
-		if isTruthy(cond) {
+		if CoerceBoolean(cond) {
 			return thenBranch, nil
 		}
 		return elseBranch, nil
@@ -105,7 +65,7 @@ func RegisterIf(r *Registry) {
 		}
 
 		// Scalar condition: evaluate immediately.
-		if isTruthy(cond) {
+		if CoerceBoolean(cond) {
 			return thenBranch, nil
 		}
 		return nil, nil

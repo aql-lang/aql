@@ -380,7 +380,7 @@ func RegisterWhere(r *Registry) {
 				var result []Value
 				for i := 0; i < list.Len(); i++ {
 					elem := list.Get(i)
-					if isTruthy(elem) {
+					if CoerceBoolean(elem) {
 						result = append(result, NewInteger(int64(i)))
 					}
 				}
@@ -754,7 +754,7 @@ func RegisterExpand(r *Registry) {
 				result := make([]Value, mask.Len())
 				dataIdx := 0
 				for i := 0; i < mask.Len(); i++ {
-					if isTruthy(mask.Get(i)) {
+					if CoerceBoolean(mask.Get(i)) {
 						if dataIdx >= data.Len() {
 							return nil, fmt.Errorf("expand: not enough data elements for mask")
 						}

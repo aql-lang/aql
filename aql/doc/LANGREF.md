@@ -1043,58 +1043,73 @@ math-e log          => 1
 
 #### `or`
 
-Logical OR. Non-boolean arguments are coerced via the same rules as
-`convert boolean`: numbers are non-zero, "true"/"false" parse
-literally, all other values are non-empty.
+Logical OR with traditional short-circuit semantics: returns the
+first operand if it is truthy, otherwise the second operand. The
+result is the actual operand value, not a coerced boolean. Truthiness
+is determined by the same rules as `convert boolean`: booleans pass
+through, numbers are non-zero, none/empty list/empty map are false,
+"true"/"false" parse literally, all other values are non-empty.
 
 *Signatures:*
-- `[boolean, boolean] -> [boolean]` — logical OR
-- `[any, any] -> [boolean]` — coerce both args, then logical OR
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [any]` — returns the winning operand
 
 ```
 true or false           => true
 false or false          => false
-1 or 0                  => true
-0 or 0                  => false
-"" or "x"               => true
+1 or 0                  => 1
+0 or 5                  => 5
+0 or 0                  => 0
+"" or "x"               => 'x'
 ```
 
 For type union construction, see [`tor`](#tor).
 
 #### `and`
 
-Logical AND. Non-boolean arguments are coerced via the same rules as
-`convert boolean` (see `or`).
+Logical AND with traditional short-circuit semantics: returns the
+first operand if it is falsy, otherwise the second operand. The
+result is the actual operand value, not a coerced boolean. Truthiness
+rules are the same as for `or`.
 
 *Signatures:*
-- `[boolean, boolean] -> [boolean]` — logical AND
-- `[any, any] -> [boolean]` — coerce both args, then logical AND
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [any]` — returns the winning operand
 
 ```
 true and false          => false
 true and true           => true
-1 and 1                 => true
-1 and 0                 => false
-"hello" and "world"     => true
+1 and 2                 => 2
+0 and 5                 => 0
+1 and 0                 => 0
+"hello" and "world"     => 'world'
 true or false and false => true       # and binds first
 ```
 
 #### `not`
 
-Logical NOT (unary).
+Logical NOT (unary). Coerces non-boolean args via `convert boolean`
+rules, then negates.
 
-*Signature:* `[boolean] -> [boolean]`
+*Signatures:*
+- `[boolean] -> [boolean]`
+- `[any] -> [boolean]` — coerce, then negate
 
 ```
 true not                => false
 not false               => true
+1 not                   => false
+"" not                  => true
 ```
 
 #### `xor`
 
-Exclusive OR.
+Exclusive OR. Non-boolean arguments are coerced via `convert boolean`
+rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true xor false          => true
@@ -1103,9 +1118,12 @@ true xor true           => false
 
 #### `nand`
 
-Logical NAND (NOT AND).
+Logical NAND (NOT AND). Non-boolean arguments are coerced via
+`convert boolean` rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true nand true          => false
@@ -1115,9 +1133,12 @@ true nand false         => true
 #### `implies`
 
 Logical implication (a → b). False only when the first argument is
-true and the second is false.
+true and the second is false. Non-boolean arguments are coerced via
+`convert boolean` rules.
 
-*Signature:* `[boolean, boolean] -> [boolean]`
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
 
 ```
 true implies false      => false

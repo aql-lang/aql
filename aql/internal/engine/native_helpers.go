@@ -23,23 +23,23 @@ func registerUnaryStringWord(r *Registry, name string, fn func(string) string) {
 	})
 }
 
-// registerBinaryBoolWord registers a word that takes two TBoolean args,
-// applies fn, and returns a NewBoolean result.
-// Covers the common pattern used by and, xor, nand.
+// registerBinaryBoolWord registers a word that takes two boolean-ish
+// args, applies fn, and returns a NewBoolean result. Non-boolean
+// inputs are coerced via CoerceBoolean (same rules as `convert
+// boolean`). Covers the common pattern used by xor, nand.
 func registerBinaryBoolWord(r *Registry, name string, fn func(a, b bool) bool) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		a, _ := args[0].AsBoolean()
-		b, _ := args[1].AsBoolean()
+		a := CoerceBoolean(args[0])
+		b := CoerceBoolean(args[1])
 		return []Value{NewBoolean(fn(a, b))}, nil
 	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              name,
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:    []Type{TBoolean, TBoolean},
-			Handler: handler,
-			Returns: []Type{TBoolean},
-		}},
+		Signatures: []NativeSig{
+			{Args: []Type{TBoolean, TBoolean}, Handler: handler, Returns: []Type{TBoolean}},
+			{Args: []Type{TAny, TAny}, Handler: handler, Returns: []Type{TBoolean}},
+		},
 	})
 }
 
@@ -90,10 +90,11 @@ func singleResult(v Value, err error) ([]Value, error) {
 	return []Value{v}, nil
 }
 
-// coerceBoolean converts any value to a boolean using the same rules
+// CoerceBoolean converts any value to a boolean using the same rules
 // as `convert boolean`: booleans pass through, numbers are non-zero,
-// "true"/"false" parse literally, all other values are non-empty.
-func coerceBoolean(v Value) bool {
+// none is false, lists/maps are non-empty, "true"/"false" parse
+// literally, all other values are non-empty.
+func CoerceBoolean(v Value) bool {
 	switch {
 	case v.VType.Matches(TBoolean):
 		b, _ := v.AsBoolean()
@@ -101,6 +102,26 @@ func coerceBoolean(v Value) bool {
 	case v.VType.Matches(TNumber):
 		n, _ := v.AsNumber()
 		return n != 0
+	case v.VType.Equal(TNone):
+		return false
+	case v.VType.Equal(TList):
+		if v.Data == nil {
+			return false
+		}
+		if elems, ok := v.Data.([]Value); ok {
+			return len(elems) > 0
+		}
+		// Non-[]Value list backings (table types, query builders) are truthy.
+		return true
+	case v.VType.Equal(TMap):
+		if v.Data == nil {
+			return false
+		}
+		if om, ok := v.Data.(*OrderedMap); ok {
+			return om.Len() > 0
+		}
+		// Non-*OrderedMap map backings (record/options/child types) are truthy.
+		return true
 	}
 	text := valToString(v)
 	switch text {

@@ -72,7 +72,7 @@ func RegisterConvert(r *Registry) {
 			return NewInteger(n), nil
 
 		case targetType.Matches(TBoolean):
-			return NewBoolean(coerceBoolean(src)), nil
+			return NewBoolean(CoerceBoolean(src)), nil
 
 		case targetType.Equal(TAtom):
 			return NewAtom(valToString(src)), nil

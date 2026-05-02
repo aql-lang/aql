@@ -192,14 +192,18 @@ B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
-| `and` | `[B, B]` | `[B]` | Logical AND | — |
-| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules), then AND | — |
+| `and` | `[B, B]` | `[B]` | Short-circuit AND: returns first falsy operand or last truthy | — |
+| | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
 | `implies` | `[B, B]` | `[B]` | `!args[1] \|\| args[0]` (reversed) | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `nand` | `[B, B]` | `[B]` | Logical NAND | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `not` | `[B]` | `[B]` | Logical NOT | — |
-| `or` | `[B, B]` | `[B]` | Logical OR | — |
-| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules), then OR | — |
+| | `[Any]` | `[B]` | Coerce arg (`convert boolean` rules), then negate | — |
+| `or` | `[B, B]` | `[B]` | Short-circuit OR: returns first truthy operand or last falsy | — |
+| | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
 | `xor` | `[B, B]` | `[B]` | Logical XOR | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 
 
 ## Comparison
