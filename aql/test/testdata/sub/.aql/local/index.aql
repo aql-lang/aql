@@ -1,1 +1,1 @@
-export Local {scope:"child"}
+export "Local" {scope:"child"}

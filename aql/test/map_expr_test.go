@@ -187,11 +187,11 @@ func TestMapExprModuleExportDef(t *testing.T) {
 	// Module exports a map whose values come from defs inside the module.
 	files := map[string]string{
 		"mod.aql": `def val 42
-export M {x:val}`,
+export "M" {x:val}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`M x .`,
+		`M.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -202,11 +202,11 @@ export M {x:val}`,
 func TestMapExprModuleExportMultipleDefs(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def a 10 def b 20
-export M {x:a, y:b}`,
+export "M" {x:a, y:b}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`M x .`,
+		`M.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -217,11 +217,11 @@ export M {x:a, y:b}`,
 func TestMapExprModuleExportMultipleDefsSecondKey(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def a 10 def b 20
-export M {x:a, y:b}`,
+export "M" {x:a, y:b}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`M y .`,
+		`M.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -232,11 +232,11 @@ export M {x:a, y:b}`,
 func TestMapExprModuleExportParen(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def base 10
-export M {x:(base add 5)}`,
+export "M" {x:(base add 5)}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`M x .`,
+		`M.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -247,12 +247,12 @@ export M {x:(base add 5)}`,
 func TestMapExprModuleExportNested(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def v 99
-export M {top:{deep:v}}`,
+export "M" {top:{deep:v}}`,
 	}
 	// Access nested: get outer map, then get inner key.
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`M top .`,
+		`M.top`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -263,12 +263,12 @@ export M {top:{deep:v}}`,
 func TestMapExprModuleExportNestedDeep(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def v 99
-export M {top:{deep:v}}`,
+export "M" {top:{deep:v}}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`def m (M top .)`,
-		`m deep .`,
+		`def m (M.top)`,
+		`m.deep`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -280,12 +280,12 @@ func TestMapExprModuleExportFnDef(t *testing.T) {
 	// Module exports a function; caller uses it to build a map with expressions.
 	files := map[string]string{
 		"mod.aql": `def double fn [[n:Integer] Integer [n add n]]
-export M {double:double}`,
+export "M" {double:double}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
 		`def x 5`,
-		`{a:(x M double .)}`,
+		`{a:(x M.double)}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -297,12 +297,12 @@ func TestMapExprModuleIsolation(t *testing.T) {
 	// Parent defs should NOT leak into module map values.
 	// Undefined word in map value now errors, so use a string.
 	files := map[string]string{
-		"mod.aql": `export M {x:"foo"}`,
+		"mod.aql": `export "M" {x:"foo"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
 		`import "./mod.aql"`,
-		`M x .`,
+		`M.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -317,11 +317,11 @@ func TestMapExprModuleIsolation(t *testing.T) {
 func TestMapExprModuleChainDefs(t *testing.T) {
 	// Module A exports a value; top level imports and uses it in a map.
 	files := map[string]string{
-		"a.aql": `export A {val:42}`,
+		"a.aql": `export "A" {val:42}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./a.aql"`,
-		`def v (A val .)`,
+		`def v (A.val)`,
 		`{result:v}`,
 	})
 	if err != nil {
@@ -333,11 +333,11 @@ func TestMapExprModuleChainDefs(t *testing.T) {
 func TestMapExprModuleChainDefsImplicit(t *testing.T) {
 	// Same as above but with implicit map syntax.
 	files := map[string]string{
-		"a.aql": `export A {val:42}`,
+		"a.aql": `export "A" {val:42}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./a.aql"`,
-		`def v (A val .)`,
+		`def v (A.val)`,
 		`result:v`,
 	})
 	if err != nil {
@@ -350,14 +350,14 @@ func TestMapExprModuleDeepChain(t *testing.T) {
 	// Chain: inner → outer → top level, each using map expressions with defs.
 	files := map[string]string{
 		"inner.aql": `def n 7
-export Inner {val:n}`,
+export "Inner" {val:n}`,
 		"outer.aql": `import "./inner.aql"
-def doubled ((Inner val .) add (Inner val .))
-export Outer {result:doubled}`,
+def doubled ((Inner.val) add (Inner.val))
+export "Outer" {result:doubled}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./outer.aql"`,
-		`(Outer result .)`,
+		`(Outer.result)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -459,13 +459,13 @@ func TestMapExprModuleComprehensive(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def bval 100
 def incr fn [[n:Integer] Integer [n add 1]]
-export M {bval:bval, incr:incr}`,
+export "M" {bval:bval, incr:incr}`,
 	}
 
 	// Test 1: explicit map with module value
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`def b (M bval .)`,
+		`def b (M.bval)`,
 		`{x:b}`,
 	})
 	if err != nil {
@@ -476,7 +476,7 @@ export M {bval:bval, incr:incr}`,
 	// Test 2: explicit map with paren expression
 	result, err = runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`def b (M bval .)`,
+		`def b (M.bval)`,
 		`{x:(b add 5)}`,
 	})
 	if err != nil {
@@ -487,7 +487,7 @@ export M {bval:bval, incr:incr}`,
 	// Test 3: map inside a list
 	result, err = runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`def b (M bval .)`,
+		`def b (M.bval)`,
 		`[{val:b}]`,
 	})
 	if err != nil {
@@ -498,7 +498,7 @@ export M {bval:bval, incr:incr}`,
 	// Test 4: nested map
 	result, err = runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`def b (M bval .)`,
+		`def b (M.bval)`,
 		`{top:{deep:b}}`,
 	})
 	if err != nil {

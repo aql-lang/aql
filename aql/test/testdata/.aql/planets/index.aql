@@ -1,2 +1,2 @@
 import "./data.json" def data end
-export Planets {catalog:data}
+export "Planets" {catalog:data}

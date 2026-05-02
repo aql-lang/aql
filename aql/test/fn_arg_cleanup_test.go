@@ -11,10 +11,10 @@ import (
 // --- Unnamed args, body ignores them ---
 
 func TestFnArgCleanup_UnnamedOneArg_OneReturn(t *testing.T) {
-	// def f fn [[Atom] [Integer] [1]]; f a → 1
+	// def f fn [[Atom] [Integer] [1]]; f (quote a) → 1
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [Integer] [1]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestFnArgCleanup_UnnamedTwoArgs_TwoReturns(t *testing.T) {
 	// def g fn [[Atom Atom] [Integer Integer] [1 2]]; g a b → 1 2
 	result, err := runSteps(t, []string{
 		`def g fn [[Atom Atom] [Integer Integer] [1 2]]`,
-		`g a b`,
+		`g (quote a) (quote b)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestFnArgCleanup_UnnamedOneArg_TwoReturns(t *testing.T) {
 	// Body produces 2 values, 1 unnamed arg discarded.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [Integer Integer] [10 20]]`,
-		`f x`,
+		`f (quote x)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestFnArgCleanup_UnnamedTwoArgs_OneReturn(t *testing.T) {
 	// 2 unnamed args, body ignores them, produces 1 return.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom Integer] [Integer] [99]]`,
-		`f x 5`,
+		`f (quote x) 5`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestFnArgCleanup_UnnamedTwoArgs_OneReturn(t *testing.T) {
 func TestFnArgCleanup_UnnamedThreeArgs_OneReturn(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom Atom Atom] [Integer] [42]]`,
-		`f a b c`,
+		`f (quote a) (quote b) (quote c)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestFnArgCleanup_UnnamedConsumed_Upper(t *testing.T) {
 	// Body consumes the unnamed Atom via upper.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [String] [upper]]`,
-		`f hello`,
+		`f (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestFnArgCleanup_UnnamedPartiallyConsumed(t *testing.T) {
 	// 2 unnamed args, body consumes 1 (via upper), other discarded.
 	result, err := runSteps(t, []string{
 		`def f fn [[String Atom] [String] [upper]]`,
-		`f "ignore" hello`,
+		`f "ignore" (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestFnArgCleanup_UnnamedPartiallyConsumed(t *testing.T) {
 func TestFnArgCleanup_NamedOneArg_OneReturn(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def f fn [[x:Atom] [Integer] [1]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestFnArgCleanup_NamedOneArg_OneReturn(t *testing.T) {
 func TestFnArgCleanup_NamedTwoArgs_TwoReturns(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def g fn [[x:Atom y:Atom] [Integer Integer] [1 2]]`,
-		`g a b`,
+		`g (quote a) (quote b)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestFnArgCleanup_NamedUnused(t *testing.T) {
 	// Named arg not referenced in body — still cleaned up.
 	result, err := runSteps(t, []string{
 		`def f fn [[x:Atom] [Integer] [42]]`,
-		`f hello`,
+		`f (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestFnArgCleanup_MixedNamedUnnamed(t *testing.T) {
 	// Named x used in body, unnamed Atom ignored and discarded.
 	result, err := runSteps(t, []string{
 		`def f fn [[x:Integer Atom] [Integer] [x mul 2]]`,
-		`f 5 ignored`,
+		`f 5 (quote ignored)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestFnArgCleanup_MixedUnnamedNamed(t *testing.T) {
 	// Unnamed Integer ignored, named x used.
 	result, err := runSteps(t, []string{
 		`def f fn [[Integer x:Atom] [String] [x upper]]`,
-		`f 99 hello`,
+		`f 99 (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +198,7 @@ func TestFnArgCleanup_NoReturnType_UnnamedPreserved(t *testing.T) {
 	// Without return types, unnamed args remain (no ReturnCheck inserted).
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [] []]`,
-		`f hello`,
+		`f (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestFnArgCleanup_TooFewReturns(t *testing.T) {
 	// Even with 1 unnamed arg, its type (Atom) doesn't match Integer.
 	_, err := runSteps(t, []string{
 		`def f fn [[Atom] [Integer] [drop]]`,
-		`f hello`,
+		`f (quote hello)`,
 	})
 	if err == nil {
 		t.Fatal("expected error for too few return values, got nil")
@@ -263,7 +263,7 @@ func TestFnArgCleanup_AbbreviatedSig(t *testing.T) {
 	// fn [Atom Integer [1]] is equivalent to fn [[Atom] [Integer] [1]]
 	result, err := runSteps(t, []string{
 		`def f fn [Atom Integer [1]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestFnArgCleanup_PrintThenReturn(t *testing.T) {
 	// def f fn [[Atom] [Integer] [print; 1]]; f a → prints "a", returns 1
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [Integer] [print; 1]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -302,7 +302,7 @@ func TestFnArgCleanup_ThreeArgs_BodyUsesOne(t *testing.T) {
 	// 3 unnamed args, body only uses top one (math.negate), other 2 discarded.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom Atom Integer] [Integer] [math.negate]]`,
-		`f x y 5`,
+		`f (quote x) (quote y) 5`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +313,7 @@ func TestFnArgCleanup_ThreeArgs_BodyUsesOne(t *testing.T) {
 func TestFnArgCleanup_ThreeArgs_ThreeReturns(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom Atom Atom] [Integer Integer Integer] [10 20 30]]`,
-		`f a b c`,
+		`f (quote a) (quote b) (quote c)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestFnArgCleanup_ConcreteReturn_Simple(t *testing.T) {
 	// Output 1 is not a type, so body becomes [print end 1].
 	result, err := runSteps(t, []string{
 		`def f fn [Atom 1 [print]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -338,7 +338,7 @@ func TestFnArgCleanup_ConcreteReturn_Simple(t *testing.T) {
 func TestFnArgCleanup_ConcreteReturn_MultipleValues(t *testing.T) {
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [1 2] [print]]`,
-		`f a`,
+		`f (quote a)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -396,7 +396,7 @@ func TestFnArgCleanup_ConcreteReturn_TypeOutputUnchanged(t *testing.T) {
 	// String IS a type, so normal return type checking applies.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] [String] [upper]]`,
-		`f hello`,
+		`f (quote hello)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -408,7 +408,7 @@ func TestFnArgCleanup_ConcreteReturn_EmptyBody(t *testing.T) {
 	// Body is empty, concrete return 42 appended after end.
 	result, err := runSteps(t, []string{
 		`def f fn [[Atom] 42 []]`,
-		`f x`,
+		`f (quote x)`,
 	})
 	if err != nil {
 		t.Fatal(err)

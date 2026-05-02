@@ -1717,7 +1717,7 @@ func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewWord("lower"), NewWord("foo")})
+	result, err := e.Run([]Value{NewWord("lower"), NewString("foo")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -4723,7 +4723,7 @@ func TestModuleBasic(t *testing.T) {
 	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
-		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), body})
 	if len(result) != 1 {
@@ -4759,7 +4759,7 @@ func TestModuleImportBasic(t *testing.T) {
 	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
-		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
 	// Run: import module [...]
 	result := runAQL(t, r, []Value{
@@ -4790,7 +4790,7 @@ func TestModuleImportDotAccess(t *testing.T) {
 	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
-		NewWord("export"), NewWord("Foo"), makeMap("inc", NewWord("inc")),
+		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
 	// Step 1: import the module
 	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
@@ -4800,7 +4800,7 @@ func TestModuleImportDotAccess(t *testing.T) {
 	// dot with "inc" gives [add 1]
 	// do [add 1] with 2 on stack should give 3
 	// Actually let's test just Foo . inc to get the value
-	result := runAQL(t, r, []Value{NewWord("Foo"), NewWord("inc"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewWord("Foo"), NewAtom("inc"), NewWord("get")})
 	if len(result) != 1 {
 		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
 	}
@@ -4818,7 +4818,7 @@ func TestModuleIsolation(t *testing.T) {
 	}
 	body := NewList([]Value{
 		NewWord("def"), NewWord("secret"), NewInteger(42),
-		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
+		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
 	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
 
@@ -4836,7 +4836,7 @@ func TestModuleDefSubject(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := NewList([]Value{
-		NewWord("export"), NewWord("M"), makeMap("x", NewInteger(1)),
+		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("MyMod"), NewWord("module"), body,
@@ -4864,7 +4864,7 @@ func TestModuleImportRename(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := NewList([]Value{
-		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
+		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
 	modResult := runAQL(t, r, []Value{NewWord("module"), body})
 	if len(modResult) != 1 || !modResult[0].IsModule() {
@@ -4889,7 +4889,7 @@ func TestModuleImportMultiRename(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := NewList([]Value{
-		NewWord("export"), NewWord("Foo"), makeMap("x", NewInteger(1)),
+		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
 	modResult := runAQL(t, r, []Value{NewWord("module"), body})
 
@@ -4918,7 +4918,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	// Module body tries to use "foo" — it should NOT find the parent def.
 	// "foo" should resolve to an atom inside the module.
 	body := NewList([]Value{
-		NewWord("export"), NewWord("M"), makeMap("val", NewWord("foo")),
+		NewWord("export"), NewAtom("M"), makeMap("val", NewWord("foo")),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), body})
 	if len(result) != 1 || !result[0].IsModule() {

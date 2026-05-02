@@ -44,12 +44,12 @@ func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]en
 
 func TestImportFileBasic(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export Config {version:42,name:"myapp"}`,
+		"config.aql": `export "Config" {version:42,name:"myapp"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./config.aql"`,
-		`Config version .`,
+		`Config.version`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -59,12 +59,12 @@ func TestImportFileBasic(t *testing.T) {
 
 func TestImportFileStringValue(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export Config {version:42,name:"myapp"}`,
+		"config.aql": `export "Config" {version:42,name:"myapp"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./config.aql"`,
-		`Config name .`,
+		`Config.name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -76,13 +76,13 @@ func TestImportFileStringValue(t *testing.T) {
 
 func TestImportFileMultipleExports(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export A {x:1}
-export B {y:2}`,
+		"data.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./data.aql"`,
-		`A x .`,
+		`A.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -92,13 +92,13 @@ export B {y:2}`,
 
 func TestImportFileMultipleExportsSecond(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export A {x:1}
-export B {y:2}`,
+		"data.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./data.aql"`,
-		`B y .`,
+		`B.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -110,12 +110,12 @@ export B {y:2}`,
 
 func TestImportFileRename(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export Orig {x:99}`,
+		"data.aql": `export "Orig" {x:99}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import [Orig Renamed] "./data.aql"`,
-		`Renamed x .`,
+		`Renamed.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,13 +125,13 @@ func TestImportFileRename(t *testing.T) {
 
 func TestImportFileMultiRename(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export A {x:1}
-export B {y:2}`,
+		"data.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import [[A AA] [B BB]] "./data.aql"`,
-		`AA x .`,
+		`AA.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -141,13 +141,13 @@ export B {y:2}`,
 
 func TestImportFileMultiRenameSecond(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export A {x:1}
-export B {y:2}`,
+		"data.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import [[A AA] [B BB]] "./data.aql"`,
-		`BB y .`,
+		`BB.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestImportFileIsolation(t *testing.T) {
 	// Internal defs should not leak to parent.
 	files := map[string]string{
 		"mod.aql": `def secret 42
-export M {x:1}`,
+export "M" {x:1}`,
 	}
 
 	_, err := runModuleSteps(t, files, []string{
@@ -178,13 +178,13 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 	// Parent defs should not be visible inside the file's module.
 	// Use a string value so the map doesn't error on undefined word.
 	files := map[string]string{
-		"mod.aql": `export M {val:"foo"}`,
+		"mod.aql": `export "M" {val:"foo"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
 		`import "./mod.aql"`,
-		`M val .`,
+		`M.val`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -201,12 +201,12 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 func TestImportFileDefExport(t *testing.T) {
 	files := map[string]string{
 		"lib.aql": `def myval 42
-export Lib {myval:myval}`,
+export "Lib" {myval:myval}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./lib.aql"`,
-		`Lib myval .`,
+		`Lib.myval`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +218,7 @@ export Lib {myval:myval}`,
 
 func TestImportFileMapExport(t *testing.T) {
 	files := map[string]string{
-		"comp.aql": `export Vals {x:10,y:20}`,
+		"comp.aql": `export "Vals" {x:10,y:20}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
@@ -235,12 +235,12 @@ func TestImportFileMapExport(t *testing.T) {
 
 func TestImportFileNoModuleWord(t *testing.T) {
 	files := map[string]string{
-		"simple.aql": `export Simple {a:1,b:2,c:3}`,
+		"simple.aql": `export "Simple" {a:1,b:2,c:3}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./simple.aql"`,
-		`Simple c .`,
+		`Simple.c`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -253,12 +253,12 @@ func TestImportFileNoModuleWord(t *testing.T) {
 func TestImportFileFunctionListExport(t *testing.T) {
 	files := map[string]string{
 		"fns.aql": `def inc [1 add]
-export Fns {inc:inc}`,
+export "Fns" {inc:inc}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./fns.aql"`,
-		`Fns inc .`,
+		`Fns.inc`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestImportFileParseError(t *testing.T) {
 
 func TestImportFileRenameNotFound(t *testing.T) {
 	files := map[string]string{
-		"mod.aql": `export A {x:1}`,
+		"mod.aql": `export "A" {x:1}`,
 	}
 	_, err := runModuleSteps(t, files, []string{
 		`import [NoSuch Renamed] "./mod.aql"`,
@@ -316,12 +316,12 @@ func TestImportFileMultipleDefs(t *testing.T) {
 	files := map[string]string{
 		"math.aql": `def pi 3
 def e 2
-export Math {pi:pi,e:e}`,
+export "Math" {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./math.aql"`,
-		`Math pi .`,
+		`Math.pi`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -333,12 +333,12 @@ func TestImportFileMultipleDefsSecond(t *testing.T) {
 	files := map[string]string{
 		"math.aql": `def pi 3
 def e 2
-export Math {pi:pi,e:e}`,
+export "Math" {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`import "./math.aql"`,
-		`Math e .`,
+		`Math.e`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +371,7 @@ func TestImportJSONFileAccess(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./data.json" name .`,
+		`import "./data.json" . name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestImportJsonicFile(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./config.jsonic" name .`,
+		`import "./config.jsonic" . name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -514,11 +514,11 @@ func TestImportBareModuleRenameNotFoundError(t *testing.T) {
 
 func TestImportBareModuleBasic(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export Lib {version:1,name:"mylib"}`,
+		".aql/mylib/index.aql": `export "Lib" {version:1,name:"mylib"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "mylib"`,
-		`Lib version .`,
+		`Lib.version`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -528,11 +528,11 @@ func TestImportBareModuleBasic(t *testing.T) {
 
 func TestImportBareModuleStringField(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export Lib {version:1,name:"mylib"}`,
+		".aql/mylib/index.aql": `export "Lib" {version:1,name:"mylib"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "mylib"`,
-		`Lib name .`,
+		`Lib.name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -542,11 +542,11 @@ func TestImportBareModuleStringField(t *testing.T) {
 
 func TestImportBareModuleWithRename(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export Orig {val:42}`,
+		".aql/mylib/index.aql": `export "Orig" {val:42}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import [Orig Renamed] "mylib"`,
-		`Renamed val .`,
+		`Renamed.val`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -556,12 +556,12 @@ func TestImportBareModuleWithRename(t *testing.T) {
 
 func TestImportBareModuleMultipleExports(t *testing.T) {
 	files := map[string]string{
-		".aql/stuff/index.aql": `export A {x:1}
-export B {y:2}`,
+		".aql/stuff/index.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "stuff"`,
-		`B y .`,
+		`B.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -606,10 +606,10 @@ func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, st
 func TestBareModuleResolveLevel1(t *testing.T) {
 	// Module at CWD level: /project/.aql/foo/index.aql
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:1}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -620,10 +620,10 @@ func TestBareModuleResolveLevel1(t *testing.T) {
 func TestBareModuleResolveLevel2(t *testing.T) {
 	// Module one level up: /project/.aql/foo/index.aql, CWD = /project/src
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:2}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -633,10 +633,10 @@ func TestBareModuleResolveLevel2(t *testing.T) {
 
 func TestBareModuleResolveLevel3(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:3}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:3}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src/sub", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -646,10 +646,10 @@ func TestBareModuleResolveLevel3(t *testing.T) {
 
 func TestBareModuleResolveLevel4(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:4}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:4}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -659,10 +659,10 @@ func TestBareModuleResolveLevel4(t *testing.T) {
 
 func TestBareModuleResolveLevel5(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:5}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:5}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -672,10 +672,10 @@ func TestBareModuleResolveLevel5(t *testing.T) {
 
 func TestBareModuleResolveLevel6(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:6}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:6}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -685,10 +685,10 @@ func TestBareModuleResolveLevel6(t *testing.T) {
 
 func TestBareModuleResolveLevel7(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export Foo {level:7}`,
+		"/project/.aql/foo/index.aql": `export "Foo" {level:7}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e/f", files, []string{
-		`import "foo"`, `Foo level .`,
+		`import "foo"`, `Foo.level`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -699,10 +699,10 @@ func TestBareModuleResolveLevel7(t *testing.T) {
 func TestBareModuleResolveAtRoot(t *testing.T) {
 	// Module at filesystem root: /.aql/foo/index.aql
 	files := map[string]string{
-		"/.aql/rootmod/index.aql": `export Root {found:true}`,
+		"/.aql/rootmod/index.aql": `export "Root" {found:true}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
-		`import "rootmod"`, `Root found .`,
+		`import "rootmod"`, `Root.found`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -715,11 +715,11 @@ func TestBareModuleResolveAtRoot(t *testing.T) {
 func TestBareModuleClosestWins(t *testing.T) {
 	// Module exists at both CWD and parent — CWD version wins.
 	files := map[string]string{
-		"/project/src/.aql/foo/index.aql": `export Foo {loc:"child"}`,
-		"/project/.aql/foo/index.aql":     `export Foo {loc:"parent"}`,
+		"/project/src/.aql/foo/index.aql": `export "Foo" {loc:"child"}`,
+		"/project/.aql/foo/index.aql":     `export "Foo" {loc:"parent"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "foo"`, `Foo loc .`,
+		`import "foo"`, `Foo.loc`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -730,11 +730,11 @@ func TestBareModuleClosestWins(t *testing.T) {
 func TestBareModuleClosestWinsDeep(t *testing.T) {
 	// Module at level 2 and level 5 — level 2 (closer) wins.
 	files := map[string]string{
-		"/a/b/.aql/mod/index.aql":     `export Mod {loc:"level2"}`,
-		"/a/b/c/d/.aql/mod/index.aql": `export Mod {loc:"level4"}`,
+		"/a/b/.aql/mod/index.aql":     `export "Mod" {loc:"level2"}`,
+		"/a/b/c/d/.aql/mod/index.aql": `export "Mod" {loc:"level4"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c/d/e", files, []string{
-		`import "mod"`, `Mod loc .`,
+		`import "mod"`, `Mod.loc`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -745,10 +745,10 @@ func TestBareModuleClosestWinsDeep(t *testing.T) {
 func TestBareModuleFallsThroughToParent(t *testing.T) {
 	// Module only at parent, not at CWD.
 	files := map[string]string{
-		"/project/.aql/util/index.aql": `export Util {val:99}`,
+		"/project/.aql/util/index.aql": `export "Util" {val:99}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "util"`, `Util val .`,
+		`import "util"`, `Util.val`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -761,13 +761,13 @@ func TestBareModuleFallsThroughToParent(t *testing.T) {
 func TestBareModuleSiblings(t *testing.T) {
 	// Two different modules in the same .aql/ directory.
 	files := map[string]string{
-		"/project/.aql/alpha/index.aql": `export Alpha {id:"a"}`,
-		"/project/.aql/beta/index.aql":  `export Beta {id:"b"}`,
+		"/project/.aql/alpha/index.aql": `export "Alpha" {id:"a"}`,
+		"/project/.aql/beta/index.aql":  `export "Beta" {id:"b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "alpha"`,
 		`import "beta"`,
-		`Beta id .`,
+		`Beta.id`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -777,13 +777,13 @@ func TestBareModuleSiblings(t *testing.T) {
 
 func TestBareModuleSiblingsAccessBoth(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/alpha/index.aql": `export Alpha {id:"a"}`,
-		"/project/.aql/beta/index.aql":  `export Beta {id:"b"}`,
+		"/project/.aql/alpha/index.aql": `export "Alpha" {id:"a"}`,
+		"/project/.aql/beta/index.aql":  `export "Beta" {id:"b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "alpha"`,
 		`import "beta"`,
-		`Alpha id .`,
+		`Alpha.id`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -794,13 +794,13 @@ func TestBareModuleSiblingsAccessBoth(t *testing.T) {
 func TestBareModuleSiblingsAtDifferentLevels(t *testing.T) {
 	// alpha at CWD level, beta at parent level.
 	files := map[string]string{
-		"/project/src/.aql/alpha/index.aql": `export Alpha {id:"child-a"}`,
-		"/project/.aql/beta/index.aql":      `export Beta {id:"parent-b"}`,
+		"/project/src/.aql/alpha/index.aql": `export "Alpha" {id:"child-a"}`,
+		"/project/.aql/beta/index.aql":      `export "Beta" {id:"parent-b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "alpha"`,
 		`import "beta"`,
-		`Alpha id .`,
+		`Alpha.id`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -810,13 +810,13 @@ func TestBareModuleSiblingsAtDifferentLevels(t *testing.T) {
 
 func TestBareModuleSiblingsAtDifferentLevelsSecond(t *testing.T) {
 	files := map[string]string{
-		"/project/src/.aql/alpha/index.aql": `export Alpha {id:"child-a"}`,
-		"/project/.aql/beta/index.aql":      `export Beta {id:"parent-b"}`,
+		"/project/src/.aql/alpha/index.aql": `export "Alpha" {id:"child-a"}`,
+		"/project/.aql/beta/index.aql":      `export "Beta" {id:"parent-b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "alpha"`,
 		`import "beta"`,
-		`Beta id .`,
+		`Beta.id`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -830,11 +830,11 @@ func TestBareModuleSameNameDifferentParents(t *testing.T) {
 	// "utils" exists at two different directory levels with different content.
 	// The closest one (child) should win.
 	files := map[string]string{
-		"/project/src/.aql/utils/index.aql": `export Utils {scope:"local",ver:2}`,
-		"/project/.aql/utils/index.aql":     `export Utils {scope:"global",ver:1}`,
+		"/project/src/.aql/utils/index.aql": `export "Utils" {scope:"local",ver:2}`,
+		"/project/.aql/utils/index.aql":     `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "utils"`, `Utils scope .`,
+		`import "utils"`, `Utils.scope`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -844,11 +844,11 @@ func TestBareModuleSameNameDifferentParents(t *testing.T) {
 
 func TestBareModuleSameNameDifferentParentsVersion(t *testing.T) {
 	files := map[string]string{
-		"/project/src/.aql/utils/index.aql": `export Utils {scope:"local",ver:2}`,
-		"/project/.aql/utils/index.aql":     `export Utils {scope:"global",ver:1}`,
+		"/project/src/.aql/utils/index.aql": `export "Utils" {scope:"local",ver:2}`,
+		"/project/.aql/utils/index.aql":     `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "utils"`, `Utils ver .`,
+		`import "utils"`, `Utils.ver`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -859,10 +859,10 @@ func TestBareModuleSameNameDifferentParentsVersion(t *testing.T) {
 func TestBareModuleSameNameParentWinsWhenChildAbsent(t *testing.T) {
 	// "utils" only at the parent level — should be found via upward walk.
 	files := map[string]string{
-		"/project/.aql/utils/index.aql": `export Utils {scope:"global",ver:1}`,
+		"/project/.aql/utils/index.aql": `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
-		`import "utils"`, `Utils scope .`,
+		`import "utils"`, `Utils.scope`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -873,12 +873,12 @@ func TestBareModuleSameNameParentWinsWhenChildAbsent(t *testing.T) {
 func TestBareModuleSameNameThreeLevels(t *testing.T) {
 	// "config" at three levels; the closest should win.
 	files := map[string]string{
-		"/a/b/c/.aql/config/index.aql": `export Config {env:"dev"}`,
-		"/a/b/.aql/config/index.aql":   `export Config {env:"staging"}`,
-		"/a/.aql/config/index.aql":     `export Config {env:"prod"}`,
+		"/a/b/c/.aql/config/index.aql": `export "Config" {env:"dev"}`,
+		"/a/b/.aql/config/index.aql":   `export "Config" {env:"staging"}`,
+		"/a/.aql/config/index.aql":     `export "Config" {env:"prod"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
-		`import "config"`, `Config env .`,
+		`import "config"`, `Config.env`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -889,11 +889,11 @@ func TestBareModuleSameNameThreeLevels(t *testing.T) {
 func TestBareModuleSameNameThreeLevelsMidWins(t *testing.T) {
 	// "config" at root and mid but NOT at CWD. Mid level wins.
 	files := map[string]string{
-		"/a/b/.aql/config/index.aql": `export Config {env:"staging"}`,
-		"/a/.aql/config/index.aql":   `export Config {env:"prod"}`,
+		"/a/b/.aql/config/index.aql": `export "Config" {env:"staging"}`,
+		"/a/.aql/config/index.aql":   `export "Config" {env:"prod"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
-		`import "config"`, `Config env .`,
+		`import "config"`, `Config.env`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -919,7 +919,7 @@ func TestBareModuleNotFoundDeep(t *testing.T) {
 func TestBareModuleWrongNameNotFound(t *testing.T) {
 	// "bar" exists but we ask for "baz".
 	files := map[string]string{
-		"/project/.aql/bar/index.aql": `export Bar {x:1}`,
+		"/project/.aql/bar/index.aql": `export "Bar" {x:1}`,
 	}
 	_, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "baz"`,
@@ -936,13 +936,13 @@ func TestBareModuleWrongNameNotFound(t *testing.T) {
 
 func TestBareModuleAndFilePathImportCoexist(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/bare/index.aql": `export Bare {src:"bare"}`,
-		"/project/local.aql":           `export Local {src:"file"}`,
+		"/project/.aql/bare/index.aql": `export "Bare" {src:"bare"}`,
+		"/project/local.aql":           `export "Local" {src:"file"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "bare"`,
 		`import "./local.aql"`,
-		`Bare src .`,
+		`Bare.src`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -954,12 +954,12 @@ func TestBareModuleAndFilePathImportCoexist(t *testing.T) {
 
 func TestBareModuleWithMultiRename(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/lib/index.aql": `export A {x:1}
-export B {y:2}`,
+		"/project/.aql/lib/index.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import [[A X][B Y]] "lib"`,
-		`X x .`,
+		`X.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -969,12 +969,12 @@ export B {y:2}`,
 
 func TestBareModuleWithMultiRenameSecond(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/lib/index.aql": `export A {x:1}
-export B {y:2}`,
+		"/project/.aql/lib/index.aql": `export "A" {x:1}
+export "B" {y:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import [[A X][B Y]] "lib"`,
-		`Y y .`,
+		`Y.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -989,10 +989,10 @@ func TestBareModuleWithDefs(t *testing.T) {
 		"/project/.aql/math/index.aql": `
 def pi 3
 def e 2
-export Math {pi:pi,e:e}`,
+export "Math" {pi:pi,e:e}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
-		`import "math"`, `Math pi .`,
+		`import "math"`, `Math.pi`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1004,7 +1004,7 @@ func TestBareModuleImportsJsonReExportsAsMap(t *testing.T) {
 	files := map[string]string{
 		"/project/.aql/planets/data.json": `{"earth":{"diameter":12756},"mars":{"diameter":6792}}`,
 		"/project/.aql/planets/index.aql": `import "./data.json" def data end
-export Planets {catalog:data}`,
+export "Planets" {catalog:data}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "planets"`,
@@ -1020,10 +1020,10 @@ func TestBareModuleInternalDefsDoNotLeak(t *testing.T) {
 	files := map[string]string{
 		"/project/.aql/secret/index.aql": `
 def internal 42
-export Public {val:internal}`,
+export "Public" {val:internal}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
-		`import "secret"`, `Public val .`,
+		`import "secret"`, `Public.val`,
 	})
 	if err != nil {
 		t.Fatal(err)

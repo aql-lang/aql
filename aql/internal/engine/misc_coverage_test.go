@@ -549,7 +549,7 @@ func TestModuleImportFromFile(t *testing.T) {
 		m := NewOrderedMap()
 		m.Set("val", NewString("world"))
 		return []Value{
-			NewWord("export"), NewWord("greet"), NewMap(m),
+			NewWord("export"), NewAtom("greet"), NewMap(m),
 		}, nil
 	}
 
@@ -576,7 +576,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 		m := NewOrderedMap()
 		m.Set("val", NewInteger(42))
 		return []Value{
-			NewWord("export"), NewWord("foo"), NewMap(m),
+			NewWord("export"), NewAtom("foo"), NewMap(m),
 		}, nil
 	}
 
@@ -627,8 +627,8 @@ func TestModuleImportSelectedExports(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
-			NewWord("export"), NewWord("a"), NewMap(m1),
-			NewWord("export"), NewWord("b"), NewMap(m2),
+			NewWord("export"), NewAtom("a"), NewMap(m1),
+			NewWord("export"), NewAtom("b"), NewMap(m2),
 		}),
 	})
 
@@ -658,8 +658,8 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
-			NewWord("export"), NewWord("p"), NewMap(m1),
-			NewWord("export"), NewWord("q"), NewMap(m2),
+			NewWord("export"), NewAtom("p"), NewMap(m1),
+			NewWord("export"), NewAtom("q"), NewMap(m2),
 		}),
 	})
 

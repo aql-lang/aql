@@ -624,7 +624,7 @@ func TestDotMapAtom(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("get")})
 	_as0, _ := result[0].AsInteger()
 	if len(result) != 1 || _as0 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -677,7 +677,7 @@ func TestDotMapMissing(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
@@ -702,7 +702,7 @@ func TestDotNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -729,7 +729,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
-	result := runAQL(t, r, []Value{list, NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
@@ -786,7 +786,7 @@ func TestDotMapThenList(t *testing.T) {
 	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
 	result := runAQL(t, r, []Value{
 		NewMap(m),
-		NewWord("items"), NewWord("get"),
+		NewAtom("items"), NewWord("get"),
 		NewInteger(1), NewWord("get"),
 	})
 	_as6, _ := result[0].AsInteger()
@@ -811,7 +811,7 @@ func TestDotListThenMap(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		list,
 		NewInteger(0), NewWord("get"),
-		NewWord("x"), NewWord("get"),
+		NewAtom("x"), NewWord("get"),
 	})
 	_as7, _ := result[0].AsInteger()
 	if len(result) != 1 || _as7 != 1 {
@@ -833,7 +833,7 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		list,
 		NewInteger(1), NewWord("get"),
-		NewWord("x"), NewWord("get"),
+		NewAtom("x"), NewWord("get"),
 	})
 	_as8, _ := result[0].AsInteger()
 	if len(result) != 1 || _as8 != 2 {
@@ -850,7 +850,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("key"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("get")})
 	_as9, _ := result[0].AsInteger()
 	if len(result) != 1 || _as9 != 99 {
 		t.Errorf("expected 99 via . alias, got %v", result)
@@ -888,9 +888,9 @@ func TestDotDeepListMapCombo(t *testing.T) {
 	outer.Set("a", NewList([]Value{NewMap(m0), NewMap(m1)}))
 	result := runAQL(t, r, []Value{
 		NewMap(outer),
-		NewWord("a"), NewWord("get"),
+		NewAtom("a"), NewWord("get"),
 		NewInteger(1), NewWord("get"),
-		NewWord("b"), NewWord("get"),
+		NewAtom("b"), NewWord("get"),
 		NewInteger(0), NewWord("get"),
 	})
 	_as11, _ := result[0].AsInteger()
@@ -906,7 +906,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("getr")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("getr")})
 	_as12, _ := result[0].AsInteger()
 	if len(result) != 1 || _as12 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -920,7 +920,7 @@ func TestDotrMapMissingError(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("getr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -934,7 +934,7 @@ func TestDotrNoneError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("getr")})
+	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}

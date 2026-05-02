@@ -1035,7 +1035,7 @@ func TestCheckInlineModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`import module [export X {v:42}]  X.v`)
+	res, err := a.Check(`import module [export "X" {v:42}]  X.v`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}

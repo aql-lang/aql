@@ -101,7 +101,7 @@ func TestRealFileBareModuleImportsAqlRelative(t *testing.T) {
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "utils"`,
-		`Utils magicnum .`,
+		`Utils.magicnum`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestRealFileRelativePathImport(t *testing.T) {
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "./lib.aql"`,
-		`Lib version .`,
+		`Lib.version`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestRealFileBareModuleChildShadows(t *testing.T) {
 	dir := filepath.Join(testdataDir(t), "sub")
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "local"`,
-		`Local scope .`,
+		`Local.scope`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestRealFileBareModuleFromDeepSubdirFindsChild(t *testing.T) {
 	dir := filepath.Join(testdataDir(t), "sub", "deep")
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "local"`,
-		`Local scope .`,
+		`Local.scope`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestRealFileMixedBareAndRelative(t *testing.T) {
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "planets"`,
 		`import "./lib.aql"`,
-		`Lib version .`,
+		`Lib.version`,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -51,13 +51,13 @@ true false	true false
 # === String functions - prefix ===
 "hello" upper	'HELLO'
 "WORLD" lower	'world'
-a upper	'A'
+"a" upper	'A'
 "abc" upper	'ABC'
 "MiXeD" lower	'mixed'
 
 # === String functions - forward ===
 lower "ABC"	'abc'
-lower B	'b'
+lower "B"	'b'
 # upper now has forward precedence (unified model)
 upper "abc"	'ABC'
 lower "XYZ"	'xyz'
@@ -86,7 +86,7 @@ lower "XYZ"	'xyz'
 "count: " add 42	'count: 42'
 42 add " items"	'42 items'
 "flag: " add true	'flag: true'
-"val: " add foo	'val: foo'
+"val: " add "foo"	'val: foo'
 
 # Numbers still do integer addition
 1 add 2	3
@@ -506,14 +506,14 @@ def "inc" [1 add] 10 inc	11
 [1 add] def "inc3"; 10 inc3	11
 
 # def with prefix scalar body
-42 def answer answer	42
+42 def answer (quote answer)	42
 
 # Use defined word multiple times
 def inc [1 add] 1 inc inc inc	4
 
 # def does not break existing word coercion
-a upper	'A'
-lower B	'b'
+"a" upper	'A'
+lower "B"	'b'
 
 # === Error cases ===
 

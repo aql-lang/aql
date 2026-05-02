@@ -9,7 +9,7 @@ def moon make Entity {
   entity:"moon"
 }
 
-export solardemo {
+export "solardemo" {
   planet:planet
   moon:moon
   # planet:{kind:"api",spec:"voxgig-solardemo",entity:"planet"},
