@@ -218,11 +218,17 @@ func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // sigTypeMatches checks whether a value's type matches a signature arg type,
 // including metatype awareness: a type literal (Data==nil) whose metatype
 // matches a metatype signature arg (e.g. String literal matches TScalarType).
+//
+// Carrier values are excluded from the metatype path: a check-mode
+// carrier has Data==nil and a concrete VType (e.g. Integer), but it
+// represents an unknown value of that type, NOT a type literal — so
+// it must not satisfy a TScalarType slot. The genuine type literals
+// produced by stepWord on a type-name word have Carrier=false.
 func sigTypeMatches(v Value, t Type) bool {
 	if v.VType.Matches(t) {
 		return true
 	}
-	if v.Data == nil && IsMetaType(t) {
+	if v.Data == nil && !v.Carrier && IsMetaType(t) {
 		return MetatypeFor(v.VType).Matches(t)
 	}
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {

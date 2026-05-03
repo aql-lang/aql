@@ -87,6 +87,42 @@ func Unify(a, b Value) (Value, bool) {
 		return unifyMaps(a, aMap, b, bMap)
 	}
 
+	// Dependent-integer unification. A DepInteger carries a comparison
+	// constraint (e.g. ≥10); it unifies with a concrete Integer iff the
+	// integer satisfies the constraint, and returns the plain Integer
+	// (not the DepInteger) so downstream consumers see a normal scalar.
+	// The IsDepInteger guard on the other side rules out DepInteger ↔
+	// DepInteger pairs (TInteger.Matches() is overridden to accept
+	// DepInteger values, but their Data isn't an integer payload).
+	if a.IsDepInteger() && !b.IsDepInteger() && b.Data != nil && bType.Matches(TInteger) {
+		info, err := a.AsDepInteger()
+		if err != nil {
+			return Value{}, false
+		}
+		n, err := b.AsInteger()
+		if err != nil {
+			return Value{}, false
+		}
+		if depIntegerCheck(info, n) {
+			return b, true
+		}
+		return Value{}, false
+	}
+	if b.IsDepInteger() && !a.IsDepInteger() && a.Data != nil && aType.Matches(TInteger) {
+		info, err := b.AsDepInteger()
+		if err != nil {
+			return Value{}, false
+		}
+		n, err := a.AsInteger()
+		if err != nil {
+			return Value{}, false
+		}
+		if depIntegerCheck(info, n) {
+			return a, true
+		}
+		return Value{}, false
+	}
+
 	// Type literal unification: a type literal (Data==nil) unifies with
 	// any concrete value whose type matches. Return the concrete value.
 	if a.Data == nil && b.Data != nil && bType.Matches(aType) {

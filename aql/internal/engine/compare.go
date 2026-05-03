@@ -192,74 +192,114 @@ func deepEqual(a, b Value) bool {
 	return false
 }
 
+// makeDepIntegerSig builds the [TInteger, TScalarType] -> [TDepInteger]
+// signature variant for a comparison op. With `Integer gte 10`, arg0 is
+// the bound (10) and arg1 is the Integer type literal; the sig sorts
+// ahead of the [Any, Any] sig because its types are more specific, so
+// concrete `5 gte 10` still hits the boolean branch.
+func makeDepIntegerSig(opName string, kind DepKind) NativeSig {
+	return NativeSig{
+		Args: []Type{TInteger, TScalarType},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			// arg1 is the type-literal at the deep position. The
+			// first slice supports the Integer base type only;
+			// other scalar bases (Decimal, String, …) can be added
+			// later by widening this guard.
+			if !args[1].VType.Equal(TInteger) || args[1].Data != nil {
+				return nil, fmt.Errorf("%s: dependent constructor needs an Integer type literal, got %s",
+					opName, args[1].VType.String())
+			}
+			bound, err := args[0].AsInteger()
+			if err != nil {
+				return nil, fmt.Errorf("%s: bound must be an Integer, got %s", opName, args[0].VType.String())
+			}
+			return []Value{NewDepInteger(kind, bound)}, nil
+		},
+		Returns: []Type{TDepInteger},
+	}
+}
+
 func RegisterComparison(r *Registry) {
 	// lt: [any, any] -> [boolean] — less than
 	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
+	// Also accepts `Integer lt N` to construct a DepInteger constraint.
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lt",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("lt: %w", err)
-				}
-				return []Value{NewBoolean(cmp < 0)}, nil
+		Signatures: []NativeSig{
+			makeDepIntegerSig("lt", DepLT),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("lt: %w", err)
+					}
+					return []Value{NewBoolean(cmp < 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// gt: [any, any] -> [boolean] — greater than
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gt",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("gt: %w", err)
-				}
-				return []Value{NewBoolean(cmp > 0)}, nil
+		Signatures: []NativeSig{
+			makeDepIntegerSig("gt", DepGT),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("gt: %w", err)
+					}
+					return []Value{NewBoolean(cmp > 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// lte: [any, any] -> [boolean] — less than or equal
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lte",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("lte: %w", err)
-				}
-				return []Value{NewBoolean(cmp <= 0)}, nil
+		Signatures: []NativeSig{
+			makeDepIntegerSig("lte", DepLTE),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("lte: %w", err)
+					}
+					return []Value{NewBoolean(cmp <= 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// gte: [any, any] -> [boolean] — greater than or equal
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gte",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("gte: %w", err)
-				}
-				return []Value{NewBoolean(cmp >= 0)}, nil
+		Signatures: []NativeSig{
+			makeDepIntegerSig("gte", DepGTE),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("gte: %w", err)
+					}
+					return []Value{NewBoolean(cmp >= 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)

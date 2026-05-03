@@ -23,13 +23,14 @@ type Type struct {
 // typeRoots are the top-level type hierarchy roots. If Parts[0] is already
 // one of these, the path is considered fully qualified and is not expanded.
 var typeRoots = map[string]bool{
-	"Scalar": true,
-	"Node":   true,
-	"Word":   true,
-	"Object": true,
-	"Any":    true,
-	"None":   true,
-	"Type":   true,
+	"Scalar":    true,
+	"Node":      true,
+	"Word":      true,
+	"Object":    true,
+	"Any":       true,
+	"None":      true,
+	"Type":      true,
+	"Dependent": true,
 }
 
 // typeAncestry maps short (legacy) first-part names to their full ancestry
@@ -74,6 +75,7 @@ var typeAncestry = map[string]string{
 	"Matrix":      "Scalar/Number/Matrix",
 	"Timeout":     "Object/Timeout",
 	"Interval":    "Object/Interval",
+	"DepInteger":  "Type/Dependent/DepInteger",
 }
 
 // Well-known types.
@@ -137,6 +139,8 @@ var (
 	TTimezone       = mustType("Scalar/Time/Timezone")
 	TMatrix         = mustType("Scalar/Number/Matrix")
 	TTimeout        = mustType("Object/Timeout")
+	TDependent      = mustType("Type/Dependent")
+	TDepInteger     = mustType("Type/Dependent/DepInteger")
 	TInterval       = mustType("Object/Interval")
 )
 
@@ -333,9 +337,18 @@ var builtinTypeList = []Type{
 //   - "Any" pattern matches everything.
 //   - A child matches a parent: Scalar/String/Proper matches Scalar/String.
 //   - A parent does NOT match a child: Scalar/String does not match Scalar/String/Proper.
+//   - Dependent/DepInteger is treated as a subtype of Scalar/Number/Integer
+//     (and its ancestors Number, Scalar, Any) — the Dependent branch lives
+//     under its own root in the lattice for clear separation, but values of
+//     a dependent integer constraint must satisfy any Integer-typed slot.
+//     Per-value satisfaction (does 5 lie in [10, ∞)?) is handled at Unify
+//     time; this method answers the type-level question only.
 func (t Type) Matches(pattern Type) bool {
 	// "Any" matches everything unconditionally.
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Any" {
+		return true
+	}
+	if isDependentIntegerPath(t) && integerPatternMatches(pattern) {
 		return true
 	}
 	if len(t.Parts) < len(pattern.Parts) {
@@ -347,6 +360,31 @@ func (t Type) Matches(pattern Type) bool {
 		}
 	}
 	return true
+}
+
+// isDependentIntegerPath reports whether t is the DepInteger type or a
+// value-tagged subtype underneath it (mirrors how NewInteger encodes the
+// literal value as an extra path part).
+func isDependentIntegerPath(t Type) bool {
+	if len(t.Parts) < 3 {
+		return false
+	}
+	return t.Parts[0] == "Type" && t.Parts[1] == "Dependent" && t.Parts[2] == "DepInteger"
+}
+
+// integerPatternMatches reports whether the given pattern is Integer or
+// any of its lattice ancestors (Number, Scalar, Any). Used to decide
+// whether a DepInteger value satisfies a sig slot expecting Integer.
+func integerPatternMatches(pattern Type) bool {
+	switch len(pattern.Parts) {
+	case 1:
+		return pattern.Parts[0] == "Any" || pattern.Parts[0] == "Scalar"
+	case 2:
+		return pattern.Parts[0] == "Scalar" && pattern.Parts[1] == "Number"
+	case 3:
+		return pattern.Parts[0] == "Scalar" && pattern.Parts[1] == "Number" && pattern.Parts[2] == "Integer"
+	}
+	return false
 }
 
 // Specificity returns the depth of the type. More parts = more specific.

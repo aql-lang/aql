@@ -765,6 +765,9 @@ func valToString(v Value) string {
 	case v.IsAtom():
 		_as9, _ := v.AsAtom()
 		return _as9
+	case v.IsDepInteger():
+		di, _ := v.AsDepInteger()
+		return fmt.Sprintf("(Integer %s %d)", di.Kind, di.Bound)
 	case v.VType.Matches(TDecimal):
 		_as10, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as10, 'f', -1, 64)

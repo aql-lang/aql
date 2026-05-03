@@ -1516,6 +1516,9 @@ func (v Value) String() string {
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as4, 'f', -1, 64)
+	case v.IsDepInteger():
+		di, _ := v.AsDepInteger()
+		return fmt.Sprintf("(Integer %s %d)", di.Kind, di.Bound)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):
