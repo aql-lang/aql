@@ -10,6 +10,9 @@ func RegisterTypeDef(r *Registry) {
 		if !isTypeValue(body) {
 			return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
 		}
+		if !IsCapitalisedName(name) {
+			return fmt.Errorf("type %s: type names must start with a capital letter", name)
+		}
 		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
 			return err
 		}
@@ -43,7 +46,15 @@ func RegisterTypeDef(r *Registry) {
 			r.Types[name] = body
 		} else {
 			installDef(r, name, body)
-			r.Types[name] = body
+			// installDef may rewrite ObjectType bodies to inject the
+			// hierarchical Name (e.g. Object/Foo/Bar). Pull the
+			// canonical value back from DefStacks so r.Types always
+			// holds what type-operation lookups should see.
+			if ds := r.DefStacks[name]; len(ds) > 0 {
+				r.Types[name] = ds[len(ds)-1]
+			} else {
+				r.Types[name] = body
+			}
 		}
 		// Register the new name parts as known.
 		for _, p := range strings.Split(name, "/") {

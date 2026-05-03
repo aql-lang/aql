@@ -11,20 +11,20 @@
 #
 # Nearest to word = sig[0]. Forward args fill sig[0] left-to-right.
 # Stack args fill remaining slots nearest-first (top of stack first).
-# Same-type args preserve positional order (sub 10 3 = 7).
+# Same-type Args preserve positional order (sub 10 3 = 7).
 
 # =====================================================================
 # 2-param: [Opts Integer] — distinct types
 # =====================================================================
 
 # All forward: {x:4}→Opts, 3→Integer
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
+def opts (make Options {x:Integer}) def f fn [[m:opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
 
 # All forward (was 1 prefix + 1 forward, changed for sequential planner)
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
+def opts (make Options {x:Integer}) def f fn [[m:opts n:Integer] [Integer] [(m . x) add n]] f {x:4} 3	7
 
 # All prefix: nearest=sig[0]=Opts, next=sig[1]=Integer
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 3 {x:4} f	7
+def opts (make Options {x:Integer}) def f fn [[m:opts n:Integer] [Integer] [(m . x) add n]] 3 {x:4} f	7
 
 # =====================================================================
 # 2-param: [Integer String] — distinct scalar types
@@ -56,39 +56,39 @@ sub 10 3	-7
 # =====================================================================
 
 # All forward
-def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
+def opts (make Options {x:Integer}) def h fn [[m:opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
 
 # All forward (was 1 prefix + 2 forward, changed for sequential planner)
-def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
+def opts (make Options {x:Integer}) def h fn [[m:opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
 
 # All forward (was 2 prefix + 1 forward, changed for sequential planner)
-def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
+def opts (make Options {x:Integer}) def h fn [[m:opts n:Integer s:String] [String] [(m . x) add n add s]] h {x:10} 5 "!"	'15!'
 
 # All prefix: nearest=sig[0]=Opts, then sig[1]=Integer, then sig[2]=String
-def Opts (make Options {x:Integer}) def h fn [[m:Opts n:Integer s:String] [String] [(m . x) add n add s]] "!" 5 {x:10} h	'15!'
+def opts (make Options {x:Integer}) def h fn [[m:opts n:Integer s:String] [String] [(m . x) add n add s]] "!" 5 {x:10} h	'15!'
 
 # =====================================================================
 # Optional Options with ordering
 # =====================================================================
 
 # Suffix: opts then int
-def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] f {x:10} 5	15
+def opts (make Options {x:1}) def f fn [[m?:opts n:Integer] [Integer] [(m . x) add n]] f {x:10} 5	15
 
 # 1 prefix (opts) + 1 forward (int)
-def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] {x:10} f 5	15
+def opts (make Options {x:1}) def f fn [[m?:opts n:Integer] [Integer] [(m . x) add n]] {x:10} f 5	15
 
 # All prefix: sig[0]=Opts (nearest to f), sig[1]=Integer
-def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [(m . x) add n]] 5 {x:10} f	15
+def opts (make Options {x:1}) def f fn [[m?:opts n:Integer] [Integer] [(m . x) add n]] 5 {x:10} f	15
 
 # Optional omitted — just int
-def Opts (make Options {x:1}) def f fn [[m?:Opts n:Integer] [Integer] [n]] f 5	5
+def opts (make Options {x:1}) def f fn [[m?:opts n:Integer] [Integer] [n]] f 5	5
 
 # =====================================================================
 # Extra values on stack should not be consumed
 # =====================================================================
 
 # Extra value before args, not consumed
-def Opts (make Options {x:Integer}) def f fn [[m:Opts n:Integer] [Integer] [(m . x) add n]] 99 3 {x:4} f	99 7
+def opts (make Options {x:Integer}) def f fn [[m:opts n:Integer] [Integer] [(m . x) add n]] 99 3 {x:4} f	99 7
 
 # =====================================================================
 # Boolean + Integer — distinct scalar subtypes

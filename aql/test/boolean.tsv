@@ -1,5 +1,5 @@
 # boolean.tsv — extensive tests for Boolean coercion, short-circuiting,
-# algebraic type operators (tor / tand), the `otherwise` word, and
+# algebraic type Operators (tor / tand), the `otherwise` word, and
 # their interactions with the rest of the language.
 #
 # Format: <expr>\t<expected-output>[\t<error-code>]
@@ -210,7 +210,7 @@ None otherwise 5	5
 # 9. tor — type-or (disjunction / union)
 # =====================================================================
 
-# Two type literals.
+# Two type Literals.
 String tor None	Scalar/String|None
 Number tor String	Scalar/Number|Scalar/String
 Boolean tor None	Scalar/Boolean|None
@@ -223,7 +223,7 @@ Integer tor Decimal tor String tor None	Scalar/Number/Integer|Scalar/Number/Deci
 1 tor 2	1|2
 "a" tor "b" tor "c"	'a'|'b'|'c'
 
-# Mixed concrete and type literals.
+# Mixed concrete and type Literals.
 String tor 42	Scalar/String|42
 
 # Disjunct alternatives are kept as-is at runtime (no subsumption).
@@ -258,7 +258,7 @@ String tor String	Scalar/String|Scalar/String
 1 tand Number	1
 "hi" tand String	'hi'
 
-# Type literals: tand falls back to Unify; the narrower type wins.
+# Type literals: tand falls back to Unify; the narrower type Wins.
 Integer tand Number	Scalar/Number/Integer
 Number tand Integer	Scalar/Number/Integer
 
@@ -405,7 +405,7 @@ None tor String	None|Scalar/String
 # otherwise with both None.
 None otherwise None	None
 
-# Boolean coercion through type coercion.
+# Boolean Coercion through type Coercion.
 (1 convert Boolean) and (2 convert Boolean)	true
 (0 convert Boolean) or (false)	false
 
@@ -827,12 +827,12 @@ None is ([Integer String None] tany)	true
 # 38. tall — type-literal narrowing
 # =====================================================================
 
-# Subtype wins: narrower type is kept.
+# Subtype wins: narrower type Is kept.
 [Number Integer] tall	Scalar/Number/Integer
 [Integer Number] tall	Scalar/Number/Integer
 [Scalar Integer] tall	Scalar/Number/Integer
 
-# Same type collapses.
+# Same type Collapses.
 [String String] tall	Scalar/String
 [None None] tall	None
 

@@ -471,3 +471,14 @@ func ValidateTypeNameParts(name string, known map[string]bool) error {
 	}
 	return nil
 }
+
+// IsCapitalisedName reports whether name starts with an ASCII upper-case
+// letter. The naming rule is: type names start with a capital, def names
+// don't. Empty names are not capitalised.
+func IsCapitalisedName(name string) bool {
+	if name == "" {
+		return false
+	}
+	c := name[0]
+	return c >= 'A' && c <= 'Z'
+}

@@ -52,6 +52,9 @@ func RegisterDef(r *Registry) {
 		name := defName(args[0])
 		stackOnly := defStackOnly(args[0])
 		body := args[1]
+		if IsCapitalisedName(name) {
+			return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
+		}
 		// Refuse a def whose name is already a registered TYPE — type
 		// and def share the same Word namespace so a single name
 		// must mean exactly one thing.
@@ -74,6 +77,9 @@ func RegisterDef(r *Registry) {
 			return nil, fmt.Errorf("def: typed-name map must have exactly one key, got %d", nameMap.Len())
 		}
 		name := nameMap.Keys()[0]
+		if IsCapitalisedName(name) {
+			return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
+		}
 		if _, ok := r.Types[name]; ok {
 			return nil, fmt.Errorf("def %s: name clash — already a type", name)
 		}

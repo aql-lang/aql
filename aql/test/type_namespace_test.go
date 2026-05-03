@@ -30,38 +30,30 @@ func expectError(t *testing.T, src string, wantSubstr string) {
 	}
 }
 
-// def-then-type clashes
-func TestNameConfusion_DefThenTypeLiteral(t *testing.T) {
+// Under the case rule (type names capital, def names not), the
+// case-mismatch check fires first and the same name can't legally
+// reach both sides. These tests pin the case-rule message; the
+// underlying name-clash guard remains in place for the rare future
+// case where a capitalised native is added (no such native exists
+// today).
+func TestNameConfusion_DefThenType_CaseRule(t *testing.T) {
+	// `type foo` is rejected outright — type names must capitalise.
 	expectError(t, `def foo 1
-type foo Integer`, "name clash")
+type foo Integer`, "must start with a capital letter")
 }
 
-func TestNameConfusion_DefFnThenType(t *testing.T) {
-	expectError(t, `def foo fn [[Integer] [Integer] [1 add]]
-type foo Integer`, "name clash")
-}
-
-// type-then-def clashes
-func TestNameConfusion_TypeThenDef(t *testing.T) {
+func TestNameConfusion_TypeThenDef_CaseRule(t *testing.T) {
+	// `def Foo` is rejected outright — def names must not capitalise.
 	expectError(t, `type Foo Integer
-def Foo 1`, "name clash")
+def Foo 1`, "must not start with a capital letter")
 }
 
-func TestNameConfusion_TypeThenDefFn(t *testing.T) {
-	expectError(t, `type Foo Integer
-def Foo fn [[Integer] [Integer] [1 add]]`, "name clash")
-}
-
-// Predicate type clash: same as above but with the new fn-body type.
-func TestNameConfusion_TypePredicateThenDef(t *testing.T) {
-	expectError(t, `type Bbd fn [x:Any Any [if (x is String) [x] [None]]]
-def Bbd 1`, "name clash")
-}
-
-// Native fn clash: trying to redefine a registered native (e.g. add)
-// as a type must fail.
-func TestNameConfusion_TypeOverNativeFn(t *testing.T) {
-	expectError(t, `type add Integer`, "name clash")
+// Native fn clash: `type` over a registered native — natives are
+// lowercase, so the capital-rule message hits first. The
+// name-clash guard is still wired up in case capitalised natives
+// are ever registered.
+func TestNameConfusion_TypeOverNativeFn_CaseRule(t *testing.T) {
+	expectError(t, `type add Integer`, "must start with a capital letter")
 }
 
 // Re-defining the same TYPE is also rejected (no shadow stack — type

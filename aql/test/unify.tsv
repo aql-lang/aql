@@ -69,7 +69,7 @@ Boolean	None	false
 []	[]	true	[]
 [true,false]	[true,false]	true	[true,false]
 
-# List element-wise narrowing (type names in lists are type literals)
+# List element-wise narrowing (type Names in lists are type Literals)
 [1,String]	[Number,"a"]	true	[1,'a']
 [Number,Number]	[1,2]	true	[1,2]
 [String,String]	["x","y"]	true	['x','y']
@@ -88,7 +88,7 @@ Boolean	None	false
 [1,2]	[1,3]	false
 [1,"a"]	[1,2]	false
 
-# List with type literal
+# List with type Literal
 List	[1,2]	true	[1,2]
 [1,2]	List	true	[1,2]
 List	List	true	Node/List
@@ -124,7 +124,7 @@ List	[]	true	[]
 {x:Number,y:(String tor None)}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
 {x:Number,y:String}	{x:1}	false
 
-# Optional field syntax ? (sugar for type tor None)
+# Optional field syntax ? (sugar for type Tor None)
 {x:Number,y?:String}	{x:1}	true	{x:1,y:None}
 {x:Number,y?:String}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
 {x?:Number}	{}	true	{x:None}
@@ -136,7 +136,7 @@ List	[]	true	[]
 {x:1}	{x:2}	false
 {x:1}	{x:"a"}	false
 
-# Map with type literal
+# Map with type Literal
 Map	{x:1}	true	{x:1}
 {x:1}	Map	true	{x:1}
 Map	Map	true	Node/Map
@@ -152,7 +152,7 @@ Map	{}	true	{}
 {x:[1,String]}	{x:[Number,"a"]}	true	{x:[1,'a']}
 {x:[1]}	{x:[2]}	false
 
-# Cross-type failures: list vs map vs scalar
+# Cross-type Failures: list vs map vs scalar
 [1]	{x:1}	false
 {x:1}	[1]	false
 List	Map	false
@@ -183,7 +183,7 @@ Any	{x:1}	true	{x:1}
 [:Number]	[:Number]	true	[:Scalar/Number]
 [:Boolean]	[:Boolean]	true	[:Scalar/Boolean]
 
-# Typed list - child type narrowing
+# Typed list - child type Narrowing
 [:Any]	[:Number]	true	[:Scalar/Number]
 [:Any]	[:String]	true	[:Scalar/String]
 [:Number]	[:Any]	true	[:Scalar/Number]
@@ -205,7 +205,7 @@ Any	{x:1}	true	{x:1}
 [:Number]	[]	true	[]
 [:{x:Number}]	[]	true	[]
 
-# Typed list vs concrete list (fail - type mismatch)
+# Typed list vs concrete list (fail - type Mismatch)
 [:String]	[1,2]	false
 [:Number]	["hello"]	false
 [:Boolean]	[1]	false
@@ -221,7 +221,7 @@ Any	{x:1}	true	{x:1}
 [:{x:String}]	[{x:"a"},{x:"b"}]	true	[{x:'a'},{x:'b'}]
 [:{x:Number}]	[{x:1},{y:1}]	false
 
-# Typed list vs bare list type literal
+# Typed list vs bare list type Literal
 List	[:String]	true	[:Scalar/String]
 [:String]	List	true	[:Scalar/String]
 List	[:Number]	true	[:Scalar/Number]
@@ -246,7 +246,7 @@ None	[:Number]	false
 [:[:Number]]	[["a"]]	false
 [:[:Number]]	[[1],[2,3],[]]	true	[[1],[2,3],[]]
 
-# Deeper typed list child type unification
+# Deeper typed list child type Unification
 [:[:String]]	[:[:String]]	true	[:[:Scalar/String]]
 [:[:Number]]	[:[:Any]]	true	[:[:Scalar/Number]]
 [:[:String]]	[:[:Number]]	false
@@ -261,7 +261,7 @@ None	[:Number]	false
 {:Number}	{:Number}	true	{:Scalar/Number}
 {:Boolean}	{:Boolean}	true	{:Scalar/Boolean}
 
-# Typed map - child type narrowing
+# Typed map - child type Narrowing
 {:Any}	{:Number}	true	{:Scalar/Number}
 {:Any}	{:String}	true	{:Scalar/String}
 {:Number}	{:Any}	true	{:Scalar/Number}
@@ -283,7 +283,7 @@ None	[:Number]	false
 {:Number}	{}	true	{}
 {:{x:Number}}	{}	true	{}
 
-# Typed map vs concrete map (fail - type mismatch)
+# Typed map vs concrete map (fail - type Mismatch)
 {:String}	{a:1}	false
 {:Number}	{x:"hello"}	false
 {:Boolean}	{x:1}	false
@@ -299,7 +299,7 @@ None	[:Number]	false
 {:{x:String}}	{a:{x:"a"},b:{x:"b"}}	true	{a:{x:'a'},b:{x:'b'}}
 {:{x:Number}}	{a:{x:1},b:{y:1}}	false
 
-# Typed map vs bare map type literal
+# Typed map vs bare map type Literal
 Map	{:String}	true	{:Scalar/String}
 {:String}	Map	true	{:Scalar/String}
 Map	{:Number}	true	{:Scalar/Number}
@@ -324,7 +324,7 @@ None	{:Number}	false
 {:{:Number}}	{a:{x:"a"}}	false
 {:{:Number}}	{a:{x:1,y:2},b:{z:3}}	true	{a:{x:1,y:2},b:{z:3}}
 
-# Deeper typed map child type unification
+# Deeper typed map child type Unification
 {:{:String}}	{:{:String}}	true	{:{:Scalar/String}}
 {:{:Number}}	{:{:Any}}	true	{:{:Scalar/Number}}
 {:{:String}}	{:{:Number}}	false

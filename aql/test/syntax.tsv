@@ -156,7 +156,7 @@ true unify 1	'~unify-fail' false
 "hello" unify true	'~unify-fail' false
 false unify "world"	'~unify-fail' false
 
-# === Unify - type narrowing with parent types ===
+# === Unify - type Narrowing with parent types ===
 1 unify Number	1 true
 Number unify 1	1 true
 42 unify Number	42 true
@@ -166,7 +166,7 @@ String unify "hello"	'hello' true
 true unify Boolean	true true
 Boolean unify false	false true
 
-# === Unify - type with any ===
+# === Unify - type With any ===
 1 unify Any	1 true
 Any unify 1	1 true
 "hello" unify Any	'hello' true
@@ -174,7 +174,7 @@ Any unify "hello"	'hello' true
 true unify Any	true true
 Any unify false	false true
 
-# === Unify - parent type with parent type ===
+# === Unify - parent type With parent type ===
 Number unify Number	Scalar/Number true
 String unify String	Scalar/String true
 Boolean unify Boolean	Scalar/Boolean true
@@ -354,11 +354,11 @@ None unify Map	'~unify-fail' false
 [:Any] unify [:String]	[:Scalar/String] true
 [:Number] unify [:Any]	[:Scalar/Number] true
 
-# === Unify - typed list child type mismatch ===
+# === Unify - typed list child type Mismatch ===
 [:String] unify [:Number]	'~unify-fail' false
 [:Number] unify [:Boolean]	'~unify-fail' false
 
-# === Unify - typed list with type literal ===
+# === Unify - typed list with type Literal ===
 List unify [:String]	[:Scalar/String] true
 [:String] unify List	[:Scalar/String] true
 List unify [:Number]	[:Scalar/Number] true
@@ -420,7 +420,7 @@ None unify [:String]	'~unify-fail' false
 {:Number} unify {}	{} true
 {:{x:Number}} unify {}	{} true
 
-# === Unify - typed maps with concrete (fail - type mismatch) ===
+# === Unify - typed maps with concrete (fail - type Mismatch) ===
 {:String} unify {a:1}	'~unify-fail' false
 {:Number} unify {x:"hello"}	'~unify-fail' false
 {:Boolean} unify {x:1}	'~unify-fail' false
@@ -431,7 +431,7 @@ None unify [:String]	'~unify-fail' false
 {:Number} unify {:Any}	{:Scalar/Number} true
 {:String} unify {:Any}	{:Scalar/String} true
 
-# === Unify - typed map child type mismatch ===
+# === Unify - typed map child type Mismatch ===
 {:String} unify {:Number}	'~unify-fail' false
 {:Number} unify {:Boolean}	'~unify-fail' false
 {:String} unify {:Boolean}	'~unify-fail' false
@@ -442,7 +442,7 @@ None unify [:String]	'~unify-fail' false
 {a:1} unify {:String}	'~unify-fail' false
 {x:"hello"} unify {:Number}	'~unify-fail' false
 
-# === Unify - typed map with type literal ===
+# === Unify - typed map with type Literal ===
 Map unify {:String}	{:Scalar/String} true
 {:String} unify Map	{:Scalar/String} true
 Map unify {:Number}	{:Scalar/Number} true
@@ -473,7 +473,7 @@ None unify {:Number}	'~unify-fail' false
 {:{:Number}} unify {a:{x:"a"}}	'~unify-fail' false
 {:{:Number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
 
-# === Unify - deeper typed map child type unification ===
+# === Unify - deeper typed map child type Unification ===
 {:{:String}} unify {:{:String}}	{:{:Scalar/String}} true
 {:{:Number}} unify {:{:Any}}	{:{:Scalar/Number}} true
 {:{:String}} unify {:{:Number}}	'~unify-fail' false
@@ -532,7 +532,7 @@ lower "B"	'b'
 # Missing all arguments for add
 add		signature_error
 
-# Wrong type for upper (integer instead of string)
+# Wrong type For upper (integer instead of string)
 1 upper		signature_error
 
 # Too many prefix args for upper
@@ -619,7 +619,7 @@ def sq fn [[x:Number] [Number] [x mul x]] sq 6	36
 # Multiple calls to function def
 def inc fn [[x:Number] [Number] [x add 1]] 1 inc inc inc	4
 
-# Unnamed Map parameter (type literal, not a map value)
+# Unnamed Map parameter (type Literal, not a map value)
 def mid fn [[Map] [] []] end {a:2} mid	{a:2}
 
 # Unnamed List parameter
@@ -707,7 +707,7 @@ false and true or true	true
 true and (not false)	true
 not true or false	false
 
-# === convert - type conversions ===
+# === convert - type Conversions ===
 
 # Integer to string
 99 convert String	'99'
@@ -748,7 +748,7 @@ false convert String	'false'
 "hello" convert Atom	hello
 "42" convert Atom	42
 
-# === make - type instance creation ===
+# === make - type Instance creation ===
 
 # make scalar: integer to string
 make String 9	'9'
@@ -788,11 +788,11 @@ type Point record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
 # make record: named fields in different order
 type Point record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
 
-# make record: type conversion applied to fields
-type bar record [x:Number y:Boolean z:String] make bar [1 false "s"]	{x:1,y:false,z:'s'}
+# make record: type Conversion applied to fields
+type Bar record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
 
-# make record: named fields reordered with type conversion
-type bar record [x:Number y:Boolean z:String] make bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+# make record: named fields reordered with type Conversion
+type Bar record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # make record: field value conversion (string to number)
 type Pair record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
@@ -800,25 +800,25 @@ type Pair record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
 # make with infix form
 type P record [x:Number y:Number] P make [1 2]	{x:1,y:2}
 
-# === type - custom type definitions ===
+# === type - custom type Definitions ===
 
-# type with record
+# type With record
 type Vec record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
 
-# type with disjunct
+# type With disjunct
 type OptNum (Number tor None) OptNum unify 5	5 true
 type OptNum (Number tor None) OptNum unify None	None true
 type OptNum (Number tor None) OptNum unify "hi"	'~unify-fail' false
 
-# type with type alias
+# type With type Alias
 type Num Number Num unify 42	42 true
 type Num Number Num unify "hi"	'~unify-fail' false
 
-# type with typed list
+# type With typed list
 type Nums [:Number] Nums unify [1,2,3]	[1,2,3] true
 type Nums [:Number] Nums unify ["a"]	'~unify-fail' false
 
-# type with typed map
+# type With typed map
 type NumMap {:Number} NumMap unify {a:1,b:2}	{a:1,b:2} true
 
 # === do - evaluate list and map contents ===
@@ -849,7 +849,7 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 
 # === disjunct - union types via tor ===
 
-# Disjunct creation: type literals
+# Disjunct creation: type Literals
 String tor Number	Scalar/String|Scalar/Number
 String tor None	Scalar/String|None
 None tor Boolean	None|Scalar/Boolean
@@ -869,7 +869,7 @@ String tor Number tor Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
 (String tor Boolean) unify 42	'~unify-fail' false
 (Number tor Boolean) unify "hi"	'~unify-fail' false
 
-# Disjunct unify with type narrowing
+# Disjunct unify with type Narrowing
 (String tor Number) unify Number	Scalar/Number true
 (String tor Number) unify String	Scalar/String true
 (Number tor None) unify 5	5 true
@@ -931,7 +931,7 @@ None otherwise None	None
 # Three-way merge
 {x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
 
-# Scalar unification: type narrows to concrete
+# Scalar unification: type Narrows to concrete
 1 tand Integer	1
 
 # === dblcall (callback function example) ===

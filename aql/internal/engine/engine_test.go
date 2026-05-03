@@ -4485,14 +4485,14 @@ func TestRecordTypeWithDef(t *testing.T) {
 	}
 	e := New(reg)
 
-	// def Point record [x:number y:number]
+	// type Point record [x:number y:number]
 	// Point => record{x:Number,y:Number}
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
 	input := []Value{
-		NewWord("def"), NewWord("Point"),
+		NewWord("type"), NewWord("Point"),
 		NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
 		NewWord("end"),
 		NewWord("Point"),
@@ -4830,7 +4830,7 @@ func TestModuleIsolation(t *testing.T) {
 
 func TestModuleDefSubject(t *testing.T) {
 	// Modules can be subjects of def.
-	// def MyMod module [export M {x:1}]
+	// def myMod module [export M {x:1}]
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -4839,20 +4839,20 @@ func TestModuleDefSubject(t *testing.T) {
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("MyMod"), NewWord("module"), body,
+		NewWord("def"), NewWord("myMod"), NewWord("module"), body,
 	})
 
-	// MyMod should resolve to a module descriptor.
-	result := runAQL(t, r, []Value{NewWord("MyMod")})
+	// myMod should resolve to a module descriptor.
+	result := runAQL(t, r, []Value{NewWord("myMod")})
 	if len(result) != 1 || !result[0].IsModule() {
-		t.Fatalf("def MyMod: expected module descriptor, got %v", result)
+		t.Fatalf("def myMod: expected module descriptor, got %v", result)
 	}
 
-	// import MyMod should work.
-	runAQL(t, r, []Value{NewWord("import"), NewWord("MyMod")})
+	// import myMod should work.
+	runAQL(t, r, []Value{NewWord("import"), NewWord("myMod")})
 	result2 := runAQL(t, r, []Value{NewWord("M")})
 	if len(result2) != 1 || !result2[0].VType.Equal(TMap) {
-		t.Errorf("import MyMod: M = %v, want map", result2)
+		t.Errorf("import myMod: M = %v, want map", result2)
 	}
 }
 
