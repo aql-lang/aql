@@ -271,6 +271,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.MemOps = parent.MemOps
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
+	// CheckMode is deliberately NOT propagated to the module sub-
+	// registry. Module bodies need concrete string literals (used as
+	// export names / map keys) which carrier-stripping under CheckMode
+	// destroys. A typo inside an inline module body therefore raises
+	// a hard `undefined_word` error from stepWord and aborts the
+	// import; the user sees a clear single-error diagnostic and can
+	// fix the body before re-running. Top-level / if / do / for / fn
+	// bodies all stay in CheckMode and collect every typo as usual.
 
 	// Let the native package (or other extension packages) register
 	// their words in the module's sub-registry. Propagate the hook

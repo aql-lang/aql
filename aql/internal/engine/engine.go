@@ -398,24 +398,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	}
 
 	// Drain any Undefined-Atom values left on the stack. Outside check
-	// mode `stepWord` already errors on undefined words, so this loop
-	// runs only under CheckMode, where stepWord deliberately tolerates
-	// the undefined-word path so static analysis can keep going. Each
-	// dangling atom is converted to a diagnostic + Any carrier so the
-	// rest of the program continues to be checked.
+	// mode `stepWord` errors on undefined words so this loop is a
+	// no-op. Under CheckMode `stepWord` already emitted the diagnostic
+	// at the source token; here we only need to replace any dangling
+	// Undefined atoms with `Any` carriers so the residual stack stays
+	// type-clean for downstream consumers of CheckResult.Stack.
 	for i, v := range e.stack {
 		if !v.Undefined {
 			continue
 		}
 		if e.registry != nil && e.registry.CheckMode {
-			name, _ := v.AsAtom()
-			e.registry.addCheckDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + name,
-				Word:   name,
-				Row:    v.Pos.Row,
-				Col:    v.Pos.Col,
-			})
 			e.stack[i] = NewCarrier(TAny)
 		}
 	}
@@ -711,8 +703,13 @@ func (e *Engine) stepWord(val Value) error {
 		// position, where forward collection captures the word as an
 		// Atom before it ever reaches stepWord.
 		//
-		// In CheckMode the engine continues so static analysis can
-		// keep going; the diagnostic is collected at end-of-Run.
+		// In CheckMode the engine emits a diagnostic and continues with
+		// an `Atom{Undefined:true}` so static analysis can keep going.
+		// The diagnostic is recorded HERE rather than at end-of-Run
+		// because the placeholder atom can be consumed by a downstream
+		// operation (e.g. a checkModeAssumeSig for `add`) and never
+		// reach the result stack — recording at the source guarantees
+		// every undefined word produces exactly one diagnostic.
 		if e.registry == nil || !e.registry.CheckMode {
 			return &AqlError{
 				Code:       "undefined_word",
@@ -723,6 +720,13 @@ func (e *Engine) stepWord(val Value) error {
 				fullSource: e.effectiveSource(),
 			}
 		}
+		e.registry.addCheckDiagnostic(CheckDiagnostic{
+			Code:   "undefined_word",
+			Detail: "undefined word: " + w.Name,
+			Word:   w.Name,
+			Row:    val.Pos.Row,
+			Col:    val.Pos.Col,
+		})
 		v := NewAtom(w.Name)
 		v.Pos = val.Pos
 		v.Undefined = true

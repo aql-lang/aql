@@ -776,6 +776,14 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					}
 				}
 			}
+			// Always analyse the body so diagnostics emitted by stepWord
+			// (undefined_word, no_signature, …) inside the body propagate
+			// up to the parent registry. When the fn declares an explicit
+			// return type, we use that for the carrier result and drop
+			// the analyser's residual stack — the analyser is run purely
+			// for its side-effecting diagnostic collection. Memoisation
+			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
+			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
 			if len(declaredReturns) > 0 {
 				out := make([]Value, len(declaredReturns))
 				for i, t := range declaredReturns {
@@ -783,7 +791,6 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				}
 				return out
 			}
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
 			if len(stk) == 0 {
 				return []Value{NewCarrier(TAny)}
 			}
