@@ -72,7 +72,23 @@ func RegisterDef(r *Registry) {
 		if !isTypeValue(constraint) {
 			return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
 		}
-		unified, ok := Unify(args[1], constraint)
+		// When the constraint is a function-shape type and the body is
+		// a quoted atom naming a defined function, resolve to the
+		// function value before unifying. This lets the user write
+		// `def m:Mapper (quote double)` to bind m to the function
+		// double — quote's normal output is an Atom, which would
+		// never unify with a FnUndef constraint otherwise.
+		body := args[1]
+		if constraint.VType.Equal(TFnUndef) && body.IsAtom() {
+			atomName, _ := body.AsAtom()
+			if ds := r.DefStacks[atomName]; len(ds) > 0 {
+				top := ds[len(ds)-1]
+				if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+					body = top
+				}
+			}
+		}
+		unified, ok := Unify(body, constraint)
 		if !ok {
 			return nil, fmt.Errorf("def %s: value does not unify with declared type %s",
 				name, constraint.String())

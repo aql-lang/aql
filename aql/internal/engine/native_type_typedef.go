@@ -13,7 +13,16 @@ func RegisterTypeDef(r *Registry) {
 		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
 			return err
 		}
-		installDef(r, name, body)
+		// installDef would interpret a FnUndef body as the existing
+		// "targeted-sig undef" command (`def name fn [spec]` removes
+		// matching sigs). For the `type Mapper fn [[Integer] [Integer]]`
+		// surface form we want the FnUndef to BIND as a structural
+		// function-shape type, so push it directly to DefStacks here.
+		if body.VType.Equal(TFnUndef) {
+			r.DefStacks[name] = append(r.DefStacks[name], body)
+		} else {
+			installDef(r, name, body)
+		}
 		// Register the new name parts as known.
 		for _, p := range strings.Split(name, "/") {
 			r.KnownTypeParts[p] = true
@@ -89,6 +98,13 @@ func isTypeValue(v Value) bool {
 	}
 	// Dependent scalar type (Integer gt 10, String lt "z", …)
 	if v.IsDepScalar() {
+		return true
+	}
+	// Function-signature type: a FnUndef carrying input + output sig
+	// patterns and no body. Produced by `fn [[input] [output]]`. Used
+	// as a structural function shape — `def n:Mapper f` requires f to
+	// be a function whose signatures match the FnUndef pattern.
+	if v.VType.Equal(TFnUndef) {
 		return true
 	}
 	return false

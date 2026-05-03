@@ -119,6 +119,26 @@ func Unify(a, b Value) (Value, bool) {
 		}
 	}
 
+	// Function-signature unification. A FnUndef value carries one or
+	// more (input, output) sig patterns and acts as a structural
+	// function-type constraint; the other side must be a function
+	// value (TFnDef or TFunction wrapping FnDefInfo) whose signatures
+	// cover the FnUndef pattern. The first slice uses exact-match
+	// rules — see the recommendation block in the commit message for
+	// the variance/overload extensions planned for a follow-up.
+	if aType.Equal(TFnUndef) && (bType.Equal(TFnDef) || bType.Equal(TFunction)) {
+		if fnUndefMatchesFnDef(a, b) {
+			return b, true
+		}
+		return Value{}, false
+	}
+	if bType.Equal(TFnUndef) && (aType.Equal(TFnDef) || aType.Equal(TFunction)) {
+		if fnUndefMatchesFnDef(b, a) {
+			return a, true
+		}
+		return Value{}, false
+	}
+
 	// Type literal unification: a type literal (Data==nil) unifies with
 	// any concrete value whose type matches. Return the concrete value.
 	if a.Data == nil && b.Data != nil && bType.Matches(aType) {
