@@ -153,26 +153,7 @@ func RegisterTall(r *Registry) {
 		}
 		acc := list.Get(0)
 		for i := 1; i < n; i++ {
-			v := list.Get(i)
-			if acc.VType.Equal(TNever) || v.VType.Equal(TNever) {
-				acc = NewTypeLiteral(TNever)
-				continue
-			}
-			if isPlainConcreteMap(acc) && isPlainConcreteMap(v) {
-				merged, ok := mergeMaps(acc.AsMap(), v.AsMap())
-				if !ok {
-					acc = NewTypeLiteral(TNever)
-					continue
-				}
-				acc = NewMap(merged)
-				continue
-			}
-			unified, ok := Unify(acc, v)
-			if !ok {
-				acc = NewTypeLiteral(TNever)
-				continue
-			}
-			acc = unified
+			acc = tandValues(acc, list.Get(i))
 		}
 		return []Value{acc}, nil
 	}

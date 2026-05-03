@@ -32,13 +32,28 @@ identity `Any`).
 `unify.go`'s Never branch), so `v is Never` is `false` for every
 concrete value `v`. Tests in `aql/test/type_never_test.go`.
 
-### 1.2 No distribution / De Morgan
+### 1.2 No distribution / De Morgan — RESOLVED
 
-There is no rewrite rule turning `(A tor B) tand C` into `(A tand C)
-tor (B tand C)`, no analogue for `tand`/`tor` over the disjunct
-alternatives list. The user has to factor by hand. Not a bug per se;
-it makes algebraic reasoning over compound types harder than it
-should be.
+`internal/engine/native_type_tand.go` now distributes `tand` over
+`tor`. When either side is a disjunct, `tandValues` computes the
+cross product, recursively reduces each pair, drops `Never` results
+(via `tor`'s identity rule), and dedupes structurally identical
+alternatives. `(A tor B) tand C` reduces to `(A tand C) tor (B tand C)`;
+both sides being disjuncts produces the full DNF expansion.
+
+`tall` calls the same helper, so n-ary intersections distribute
+through every fold step. The dedup uses `valuesEqual` guarded by
+`VType.Equal` (the existing convention — `valuesEqual` shortcuts
+to true on Data==nil regardless of VType, so callers that compare
+type literals must pre-check VType).
+
+Tests in `aql/test/type_distribute_test.go` cover left- and
+right-side disjuncts, both-side cross product, full DNF collapse to
+`Never`, dedup, `Never` filtering pre-distribution, value-level
+disjuncts, and `tall` folds.
+
+De Morgan rewrites for `not` are not yet in scope — there is no
+type-level negation operator, so there is nothing to dualise.
 
 ### 1.3 No `DepScalar ↔ DepScalar` unification
 
