@@ -126,6 +126,46 @@ func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 	}
 }
 
+// `is` with structural fn-shape types (FnUndef from `type Foo fn
+// [[input] [output]]`). The value side is a `(quote name)` whose
+// name resolves through DefStacks to a FnDef; `is` then runs the
+// FnUndef↔FnDef structural matcher under the hood.
+
+func TestIsFnShape_True(t *testing.T) {
+	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+def double fn [[Integer] [Integer] [1 add]]
+(quote double) is Mapper`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("(quote double) is Mapper = %v, want [\"true\"]", got)
+	}
+}
+
+func TestIsFnShape_FalseWrongInputType(t *testing.T) {
+	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+def stringy fn [[String] [Integer] [length]]
+(quote stringy) is Mapper`)
+	if len(got) != 1 || got[0] != "false" {
+		t.Errorf("(quote stringy) is Mapper = %v, want [\"false\"]", got)
+	}
+}
+
+func TestIsFnShape_FalseWrongReturnType(t *testing.T) {
+	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+def stringer fn [[Integer] [String] [convert String]]
+(quote stringer) is Mapper`)
+	if len(got) != 1 || got[0] != "false" {
+		t.Errorf("(quote stringer) is Mapper = %v, want [\"false\"]", got)
+	}
+}
+
+func TestIsFnShape_FalseNonFunction(t *testing.T) {
+	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+42 is Mapper`)
+	if len(got) != 1 || got[0] != "false" {
+		t.Errorf("42 is Mapper = %v, want [\"false\"]", got)
+	}
+}
+
 // Regression for the BarrierPos: the next-line token must NOT be
 // pulled into `is` as its second forward arg.
 func TestIsBarrierPos_DoesNotEatNextToken(t *testing.T) {

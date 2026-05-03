@@ -13,6 +13,20 @@ func RegisterIs(r *Registry) {
 			BarrierPos: 1,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, b := args[1], args[0]
+				// Resolve `(quote name)` on the value side when the
+				// pattern is a function-shape type (FnUndef). quote
+				// produces an Atom, but a structural fn-type
+				// constraint wants the underlying FnDef value to
+				// compare against — same lookup defTypedHandler does.
+				if b.VType.Equal(TFnUndef) && a.IsAtom() {
+					name, _ := a.AsAtom()
+					if ds := r.DefStacks[name]; len(ds) > 0 {
+						top := ds[len(ds)-1]
+						if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+							a = top
+						}
+					}
+				}
 				// Predicate-type check: if the pattern (b) is a fn
 				// (Quoted=true so it didn't auto-execute on the way
 				// here), call the predicate against a and report
