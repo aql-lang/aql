@@ -358,3 +358,307 @@ func TestDecideTree(t *testing.T) {
 		t.Errorf("expected hot, got %v", result[0])
 	}
 }
+
+// --- Deep structure regression tests ---
+//
+// These tests exercise the decision module against deeply nested data
+// shapes. Before the strict undefined-word rule, bare-word values inside
+// nested predicate / branch / rule maps were lazily converted to
+// `Atom{Undefined:true}` and could leak through several layers of
+// auto-evaluation, causing intermittent end-of-Run failures depending
+// on whether each particular nesting level happened to consume them as
+// an Atom slot. With strict mode the only way to put a name into a
+// deep structure is an explicit string or `(quote name)`, so the data
+// shape is unambiguous all the way down. The tests below build trees /
+// predicates / tables several levels deep using string field names and
+// confirm the evaluator threads a result through every layer.
+
+// TestDecisionDeepNestedPredicates builds a 4-level predicate tree
+// any-of(all-of(p1, not-of(p2)), all-of(p3, p4)) and runs eval-pred
+// against an input that should make exactly one branch true.
+func TestDecisionDeepNestedPredicates(t *testing.T) {
+	r := decisionRegistry(t)
+	src := `
+		def p1 {field:"a", op:"gte", value:10}
+		def p2 {field:"b", op:"lt", value:5}
+		def p3 {field:"c", op:"eq", value:"x"}
+		def p4 {field:"d", op:"neq", value:"y"}
+
+		def inner-not (p2 decision.not-of)
+		def left  ([p1 inner-not] decision.all-of)
+		def right ([p3 p4] decision.all-of)
+		def root  ([left right] decision.any-of)
+	`
+
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		// left fires: a>=10 AND not(b<5).
+		{"LeftBranchTrue", `{a:15, b:10, c:"none", d:"y"}`, true},
+		// right fires: c==x AND d!=y.
+		{"RightBranchTrue", `{a:0, b:0, c:"x", d:"z"}`, true},
+		// neither fires.
+		{"BothBranchesFalse", `{a:0, b:10, c:"y", d:"y"}`, false},
+		// left fails because b<5 makes the not-of false; right fails on c.
+		{"NotOfBlocksLeft", `{a:15, b:1, c:"y", d:"z"}`, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := runDecisionAQL(t, r, src+`
+				`+tc.input+` root decision.eval-pred
+			`)
+			b, _ := result[0].AsBoolean()
+			if b != tc.want {
+				t.Errorf("got %v, want %v for input %s", b, tc.want, tc.input)
+			}
+		})
+	}
+}
+
+// TestDecisionDeepCompoundTable builds a decision table whose rules
+// contain compound predicates at three nesting levels (group-all
+// containing group-any plus group-not-of-cond). Each level used to be
+// vulnerable to bare-word leakage in the lenient regime.
+func TestDecisionDeepCompoundTable(t *testing.T) {
+	r := decisionRegistry(t)
+	src := `
+		def tbl ({kind:"table", hit-policy:"first", rules:[
+		  {when:{kind:"group", op:"all", children:[
+		    {field:"role", op:"eq", value:"admin"}
+		    {kind:"group", op:"any", children:[
+		      {field:"region", op:"eq", value:"us"}
+		      {field:"region", op:"eq", value:"eu"}
+		    ]}
+		    {kind:"group", op:"not", children:{field:"banned", op:"eq", value:true}}
+		  ]}, then:{access:"full"}}
+		  {when:{kind:"group", op:"any", children:[
+		    {field:"role", op:"eq", value:"user"}
+		    {field:"role", op:"eq", value:"reader"}
+		  ]}, then:{access:"limited"}}
+		  {when:{field:"role", op:"eq", value:"guest"}, then:{access:"none"}}
+		]})
+	`
+
+	cases := []struct {
+		name  string
+		input string
+		want  string // empty string => expect no-match
+	}{
+		{"AdminEUNotBanned", `{role:"admin", region:"eu", banned:false}`, "full"},
+		{"AdminUSNotBanned", `{role:"admin", region:"us", banned:false}`, "full"},
+		{"AdminBanned", `{role:"admin", region:"eu", banned:true}`, ""}, // rule 1 fails on not(banned); admin doesn't match rules 2/3
+		{"User", `{role:"user", region:"us", banned:false}`, "limited"},
+		{"Reader", `{role:"reader", region:"eu", banned:false}`, "limited"},
+		{"Guest", `{role:"guest", region:"us", banned:false}`, "none"},
+		{"AdminAsiaNotBanned", `{role:"admin", region:"asia", banned:false}`, ""}, // rule 1's any-of(us,eu) fails
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := runDecisionAQL(t, r, src+`
+				`+tc.input+` tbl decision.eval-table
+			`)
+			m := result[0].AsMap()
+			if m == nil {
+				t.Fatalf("expected map result, got %s", result[0].VType.String())
+			}
+			if tc.want == "" {
+				errVal, ok := m.Get("error")
+				if !ok {
+					t.Fatalf("expected no-match error, got %s", result[0])
+				}
+				es, _ := errVal.AsString()
+				if es != "no-match" {
+					t.Errorf("got error=%q, want no-match", es)
+				}
+				return
+			}
+			access, ok := m.Get("access")
+			if !ok {
+				t.Fatalf("missing 'access' key in result %s", result[0])
+			}
+			s, _ := access.AsString()
+			if s != tc.want {
+				t.Errorf("got access=%q, want %q for input %s", s, tc.want, tc.input)
+			}
+		})
+	}
+}
+
+// TestDecisionDeepBranchingTree exercises a 3-level decision tree where
+// each branch points at another branch, terminating in distinct leaf
+// nodes. The same id strings appear in different roles (next pointer,
+// node id, leaf result) so any leakage of an undefined-atom version of
+// the name would change one of them.
+func TestDecisionDeepBranchingTree(t *testing.T) {
+	r := decisionRegistry(t)
+	src := `
+		def model ({kind:"tree", root:"start", nodes:[
+		  {id:"start", kind:"branch", branches:[
+		    {when:{field:"region", op:"eq", value:"us"}, next:"us-check"}
+		    {when:{field:"region", op:"eq", value:"eu"}, next:"eu-check"}
+		  ]}
+		  {id:"us-check", kind:"branch", branches:[
+		    {when:{field:"age", op:"gte", value:21}, next:"us-adult"}
+		    {when:{field:"age", op:"lt", value:21}, next:"us-minor"}
+		  ]}
+		  {id:"eu-check", kind:"branch", branches:[
+		    {when:{field:"age", op:"gte", value:18}, next:"eu-adult"}
+		    {when:{field:"age", op:"lt", value:18}, next:"eu-minor"}
+		  ]}
+		  {id:"us-adult", kind:"leaf", result:"us-allow"}
+		  {id:"us-minor", kind:"leaf", result:"us-deny"}
+		  {id:"eu-adult", kind:"leaf", result:"eu-allow"}
+		  {id:"eu-minor", kind:"leaf", result:"eu-deny"}
+		]})
+	`
+
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"USAdult", `{region:"us", age:25}`, "us-allow"},
+		{"USMinor", `{region:"us", age:19}`, "us-deny"},
+		{"EUAdult", `{region:"eu", age:19}`, "eu-allow"},
+		{"EUMinor", `{region:"eu", age:17}`, "eu-deny"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := runDecisionAQL(t, r, src+`
+				`+tc.input+` model decision.decide
+			`)
+			s, _ := result[0].AsString()
+			if s != tc.want {
+				t.Errorf("got %q, want %q for input %s", s, tc.want, tc.input)
+			}
+		})
+	}
+}
+
+// TestDecisionTreeDeepLeafResult confirms that the leaf result can
+// itself be an arbitrarily nested map and that the evaluator returns it
+// unchanged. Earlier the eval-tree loop ran maps through autoEval
+// repeatedly, which could rewrite undefined-atom values inside the
+// payload.
+func TestDecisionTreeDeepLeafResult(t *testing.T) {
+	r := decisionRegistry(t)
+	result := runDecisionAQL(t, r, `
+		def model ({kind:"tree", root:"root", nodes:[
+		  {id:"root", kind:"branch", branches:[
+		    {when:{field:"x", op:"gt", value:0}, next:"pos"}
+		    {when:{field:"x", op:"lt", value:0}, next:"neg"}
+		  ]}
+		  {id:"pos", kind:"leaf", result:{
+		    sign:"positive",
+		    detail:{
+		      bucket:"high",
+		      tags:["good","ok"],
+		      nested:{level:3, label:"deep"}
+		    }
+		  }}
+		  {id:"neg", kind:"leaf", result:"negative"}
+		]})
+		{x:5} model decision.decide
+	`)
+	m := result[0].AsMap()
+	if m == nil {
+		t.Fatalf("expected map result, got %s", result[0].VType.String())
+	}
+	sign, _ := m.Get("sign")
+	s, _ := sign.AsString()
+	if s != "positive" {
+		t.Errorf("sign = %q, want positive", s)
+	}
+	detail, _ := m.Get("detail")
+	dm := detail.AsMap()
+	if dm == nil {
+		t.Fatalf("expected detail map, got %s", detail.VType.String())
+	}
+	bucket, _ := dm.Get("bucket")
+	if bs, _ := bucket.AsString(); bs != "high" {
+		t.Errorf("detail.bucket = %q, want high", bs)
+	}
+	nested, _ := dm.Get("nested")
+	nm := nested.AsMap()
+	if nm == nil {
+		t.Fatalf("expected nested map, got %s", nested.VType.String())
+	}
+	label, _ := nm.Get("label")
+	if ls, _ := label.AsString(); ls != "deep" {
+		t.Errorf("detail.nested.label = %q, want deep", ls)
+	}
+}
+
+// TestDecisionDeepStructureRejectsUndefinedWords is a regression guard
+// for the strict undefined-word rule: a bare-word `field` value buried
+// inside a deeply nested when-clause must error with `undefined_word`
+// instead of silently becoming an Atom that propagates through the
+// evaluator. Before the rule, this kind of typo could survive several
+// auto-eval passes and produce surprising "no-match" results; now it
+// fails fast with a clear error.
+func TestDecisionDeepStructureRejectsUndefinedWords(t *testing.T) {
+	r := decisionRegistry(t)
+	src := `
+		def tbl ({kind:"table", hit-policy:"first", rules:[
+		  {when:{kind:"group", op:"all", children:[
+		    {field:age, op:"gte", value:18}
+		  ]}, then:{ok:true}}
+		]})
+		{age:25} tbl decision.eval-table
+	`
+	values, err := parser.Parse(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	eng := engine.NewTop(r)
+	_, err = eng.Run(values)
+	if err == nil {
+		t.Fatal("expected undefined_word error for bare-word field value, got nil")
+	}
+	if !contains(err.Error(), "undefined_word") || !contains(err.Error(), "age") {
+		t.Errorf("expected undefined_word error mentioning 'age', got: %v", err)
+	}
+}
+
+// TestDecisionDeepTreeRejectsUndefinedWords confirms the same strict
+// rule applies inside decision-tree node payloads.
+func TestDecisionDeepTreeRejectsUndefinedWords(t *testing.T) {
+	r := decisionRegistry(t)
+	// Bare-word "us" is the typo here — it must error rather than
+	// silently mismatch every region.
+	src := `
+		def model ({kind:"tree", root:"start", nodes:[
+		  {id:"start", kind:"branch", branches:[
+		    {when:{field:"region", op:"eq", value:us}, next:"us"}
+		  ]}
+		  {id:"us", kind:"leaf", result:"ok"}
+		]})
+		{region:"us"} model decision.decide
+	`
+	values, err := parser.Parse(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	eng := engine.NewTop(r)
+	_, err = eng.Run(values)
+	if err == nil {
+		t.Fatal("expected undefined_word error for bare-word value, got nil")
+	}
+	if !contains(err.Error(), "undefined_word") || !contains(err.Error(), "us") {
+		t.Errorf("expected undefined_word error mentioning 'us', got: %v", err)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
