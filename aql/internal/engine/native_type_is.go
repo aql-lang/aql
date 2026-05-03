@@ -9,7 +9,8 @@ func RegisterIs(r *Registry) {
 		Name:              "is",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args:       []Type{TAny, TAny},
+			BarrierPos: 1,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, b := args[1], args[0]
 				// Predicate-type check: if the pattern (b) is a fn

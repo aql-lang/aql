@@ -74,24 +74,26 @@ type Foo String`, "conflicts with an existing type name")
 const isBbdSource = `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
 `
 
-// `is` is forward-prec and greedy, so multi-line tests wrap each
-// `is` expression in parens to scope its forward arg collection.
+// `is` carries BarrierPos=1 (mirroring `or`): only its first arg can
+// be forward, so a value-then-`is`-then-type expression doesn't eat
+// the next line's first token. Tests below rely on that — no parens
+// needed.
 func TestIsPredicate_True(t *testing.T) {
-	got := runOne(t, isBbdSource+`("c" is Bbd)`)
+	got := runOne(t, isBbdSource+`"c" is Bbd`)
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("\"c\" is Bbd = %v, want [\"true\"]", got)
 	}
 }
 
 func TestIsPredicate_FalseOutOfRange(t *testing.T) {
-	got := runOne(t, isBbdSource+`("e" is Bbd)`)
+	got := runOne(t, isBbdSource+`"e" is Bbd`)
 	if len(got) != 1 || got[0] != "false" {
 		t.Errorf("\"e\" is Bbd = %v, want [\"false\"]", got)
 	}
 }
 
 func TestIsPredicate_FalseWrongType(t *testing.T) {
-	got := runOne(t, isBbdSource+`(99 is Bbd)`)
+	got := runOne(t, isBbdSource+`99 is Bbd`)
 	if len(got) != 1 || got[0] != "false" {
 		t.Errorf("99 is Bbd = %v, want [\"false\"]", got)
 	}
@@ -101,7 +103,7 @@ func TestIsPredicate_TransformingPredicate(t *testing.T) {
 	// `is` only checks the success/failure flag; the transformed value
 	// is discarded by `is` (the Boolean answer is what matters).
 	got := runOne(t, `type Up fn [x:Any Any [if (x is String) [x upper] [None]]]
-("hello" is Up)`)
+"hello" is Up`)
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("\"hello\" is Up = %v, want [\"true\"]", got)
 	}
@@ -111,8 +113,8 @@ func TestIsPredicate_TransformingPredicate(t *testing.T) {
 // behaviour) — guard that the predicate path doesn't break it.
 func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 	got := runOne(t, `type G10 (Integer gt 10)
-(15 is G10)
-(5 is G10)`)
+15 is G10
+5 is G10`)
 	if len(got) != 2 {
 		t.Fatalf("got %v, want 2 results", got)
 	}
@@ -121,5 +123,22 @@ func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 	}
 	if got[1] != "false" {
 		t.Errorf("5 is G10 = %v, want \"false\"", got[1])
+	}
+}
+
+// Regression for the BarrierPos: the next-line token must NOT be
+// pulled into `is` as its second forward arg.
+func TestIsBarrierPos_DoesNotEatNextToken(t *testing.T) {
+	got := runOne(t, `type G10 (Integer gt 10)
+15 is G10
+42`)
+	if len(got) != 2 {
+		t.Fatalf("got %v, want 2 results", got)
+	}
+	if got[0] != "true" {
+		t.Errorf("first result = %v, want \"true\" (15 is G10)", got[0])
+	}
+	if got[1] != int64(42) {
+		t.Errorf("second result = %v, want 42 (untouched by is)", got[1])
 	}
 }
