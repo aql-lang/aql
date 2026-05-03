@@ -31,15 +31,22 @@ func defStackOnly(v Value) bool {
 // evaluation. If the body is a list, its elements are spliced into the
 // stack. Otherwise the single value is pushed.
 //
-// Two signatures with a single handler each:
+// Three signatures, sharing a single handler each:
 //
 //	Args:[TString, TAny]       – def "name" body
 //	Args:[TAtom/q, TAny]       – def name body  (word captured as atom via /q)
+//	Args:[TMap, TAny]          – def name:Type body  (typed binding)
 //
 // The /q modifier on the Atom position causes Word values to be treated as
 // Atoms for matching, and captured without evaluation during forward
 // collection. Forward precedence rules handle all orderings (forward,
 // infix, postfix) without separate infix signatures.
+//
+// The TMap form picks up the surface syntax `def name:Type body`. At the
+// top level, jsonic parses `name:Type` as a single-pair map; the handler
+// extracts the only key as the name, the only value as a type
+// constraint, and unifies the body with the constraint before
+// installing. Multi-key maps and non-type values are rejected.
 func RegisterDef(r *Registry) {
 	defHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
@@ -52,10 +59,43 @@ func RegisterDef(r *Registry) {
 		return nil, nil
 	}
 
+	defTypedHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		nameMap := args[0].AsMap()
+		if nameMap == nil || nameMap.Len() == 0 {
+			return nil, fmt.Errorf("def: typed-name map must have exactly one key, got empty/non-concrete map")
+		}
+		if nameMap.Len() != 1 {
+			return nil, fmt.Errorf("def: typed-name map must have exactly one key, got %d", nameMap.Len())
+		}
+		name := nameMap.Keys()[0]
+		constraint, _ := nameMap.Get(name)
+		if !isTypeValue(constraint) {
+			return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
+		}
+		unified, ok := Unify(args[1], constraint)
+		if !ok {
+			return nil, fmt.Errorf("def %s: value does not unify with declared type %s",
+				name, constraint.String())
+		}
+		installDef(r, name, unified)
+		r.recordCheckDef(name, args[0].Pos)
+		return nil, nil
+	}
+
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "def",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
+			{
+				// Typed-name binding: def name:Type body. Sorts first
+				// because TMap is more specific than TString / TAtom
+				// at the same depth (higher inherent score).
+				Args:           []Type{TMap, TAny},
+				NoEvalArgs:     map[int]bool{1: true},
+				Handler:        defTypedHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
+			},
 			{
 				Args:           []Type{TString, TAny},
 				NoEvalArgs:     map[int]bool{1: true},

@@ -87,5 +87,9 @@ func isTypeValue(v Value) bool {
 	if v.IsObjectType() {
 		return true
 	}
+	// Dependent scalar type (Integer gt 10, String lt "z", …)
+	if v.IsDepScalar() {
+		return true
+	}
 	return false
 }
