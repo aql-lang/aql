@@ -69,15 +69,18 @@ func RegisterDef(r *Registry) {
 		}
 		name := nameMap.Keys()[0]
 		constraint, _ := nameMap.Get(name)
-		// NoEvalArgs suppresses the generic autoEvalMap pipeline for
-		// this slot, so a Word at the type position arrives raw —
-		// resolve it manually through DefStacks. This is what lets
-		// fn-as-type values (a registered fn AND a DefStacks entry)
-		// be picked up here as the type value rather than getting
-		// called like a normal word reference.
+		// NoEvalMapArgs suppresses the generic autoEvalMap pipeline for
+		// this slot, so a Word at the type position arrives raw.
+		// Resolve named user-defined types via r.Types (the dedicated
+		// type registry) first; fall back to DefStacks so legacy
+		// type-definition kinds that still pass through installDef
+		// (records, ObjectType, DepScalar, …) keep working until the
+		// full migration completes.
 		if constraint.IsWord() {
 			w, _ := constraint.AsWord()
-			if ds := r.DefStacks[w.Name]; len(ds) > 0 {
+			if tv, ok := r.Types[w.Name]; ok {
+				constraint = tv
+			} else if ds := r.DefStacks[w.Name]; len(ds) > 0 {
 				constraint = ds[len(ds)-1]
 			}
 		}

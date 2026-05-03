@@ -155,23 +155,29 @@ func TestTypeFnPredicate_DefBindWrongType(t *testing.T) {
 	}
 }
 
-// The named predicate type should also still be callable as an
-// ordinary fn; binding it as a type doesn't preclude direct use.
-// aql.Run renders the residual values through `default → v.String()`,
-// so the returned []any holds either the string value (on success)
-// or "null" / the None type's string form (on failure).
-func TestTypeFnPredicate_AlsoCallable(t *testing.T) {
-	got := runOne(t, bbdSource+`Bbd "c"
-Bbd "e"`)
-	if len(got) != 2 {
-		t.Fatalf("got %v results, want 2", got)
+// Predicate types are NOT independently callable. Resolving Bbd by
+// name pushes the FnDef value with Quoted=true so the engine treats
+// it as data, not a call site — so `Bbd "c"` leaves the FnDef and
+// "c" on the stack rather than invoking the predicate. This is the
+// "type-defining functions are only used for type operations" rule:
+// they participate in def name:T body, v is T, inspect T — never as
+// free-standing calls.
+func TestTypeFnPredicate_NotIndependentlyCallable(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
 	}
-	if got[0] != "c" {
-		t.Errorf("Bbd \"c\" = %v, want \"c\"", got[0])
+	result, err := a.Run(bbdSource + `Bbd "c"`)
+	if err != nil {
+		t.Fatalf("run: %v", err)
 	}
-	// The second call returns None — aql.Run stringifies it.
-	if got[1] != "None" {
-		t.Errorf("Bbd \"e\" = %v, want \"None\"", got[1])
+	// The residual stack should hold the FnDef (rendered by String())
+	// and the string "c", not the predicate's return value.
+	if len(result) != 2 {
+		t.Fatalf("got %v results, want 2 (FnDef + string)", result)
+	}
+	if result[1] != "c" {
+		t.Errorf("residual[1] = %v, want \"c\"", result[1])
 	}
 }
 

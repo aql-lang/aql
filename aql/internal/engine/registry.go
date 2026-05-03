@@ -12,6 +12,16 @@ import (
 // Registry maps function names to their definitions.
 type Registry struct {
 	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	// Types holds named type definitions installed by the `type` word —
+	// type literals, records, disjuncts, typed lists/maps, options,
+	// records, object types, dependent scalars (DepInteger, DepString,
+	// …), function-shape types (FnUndef), and predicate types
+	// (FnDef/Function used as type-defining functions). Type values
+	// live here, not in DefStacks, because they are NOT independently
+	// callable — a predicate type Bbd is only ever consulted via type
+	// operations (`def n:Bbd v`, `v is Bbd`, `inspect Bbd`), never
+	// invoked as a free-standing fn.
+	Types             map[string]Value                                   // name → type value
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -159,6 +169,7 @@ func NewRegistry() (*Registry, error) {
 
 	r := &Registry{
 		DefStacks:      make(map[string][]Value),
+		Types:          make(map[string]Value),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,

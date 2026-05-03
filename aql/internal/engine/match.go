@@ -156,6 +156,22 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						}
 					}
 
+					// Named type from r.Types: resolves to the type
+					// value (mirror of stepWord's r.Types lookup so the
+					// planner's expected type matches what stepWord
+					// will actually push at runtime). Predicate types
+					// arrive as TFnDef/TFunction values; plan against
+					// that VType for sig matching.
+					if tv, ok := e.registry.Types[ww.Name]; ok {
+						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break // named-type value doesn't fit this slot
+					}
+
 					// 1.4: function word — boundary, stop.
 					if e.registry.Lookup(ww.Name) != nil {
 						break

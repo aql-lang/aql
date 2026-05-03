@@ -697,6 +697,22 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
+		// Named user-defined types live in r.Types (separate from
+		// DefStacks) so they're not independently callable. Pushing
+		// the type value with Quoted=true is what keeps a predicate
+		// type from auto-executing — execFnDefLiteral honours the
+		// Quoted flag and treats the FnDef as data, not a call site.
+		if e.registry != nil {
+			if tv, ok := e.registry.Types[w.Name]; ok {
+				push := tv
+				if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
+					push.Quoted = true
+				}
+				push.Pos = val.Pos
+				e.stack[e.pointer] = push
+				return nil
+			}
+		}
 		// Strict rule: an undefined word at the pointer is an error.
 		// Names that need to be values must be quoted explicitly (`quote
 		// foo` or a literal atom) or land at a /q-quoted argument

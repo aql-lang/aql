@@ -13,15 +13,23 @@ func RegisterTypeDef(r *Registry) {
 		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
 			return err
 		}
-		// installDef would interpret a FnUndef body as the existing
-		// "targeted-sig undef" command (`def name fn [spec]` removes
-		// matching sigs). For the `type Mapper fn [[Integer] [Integer]]`
-		// surface form we want the FnUndef to BIND as a structural
-		// function-shape type, so push it directly to DefStacks here.
-		if body.VType.Equal(TFnUndef) {
-			r.DefStacks[name] = append(r.DefStacks[name], body)
+		// Type-defining functions (FnUndef = structural sig pattern,
+		// FnDef/Function = predicate) live ONLY in r.Types: they are
+		// not independently callable and only participate in type
+		// operations (`def n:T v`, `v is T`, `inspect T`). Routing
+		// them through installDef would either register Bbd as a
+		// free-standing callable word (FnDef path) or trigger the
+		// targeted-sig undef machinery (FnUndef path). Other type
+		// kinds (literals, records, disjuncts, typed list/map,
+		// ObjectType, DepScalar, …) keep the legacy installDef path
+		// so they continue to round-trip through DefStacks for
+		// auto-eval lookup. They're also mirrored into r.Types so
+		// type ops can resolve every named type uniformly.
+		if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) || body.VType.Equal(TFnUndef) {
+			r.Types[name] = body
 		} else {
 			installDef(r, name, body)
+			r.Types[name] = body
 		}
 		// Register the new name parts as known.
 		for _, p := range strings.Split(name, "/") {
