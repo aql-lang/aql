@@ -759,15 +759,19 @@ func valToString(v Value) string {
 		return v.VType.String()
 	}
 	switch {
+	case v.IsDepScalar():
+		// Must come before TString/TInteger/etc. matches: the
+		// lattice override makes DepString.Matches(TString) true,
+		// so without this case AsString would crash on the wrong
+		// payload type.
+		ds, _ := v.AsDepScalar()
+		return fmt.Sprintf("(%s %s %s)", dependentLeafFromType(v.VType), ds.Kind, ds.Bound.String())
 	case v.VType.Matches(TString):
 		_as8, _ := v.AsString()
 		return _as8
 	case v.IsAtom():
 		_as9, _ := v.AsAtom()
 		return _as9
-	case v.IsDepInteger():
-		di, _ := v.AsDepInteger()
-		return fmt.Sprintf("(Integer %s %d)", di.Kind, di.Bound)
 	case v.VType.Matches(TDecimal):
 		_as10, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as10, 'f', -1, 64)

@@ -78,6 +78,13 @@ func formatForPrint(v Value) string {
 		return info.Message
 	}
 
+	// Dependent scalar: render the constraint, not the underlying base.
+	// Must run before TString / TInteger / etc. matches because a
+	// DepScalar's VType also matches its base via the lattice override.
+	if v.IsDepScalar() {
+		return valToString(v)
+	}
+
 	// String: printed as-is (no quotes).
 	if v.VType.Matches(TString) {
 		_as0, _ := v.AsString()

@@ -192,30 +192,39 @@ func deepEqual(a, b Value) bool {
 	return false
 }
 
-// makeDepIntegerSig builds the [TInteger, TScalarType] -> [TDepInteger]
-// signature variant for a comparison op. With `Integer gte 10`, arg0 is
-// the bound (10) and arg1 is the Integer type literal; the sig sorts
-// ahead of the [Any, Any] sig because its types are more specific, so
-// concrete `5 gte 10` still hits the boolean branch.
-func makeDepIntegerSig(opName string, kind DepKind) NativeSig {
+// makeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
+// signature variant for a comparison op. `Integer gte 10`, `String lt
+// "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
+// the base-type literal. The result type path is Type/Dependent/Dep<X>
+// where <X> is the leaf of the base type. This sig sorts ahead of the
+// [Any, Any] boolean sig (because its types are more specific), so
+// concrete `5 gte 10` still hits the boolean branch via the second
+// match attempt.
+func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
-		Args: []Type{TInteger, TScalarType},
+		Args: []Type{TScalar, TScalarType},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			// arg1 is the type-literal at the deep position. The
-			// first slice supports the Integer base type only;
-			// other scalar bases (Decimal, String, …) can be added
-			// later by widening this guard.
-			if !args[1].VType.Equal(TInteger) || args[1].Data != nil {
-				return nil, fmt.Errorf("%s: dependent constructor needs an Integer type literal, got %s",
+			// arg1 is the type-literal at the deep position. Reject
+			// non-leaf bases — only the well-known scalar types map
+			// to a Dependent leaf name.
+			if args[1].Data != nil {
+				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
 					opName, args[1].VType.String())
 			}
-			bound, err := args[0].AsInteger()
-			if err != nil {
-				return nil, fmt.Errorf("%s: bound must be an Integer, got %s", opName, args[0].VType.String())
+			leaf := dependentLeafFromBoundType(args[1].VType)
+			if leaf == "" {
+				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
+					opName, args[1].VType.String())
 			}
-			return []Value{NewDepInteger(kind, bound)}, nil
+			// Bound must be the same scalar base as the type literal.
+			base, _ := dependentLeafBaseType(leaf)
+			if !args[0].VType.Matches(base) {
+				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
+					opName, args[0].VType.String(), base.String())
+			}
+			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
-		Returns: []Type{TDepInteger},
+		Returns: []Type{TDependent},
 	}
 }
 
@@ -227,7 +236,7 @@ func RegisterComparison(r *Registry) {
 		Name:              "lt",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			makeDepIntegerSig("lt", DepLT),
+			makeDepScalarSig("lt", DepLT),
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -247,7 +256,7 @@ func RegisterComparison(r *Registry) {
 		Name:              "gt",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			makeDepIntegerSig("gt", DepGT),
+			makeDepScalarSig("gt", DepGT),
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -267,7 +276,7 @@ func RegisterComparison(r *Registry) {
 		Name:              "lte",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			makeDepIntegerSig("lte", DepLTE),
+			makeDepScalarSig("lte", DepLTE),
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -287,7 +296,7 @@ func RegisterComparison(r *Registry) {
 		Name:              "gte",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			makeDepIntegerSig("gte", DepGTE),
+			makeDepScalarSig("gte", DepGTE),
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

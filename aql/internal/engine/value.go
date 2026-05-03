@@ -1508,6 +1508,13 @@ func (v Value) String() string {
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "number", "string").
 		return v.VType.String()
+	case v.IsDepScalar():
+		// Must come before TString / TInteger / TDecimal matches: the
+		// lattice override makes DepString.Matches(TString) (and the
+		// numeric counterparts) true, so without this case the value
+		// payload would be cast to the wrong concrete type.
+		ds, _ := v.AsDepScalar()
+		return fmt.Sprintf("(%s %s %s)", dependentLeafFromType(v.VType), ds.Kind, ds.Bound.String())
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):
@@ -1516,9 +1523,6 @@ func (v Value) String() string {
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
 		return strconv.FormatFloat(_as4, 'f', -1, 64)
-	case v.IsDepInteger():
-		di, _ := v.AsDepInteger()
-		return fmt.Sprintf("(Integer %s %d)", di.Kind, di.Bound)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):
