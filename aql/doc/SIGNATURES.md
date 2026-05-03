@@ -15,6 +15,28 @@ Abbreviations: I=Integer, D=Decimal, N=Number, S=String, A=Atom,
 B=Boolean, M=Map, L=List, W=Word, /q=QuoteArgs modifier, /s=stack-only,
 /f=FullStack.
 
+### Language rule: undefined words are errors
+
+A word that is not registered, not in the current `DefStacks`, and not a
+known literal (`true`/`false`/a type name) is an error at the moment it
+reaches the pointer. Names that are meant to be values, not calls, must
+be quoted explicitly:
+
+- `quote foo` produces `Atom(foo)` from the upcoming Word.
+- `(quote foo)` does the same inside a paren and pushes the Atom for
+  forward collection.
+- A `/q`-marked sig position captures the upcoming Word as an Atom
+  during forward collection — see the next subsection.
+
+There is no implicit "undefined → Atom" fallback any more. `lower foo`
+errors with `undefined word: foo`; the user must write `lower "foo"` or
+`lower (quote foo)` (or move the value behind a `/q` slot).
+
+CheckMode is the one exception: the static analyser still tolerates
+undefined words during a run so a single typo does not blank the rest
+of the analysis. Each undefined word is recorded as a diagnostic and
+replaced with an `Any` carrier so downstream type-checking continues.
+
 ### Language rule: `/q` is forward-args only
 
 The `/q` ("implicit quote") modifier on an argument position is a
@@ -29,12 +51,13 @@ The asymmetry between forward and stack args is intentional design:
   collection time to prevent the upcoming Word from being evaluated.
 - **Stack side**: `/q` is meaningless and **cannot match**. By the time a
   value reaches the resolved stack it is no longer a Word — `stepWord`
-  has either invoked a registered word, resolved a defined name, or
-  converted an undefined Word to an Atom (with `Undefined=true`). The
-  only way to put a name on the stack as a value is `quote name`, which
-  produces an Atom. An Atom on the stack matches an `[A, ...]` /q sig
-  via the normal `sigTypeMatches` fall-through; no `/q` involvement is
-  required for stack matching.
+  has either invoked a registered word, resolved a defined name, or (in
+  CheckMode only) converted an undefined Word to an `Undefined=true`
+  Atom. Outside CheckMode an undefined Word is an error before it ever
+  reaches the stack. The only way to put a name on the stack as a value
+  is `quote name`, which produces an Atom. An Atom on the stack matches
+  an `[A, ...]` /q sig via the normal `sigTypeMatches` fall-through; no
+  `/q` involvement is required for stack matching.
 
 Consequences for sig design:
 
@@ -44,6 +67,9 @@ Consequences for sig design:
    redundant.
 2. There is no need to declare `/q` on a sig that is only ever reached
    via stack matching — it would have no effect.
+3. Bare-word data passed to a sig **without** `/q` is now an error.
+   Either add `/q` to the sig if a name should be accepted there, or
+   require callers to quote (`(quote name)` or `'name`).
 
 
 ## Stack Manipulation

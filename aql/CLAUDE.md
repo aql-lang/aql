@@ -224,6 +224,32 @@ with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
+## Undefined Words (CRITICAL)
+
+An undefined word reaching the pointer is an **error**, not a value.
+A word that is not registered, not in `DefStacks`, and not a known
+literal (`true`/`false`/a type name) raises `[aql/undefined_word]` at
+`stepWord`. There is no implicit `Word → Atom` fallback.
+
+Names that are meant as data must be quoted:
+
+- `quote foo` — captures the upcoming Word as `Atom(foo)`.
+- `(quote foo)` — same, inside a paren so forward collection can pick
+  up the resulting Atom.
+- A `/q`-marked sig position — captures the upcoming Word as an Atom
+  during forward collection (`def name body`, `get key map`,
+  `set key val store`, etc.).
+
+CheckMode is the single exception: `stepWord` keeps the lenient
+"undefined → `Atom{Undefined:true}`" path so static analysis can
+continue past a typo. Each dangling Undefined Atom is converted to a
+diagnostic + `Any` carrier in the end-of-`Run()` drain in
+`engine.go`.
+
+When adding a sig that should accept a bare-word name as data, add `/q`
+to the corresponding Atom position. Without `/q`, callers will see an
+`undefined_word` error and must wrap the name in `quote` themselves.
+
 ## Panic Prevention (CRITICAL)
 
 **Panics must never occur in this codebase.** All code must be defensive

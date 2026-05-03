@@ -37,15 +37,19 @@ type Signature struct {
 	// being executed by stepWord. This is what makes `def name body`,
 	// `set foo 42 store`, `get a {a:1}`, etc. work without an explicit `quote`.
 	//
+	// Outside a /q slot, an undefined word at the pointer is an error
+	// (see stepWord). To pass a name as data without /q, the caller must
+	// quote it explicitly: `quote foo`, `(quote foo)`, or a literal atom.
+	//
 	// /q has no effect on stack matching: by the time a value reaches the
 	// resolved stack it is no longer a Word — stepWord has either invoked a
-	// registered word, resolved a defined name, or converted an undefined
-	// Word to an Atom. The only way to put a name on the stack as a value
-	// is `quote name`, which produces an Atom; that Atom matches an
-	// [Atom/q, X] sig via the normal sigTypeMatches fall-through. So a
-	// single [Atom/q, X] sig covers BOTH the forward Word case and the
-	// explicit-Atom case — there is no need to declare a separate non-/q
-	// Atom sig.
+	// registered word, resolved a defined name, or (under CheckMode only)
+	// converted an undefined Word to an `Undefined=true` Atom. The only
+	// way to put a name on the stack as a value is `quote name`, which
+	// produces an Atom; that Atom matches an [Atom/q, X] sig via the
+	// normal sigTypeMatches fall-through. So a single [Atom/q, X] sig
+	// covers BOTH the forward Word case and the explicit-Atom case —
+	// there is no need to declare a separate non-/q Atom sig.
 	QuoteArgs map[int]bool
 
 	// NoEvalArgs marks arg positions where list auto-evaluation should be

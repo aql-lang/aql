@@ -397,18 +397,18 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		return nil, err
 	}
 
-	// Check for undefined words left on the result stack.
-	// Atoms marked Undefined came from words that were never defined;
-	// they are only allowed when consumed by a function expecting TAtom
-	// or in a quoted map/list (which skips evaluation entirely).
-	// In check mode, demote to a diagnostic and replace with an Any
-	// carrier so analysis of the surrounding program continues.
+	// Drain any Undefined-Atom values left on the stack. Outside check
+	// mode `stepWord` already errors on undefined words, so this loop
+	// runs only under CheckMode, where stepWord deliberately tolerates
+	// the undefined-word path so static analysis can keep going. Each
+	// dangling atom is converted to a diagnostic + Any carrier so the
+	// rest of the program continues to be checked.
 	for i, v := range e.stack {
 		if !v.Undefined {
 			continue
 		}
-		name, _ := v.AsAtom()
 		if e.registry != nil && e.registry.CheckMode {
+			name, _ := v.AsAtom()
 			e.registry.addCheckDiagnostic(CheckDiagnostic{
 				Code:   "undefined_word",
 				Detail: "undefined word: " + name,
@@ -417,13 +417,6 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 				Col:    v.Pos.Col,
 			})
 			e.stack[i] = NewCarrier(TAny)
-			continue
-		}
-		return nil, &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + name,
-			Src:        name,
-			fullSource: e.effectiveSource(),
 		}
 	}
 
@@ -711,6 +704,24 @@ func (e *Engine) stepWord(val Value) error {
 		if t, ok := ResolveTypePath(w.Name); ok {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
+		}
+		// Strict rule: an undefined word at the pointer is an error.
+		// Names that need to be values must be quoted explicitly (`quote
+		// foo` or a literal atom) or land at a /q-quoted argument
+		// position, where forward collection captures the word as an
+		// Atom before it ever reaches stepWord.
+		//
+		// In CheckMode the engine continues so static analysis can
+		// keep going; the diagnostic is collected at end-of-Run.
+		if e.registry == nil || !e.registry.CheckMode {
+			return &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
 		}
 		v := NewAtom(w.Name)
 		v.Pos = val.Pos

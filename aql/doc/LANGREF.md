@@ -50,13 +50,20 @@ Escape sequences in template strings: `\\`, `` \` ``, `\$`, `\n`,
 `\t`, `\r`. Use `\$` to include a literal `${` without triggering
 interpolation.
 
-**Atoms** are bare unquoted words that do not match any defined function,
-type name, or boolean. They represent symbolic names.
+**Atoms** represent symbolic names. They are produced explicitly with
+`quote`. A bare unquoted word that is not a defined function, a type
+name, or a boolean is **not** an atom — it is an `undefined_word`
+error. To use a name as data, quote it:
 
 ```
-foo             => foo
-abc             => abc
+quote foo       => foo
+quote abc       => abc
 ```
+
+Inside a `/q`-marked argument position the engine quotes for you, so
+`def foo 42`, `set foo 42 store`, `get foo {foo:1}` work without an
+explicit `quote`. Outside such a position, `foo` on its own raises
+`undefined_word`.
 
 **Booleans** are the bare words `true` and `false`.
 
@@ -1986,10 +1993,12 @@ first `x` gets 5, then `y` gets 3.
 **Variables do not leak:**
 
 ```
-5 var [[x] x mul x] x                 => 25 x
+5 var [[x] x mul x] (quote x)         => 25 x
 ```
 
-After `var` completes, `x` reverts to an unknown word (atom `x`).
+After `var` completes, `x` reverts to an undefined word; the explicit
+`(quote x)` produces the trailing atom in the example above. A bare `x`
+at this point would raise `undefined_word`.
 
 **Preserves existing definitions:**
 
