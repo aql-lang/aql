@@ -12,6 +12,20 @@ func RegisterIs(r *Registry) {
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, b := args[1], args[0]
+				// Predicate-type check: if the pattern (b) is a fn
+				// (Quoted=true so it didn't auto-execute on the way
+				// here), call the predicate against a and report
+				// success iff it returned a non-None value.
+				// Mirrors defTypedHandler's invocation rules.
+				if b.VType.Equal(TFnDef) || b.VType.Equal(TFunction) {
+					if fnDef, ok := b.Data.(FnDefInfo); ok && len(fnDef.Sigs) > 0 && len(fnDef.Sigs[0].Params) == 1 {
+						result, err := r.CallAQL(&fnDef.Sigs[0], []Value{a})
+						if err != nil || len(result) != 1 {
+							return []Value{NewBoolean(false)}, nil
+						}
+						return []Value{NewBoolean(!result[0].VType.Equal(TNone))}, nil
+					}
+				}
 				// Metatype early-return: when pattern (b) is a metatype and
 				// value (a) is a type literal, directly check metatype matching.
 				// (a=value, b=pattern due to the swap above.)

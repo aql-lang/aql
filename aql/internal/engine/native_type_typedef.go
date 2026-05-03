@@ -13,6 +13,20 @@ func RegisterTypeDef(r *Registry) {
 		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
 			return err
 		}
+		// Refuse a type definition whose name already names a callable
+		// or a def'd value. Type and def share a single source-level
+		// namespace (the same Word resolves both), so allowing both
+		// to bind the same name would silently change behaviour
+		// depending on context.
+		if r.Lookup(name) != nil {
+			return fmt.Errorf("type %s: name clash — already a registered function", name)
+		}
+		if len(r.DefStacks[name]) > 0 {
+			return fmt.Errorf("type %s: name clash — already a def'd value", name)
+		}
+		if _, ok := r.Types[name]; ok {
+			return fmt.Errorf("type %s: already defined as a type", name)
+		}
 		// Type-defining functions (FnUndef = structural sig pattern,
 		// FnDef/Function = predicate) live ONLY in r.Types: they are
 		// not independently callable and only participate in type

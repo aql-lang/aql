@@ -52,6 +52,12 @@ func RegisterDef(r *Registry) {
 		name := defName(args[0])
 		stackOnly := defStackOnly(args[0])
 		body := args[1]
+		// Refuse a def whose name is already a registered TYPE — type
+		// and def share the same Word namespace so a single name
+		// must mean exactly one thing.
+		if _, ok := r.Types[name]; ok {
+			return nil, fmt.Errorf("def %s: name clash — already a type", name)
+		}
 		installDef(r, name, body, stackOnly)
 		// Record installation for unused-def analysis. The arg's
 		// Pos points at the name token.
@@ -68,6 +74,9 @@ func RegisterDef(r *Registry) {
 			return nil, fmt.Errorf("def: typed-name map must have exactly one key, got %d", nameMap.Len())
 		}
 		name := nameMap.Keys()[0]
+		if _, ok := r.Types[name]; ok {
+			return nil, fmt.Errorf("def %s: name clash — already a type", name)
+		}
 		constraint, _ := nameMap.Get(name)
 		// NoEvalMapArgs suppresses the generic autoEvalMap pipeline for
 		// this slot, so a Word at the type position arrives raw.
