@@ -56,11 +56,20 @@ type Signature struct {
 	// suppressed in execMatch. Unlike QuoteArgs, this does NOT affect
 	// forward collection or word→atom conversion — it only prevents
 	// autoEvalList from running on consumed list arguments at marked
-	// positions. Map auto-evaluation (autoEvalMap) is NOT affected.
+	// positions. Map auto-evaluation (autoEvalMap) is NOT affected;
+	// for that use NoEvalMapArgs.
 	// Use this for code-body positions (def body, if branches, for body,
 	// etc.) where the list contains code to execute later, not data to
 	// resolve now.
 	NoEvalArgs map[int]bool
+
+	// NoEvalMapArgs marks arg positions where map auto-evaluation
+	// (autoEvalMap) should be suppressed. Used by def's typed-name
+	// signature so a Word at the type position arrives raw — without
+	// this, a fn-as-type name (registered as a callable AND stored as
+	// a type value) would be called by the auto-eval pipeline before
+	// the handler could resolve it as a type.
+	NoEvalMapArgs map[int]bool
 
 	// BarrierPos is the arg index where forward collection must stop.
 	// Positions before BarrierPos are collected forward; positions from

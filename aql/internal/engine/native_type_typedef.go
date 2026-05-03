@@ -107,5 +107,15 @@ func isTypeValue(v Value) bool {
 	if v.VType.Equal(TFnUndef) {
 		return true
 	}
+	// Predicate type: a FnDef / Function whose body returns a Boolean.
+	// Produced by `fn [x:Any Any [body]]`. Used as a *dependent* type
+	// — `def n:Bbd value` calls the predicate against `value` and
+	// installs the def iff the predicate returns true. The fn's
+	// signature must take exactly one argument and return a Boolean
+	// (or a value that converts to Boolean); enforcement happens in
+	// the typed-def handler when it actually calls the predicate.
+	if v.VType.Equal(TFnDef) || v.VType.Equal(TFunction) {
+		return true
+	}
 	return false
 }

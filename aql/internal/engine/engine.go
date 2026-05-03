@@ -847,9 +847,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].VType.Equal(TMap) &&
 				match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
-				evaluated, err := e.autoEvalMap(match.Args[i])
-				if err == nil {
-					match.Args[i] = evaluated
+				// NoEvalMapArgs (separate from the list-only
+				// NoEvalArgs) suppresses map auto-evaluation at this
+				// slot. Used by def's typed-name sig so a Word at the
+				// type position arrives raw — important when the type
+				// is a fn that's also a registered callable.
+				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalMap(match.Args[i])
+					if err == nil {
+						match.Args[i] = evaluated
+					}
 				}
 			} else if match.Args[i].VType.Equal(TList) &&
 				match.Args[i].Data != nil && !match.Args[i].IsTypedList() && !match.Args[i].IsTableType() {

@@ -69,6 +69,18 @@ func RegisterDef(r *Registry) {
 		}
 		name := nameMap.Keys()[0]
 		constraint, _ := nameMap.Get(name)
+		// NoEvalArgs suppresses the generic autoEvalMap pipeline for
+		// this slot, so a Word at the type position arrives raw —
+		// resolve it manually through DefStacks. This is what lets
+		// fn-as-type values (a registered fn AND a DefStacks entry)
+		// be picked up here as the type value rather than getting
+		// called like a normal word reference.
+		if constraint.IsWord() {
+			w, _ := constraint.AsWord()
+			if ds := r.DefStacks[w.Name]; len(ds) > 0 {
+				constraint = ds[len(ds)-1]
+			}
+		}
 		if !isTypeValue(constraint) {
 			return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
 		}
@@ -88,6 +100,33 @@ func RegisterDef(r *Registry) {
 				}
 			}
 		}
+		// Predicate type: the constraint is a fn whose body returns
+		// Boolean. Call it on the candidate value; on true the def
+		// installs (with the original body), on false / non-Boolean
+		// the def errors.
+		if constraint.VType.Equal(TFnDef) || constraint.VType.Equal(TFunction) {
+			fnDef, ok := constraint.Data.(FnDefInfo)
+			if !ok {
+				return nil, fmt.Errorf("def %s: predicate type has invalid payload", name)
+			}
+			if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
+				return nil, fmt.Errorf("def %s: predicate type must take exactly one argument", name)
+			}
+			result, err := r.CallAQL(&fnDef.Sigs[0], []Value{body})
+			if err != nil {
+				return nil, fmt.Errorf("def %s: predicate evaluation failed: %w", name, err)
+			}
+			if len(result) != 1 || !result[0].VType.Matches(TBoolean) {
+				return nil, fmt.Errorf("def %s: predicate type must return a Boolean, got %v", name, result)
+			}
+			ok2, _ := result[0].AsBoolean()
+			if !ok2 {
+				return nil, fmt.Errorf("def %s: value does not satisfy predicate type", name)
+			}
+			installDef(r, name, body)
+			r.recordCheckDef(name, args[0].Pos)
+			return nil, nil
+		}
 		unified, ok := Unify(body, constraint)
 		if !ok {
 			return nil, fmt.Errorf("def %s: value does not unify with declared type %s",
@@ -106,8 +145,13 @@ func RegisterDef(r *Registry) {
 				// Typed-name binding: def name:Type body. Sorts first
 				// because TMap is more specific than TString / TAtom
 				// at the same depth (higher inherent score).
+				// NoEvalMapArgs[0]=true keeps the type-name map's value
+				// raw so the handler can resolve it through DefStacks
+				// itself — important for fn-as-type names that double
+				// as registered callables.
 				Args:           []Type{TMap, TAny},
 				NoEvalArgs:     map[int]bool{1: true},
+				NoEvalMapArgs:  map[int]bool{0: true},
 				Handler:        defTypedHandler,
 				Returns:        []Type{},
 				RunInCheckMode: true,

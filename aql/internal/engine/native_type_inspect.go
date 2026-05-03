@@ -6,9 +6,15 @@ func RegisterInspect(r *Registry) {
 		name := _as0.Name
 
 		// If the word names a user-defined type, return a type inspection.
+		// Skip the type-inspection branch when the DefStacks entry is a
+		// FnDef/Function — those are now technically isTypeValue-true
+		// (they're predicate types in the new fn-as-type feature) but
+		// here we want the function-inspection path, not a type one.
+		// Type-as-fn cases come in via the Atom handler from explicit
+		// type-name lookups; native fns reach this branch as Words.
 		if stack := r.DefStacks[name]; len(stack) > 0 {
 			top := stack[len(stack)-1]
-			if isTypeValue(top) {
+			if isTypeValue(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
