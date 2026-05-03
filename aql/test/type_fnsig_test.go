@@ -100,15 +100,19 @@ def p:Predicate (quote positive)
 	}
 }
 
-// --- Predicate-as-type: fn with a body returning Boolean ---
+// --- Predicate-as-type: fn that returns None on fail / the unified value on ok ---
 //
-// `type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]`
-// installs Bbd as a *predicate* type. `def p:Bbd value` calls the
-// predicate with `value`; on true the def installs, on false it errors.
+// `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]`
+// installs Bbd as a *predicate* type. `def p:Bbd v` calls the predicate
+// with `v`; on a non-None return the def installs with the *returned*
+// value (which may be a transformed version of v); on a None return
+// the def errors and is not installed.
+
+const bbdSource = `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+`
 
 func TestTypeFnPredicate_DefBindWithinRange(t *testing.T) {
-	got := runOne(t, `type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]
-def p:Bbd "c"
+	got := runOne(t, bbdSource+`def p:Bbd "c"
 p`)
 	if len(got) != 1 || got[0] != "c" {
 		t.Errorf("got %v, want [\"c\"]", got)
@@ -117,8 +121,7 @@ p`)
 
 func TestTypeFnPredicate_DefBindBoundary(t *testing.T) {
 	for _, val := range []string{"b", "c", "d"} {
-		got := runOne(t, `type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]
-def p:Bbd "`+val+`"
+		got := runOne(t, bbdSource+`def p:Bbd "`+val+`"
 p`)
 		if len(got) != 1 || got[0] != val {
 			t.Errorf("Bbd boundary %q: got %v, want [%q]", val, got, val)
@@ -132,8 +135,7 @@ func TestTypeFnPredicate_DefBindOutOfRange(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new: %v", err)
 		}
-		_, err = a.Run(`type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]
-def q:Bbd "` + val + `"`)
+		_, err = a.Run(bbdSource + `def q:Bbd "` + val + `"`)
 		if err == nil {
 			t.Errorf("Bbd out-of-range %q: expected unify error, got nil", val)
 		}
@@ -146,9 +148,8 @@ func TestTypeFnPredicate_DefBindWrongType(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	// Integer 99 is not a String, so (x is String) is false → predicate
-	// returns false → def errors.
-	_, err = a.Run(`type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]
-def q:Bbd 99`)
+	// returns None → def errors.
+	_, err = a.Run(bbdSource + `def q:Bbd 99`)
 	if err == nil {
 		t.Fatal("Bbd with Integer 99: expected unify error, got nil")
 	}
@@ -156,26 +157,39 @@ def q:Bbd 99`)
 
 // The named predicate type should also still be callable as an
 // ordinary fn; binding it as a type doesn't preclude direct use.
-// aql.Run renders Boolean carriers via `default → v.String()`, so
-// the returned []any holds the strings "true" / "false".
+// aql.Run renders the residual values through `default → v.String()`,
+// so the returned []any holds either the string value (on success)
+// or "null" / the None type's string form (on failure).
 func TestTypeFnPredicate_AlsoCallable(t *testing.T) {
-	got := runOne(t, `type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d")]]
-Bbd "c"
+	got := runOne(t, bbdSource+`Bbd "c"
 Bbd "e"`)
 	if len(got) != 2 {
 		t.Fatalf("got %v results, want 2", got)
 	}
-	if got[0] != "true" {
-		t.Errorf("Bbd \"c\" = %v, want \"true\"", got[0])
+	if got[0] != "c" {
+		t.Errorf("Bbd \"c\" = %v, want \"c\"", got[0])
 	}
-	if got[1] != "false" {
-		t.Errorf("Bbd \"e\" = %v, want \"false\"", got[1])
+	// The second call returns None — aql.Run stringifies it.
+	if got[1] != "None" {
+		t.Errorf("Bbd \"e\" = %v, want \"None\"", got[1])
+	}
+}
+
+// A predicate that *transforms* the value: success returns a
+// different value (here, the upper-cased form). The def installs
+// with the transformed value, not the original input.
+func TestTypeFnPredicate_TransformsOnSuccess(t *testing.T) {
+	got := runOne(t, `type Up fn [x:Any Any [if (x is String) [x upper] [None]]]
+def shout:Up "hello"
+shout`)
+	if len(got) != 1 || got[0] != "HELLO" {
+		t.Errorf("got %v, want [\"HELLO\"]", got)
 	}
 }
 
 // A predicate over Integer values (ranged constraint expressed as a fn).
 func TestTypeFnPredicate_IntegerRange(t *testing.T) {
-	got := runOne(t, `type Mid fn [n:Any Any [(n is Integer) and (n gte 10) and (n lte 20)]]
+	got := runOne(t, `type Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
 def x:Mid 15
 x`)
 	if len(got) != 1 || got[0] != int64(15) {
@@ -188,7 +202,7 @@ func TestTypeFnPredicate_IntegerRangeFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mid fn [n:Any Any [(n is Integer) and (n gte 10) and (n lte 20)]]
+	_, err = a.Run(`type Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
 def x:Mid 25`)
 	if err == nil {
 		t.Fatal("Mid with 25: expected unify error, got nil")

@@ -100,10 +100,13 @@ func RegisterDef(r *Registry) {
 				}
 			}
 		}
-		// Predicate type: the constraint is a fn whose body returns
-		// Boolean. Call it on the candidate value; on true the def
-		// installs (with the original body), on false / non-Boolean
-		// the def errors.
+		// Predicate type: the constraint is a fn whose body unifies the
+		// candidate against the type. The fn returns None on failure
+		// or the unified value on success — typically the candidate
+		// itself, but a coercive predicate may return a transformed
+		// value. The def installs with the *returned* value, not the
+		// candidate, so a predicate like `[x upper]` actually rebinds
+		// to the transformed shape.
 		if constraint.VType.Equal(TFnDef) || constraint.VType.Equal(TFunction) {
 			fnDef, ok := constraint.Data.(FnDefInfo)
 			if !ok {
@@ -116,14 +119,14 @@ func RegisterDef(r *Registry) {
 			if err != nil {
 				return nil, fmt.Errorf("def %s: predicate evaluation failed: %w", name, err)
 			}
-			if len(result) != 1 || !result[0].VType.Matches(TBoolean) {
-				return nil, fmt.Errorf("def %s: predicate type must return a Boolean, got %v", name, result)
+			if len(result) != 1 {
+				return nil, fmt.Errorf("def %s: predicate type must return exactly one value, got %d", name, len(result))
 			}
-			ok2, _ := result[0].AsBoolean()
-			if !ok2 {
+			out := result[0]
+			if out.VType.Equal(TNone) {
 				return nil, fmt.Errorf("def %s: value does not satisfy predicate type", name)
 			}
-			installDef(r, name, body)
+			installDef(r, name, out)
 			r.recordCheckDef(name, args[0].Pos)
 			return nil, nil
 		}
