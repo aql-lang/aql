@@ -809,19 +809,20 @@ None is ([Integer String None] tany)	true
 [{b:2} {a:1}] tall	{b:2,a:1}
 
 # =====================================================================
-# 37. tall — error cases (conflicting concrete values)
+# 37. tall — disjoint cases reduce to Never
 # =====================================================================
 
-# Two different concrete values for the same key fail (unify_error
-# matches the substring "cannot unify").
-[{x:1} {x:2}] tall		unify_error
-[{x:Integer} {x:String}] tall		unify_error
-[{x:1 y:2} {x:1 y:3}] tall		unify_error
+# Two different concrete values for the same key are disjoint, so the
+# whole intersection collapses to Never (the bottom type / empty
+# intersection). tall is total: it never errors on disjoint input.
+[{x:1} {x:2}] tall	Never
+[{x:Integer} {x:String}] tall	Never
+[{x:1 y:2} {x:1 y:3}] tall	Never
 
-# Non-map values that don't unify also fail.
-[1 2] tall		unify_error
-[1 String] tall		unify_error
-[Integer Boolean] tall		unify_error
+# Non-map values that don't unify also reduce to Never.
+[1 2] tall	Never
+[1 String] tall	Never
+[Integer Boolean] tall	Never
 
 # =====================================================================
 # 38. tall — type-literal narrowing

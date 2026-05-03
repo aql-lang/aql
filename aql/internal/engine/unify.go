@@ -38,6 +38,20 @@ func Unify(a, b Value) (Value, bool) {
 		return unifyDisjunct(_as1, a)
 	}
 
+	// "never" is the bottom type — uninhabited, only unifies with
+	// itself. Unify(Never, T) for T != Never always fails: there is
+	// no value satisfying both types because Never has no values at
+	// all. Checked before None and Any so that Never on either side
+	// short-circuits before any other rule applies.
+	aNever := aType.Equal(TNever)
+	bNever := bType.Equal(TNever)
+	if aNever || bNever {
+		if aNever && bNever {
+			return a, true
+		}
+		return Value{}, false
+	}
+
 	// "none" only unifies with "none".
 	aNone := aType.Equal(TNone)
 	bNone := bType.Equal(TNone)

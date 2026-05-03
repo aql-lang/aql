@@ -16,14 +16,21 @@ follows the catalogue.
 
 ## 1. Algebraic side
 
-### 1.1 `tand` of non-maps falls through to `Unify`
+### 1.1 `tand` of non-maps falls through to `Unify` — RESOLVED
 
-`internal/engine/native_type_tand.go:23` — when neither side is a
-plain concrete map, `tand` calls `Unify(a, b)` and reports `tand:
-cannot unify values` if it fails. So `Integer tand String` errors
-instead of producing a `Never` / empty disjunct. `tor` always builds
-a disjunct, even for two unrelated values; `tand` quietly disagrees
-about what its zero/error case should be. Inconsistency.
+`internal/engine/native_type_tand.go` now returns `Never` (the bottom
+type) when `Unify` fails, instead of erroring. `tall` and the
+record-merge path do the same. `tor`/`tany` treat `Never` as the
+identity element and filter it out of disjunct alternatives, so
+`String tor Never = String` and `[Integer Never] tany = Integer`.
+The two operators now share a consistent algebra: `tand`'s zero
+case is `Never`, and `tor`'s identity is `Never` (dual to `tand`'s
+identity `Any`).
+
+`Never` itself is a registered top-level type (`engine.TNever`,
+`types.go:86`); it's uninhabited (only unifies with itself per
+`unify.go`'s Never branch), so `v is Never` is `false` for every
+concrete value `v`. Tests in `aql/test/type_never_test.go`.
 
 ### 1.2 No distribution / De Morgan
 

@@ -13,6 +13,7 @@ var typeNameEntries = []struct {
 }{
 	{"Any", TAny},
 	{"None", TNone},
+	{"Never", TNever},
 	{"Scalar", TScalar},
 	{"Number", TNumber},
 	{"Integer", TInteger},

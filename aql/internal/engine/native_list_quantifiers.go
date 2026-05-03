@@ -109,7 +109,20 @@ func RegisterTany(r *Registry) {
 				alts = append(alts, v)
 			}
 		}
-		return []Value{NewDisjunct(alts)}, nil
+		// Filter Never (identity for union); collapse trivial cases.
+		filtered := alts[:0]
+		for _, alt := range alts {
+			if !alt.VType.Equal(TNever) {
+				filtered = append(filtered, alt)
+			}
+		}
+		if len(filtered) == 0 {
+			return []Value{NewTypeLiteral(TNever)}, nil
+		}
+		if len(filtered) == 1 {
+			return []Value{filtered[0]}, nil
+		}
+		return []Value{NewDisjunct(filtered)}, nil
 	}
 
 	r.RegisterNativeFunc(NativeFunc{
@@ -141,17 +154,23 @@ func RegisterTall(r *Registry) {
 		acc := list.Get(0)
 		for i := 1; i < n; i++ {
 			v := list.Get(i)
+			if acc.VType.Equal(TNever) || v.VType.Equal(TNever) {
+				acc = NewTypeLiteral(TNever)
+				continue
+			}
 			if isPlainConcreteMap(acc) && isPlainConcreteMap(v) {
-				merged, err := mergeMaps(acc.AsMap(), v.AsMap())
-				if err != nil {
-					return nil, err
+				merged, ok := mergeMaps(acc.AsMap(), v.AsMap())
+				if !ok {
+					acc = NewTypeLiteral(TNever)
+					continue
 				}
 				acc = NewMap(merged)
 				continue
 			}
 			unified, ok := Unify(acc, v)
 			if !ok {
-				return nil, fmt.Errorf("tall: cannot unify values")
+				acc = NewTypeLiteral(TNever)
+				continue
 			}
 			acc = unified
 		}

@@ -1,28 +1,37 @@
 package engine
 
-import "fmt"
-
 func RegisterTand(r *Registry) {
-	// tand combines two values by conjunction. For two concrete maps it
-	// merges keys (unifying overlapping values). For other shapes it
-	// falls back to Unify.
+	// tand combines two values by conjunction (intersection). For two
+	// concrete maps it merges keys (unifying overlapping values). For
+	// other shapes it falls back to Unify.
+	//
+	// When the two sides are disjoint (Unify fails), the intersection
+	// is empty and tand reduces to Never (the bottom type). This makes
+	// tand total — every input pair has a defined result rather than
+	// erroring. Map merging at incompatible keys propagates Never the
+	// same way: a single Never field annihilates the whole record.
 	//
 	// args[0] = nearest (top/forward), args[1] = farther (stack).
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		a := args[1]
 		b := args[0]
 
+		// Never annihilates: T tand Never = Never tand T = Never.
+		if a.VType.Equal(TNever) || b.VType.Equal(TNever) {
+			return []Value{NewTypeLiteral(TNever)}, nil
+		}
+
 		if isPlainConcreteMap(a) && isPlainConcreteMap(b) {
-			merged, err := mergeMaps(a.AsMap(), b.AsMap())
-			if err != nil {
-				return nil, err
+			merged, ok := mergeMaps(a.AsMap(), b.AsMap())
+			if !ok {
+				return []Value{NewTypeLiteral(TNever)}, nil
 			}
 			return []Value{NewMap(merged)}, nil
 		}
 
 		unified, ok := Unify(a, b)
 		if !ok {
-			return nil, fmt.Errorf("tand: cannot unify values")
+			return []Value{NewTypeLiteral(TNever)}, nil
 		}
 		return []Value{unified}, nil
 	}
@@ -55,14 +64,16 @@ func isPlainConcreteMap(v Value) bool {
 
 // mergeMaps walks keys of a then b in order, unifying values for keys
 // present in both. Keys present in only one side are kept as-is.
-func mergeMaps(a, b ReadMap) (*OrderedMap, error) {
+// Returns ok=false when any overlapping key has incompatible values —
+// the caller propagates that as Never (the empty intersection).
+func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
 	result := NewOrderedMap()
 	for _, key := range a.Keys() {
 		aVal, _ := a.Get(key)
 		if bVal, present := b.Get(key); present {
 			unified, ok := Unify(aVal, bVal)
 			if !ok {
-				return nil, fmt.Errorf("tand: cannot unify values for key %q", key)
+				return nil, false
 			}
 			result.Set(key, unified)
 			continue
@@ -76,5 +87,5 @@ func mergeMaps(a, b ReadMap) (*OrderedMap, error) {
 		bVal, _ := b.Get(key)
 		result.Set(key, bVal)
 	}
-	return result, nil
+	return result, true
 }

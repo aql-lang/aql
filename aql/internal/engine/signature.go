@@ -207,7 +207,6 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	return nil
 }
 
-
 // flexibleMatch checks whether values match the given signature positionally.
 // Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
@@ -291,7 +290,9 @@ func positionalMatch(values []Value, sig *Signature) bool {
 // earlier (tried first). Every type has a unique score. Unknown types
 // default to 1000.
 var typeInherentScores = map[string]int{
-	// Depth 1 — Any/None are special; concrete roots ordered by breadth.
+	// Depth 1 — Any/None/Never are special; concrete roots ordered by breadth.
+	// Never (uninhabited) is most specific, then None (unit), then Any (top).
+	"Never":  50,
 	"None":   100,
 	"Any":    200,
 	"Type":   300,
@@ -301,18 +302,18 @@ var typeInherentScores = map[string]int{
 	"Node":   700,
 
 	// Depth 2 — Word internals (structural tokens, narrow cardinality)
-	"Word/__DJ": 100,
-	"Word/__FN": 200,
-	"Word/__FW": 300,
+	"Word/__DJ":      100,
+	"Word/__FN":      200,
+	"Word/__FW":      300,
 	"Word/__IN":      400,
 	"Word/__IN/__DC": 400,
-	"Word/__MK": 500,
-	"Word/__MD": 600,
-	"Word/__MV": 700,
-	"Word/__OP": 800,
-	"Word/__PE": 900,
-	"Word/__RC": 1000,
-	"Word/__UF": 1100,
+	"Word/__MK":      500,
+	"Word/__MD":      600,
+	"Word/__MV":      700,
+	"Word/__OP":      800,
+	"Word/__PE":      900,
+	"Word/__RC":      1000,
+	"Word/__UF":      1100,
 
 	// Depth 2 — regular types, ordered by cardinality
 	"Scalar/Boolean":  1200,

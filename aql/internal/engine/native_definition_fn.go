@@ -493,6 +493,8 @@ func resolveTypeName(name string) (Type, error) {
 		return TAny, nil
 	case "None":
 		return TNone, nil
+	case "Never":
+		return TNever, nil
 	case "Number":
 		return TNumber, nil
 	case "Integer":
