@@ -358,6 +358,29 @@ func (t Type) Matches(pattern Type) bool {
 			}
 		}
 	}
+	return t.PathSubtype(pattern)
+}
+
+// PathSubtype reports whether t is a strict path-prefix subtype of
+// pattern: every Part of pattern is a Part of t at the same index.
+// This is the LEXICAL subtype test — no `Any` matches-everything
+// special case, no Dep<Leaf> → base bolt-on, no metatype rules.
+//
+// When to use which:
+//
+//   - `Matches` is the LATTICE-aware test. Use it for sig matching
+//     and any logic that treats a `DepInteger` value as if it were
+//     an Integer (for assignability, signature dispatch, etc.).
+//   - `PathSubtype` is the LEXICAL test. Use it when you want to
+//     know "does this value really carry an X payload" — for
+//     example before a `v.AsX()` call where a `DepX` payload would
+//     be a category error. This is the safer guard for the panic-
+//     prevention pattern in CLAUDE.md; AsConcreteX is the same
+//     thing at the value-accessor level.
+//
+// `t.PathSubtype(t)` is always true (identity is a subtype of
+// itself).
+func (t Type) PathSubtype(pattern Type) bool {
 	if len(t.Parts) < len(pattern.Parts) {
 		return false
 	}

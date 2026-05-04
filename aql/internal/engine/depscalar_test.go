@@ -24,12 +24,15 @@ func TestNewDepScalarDecimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AsDepScalar: %v", err)
 	}
-	if info.Kind != DepGTE {
-		t.Errorf("Kind = %d, want DepGTE", info.Kind)
+	if info.Lo == nil || !info.Lo.Inclusive {
+		t.Errorf("Lo = %+v, want inclusive lower bound (GTE)", info.Lo)
 	}
-	bv, _ := info.Bound.AsDecimal()
+	if info.Hi != nil {
+		t.Errorf("Hi = %+v, want nil for single-bound DepScalar", info.Hi)
+	}
+	bv, _ := info.Lo.Value.AsDecimal()
 	if bv != 1.5 {
-		t.Errorf("Bound = %v, want 1.5", bv)
+		t.Errorf("Lo.Value = %v, want 1.5", bv)
 	}
 }
 
@@ -39,9 +42,15 @@ func TestNewDepScalarString(t *testing.T) {
 		t.Errorf("VType = %s, want Type/Dependent/DepString", d.VType.String())
 	}
 	info, _ := d.AsDepScalar()
-	bv, _ := info.Bound.AsString()
-	if info.Kind != DepLT || bv != "z" {
-		t.Errorf("got Kind=%d Bound=%q, want DepLT 'z'", info.Kind, bv)
+	if info.Hi == nil || info.Hi.Inclusive {
+		t.Errorf("Hi = %+v, want strict upper bound (LT)", info.Hi)
+	}
+	if info.Lo != nil {
+		t.Errorf("Lo = %+v, want nil for single-bound DepScalar", info.Lo)
+	}
+	bv, _ := info.Hi.Value.AsString()
+	if bv != "z" {
+		t.Errorf("Hi.Value = %q, want \"z\"", bv)
 	}
 }
 
@@ -140,8 +149,8 @@ func TestUnifyDepString(t *testing.T) {
 	}{
 		{"a", true},
 		{"y", true},
-		{"z", false},   // strict <
-		{"za", false},  // lex order
+		{"z", false},  // strict <
+		{"za", false}, // lex order
 	}
 	for _, tc := range cases {
 		_, ok := Unify(NewString(tc.val), d)

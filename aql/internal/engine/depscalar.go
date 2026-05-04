@@ -43,46 +43,103 @@ func (k DepKind) String() string {
 	return strings.Join(parts, "|")
 }
 
-// DepScalarInfo is the payload carried by a Value of a Type/Dependent/Dep<X>
-// type, where <X> is the leaf name of the base scalar type. The
-// bit-field Kind selects which comparison(s) to apply against the
-// concrete Bound value. The Bound's VType pins the base scalar type.
-//
-// Kind2/Bound2 form an optional second constraint, used for
-// interval-style refinement (lower AND upper bound). When Kind2 is
-// zero the value carries a single comparison and behaves exactly as
-// the original implementation; when both are set, the value matches
-// iff both comparisons hold against the same input. The two halves
-// must be on opposite sides of the lattice (one lower-style — GT or
-// GTE — and one upper-style — LT or LTE); same-side combinations are
-// always tightened to a single bound during construction or
-// unification, so they never reach the dual-storage form.
-type DepScalarInfo struct {
-	Kind   DepKind
-	Bound  Value
-	Kind2  DepKind
-	Bound2 Value
+// DepBound is one side of a dependent-scalar constraint: a comparison
+// against a concrete bound. Inclusive distinguishes weak (≤, ≥) from
+// strict (<, >). The bound's VType pins the base scalar type for the
+// containing DepScalar.
+type DepBound struct {
+	Inclusive bool  // true → GTE/LTE, false → GT/LT
+	Value     Value // the concrete bound being compared against
 }
 
-// isLowerKind reports whether k bounds the value from below.
-func isLowerKind(k DepKind) bool { return k == DepGT || k == DepGTE }
+// DepScalarInfo is the payload carried by a Value of a Type/Dependent/
+// Dep<X> type, where <X> is the leaf name of the base scalar type.
+//
+// A DepScalar carries up to two bounds:
+//
+//   - Lo (lower bound) — values must satisfy `v > Lo.Value` (strict)
+//     or `v >= Lo.Value` (inclusive).
+//   - Hi (upper bound) — values must satisfy `v < Hi.Value` (strict)
+//     or `v <= Hi.Value` (inclusive).
+//
+// Either side may be nil meaning "unbounded on this side". The two
+// bounds are AND-combined; intervals like `[10, 20]` set both Lo and
+// Hi. Same-side combinations (e.g. `gte 10 tand gte 5`) tighten to
+// the more restrictive single bound during construction or
+// unification — the dual-bound shape is reserved for genuine
+// intervals where Lo and Hi are on opposite sides of the lattice.
+//
+// Empty intervals (Lo > Hi, or equal with strict on either side)
+// reduce to Never *before* a DepScalarInfo with that shape can be
+// constructed, so a populated info always represents a non-empty
+// constraint.
+type DepScalarInfo struct {
+	Lo *DepBound // nil = no lower bound
+	Hi *DepBound // nil = no upper bound
+}
 
-// isUpperKind reports whether k bounds the value from above.
-func isUpperKind(k DepKind) bool { return k == DepLT || k == DepLTE }
+// kindToBound translates a single DepKind into a (DepBound, isLower)
+// pair. Returns (nil, false) for kinds that don't decompose into a
+// single bound (zero, multi-bit, etc.). Used by NewDepScalar and
+// combineDepScalars to feed the kind-tagged constructor APIs into
+// the Lo/Hi storage.
+func kindToBound(kind DepKind, value Value) (*DepBound, bool, bool) {
+	switch kind {
+	case DepGT:
+		return &DepBound{Inclusive: false, Value: value}, true, true
+	case DepGTE:
+		return &DepBound{Inclusive: true, Value: value}, true, true
+	case DepLT:
+		return &DepBound{Inclusive: false, Value: value}, false, true
+	case DepLTE:
+		return &DepBound{Inclusive: true, Value: value}, false, true
+	}
+	return nil, false, false
+}
+
+// boundToKind translates a (bound, isLower) pair back into the
+// equivalent DepKind. Used by formatDepScalar so the surface form
+// stays stable across the redesign (`(Integer gte 10 lte 20)`).
+func boundToKind(b *DepBound, lower bool) DepKind {
+	if b == nil {
+		return 0
+	}
+	if lower {
+		if b.Inclusive {
+			return DepGTE
+		}
+		return DepGT
+	}
+	if b.Inclusive {
+		return DepLTE
+	}
+	return DepLT
+}
 
 // NewDepScalar builds a DepScalar Value from a comparison kind and a
 // concrete bound. The bound's VType determines the base type of the
 // dependent constraint and selects the leaf name in the resulting
 // Type/Dependent/Dep<Leaf> path. Returns a Value with a None VType
-// (and no payload) if the bound is not a scalar — callers are
-// expected to validate types before constructing.
+// (and no payload) if the bound is not a scalar or kind doesn't
+// decompose into a single bound — callers are expected to validate
+// types before constructing.
 func NewDepScalar(kind DepKind, bound Value) Value {
 	leaf := dependentLeafFromBoundType(bound.VType)
 	if leaf == "" {
 		return Value{VType: TNone}
 	}
+	db, lower, ok := kindToBound(kind, bound)
+	if !ok {
+		return Value{VType: TNone}
+	}
 	t, _ := NewType("Type/Dependent/Dep" + leaf)
-	return newValue(t, DepScalarInfo{Kind: kind, Bound: bound})
+	info := DepScalarInfo{}
+	if lower {
+		info.Lo = db
+	} else {
+		info.Hi = db
+	}
+	return newValue(t, info)
 }
 
 // dependentLeafFromBoundType returns the leaf name to use in a
@@ -162,86 +219,89 @@ func (v Value) AsDepScalar() (DepScalarInfo, error) {
 	return DepScalarInfo{}, fmt.Errorf("AsDepScalar: not a DepScalar value (got %T)", v.Data)
 }
 
-// depScalarCheck returns true if `value` satisfies every comparison
-// in info against the corresponding bound. The primary comparison
-// (Kind/Bound) is required; the secondary (Kind2/Bound2) is also
-// applied when Kind2 != 0. Both halves are AND-combined.
+// depScalarCheck returns true if `value` satisfies every populated
+// bound in info. Both Lo and Hi are AND-combined.
 func depScalarCheck(info DepScalarInfo, value Value) bool {
-	if info.Kind == 0 {
+	if info.Lo == nil && info.Hi == nil {
 		return false
 	}
-	if !depCompareCheck(info.Kind, info.Bound, value) {
+	if info.Lo != nil && !depBoundCheck(info.Lo, true, value) {
 		return false
 	}
-	if info.Kind2 != 0 && !depCompareCheck(info.Kind2, info.Bound2, value) {
+	if info.Hi != nil && !depBoundCheck(info.Hi, false, value) {
 		return false
 	}
 	return true
 }
 
-// depCompareCheck applies a single comparison kind to value vs bound.
-// Returns false on any compareValues error so cross-type comparisons
-// (e.g. Integer DepScalar vs String value) reject cleanly.
-func depCompareCheck(kind DepKind, bound, value Value) bool {
-	cmp, err := compareValues(value, bound)
+// depBoundCheck applies a single-side bound to value. lower=true
+// requires value > bound (or ≥ if Inclusive); lower=false requires
+// value < bound (or ≤). Returns false on any compareValues error so
+// cross-type comparisons (e.g. Integer DepScalar vs String value)
+// reject cleanly.
+func depBoundCheck(b *DepBound, lower bool, value Value) bool {
+	cmp, err := compareValues(value, b.Value)
 	if err != nil {
 		return false
 	}
-	if kind&DepGT != 0 && !(cmp > 0) {
+	if lower {
+		if b.Inclusive {
+			return cmp >= 0
+		}
+		return cmp > 0
+	}
+	if b.Inclusive {
+		return cmp <= 0
+	}
+	return cmp < 0
+}
+
+// boundsEqual reports whether two DepBound pointers represent the
+// same constraint. Both nil → equal; one nil → not equal; otherwise
+// Inclusive flag and structurally-equal Value.
+func boundsEqual(a, b *DepBound) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
 		return false
 	}
-	if kind&DepGTE != 0 && !(cmp >= 0) {
+	if a.Inclusive != b.Inclusive {
 		return false
 	}
-	if kind&DepLT != 0 && !(cmp < 0) {
+	if !a.Value.VType.Equal(b.Value.VType) {
 		return false
 	}
-	if kind&DepLTE != 0 && !(cmp <= 0) {
-		return false
-	}
-	return true
+	return valuesEqual(a.Value, b.Value)
 }
 
 // depScalarsEqual reports whether two DepScalar payloads describe the
-// same constraint: same primary kind/bound and same secondary
-// kind/bound (if any). Bound comparison delegates to valuesEqual so
-// the underlying scalar payload is compared structurally.
+// same constraint: same Lo bound and same Hi bound (treating nil as
+// "no bound on this side").
 func depScalarsEqual(a, b DepScalarInfo) bool {
-	if a.Kind != b.Kind {
-		return false
-	}
-	if a.Kind != 0 {
-		if !a.Bound.VType.Equal(b.Bound.VType) {
-			return false
-		}
-		if !valuesEqual(a.Bound, b.Bound) {
-			return false
-		}
-	}
-	if a.Kind2 != b.Kind2 {
-		return false
-	}
-	if a.Kind2 != 0 {
-		if !a.Bound2.VType.Equal(b.Bound2.VType) {
-			return false
-		}
-		if !valuesEqual(a.Bound2, b.Bound2) {
-			return false
-		}
-	}
-	return true
+	return boundsEqual(a.Lo, b.Lo) && boundsEqual(a.Hi, b.Hi)
 }
 
-// formatDepScalar renders a DepScalar's display form, surfacing the
-// secondary bound when present. Single-bound is "(Leaf op bound)";
-// interval is "(Leaf op1 bound1 op2 bound2)".
+// formatDepScalar renders a DepScalar's display form. Single-bound is
+// "(Leaf op bound)"; interval is "(Leaf op1 bound1 op2 bound2)" with
+// the lower bound rendered first for stability. Each side is
+// translated back through boundToKind so the surface form matches
+// the gt/gte/lt/lte vocabulary the user wrote.
 func formatDepScalar(leaf string, info DepScalarInfo) string {
-	if info.Kind2 == 0 {
-		return fmt.Sprintf("(%s %s %s)", leaf, info.Kind, info.Bound.String())
+	switch {
+	case info.Lo != nil && info.Hi != nil:
+		return fmt.Sprintf("(%s %s %s %s %s)", leaf,
+			boundToKind(info.Lo, true), info.Lo.Value.String(),
+			boundToKind(info.Hi, false), info.Hi.Value.String())
+	case info.Lo != nil:
+		return fmt.Sprintf("(%s %s %s)", leaf,
+			boundToKind(info.Lo, true), info.Lo.Value.String())
+	case info.Hi != nil:
+		return fmt.Sprintf("(%s %s %s)", leaf,
+			boundToKind(info.Hi, false), info.Hi.Value.String())
+	default:
+		return fmt.Sprintf("(%s)", leaf)
 	}
-	return fmt.Sprintf("(%s %s %s %s %s)", leaf,
-		info.Kind, info.Bound.String(),
-		info.Kind2, info.Bound2.String())
 }
 
 // renderDepScalar is the canonical Value-shaped wrapper around
@@ -265,84 +325,66 @@ func renderDepScalar(v Value) string {
 	return formatDepScalar(dependentLeafFromType(v.VType), info)
 }
 
-// tightenSameSide combines two same-side comparisons (both lower or
-// both upper) into the tighter single bound. The caller has verified
-// k1 and k2 are both lower-style or both upper-style. Errors on the
-// underlying compare propagate via ok=false (treated as Never).
-func tightenSameSide(k1 DepKind, b1 Value, k2 DepKind, b2 Value) (DepKind, Value, bool) {
-	cmp, err := compareValues(b1, b2)
+// tightenSameSide combines two same-side bounds (both lower, or both
+// upper) into the tighter single bound. The caller has verified
+// lower matches both inputs. Errors on the underlying compare
+// propagate via ok=false (treated as Never).
+func tightenSameSide(a, b *DepBound, lower bool) (*DepBound, bool) {
+	cmp, err := compareValues(a.Value, b.Value)
 	if err != nil {
-		return 0, Value{}, false
+		return nil, false
 	}
 	// For lower bounds, the larger value is tighter; for upper bounds,
 	// the smaller. When the bounds are equal, prefer the strict form
 	// (GT over GTE, LT over LTE) — it's the narrower constraint.
-	lower := isLowerKind(k1)
 	if cmp == 0 {
-		strictGT := k1 == DepGT || k2 == DepGT
-		strictLT := k1 == DepLT || k2 == DepLT
-		if lower {
-			if strictGT {
-				return DepGT, b1, true
-			}
-			return DepGTE, b1, true
-		}
-		if strictLT {
-			return DepLT, b1, true
-		}
-		return DepLTE, b1, true
+		strict := !a.Inclusive || !b.Inclusive
+		return &DepBound{Inclusive: !strict, Value: a.Value}, true
 	}
 	if (lower && cmp > 0) || (!lower && cmp < 0) {
-		return k1, b1, true
+		return a, true
 	}
-	return k2, b2, true
+	return b, true
 }
 
-// combineDepScalars computes the intersection of two single- or
-// dual-comparison DepScalar constraints over the same base type.
-// Returns ok=false when the result is empty (no value satisfies both).
+// combineDepScalars computes the intersection of two DepScalar
+// constraints over the same base type. Returns ok=false when the
+// result is empty (no value satisfies both).
 //
 //	(Integer gt 5) tand (Integer lt 10) → interval (5, 10)
 //	(Integer gte 10) tand (Integer gte 5) → gte 10 (tighter)
 //	(Integer gt 10) tand (Integer lt 5) → empty (Never)
 func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
-	// Split each side into lower and upper components.
-	type comp struct {
-		kind  DepKind
-		bound Value
-		set   bool
-	}
-	var lo, hi comp
-	add := func(k DepKind, v Value) bool {
-		if k == 0 {
-			return true
-		}
-		c := &lo
-		if isUpperKind(k) {
-			c = &hi
-		}
-		if !c.set {
-			c.kind, c.bound, c.set = k, v, true
-			return true
-		}
-		nk, nv, ok := tightenSameSide(c.kind, c.bound, k, v)
+	out := DepScalarInfo{}
+	// Tighten lower bounds first.
+	switch {
+	case a.Lo == nil:
+		out.Lo = b.Lo
+	case b.Lo == nil:
+		out.Lo = a.Lo
+	default:
+		t, ok := tightenSameSide(a.Lo, b.Lo, true)
 		if !ok {
-			return false
-		}
-		c.kind, c.bound = nk, nv
-		return true
-	}
-	for _, p := range []struct {
-		k DepKind
-		v Value
-	}{{a.Kind, a.Bound}, {a.Kind2, a.Bound2}, {b.Kind, b.Bound}, {b.Kind2, b.Bound2}} {
-		if !add(p.k, p.v) {
 			return DepScalarInfo{}, false
 		}
+		out.Lo = t
 	}
-	// If both sides are present, verify the interval is non-empty.
-	if lo.set && hi.set {
-		cmp, err := compareValues(lo.bound, hi.bound)
+	// Then upper bounds.
+	switch {
+	case a.Hi == nil:
+		out.Hi = b.Hi
+	case b.Hi == nil:
+		out.Hi = a.Hi
+	default:
+		t, ok := tightenSameSide(a.Hi, b.Hi, false)
+		if !ok {
+			return DepScalarInfo{}, false
+		}
+		out.Hi = t
+	}
+	// Verify the resulting interval is non-empty.
+	if out.Lo != nil && out.Hi != nil {
+		cmp, err := compareValues(out.Lo.Value, out.Hi.Value)
 		if err != nil {
 			return DepScalarInfo{}, false
 		}
@@ -350,18 +392,9 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 			return DepScalarInfo{}, false
 		}
 		// Equal bounds: empty unless both sides are inclusive.
-		if cmp == 0 && (lo.kind == DepGT || hi.kind == DepLT) {
+		if cmp == 0 && (!out.Lo.Inclusive || !out.Hi.Inclusive) {
 			return DepScalarInfo{}, false
 		}
-	}
-	out := DepScalarInfo{}
-	if lo.set {
-		out.Kind, out.Bound = lo.kind, lo.bound
-		if hi.set {
-			out.Kind2, out.Bound2 = hi.kind, hi.bound
-		}
-	} else if hi.set {
-		out.Kind, out.Bound = hi.kind, hi.bound
 	}
 	return out, true
 }
@@ -447,8 +480,8 @@ func RegisterBetween(r *Registry) {
 						return []Value{NewTypeLiteral(TNever)}, nil
 					}
 					info := DepScalarInfo{
-						Kind: DepGTE, Bound: args[0],
-						Kind2: DepLTE, Bound2: args[1],
+						Lo: &DepBound{Inclusive: true, Value: args[0]},
+						Hi: &DepBound{Inclusive: true, Value: args[1]},
 					}
 					t, err := NewType("Type/Dependent/Dep" + leaf)
 					if err != nil {
