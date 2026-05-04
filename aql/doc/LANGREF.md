@@ -3512,6 +3512,31 @@ The `CheckResult` JSON object has:
 - **Disjunction widening**: carrier disjunctions wider than `CarrierDisjunctCap`
   (8 alternatives) collapse to their common ancestor.
 
+### Carriers vs type literals at sig-match time
+
+Carriers and type literals share an important field-level shape — both
+have nil `Data` and a concrete `VType`. The `Carrier` flag is the only
+field that distinguishes them. The runtime relies on this distinction
+at signature-matching time:
+
+- A **carrier** of type `T` is an abstract VALUE of type `T`. It
+  satisfies value-level slots like `[TInteger]` but **not** metatype
+  slots like `[TScalarType]`.
+- A **type literal** for `T` (produced by stepWord on a type-name word
+  like `Integer`) IS a type, not a value. It satisfies metatype slots
+  but not value-level slots of the same name.
+
+Concretely, given `[TScalarType]` in a sig:
+- `Integer` (the word, parsed as type literal) — matches.
+- `Carrier{Integer}` (the result of analysing `1`) — does NOT match.
+
+The `sigTypeMatches` function (`internal/engine/signature.go`)
+implements this with an explicit `!v.Carrier` guard on the metatype
+branch. When adding a new metatype branch (a new `IsMetaType` family),
+preserve that guard — otherwise the analyser will silently upgrade
+carriers into metatype matches and break dispatch. See §6.2 in
+`doc/design/TYPE-SYSTEM-REVIEW.md` for the design rationale.
+
 ### Adding `Returns` to Custom Native Words
 
 Every `NativeSig` should declare either `Returns []Type` (static return types)

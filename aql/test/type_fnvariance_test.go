@@ -123,3 +123,37 @@ def f fn [[Integer] [Integer] [1 add]]
 		t.Errorf("required-required = %v, want true", got)
 	}
 }
+
+// Required spec, optional sig: sig accepts a superset of call shapes
+// (it can be called with or without the arg). Required spec only
+// calls it with the arg, which sig handles. Should satisfy.
+func TestVariance_RequiredSpecOptionalSig(t *testing.T) {
+	got := runOne(t, `type M fn [[Integer] [Integer]]
+def f fn [[x?:Integer] [Integer] [x]]
+(quote f) is M`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("required-optional = %v, want true (sig is more permissive)", got)
+	}
+}
+
+// Optional spec, required sig: spec promises caller may omit, sig
+// requires presence. Should NOT satisfy — caller's omission would
+// crash sig.
+func TestVariance_OptionalSpecRequiredSig(t *testing.T) {
+	got := runOne(t, `type M fn [[x?:Integer] [Integer]]
+def f fn [[x:Integer] [Integer] [x]]
+(quote f) is M`)
+	if len(got) != 1 || got[0] != "false" {
+		t.Errorf("optional-required = %v, want false (sig can't accept omission)", got)
+	}
+}
+
+// Optional spec, optional sig: trivially aligned.
+func TestVariance_OptionalSpecOptionalSig(t *testing.T) {
+	got := runOne(t, `type M fn [[x?:Integer] [Integer]]
+def f fn [[x?:Integer] [Integer] [x]]
+(quote f) is M`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("optional-optional = %v, want true", got)
+	}
+}

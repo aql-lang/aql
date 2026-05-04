@@ -223,15 +223,35 @@ func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	return nil, false
 }
 
-// sigTypeMatches checks whether a value's type matches a signature arg type,
-// including metatype awareness: a type literal (Data==nil) whose metatype
-// matches a metatype signature arg (e.g. String literal matches TScalarType).
+// sigTypeMatches checks whether a value's type matches a signature arg
+// type, including metatype awareness: a type literal (Data==nil) whose
+// metatype matches a metatype signature arg (e.g. String literal
+// matches TScalarType).
 //
-// Carrier values are excluded from the metatype path: a check-mode
-// carrier has Data==nil and a concrete VType (e.g. Integer), but it
-// represents an unknown value of that type, NOT a type literal — so
-// it must not satisfy a TScalarType slot. The genuine type literals
-// produced by stepWord on a type-name word have Carrier=false.
+// **The carrier rule.** Carriers occupy a deliberately ambiguous role
+// in the type system: they have a concrete VType (e.g. TInteger) and
+// nil Data, identical to a type literal at the field level. But
+// semantically they are abstract VALUES, not types. To preserve that
+// distinction at sig-match time, sigTypeMatches treats them as
+// values:
+//
+//   - Carrier{Integer} satisfies TInteger (the value-level slot).
+//   - Carrier{Integer} does NOT satisfy TScalarType (the metatype slot).
+//
+// Without the carrier exclusion at the metatype branch, every
+// check-mode pass through `is`/`typeof`/`unify` would silently
+// upgrade carriers into metatype matches and produce wrong
+// dispatch. The Carrier=false guard on the metatype path is the
+// only place this distinction is enforced — adding new metatype
+// branches must preserve it.
+//
+// Genuine type literals produced by stepWord on a type-name word
+// (e.g. the Word `Integer` resolves to NewTypeLiteral(TInteger))
+// always have Carrier=false, so they continue to match metatype
+// slots correctly.
+//
+// See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
+// user-facing description of this rule.
 func sigTypeMatches(v Value, t Type) bool {
 	if v.VType.Matches(t) {
 		return true

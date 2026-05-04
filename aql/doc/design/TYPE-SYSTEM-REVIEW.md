@@ -289,19 +289,27 @@ any) must unify with the spec's. A candidate without a pattern still
 satisfies a spec with one — the candidate's broader contract still
 admits everything the spec demands.
 
-### 4.3 `Optional` and `BarrierPos` not checked — PARTIAL (Optional resolved)
+### 4.3 `Optional` and `BarrierPos` not checked — RESOLVED
 
-`Optional` is now part of the variance check. `spec.Optional[i]`
-implies `sig.Optional[i]` (covariant on optional flags). A candidate
-that's required where the spec is optional fails — the candidate
-can't accept the omission the spec is allowed to make.
+`Optional` is part of the variance check (`fnSigSatisfiesSpec` in
+`internal/engine/fnsig.go`). `spec.Optional[i]` implies
+`sig.Optional[i]` (covariant on optional flags). A candidate that's
+required where the spec is optional fails — the candidate can't
+accept the omission the spec is allowed to make.
 
-`BarrierPos` is intentionally NOT checked: `FnSigSpec` doesn't carry
-a BarrierPos field (it's a body-level collection setting on FnSig,
-not part of the structural shape), so the type system can't declare
-a barrier requirement. To enable BarrierPos in fn-shape types,
-`FnSigSpec` would first need the field plus a parser-side syntax —
-a deferrable extension.
+The four alignment cases (req/req, req/opt, opt/req, opt/opt) are now
+covered by `TestVariance_*` in `aql/test/type_fnvariance_test.go`.
+
+`BarrierPos` is intentionally excluded from the structural shape:
+`FnSigSpec` doesn't carry one because barriers are a forward-
+collection control, not a contract surface. A function that uses
+`/N` internally is observationally indistinguishable to its caller
+from one that doesn't — both produce the same result with the same
+arity. Adding BarrierPos to fn-shape types would also require new
+parser syntax for `type Foo fn [...]` to express the barrier
+position, and would constrain implementations in a way the type
+system has no business doing. This is documented inline in
+`fnsig.go`'s `fnSigSatisfiesSpec` comment.
 
 
 ## 5. `r.Types` registry (the post-namespace-split state)
@@ -393,15 +401,23 @@ short-circuit (see §3.2): under check mode the body isn't run, so
 the typed binding is accepted. Symbolic execution against the body
 remains a research problem (§3.4 territory).
 
-### 6.2 `sigTypeMatches` carrier rule is implicit knowledge
+### 6.2 `sigTypeMatches` carrier rule is implicit knowledge — RESOLVED
 
-`internal/engine/signature.go:230` excludes Carrier values from the
-metatype-matching path. If a contributor writes a native sig with
-`[TScalarType, …]` and runs it under check mode, they have to
-already know carriers count as "non-metatype" — that knowledge isn't
-in `LANGREF.md`, `SIGNATURES.md`, or any code-level doc.
+The carrier exclusion at the metatype branch is now documented in
+two places:
 
-Status: not addressed. Documentation-mostly fix.
+- `sigTypeMatches`'s doc comment in `internal/engine/signature.go`
+  spells out the rule and warns that any new metatype branch must
+  preserve the `!v.Carrier` guard.
+- `LANGREF.md` "Type-Registry Internals" gains a "Carriers vs type
+  literals at sig-match time" section that gives the user-facing
+  rule with examples.
+
+The semantic rule itself: a `Carrier{T}` is an abstract value, not a
+type. It satisfies a value-level slot for `T` but not a metatype
+slot like `[TScalarType]`. Type literals (`Integer`, `String`)
+produced by stepWord on type-name words have `Carrier=false` and
+continue to match metatype slots correctly.
 
 ### 6.3 Forward planner accepts `def n:T anything` — RESOLVED
 
@@ -661,12 +677,12 @@ For at-a-glance status:
 | §3.4  | Predicate-vs-predicate compatibility | open     |
 | §4.1  | Variance in `fnSigMatchesSpec`       | RESOLVED |
 | §4.2  | `FnParam.Pattern` ignored            | RESOLVED |
-| §4.3  | `Optional`/`BarrierPos` not checked  | PARTIAL  |
+| §4.3  | `Optional`/`BarrierPos` not checked  | RESOLVED |
 | §5.1  | Type shadowing                       | RESOLVED |
 | §5.2  | Double-write for non-fn types        | RESOLVED |
 | §5.3  | `untype Foo`                         | RESOLVED |
 | §6.1  | Predicate-type CheckMode analysis    | PARTIAL  |
-| §6.2  | `sigTypeMatches` carrier rule docs   | open     |
+| §6.2  | `sigTypeMatches` carrier rule docs   | RESOLVED |
 | §6.3  | Forward planner narrowing            | RESOLVED |
 | §7.1  | Inline disjunct syntax (`|`)         | declined |
 | §7.2  | `(quote name)` ergonomics            | RESOLVED |
