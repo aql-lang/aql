@@ -142,6 +142,14 @@ func formatValueJSON(v Value) string {
 		}
 		return v.VType.String()
 	}
+	// DepScalar pre-empts the Matches(TString)/... dispatch so its
+	// constraint payload renders via the DepScalar formatter rather
+	// than crashing through AsString. Quote the form so it's a valid
+	// JSON string.
+	if v.IsDepScalar() {
+		ds, _ := v.AsDepScalar()
+		return fmt.Sprintf("%q", formatDepScalar(dependentLeafFromType(v.VType), ds))
+	}
 	switch {
 	case v.VType.Matches(TString):
 		_as1, _ := v.AsString()

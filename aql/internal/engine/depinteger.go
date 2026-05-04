@@ -244,6 +244,36 @@ func depCompareCheck(kind DepKind, bound, value Value) bool {
 	return true
 }
 
+// depScalarsEqual reports whether two DepScalar payloads describe the
+// same constraint: same primary kind/bound and same secondary
+// kind/bound (if any). Bound comparison delegates to valuesEqual so
+// the underlying scalar payload is compared structurally.
+func depScalarsEqual(a, b DepScalarInfo) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	if a.Kind != 0 {
+		if !a.Bound.VType.Equal(b.Bound.VType) {
+			return false
+		}
+		if !valuesEqual(a.Bound, b.Bound) {
+			return false
+		}
+	}
+	if a.Kind2 != b.Kind2 {
+		return false
+	}
+	if a.Kind2 != 0 {
+		if !a.Bound2.VType.Equal(b.Bound2.VType) {
+			return false
+		}
+		if !valuesEqual(a.Bound2, b.Bound2) {
+			return false
+		}
+	}
+	return true
+}
+
 // formatDepScalar renders a DepScalar's display form, surfacing the
 // secondary bound when present. Single-bound is "(Leaf op bound)";
 // interval is "(Leaf op1 bound1 op2 bound2)".

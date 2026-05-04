@@ -90,9 +90,14 @@ func RegisterDef(r *Registry) {
 		// type registry) first; fall back to DefStacks so legacy
 		// type-definition kinds that still pass through installDef
 		// (records, ObjectType, DepScalar, …) keep working until the
-		// full migration completes.
+		// full migration completes. Capture the source name when the
+		// constraint comes from a registered type — the error path
+		// uses it so messages say "type Bbd" rather than just printing
+		// the resolved value form.
+		typeName := ""
 		if constraint.IsWord() {
 			w, _ := constraint.AsWord()
+			typeName = w.Name
 			if tv, ok := r.Types[w.Name]; ok {
 				constraint = tv
 			} else if ds := r.DefStacks[w.Name]; len(ds) > 0 {
@@ -101,6 +106,15 @@ func RegisterDef(r *Registry) {
 		}
 		if !isTypeValue(constraint) {
 			return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
+		}
+		// describeType returns the user-facing label for the
+		// constraint: the registered name when one is known, the
+		// rendered value form otherwise.
+		describeType := func() string {
+			if typeName != "" {
+				return typeName
+			}
+			return constraint.String()
 		}
 		// When the constraint is a function-shape type and the body is
 		// a quoted atom naming a defined function, resolve to the
@@ -128,21 +142,22 @@ func RegisterDef(r *Registry) {
 		if constraint.VType.Equal(TFnDef) || constraint.VType.Equal(TFunction) {
 			fnDef, ok := constraint.Data.(FnDefInfo)
 			if !ok {
-				return nil, fmt.Errorf("def %s: predicate type has invalid payload", name)
+				return nil, fmt.Errorf("def %s: predicate type %s has invalid payload", name, describeType())
 			}
 			if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
-				return nil, fmt.Errorf("def %s: predicate type must take exactly one argument", name)
+				return nil, fmt.Errorf("def %s: predicate type %s must take exactly one argument", name, describeType())
 			}
 			result, err := r.CallAQL(&fnDef.Sigs[0], []Value{body})
 			if err != nil {
-				return nil, fmt.Errorf("def %s: predicate evaluation failed: %w", name, err)
+				return nil, fmt.Errorf("def %s: predicate type %s evaluation failed: %w", name, describeType(), err)
 			}
 			if len(result) != 1 {
-				return nil, fmt.Errorf("def %s: predicate type must return exactly one value, got %d", name, len(result))
+				return nil, fmt.Errorf("def %s: predicate type %s must return exactly one value, got %d", name, describeType(), len(result))
 			}
 			out := result[0]
 			if out.VType.Equal(TNone) {
-				return nil, fmt.Errorf("def %s: value does not satisfy predicate type", name)
+				return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
+					name, body.String(), describeType())
 			}
 			installDef(r, name, out)
 			r.recordCheckDef(name, args[0].Pos)
@@ -150,8 +165,8 @@ func RegisterDef(r *Registry) {
 		}
 		unified, ok := Unify(body, constraint)
 		if !ok {
-			return nil, fmt.Errorf("def %s: value does not unify with declared type %s",
-				name, constraint.String())
+			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
+				name, body.String(), describeType())
 		}
 		installDef(r, name, unified)
 		r.recordCheckDef(name, args[0].Pos)

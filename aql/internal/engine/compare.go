@@ -11,6 +11,13 @@ import "fmt"
 //   - Cross-type: ordered by type name (atom < boolean < number < string)
 //   - Lists, maps, and other types: not orderable, returns error
 func compareValues(a, b Value) (int, error) {
+	// DepScalar values represent type-level constraints, not concrete
+	// scalars. Ordering them as if they were scalar values is a
+	// category error — refuse rather than silently coerce zero
+	// values through the Matches(TNumber)/AsNumber() path.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
+	}
 	// Numeric comparisons: both operands are some form of Number.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
 		_as1, _ := a.AsNumber()
@@ -77,6 +84,18 @@ func exactEqual(a, b Value) bool {
 		return true
 	}
 
+	// DepScalar pre-empts the Matches(TNumber)/Matches(TString)/...
+	// dispatch below: the lattice override would otherwise route
+	// DepInteger payloads into AsNumber and silently compare zero
+	// values. Two DepScalars are equal iff their constraint shapes
+	// match (delegated through valuesEqual).
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		return a.VType.Equal(b.VType) && valuesEqual(a, b)
+	}
+
 	// Types: structural comparison.
 	if isTypeValue(a) && isTypeValue(b) {
 		return a.VType.Equal(b.VType) && valuesEqual(a, b)
@@ -121,6 +140,16 @@ func deepEqual(a, b Value) bool {
 	// none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
 		return true
+	}
+
+	// DepScalar pre-empts scalar dispatch — see exactEqual for the
+	// reasoning. Two DepScalars compare equal iff their type and
+	// constraint payload match.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		return a.VType.Equal(b.VType) && valuesEqual(a, b)
 	}
 
 	// Scalars.

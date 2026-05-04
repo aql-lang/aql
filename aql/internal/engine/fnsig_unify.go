@@ -7,13 +7,11 @@ package engine
 // by `fn [[input] [output]]` (and registered as a type via `type Foo
 // fn [...]`) and acts as a structural function-shape constraint.
 //
-// The first slice uses **exact-match** semantics: every FnSigSpec in
-// the FnUndef must be matched by some FnSig in the candidate
-// FnDefInfo's Sigs slice (or one of the compiled Signatures, for
-// Go-implemented words), where "match" means same arity and pairwise
-// Type.Equal on each param type and each return type. The follow-up
-// will add variance / overload-subset / pattern-aware rules — those
-// are sketched in the commit message accompanying this file.
+// Matching uses **structural subtyping** with the standard
+// contravariant-input / covariant-output rules (see
+// `fnSigSatisfiesSpec` in native_definition_undef.go). Pattern
+// (FnParam.Pattern) and Optional/BarrierPos differences are not yet
+// checked.
 
 // fnUndefMatchesFnDef reports whether the candidate function value
 // (TFnDef or TFunction wrapping FnDefInfo) satisfies every FnSigSpec
@@ -42,14 +40,14 @@ func fnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 }
 
 // fnDefHasSig reports whether the candidate has at least one
-// signature that matches `want` exactly. Both AQL-defined Sigs (with
-// FnParam payload) and compiled Signatures (with raw Type payload)
-// are considered so Go-implemented words can also satisfy a FnUndef
-// type. The exact-match shape is delegated to fnSigMatchesSpec
-// (defined alongside `undef`'s targeted-signature removal).
+// signature that satisfies `want` under structural subtyping. Both
+// AQL-defined Sigs (with FnParam payload) and compiled Signatures
+// (with raw Type payload) are considered so Go-implemented words can
+// also satisfy a FnUndef type. The variance rule is delegated to
+// fnSigSatisfiesSpec.
 func fnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 	for _, s := range fnDef.Sigs {
-		if fnSigMatchesSpec(s, want) {
+		if fnSigSatisfiesSpec(s, want) {
 			return true
 		}
 	}
@@ -63,7 +61,7 @@ func fnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 		for i, t := range sig.Args {
 			params[i] = FnParam{Type: t}
 		}
-		if fnSigMatchesSpec(FnSig{Params: params, Returns: sig.Returns}, want) {
+		if fnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns}, want) {
 			return true
 		}
 	}

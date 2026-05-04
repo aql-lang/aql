@@ -67,7 +67,10 @@ func RegisterUndef(r *Registry) {
 }
 
 // fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
-// (same param types and return types, ignoring param names).
+// exactly: same arity, same param types pairwise, same return types
+// pairwise. Used by `undef name fn [spec]` to identify the precise
+// previously-installed signature to remove. Variance is intentionally
+// NOT applied here — the user is naming a specific shape to discard.
 func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 	if len(sig.Params) != len(spec.Params) {
 		return false
@@ -82,6 +85,46 @@ func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 	}
 	for i := range sig.Returns {
 		if !sig.Returns[i].Equal(spec.Returns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// fnSigSatisfiesSpec returns true if a candidate FnSig satisfies a
+// FnSigSpec under standard structural function subtyping:
+//
+//   - **Inputs are contravariant.** Each spec param type must be a
+//     subtype of the candidate's param type at the same position.
+//     Example: spec=[Integer], sig=[Number] — sig accepts Integer
+//     (because Integer ⊂ Number), so it satisfies the spec.
+//   - **Returns are covariant.** Each candidate return type must be
+//     a subtype of the spec's return type at the same position.
+//     Example: spec=[Number], sig=[Integer] — sig produces Integer
+//     which is also a Number, so it satisfies the spec.
+//   - Arities must match exactly. Optional/BarrierPos differences
+//     and pattern (FnParam.Pattern) constraints are not yet checked.
+//
+// Used by `fnDefHasSig` for `type Foo fn [...]` constraint matching.
+// Strictly widens the previous exact-match rule.
+func fnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
+	if len(sig.Params) != len(spec.Params) {
+		return false
+	}
+	for i := range sig.Params {
+		// Contravariant: spec_input must be a subtype of sig_input.
+		// `t.Matches(pattern)` is true iff t ⊆ pattern in the type
+		// lattice, so spec.Type.Matches(sig.Type) checks spec ⊆ sig.
+		if !spec.Params[i].Type.Matches(sig.Params[i].Type) {
+			return false
+		}
+	}
+	if len(sig.Returns) != len(spec.Returns) {
+		return false
+	}
+	for i := range sig.Returns {
+		// Covariant: sig_return must be a subtype of spec_return.
+		if !sig.Returns[i].Matches(spec.Returns[i]) {
 			return false
 		}
 	}

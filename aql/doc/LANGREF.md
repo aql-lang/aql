@@ -3185,6 +3185,210 @@ When matching function signatures, the most specific match wins:
 longest argument list with narrowest types.
 
 
+## Type Algebra
+
+`tand` (intersection) and `tor` (union) compose types into a bounded
+distributive lattice. Both operators are forward-precedence with
+`BarrierPos=1` so chains don't greedily consume.
+
+```
+Integer tor String           → Integer | String
+Integer tor Number           → Number          (subsumption)
+Integer tor Integer          → Integer         (idempotence)
+Integer tand Number          → Integer         (narrower wins)
+Integer tand String          → Never           (disjoint)
+String tor Never             → String          (Never is identity for tor)
+String tand Any              → String          (Any is identity for tand)
+```
+
+**Algebraic laws.** `tand` and `tor` form a bounded distributive
+lattice over types. The laws are:
+
+| Law                      | tand                          | tor                          |
+|--------------------------|-------------------------------|------------------------------|
+| identity                 | `T tand Any = T`              | `T tor Never = T`            |
+| annihilator              | `T tand Never = Never`        | `T tor Any = Any`            |
+| idempotence              | `T tand T = T`                | `T tor T = T`                |
+| commutativity            | `A tand B = B tand A`         | `A tor B = B tor A`          |
+| associativity            | `(A tand B) tand C = …`       | `(A tor B) tor C = …`        |
+| distribution             | `(A tor B) tand C = (A tand C) tor (B tand C)` |    |
+
+Distribution is implemented at construction: `(Integer tor String)
+tand Integer` reduces to `Integer` directly (the cross product with
+`Never` filtered, results deduped).
+
+`tall [list]` and `tany [list]` fold these over a list. Both are
+full monoids:
+
+```
+[Integer Number Scalar] tall    → Integer  (tighten through chain)
+[] tall                         → Any      (identity for tand)
+[Integer String] tany           → Integer | String
+[] tany                         → Never    (identity for tor)
+```
+
+**`Never` (bottom type).** Uninhabited — no value satisfies `Never`.
+It is the dual of `Any`: where `Any` matches everything, `Never`
+matches nothing. Disjoint intersections collapse to `Never`
+automatically; `Never` literals can also be written explicitly.
+
+```
+v is Never                   → false  (for any concrete v)
+def x:Never 42               → error  (no value satisfies Never)
+type Bottom Never            → ok     (alias)
+```
+
+
+## Dependent Types
+
+Comparison operators with a type-literal arg construct a
+**dependent scalar** type — a value-level constraint over a base
+scalar type:
+
+```
+Integer gte 10               → DepInteger     (≥ 10)
+Integer gt 10                → DepInteger     (> 10)
+Integer lt 100               → DepInteger     (< 100)
+Integer lte 100              → DepInteger     (≤ 100)
+String lt "z"                → DepString      (< "z")
+Decimal gte 1.5              → DepDecimal     (≥ 1.5)
+```
+
+Dependent types live under `Type/Dependent/Dep<Leaf>` where `<Leaf>`
+is `Integer`, `Decimal`, `Number`, `String`, `Boolean`, or `Atom`.
+They satisfy any signature slot expecting the base type — `DepInteger`
+matches `Integer`, `Number`, `Scalar`, and `Any`.
+
+Unification:
+
+```
+(Integer gte 10) unify 15    → 15, true       (15 ≥ 10)
+(Integer gte 10) unify 5     → fail           (5 < 10)
+(Integer gte 10) unify "x"   → fail           (cross-type)
+```
+
+**Intervals.** `tand` of two same-base dependent scalars combines
+the constraints — same-side bounds tighten, opposite-side bounds
+form a closed interval. Empty intervals reduce to `Never`.
+
+```
+(Integer gte 10) tand (Integer lte 20)  → DepInteger [10, 20]
+(Integer gte 10) tand (Integer gte 5)   → DepInteger ≥ 10  (tighten)
+(Integer gt 10) tand (Integer lt 5)     → Never            (empty)
+```
+
+`between` is the surface form for closed intervals:
+
+```
+Integer between 10 20        → DepInteger [10, 20]
+String between "b" "d"       → DepString  ["b", "d"]
+Integer between 20 10        → Never                       (inverted)
+```
+
+
+## Predicate Types
+
+`type Foo fn [param:Any Any [body]]` registers a **predicate type**:
+a function whose body decides membership. Per the contract, the body
+returns:
+
+- `None` to signal "no match".
+- Any other value to signal "match" — typically the input itself, or
+  a transformed form (a coercive predicate).
+
+```
+type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+
+"c" is Bbd                   → true
+"e" is Bbd                   → false
+99 is Bbd                    → false
+def s:Bbd "c"                → ok
+def s:Bbd "e"                → error: value 'e' does not satisfy predicate type Bbd
+```
+
+**`guard` shorthand.** Every predicate body has the shape "compute
+a Boolean, return val on true / None on false". The `guard` word
+shortens this:
+
+```
+true guard 42                → 42
+false guard 42               → None
+
+# Predicate body using guard:
+type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d") guard x]]
+
+# Coercive (transforming) predicate:
+type Up fn [x:Any Any [(x is String) guard (x upper)]]
+def s:Up "hi"
+s                            → "HI"
+```
+
+**Predicate functions are not independently callable.** A name
+registered via `type Foo fn […]` lives in the type registry only —
+not in the def stack — so `Foo "x"` errors. Use `is` for membership
+checks and `def x:Foo …` for typed bindings.
+
+
+## Structural Function-Shape Types
+
+`type Foo fn [[input1 input2] [output]]` (no body — pair-of-lists
+form) registers a **structural function-shape type**: a constraint
+that matches function values by their signature shape rather than
+by name.
+
+```
+type Mapper fn [[Integer] [Integer]]
+def double fn [[Integer] [Integer] [1 add]]
+(quote double) is Mapper     → true
+def m:Mapper (quote double)  → ok (m bound to double)
+```
+
+**Variance.** Structural fn matching uses the standard subtyping
+rules:
+
+- **Inputs are contravariant.** Candidate's input must be a
+  supertype-or-equal of the spec's. A function that accepts `Number`
+  satisfies a constraint that demands `Integer`-acceptance.
+- **Returns are covariant.** Candidate's return must be a
+  subtype-or-equal of the spec's. A function that returns `Integer`
+  satisfies a constraint that promises `Number`.
+
+```
+type Mapper fn [[Integer] [Number]]   # accept Integer, return Number
+def f fn [[Number] [Integer] [convert Integer]]
+(quote f) is Mapper          → true   # broader input, narrower return
+```
+
+**`(quote name)` idiom.** When binding a function to a fn-shape
+type, wrap the source name in `quote` so it arrives as an Atom that
+the def handler can resolve to the function value. `def m:Mapper
+double` would invoke `double` with no args; `def m:Mapper (quote
+double)` binds `m` to the function itself.
+
+
+## Type and Def Naming
+
+- **Type names must start with a capital letter.** `type foo Integer`
+  is rejected.
+- **Def names must NOT start with a capital letter.** `def Foo 1` is
+  rejected.
+
+The case rule keeps the two namespaces from drifting. A name clash
+across `type` / `def` / native-fn registration is rejected at
+definition time.
+
+
+## Type-Registry Internals
+
+User-defined types live in `Registry.Types`, a separate map from
+`Registry.DefStacks` (which holds value defs and fn-defined words).
+Predicate-type and structural-fn-shape types are stored *only* in
+`Registry.Types` so they're not callable as ordinary words.
+Dependent and record types still pass through both maps for legacy
+reasons. Word resolution checks `r.Types` first when the call site
+is a typed-def constraint slot, then falls back to `DefStacks`.
+
+
 ## Error Codes
 
 | Code              | Meaning                                          |

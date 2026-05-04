@@ -671,6 +671,25 @@ func valuesEqual(a, b Value) bool {
 	if a.Data == nil || b.Data == nil {
 		return false
 	}
+	// Dependent scalar: route to payload comparison BEFORE the
+	// Matches(TString)/Matches(TInteger)/... dispatch below. The
+	// lattice override makes DepString.Matches(TString)=true, so
+	// without this branch a DepScalar would fall into AsString and
+	// silently compare zero-value payloads.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		ai, err := a.AsDepScalar()
+		if err != nil {
+			return false
+		}
+		bi, err := b.AsDepScalar()
+		if err != nil {
+			return false
+		}
+		return depScalarsEqual(ai, bi)
+	}
 	switch {
 	case a.VType.Matches(TString):
 		_as20, _ := a.AsString()

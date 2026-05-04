@@ -11,7 +11,7 @@ import (
 
 // Registry maps function names to their definitions.
 type Registry struct {
-	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	DefStacks map[string][]Value // stacked bodies for def-defined words
 	// Types holds named type definitions installed by the `type` word —
 	// type literals, records, disjuncts, typed lists/maps, options,
 	// records, object types, dependent scalars (DepInteger, DepString,
@@ -577,6 +577,7 @@ func Register(r *Registry) {
 	RegisterTypeof(r)
 	RegisterFullTypeof(r)
 	RegisterIs(r)
+	RegisterGuard(r)
 	RegisterInspect(r)
 	RegisterBase(r)
 	RegisterTor(r)
