@@ -97,7 +97,7 @@ func TestDepAtomMatchesAtom(t *testing.T) {
 
 // DepInteger continues to work via the new general path (sanity).
 func TestDepIntegerStillMatchesInteger(t *testing.T) {
-	d := NewDepInteger(DepGTE, 10)
+	d := NewDepScalar(DepGTE, NewInteger(10))
 	for _, anc := range []Type{TInteger, TNumber, TScalar, TAny} {
 		if !d.VType.Matches(anc) {
 			t.Errorf("DepInteger no longer matches ancestor %s", anc)
@@ -178,7 +178,7 @@ func TestUnifyDepRejectsCrossType(t *testing.T) {
 	if _, ok := Unify(NewInteger(5), ds); ok {
 		t.Error("Unify(5, DepString) succeeded; want failure (cross-type)")
 	}
-	di := NewDepInteger(DepGTE, 10)
+	di := NewDepScalar(DepGTE, NewInteger(10))
 	if _, ok := Unify(NewString("x"), di); ok {
 		t.Error("Unify(\"x\", DepInteger) succeeded; want failure (cross-type)")
 	}

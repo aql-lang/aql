@@ -9,7 +9,7 @@ func RegisterInspect(r *Registry) {
 		// reach inspect through this branch and get the type-inspection
 		// view. Native fn-shadow entries in DefStacks (every native
 		// word has one for fallback dispatch) used to fool the old
-		// "isTypeValue(DefStacks top)" check; that's now bypassed
+		// "isTypeBody(DefStacks top)" check; that's now bypassed
 		// because r.Types is the single source of truth for named
 		// types and native fns are NOT in it.
 		if tv, ok := r.Types[name]; ok {
@@ -17,7 +17,7 @@ func RegisterInspect(r *Registry) {
 		}
 		if stack := r.DefStacks[name]; len(stack) > 0 {
 			top := stack[len(stack)-1]
-			if isTypeValue(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
+			if isTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -32,7 +32,7 @@ func RegisterInspect(r *Registry) {
 		}
 		if stack := r.DefStacks[name]; len(stack) > 0 {
 			top := stack[len(stack)-1]
-			if isTypeValue(top) {
+			if isTypeBody(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}

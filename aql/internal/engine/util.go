@@ -189,6 +189,117 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 	return r.TopOfDefStack(name)
 }
 
+// ResolveTypedNameValue resolves a Value-shaped type reference to its
+// concrete type value, capturing the source name when the input was
+// a Word. Returns the resolved value, the source name (empty if v
+// wasn't a Word), and ok=false only when v WAS a Word but couldn't
+// be resolved through r.Types or DefStacks.
+//
+// Replaces the
+// `if v.IsWord() { w, _ := v.AsWord(); typeName = w.Name; if tv, ok :=
+// r.Types[w.Name]; ok { v = tv } else if ds := r.DefStacks[w.Name];
+// len(ds) > 0 { v = ds[len(ds)-1] } }` pattern in `defTypedHandler`,
+// `is`, `inspect`, and `typeof` — extracting the name capture so
+// downstream error messages can surface "type Bbd" rather than the
+// rendered value form.
+func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, ok bool) {
+	if !v.IsWord() {
+		return v, "", true
+	}
+	w, _ := v.AsWord()
+	rv, hit := r.ResolveTypedName(w.Name)
+	if !hit {
+		return v, w.Name, false
+	}
+	return rv, w.Name, true
+}
+
+// RunPredicate invokes a predicate-type fn against a candidate
+// value, applying the None-or-value contract. Returns the
+// predicate's output, a `matched` flag (true when the result is
+// not-None), and an error for malformed predicates or invocation
+// failures.
+//
+// The constraint must be a TFnDef or TFunction value carrying
+// FnDefInfo with a single-arg first signature. Predicate types
+// from `type Foo fn [x:Any Any [body]]` always satisfy this; other
+// shapes return an error.
+//
+// This is the common code between `defTypedHandler` (which uses
+// `out` as the rebound value) and `is` (which uses `matched` as the
+// Boolean result). Extracting it gives a single place to add
+// sandboxing (§3.3) when that work lands.
+func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
+	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.VType.String())
+	}
+	fnDef, ok := constraint.Data.(FnDefInfo)
+	if !ok {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint has invalid payload (got %T)", constraint.Data)
+	}
+	if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
+		return Value{}, false, fmt.Errorf("RunPredicate: predicate must take exactly one argument")
+	}
+	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
+	if err != nil {
+		return Value{}, false, err
+	}
+	if len(result) != 1 {
+		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
+	}
+	out = result[0]
+	matched = !out.VType.Equal(TNone)
+	return out, matched, nil
+}
+
+// AsConcreteString unwraps a String-typed Value into its Go string,
+// returning a clear error if the value is a DepScalar constraint
+// payload rather than a concrete String. The lattice override makes
+// `DepString.Matches(TString)` true for sig-matching purposes, so
+// any code path that sees a TString value and immediately calls
+// `AsString` will hit a `DepString → "" + error` silent miscompile
+// when the caller swallows the error. Use AsConcreteString in any
+// path where the concrete payload is required (display, comparison,
+// indexing, …); the error is loud and discoverable.
+func (v Value) AsConcreteString() (string, error) {
+	if v.IsDepScalar() {
+		return "", fmt.Errorf("AsConcreteString: value is a dependent-type constraint (%s), not a concrete String", v.VType.String())
+	}
+	return v.AsString()
+}
+
+// AsConcreteInteger — DepScalar-rejecting accessor. See AsConcreteString.
+func (v Value) AsConcreteInteger() (int64, error) {
+	if v.IsDepScalar() {
+		return 0, fmt.Errorf("AsConcreteInteger: value is a dependent-type constraint (%s), not a concrete Integer", v.VType.String())
+	}
+	return v.AsInteger()
+}
+
+// AsConcreteDecimal — DepScalar-rejecting accessor. See AsConcreteString.
+func (v Value) AsConcreteDecimal() (float64, error) {
+	if v.IsDepScalar() {
+		return 0, fmt.Errorf("AsConcreteDecimal: value is a dependent-type constraint (%s), not a concrete Decimal", v.VType.String())
+	}
+	return v.AsDecimal()
+}
+
+// AsConcreteBoolean — DepScalar-rejecting accessor. See AsConcreteString.
+func (v Value) AsConcreteBoolean() (bool, error) {
+	if v.IsDepScalar() {
+		return false, fmt.Errorf("AsConcreteBoolean: value is a dependent-type constraint (%s), not a concrete Boolean", v.VType.String())
+	}
+	return v.AsBoolean()
+}
+
+// AsConcreteAtom — DepScalar-rejecting accessor. See AsConcreteString.
+func (v Value) AsConcreteAtom() (string, error) {
+	if v.IsDepScalar() {
+		return "", fmt.Errorf("AsConcreteAtom: value is a dependent-type constraint (%s), not a concrete Atom", v.VType.String())
+	}
+	return v.AsAtom()
+}
+
 // FlattenDisjunctAlts returns the alternatives of a disjunct value
 // or a single-element slice containing v if it isn't a disjunct.
 // Replaces the

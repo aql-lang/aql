@@ -151,14 +151,14 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	}
 
 	a.registry.Source = src
-	a.registry.CheckMode = true
-	a.registry.CheckDiagnostics = nil
-	a.registry.CheckStepCount = 0
-	a.registry.CheckBudgetTripped = false
-	a.registry.CheckDefsInstalled = nil
-	a.registry.CheckDefsUsed = nil
-	a.registry.CheckContextTypes = nil
-	defer func() { a.registry.CheckMode = false }()
+	a.registry.Check.Mode = true
+	a.registry.Check.Diagnostics = nil
+	a.registry.Check.StepCount = 0
+	a.registry.Check.BudgetTripped = false
+	a.registry.Check.DefsInstalled = nil
+	a.registry.Check.DefsUsed = nil
+	a.registry.Check.ContextTypes = nil
+	defer func() { a.registry.Check.Mode = false }()
 
 	eng := engine.NewTop(a.registry)
 	eng.SetSource(src)
@@ -167,7 +167,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	// so the Used map has been fully populated.
 	a.registry.EmitUnusedDefDiagnostics()
 	if err != nil {
-		return CheckResult{Diagnostics: a.registry.CheckDiagnostics}, err
+		return CheckResult{Diagnostics: a.registry.Check.Diagnostics}, err
 	}
 
 	stack := make([]string, len(result))
@@ -179,7 +179,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	// in the source text. Best-effort — duplicates fall back to
 	// the last occurrence, which is usually the call site rather
 	// than the definition.
-	diags := a.registry.CheckDiagnostics
+	diags := a.registry.Check.Diagnostics
 	var summary CheckSummary
 	for i := range diags {
 		if diags[i].Row == 0 && diags[i].Word != "" {

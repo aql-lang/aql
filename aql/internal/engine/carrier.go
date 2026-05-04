@@ -6,7 +6,7 @@ import "strings"
 //
 // A "carrier" is a normal Value with Carrier=true and (typically)
 // Data=nil: it carries only type information, not a concrete payload.
-// The engine is driven in check mode by Registry.CheckMode. In that
+// The engine is driven in check mode by Registry.Check.Mode. In that
 // mode, the same dispatch machinery (matchSignature, forward
 // collection, sort order, etc.) runs, but execMatch consults
 // Signature.Returns to synthesise carrier results instead of calling
@@ -317,11 +317,12 @@ func JoinCarriers(a, b Value) Value {
 		}
 	}
 	// Gather unique alternatives across a and b, subsume subtypes,
-	// then apply the width cap.
-	alts := mergeAlternatives(
-		flattenAlternatives(a),
-		flattenAlternatives(b),
-	)
+	// then apply the width cap. simplifyDisjunctAlts is the runtime
+	// path's helper but produces identical output for the
+	// type-literal-only inputs the carrier path supplies.
+	combined := append([]Value(nil), flattenAlternatives(a)...)
+	combined = append(combined, flattenAlternatives(b)...)
+	alts := simplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
 		return NewCarrier(alts[0].VType)
 	}
@@ -335,41 +336,6 @@ func JoinCarriers(a, b Value) Value {
 	v := NewDisjunct(alts)
 	v.Carrier = true
 	return v
-}
-
-// mergeAlternatives merges two slices of type-literal alternatives
-// into a single slice with subsumption: if one alternative is a
-// subtype of another, only the parent is kept. Duplicates are
-// removed.
-func mergeAlternatives(a, b []Value) []Value {
-	combined := append([]Value(nil), a...)
-	combined = append(combined, b...)
-	// Deduplicate by VType path, subsume subtypes.
-	out := combined[:0]
-outer:
-	for i, cand := range combined {
-		// Skip if already subsumed by an earlier entry.
-		for j := 0; j < i; j++ {
-			if combined[j].VType.Equal(cand.VType) {
-				continue outer // duplicate
-			}
-		}
-		// Drop candidates whose type is a strict subtype of any
-		// other candidate.
-		for j, other := range combined {
-			if j == i {
-				continue
-			}
-			if cand.VType.Equal(other.VType) {
-				continue
-			}
-			if cand.VType.Matches(other.VType) {
-				continue outer // subsumed
-			}
-		}
-		out = append(out, cand)
-	}
-	return out
 }
 
 // checkModeFallbackPositions returns up to n stack indices to use as
@@ -645,24 +611,24 @@ func JoinCarrierStacks(a, b []Value) []Value {
 // type reflects every write. Safe to call outside check mode — it
 // becomes a no-op.
 func (r *Registry) RecordContextSet(key string, carrier Value) {
-	if !r.CheckMode || key == "" {
+	if !r.Check.Mode || key == "" {
 		return
 	}
-	if r.CheckContextTypes == nil {
-		r.CheckContextTypes = map[string]Value{}
+	if r.Check.ContextTypes == nil {
+		r.Check.ContextTypes = map[string]Value{}
 	}
-	if existing, ok := r.CheckContextTypes[key]; ok {
-		r.CheckContextTypes[key] = JoinCarriers(existing, carrier)
+	if existing, ok := r.Check.ContextTypes[key]; ok {
+		r.Check.ContextTypes[key] = JoinCarriers(existing, carrier)
 		return
 	}
-	r.CheckContextTypes[key] = carrier
+	r.Check.ContextTypes[key] = carrier
 }
 
 // LookupContextType returns the carrier recorded for the given key
 // via a prior set, or an Any carrier + false when the key has not
 // been observed in this check run.
 func (r *Registry) LookupContextType(key string) (Value, bool) {
-	if v, ok := r.CheckContextTypes[key]; ok {
+	if v, ok := r.Check.ContextTypes[key]; ok {
 		return v, true
 	}
 	return NewCarrier(TAny), false
@@ -673,30 +639,30 @@ func (r *Registry) LookupContextType(key string) (Value, bool) {
 // end-of-run analysis can flag defs that were never referenced.
 // Names starting with "_" (engine internals) are ignored.
 func (r *Registry) recordCheckDef(name string, pos SrcPos) {
-	if !r.CheckMode || name == "" || strings.HasPrefix(name, "_") {
+	if !r.Check.Mode || name == "" || strings.HasPrefix(name, "_") {
 		return
 	}
-	if r.CheckDefsInstalled == nil {
-		r.CheckDefsInstalled = map[string]SrcPos{}
+	if r.Check.DefsInstalled == nil {
+		r.Check.DefsInstalled = map[string]SrcPos{}
 	}
-	r.CheckDefsInstalled[name] = pos
+	r.Check.DefsInstalled[name] = pos
 	// Any prior "use" count for this name was against an older
 	// (now-shadowed) def or against a lookup during def setup —
 	// reset so only uses AFTER this install count.
-	delete(r.CheckDefsUsed, name)
+	delete(r.Check.DefsUsed, name)
 }
 
 // recordCheckUse marks a name as referenced during check mode. It is
 // safe to call unconditionally; when CheckMode is off the call is a
 // no-op. Used by Registry.Lookup and stepWord's simple-value path.
 func (r *Registry) recordCheckUse(name string) {
-	if !r.CheckMode || name == "" {
+	if !r.Check.Mode || name == "" {
 		return
 	}
-	if r.CheckDefsUsed == nil {
-		r.CheckDefsUsed = map[string]bool{}
+	if r.Check.DefsUsed == nil {
+		r.Check.DefsUsed = map[string]bool{}
 	}
-	r.CheckDefsUsed[name] = true
+	r.Check.DefsUsed[name] = true
 }
 
 // EmitUnusedDefDiagnostics walks the set of defs installed during a
@@ -704,8 +670,8 @@ func (r *Registry) recordCheckUse(name string) {
 // never referenced. Call this at the end of a check pass, before
 // returning the CheckResult.
 func (r *Registry) EmitUnusedDefDiagnostics() {
-	for name, pos := range r.CheckDefsInstalled {
-		if r.CheckDefsUsed[name] {
+	for name, pos := range r.Check.DefsInstalled {
+		if r.Check.DefsUsed[name] {
 			continue
 		}
 		r.addCheckDiagnostic(CheckDiagnostic{
@@ -727,7 +693,7 @@ func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
 	}
-	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
+	r.Check.Diagnostics = append(r.Check.Diagnostics, d)
 }
 
 // GuardClause describes one `x is T` clause detected in a condition.
@@ -830,7 +796,7 @@ func literalCondValue(condList Value) (bool, bool) {
 // the narrowings after the then-branch runs.
 func applyGuardNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.CheckMode {
+	if r == nil || !r.Check.Mode {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -861,7 +827,7 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 // alternative is subtracted. Returns a restore func.
 func applyComplementNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.CheckMode {
+	if r == nil || !r.Check.Mode {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -943,21 +909,21 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	key := sb.String()
 
-	if r.CheckFnSummaries == nil {
-		r.CheckFnSummaries = map[string][]Value{}
+	if r.Check.FnSummaries == nil {
+		r.Check.FnSummaries = map[string][]Value{}
 	}
-	if r.CheckFnInflight == nil {
-		r.CheckFnInflight = map[string]bool{}
+	if r.Check.FnInflight == nil {
+		r.Check.FnInflight = map[string]bool{}
 	}
-	if cached, ok := r.CheckFnSummaries[key]; ok {
+	if cached, ok := r.Check.FnSummaries[key]; ok {
 		return cached
 	}
-	if r.CheckFnInflight[key] {
+	if r.Check.FnInflight[key] {
 		// Recursion detected — break the cycle with an Any carrier.
 		return []Value{NewCarrier(TAny)}
 	}
-	r.CheckFnInflight[key] = true
-	defer delete(r.CheckFnInflight, key)
+	r.Check.FnInflight[key] = true
+	defer delete(r.Check.FnInflight, key)
 
 	// Snapshot def-stack depths so we can unwind any defs the body
 	// or parameter binding created.
@@ -1000,6 +966,6 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		}
 	}
 
-	r.CheckFnSummaries[key] = result
+	r.Check.FnSummaries[key] = result
 	return result
 }

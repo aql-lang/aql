@@ -208,12 +208,11 @@ func describeStackTypes(stack []Value, pointer int) string {
 		} else if v.IsAtom() {
 			a, _ := v.AsAtom()
 			label = "atom(" + a + ")"
-		} else if v.IsDepScalar() {
+		} else if s := renderDepScalar(v); s != "" {
 			// Render the constraint payload rather than falling
 			// into a Matches(TString)/AsString path that would
 			// silently produce an empty label.
-			ds, _ := v.AsDepScalar()
-			label = formatDepScalar(dependentLeafFromType(v.VType), ds)
+			label = s
 		} else if v.VType.Matches(TString) {
 			s, _ := v.AsString()
 			if len(s) > 20 {

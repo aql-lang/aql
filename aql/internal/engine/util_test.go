@@ -471,6 +471,177 @@ func TestResolveTypedName_NilRegistry(t *testing.T) {
 	}
 }
 
+// --- AsConcreteX accessors ---
+
+func TestAsConcreteString_Concrete(t *testing.T) {
+	s, err := NewString("hi").AsConcreteString()
+	if err != nil || s != "hi" {
+		t.Errorf("got (%q, %v), want (\"hi\", nil)", s, err)
+	}
+}
+
+func TestAsConcreteString_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepLT, NewString("z"))
+	_, err := v.AsConcreteString()
+	if err == nil {
+		t.Errorf("expected error for DepString")
+	}
+}
+
+func TestAsConcreteInteger_Concrete(t *testing.T) {
+	n, err := NewInteger(42).AsConcreteInteger()
+	if err != nil || n != 42 {
+		t.Errorf("got (%d, %v), want (42, nil)", n, err)
+	}
+}
+
+func TestAsConcreteInteger_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepGT, NewInteger(10))
+	_, err := v.AsConcreteInteger()
+	if err == nil {
+		t.Errorf("expected error for DepInteger")
+	}
+}
+
+func TestAsConcreteDecimal_Concrete(t *testing.T) {
+	f, err := NewDecimal(1.5).AsConcreteDecimal()
+	if err != nil || f != 1.5 {
+		t.Errorf("got (%v, %v), want (1.5, nil)", f, err)
+	}
+}
+
+func TestAsConcreteDecimal_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepGTE, NewDecimal(1.5))
+	_, err := v.AsConcreteDecimal()
+	if err == nil {
+		t.Errorf("expected error for DepDecimal")
+	}
+}
+
+func TestAsConcreteBoolean_Concrete(t *testing.T) {
+	b, err := NewBoolean(true).AsConcreteBoolean()
+	if err != nil || !b {
+		t.Errorf("got (%v, %v), want (true, nil)", b, err)
+	}
+}
+
+func TestAsConcreteBoolean_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepGTE, NewBoolean(true))
+	_, err := v.AsConcreteBoolean()
+	if err == nil {
+		t.Errorf("expected error for DepBoolean")
+	}
+}
+
+func TestAsConcreteAtom_Concrete(t *testing.T) {
+	a, err := NewAtom("foo").AsConcreteAtom()
+	if err != nil || a != "foo" {
+		t.Errorf("got (%q, %v), want (\"foo\", nil)", a, err)
+	}
+}
+
+func TestAsConcreteAtom_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepGTE, NewAtom("a"))
+	_, err := v.AsConcreteAtom()
+	if err == nil {
+		t.Errorf("expected error for DepAtom")
+	}
+}
+
+// --- ResolveTypedNameValue ---
+
+func TestResolveTypedNameValue_NotAWord(t *testing.T) {
+	r, _ := NewRegistry()
+	v := NewInteger(42)
+	out, name, ok := r.ResolveTypedNameValue(v)
+	if !ok {
+		t.Errorf("non-word value: ok=false, want true (no resolution attempted)")
+	}
+	if name != "" {
+		t.Errorf("non-word value: name=%q, want empty", name)
+	}
+	n, _ := out.AsInteger()
+	if n != 42 {
+		t.Errorf("non-word value: out modified (got %d)", n)
+	}
+}
+
+func TestResolveTypedNameValue_WordResolved(t *testing.T) {
+	r, _ := NewRegistry()
+	r.Types["Bbd"] = NewString("from-types")
+	out, name, ok := r.ResolveTypedNameValue(NewWord("Bbd"))
+	if !ok || name != "Bbd" {
+		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)
+	}
+	s, _ := out.AsString()
+	if s != "from-types" {
+		t.Errorf("resolved value = %q, want \"from-types\"", s)
+	}
+}
+
+func TestResolveTypedNameValue_WordUnresolved(t *testing.T) {
+	r, _ := NewRegistry()
+	w := NewWord("Unknown")
+	out, name, ok := r.ResolveTypedNameValue(w)
+	if ok {
+		t.Errorf("unresolved word: ok=true, want false")
+	}
+	if name != "Unknown" {
+		t.Errorf("unresolved: name=%q, want \"Unknown\"", name)
+	}
+	// out should be the original Word (unchanged) so callers can
+	// continue with it.
+	if !out.IsWord() {
+		t.Errorf("unresolved word: out.IsWord=false")
+	}
+}
+
+// --- RunPredicate ---
+
+func TestRunPredicate_NotAFn(t *testing.T) {
+	r, _ := NewRegistry()
+	_, _, err := r.RunPredicate(NewInteger(1), NewInteger(42))
+	if err == nil {
+		t.Fatalf("expected error for non-fn constraint")
+	}
+}
+
+func TestRunPredicate_BadPayload(t *testing.T) {
+	r, _ := NewRegistry()
+	v := Value{VType: TFnDef, Data: "not a FnDefInfo"}
+	_, _, err := r.RunPredicate(v, NewInteger(42))
+	if err == nil {
+		t.Fatalf("expected error for invalid FnDef payload")
+	}
+}
+
+func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
+	r, _ := NewRegistry()
+	v := Value{VType: TFnDef, Data: FnDefInfo{}}
+	_, _, err := r.RunPredicate(v, NewInteger(42))
+	if err == nil {
+		t.Fatalf("expected error for predicate with no sigs")
+	}
+}
+
+func TestRunPredicate_MultiArgPredicate(t *testing.T) {
+	r, _ := NewRegistry()
+	v := Value{VType: TFnDef, Data: FnDefInfo{
+		Sigs: []FnSig{{Params: []FnParam{{Type: TAny}, {Type: TAny}}}},
+	}}
+	_, _, err := r.RunPredicate(v, NewInteger(42))
+	if err == nil {
+		t.Fatalf("expected error for predicate with 2 params")
+	}
+}
+
+// Happy-path tests for RunPredicate live in aql/test/type_*_test.go
+// (they need the full parse pipeline to construct predicates).
+// Coverage at the unit level is satisfied by the four error-path
+// tests above — every branch of RunPredicate's pre-CallAQL logic is
+// exercised. The CallAQL → result-shape branches are reachable only
+// via real predicate bodies, hence the integration-level coverage.
+
 // --- FlattenDisjunctAlts ---
 
 func TestFlattenDisjunctAlts_NotADisjunct(t *testing.T) {

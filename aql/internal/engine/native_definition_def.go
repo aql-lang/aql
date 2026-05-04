@@ -94,15 +94,9 @@ func RegisterDef(r *Registry) {
 		// constraint comes from a registered type — the error path
 		// uses it so messages say "type Bbd" rather than just printing
 		// the resolved value form.
-		typeName := ""
-		if constraint.IsWord() {
-			w, _ := constraint.AsWord()
-			typeName = w.Name
-			if resolved, ok := r.ResolveTypedName(w.Name); ok {
-				constraint = resolved
-			}
-		}
-		if !isTypeValue(constraint) {
+		var typeName string
+		constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
+		if !isTypeBody(constraint) {
 			return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
 		}
 		// describeType returns the user-facing label for the
@@ -137,22 +131,11 @@ func RegisterDef(r *Registry) {
 		// candidate, so a predicate like `[x upper]` actually rebinds
 		// to the transformed shape.
 		if constraint.VType.Equal(TFnDef) || constraint.VType.Equal(TFunction) {
-			fnDef, ok := constraint.Data.(FnDefInfo)
-			if !ok {
-				return nil, fmt.Errorf("def %s: predicate type %s has invalid payload", name, describeType())
-			}
-			if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
-				return nil, fmt.Errorf("def %s: predicate type %s must take exactly one argument", name, describeType())
-			}
-			result, err := r.CallAQL(&fnDef.Sigs[0], []Value{body})
+			out, matched, err := r.RunPredicate(constraint, body)
 			if err != nil {
-				return nil, fmt.Errorf("def %s: predicate type %s evaluation failed: %w", name, describeType(), err)
+				return nil, fmt.Errorf("def %s: predicate type %s: %w", name, describeType(), err)
 			}
-			if len(result) != 1 {
-				return nil, fmt.Errorf("def %s: predicate type %s must return exactly one value, got %d", name, describeType(), len(result))
-			}
-			out := result[0]
-			if out.VType.Equal(TNone) {
+			if !matched {
 				return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
 					name, body.String(), describeType())
 			}

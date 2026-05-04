@@ -30,15 +30,14 @@ func RegisterIs(r *Registry) {
 				// (Quoted=true so it didn't auto-execute on the way
 				// here), call the predicate against a and report
 				// success iff it returned a non-None value.
-				// Mirrors defTypedHandler's invocation rules.
+				// RunPredicate is the single source of truth for the
+				// None/value contract — see util.go.
 				if b.VType.Equal(TFnDef) || b.VType.Equal(TFunction) {
-					if fnDef, ok := b.Data.(FnDefInfo); ok && len(fnDef.Sigs) > 0 && len(fnDef.Sigs[0].Params) == 1 {
-						result, err := r.CallAQL(&fnDef.Sigs[0], []Value{a})
-						if err != nil || len(result) != 1 {
-							return []Value{NewBoolean(false)}, nil
-						}
-						return []Value{NewBoolean(!result[0].VType.Equal(TNone))}, nil
+					_, matched, err := r.RunPredicate(b, a)
+					if err != nil {
+						return []Value{NewBoolean(false)}, nil
 					}
+					return []Value{NewBoolean(matched)}, nil
 				}
 				// Metatype early-return: when pattern (b) is a metatype and
 				// value (a) is a type literal, directly check metatype matching.

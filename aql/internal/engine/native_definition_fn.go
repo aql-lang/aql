@@ -459,7 +459,7 @@ func lookupDefType(r *Registry, name string) *Value {
 		return nil
 	}
 	val := stack[len(stack)-1]
-	if !isTypeValue(val) {
+	if !isTypeBody(val) {
 		return nil
 	}
 	return &val

@@ -71,7 +71,7 @@ func TestTypedDefAnonymousDepIntegerSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dep := NewDepInteger(DepGT, 10)
+	dep := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", dep)
 	runAQL(t, r, []Value{
@@ -92,7 +92,7 @@ func TestTypedDefAnonymousDepIntegerFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dep := NewDepInteger(DepGT, 10)
+	dep := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", dep)
 	e := New(r)
@@ -118,7 +118,7 @@ func TestTypedDefNamedTypeSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g10 := NewDepInteger(DepGT, 10)
+	g10 := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", g10)
 	runAQL(t, r, []Value{
@@ -139,7 +139,7 @@ func TestTypedDefNamedTypeFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g10 := NewDepInteger(DepGT, 10)
+	g10 := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", g10)
 	e := New(r)

@@ -97,7 +97,7 @@ func exactEqual(a, b Value) bool {
 	}
 
 	// Types: structural comparison.
-	if isTypeValue(a) && isTypeValue(b) {
+	if isTypeBody(a) && isTypeBody(b) {
 		return a.VType.Equal(b.VType) && valuesEqual(a, b)
 	}
 
@@ -221,42 +221,6 @@ func deepEqual(a, b Value) bool {
 	return false
 }
 
-// makeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
-// signature variant for a comparison op. `Integer gte 10`, `String lt
-// "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
-// the base-type literal. The result type path is Type/Dependent/Dep<X>
-// where <X> is the leaf of the base type. This sig sorts ahead of the
-// [Any, Any] boolean sig (because its types are more specific), so
-// concrete `5 gte 10` still hits the boolean branch via the second
-// match attempt.
-func makeDepScalarSig(opName string, kind DepKind) NativeSig {
-	return NativeSig{
-		Args: []Type{TScalar, TScalarType},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			// arg1 is the type-literal at the deep position. Reject
-			// non-leaf bases — only the well-known scalar types map
-			// to a Dependent leaf name.
-			if args[1].Data != nil {
-				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
-					opName, args[1].VType.String())
-			}
-			leaf := dependentLeafFromBoundType(args[1].VType)
-			if leaf == "" {
-				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
-					opName, args[1].VType.String())
-			}
-			// Bound must be the same scalar base as the type literal.
-			base, _ := dependentLeafBaseType(leaf)
-			if !args[0].VType.Matches(base) {
-				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
-					opName, args[0].VType.String(), base.String())
-			}
-			return []Value{NewDepScalar(kind, args[0])}, nil
-		},
-		Returns: []Type{TDependent},
-	}
-}
-
 func RegisterComparison(r *Registry) {
 	// lt: [any, any] -> [boolean] — less than
 	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
@@ -340,61 +304,10 @@ func RegisterComparison(r *Registry) {
 		},
 	})
 
-	// between: [scalar, scalar, scalarType] -> [Dependent]
-	// Source form `Integer between 10 20` builds a closed-interval
-	// DepScalar — equivalent to `(Integer gte 10) tand (Integer lte 20)`
-	// but in one word. Sig order follows the concatenative mirror
-	// pattern: sig[0]=lo (innermost forward), sig[1]=hi, sig[2]=type
-	// (deepest, taken from the stack when the type is prefixed).
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "between",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args: []Type{TScalar, TScalar, TScalarType},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if args[2].Data != nil {
-						return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
-							args[2].VType.String())
-					}
-					leaf := dependentLeafFromBoundType(args[2].VType)
-					if leaf == "" {
-						return nil, fmt.Errorf("between: unsupported base type %s",
-							args[2].VType.String())
-					}
-					base, _ := dependentLeafBaseType(leaf)
-					if !args[0].VType.Matches(base) {
-						return nil, fmt.Errorf("between: low bound %s does not match base %s",
-							args[0].VType.String(), base.String())
-					}
-					if !args[1].VType.Matches(base) {
-						return nil, fmt.Errorf("between: high bound %s does not match base %s",
-							args[1].VType.String(), base.String())
-					}
-					// Empty interval (lo > hi) reduces to Never. Equal
-					// bounds form a singleton, which the underlying
-					// closed interval already represents correctly.
-					cmp, err := compareValues(args[0], args[1])
-					if err != nil {
-						return nil, fmt.Errorf("between: %w", err)
-					}
-					if cmp > 0 {
-						return []Value{NewTypeLiteral(TNever)}, nil
-					}
-					info := DepScalarInfo{
-						Kind: DepGTE, Bound: args[0],
-						Kind2: DepLTE, Bound2: args[1],
-					}
-					t, err := NewType("Type/Dependent/Dep" + leaf)
-					if err != nil {
-						return nil, fmt.Errorf("between: %w", err)
-					}
-					return []Value{newValue(t, info)}, nil
-				},
-				Returns: []Type{TDependent},
-			},
-		},
-	})
+	// between: closed-interval DepScalar constructor — moved to
+	// depscalar.go. Co-located with the rest of the dependent-type
+	// machinery so adding new bound shapes only touches one file.
+	RegisterBetween(r)
 
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
 	r.RegisterNativeFunc(NativeFunc{

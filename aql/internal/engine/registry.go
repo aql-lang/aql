@@ -45,61 +45,80 @@ type Registry struct {
 	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
 	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 
-	// CheckMode toggles static type-checking execution. When true, the
+	// Check holds all static type-checking state, bundled together
+	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
+	// §3.3) can snapshot/restore one field instead of ten.
+	Check CheckState
+}
+
+// CheckState aggregates the static type-checking state that used to
+// live as ten loose fields on Registry. Bundling them serves two
+// purposes:
+//
+//   - **Sandboxing.** A predicate body that runs under unify checks
+//     should not mutate enclosing analysis state. With a single
+//     struct, snapshot/restore is `saved := r.Check; defer func()
+//     { r.Check = saved }()` rather than ten parallel assignments.
+//   - **Discoverability.** Anyone reading `Registry` can see the
+//     check-mode footprint at a glance instead of scanning ten
+//     adjacent declarations.
+type CheckState struct {
+	// Mode toggles static type-checking execution. When true, the
 	// engine runs the same dispatch/matching machinery but carries
 	// type-only Carrier values instead of concrete payloads, and
-	// replaces signature handlers with carrier-typed return propagation
-	// (see Signature.Returns). Diagnostics are accumulated into
-	// CheckDiagnostics rather than returned as hard errors.
-	CheckMode        bool
-	CheckDiagnostics []CheckDiagnostic
+	// replaces signature handlers with carrier-typed return
+	// propagation (see Signature.Returns). Diagnostics are
+	// accumulated into Diagnostics rather than returned as hard
+	// errors.
+	Mode        bool
+	Diagnostics []CheckDiagnostic
 
-	// CheckFnSummaries caches carrier return-stacks for user-defined
-	// fn bodies keyed by (name + "#" + argTypesJoined). Populated by
-	// analyseFnBody; re-entrant calls (recursion) consult this cache
-	// to break cycles and converge on a fixed point.
-	CheckFnSummaries map[string][]Value
+	// FnSummaries caches carrier return-stacks for user-defined fn
+	// bodies keyed by (name + "#" + argTypesJoined). Populated by
+	// analyseFnBody; re-entrant calls (recursion) consult this
+	// cache to break cycles and converge on a fixed point.
+	FnSummaries map[string][]Value
 
-	// CheckFnInflight tracks which (name, arg-types) analyses are
-	// currently running so that recursive calls can bail out with a
-	// placeholder instead of looping.
-	CheckFnInflight map[string]bool
+	// FnInflight tracks which (name, arg-types) analyses are
+	// currently running so that recursive calls can bail out with
+	// a placeholder instead of looping.
+	FnInflight map[string]bool
 
-	// CheckStepCount is the running total of engine steps consumed
-	// by the current check run, summed across every sub-engine.
-	// Used with CheckStepBudget to cap total analysis effort.
-	CheckStepCount int
+	// StepCount is the running total of engine steps consumed by
+	// the current check run, summed across every sub-engine. Used
+	// with StepBudget to cap total analysis effort.
+	StepCount int
 
-	// CheckStepBudget is the maximum total steps the check run may
+	// StepBudget is the maximum total steps the check run may
 	// consume. Zero means "use DefaultCheckStepBudget". Once
 	// exceeded, the engine emits a step_budget_exceeded diagnostic
 	// and returns the current residual stack immediately.
-	CheckStepBudget int
+	StepBudget int
 
-	// CheckBudgetTripped is set to true after the first budget
-	// overshoot so we emit at most one diagnostic per check run.
-	CheckBudgetTripped bool
+	// BudgetTripped is set to true after the first budget overshoot
+	// so we emit at most one diagnostic per check run.
+	BudgetTripped bool
 
-	// CheckDefsInstalled records the names (and source positions)
-	// that the user's program defined during a check run via the
-	// def word. Populated by recordCheckDef; consulted at end of
-	// run to emit unused_def warnings.
-	CheckDefsInstalled map[string]SrcPos
+	// DefsInstalled records the names (and source positions) that
+	// the user's program defined during a check run via the def
+	// word. Populated by recordCheckDef; consulted at end of run
+	// to emit unused_def warnings.
+	DefsInstalled map[string]SrcPos
 
-	// CheckDefsUsed records names looked up via Registry.Lookup or
+	// DefsUsed records names looked up via Registry.Lookup or
 	// simple-value substitution in check mode. Used to filter out
 	// defs that were referenced at least once.
-	CheckDefsUsed map[string]bool
+	DefsUsed map[string]bool
 
-	// CheckContextTypes is a best-effort record of keys that user
-	// code wrote to a Store during a check run. The value is the
-	// last-seen carrier type for that key, joined via
-	// JoinCarriers on repeated writes. Used by get's ReturnsFn so
-	// subsequent reads can produce a typed carrier rather than
-	// falling back to Any. Shared across the entire check run —
-	// not keyed by store identity — to keep the model simple for
-	// the common "one context store" usage pattern.
-	CheckContextTypes map[string]Value
+	// ContextTypes is a best-effort record of keys that user code
+	// wrote to a Store during a check run. The value is the
+	// last-seen carrier type for that key, joined via JoinCarriers
+	// on repeated writes. Used by get's ReturnsFn so subsequent
+	// reads can produce a typed carrier rather than falling back to
+	// Any. Shared across the entire check run — not keyed by store
+	// identity — to keep the model simple for the common
+	// "one context store" usage pattern.
+	ContextTypes map[string]Value
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -776,8 +795,7 @@ func valToString(v Value) string {
 		// lattice override makes DepString.Matches(TString) true,
 		// so without this case AsString would crash on the wrong
 		// payload type.
-		ds, _ := v.AsDepScalar()
-		return formatDepScalar(dependentLeafFromType(v.VType), ds)
+		return renderDepScalar(v)
 	case v.VType.Matches(TString):
 		_as8, _ := v.AsString()
 		return _as8

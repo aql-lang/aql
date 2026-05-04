@@ -11,7 +11,7 @@ func TestApplyComplementNarrowing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
-	r.CheckMode = true
+	r.Check.Mode = true
 
 	// Install a disjunct carrier on x: Integer|String.
 	disjunct := NewDisjunct([]Value{
@@ -50,7 +50,7 @@ func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
-	r.CheckMode = true
+	r.Check.Mode = true
 
 	r.DefStacks["x"] = []Value{NewCarrier(TInteger)}
 

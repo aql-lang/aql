@@ -162,48 +162,6 @@ func (v Value) AsDepScalar() (DepScalarInfo, error) {
 	return DepScalarInfo{}, fmt.Errorf("AsDepScalar: not a DepScalar value (got %T)", v.Data)
 }
 
-// --- DepInteger compatibility wrappers ---
-//
-// The first slice exposed Integer-specific names. The general DepScalar
-// machinery now drives them; these wrappers keep the public API stable.
-
-// NewDepInteger builds a DepInteger from a comparison kind and an int64
-// bound. Equivalent to NewDepScalar(kind, NewInteger(bound)).
-func NewDepInteger(kind DepKind, bound int64) Value {
-	return NewDepScalar(kind, NewInteger(bound))
-}
-
-// IsDepInteger reports whether the value is the DepInteger flavour of
-// DepScalar.
-func (v Value) IsDepInteger() bool {
-	return dependentLeafFromType(v.VType) == "Integer"
-}
-
-// DepIntegerInfo is the legacy payload shape; today it's a synonym
-// for the integer flavour of DepScalarInfo. Bound is the int64 value
-// extracted from the underlying scalar bound.
-type DepIntegerInfo struct {
-	Kind  DepKind
-	Bound int64
-}
-
-// AsDepInteger returns the legacy int64-typed payload for a DepInteger
-// value. Errors for non-integer dependents.
-func (v Value) AsDepInteger() (DepIntegerInfo, error) {
-	di, err := v.AsDepScalar()
-	if err != nil {
-		return DepIntegerInfo{}, err
-	}
-	if !v.IsDepInteger() {
-		return DepIntegerInfo{}, fmt.Errorf("AsDepInteger: value is %s, not DepInteger", v.VType)
-	}
-	n, err := di.Bound.AsInteger()
-	if err != nil {
-		return DepIntegerInfo{}, fmt.Errorf("AsDepInteger: bound: %w", err)
-	}
-	return DepIntegerInfo{Kind: di.Kind, Bound: n}, nil
-}
-
 // depScalarCheck returns true if `value` satisfies every comparison
 // in info against the corresponding bound. The primary comparison
 // (Kind/Bound) is required; the secondary (Kind2/Bound2) is also
@@ -286,10 +244,25 @@ func formatDepScalar(leaf string, info DepScalarInfo) string {
 		info.Kind2, info.Bound2.String())
 }
 
-// depIntegerCheck is the integer-specific shim; kept for any caller
-// using the int64 form directly.
-func depIntegerCheck(info DepIntegerInfo, n int64) bool {
-	return depScalarCheck(DepScalarInfo{Kind: info.Kind, Bound: NewInteger(info.Bound)}, NewInteger(n))
+// renderDepScalar is the canonical Value-shaped wrapper around
+// formatDepScalar. Every display surface in the engine — Value.String,
+// valToString, formatValueJSON, formatForPrint, aql_error stack
+// rendering — funnels DepScalar values through here so the surface
+// representation stays consistent across paths and the
+// IsDepScalar→AsDepScalar dance happens in exactly one place.
+//
+// Returns the empty string if v isn't a DepScalar so callers can use
+// `if s := renderDepScalar(v); s != ""` as a guarded alternative
+// branch.
+func renderDepScalar(v Value) string {
+	if !v.IsDepScalar() {
+		return ""
+	}
+	info, err := v.AsDepScalar()
+	if err != nil {
+		return ""
+	}
+	return formatDepScalar(dependentLeafFromType(v.VType), info)
 }
 
 // tightenSameSide combines two same-side comparisons (both lower or
@@ -391,4 +364,100 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 		out.Kind, out.Bound = hi.kind, hi.bound
 	}
 	return out, true
+}
+
+// makeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
+// signature variant for a comparison op. `Integer gte 10`, `String lt
+// "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
+// the base-type literal. The result type path is Type/Dependent/Dep<X>
+// where <X> is the leaf of the base type. This sig sorts ahead of the
+// [Any, Any] boolean sig (because its types are more specific), so
+// concrete `5 gte 10` still hits the boolean branch via the second
+// match attempt.
+//
+// Used by RegisterComparison to wire the same single-bound DepScalar
+// constructor onto each of `lt`, `gt`, `lte`, `gte`.
+func makeDepScalarSig(opName string, kind DepKind) NativeSig {
+	return NativeSig{
+		Args: []Type{TScalar, TScalarType},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			// arg1 is the type-literal at the deep position. Reject
+			// non-leaf bases — only the well-known scalar types map
+			// to a Dependent leaf name.
+			if args[1].Data != nil {
+				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
+					opName, args[1].VType.String())
+			}
+			leaf := dependentLeafFromBoundType(args[1].VType)
+			if leaf == "" {
+				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
+					opName, args[1].VType.String())
+			}
+			// Bound must be the same scalar base as the type literal.
+			base, _ := dependentLeafBaseType(leaf)
+			if !args[0].VType.Matches(base) {
+				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
+					opName, args[0].VType.String(), base.String())
+			}
+			return []Value{NewDepScalar(kind, args[0])}, nil
+		},
+		Returns: []Type{TDependent},
+	}
+}
+
+// RegisterBetween registers `between`: a closed-interval DepScalar
+// constructor. `Integer between 10 20` ≡ `(Integer gte 10) tand
+// (Integer lte 20)` but in one word. Sig follows the concatenative
+// mirror pattern: sig[0]=lo (innermost forward), sig[1]=hi, sig[2]=
+// type (deepest, taken from the stack when the type is prefixed).
+//
+// Inverted bounds (lo > hi) collapse to Never; equal bounds form a
+// singleton interval.
+func RegisterBetween(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "between",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TScalar, TScalar, TScalarType},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if args[2].Data != nil {
+						return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
+							args[2].VType.String())
+					}
+					leaf := dependentLeafFromBoundType(args[2].VType)
+					if leaf == "" {
+						return nil, fmt.Errorf("between: unsupported base type %s",
+							args[2].VType.String())
+					}
+					base, _ := dependentLeafBaseType(leaf)
+					if !args[0].VType.Matches(base) {
+						return nil, fmt.Errorf("between: low bound %s does not match base %s",
+							args[0].VType.String(), base.String())
+					}
+					if !args[1].VType.Matches(base) {
+						return nil, fmt.Errorf("between: high bound %s does not match base %s",
+							args[1].VType.String(), base.String())
+					}
+					cmp, err := compareValues(args[0], args[1])
+					if err != nil {
+						return nil, fmt.Errorf("between: %w", err)
+					}
+					if cmp > 0 {
+						return []Value{NewTypeLiteral(TNever)}, nil
+					}
+					info := DepScalarInfo{
+						Kind: DepGTE, Bound: args[0],
+						Kind2: DepLTE, Bound2: args[1],
+					}
+					t, err := NewType("Type/Dependent/Dep" + leaf)
+					if err != nil {
+						return nil, fmt.Errorf("between: %w", err)
+					}
+					return []Value{newValue(t, info)}, nil
+				},
+				Returns: []Type{TDependent},
+			},
+		},
+	})
 }

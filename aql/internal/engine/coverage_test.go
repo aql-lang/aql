@@ -1734,18 +1734,18 @@ func TestResolveTypeNameUnknown(t *testing.T) {
 }
 
 // ========================
-// isTypeValue tests
+// isTypeBody tests
 // ========================
 
 func TestIsTypeValueTypeLiteral(t *testing.T) {
-	if !isTypeValue(NewTypeLiteral(TNumber)) {
+	if !isTypeBody(NewTypeLiteral(TNumber)) {
 		t.Error("type literal should be a type value")
 	}
 }
 
 func TestIsTypeValueDisjunct(t *testing.T) {
 	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
-	if !isTypeValue(disj) {
+	if !isTypeBody(disj) {
 		t.Error("disjunct of types should be a type value")
 	}
 }
@@ -1754,27 +1754,27 @@ func TestIsTypeValueRecordType(t *testing.T) {
 	f := NewOrderedMap()
 	f.Set("x", NewTypeLiteral(TNumber))
 	rt := NewRecordType(f)
-	if !isTypeValue(rt) {
+	if !isTypeBody(rt) {
 		t.Error("record type should be a type value")
 	}
 }
 
 func TestIsTypeValueNotType(t *testing.T) {
-	if isTypeValue(NewInteger(42)) {
+	if isTypeBody(NewInteger(42)) {
 		t.Error("integer should not be a type value")
 	}
 }
 
 func TestIsTypeValueTypedList(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TString))
-	if !isTypeValue(tl) {
+	if !isTypeBody(tl) {
 		t.Error("typed list should be a type value")
 	}
 }
 
 func TestIsTypeValueTypedMap(t *testing.T) {
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
-	if !isTypeValue(tm) {
+	if !isTypeBody(tm) {
 		t.Error("typed map should be a type value")
 	}
 }
@@ -4247,7 +4247,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 
 	// ResolveFieldType should resolve "MyNum" string to the type value
 	result := ResolveFieldType(r, NewString("MyNum"))
-	if !isTypeValue(result) {
+	if !isTypeBody(result) {
 		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
 	}
 }

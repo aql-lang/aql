@@ -7,7 +7,7 @@ import (
 
 func RegisterTypeDef(r *Registry) {
 	validateAndInstall := func(name string, body Value) error {
-		if !isTypeValue(body) {
+		if !isTypeBody(body) {
 			return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
 		}
 		if !IsCapitalisedName(name) {
@@ -95,8 +95,8 @@ func RegisterTypeDef(r *Registry) {
 	})
 }
 
-// isTypeValue reports whether a value is a valid type definition body.
-func isTypeValue(v Value) bool {
+// isTypeBody reports whether a value is a valid type definition body.
+func isTypeBody(v Value) bool {
 	// Type literal (Data==nil): number, string, boolean, any, etc.
 	if v.Data == nil {
 		return true

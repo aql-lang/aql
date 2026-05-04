@@ -261,7 +261,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// carriers before execution. The same dispatch/matching machinery
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
-	if e.registry != nil && e.registry.CheckMode {
+	if e.registry != nil && e.registry.Check.Mode {
 		input = StripToCarriers(input)
 	}
 
@@ -285,15 +285,15 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// Check-mode global step budget: abort the whole run
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
-		if e.registry != nil && e.registry.CheckMode {
-			budget := e.registry.CheckStepBudget
+		if e.registry != nil && e.registry.Check.Mode {
+			budget := e.registry.Check.StepBudget
 			if budget == 0 {
 				budget = DefaultCheckStepBudget
 			}
-			e.registry.CheckStepCount++
-			if e.registry.CheckStepCount > budget {
-				if !e.registry.CheckBudgetTripped {
-					e.registry.CheckBudgetTripped = true
+			e.registry.Check.StepCount++
+			if e.registry.Check.StepCount > budget {
+				if !e.registry.Check.BudgetTripped {
+					e.registry.Check.BudgetTripped = true
 					e.registry.addCheckDiagnostic(CheckDiagnostic{
 						Code:   "step_budget_exceeded",
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
@@ -408,7 +408,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		if !v.Undefined {
 			continue
 		}
-		if e.registry != nil && e.registry.CheckMode {
+		if e.registry != nil && e.registry.Check.Mode {
 			e.stack[i] = NewCarrier(TAny)
 		}
 	}
@@ -727,7 +727,7 @@ func (e *Engine) stepWord(val Value) error {
 		// operation (e.g. a checkModeAssumeSig for `add`) and never
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
-		if e.registry == nil || !e.registry.CheckMode {
+		if e.registry == nil || !e.registry.Check.Mode {
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
@@ -781,7 +781,7 @@ func (e *Engine) stepWord(val Value) error {
 	// through the assume-sig recovery path so the user gets a
 	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
 	if sig != nil && sig.Fallback &&
-		e.registry != nil && e.registry.CheckMode {
+		e.registry != nil && e.registry.Check.Mode {
 		hasTyped := false
 		for i := range fn.Signatures {
 			if !fn.Signatures[i].Fallback {
@@ -801,7 +801,7 @@ func (e *Engine) stepWord(val Value) error {
 		// in place of the word + up to N adjacent arg slots.
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
-		if e.registry != nil && e.registry.CheckMode && len(fn.Signatures) > 0 {
+		if e.registry != nil && e.registry.Check.Mode && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn)
@@ -902,7 +902,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry != nil && e.registry.CheckMode && !match.Sig.RunInCheckMode {
+	if e.registry != nil && e.registry.Check.Mode && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {

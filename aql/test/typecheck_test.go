@@ -1476,7 +1476,7 @@ func TestCheckUndefinedWordHasPosition(t *testing.T) {
 // is restored after `Check` finishes. A second call (using the runtime
 // path through the public API) must error on an undefined word rather
 // than tolerating it. This guards against accidentally stripping the
-// `defer registry.CheckMode = false` reset.
+// `defer registry.Check.Mode = false` reset.
 func TestCheckModeDoesNotLeakAfterReturn(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {

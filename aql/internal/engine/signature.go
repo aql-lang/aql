@@ -100,7 +100,7 @@ type Signature struct {
 	ReturnsFn ReturnsFunc
 
 	// RunInCheckMode, when true, causes the engine to execute this
-	// signature's Handler even when Registry.CheckMode is on. Use it
+	// signature's Handler even when Registry.Check.Mode is on. Use it
 	// for words with registry-level side effects that later words
 	// rely on (def, undef, fn, type, import, export, module). The
 	// handler still runs against carrier args, so it must tolerate

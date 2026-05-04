@@ -1002,9 +1002,9 @@ func (v Value) AsTimeout() (*TimeoutInfo, error) {
 
 // IntervalInfo holds a repeating interval handle.
 type IntervalInfo struct {
-	ID     string       // unique identifier
-	Ms     int64        // interval in milliseconds
-	Ticker *time.Ticker // underlying Go ticker (nil after cancel)
+	ID     string        // unique identifier
+	Ms     int64         // interval in milliseconds
+	Ticker *time.Ticker  // underlying Go ticker (nil after cancel)
 	Done   chan struct{} // closed to signal cancellation
 }
 
@@ -1513,8 +1513,7 @@ func (v Value) String() string {
 		// lattice override makes DepString.Matches(TString) (and the
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
-		ds, _ := v.AsDepScalar()
-		return formatDepScalar(dependentLeafFromType(v.VType), ds)
+		return renderDepScalar(v)
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):
