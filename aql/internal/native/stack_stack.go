@@ -1,8 +1,10 @@
 package native
+
 import (
-	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"fmt"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
+
 func RegisterStackCollect(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
 		Name:              "stack",
@@ -11,7 +13,7 @@ func RegisterStackCollect(r *engine.Registry) {
 			Args:      []engine.Type{engine.TInteger},
 			FullStack: true,
 			Handler: func(args []engine.Value, _ map[string]engine.Value, stack []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				_as0, _ := args[0].AsInteger()
+				_as0, _ := args[0].AsConcreteInteger()
 				n := int(_as0)
 				if n < 0 || n > len(stack) {
 					return nil, fmt.Errorf("stack: count %d out of range (stack depth %d)", n, len(stack))

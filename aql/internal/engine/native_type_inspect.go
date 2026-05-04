@@ -25,7 +25,7 @@ func RegisterInspect(r *Registry) {
 	}
 	// Atom (now Scalar/Atom): inspect by name, same as words.
 	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name, _ := args[0].AsAtom()
+		name, _ := args[0].AsConcreteAtom()
 		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}

@@ -52,7 +52,7 @@ func RegisterSet(r *Registry) {
 		if arr == nil {
 			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
 		}
-		_as0, _ := args[0].AsInteger()
+		_as0, _ := args[0].AsConcreteInteger()
 		idx := int(_as0)
 		if !arr.Set(idx, args[1]) {
 			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
@@ -103,7 +103,7 @@ func RegisterSet(r *Registry) {
 				Args:      []Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   objectHandler,
-				Returns: []Type{},
+				Returns:   []Type{},
 			},
 		},
 	})

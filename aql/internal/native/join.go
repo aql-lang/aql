@@ -13,7 +13,7 @@ import (
 //   - [list]         — joins the list elements with a comma
 func RegisterJoin(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "join",
+		Name:              "join",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
 			{
@@ -46,7 +46,7 @@ func joinSepHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if !ok {
 		return nil, fmt.Errorf("join: expected list, got %T", data)
 	}
-	sep, err := args[1].AsString()
+	sep, err := args[1].AsConcreteString()
 	if err != nil {
 		return nil, fmt.Errorf("join: separator: %w", err)
 	}

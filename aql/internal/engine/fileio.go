@@ -252,7 +252,7 @@ func RegisterFileIO(r *Registry) {
 	// write: [path/string, string] -> [path/string]
 	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content, _ := args[1].AsString()
+		content, _ := args[1].AsConcreteString()
 		result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
 		if err != nil {
 			return result, err
@@ -263,7 +263,7 @@ func RegisterFileIO(r *Registry) {
 	// write: [path/string, string, map] -> [path/string]
 	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content, _ := args[1].AsString()
+		content, _ := args[1].AsConcreteString()
 		enc, format, mode, nl, _ := parseFileOpts(args[2])
 		result, err := doWrite(r, path, content, enc, format, mode, nl)
 		if err != nil {

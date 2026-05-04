@@ -8,9 +8,7 @@ func RegisterPopArgs(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if len(r.ArgsStack) > 0 {
-					r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
-				}
+				r.PopArgs()
 				return nil, nil
 			},
 			Returns: []Type{},

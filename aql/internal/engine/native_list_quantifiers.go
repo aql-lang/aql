@@ -13,7 +13,7 @@ import "fmt"
 //	[]    any   → false
 func RegisterAny(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return []Value{NewBoolean(false)}, nil
 		}
 		list := args[0].AsList()
@@ -51,7 +51,7 @@ func RegisterAny(r *Registry) {
 //	[]      all   → true
 func RegisterAll(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return []Value{NewBoolean(true)}, nil
 		}
 		list := args[0].AsList()
@@ -88,7 +88,7 @@ func RegisterAll(r *Registry) {
 //	[(String tor None) Number] tany → String|None|Number   (flattened)
 func RegisterTany(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("tany: expected a concrete list")
 		}
 		list := args[0].AsList()
@@ -135,7 +135,7 @@ func RegisterTany(r *Registry) {
 //	[1 Integer Number] tall       → 1
 func RegisterTall(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("tall: expected a concrete list")
 		}
 		list := args[0].AsList()

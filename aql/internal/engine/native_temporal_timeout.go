@@ -12,7 +12,7 @@ import (
 func RegisterTimeout(r *Registry) {
 	makeHandler := func(isList bool) Handler {
 		return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			ms, _ := args[0].AsInteger()
+			ms, _ := args[0].AsConcreteInteger()
 			if ms < 0 {
 				return nil, fmt.Errorf("timeout: milliseconds must be non-negative, got %d", ms)
 			}

@@ -110,7 +110,7 @@ func RegisterTrace(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 				}
 				elems := args[0].AsList().Slice()

@@ -1,7 +1,8 @@
 package native
+
 import (
-	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"fmt"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 
 	voxgigstruct "github.com/voxgig/struct"
 )
@@ -19,9 +20,9 @@ func RegisterStringSlice(r *engine.Registry) {
 	// 3-arg: slice start end data
 	// Forward-first: args[0]=start, args[1]=end, args[2]=data (stack).
 	sliceStartEndHandler := func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-		_as0, _ := args[0].AsInteger()
+		_as0, _ := args[0].AsConcreteInteger()
 		start := int(_as0)
-		_as1, _ := args[1].AsInteger()
+		_as1, _ := args[1].AsConcreteInteger()
 		end := int(_as1)
 		data := valueToSliceArg(args[2])
 		result := voxgigstruct.Slice(data, start, end)
@@ -31,7 +32,7 @@ func RegisterStringSlice(r *engine.Registry) {
 	// 2-arg: slice start data
 	// Forward-first: args[0]=start, args[1]=data (stack).
 	sliceStartHandler := func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-		_as2, _ := args[0].AsInteger()
+		_as2, _ := args[0].AsConcreteInteger()
 		start := int(_as2)
 		data := valueToSliceArg(args[1])
 		result := voxgigstruct.Slice(data, start)

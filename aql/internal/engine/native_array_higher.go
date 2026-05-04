@@ -4,7 +4,8 @@ import "fmt"
 
 // RegisterEach registers the "each" word.
 // each applies a quoted code body to each element of a data list, collecting results.
-//   each [dup add] [1 2 3]  →  [2 4 6]
+//
+//	each [dup add] [1 2 3]  →  [2 4 6]
 func RegisterEach(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "each",
@@ -13,7 +14,7 @@ func RegisterEach(r *Registry) {
 			Args:       []Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				if args[0].Data == nil || args[1].Data == nil {
+				if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("each: expected concrete lists")
 				}
 				bodySlice := args[0].AsList().Slice()
@@ -128,7 +129,7 @@ func RegisterFold(r *Registry) {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 					// args[0]=init, args[1]=body, args[2]=data
-					if args[1].Data == nil || args[2].Data == nil {
+					if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
 						return nil, fmt.Errorf("fold: expected concrete lists")
 					}
 					init := args[0]
@@ -156,7 +157,7 @@ func RegisterFold(r *Registry) {
 				Args:       []Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-					if args[0].Data == nil || args[1].Data == nil {
+					if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 						return nil, fmt.Errorf("fold: expected concrete lists")
 					}
 					bodySlice := args[0].AsList().Slice()
@@ -213,7 +214,8 @@ func doFold(reg *Registry, acc Value, bodySlice []Value, data ReadList) ([]Value
 // RegisterScan registers the "scan" word.
 // scan is a running reduction: first element is the initial accumulator,
 // each step produces an intermediate result.
-//   scan [add] [1 2 3 4]  →  [1 3 6 10]
+//
+//	scan [add] [1 2 3 4]  →  [1 3 6 10]
 func RegisterScan(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "scan",
@@ -222,7 +224,7 @@ func RegisterScan(r *Registry) {
 			Args:       []Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				if args[0].Data == nil || args[1].Data == nil {
+				if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("scan: expected concrete lists")
 				}
 				bodySlice := args[0].AsList().Slice()
@@ -270,7 +272,8 @@ func RegisterScan(r *Registry) {
 // RegisterOuter registers the "outer" word.
 // outer applies an operation body to every pair (l, r) from left and right arrays,
 // producing a 2D nested list.
-//   outer [add] [1 2] [10 20]  →  [[11 21] [12 22]]
+//
+//	outer [add] [1 2] [10 20]  →  [[11 21] [12 22]]
 func RegisterOuter(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "outer",
@@ -279,35 +282,35 @@ func RegisterOuter(r *Registry) {
 			Args:       []Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil {
-				return nil, fmt.Errorf("outer: expected concrete lists")
-			}
-			bodySlice := args[0].AsList().Slice()
-			left := args[1].AsList()
-			right := args[2].AsList()
-
-			rows := make([]Value, left.Len())
-			for i := 0; i < left.Len(); i++ {
-				row := make([]Value, right.Len())
-				for j := 0; j < right.Len(); j++ {
-					input := make([]Value, len(bodySlice)+2)
-					input[0] = left.Get(i)
-					input[1] = right.Get(j)
-					copy(input[2:], bodySlice)
-
-					sub := New(reg)
-					res, err := sub.Run(input)
-					if err != nil {
-						return nil, fmt.Errorf("outer: (%d,%d): %w", i, j, err)
-					}
-					if len(res) == 0 {
-						return nil, fmt.Errorf("outer: (%d,%d): body produced no result", i, j)
-					}
-					row[j] = res[len(res)-1]
+				if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) {
+					return nil, fmt.Errorf("outer: expected concrete lists")
 				}
-				rows[i] = NewList(row)
-			}
-			return []Value{NewList(rows)}, nil
+				bodySlice := args[0].AsList().Slice()
+				left := args[1].AsList()
+				right := args[2].AsList()
+
+				rows := make([]Value, left.Len())
+				for i := 0; i < left.Len(); i++ {
+					row := make([]Value, right.Len())
+					for j := 0; j < right.Len(); j++ {
+						input := make([]Value, len(bodySlice)+2)
+						input[0] = left.Get(i)
+						input[1] = right.Get(j)
+						copy(input[2:], bodySlice)
+
+						sub := New(reg)
+						res, err := sub.Run(input)
+						if err != nil {
+							return nil, fmt.Errorf("outer: (%d,%d): %w", i, j, err)
+						}
+						if len(res) == 0 {
+							return nil, fmt.Errorf("outer: (%d,%d): body produced no result", i, j)
+						}
+						row[j] = res[len(res)-1]
+					}
+					rows[i] = NewList(row)
+				}
+				return []Value{NewList(rows)}, nil
 			},
 			ReturnsFn: func(args []Value) []Value {
 				leftElem := dataListElemType(args[1])
@@ -329,7 +332,8 @@ func RegisterOuter(r *Registry) {
 // inner performs an inner-product-style operation using a pair-op and an aggregate-op.
 // For 1D vectors: zip with pair-op, then fold with agg-op.
 // For 2D matrices: matrix inner product (left rows × right columns).
-//   inner [mul] [add] [1 2 3] [4 5 6]  →  32  (dot product)
+//
+//	inner [mul] [add] [1 2 3] [4 5 6]  →  32  (dot product)
 func RegisterInner(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "inner",
@@ -338,108 +342,108 @@ func RegisterInner(r *Registry) {
 			Args:       []Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-			if args[0].Data == nil || args[1].Data == nil || args[2].Data == nil || args[3].Data == nil {
-				return nil, fmt.Errorf("inner: expected concrete lists")
-			}
-			pairOp := args[0].AsList().Slice()
-			aggOp := args[1].AsList().Slice()
-			left := args[2].AsList()
-			right := args[3].AsList()
-
-			// 1D case: zip then fold
-			if left.Len() > 0 && !left.Get(0).VType.Matches(TList) {
-				if left.Len() != right.Len() {
-					return nil, fmt.Errorf("inner: vectors must have same length")
+				if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) || !IsConcrete(args[3]) {
+					return nil, fmt.Errorf("inner: expected concrete lists")
 				}
-				// Apply pair-op to each pair
-				paired := make([]Value, left.Len())
-				for i := 0; i < left.Len(); i++ {
-					input := make([]Value, len(pairOp)+2)
-					input[0] = left.Get(i)
-					input[1] = right.Get(i)
-					copy(input[2:], pairOp)
-					sub := New(reg)
-					res, err := sub.Run(input)
-					if err != nil {
-						return nil, fmt.Errorf("inner: pair %d: %w", i, err)
-					}
-					if len(res) == 0 {
-						return nil, fmt.Errorf("inner: pair %d: no result", i)
-					}
-					paired[i] = res[len(res)-1]
-				}
-				// Fold with agg-op
-				acc := paired[0]
-				for i := 1; i < len(paired); i++ {
-					input := make([]Value, len(aggOp)+2)
-					input[0] = acc
-					input[1] = paired[i]
-					copy(input[2:], aggOp)
-					sub := New(reg)
-					res, err := sub.Run(input)
-					if err != nil {
-						return nil, fmt.Errorf("inner: fold %d: %w", i, err)
-					}
-					if len(res) == 0 {
-						return nil, fmt.Errorf("inner: fold %d: no result", i)
-					}
-					acc = res[len(res)-1]
-				}
-				return []Value{acc}, nil
-			}
+				pairOp := args[0].AsList().Slice()
+				aggOp := args[1].AsList().Slice()
+				left := args[2].AsList()
+				right := args[3].AsList()
 
-			// 2D case: matrix inner product
-			// left is list of rows, right is list of rows
-			// Need to transpose right to get columns
-			rightCols := transposeListOfLists(right)
-
-			rows := make([]Value, left.Len())
-			for i := 0; i < left.Len(); i++ {
-				leftRow := left.Get(i).AsList()
-				cols := make([]Value, len(rightCols))
-				for j := 0; j < len(rightCols); j++ {
-					rightCol := rightCols[j]
-					if leftRow.Len() != len(rightCol) {
-						return nil, fmt.Errorf("inner: dimension mismatch")
+				// 1D case: zip then fold
+				if left.Len() > 0 && !left.Get(0).VType.Matches(TList) {
+					if left.Len() != right.Len() {
+						return nil, fmt.Errorf("inner: vectors must have same length")
 					}
-					// Pair then fold
-					paired := make([]Value, leftRow.Len())
-					for k := 0; k < leftRow.Len(); k++ {
+					// Apply pair-op to each pair
+					paired := make([]Value, left.Len())
+					for i := 0; i < left.Len(); i++ {
 						input := make([]Value, len(pairOp)+2)
-						input[0] = leftRow.Get(k)
-						input[1] = rightCol[k]
+						input[0] = left.Get(i)
+						input[1] = right.Get(i)
 						copy(input[2:], pairOp)
 						sub := New(reg)
 						res, err := sub.Run(input)
 						if err != nil {
-							return nil, err
+							return nil, fmt.Errorf("inner: pair %d: %w", i, err)
 						}
 						if len(res) == 0 {
-							return nil, fmt.Errorf("inner: pair (%d,%d,%d): no result", i, j, k)
+							return nil, fmt.Errorf("inner: pair %d: no result", i)
 						}
-						paired[k] = res[len(res)-1]
+						paired[i] = res[len(res)-1]
 					}
+					// Fold with agg-op
 					acc := paired[0]
-					for k := 1; k < len(paired); k++ {
+					for i := 1; i < len(paired); i++ {
 						input := make([]Value, len(aggOp)+2)
 						input[0] = acc
-						input[1] = paired[k]
+						input[1] = paired[i]
 						copy(input[2:], aggOp)
 						sub := New(reg)
 						res, err := sub.Run(input)
 						if err != nil {
-							return nil, err
+							return nil, fmt.Errorf("inner: fold %d: %w", i, err)
 						}
 						if len(res) == 0 {
-							return nil, fmt.Errorf("inner: fold (%d,%d,%d): no result", i, j, k)
+							return nil, fmt.Errorf("inner: fold %d: no result", i)
 						}
 						acc = res[len(res)-1]
 					}
-					cols[j] = acc
+					return []Value{acc}, nil
 				}
-				rows[i] = NewList(cols)
-			}
-			return []Value{NewList(rows)}, nil
+
+				// 2D case: matrix inner product
+				// left is list of rows, right is list of rows
+				// Need to transpose right to get columns
+				rightCols := transposeListOfLists(right)
+
+				rows := make([]Value, left.Len())
+				for i := 0; i < left.Len(); i++ {
+					leftRow := left.Get(i).AsList()
+					cols := make([]Value, len(rightCols))
+					for j := 0; j < len(rightCols); j++ {
+						rightCol := rightCols[j]
+						if leftRow.Len() != len(rightCol) {
+							return nil, fmt.Errorf("inner: dimension mismatch")
+						}
+						// Pair then fold
+						paired := make([]Value, leftRow.Len())
+						for k := 0; k < leftRow.Len(); k++ {
+							input := make([]Value, len(pairOp)+2)
+							input[0] = leftRow.Get(k)
+							input[1] = rightCol[k]
+							copy(input[2:], pairOp)
+							sub := New(reg)
+							res, err := sub.Run(input)
+							if err != nil {
+								return nil, err
+							}
+							if len(res) == 0 {
+								return nil, fmt.Errorf("inner: pair (%d,%d,%d): no result", i, j, k)
+							}
+							paired[k] = res[len(res)-1]
+						}
+						acc := paired[0]
+						for k := 1; k < len(paired); k++ {
+							input := make([]Value, len(aggOp)+2)
+							input[0] = acc
+							input[1] = paired[k]
+							copy(input[2:], aggOp)
+							sub := New(reg)
+							res, err := sub.Run(input)
+							if err != nil {
+								return nil, err
+							}
+							if len(res) == 0 {
+								return nil, fmt.Errorf("inner: fold (%d,%d,%d): no result", i, j, k)
+							}
+							acc = res[len(res)-1]
+						}
+						cols[j] = acc
+					}
+					rows[i] = NewList(cols)
+				}
+				return []Value{NewList(rows)}, nil
 			},
 			ReturnsFn: func(args []Value) []Value {
 				leftElem := dataListElemType(args[2])

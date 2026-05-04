@@ -8,14 +8,14 @@ import (
 func RegisterNormalize(r *Registry) {
 	// normalize: [string] -> [string]
 	normalizeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as0, _ := args[0].AsString()
+		_as0, _ := args[0].AsConcreteString()
 		return doNormalize(_as0, strOpts{form: "NFC", eol: "preserve"})
 	}
 
 	// normalize: [string, map] -> [string]
 	normalizeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
-		_as1, _ := args[0].AsString()
+		_as1, _ := args[0].AsConcreteString()
 		return doNormalize(_as1, opts)
 	}
 

@@ -19,7 +19,7 @@ func RegisterError(r *Registry) {
 	// With ForwardPrecedence, the list (forward) fills sig[0],
 	// the error (stack) fills sig[1].
 	listHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("error: handler must be a concrete list, got type literal")
 		}
 		sub := New(r)
@@ -39,7 +39,7 @@ func RegisterError(r *Registry) {
 				Args:       []Type{TList, TError},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    listHandler,
-				Returns: []Type{TError},
+				Returns:    []Type{TError},
 			},
 		},
 	})

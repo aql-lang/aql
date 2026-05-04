@@ -13,7 +13,7 @@ func RegisterIota(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				_as0, _ := args[0].AsInteger()
+				_as0, _ := args[0].AsConcreteInteger()
 				n := int(_as0)
 				if n < 0 {
 					return nil, fmt.Errorf("iota: negative count %d", n)
@@ -39,7 +39,7 @@ func RegisterShape(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("shape: expected concrete list")
 				}
 				dims := computeShape(args[0])
@@ -85,7 +85,7 @@ func RegisterRank(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("rank: expected concrete list")
 				}
 				dims := computeShape(args[0])
@@ -104,7 +104,7 @@ func RegisterLength(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("length: expected concrete list")
 				}
 				list := args[0].AsList()
@@ -124,10 +124,10 @@ func RegisterReshape(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("reshape: expected concrete shape list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("reshape: expected concrete data list")
 				}
 				shapeList := args[0].AsList()
@@ -204,7 +204,7 @@ func RegisterArrFlatten(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("arr-flatten: expected concrete list")
 				}
 				flat := flattenList(args[0])
@@ -223,7 +223,7 @@ func RegisterArrTranspose(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("arr-transpose: expected concrete list")
 				}
 				outer := args[0].AsList()
@@ -265,7 +265,7 @@ func RegisterReverse(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("reverse: expected concrete list")
 				}
 				list := args[0].AsList()
@@ -290,10 +290,10 @@ func RegisterTake(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TInteger, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("take: expected concrete list")
 				}
-				_as2, _ := args[0].AsInteger()
+				_as2, _ := args[0].AsConcreteInteger()
 				n := int(_as2)
 				list := args[1].AsList()
 				length := list.Len()
@@ -332,10 +332,10 @@ func RegisterShed(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TInteger, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("shed: expected concrete list")
 				}
-				_as3, _ := args[0].AsInteger()
+				_as3, _ := args[0].AsConcreteInteger()
 				n := int(_as3)
 				list := args[1].AsList()
 				length := list.Len()
@@ -373,7 +373,7 @@ func RegisterWhere(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("where: expected concrete list")
 				}
 				list := args[0].AsList()
@@ -402,7 +402,7 @@ func RegisterUnique(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("unique: expected concrete list")
 				}
 				list := args[0].AsList()
@@ -434,7 +434,7 @@ func RegisterGrade(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("grade: expected concrete list")
 				}
 				list := args[0].AsList()
@@ -486,10 +486,10 @@ func RegisterAt(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("at: expected concrete indices list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("at: expected concrete data list")
 				}
 				indices := args[0].AsList()
@@ -520,10 +520,10 @@ func RegisterSortby(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("sortby: expected concrete keys list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("sortby: expected concrete data list")
 				}
 				keys := args[0].AsList()
@@ -559,10 +559,10 @@ func RegisterMember(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("member: expected concrete needles list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("member: expected concrete haystack list")
 				}
 				needles := args[0].AsList()
@@ -591,10 +591,10 @@ func RegisterArrIndexof(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("arr-indexof: expected concrete needles list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("arr-indexof: expected concrete haystack list")
 				}
 				needles := args[0].AsList()
@@ -635,10 +635,10 @@ func RegisterGroup(r *Registry) {
 				// Two-arg: Args[0] = keys, Args[1] = values
 				Args: []Type{TList, TList},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if args[0].Data == nil {
+					if !IsConcrete(args[0]) {
 						return nil, fmt.Errorf("group: expected concrete keys list")
 					}
-					if args[1].Data == nil {
+					if !IsConcrete(args[1]) {
 						return nil, fmt.Errorf("group: expected concrete values list")
 					}
 					keys := args[0].AsList()
@@ -667,7 +667,7 @@ func RegisterGroup(r *Registry) {
 				// Single-arg: group by value, return map of value -> list of indices
 				Args: []Type{TList},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if args[0].Data == nil {
+					if !IsConcrete(args[0]) {
 						return nil, fmt.Errorf("group: expected concrete list")
 					}
 					list := args[0].AsList()
@@ -701,10 +701,10 @@ func RegisterReplicate(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("replicate: expected concrete counts list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("replicate: expected concrete data list")
 				}
 				counts := args[0].AsList()
@@ -743,10 +743,10 @@ func RegisterExpand(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("expand: expected concrete mask list")
 				}
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("expand: expected concrete data list")
 				}
 				mask := args[0].AsList()
@@ -780,10 +780,10 @@ func RegisterWindow(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TInteger, TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[1].Data == nil {
+				if !IsConcrete(args[1]) {
 					return nil, fmt.Errorf("window: expected concrete list")
 				}
-				_as6, _ := args[0].AsInteger()
+				_as6, _ := args[0].AsConcreteInteger()
 				size := int(_as6)
 				list := args[1].AsList()
 				length := list.Len()
@@ -822,7 +822,7 @@ func RegisterPairs(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("pairs: expected concrete list")
 				}
 				list := args[0].AsList()

@@ -278,6 +278,66 @@ extend the helper surface rather than reaching into the field.
 Future namespace changes (single store, scoped types, persistent
 overlays) only need to update the helpers.
 
+## Helper API discipline
+
+The engine consolidates several distributed implicit contracts behind
+helper APIs in `internal/engine/util.go`. Use the helpers rather than
+the underlying state. Adding direct field access regresses the
+consolidation and will be flagged in code review.
+
+**Concrete-value guards** (panic-prevention, type-literal vs concrete):
+- `IsTypeLiteral(v)` — true if `Data == nil` and not a carrier and not None.
+- `IsConcrete(v)` — true if `Data != nil` and not a carrier.
+- `RequireConcreteList(v, op) (ReadList, error)` — unwraps a list-typed
+  Value or returns an error when the value is a type literal/carrier.
+- `RequireConcreteMap(v, op) (ReadMap, error)` — same for maps.
+
+Handlers that take `TList`/`TMap`/`TAny` args should guard with
+`!IsConcrete(args[i])` (or use the `RequireConcreteX` helpers) before
+calling `AsList()`/`AsMap()` — otherwise carriers and type literals
+panic on `.Len()`.
+
+**DepScalar-rejecting accessors**:
+- `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteDecimal()`,
+  `v.AsConcreteBoolean()`, `v.AsConcreteAtom()` — reject DepScalar
+  payloads with a clear error rather than silently returning the zero
+  value. Always prefer these over the bare `AsX()` accessors when the
+  arg comes from a sig-matched value (a `TString` slot can secretly
+  hold a `DepString` constraint).
+
+**Check mode**:
+- `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
+  the `r != nil && r.Check.Mode` nil-guarded variants.
+- `r.BeginCheckMode() func()` — entry-side helper; resets per-pass
+  state and returns a deferred-cleanup function. Use as
+  `defer r.BeginCheckMode()()` in the analyser entry point.
+
+**Error construction**:
+- `r.AqlError(code, detail, word)` — handler-side error constructor;
+  picks up `r.Source` automatically. Replaces the recurring
+  `makeAqlError(code, detail, name, r.Source, "")` pattern.
+- `r.AqlErrorHint(code, detail, word, hint)` — same with an explicit
+  hint string. The engine-internal helpers (`signatureError`,
+  `insufficientArgsError`, etc. in `engine.go`) layer above these
+  with engine-specific source resolution.
+
+**Args stack** (per-fn-call args list, used by the `args` word):
+- `r.PushArgs(list)` / `r.PopArgs()` / `r.TopArgs() (Value, bool)`.
+  The underlying `argsStack` field is unexported.
+
+**Context stack** (scoped Store layers for `ctx-set`/`ctx-get`/etc.):
+- `r.PushContext(parent)` — push a new copy-on-write child layer.
+- `r.PushExistingContext(ctx)` — push an existing Store without
+  wrapping (rare; used by module loading to inherit the parent's ctx).
+- `r.PopContext()`, `r.Context()` (returns the data map),
+  `r.ContextStore()` (returns the StoreInstanceInfo),
+  `r.UpdateCtxStoreChain(orig, new)`.
+
+**Pos threading**:
+- `WithPos(v, src)` — return v with Pos copied from src. Use when a
+  handler constructs a new Value from an input — error reporting
+  downstream then has the source location.
+
 ## Undefined Words (CRITICAL)
 
 An undefined word reaching the pointer is an **error**, not a value.

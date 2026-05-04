@@ -152,7 +152,7 @@ func RegisterDef(r *Registry) {
 		// the binding. The per-value test (does 5 lie in [10, ∞)?)
 		// stays runtime-only; the analyser only verifies the
 		// shape.
-		if r.Check.Mode && constraint.IsDepScalar() {
+		if r.IsCheckMode() && constraint.IsDepScalar() {
 			leaf := dependentLeafFromType(constraint.VType)
 			if base, ok := dependentLeafBaseType(leaf); ok && body.VType.Matches(base) {
 				installDef(r, name, body)
@@ -260,12 +260,12 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 								}
 							}
 						}
-						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
+						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
 					if top.VType.Equal(TFunction) {
-						return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
+						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
-					return nil, makeAqlError("signature_error", "no matching signature for "+name, name, r.Source, "")
+					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 				},
 			})
 		}

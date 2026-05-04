@@ -439,6 +439,130 @@ func (r *Registry) RestoreTypeStacks(snap map[string][]Value) {
 	r.types = snap
 }
 
+// --- ArgsStack helpers --------------------------------------------------
+
+// PushArgs pushes an args list onto the fn-call args stack. Used by
+// fn-body invocation paths (CallAQL, execFnDefSig) to make args
+// available to the body via the `args` word.
+func (r *Registry) PushArgs(args Value) {
+	if r == nil {
+		return
+	}
+	r.argsStack = append(r.argsStack, args)
+}
+
+// PopArgs pops the top args entry. Returns true if there was an entry
+// to pop. Mirrors the PopDef shape — silent on empty rather than
+// panicking.
+func (r *Registry) PopArgs() bool {
+	if r == nil || len(r.argsStack) == 0 {
+		return false
+	}
+	r.argsStack = r.argsStack[:len(r.argsStack)-1]
+	return true
+}
+
+// TopArgs returns the current top args entry (set by the active fn
+// call). Returns zero Value and false if the stack is empty.
+func (r *Registry) TopArgs() (Value, bool) {
+	if r == nil || len(r.argsStack) == 0 {
+		return Value{}, false
+	}
+	return r.argsStack[len(r.argsStack)-1], true
+}
+
+// --- Context-stack helpers (for the rare push-existing-ctx case) -------
+
+// PushExistingContext appends an existing StoreInstanceInfo to the
+// context stack without wrapping it in a new child layer. Used by
+// module loading to inherit the parent's context as the module's base
+// before the module pushes its own copy-on-write layer. The common
+// case (creating a fresh child) is `PushContext`.
+func (r *Registry) PushExistingContext(ctx *StoreInstanceInfo) {
+	if r == nil || ctx == nil {
+		return
+	}
+	r.ctxStack = append(r.ctxStack, ctx)
+}
+
+// --- CheckMode helpers --------------------------------------------------
+
+// IsCheckMode reports whether the registry is currently in check
+// (analyser) mode. Use this in handlers that need to short-circuit
+// real work to avoid side effects during static analysis. When false,
+// the handler should proceed as normal.
+func (r *Registry) IsCheckMode() bool {
+	return r != nil && r.Check.Mode
+}
+
+// CheckModeSkipsSideEffect reports whether check mode should suppress
+// a side-effecting operation. Equivalent to IsCheckMode for now —
+// kept distinct so the policy can be refined per category later
+// (file write vs network vs store mutation) without churning every
+// call site again.
+func (r *Registry) CheckModeSkipsSideEffect() bool {
+	return r.IsCheckMode()
+}
+
+// BeginCheckMode enables check mode and resets the per-pass state
+// (diagnostics, step count, budget flag, defs-installed/used,
+// context-type tracking). Returns a function that switches mode off
+// when called — typically via `defer`. Diagnostics gathered during
+// the pass remain accessible on r.Check.Diagnostics for the caller
+// to inspect after the deferred function runs.
+func (r *Registry) BeginCheckMode() func() {
+	if r == nil {
+		return func() {}
+	}
+	r.Check.Mode = true
+	r.Check.Diagnostics = nil
+	r.Check.StepCount = 0
+	r.Check.BudgetTripped = false
+	r.Check.DefsInstalled = nil
+	r.Check.DefsUsed = nil
+	r.Check.ContextTypes = nil
+	return func() {
+		r.Check.Mode = false
+	}
+}
+
+// --- Error construction -------------------------------------------------
+
+// AqlError constructs an AqlError that picks up the registry's source
+// text automatically. Replaces the recurring `makeAqlError(code,
+// detail, name, r.Source, "")` pattern across handlers — handlers
+// just call `r.AqlError("signature_error", "no match for "+name,
+// name)` and source threading is handled centrally.
+//
+// Use AqlErrorHint when a hint string is needed.
+func (r *Registry) AqlError(code, detail, word string) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlError(code, detail, word, src, "")
+}
+
+// AqlErrorHint is AqlError with an explicit hint string.
+func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlError(code, detail, word, src, hint)
+}
+
+// --- Pos threading ------------------------------------------------------
+
+// WithPos returns v with its Pos copied from src. Use when a handler
+// constructs a new Value from an input — error reporting downstream
+// then has the source location even though the new value is
+// structurally unrelated to the input.
+func WithPos(v, src Value) Value {
+	v.Pos = src.Pos
+	return v
+}
+
 // ResolveTypedName resolves a name to its type value through the
 // type-resolution chain used by the typed-def handler and `is`:
 // r.types first (the dedicated type registry), then DefStacks (legacy

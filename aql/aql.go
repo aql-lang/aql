@@ -151,14 +151,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	}
 
 	a.registry.Source = src
-	a.registry.Check.Mode = true
-	a.registry.Check.Diagnostics = nil
-	a.registry.Check.StepCount = 0
-	a.registry.Check.BudgetTripped = false
-	a.registry.Check.DefsInstalled = nil
-	a.registry.Check.DefsUsed = nil
-	a.registry.Check.ContextTypes = nil
-	defer func() { a.registry.Check.Mode = false }()
+	defer a.registry.BeginCheckMode()()
 
 	eng := engine.NewTop(a.registry)
 	eng.SetSource(src)
@@ -223,7 +216,7 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 //	a.Register("double", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
 //	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-//	        n := args[0].AsInteger()
+//	        n := args[0].AsConcreteInteger()
 //	        return []aql.Value{aql.NewInteger(n * 2)}, nil
 //	    },
 //	})
@@ -240,7 +233,7 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 //	a.RegisterStackOnly("neg", aql.Signature{
 //	    Args: []aql.Type{aql.TInteger},
 //	    Handler: func(args []aql.Value, _ map[string]aql.Value, _ []aql.Value, _ *engine.Registry) ([]aql.Value, error) {
-//	        n := args[0].AsInteger()
+//	        n := args[0].AsConcreteInteger()
 //	        return []aql.Value{aql.NewInteger(-n)}, nil
 //	    },
 //	})

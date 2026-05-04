@@ -663,7 +663,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
-			r.ArgsStack = append(r.ArgsStack, argsList)
+			r.PushArgs(argsList)
 
 			unnamedCount := 0
 			for i, p := range s.Params {
@@ -835,7 +835,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
-	r.ArgsStack = append(r.ArgsStack, argsList)
+	r.PushArgs(argsList)
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -864,9 +864,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 
 	// Cleanup: pop args stack, undef named params, then clean up
 	// any defs that were created during body execution.
-	if len(r.ArgsStack) > 0 {
-		r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
-	}
+	r.PopArgs()
 	for i := len(names) - 1; i >= 0; i-- {
 		uninstallDef(r, names[i])
 	}

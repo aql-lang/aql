@@ -1,7 +1,8 @@
 package native
+
 import (
-	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"fmt"
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 	"time"
 )
 
@@ -12,7 +13,7 @@ import (
 func RegisterInterval(r *engine.Registry) {
 	makeHandler := func(isList bool) engine.Handler {
 		return func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			ms, _ := args[0].AsInteger()
+			ms, _ := args[0].AsConcreteInteger()
 			if ms <= 0 {
 				return nil, fmt.Errorf("interval: milliseconds must be positive, got %d", ms)
 			}

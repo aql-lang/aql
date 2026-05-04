@@ -5,14 +5,14 @@ import "strings"
 func RegisterEscape(r *Registry) {
 	// escape: [string] -> [string]
 	escapeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as0, _ := args[0].AsString()
+		_as0, _ := args[0].AsConcreteString()
 		return doEscape(_as0, strOpts{tgt: "sh", quote: "none"})
 	}
 
 	// escape: [string, map] -> [string]
 	escapeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[1])
-		_as1, _ := args[0].AsString()
+		_as1, _ := args[0].AsConcreteString()
 		return doEscape(_as1, opts)
 	}
 

@@ -10,10 +10,11 @@ func RegisterArgs(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if len(r.ArgsStack) == 0 {
+				top, ok := r.TopArgs()
+				if !ok {
 					return nil, fmt.Errorf("args: not inside a function")
 				}
-				return []Value{r.ArgsStack[len(r.ArgsStack)-1]}, nil
+				return []Value{top}, nil
 			},
 			Returns: []Type{TList},
 		}},

@@ -10,8 +10,8 @@ func RegisterPad(r *Registry) {
 	// Forward-first: args[0]=width (forward), args[1]=string (stack).
 	// Usage: "ab" pad 5 → "ab   "
 	padHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as1, _ := args[1].AsString()
-		_as0, _ := args[0].AsInteger()
+		_as1, _ := args[1].AsConcreteString()
+		_as0, _ := args[0].AsConcreteInteger()
 		return doPad(_as1, _as0, strOpts{side: "right", fill: " "})
 	}
 
@@ -19,7 +19,7 @@ func RegisterPad(r *Registry) {
 	// Forward-first: args[0]=width (forward), args[1]=opts (forward), args[2]=string (stack).
 	// Usage: "ab" pad 5 {side:"left" fill:"0"} → "000ab"
 	padOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[1].Data == nil {
+		if !IsConcrete(args[1]) {
 			return nil, fmt.Errorf("pad: options must be a concrete map, got type literal")
 		}
 		opts := parseStrOpts(args[1])
@@ -32,8 +32,8 @@ func RegisterPad(r *Registry) {
 				opts.side = "right"
 			}
 		}
-		_as3, _ := args[2].AsString()
-		_as2, _ := args[0].AsInteger()
+		_as3, _ := args[2].AsConcreteString()
+		_as2, _ := args[0].AsConcreteInteger()
 		return doPad(_as3, _as2, opts)
 	}
 

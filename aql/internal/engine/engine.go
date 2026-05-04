@@ -268,7 +268,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// carriers before execution. The same dispatch/matching machinery
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
-	if e.registry != nil && e.registry.Check.Mode {
+	if e.registry.IsCheckMode() {
 		input = StripToCarriers(input)
 	}
 
@@ -292,7 +292,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// Check-mode global step budget: abort the whole run
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
-		if e.registry != nil && e.registry.Check.Mode {
+		if e.registry.IsCheckMode() {
 			budget := e.registry.Check.StepBudget
 			if budget == 0 {
 				budget = DefaultCheckStepBudget
@@ -415,7 +415,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		if !v.Undefined {
 			continue
 		}
-		if e.registry != nil && e.registry.Check.Mode {
+		if e.registry.IsCheckMode() {
 			e.stack[i] = NewCarrier(TAny)
 		}
 	}
@@ -744,7 +744,7 @@ func (e *Engine) stepWord(val Value) error {
 		// operation (e.g. a checkModeAssumeSig for `add`) and never
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
-		if e.registry == nil || !e.registry.Check.Mode {
+		if !e.registry.IsCheckMode() {
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
@@ -797,8 +797,7 @@ func (e *Engine) stepWord(val Value) error {
 	// typed signatures exist), treat it as an unmatched call and go
 	// through the assume-sig recovery path so the user gets a
 	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
-	if sig != nil && sig.Fallback &&
-		e.registry != nil && e.registry.Check.Mode {
+	if sig != nil && sig.Fallback && e.registry.IsCheckMode() {
 		hasTyped := false
 		for i := range fn.Signatures {
 			if !fn.Signatures[i].Fallback {
@@ -818,7 +817,7 @@ func (e *Engine) stepWord(val Value) error {
 		// in place of the word + up to N adjacent arg slots.
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
-		if e.registry != nil && e.registry.Check.Mode && len(fn.Signatures) > 0 {
+		if e.registry.IsCheckMode() && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn)
@@ -919,7 +918,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry != nil && e.registry.Check.Mode && !match.Sig.RunInCheckMode {
+	if e.registry.IsCheckMode() && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
@@ -1659,7 +1658,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.ArgsStack = append(e.registry.ArgsStack, NewList(argsCopy))
+	e.registry.PushArgs(NewList(argsCopy))
 
 	var names []string
 	unnamedCount := 0

@@ -265,7 +265,7 @@ func registerTimeDate(r *engine.Registry) {
 	r.Register("time-date", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -283,7 +283,7 @@ func registerTimeDateTime(r *engine.Registry) {
 	r.Register("time-datetime", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -307,7 +307,7 @@ func registerTimeInstant(r *engine.Registry) {
 	r.Register("time-instant", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -331,7 +331,7 @@ func registerTimeTimeOfDay(r *engine.Registry) {
 	r.Register("time-time-of-day", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -354,7 +354,7 @@ func registerTimeTz(r *engine.Registry) {
 	r.Register("time-tz", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -372,7 +372,7 @@ func registerTimeUnix(r *engine.Registry) {
 	r.Register("time-unix", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -386,7 +386,7 @@ func registerTimeUnixMs(r *engine.Registry) {
 	r.Register("time-unix-ms", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -400,7 +400,7 @@ func registerTimeUnixNs(r *engine.Registry) {
 	r.Register("time-unix-ns", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -653,7 +653,7 @@ func registerFormat(r *engine.Registry) {
 	r.Register("format", engine.Signature{
 		Args: []engine.Type{engine.TDate, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			layout, err := args[1].AsString()
+			layout, err := args[1].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -680,7 +680,7 @@ func registerAddDays(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := extractTime(args[0])
-			n, err := args[1].AsInteger()
+			n, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -695,7 +695,7 @@ func registerAddMonths(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := extractTime(args[0])
-			n, err := args[1].AsInteger()
+			n, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -710,7 +710,7 @@ func registerAddYears(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := extractTime(args[0])
-			n, err := args[1].AsInteger()
+			n, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -726,7 +726,7 @@ func registerDurYears(r *engine.Registry) {
 	r.Register("years", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -740,7 +740,7 @@ func registerDurMonths(r *engine.Registry) {
 	r.Register("months", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -754,7 +754,7 @@ func registerDurWeeks(r *engine.Registry) {
 	r.Register("weeks", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -768,7 +768,7 @@ func registerDurDays(r *engine.Registry) {
 	r.Register("days", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n, err := args[0].AsInteger()
+			n, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -867,15 +867,15 @@ func registerCalDur(r *engine.Registry) {
 	r.Register("cal-dur", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			y, err := args[2].AsInteger()
+			y, err := args[2].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			m, err := args[1].AsInteger()
+			m, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			d, err := args[0].AsInteger()
+			d, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -970,7 +970,7 @@ func registerTimeDuration(r *engine.Registry) {
 	r.Register("time-duration", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -1343,7 +1343,7 @@ func registerStartOf(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := extractTime(args[0])
-			unit, err := args[1].AsString()
+			unit, err := args[1].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -1380,7 +1380,7 @@ func registerEndOf(r *engine.Registry) {
 		Args: []engine.Type{engine.TDate, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			t := extractTime(args[0])
-			unit, err := args[1].AsString()
+			unit, err := args[1].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -1518,11 +1518,11 @@ func registerParseDate(r *engine.Registry) {
 	r.Register("parse-date", engine.Signature{
 		Args: []engine.Type{engine.TString, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[1].AsString()
+			s, err := args[1].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
-			layout, err := args[0].AsString()
+			layout, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -1541,11 +1541,11 @@ func registerParseDatetime(r *engine.Registry) {
 	r.Register("parse-datetime", engine.Signature{
 		Args: []engine.Type{engine.TString, engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[1].AsString()
+			s, err := args[1].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
-			layout, err := args[0].AsString()
+			layout, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}
@@ -1581,7 +1581,7 @@ func registerAutoDate(r *engine.Registry) {
 	r.Register("auto-date", engine.Signature{
 		Args: []engine.Type{engine.TString},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			s, err := args[0].AsString()
+			s, err := args[0].AsConcreteString()
 			if err != nil {
 				return nil, err
 			}

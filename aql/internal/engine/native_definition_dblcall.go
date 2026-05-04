@@ -20,7 +20,7 @@ func RegisterDblcall(r *Registry) {
 			Args:       []Type{TInteger, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				n, _ := args[0].AsInteger()
+				n, _ := args[0].AsConcreteInteger()
 				body := args[1]
 
 				if body.Data == nil {

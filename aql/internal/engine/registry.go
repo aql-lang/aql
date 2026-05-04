@@ -49,7 +49,7 @@ type Registry struct {
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
-	ArgsStack         []Value                                            // stack of args lists for nested fn calls
+	argsStack         []Value                                            // stack of args lists for nested fn calls; access via PushArgs/PopArgs/TopArgs
 	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
@@ -491,7 +491,7 @@ func (r *Registry) InitRootContext() {
 	sysStore.Set("__val", NewStoreValue(valStore))
 
 	root.Set("__sys", NewStoreValue(sysStore))
-	r.ctxStack = append(r.ctxStack, root)
+	r.PushExistingContext(root)
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives
@@ -724,8 +724,8 @@ func RegisterUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[int, int] and forward precedence.
 func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as2, _ := args[0].AsInteger()
-		_as1, _ := args[1].AsInteger()
+		_as2, _ := args[0].AsConcreteInteger()
+		_as1, _ := args[1].AsConcreteInteger()
 		result, err := op(_as2, _as1)
 		if err != nil {
 			return nil, err
@@ -791,8 +791,8 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[boolean, boolean] and forward precedence.
 func RegisterBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as7, _ := args[0].AsBoolean()
-		_as6, _ := args[1].AsBoolean()
+		_as7, _ := args[0].AsConcreteBoolean()
+		_as6, _ := args[1].AsConcreteBoolean()
 		return []Value{NewBoolean(op(_as7, _as6))}, nil
 	}
 	r.Register(name, Signature{

@@ -618,7 +618,7 @@ func JoinCarrierStacks(a, b []Value) []Value {
 // type reflects every write. Safe to call outside check mode — it
 // becomes a no-op.
 func (r *Registry) RecordContextSet(key string, carrier Value) {
-	if !r.Check.Mode || key == "" {
+	if !r.IsCheckMode() || key == "" {
 		return
 	}
 	if r.Check.ContextTypes == nil {
@@ -646,7 +646,7 @@ func (r *Registry) LookupContextType(key string) (Value, bool) {
 // end-of-run analysis can flag defs that were never referenced.
 // Names starting with "_" (engine internals) are ignored.
 func (r *Registry) recordCheckDef(name string, pos SrcPos) {
-	if !r.Check.Mode || name == "" || strings.HasPrefix(name, "_") {
+	if !r.IsCheckMode() || name == "" || strings.HasPrefix(name, "_") {
 		return
 	}
 	if r.Check.DefsInstalled == nil {
@@ -663,7 +663,7 @@ func (r *Registry) recordCheckDef(name string, pos SrcPos) {
 // safe to call unconditionally; when CheckMode is off the call is a
 // no-op. Used by Registry.Lookup and stepWord's simple-value path.
 func (r *Registry) recordCheckUse(name string) {
-	if !r.Check.Mode || name == "" {
+	if !r.IsCheckMode() || name == "" {
 		return
 	}
 	if r.Check.DefsUsed == nil {
@@ -803,7 +803,7 @@ func literalCondValue(condList Value) (bool, bool) {
 // the narrowings after the then-branch runs.
 func applyGuardNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.Check.Mode {
+	if !r.IsCheckMode() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -828,7 +828,7 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 // alternative is subtracted. Returns a restore func.
 func applyComplementNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.Check.Mode {
+	if !r.IsCheckMode() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)

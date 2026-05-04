@@ -30,7 +30,7 @@ import "fmt"
 func RegisterGuard(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		val := args[0]
-		cond, err := args[1].AsBoolean()
+		cond, err := args[1].AsConcreteBoolean()
 		if err != nil {
 			return nil, fmt.Errorf("guard: condition must be Boolean, got %s", args[1].VType.String())
 		}

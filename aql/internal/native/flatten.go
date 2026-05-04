@@ -13,7 +13,7 @@ import (
 //   - [list]          — flattens the list by one level
 func RegisterFlatten(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "flatten",
+		Name:              "flatten",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
 			{
@@ -42,7 +42,7 @@ func flattenDefaultHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // flattenDepthHandler calls voxgigstruct.Flatten with a specified depth.
 func flattenDepthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	depth, err := args[1].AsInteger()
+	depth, err := args[1].AsConcreteInteger()
 	if err != nil {
 		return nil, fmt.Errorf("flatten: depth: %w", err)
 	}

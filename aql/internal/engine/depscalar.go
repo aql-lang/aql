@@ -424,7 +424,7 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map
 			// to a Dependent leaf name.
-			if args[1].Data != nil {
+			if IsConcrete(args[1]) {
 				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
 					opName, args[1].VType.String())
 			}
@@ -462,7 +462,7 @@ func RegisterBetween(r *Registry) {
 			{
 				Args: []Type{TScalar, TScalar, TScalarType},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if args[2].Data != nil {
+					if IsConcrete(args[2]) {
 						return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
 							args[2].VType.String())
 					}

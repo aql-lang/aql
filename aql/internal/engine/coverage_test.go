@@ -4154,7 +4154,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Directly exercise the args stack by pushing and calling
-	r.ArgsStack = append(r.ArgsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
+	r.PushArgs(NewList([]Value{NewInteger(42), NewString("hi")}))
 	e := New(r)
 	result, err := e.Run([]Value{NewWord("args")})
 	if err != nil {
@@ -4168,7 +4168,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}
 	// Clean up
-	r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
+	r.PopArgs()
 }
 
 func TestArgsOutsideFnErrors(t *testing.T) {
