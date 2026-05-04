@@ -18,21 +18,11 @@ func RegisterTor(r *Registry) {
 	//   - Singleton/empty disjuncts collapse: 0 alts → Never, 1 alt
 	//     → bare value (no wrapper).
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		var alts []Value
-		// Flatten left side (farther/stack) first to maintain source order.
-		if args[1].IsDisjunct() {
-			d, _ := args[1].AsDisjunct()
-			alts = append(alts, d.Alternatives...)
-		} else {
-			alts = append(alts, args[1])
-		}
-		// Flatten right side (nearest/forward).
-		if args[0].IsDisjunct() {
-			d, _ := args[0].AsDisjunct()
-			alts = append(alts, d.Alternatives...)
-		} else {
-			alts = append(alts, args[0])
-		}
+		// Flatten both sides into a single alternative slice;
+		// FlattenDisjunctAlts returns the existing alternatives for
+		// a disjunct or [v] for any other value. Source order is
+		// preserved by walking left (farther/stack) then right.
+		alts := append(FlattenDisjunctAlts(args[1]), FlattenDisjunctAlts(args[0])...)
 		simplified := simplifyDisjunctAlts(alts)
 		if len(simplified) == 0 {
 			return []Value{NewTypeLiteral(TNever)}, nil

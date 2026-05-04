@@ -20,8 +20,7 @@ func RegisterIs(r *Registry) {
 				// compare against — same lookup defTypedHandler does.
 				if b.VType.Equal(TFnUndef) && a.IsAtom() {
 					name, _ := a.AsAtom()
-					if ds := r.DefStacks[name]; len(ds) > 0 {
-						top := ds[len(ds)-1]
+					if top, ok := r.TopOfDefStack(name); ok {
 						if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 							a = top
 						}

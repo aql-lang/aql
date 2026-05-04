@@ -82,18 +82,18 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	}
 	m := opts.AsMap()
 
-	if v, ok := m.Get("enc"); ok && v.VType.Matches(TString) {
-		enc, _ = v.AsString()
+	if s, ok := MapFieldString(m, "enc"); ok {
+		enc = s
 	}
-	if v, ok := m.Get("fmt"); ok && v.VType.Matches(TString) {
-		format, _ = v.AsString()
+	if s, ok := MapFieldString(m, "fmt"); ok {
+		format = s
 		fmtExplicit = true
 	}
-	if v, ok := m.Get("mode"); ok && v.VType.Matches(TString) {
-		mode, _ = v.AsString()
+	if s, ok := MapFieldString(m, "mode"); ok {
+		mode = s
 	}
-	if v, ok := m.Get("nl"); ok && v.VType.Matches(TString) {
-		nl, _ = v.AsString()
+	if s, ok := MapFieldString(m, "nl"); ok {
+		nl = s
 	}
 
 	return

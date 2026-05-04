@@ -50,23 +50,14 @@ func tandValues(a, b Value) Value {
 		return NewTypeLiteral(TNever)
 	}
 
-	// Distribute over disjuncts on either side.
-	aDisj := a.IsDisjunct()
-	bDisj := b.IsDisjunct()
-	if aDisj || bDisj {
-		var aAlts, bAlts []Value
-		if aDisj {
-			ad, _ := a.AsDisjunct()
-			aAlts = ad.Alternatives
-		} else {
-			aAlts = []Value{a}
-		}
-		if bDisj {
-			bd, _ := b.AsDisjunct()
-			bAlts = bd.Alternatives
-		} else {
-			bAlts = []Value{b}
-		}
+	// Distribute over disjuncts on either side. FlattenDisjunctAlts
+	// returns the alternatives for a disjunct or [v] for anything
+	// else, so the cross-product loop below handles the
+	// scalar/scalar, disjunct/scalar, scalar/disjunct, and
+	// disjunct/disjunct cases uniformly.
+	if a.IsDisjunct() || b.IsDisjunct() {
+		aAlts := FlattenDisjunctAlts(a)
+		bAlts := FlattenDisjunctAlts(b)
 		var result []Value
 		for _, ax := range aAlts {
 			for _, bx := range bAlts {

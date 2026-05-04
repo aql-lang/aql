@@ -105,13 +105,7 @@ func RegisterTany(r *Registry) {
 		}
 		var alts []Value
 		for i := 0; i < n; i++ {
-			v := list.Get(i)
-			if v.IsDisjunct() {
-				d, _ := v.AsDisjunct()
-				alts = append(alts, d.Alternatives...)
-			} else {
-				alts = append(alts, v)
-			}
+			alts = append(alts, FlattenDisjunctAlts(list.Get(i))...)
 		}
 		simplified := simplifyDisjunctAlts(alts)
 		if len(simplified) == 0 {

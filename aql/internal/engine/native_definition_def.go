@@ -98,10 +98,8 @@ func RegisterDef(r *Registry) {
 		if constraint.IsWord() {
 			w, _ := constraint.AsWord()
 			typeName = w.Name
-			if tv, ok := r.Types[w.Name]; ok {
-				constraint = tv
-			} else if ds := r.DefStacks[w.Name]; len(ds) > 0 {
-				constraint = ds[len(ds)-1]
+			if resolved, ok := r.ResolveTypedName(w.Name); ok {
+				constraint = resolved
 			}
 		}
 		if !isTypeValue(constraint) {
@@ -125,8 +123,7 @@ func RegisterDef(r *Registry) {
 		body := args[1]
 		if constraint.VType.Equal(TFnUndef) && body.IsAtom() {
 			atomName, _ := body.AsAtom()
-			if ds := r.DefStacks[atomName]; len(ds) > 0 {
-				top := ds[len(ds)-1]
+			if top, ok := r.TopOfDefStack(atomName); ok {
 				if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 					body = top
 				}
