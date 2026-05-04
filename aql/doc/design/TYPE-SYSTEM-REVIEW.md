@@ -403,15 +403,31 @@ in `LANGREF.md`, `SIGNATURES.md`, or any code-level doc.
 
 Status: not addressed. Documentation-mostly fix.
 
-### 6.3 Forward planner accepts `def n:T anything`
+### 6.3 Forward planner accepts `def n:T anything` — RESOLVED
 
-The planner type-checks the constraint slot as `TAny`; the actual
-unification happens in the handler. So check-mode can't catch
-wrong-type bindings before runtime even when the constraint is a
-plain `Integer` (where it trivially could).
+A planner-level narrowing experiment (introducing
+`Signature.NarrowArgFn` to override TAny at the body slot) was tried
+and reverted: it regressed diagnostic quality, replacing the precise
+"value X does not unify with declared type Y" with a generic "no
+matching signature for def" because rejecting the typed sig at the
+planner caused fall-through to def's other sigs.
 
-Status: not addressed. Mid effort; meaningful UX win for
-`aql check` users.
+The actual fix lives in the handler. `defTypedHandler`
+(`internal/engine/native_definition_def.go`) now distinguishes
+runtime and check-mode behaviour on Unify failure:
+
+- **Runtime**: returns the same precise error as before
+  (`def n: value V does not unify with declared type T`), aborting
+  execution at the mismatch.
+- **Check mode**: emits a `type_error` diagnostic with the same
+  detail AND installs a constraint-typed carrier for `name` so
+  downstream analysis doesn't cascade with "undefined word: n"
+  noise. `type_error` is registered with `SeverityError` in
+  `checkCodeSeverity` so it surfaces in `aql check`'s error count.
+
+Net effect: `aql check` now reports type-binding mismatches as
+errors but keeps flowing past them, finding more issues in a single
+pass. Runtime semantics unchanged.
 
 
 ## 7. Developer experience
@@ -429,17 +445,38 @@ already the language's way of saying it.
 Status: declined. The `?:` record-field shorthand stays (it's a
 field-declaration syntax, not an expression operator).
 
-### 7.2 `(quote name)` for fn-shape constraints is unidiomatic
+### 7.2 `(quote name)` for fn-shape constraints is unidiomatic — RESOLVED
 
-`def m:Mapper (quote double)` is the only spelling that works for
-fn-shape types. `def m:Mapper double` runs `double` (looking for an
-Integer arg) and errors with a confusing "no signature" message
-pointing at `double`. The system understands that this is a
-typed-binding context but doesn't take the help-the-user step of
-suggesting `(quote double)`.
+Auto-quote was rejected as too magical (would change semantics for
+the case `def x foo` where `foo` should run, not be quoted). Instead
+the engine now detects the `def name:FnShape body` typed-binding
+context and adds a hint to the signature_error.
 
-Status: not addressed. Auto-quote is a design choice (changes
-semantics); a better error message is ~10 lines.
+The detection lives in `Engine.isFnShapeTypedBindingContext`
+(`internal/engine/engine.go`). When a `signature_error` propagates
+out of a handler, `maybeAddFnShapeHint` walks the stack backward
+from the failing pointer through any deferred-forward-collection
+markers. If the enclosing collector is `def`'s typed-name sig
+(`[TMap, TAny]`) and the collected typed-name map's constraint
+resolves (via `r.ResolveTypedName`) to a `TFnUndef` value, the hint
+fires:
+
+```
+no matching signature for double
+  --> 3:14
+def m:Mapper double
+                ^^^^^^ no matching signature for double
+  = this is a typed-binding context expecting a function value
+    — did you mean `(quote double)`?
+```
+
+The hint is added to the existing AqlError's `Hint` field so
+downstream rendering picks it up automatically. False positives are
+gated by three constraints: the enclosing forward must be `def`,
+its sig must start with `TMap`, and the typed-name map's
+constraint must specifically resolve to `TFnUndef`. Plain-type
+mismatches (`def n:Integer "abc"`) keep their original concise
+error.
 
 ### 7.3 Predicate body boilerplate — RESOLVED
 
@@ -630,9 +667,9 @@ For at-a-glance status:
 | §5.3  | `untype Foo`                         | RESOLVED |
 | §6.1  | Predicate-type CheckMode analysis    | PARTIAL  |
 | §6.2  | `sigTypeMatches` carrier rule docs   | open     |
-| §6.3  | Forward planner narrowing            | open     |
+| §6.3  | Forward planner narrowing            | RESOLVED |
 | §7.1  | Inline disjunct syntax (`|`)         | declined |
-| §7.2  | `(quote name)` ergonomics            | open     |
+| §7.2  | `(quote name)` ergonomics            | RESOLVED |
 | §7.3  | Predicate `guard` word               | RESOLVED |
 | §7.4  | Name the type in errors              | RESOLVED |
 | §7.5  | `inspect` for fn-shape types         | RESOLVED |

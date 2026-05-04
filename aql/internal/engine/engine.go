@@ -166,7 +166,66 @@ func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
 	}
 
 	src := e.effectiveSource()
-	return makeAqlError("signature_error", detail, name, src, hint.String())
+	return e.maybeAddFnShapeHint(makeAqlError("signature_error", detail, name, src, hint.String())).(*AqlError)
+}
+
+// isFnShapeTypedBindingContext reports whether the failing word is
+// positioned at the body slot of a typed binding whose constraint is
+// a function-shape type (TFnUndef).
+//
+// Forward-precedence collection works by inserting a Forward marker
+// after the func word and then letting the engine evaluate upcoming
+// tokens normally; the marker holds the matched signature. So when a
+// fn dispatch fails inside a deferred forward collection, walking
+// back through the stack finds the Forward marker for the outer
+// collector. If that collector is `def` and its typed-name map
+// (already on the stack at FuncIndex+1+CollectedArgs..) carries a
+// fn-shape constraint, the failing dispatch is exactly the §7.2
+// "user wrote a fn name where they meant `(quote name)`" case.
+func (e *Engine) isFnShapeTypedBindingContext() bool {
+	if e.registry == nil || e.pointer == 0 {
+		return false
+	}
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			return false
+		}
+		if !e.stack[i].IsForward() {
+			continue
+		}
+		fwd, _ := e.stack[i].AsForward()
+		if fwd.FuncName != "def" || fwd.Sig == nil {
+			return false
+		}
+		// def's typed-name sig is the only one with TMap at position 0.
+		if len(fwd.Sig.Args) < 2 || !fwd.Sig.Args[0].Equal(TMap) {
+			return false
+		}
+		// stepLiteral moves each collected forward arg to the slot
+		// immediately before the func word, in collection order
+		// (first-collected = deepest). So position 0's value sits at
+		// FuncIndex - CollectedArgs, position 1 at FuncIndex - CollectedArgs + 1, etc.
+		if fwd.CollectedArgs < 1 {
+			return false
+		}
+		mapIdx := fwd.FuncIndex - fwd.CollectedArgs
+		if mapIdx < 0 || mapIdx >= len(e.stack) {
+			return false
+		}
+		m := e.stack[mapIdx].AsMap()
+		if m == nil || m.Len() != 1 {
+			return false
+		}
+		constraint, _ := m.Get(m.Keys()[0])
+		if constraint.IsWord() {
+			cw, _ := constraint.AsWord()
+			if tv, ok := e.registry.ResolveTypedName(cw.Name); ok {
+				constraint = tv
+			}
+		}
+		return constraint.VType.Equal(TFnUndef)
+	}
+	return false
 }
 
 // insufficientArgsError builds a detailed AqlError for forward argument
@@ -990,10 +1049,36 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
-		return err
+		return e.maybeAddFnShapeHint(err)
 	}
 
 	return e.spliceMatchResults(match, sortedIndices, n, results)
+}
+
+// maybeAddFnShapeHint wraps a signature_error from a fn-dispatch
+// failure with a §7.2 hint when the caller is `def`'s typed-binding
+// body slot expecting a fn-shape value. Without this, the user sees
+// a confusing "no matching signature for double" error pointing at
+// double's call site rather than the typed-binding context that
+// caused the fn to be invoked at all.
+func (e *Engine) maybeAddFnShapeHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	aqlErr, ok := err.(*AqlError)
+	if !ok || aqlErr.Code != "signature_error" {
+		return err
+	}
+	if !e.isFnShapeTypedBindingContext() {
+		return err
+	}
+	hint := "this is a typed-binding context expecting a function value — did you mean `(quote " + aqlErr.Src + ")`?"
+	if aqlErr.Hint != "" {
+		aqlErr.Hint = aqlErr.Hint + "\n  = " + hint
+	} else {
+		aqlErr.Hint = hint
+	}
+	return aqlErr
 }
 
 // spliceMatchResults replaces the word and its matched args on the

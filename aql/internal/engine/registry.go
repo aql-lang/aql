@@ -164,6 +164,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"undefined_word":       SeverityError,
 	"fn_body_error":        SeverityError,
 	"branch_error":         SeverityError,
+	"type_error":           SeverityError,
 	"missing_returns":      SeverityWarning,
 	"step_budget_exceeded": SeverityWarning,
 	"body_error":           SeverityWarning,

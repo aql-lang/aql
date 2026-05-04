@@ -162,6 +162,24 @@ func RegisterDef(r *Registry) {
 		}
 		unified, ok := Unify(body, constraint)
 		if !ok {
+			// In check mode, surface the type mismatch as a diagnostic
+			// AND install a constraint-typed carrier so downstream code
+			// that uses `name` doesn't cascade with "undefined word"
+			// noise. The runtime path still aborts — only check mode
+			// keeps flowing past the mismatch (§6.3).
+			if r.IsCheckMode() {
+				r.addCheckDiagnostic(CheckDiagnostic{
+					Code: "type_error",
+					Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+						name, body.String(), describeType()),
+					Word: name,
+					Row:  args[0].Pos.Row,
+					Col:  args[0].Pos.Col,
+				})
+				installDef(r, name, NewCarrier(constraint.VType))
+				r.recordCheckDef(name, args[0].Pos)
+				return nil, nil
+			}
 			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 				name, body.String(), describeType())
 		}
