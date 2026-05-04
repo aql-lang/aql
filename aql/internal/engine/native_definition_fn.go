@@ -447,19 +447,29 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 	return TAny, nil, nil
 }
 
-// lookupDefType checks if a name is def'd as a type value in the registry.
-// Returns nil if the registry is nil, the name is not def'd, or the value
-// is not a type (record, disjunct, etc.).
+// lookupDefType resolves a name to its type value. Used by fn-sig
+// parsing so `def f fn [[rgb:Color] …]` can bind the Color
+// reference to its actual record/object/disjunct/etc. type at
+// install time.
+//
+// Resolution order matches stepWord: r.Types (the canonical home
+// for user-defined types) wins, then fall back to DefStacks for
+// any legacy installer that still drops a type body there. Returns
+// nil if the name is unbound or the binding isn't a type body.
 func lookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
 	}
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+	if tv, ok := r.TopOfTypeStack(name); ok {
+		if isTypeBody(tv) {
+			return &tv
+		}
+	}
+	val, ok := r.TopOfDefStack(name)
+	if !ok {
 		return nil
 	}
-	val := stack[len(stack)-1]
-	if !isTypeValue(val) {
+	if !isTypeBody(val) {
 		return nil
 	}
 	return &val
@@ -493,6 +503,8 @@ func resolveTypeName(name string) (Type, error) {
 		return TAny, nil
 	case "None":
 		return TNone, nil
+	case "Never":
+		return TNever, nil
 	case "Number":
 		return TNumber, nil
 	case "Integer":
@@ -651,7 +663,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
-			r.ArgsStack = append(r.ArgsStack, argsList)
+			r.PushArgs(argsList)
 
 			unnamedCount := 0
 			for i, p := range s.Params {
@@ -673,10 +685,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Snapshot DefStacks lengths after installing named params
 			// so we can clean up any defs created during body execution
 			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := make(map[string]int, len(r.DefStacks))
-			for dname, dstack := range r.DefStacks {
-				defSnapshot[dname] = len(dstack)
-			}
+			defSnapshot := r.SnapshotDefDepths()
 
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
@@ -776,6 +785,14 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					}
 				}
 			}
+			// Always analyse the body so diagnostics emitted by stepWord
+			// (undefined_word, no_signature, …) inside the body propagate
+			// up to the parent registry. When the fn declares an explicit
+			// return type, we use that for the carrier result and drop
+			// the analyser's residual stack — the analyser is run purely
+			// for its side-effecting diagnostic collection. Memoisation
+			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
+			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
 			if len(declaredReturns) > 0 {
 				out := make([]Value, len(declaredReturns))
 				for i, t := range declaredReturns {
@@ -783,7 +800,6 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				}
 				return out
 			}
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
 			if len(stk) == 0 {
 				return []Value{NewCarrier(TAny)}
 			}
@@ -819,7 +835,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
-	r.ArgsStack = append(r.ArgsStack, argsList)
+	r.PushArgs(argsList)
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -840,10 +856,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// Snapshot DefStacks lengths before body execution so we can
 	// clean up any defs created during body execution (Issue 2
 	// from AQL-DX-REPORT: def leakage from fn bodies).
-	defSnapshot := make(map[string]int, len(r.DefStacks))
-	for name, stack := range r.DefStacks {
-		defSnapshot[name] = len(stack)
-	}
+	defSnapshot := r.SnapshotDefDepths()
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
@@ -851,9 +864,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 
 	// Cleanup: pop args stack, undef named params, then clean up
 	// any defs that were created during body execution.
-	if len(r.ArgsStack) > 0 {
-		r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
-	}
+	r.PopArgs()
 	for i := len(names) - 1; i >= 0; i-- {
 		uninstallDef(r, names[i])
 	}
@@ -864,8 +875,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// triggers installFnDef → Register → upsertFnDef which can
 	// modify DefStacks entries for other names).
 	var toClean []string
-	for name := range r.DefStacks {
-		if len(r.DefStacks[name]) > defSnapshot[name] {
+	for _, name := range r.DefNames() {
+		if r.DefStackDepth(name) > defSnapshot[name] {
 			toClean = append(toClean, name)
 		}
 	}
@@ -874,7 +885,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 		// Pop entries down to the snapshot length. Use a bounded
 		// loop to avoid infinite looping if uninstallDef's rebuild
 		// creates new entries.
-		for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
+		for attempts := 0; attempts < 100 && r.DefStackDepth(name) > target; attempts++ {
 			uninstallDef(r, name)
 		}
 	}

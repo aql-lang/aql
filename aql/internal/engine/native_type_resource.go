@@ -21,7 +21,7 @@ func RegisterResource(r *Registry) {
 	installDef(r, "Resource", NewObjectType(resourceInfo))
 
 	// Retrieve the installed Resource type so Entity can reference it as parent.
-	resourceVal := r.DefStacks["Resource"][len(r.DefStacks["Resource"])-1]
+	resourceVal, _ := r.TopOfDefStack("Resource")
 	installedResource, _ := resourceVal.AsObjectType()
 
 	// --- Entity: {spec:String, entity:String} inherits Resource ---

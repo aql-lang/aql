@@ -89,7 +89,7 @@ func RegisterDo(r *Registry) {
 				Args:       []Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if args[0].Data == nil {
+					if !IsConcrete(args[0]) {
 						return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")
 					}
 					return evalList(args[0].AsList().Slice())
@@ -105,8 +105,8 @@ func RegisterDo(r *Registry) {
 					body := args[0]
 					if body.IsWord() {
 						w, _ := body.AsWord()
-						if ds := r.DefStacks[w.Name]; len(ds) > 0 {
-							body = ds[len(ds)-1]
+						if v, ok := r.TopOfDefStack(w.Name); ok {
+							body = v
 						}
 					}
 					stk := RunCarrierBody(r, body)

@@ -1,6 +1,6 @@
 # Signature matching tests
 # Format: expression<TAB>expected result
-# Tests that longer and narrower type signatures match first.
+# Tests that longer and narrower type Signatures match first.
 # Tests prefix-only and forward-precedence functions.
 # Tests arguments split over the stack and future tokens.
 
@@ -29,7 +29,7 @@ if false 1 2	2
 lower "ABC"	'abc'
 upper "abc"	'ABC'
 
-# --- Narrower type wins over wider type ---
+# --- Narrower type Wins over wider type ---
 
 # add has [integer,integer] (score 204) and [scalar,scalar] (score 202)
 # Two integers should use integer addition, not string concatenation
@@ -141,7 +141,7 @@ def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
 1 2 add 3 add	6
 1 2 3 add	1 5
 
-# --- Deep type hierarchy precedence ---
+# --- Deep type Hierarchy precedence ---
 
 # or is boolean-only
 true or false	true

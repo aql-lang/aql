@@ -5,10 +5,18 @@ func RegisterInspect(r *Registry) {
 		_as0, _ := args[0].AsWord()
 		name := _as0.Name
 
-		// If the word names a user-defined type, return a type inspection.
-		if stack := r.DefStacks[name]; len(stack) > 0 {
-			top := stack[len(stack)-1]
-			if isTypeValue(top) {
+		// User-defined types live in r.Types — predicate types (FnDef)
+		// reach inspect through this branch and get the type-inspection
+		// view. Native fn-shadow entries in DefStacks (every native
+		// word has one for fallback dispatch) used to fool the old
+		// "isTypeBody(DefStacks top)" check; that's now bypassed
+		// because r.Types is the single source of truth for named
+		// types and native fns are NOT in it.
+		if tv, ok := r.TopOfTypeStack(name); ok {
+			return []Value{buildTypeInspection(name, tv)}, nil
+		}
+		if top, ok := r.TopOfDefStack(name); ok {
+			if isTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -17,10 +25,12 @@ func RegisterInspect(r *Registry) {
 	}
 	// Atom (now Scalar/Atom): inspect by name, same as words.
 	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name, _ := args[0].AsAtom()
-		if stack := r.DefStacks[name]; len(stack) > 0 {
-			top := stack[len(stack)-1]
-			if isTypeValue(top) {
+		name, _ := args[0].AsConcreteAtom()
+		if tv, ok := r.TopOfTypeStack(name); ok {
+			return []Value{buildTypeInspection(name, tv)}, nil
+		}
+		if top, ok := r.TopOfDefStack(name); ok {
+			if isTypeBody(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -68,7 +78,7 @@ func buildInspection(r *Registry, name string) Value {
 	fn := r.Lookup(name)
 	if fn == nil {
 		// No registered function — check if it's a simple def (list body).
-		if len(r.DefStacks[name]) > 0 {
+		if r.HasDef(name) {
 			result.Set("kind", NewAtom("defined"))
 			result.Set("signatures", NewList(nil))
 			return newValue(TInspect, result)
@@ -163,6 +173,52 @@ func buildTypeInspection(name string, tv Value) Value {
 		_as2, _ := tv.AsChildType()
 		child := _as2.Child
 		result.Set("child", NewString(child.VType.String()))
+
+	case tv.VType.Equal(TFnUndef):
+		// Structural fn-shape type: a FnUndef carries one or more
+		// (Params, Returns) specs. Render each spec as a `params` /
+		// `returns` pair so users can `inspect Mapper` and see the
+		// signature shape they need to satisfy. Without this case
+		// inspect's `signatures` slot would be empty for fn types.
+		result.Set("kind", NewAtom("function_shape"))
+		uInfo, _ := tv.Data.(FnUndefInfo)
+		sigs := make([]Value, 0, len(uInfo.Sigs))
+		for _, spec := range uInfo.Sigs {
+			sig := NewOrderedMap()
+			params := make([]Value, len(spec.Params))
+			for i, p := range spec.Params {
+				params[i] = NewString(p.Type.String())
+			}
+			sig.Set("params", NewList(params))
+			rets := make([]Value, len(spec.Returns))
+			for i, r := range spec.Returns {
+				rets[i] = NewString(r.String())
+			}
+			sig.Set("returns", NewList(rets))
+			sigs = append(sigs, NewMap(sig))
+		}
+		result.Set("signatures", NewList(sigs))
+
+	case tv.IsDepScalar():
+		// Dependent scalar: render the leaf and the populated
+		// bound(s). Either Lo, Hi, or both may be set; each is
+		// rendered as {kind: "gte"|"gt"|"lte"|"lt", value: <bound>}.
+		result.Set("kind", NewAtom("dependent_scalar"))
+		info, _ := tv.AsDepScalar()
+		leaf := dependentLeafFromType(tv.VType)
+		result.Set("leaf", NewString(leaf))
+		if info.Lo != nil {
+			lo := NewOrderedMap()
+			lo.Set("kind", NewString(boundToKind(info.Lo, true).String()))
+			lo.Set("value", info.Lo.Value)
+			result.Set("lo", NewMap(lo))
+		}
+		if info.Hi != nil {
+			hi := NewOrderedMap()
+			hi.Set("kind", NewString(boundToKind(info.Hi, false).String()))
+			hi.Set("value", info.Hi.Value)
+			result.Set("hi", NewMap(hi))
+		}
 
 	default:
 		// Simple type literal (Data==nil): number, string, boolean, etc.

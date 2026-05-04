@@ -549,7 +549,7 @@ func TestModuleImportFromFile(t *testing.T) {
 		m := NewOrderedMap()
 		m.Set("val", NewString("world"))
 		return []Value{
-			NewWord("export"), NewWord("greet"), NewMap(m),
+			NewWord("export"), NewAtom("greet"), NewMap(m),
 		}, nil
 	}
 
@@ -559,7 +559,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	_ = result
 
 	// Verify the export was installed
-	if _, ok := r.DefStacks["greet"]; !ok {
+	if !r.HasDef("greet") {
 		t.Error("expected 'greet' to be defined after import")
 	}
 }
@@ -576,7 +576,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 		m := NewOrderedMap()
 		m.Set("val", NewInteger(42))
 		return []Value{
-			NewWord("export"), NewWord("foo"), NewMap(m),
+			NewWord("export"), NewAtom("foo"), NewMap(m),
 		}, nil
 	}
 
@@ -587,7 +587,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	})
 	_ = result
 
-	if _, ok := r.DefStacks["bar"]; !ok {
+	if !r.HasDef("bar") {
 		t.Error("expected 'bar' to be defined after renamed import")
 	}
 }
@@ -627,8 +627,8 @@ func TestModuleImportSelectedExports(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
-			NewWord("export"), NewWord("a"), NewMap(m1),
-			NewWord("export"), NewWord("b"), NewMap(m2),
+			NewWord("export"), NewAtom("a"), NewMap(m1),
+			NewWord("export"), NewAtom("b"), NewMap(m2),
 		}),
 	})
 
@@ -639,7 +639,7 @@ func TestModuleImportSelectedExports(t *testing.T) {
 		result[0],
 	})
 
-	if _, ok := r.DefStacks["alpha"]; !ok {
+	if !r.HasDef("alpha") {
 		t.Error("expected 'alpha' to be defined")
 	}
 }
@@ -658,8 +658,8 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
-			NewWord("export"), NewWord("p"), NewMap(m1),
-			NewWord("export"), NewWord("q"), NewMap(m2),
+			NewWord("export"), NewAtom("p"), NewMap(m1),
+			NewWord("export"), NewAtom("q"), NewMap(m2),
 		}),
 	})
 
@@ -673,10 +673,10 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 		result[0],
 	})
 
-	if _, ok := r.DefStacks["r"]; !ok {
+	if !r.HasDef("r") {
 		t.Error("expected 'r' to be defined")
 	}
-	if _, ok := r.DefStacks["s"]; !ok {
+	if !r.HasDef("s") {
 		t.Error("expected 's' to be defined")
 	}
 }

@@ -82,18 +82,18 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	}
 	m := opts.AsMap()
 
-	if v, ok := m.Get("enc"); ok && v.VType.Matches(TString) {
-		enc, _ = v.AsString()
+	if s, ok := MapFieldString(m, "enc"); ok {
+		enc = s
 	}
-	if v, ok := m.Get("fmt"); ok && v.VType.Matches(TString) {
-		format, _ = v.AsString()
+	if s, ok := MapFieldString(m, "fmt"); ok {
+		format = s
 		fmtExplicit = true
 	}
-	if v, ok := m.Get("mode"); ok && v.VType.Matches(TString) {
-		mode, _ = v.AsString()
+	if s, ok := MapFieldString(m, "mode"); ok {
+		mode = s
 	}
-	if v, ok := m.Get("nl"); ok && v.VType.Matches(TString) {
-		nl, _ = v.AsString()
+	if s, ok := MapFieldString(m, "nl"); ok {
+		nl = s
 	}
 
 	return
@@ -252,7 +252,7 @@ func RegisterFileIO(r *Registry) {
 	// write: [path/string, string] -> [path/string]
 	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content, _ := args[1].AsString()
+		content, _ := args[1].AsConcreteString()
 		result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
 		if err != nil {
 			return result, err
@@ -263,7 +263,7 @@ func RegisterFileIO(r *Registry) {
 	// write: [path/string, string, map] -> [path/string]
 	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		path := extractPath(args[0])
-		content, _ := args[1].AsString()
+		content, _ := args[1].AsConcreteString()
 		enc, format, mode, nl, _ := parseFileOpts(args[2])
 		result, err := doWrite(r, path, content, enc, format, mode, nl)
 		if err != nil {

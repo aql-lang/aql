@@ -750,10 +750,17 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		} else {
 			name, _ = v.AsString()
 		}
-		stack := r.DefStacks[name]
-		if len(stack) > 0 {
-			top := stack[len(stack)-1]
-			if isTypeValue(top) {
+		// Resolution order matches stepWord / lookupDefType:
+		// r.Types is the canonical home for user-defined types,
+		// fall back to DefStacks for any legacy installer that still
+		// drops a type body there.
+		if tv, ok := r.TopOfTypeStack(name); ok {
+			if isTypeBody(tv) {
+				return tv
+			}
+		}
+		if top, ok := r.TopOfDefStack(name); ok {
+			if isTypeBody(top) {
 				return top
 			}
 		}

@@ -11,6 +11,13 @@ import "fmt"
 //   - Cross-type: ordered by type name (atom < boolean < number < string)
 //   - Lists, maps, and other types: not orderable, returns error
 func compareValues(a, b Value) (int, error) {
+	// DepScalar values represent type-level constraints, not concrete
+	// scalars. Ordering them as if they were scalar values is a
+	// category error — refuse rather than silently coerce zero
+	// values through the Matches(TNumber)/AsNumber() path.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
+	}
 	// Numeric comparisons: both operands are some form of Number.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
 		_as1, _ := a.AsNumber()
@@ -77,8 +84,20 @@ func exactEqual(a, b Value) bool {
 		return true
 	}
 
+	// DepScalar pre-empts the Matches(TNumber)/Matches(TString)/...
+	// dispatch below: the lattice override would otherwise route
+	// DepInteger payloads into AsNumber and silently compare zero
+	// values. Two DepScalars are equal iff their constraint shapes
+	// match (delegated through valuesEqual).
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		return a.VType.Equal(b.VType) && valuesEqual(a, b)
+	}
+
 	// Types: structural comparison.
-	if isTypeValue(a) && isTypeValue(b) {
+	if isTypeBody(a) && isTypeBody(b) {
 		return a.VType.Equal(b.VType) && valuesEqual(a, b)
 	}
 
@@ -121,6 +140,16 @@ func deepEqual(a, b Value) bool {
 	// none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
 		return true
+	}
+
+	// DepScalar pre-empts scalar dispatch — see exactEqual for the
+	// reasoning. Two DepScalars compare equal iff their type and
+	// constraint payload match.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		return a.VType.Equal(b.VType) && valuesEqual(a, b)
 	}
 
 	// Scalars.
@@ -195,72 +224,90 @@ func deepEqual(a, b Value) bool {
 func RegisterComparison(r *Registry) {
 	// lt: [any, any] -> [boolean] — less than
 	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
+	// Also accepts `Integer lt N` to construct a DepInteger constraint.
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lt",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("lt: %w", err)
-				}
-				return []Value{NewBoolean(cmp < 0)}, nil
+		Signatures: []NativeSig{
+			makeDepScalarSig("lt", DepLT),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("lt: %w", err)
+					}
+					return []Value{NewBoolean(cmp < 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// gt: [any, any] -> [boolean] — greater than
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gt",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("gt: %w", err)
-				}
-				return []Value{NewBoolean(cmp > 0)}, nil
+		Signatures: []NativeSig{
+			makeDepScalarSig("gt", DepGT),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("gt: %w", err)
+					}
+					return []Value{NewBoolean(cmp > 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// lte: [any, any] -> [boolean] — less than or equal
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "lte",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("lte: %w", err)
-				}
-				return []Value{NewBoolean(cmp <= 0)}, nil
+		Signatures: []NativeSig{
+			makeDepScalarSig("lte", DepLTE),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("lte: %w", err)
+					}
+					return []Value{NewBoolean(cmp <= 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
 
 	// gte: [any, any] -> [boolean] — greater than or equal
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "gte",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				cmp, err := compareValues(args[1], args[0])
-				if err != nil {
-					return nil, fmt.Errorf("gte: %w", err)
-				}
-				return []Value{NewBoolean(cmp >= 0)}, nil
+		Signatures: []NativeSig{
+			makeDepScalarSig("gte", DepGTE),
+			{
+				Args: []Type{TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					cmp, err := compareValues(args[1], args[0])
+					if err != nil {
+						return nil, fmt.Errorf("gte: %w", err)
+					}
+					return []Value{NewBoolean(cmp >= 0)}, nil
+				},
+				Returns: []Type{TBoolean},
 			},
-			Returns: []Type{TBoolean},
-		}},
+		},
 	})
+
+	// between: closed-interval DepScalar constructor — moved to
+	// depscalar.go. Co-located with the rest of the dependent-type
+	// machinery so adding new bound shapes only touches one file.
+	RegisterBetween(r)
 
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
 	r.RegisterNativeFunc(NativeFunc{

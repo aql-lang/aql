@@ -10,8 +10,35 @@ import (
 )
 
 // Registry maps function names to their definitions.
+//
+// The def-stack and type-stack registries are stored in unexported
+// fields. ALL access — read, write, snapshot, restore — goes through
+// the helper API in util.go (PushDef/PopDef/TopOfDefStack/HasDef/
+// DefStackDepth/SetDefStack/DefStack/DefNames/SnapshotDefDepths/
+// RestoreToDefDepths/TruncateDefStack/ReplaceDefTop/DeleteDef and the
+// matching Type-side helpers PushType/PopType/HasType/TopOfTypeStack/
+// TypeStackDepth/TypeNames/SnapshotTypeStacks/RestoreTypeStacks). New
+// callers must use those methods; direct field access is deliberately
+// disabled by the lowercase identifiers.
 type Registry struct {
-	DefStacks         map[string][]Value                                 // stacked bodies for def-defined words
+	defStacks map[string][]Value // stacked bodies for def-defined words
+	// types holds named type definitions installed by the `type` word —
+	// type literals, records, disjuncts, typed lists/maps, options,
+	// records, object types, dependent scalars (DepInteger, DepString,
+	// …), function-shape types (FnUndef), and predicate types
+	// (FnDef/Function used as type-defining functions). Type values
+	// live here, not in defStacks, because they are NOT independently
+	// callable — a predicate type Bbd is only ever consulted via type
+	// operations (`def n:Bbd v`, `v is Bbd`, `inspect Bbd`), never
+	// invoked as a free-standing fn.
+	//
+	// Stacked: each name maps to a stack of definitions. `type Foo X`
+	// pushes; `untype Foo` pops. The top is the active type. Once a
+	// stack empties the entry is removed from the map. This mirrors
+	// `def`'s shadowing semantics so users can introduce a temporary
+	// alias inside a sub-program and revert it without registry
+	// surgery.
+	types             map[string][]Value                                 // name → stack of type values
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -22,7 +49,7 @@ type Registry struct {
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
-	ArgsStack         []Value                                            // stack of args lists for nested fn calls
+	argsStack         []Value                                            // stack of args lists for nested fn calls; access via PushArgs/PopArgs/TopArgs
 	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
@@ -35,61 +62,80 @@ type Registry struct {
 	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
 	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 
-	// CheckMode toggles static type-checking execution. When true, the
+	// Check holds all static type-checking state, bundled together
+	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
+	// §3.3) can snapshot/restore one field instead of ten.
+	Check CheckState
+}
+
+// CheckState aggregates the static type-checking state that used to
+// live as ten loose fields on Registry. Bundling them serves two
+// purposes:
+//
+//   - **Sandboxing.** A predicate body that runs under unify checks
+//     should not mutate enclosing analysis state. With a single
+//     struct, snapshot/restore is `saved := r.Check; defer func()
+//     { r.Check = saved }()` rather than ten parallel assignments.
+//   - **Discoverability.** Anyone reading `Registry` can see the
+//     check-mode footprint at a glance instead of scanning ten
+//     adjacent declarations.
+type CheckState struct {
+	// Mode toggles static type-checking execution. When true, the
 	// engine runs the same dispatch/matching machinery but carries
 	// type-only Carrier values instead of concrete payloads, and
-	// replaces signature handlers with carrier-typed return propagation
-	// (see Signature.Returns). Diagnostics are accumulated into
-	// CheckDiagnostics rather than returned as hard errors.
-	CheckMode        bool
-	CheckDiagnostics []CheckDiagnostic
+	// replaces signature handlers with carrier-typed return
+	// propagation (see Signature.Returns). Diagnostics are
+	// accumulated into Diagnostics rather than returned as hard
+	// errors.
+	Mode        bool
+	Diagnostics []CheckDiagnostic
 
-	// CheckFnSummaries caches carrier return-stacks for user-defined
-	// fn bodies keyed by (name + "#" + argTypesJoined). Populated by
-	// analyseFnBody; re-entrant calls (recursion) consult this cache
-	// to break cycles and converge on a fixed point.
-	CheckFnSummaries map[string][]Value
+	// FnSummaries caches carrier return-stacks for user-defined fn
+	// bodies keyed by (name + "#" + argTypesJoined). Populated by
+	// analyseFnBody; re-entrant calls (recursion) consult this
+	// cache to break cycles and converge on a fixed point.
+	FnSummaries map[string][]Value
 
-	// CheckFnInflight tracks which (name, arg-types) analyses are
-	// currently running so that recursive calls can bail out with a
-	// placeholder instead of looping.
-	CheckFnInflight map[string]bool
+	// FnInflight tracks which (name, arg-types) analyses are
+	// currently running so that recursive calls can bail out with
+	// a placeholder instead of looping.
+	FnInflight map[string]bool
 
-	// CheckStepCount is the running total of engine steps consumed
-	// by the current check run, summed across every sub-engine.
-	// Used with CheckStepBudget to cap total analysis effort.
-	CheckStepCount int
+	// StepCount is the running total of engine steps consumed by
+	// the current check run, summed across every sub-engine. Used
+	// with StepBudget to cap total analysis effort.
+	StepCount int
 
-	// CheckStepBudget is the maximum total steps the check run may
+	// StepBudget is the maximum total steps the check run may
 	// consume. Zero means "use DefaultCheckStepBudget". Once
 	// exceeded, the engine emits a step_budget_exceeded diagnostic
 	// and returns the current residual stack immediately.
-	CheckStepBudget int
+	StepBudget int
 
-	// CheckBudgetTripped is set to true after the first budget
-	// overshoot so we emit at most one diagnostic per check run.
-	CheckBudgetTripped bool
+	// BudgetTripped is set to true after the first budget overshoot
+	// so we emit at most one diagnostic per check run.
+	BudgetTripped bool
 
-	// CheckDefsInstalled records the names (and source positions)
-	// that the user's program defined during a check run via the
-	// def word. Populated by recordCheckDef; consulted at end of
-	// run to emit unused_def warnings.
-	CheckDefsInstalled map[string]SrcPos
+	// DefsInstalled records the names (and source positions) that
+	// the user's program defined during a check run via the def
+	// word. Populated by recordCheckDef; consulted at end of run
+	// to emit unused_def warnings.
+	DefsInstalled map[string]SrcPos
 
-	// CheckDefsUsed records names looked up via Registry.Lookup or
+	// DefsUsed records names looked up via Registry.Lookup or
 	// simple-value substitution in check mode. Used to filter out
 	// defs that were referenced at least once.
-	CheckDefsUsed map[string]bool
+	DefsUsed map[string]bool
 
-	// CheckContextTypes is a best-effort record of keys that user
-	// code wrote to a Store during a check run. The value is the
-	// last-seen carrier type for that key, joined via
-	// JoinCarriers on repeated writes. Used by get's ReturnsFn so
-	// subsequent reads can produce a typed carrier rather than
-	// falling back to Any. Shared across the entire check run —
-	// not keyed by store identity — to keep the model simple for
-	// the common "one context store" usage pattern.
-	CheckContextTypes map[string]Value
+	// ContextTypes is a best-effort record of keys that user code
+	// wrote to a Store during a check run. The value is the
+	// last-seen carrier type for that key, joined via JoinCarriers
+	// on repeated writes. Used by get's ReturnsFn so subsequent
+	// reads can produce a typed carrier rather than falling back to
+	// Any. Shared across the entire check run — not keyed by store
+	// identity — to keep the model simple for the common
+	// "one context store" usage pattern.
+	ContextTypes map[string]Value
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -118,6 +164,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"undefined_word":       SeverityError,
 	"fn_body_error":        SeverityError,
 	"branch_error":         SeverityError,
+	"type_error":           SeverityError,
 	"missing_returns":      SeverityWarning,
 	"step_budget_exceeded": SeverityWarning,
 	"body_error":           SeverityWarning,
@@ -158,7 +205,8 @@ func NewRegistry() (*Registry, error) {
 	}
 
 	r := &Registry{
-		DefStacks:      make(map[string][]Value),
+		defStacks:      make(map[string][]Value),
+		types:          make(map[string][]Value),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,
@@ -329,15 +377,15 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
 // is pushed.
 func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
-	stack := r.DefStacks[name]
 	// If the top of the stack is already a FnDefInfo, update it in place.
-	if len(stack) > 0 {
-		if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+	if top, ok := r.TopOfDefStack(name); ok {
+		if fnDef, ok := top.Data.(FnDefInfo); ok {
 			fnDef.Signatures = append(fnDef.Signatures, sigs...)
 			SortSignatures(fnDef.Signatures)
 			fnDef.ForwardPrecedence = forwardPrec
 			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-			stack[len(stack)-1].Data = fnDef
+			top.Data = fnDef
+			r.ReplaceDefTop(name, top)
 			return
 		}
 	}
@@ -349,7 +397,7 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+	r.PushDef(name, NewFnDef(fnDef))
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args needed
@@ -378,7 +426,7 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // recorded by the engine.stepWord paths (simple-value substitution
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
-	stack := r.DefStacks[name]
+	stack := r.DefStack(name)
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			return &fnDef
@@ -401,13 +449,14 @@ func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *Mat
 // DefStacks[name] to only the Fallback entries (if any). Used during
 // rebuild after overlap filtering or undef.
 func (r *Registry) clearSigsKeepFallback(name string) {
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+	top, ok := r.TopOfDefStack(name)
+	if !ok {
 		return
 	}
-	if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+	if fnDef, ok := top.Data.(FnDefInfo); ok {
 		fnDef.Signatures = KeepFallback(fnDef.Signatures)
-		stack[len(stack)-1].Data = fnDef
+		top.Data = fnDef
+		r.ReplaceDefTop(name, top)
 	}
 }
 
@@ -443,7 +492,7 @@ func (r *Registry) InitRootContext() {
 	sysStore.Set("__val", NewStoreValue(valStore))
 
 	root.Set("__sys", NewStoreValue(sysStore))
-	r.ctxStack = append(r.ctxStack, root)
+	r.PushExistingContext(root)
 }
 
 // DefaultRegistry returns a registry populated with built-in primitives
@@ -566,6 +615,7 @@ func Register(r *Registry) {
 	RegisterTypeof(r)
 	RegisterFullTypeof(r)
 	RegisterIs(r)
+	RegisterGuard(r)
 	RegisterInspect(r)
 	RegisterBase(r)
 	RegisterTor(r)
@@ -675,8 +725,8 @@ func RegisterUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[int, int] and forward precedence.
 func registerBinaryIntOp(r *Registry, name string, op func(a, b int64) (int64, error)) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as2, _ := args[0].AsInteger()
-		_as1, _ := args[1].AsInteger()
+		_as2, _ := args[0].AsConcreteInteger()
+		_as1, _ := args[1].AsConcreteInteger()
 		result, err := op(_as2, _as1)
 		if err != nil {
 			return nil, err
@@ -742,8 +792,8 @@ func registerUnaryNumOp(r *Registry, name string, op func(float64) float64) {
 // signature Args:[boolean, boolean] and forward precedence.
 func RegisterBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as7, _ := args[0].AsBoolean()
-		_as6, _ := args[1].AsBoolean()
+		_as7, _ := args[0].AsConcreteBoolean()
+		_as6, _ := args[1].AsConcreteBoolean()
 		return []Value{NewBoolean(op(_as7, _as6))}, nil
 	}
 	r.Register(name, Signature{
@@ -759,6 +809,12 @@ func valToString(v Value) string {
 		return v.VType.String()
 	}
 	switch {
+	case v.IsDepScalar():
+		// Must come before TString/TInteger/etc. matches: the
+		// lattice override makes DepString.Matches(TString) true,
+		// so without this case AsString would crash on the wrong
+		// payload type.
+		return renderDepScalar(v)
 	case v.VType.Matches(TString):
 		_as8, _ := v.AsString()
 		return _as8

@@ -893,13 +893,13 @@ func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 
 func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// An unknown word in forward position should resolve to atom
+	// An explicit Atom value can be the body of a def (def atomVal 'myatom).
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("atomVal"), NewWord("myatom"), NewWord("end"),
+		NewWord("def"), NewWord("atomVal"), NewAtom("myatom"), NewWord("end"),
 		NewWord("atomVal"),
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("def atomVal myatom = %v, want atom", result)
+		t.Errorf("def atomVal 'myatom = %v, want atom", result)
 	}
 }
 

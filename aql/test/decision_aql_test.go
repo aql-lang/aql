@@ -87,7 +87,7 @@ var decisionTests = []decisionTestCase{
 	// --- cond builder ---
 	{
 		name: "Cond",
-		expr: `18 "gte" age decision.cond`,
+		expr: `18 "gte" quote age decision.cond`,
 		check: func(t *testing.T, result []engine.Value) {
 			t.Helper()
 			m := result[0].AsMap()
@@ -104,42 +104,42 @@ var decisionTests = []decisionTestCase{
 	// --- eval-cond ---
 	{
 		name:  "EvalCondTrue",
-		expr:  `{age:25} {field:age,op:"gte",value:18} decision.eval-cond`,
+		expr:  `{age:25} {field:"age",op:"gte",value:18} decision.eval-cond`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalCondFalse",
-		expr:  `{age:15} {field:age,op:"gte",value:18} decision.eval-cond`,
+		expr:  `{age:15} {field:"age",op:"gte",value:18} decision.eval-cond`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalCondEq",
-		expr:  `{status:"active"} {field:status,op:"eq",value:"active"} decision.eval-cond`,
+		expr:  `{status:"active"} {field:"status",op:"eq",value:"active"} decision.eval-cond`,
 		check: checkBool(true),
 	},
 
 	// --- eval-pred ---
 	{
 		name:  "EvalPredAllOf",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)`,
 		expr:  `{age:25,score:80} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalPredAllOfFalse",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)`,
 		expr:  `{age:25,score:30} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalPredAnyOf",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.any-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.any-of)`,
 		expr:  `{age:10,score:80} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalPredNotOf",
-		setup: `def pred ({field:age,op:"lt",value:18} decision.not-of)`,
+		setup: `def pred ({field:"age",op:"lt",value:18} decision.not-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
@@ -148,8 +148,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableFirst",
 		setup: `def tbl ([
-			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
-			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
+			{when:{field:"age",op:"lt",value:18}, then:{category:"minor"}}
+			{when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("category", "adult"),
@@ -157,8 +157,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableFirstMinor",
 		setup: `def tbl ([
-			{when:{field:age,op:"lt",value:18}, then:{category:"minor"}}
-			{when:{field:age,op:"gte",value:18}, then:{category:"adult"}}
+			{when:{field:"age",op:"lt",value:18}, then:{category:"minor"}}
+			{when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
 		] decision.make-table)`,
 		expr:  `{age:12} tbl decision.eval-table`,
 		check: checkMapField("category", "minor"),
@@ -166,8 +166,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableUnique",
 		setup: `def rawtbl ([
-			{when:{field:score,op:"lt",value:50}, then:{grade:"fail"}}
-			{when:{field:score,op:"gte",value:50}, then:{grade:"pass"}}
+			{when:{field:"score",op:"lt",value:50}, then:{grade:"fail"}}
+			{when:{field:"score",op:"gte",value:50}, then:{grade:"pass"}}
 		] decision.make-table)
 		def tbl (rawtbl "unique" decision.with-policy)`,
 		expr:  `{score:75} tbl decision.eval-table`,
@@ -175,15 +175,15 @@ var decisionTests = []decisionTestCase{
 	},
 	{
 		name:  "TableNoMatch",
-		setup: `def tbl ([{when:{field:age,op:"gt",value:100}, then:{x:1}}] decision.make-table)`,
+		setup: `def tbl ([{when:{field:"age",op:"gt",value:100}, then:{x:1}}] decision.make-table)`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("error", "no-match"),
 	},
 	{
 		name: "TableCompound",
 		setup: `def tbl ({kind:"table", hit-policy:"first", rules:[
-			{when:{kind:"group",op:"all",children:[{field:age,op:"lt",value:30} {field:score,op:"gte",value:90}]}, then:{tier:"premium"}}
-			{when:{field:score,op:"gte",value:50}, then:{tier:"standard"}}
+			{when:{kind:"group",op:"all",children:[{field:"age",op:"lt",value:30} {field:"score",op:"gte",value:90}]}, then:{tier:"premium"}}
+			{when:{field:"score",op:"gte",value:50}, then:{tier:"standard"}}
 		]})`,
 		expr:  `{age:25,score:95} tbl decision.eval-table`,
 		check: checkMapField("tier", "premium"),
@@ -191,8 +191,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableCollect",
 		setup: `def rawtbl ([
-			{when:{field:age,op:"gte",value:18}, then:{perk:"vote"}}
-			{when:{field:age,op:"gte",value:21}, then:{perk:"drink"}}
+			{when:{field:"age",op:"gte",value:18}, then:{perk:"vote"}}
+			{when:{field:"age",op:"gte",value:21}, then:{perk:"drink"}}
 		] decision.make-table)
 		def tbl (rawtbl "collect" decision.with-policy)`,
 		expr:  `{age:25} tbl decision.eval-table`,
@@ -201,9 +201,9 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TablePriority",
 		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
-			{when:{field:age,op:"gte",value:18}, then:{tier:"adult"}, priority:1}
-			{when:{field:age,op:"gte",value:21}, then:{tier:"senior"}, priority:10}
-			{when:{field:age,op:"gte",value:0}, then:{tier:"any"}, priority:0}
+			{when:{field:"age",op:"gte",value:18}, then:{tier:"adult"}, priority:1}
+			{when:{field:"age",op:"gte",value:21}, then:{tier:"senior"}, priority:10}
+			{when:{field:"age",op:"gte",value:0}, then:{tier:"any"}, priority:0}
 		]})`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("tier", "senior"),
@@ -212,44 +212,44 @@ var decisionTests = []decisionTestCase{
 	// --- eval-tree ---
 	{
 		name: "Tree",
-		setup: `def tree ({kind:"tree", root:root, nodes:[
-			{id:root, kind:"branch", branches:[
-				{when:{field:age,op:"lt",value:18}, next:minor}
-				{when:{field:age,op:"gte",value:18}, next:adult}
+		setup: `def tree ({kind:"tree", root:"root", nodes:[
+			{id:"root", kind:"branch", branches:[
+				{when:{field:"age",op:"lt",value:18}, next:"minor"}
+				{when:{field:"age",op:"gte",value:18}, next:"adult"}
 			]}
-			{id:minor, kind:"leaf", result:{category:"minor"}}
-			{id:adult, kind:"leaf", result:{category:"adult"}}
+			{id:"minor", kind:"leaf", result:{category:"minor"}}
+			{id:"adult", kind:"leaf", result:{category:"adult"}}
 		]})`,
 		expr:  `{age:25} tree decision.eval-tree`,
 		check: checkMapField("category", "adult"),
 	},
 	{
 		name: "TreeMinor",
-		setup: `def tree ({kind:"tree", root:root, nodes:[
-			{id:root, kind:"branch", branches:[
-				{when:{field:age,op:"lt",value:18}, next:minor}
-				{when:{field:age,op:"gte",value:18}, next:adult}
+		setup: `def tree ({kind:"tree", root:"root", nodes:[
+			{id:"root", kind:"branch", branches:[
+				{when:{field:"age",op:"lt",value:18}, next:"minor"}
+				{when:{field:"age",op:"gte",value:18}, next:"adult"}
 			]}
-			{id:minor, kind:"leaf", result:"too-young"}
-			{id:adult, kind:"leaf", result:"welcome"}
+			{id:"minor", kind:"leaf", result:"too-young"}
+			{id:"adult", kind:"leaf", result:"welcome"}
 		]})`,
 		expr:  `{age:12} tree decision.eval-tree`,
 		check: checkString("too-young"),
 	},
 	{
 		name: "TreeMultiLevel",
-		setup: `def tree ({kind:"tree", root:check-age, nodes:[
-			{id:check-age, kind:"branch", branches:[
-				{when:{field:age,op:"lt",value:18}, next:reject}
-				{when:{field:age,op:"gte",value:18}, next:check-score}
+		setup: `def tree ({kind:"tree", root:"check-age", nodes:[
+			{id:"check-age", kind:"branch", branches:[
+				{when:{field:"age",op:"lt",value:18}, next:"reject"}
+				{when:{field:"age",op:"gte",value:18}, next:"check-score"}
 			]}
-			{id:check-score, kind:"branch", branches:[
-				{when:{field:score,op:"gte",value:80}, next:approve}
-				{when:{field:score,op:"lt",value:80}, next:review}
+			{id:"check-score", kind:"branch", branches:[
+				{when:{field:"score",op:"gte",value:80}, next:"approve"}
+				{when:{field:"score",op:"lt",value:80}, next:"review"}
 			]}
-			{id:reject, kind:"leaf", result:"rejected"}
-			{id:approve, kind:"leaf", result:"approved"}
-			{id:review, kind:"leaf", result:"needs-review"}
+			{id:"reject", kind:"leaf", result:"rejected"}
+			{id:"approve", kind:"leaf", result:"approved"}
+			{id:"review", kind:"leaf", result:"needs-review"}
 		]})`,
 		expr:  `{age:25,score:90} tree decision.eval-tree`,
 		check: checkString("approved"),
@@ -258,32 +258,32 @@ var decisionTests = []decisionTestCase{
 	// --- eval-cond (additional comparison ops) ---
 	{
 		name:  "EvalCondNeq",
-		expr:  `{status:"active"} {field:status,op:"neq",value:"inactive"} decision.eval-cond`,
+		expr:  `{status:"active"} {field:"status",op:"neq",value:"inactive"} decision.eval-cond`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalCondLt",
-		expr:  `{age:10} {field:age,op:"lt",value:18} decision.eval-cond`,
+		expr:  `{age:10} {field:"age",op:"lt",value:18} decision.eval-cond`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalCondLte",
-		expr:  `{age:18} {field:age,op:"lte",value:18} decision.eval-cond`,
+		expr:  `{age:18} {field:"age",op:"lte",value:18} decision.eval-cond`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalCondGt",
-		expr:  `{age:25} {field:age,op:"gt",value:18} decision.eval-cond`,
+		expr:  `{age:25} {field:"age",op:"gt",value:18} decision.eval-cond`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalCondGtFalse",
-		expr:  `{age:5} {field:age,op:"gt",value:18} decision.eval-cond`,
+		expr:  `{age:5} {field:"age",op:"gt",value:18} decision.eval-cond`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalCondUnknownOpReturnsFalse",
-		expr:  `{age:25} {field:age,op:"weird",value:18} decision.eval-cond`,
+		expr:  `{age:25} {field:"age",op:"weird",value:18} decision.eval-cond`,
 		check: checkBool(false),
 	},
 
@@ -302,37 +302,37 @@ var decisionTests = []decisionTestCase{
 	},
 	{
 		name:  "EvalPredAllOfSingleChildTrue",
-		setup: `def pred ([{field:age,op:"gte",value:18}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18}] decision.all-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalPredAllOfSingleChildFalse",
-		setup: `def pred ([{field:age,op:"gte",value:18}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18}] decision.all-of)`,
 		expr:  `{age:10} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalPredAnyOfAllFalse",
-		setup: `def pred ([{field:age,op:"gte",value:100} {field:age,op:"lt",value:0}] decision.any-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:100} {field:"age",op:"lt",value:0}] decision.any-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalPredAnyOfFirstTrueShortCircuits",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:never,op:"eq",value:"x"}] decision.any-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"never",op:"eq",value:"x"}] decision.any-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalPredAllOfThreeChildrenTrue",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50} {field:active,op:"eq",value:true}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50} {field:"active",op:"eq",value:true}] decision.all-of)`,
 		expr:  `{age:25,score:80,active:true} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
 	{
 		name:  "EvalPredAllOfThreeChildrenOneFails",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:score,op:"gt",value:50} {field:active,op:"eq",value:true}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50} {field:"active",op:"eq",value:true}] decision.all-of)`,
 		expr:  `{age:25,score:80,active:false} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
@@ -341,10 +341,10 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "EvalPredAnyOfInsideAllOf",
 		setup: `def pred ([
-			{field:age,op:"gte",value:18}
+			{field:"age",op:"gte",value:18}
 			{kind:"group",op:"any",children:[
-				{field:role,op:"eq",value:"admin"}
-				{field:role,op:"eq",value:"editor"}
+				{field:"role",op:"eq",value:"admin"}
+				{field:"role",op:"eq",value:"editor"}
 			]}
 		] decision.all-of)`,
 		expr:  `{age:25,role:"admin"} pred decision.eval-pred`,
@@ -353,10 +353,10 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "EvalPredAnyOfInsideAllOfRejects",
 		setup: `def pred ([
-			{field:age,op:"gte",value:18}
+			{field:"age",op:"gte",value:18}
 			{kind:"group",op:"any",children:[
-				{field:role,op:"eq",value:"admin"}
-				{field:role,op:"eq",value:"editor"}
+				{field:"role",op:"eq",value:"admin"}
+				{field:"role",op:"eq",value:"editor"}
 			]}
 		] decision.all-of)`,
 		expr:  `{age:25,role:"viewer"} pred decision.eval-pred`,
@@ -366,10 +366,10 @@ var decisionTests = []decisionTestCase{
 		name: "EvalPredAllOfInsideAnyOf",
 		setup: `def pred ([
 			{kind:"group",op:"all",children:[
-				{field:age,op:"gte",value:18}
-				{field:age,op:"lt",value:65}
+				{field:"age",op:"gte",value:18}
+				{field:"age",op:"lt",value:65}
 			]}
-			{field:vip,op:"eq",value:true}
+			{field:"vip",op:"eq",value:true}
 		] decision.any-of)`,
 		expr:  `{age:80,vip:true} pred decision.eval-pred`,
 		check: checkBool(true),
@@ -377,8 +377,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "EvalPredNotOfGroup",
 		setup: `def pred ({kind:"group",op:"not",children:[{kind:"group",op:"any",children:[
-			{field:status,op:"eq",value:"banned"}
-			{field:status,op:"eq",value:"suspended"}
+			{field:"status",op:"eq",value:"banned"}
+			{field:"status",op:"eq",value:"suspended"}
 		]}]} )`,
 		expr:  `{status:"active"} pred decision.eval-pred`,
 		check: checkBool(true),
@@ -391,7 +391,7 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableCollectNoMatch",
 		setup: `def rawtbl ([
-			{when:{field:age,op:"gt",value:100}, then:{x:1}}
+			{when:{field:"age",op:"gt",value:100}, then:{x:1}}
 		] decision.make-table)
 		def tbl (rawtbl "collect" decision.with-policy)`,
 		expr:  `{age:25} tbl decision.eval-table`,
@@ -400,8 +400,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TableUniqueMultipleMatchesError",
 		setup: `def rawtbl ([
-			{when:{field:age,op:"gte",value:18}, then:{tag:"a"}}
-			{when:{field:age,op:"gte",value:21}, then:{tag:"b"}}
+			{when:{field:"age",op:"gte",value:18}, then:{tag:"a"}}
+			{when:{field:"age",op:"gte",value:21}, then:{tag:"b"}}
 		] decision.make-table)
 		def tbl (rawtbl "unique" decision.with-policy)`,
 		expr:  `{age:30} tbl decision.eval-table`,
@@ -410,7 +410,7 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TablePriorityNoMatch",
 		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
-			{when:{field:age,op:"gt",value:100}, then:{tier:"X"}, priority:1}
+			{when:{field:"age",op:"gt",value:100}, then:{tier:"X"}, priority:1}
 		]})`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("error", "no-match"),
@@ -418,8 +418,8 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "TablePriorityMissingPriorityFieldDefaultsToZero",
 		setup: `def tbl ({kind:"table", hit-policy:"priority", rules:[
-			{when:{field:age,op:"gte",value:18}, then:{tier:"plain"}}
-			{when:{field:age,op:"gte",value:21}, then:{tier:"vip"}, priority:5}
+			{when:{field:"age",op:"gte",value:18}, then:{tier:"plain"}}
+			{when:{field:"age",op:"gte",value:21}, then:{tier:"vip"}, priority:5}
 		]})`,
 		expr:  `{age:25} tbl decision.eval-table`,
 		check: checkMapField("tier", "vip"),
@@ -429,12 +429,12 @@ var decisionTests = []decisionTestCase{
 		setup: `def tbl ({kind:"table", hit-policy:"first", rules:[
 			{when:{kind:"group",op:"all",children:[
 				{kind:"group",op:"any",children:[
-					{field:role,op:"eq",value:"admin"}
-					{field:role,op:"eq",value:"editor"}
+					{field:"role",op:"eq",value:"admin"}
+					{field:"role",op:"eq",value:"editor"}
 				]}
-				{field:active,op:"eq",value:true}
+				{field:"active",op:"eq",value:true}
 			]}, then:{access:"granted"}}
-			{when:{field:active,op:"eq",value:true}, then:{access:"limited"}}
+			{when:{field:"active",op:"eq",value:true}, then:{access:"limited"}}
 		]})`,
 		expr:  `{role:"editor",active:true} tbl decision.eval-table`,
 		check: checkMapField("access", "granted"),
@@ -443,20 +443,20 @@ var decisionTests = []decisionTestCase{
 	// --- eval-tree: error / edge cases ---
 	{
 		name: "TreeNoBranchMatch",
-		setup: `def tree ({kind:"tree", root:root, nodes:[
-			{id:root, kind:"branch", branches:[
-				{when:{field:age,op:"gt",value:100}, next:tooOld}
+		setup: `def tree ({kind:"tree", root:"root", nodes:[
+			{id:"root", kind:"branch", branches:[
+				{when:{field:"age",op:"gt",value:100}, next:"tooOld"}
 			]}
-			{id:tooOld, kind:"leaf", result:"old"}
+			{id:"tooOld", kind:"leaf", result:"old"}
 		]})`,
 		expr:  `{age:25} tree decision.eval-tree`,
 		check: checkMapField("error", "no-branch-match"),
 	},
 	{
 		name: "TreeBrokenNextId",
-		setup: `def tree ({kind:"tree", root:root, nodes:[
-			{id:root, kind:"branch", branches:[
-				{when:{field:flag,op:"eq",value:true}, next:missing}
+		setup: `def tree ({kind:"tree", root:"root", nodes:[
+			{id:"root", kind:"branch", branches:[
+				{when:{field:"flag",op:"eq",value:true}, next:"missing"}
 			]}
 		]})`,
 		expr:  `{flag:true} tree decision.eval-tree`,
@@ -474,19 +474,19 @@ var decisionTests = []decisionTestCase{
 	// --- eval-pred uses each + all/any (regression: short-circuit identity) ---
 	{
 		name:  "EvalPredAllOfFirstFails",
-		setup: `def pred ([{field:never,op:"eq",value:"x"} {field:age,op:"gte",value:18}] decision.all-of)`,
+		setup: `def pred ([{field:"never",op:"eq",value:"x"} {field:"age",op:"gte",value:18}] decision.all-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalPredAllOfLastFails",
-		setup: `def pred ([{field:age,op:"gte",value:18} {field:never,op:"eq",value:"x"}] decision.all-of)`,
+		setup: `def pred ([{field:"age",op:"gte",value:18} {field:"never",op:"eq",value:"x"}] decision.all-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(false),
 	},
 	{
 		name:  "EvalPredAnyOfLastTrue",
-		setup: `def pred ([{field:age,op:"gt",value:100} {field:age,op:"lt",value:0} {field:age,op:"gte",value:18}] decision.any-of)`,
+		setup: `def pred ([{field:"age",op:"gt",value:100} {field:"age",op:"lt",value:0} {field:"age",op:"gte",value:18}] decision.any-of)`,
 		expr:  `{age:25} pred decision.eval-pred`,
 		check: checkBool(true),
 	},
@@ -495,21 +495,21 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "DecideTable",
 		setup: `def model ({kind:"table", hit-policy:"first", rules:[
-			{when:{field:x,op:"gt",value:0}, then:{sign:"positive"}}
-			{when:{field:x,op:"lt",value:0}, then:{sign:"negative"}}
+			{when:{field:"x",op:"gt",value:0}, then:{sign:"positive"}}
+			{when:{field:"x",op:"lt",value:0}, then:{sign:"negative"}}
 		]})`,
 		expr:  `{x:5} model decision.decide`,
 		check: checkMapField("sign", "positive"),
 	},
 	{
 		name: "DecideTree",
-		setup: `def model ({kind:"tree", root:root, nodes:[
-			{id:root, kind:"branch", branches:[
-				{when:{field:temp,op:"gt",value:30}, next:hot}
-				{when:{field:temp,op:"lt",value:10}, next:cold}
+		setup: `def model ({kind:"tree", root:"root", nodes:[
+			{id:"root", kind:"branch", branches:[
+				{when:{field:"temp",op:"gt",value:30}, next:"hot"}
+				{when:{field:"temp",op:"lt",value:10}, next:"cold"}
 			]}
-			{id:hot, kind:"leaf", result:"hot"}
-			{id:cold, kind:"leaf", result:"cold"}
+			{id:"hot", kind:"leaf", result:"hot"}
+			{id:"cold", kind:"leaf", result:"cold"}
 		]})`,
 		expr:  `{temp:35} model decision.decide`,
 		check: checkString("hot"),
@@ -581,7 +581,7 @@ func inlineDecisionRegistry(t *testing.T) *engine.Registry {
 	r.SetParseFunc(parser.Parse)
 	native.Register(r)
 
-	src := buildDecisionModuleAQL() + "\nimport decision\n"
+	src := buildDecisionModuleAQL() + "\nimport (quote decision)\n"
 	vals, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)

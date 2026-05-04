@@ -52,7 +52,10 @@ TYPE.EQUAL(other):
 
 Values are matched against signature types strictly in order — no permutation.
 The `/q` modifier (implicit quote) on a signature position allows Word values
-to match as Atoms without evaluation.
+to match as Atoms without evaluation. Note that `/q` is a **forward-only**
+language rule: a Word value can only end up in `values[i]` via forward
+collection, never via stack matching (see §7), because stack values have
+already been processed by `stepWord`.
 
 ```
 POSITIONAL_MATCH(values[], sig):
@@ -62,7 +65,7 @@ POSITIONAL_MATCH(values[], sig):
         v = values[i]
         t = sig.args[i]
 
-        // /q modifier: treat Word as Atom for matching
+        // /q modifier (forward-only): treat Word as Atom for matching
         if sig.quoteArgs[i] AND v.type == Word:
             if NOT Atom.MATCHES(t):
                 return false
@@ -266,33 +269,64 @@ FORWARD_STACK_COVERAGE(sigArgs[], resolved[]):
 
 ## 7. The /q Modifier (Implicit Quote)
 
-The `/q` modifier on a signature argument position indicates that a Word value
-at that position should be treated as an Atom for matching purposes and captured
-without evaluation during forward collection.
+The `/q` modifier on a signature argument position is a **forward-args-only**
+language rule: it intervenes during forward arg collection so that the next
+incoming Word is captured as an Atom rather than executed. This is what makes
+`def name body`, `set foo 42 store`, `get a {a:1}`, etc. work without an
+explicit `quote`.
+
+### Asymmetric design (forward-only)
+
+`/q` has effect on the forward side only. The asymmetry between forward and
+stack arg matching is intentional:
+
+- **Forward side**: `/q` is meaningful and active. Without it, an upcoming Word
+  is dispatched through the engine (executed if registered, looked up if
+  defined, otherwise converted to an Atom by `stepWord`). With `/q` set on the
+  receiving sig position, the engine bypasses that and takes the Word as the
+  raw name.
+- **Stack side**: `/q` cannot match. By the time a value reaches the resolved
+  stack it is no longer a Word — `stepWord` has either executed it, resolved
+  it to a defined value, or converted it to an undefined Atom. The only way to
+  put a name on the stack as a value is `quote`, which produces an Atom. An
+  Atom on the stack matches an `[A/q, X]` sig via the normal type-match
+  fall-through; the `/q` annotation is irrelevant to that path.
+
+### Consequence for sig design
+
+A `[A/q, X]` signature already covers both reachable cases:
+
+1. The forward Word case (`set foo 42 store`) — `/q` captures `foo` as Atom.
+2. The explicit Atom case (`set 'foo 42 store`, or any all-prefix form like
+   `'foo 42 store set`) — the value arrives as Atom and matches the `A`
+   slot directly via `sigTypeMatches`.
+
+A separate `[A, X]` sig (without `/q`) is therefore redundant. Only declare
+distinct sigs for genuinely different key types (e.g. `[S, X]` for String
+keys, `[I, X]` for Integer keys).
 
 ### Signature Definition
 
 ```
 Signature {
     args:      Type[]
-    quoteArgs: map[int]bool   // positions with /q modifier
+    quoteArgs: map[int]bool   // positions with /q modifier (forward only)
     handler:   function
     ...
 }
 ```
 
-### Where /q applies
+### Where /q is consulted
 
-The /q modifier affects matching at every point in the engine where type
-compatibility is checked:
+All effective uses of `/q` are on the forward-collection path:
 
-1. **POSITIONAL_MATCH** — Word at /q position matches if Atom.MATCHES(sigType)
-2. **Forward collection** — Word value at /q position is accepted by the forward
-3. **Forward word capture** — `hasPendingForwardExpectingWord` returns true for /q positions, preventing word evaluation during collection
-4. **Planner peek bonus** — Word peek at /q position gets the specific-type bonus
-5. **Early resolution** — `shouldResolveForwardEarly` recognizes /q when checking if a shorter sig matches collected types
-6. **hasForwardValues** — /q positions are recognized as accepting words
-7. **Overload switching** — /q positions match Word values during forward sig switching
+1. **Forward collection** — Word value at /q position is accepted by the forward scan and stored without evaluation
+2. **Forward word capture** — `hasPendingForwardExpectingWord` returns true for /q positions, preventing word evaluation during collection
+3. **Planner peek bonus** — Word peek at /q position gets the specific-type bonus
+4. **Early resolution** — `shouldResolveForwardEarly` recognizes /q when checking if a shorter sig matches collected types
+5. **hasForwardValues** — /q positions are recognized as accepting words
+6. **Overload switching** — /q positions match Word values during forward sig switching
+7. **POSITIONAL_MATCH** — Word at /q position matches if `Atom.MATCHES(sigType)`. This branch is reachable only with values produced from forward collection (where a raw Word can be present in the signature-position slot); for true stack-only matching, the slot will hold an Atom and the standard type-match path handles it.
 
 ### Example: `def` signatures
 

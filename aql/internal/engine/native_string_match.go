@@ -5,8 +5,8 @@ import "strings"
 func RegisterMatch(r *Registry) {
 	// match: [string, string] -> [map]
 	matchHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as1, _ := args[0].AsString()
-		_as0, _ := args[1].AsString()
+		_as1, _ := args[0].AsConcreteString()
+		_as0, _ := args[1].AsConcreteString()
 		return doMatch(_as1, _as0,
 			strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 	}
@@ -14,8 +14,8 @@ func RegisterMatch(r *Registry) {
 	// match: [string, string, map] -> [map]
 	matchOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		opts := parseStrOpts(args[2])
-		_as3, _ := args[0].AsString()
-		_as2, _ := args[1].AsString()
+		_as3, _ := args[0].AsConcreteString()
+		_as2, _ := args[1].AsConcreteString()
 		return doMatch(_as3, _as2, opts)
 	}
 

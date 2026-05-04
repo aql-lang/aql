@@ -164,7 +164,7 @@ def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [
 # aql:decision — Exports
 # ============================================================
 
-export decision {
+export "decision" {
   Cond:        Cond
   Pred:        Pred
   Rule:        Rule

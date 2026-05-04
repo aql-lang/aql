@@ -1,5 +1,5 @@
 # boolean.tsv — extensive tests for Boolean coercion, short-circuiting,
-# algebraic type operators (tor / tand), the `otherwise` word, and
+# algebraic type Operators (tor / tand), the `otherwise` word, and
 # their interactions with the rest of the language.
 #
 # Format: <expr>\t<expected-output>[\t<error-code>]
@@ -210,7 +210,7 @@ None otherwise 5	5
 # 9. tor — type-or (disjunction / union)
 # =====================================================================
 
-# Two type literals.
+# Two type Literals.
 String tor None	Scalar/String|None
 Number tor String	Scalar/Number|Scalar/String
 Boolean tor None	Scalar/Boolean|None
@@ -223,12 +223,16 @@ Integer tor Decimal tor String tor None	Scalar/Number/Integer|Scalar/Number/Deci
 1 tor 2	1|2
 "a" tor "b" tor "c"	'a'|'b'|'c'
 
-# Mixed concrete and type literals.
+# Mixed concrete and type Literals.
 String tor 42	Scalar/String|42
 
-# Disjunct alternatives are kept as-is at runtime (no subsumption).
-Number tor Integer	Scalar/Number|Scalar/Number/Integer
-String tor String	Scalar/String|Scalar/String
+# Disjunct alternatives are simplified at construction:
+# - Identical alternatives dedupe (idempotence).
+# - Strict subtype is subsumed by its supertype.
+# These leave a single alternative, so the disjunct collapses to a
+# bare type literal.
+Number tor Integer	Scalar/Number
+String tor String	Scalar/String
 
 # Disjunct unifies with one of its alternatives.
 (String tor None) unify "hi"	'hi' true
@@ -258,7 +262,7 @@ String tor String	Scalar/String|Scalar/String
 1 tand Number	1
 "hi" tand String	'hi'
 
-# Type literals: tand falls back to Unify; the narrower type wins.
+# Type literals: tand falls back to Unify; the narrower type Wins.
 Integer tand Number	Scalar/Number/Integer
 Number tand Integer	Scalar/Number/Integer
 
@@ -405,7 +409,7 @@ None tor String	None|Scalar/String
 # otherwise with both None.
 None otherwise None	None
 
-# Boolean coercion through type coercion.
+# Boolean Coercion through type Coercion.
 (1 convert Boolean) and (2 convert Boolean)	true
 (0 convert Boolean) or (false)	false
 
@@ -754,10 +758,10 @@ quote [true false true] all	false
 [{x:1}] tall	{x:1}
 [Integer] tall	Scalar/Number/Integer
 
-# Repeated elements are kept (no dedup).
-[String String] tany	Scalar/String|Scalar/String
-[None None] tany	None|None
-[1 1 1] tany	1|1|1
+# Repeated elements dedupe (idempotence: T tor T = T).
+[String String] tany	Scalar/String
+[None None] tany	None
+[1 1 1] tany	1
 
 # =====================================================================
 # 34. tany — disjunct flattening
@@ -809,30 +813,31 @@ None is ([Integer String None] tany)	true
 [{b:2} {a:1}] tall	{b:2,a:1}
 
 # =====================================================================
-# 37. tall — error cases (conflicting concrete values)
+# 37. tall — disjoint cases reduce to Never
 # =====================================================================
 
-# Two different concrete values for the same key fail (unify_error
-# matches the substring "cannot unify").
-[{x:1} {x:2}] tall		unify_error
-[{x:Integer} {x:String}] tall		unify_error
-[{x:1 y:2} {x:1 y:3}] tall		unify_error
+# Two different concrete values for the same key are disjoint, so the
+# whole intersection collapses to Never (the bottom type / empty
+# intersection). tall is total: it never errors on disjoint input.
+[{x:1} {x:2}] tall	Never
+[{x:Integer} {x:String}] tall	Never
+[{x:1 y:2} {x:1 y:3}] tall	Never
 
-# Non-map values that don't unify also fail.
-[1 2] tall		unify_error
-[1 String] tall		unify_error
-[Integer Boolean] tall		unify_error
+# Non-map values that don't unify also reduce to Never.
+[1 2] tall	Never
+[1 String] tall	Never
+[Integer Boolean] tall	Never
 
 # =====================================================================
 # 38. tall — type-literal narrowing
 # =====================================================================
 
-# Subtype wins: narrower type is kept.
+# Subtype wins: narrower type Is kept.
 [Number Integer] tall	Scalar/Number/Integer
 [Integer Number] tall	Scalar/Number/Integer
 [Scalar Integer] tall	Scalar/Number/Integer
 
-# Same type collapses.
+# Same type Collapses.
 [String String] tall	Scalar/String
 [None None] tall	None
 

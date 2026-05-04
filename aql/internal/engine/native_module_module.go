@@ -36,7 +36,7 @@ func RegisterModule(r *Registry) {
 			Args:       []Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if args[0].Data == nil {
+				if !IsConcrete(args[0]) {
 					return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 				}
 				desc, err := RunModuleBody(r, args[0].AsList().Slice())
@@ -64,7 +64,7 @@ func RegisterModule(r *Registry) {
 	// import: [list module-desc] -> [] — rename imports via list
 	importRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		desc, _ := args[1].AsModule()
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 		}
 		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
@@ -84,7 +84,7 @@ func RegisterModule(r *Registry) {
 	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
 	// For other files, reads, parses as AQL, and executes in an isolated module engine.
 	importFileHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path, _ := args[0].AsString()
+		path, _ := args[0].AsConcreteString()
 		if isNativeModImport(path) {
 			return nil, resolveNativeMod(r, path)
 		}
@@ -113,7 +113,7 @@ func RegisterModule(r *Registry) {
 
 	// import: [list string] -> [] — import from file or bare module with renaming.
 	importFileRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path, _ := args[1].AsString()
+		path, _ := args[1].AsConcreteString()
 		if !isFilePath(path) {
 			resolved, err := resolveBareModule(r, path)
 			if err != nil {
@@ -143,7 +143,7 @@ func RegisterModule(r *Registry) {
 		if name != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
 		}
-		if args[1].Data == nil {
+		if !IsConcrete(args[1]) {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
 		desc, err := RunModuleBody(r, args[1].AsList().Slice())
@@ -160,10 +160,10 @@ func RegisterModule(r *Registry) {
 		if name != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
 		}
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 		}
-		if args[2].Data == nil {
+		if !IsConcrete(args[2]) {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
 		desc, err := RunModuleBody(r, args[2].AsList().Slice())
@@ -179,7 +179,7 @@ func RegisterModule(r *Registry) {
 		if modName != "module" {
 			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", modName)
 		}
-		if args[2].Data == nil {
+		if !IsConcrete(args[2]) {
 			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 		}
 		desc, err := RunModuleBody(r, args[2].AsList().Slice())
@@ -195,63 +195,63 @@ func RegisterModule(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TModule},
-				Handler: importAllHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TModule},
+				Handler:        importAllHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TList, TModule},
-				Handler: importRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TModule},
+				Handler:        importRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
 				Args: []Type{TAtom, TModule},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					_as0, _ := args[0].AsAtom()
+					_as0, _ := args[0].AsConcreteAtom()
 					return importSingleRenameHandler(_as0, args)
 				},
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TString},
-				Handler: importFileHandler,
-				Returns: []Type{TModule},
-			RunInCheckMode: true,
+				Args:           []Type{TString},
+				Handler:        importFileHandler,
+				Returns:        []Type{TModule},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TList, TString},
-				Handler: importFileRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TString},
+				Handler:        importFileRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			// Inline module forms: use /q to capture "module" as a quoted word
 			// instead of executing it as a function.
 			{
-				Args:       []Type{TAtom, TList},
-				QuoteArgs:  map[int]bool{0: true},
-				NoEvalArgs: map[int]bool{1: true},
-				Handler:    importInlineHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TAtom, TList},
+				QuoteArgs:      map[int]bool{0: true},
+				NoEvalArgs:     map[int]bool{1: true},
+				Handler:        importInlineHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:       []Type{TList, TAtom, TList},
-				QuoteArgs:  map[int]bool{1: true},
-				NoEvalArgs: map[int]bool{2: true},
-				Handler:    importInlineRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TAtom, TList},
+				QuoteArgs:      map[int]bool{1: true},
+				NoEvalArgs:     map[int]bool{2: true},
+				Handler:        importInlineRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:       []Type{TAtom, TAtom, TList},
-				QuoteArgs:  map[int]bool{1: true},
-				NoEvalArgs: map[int]bool{2: true},
-				Handler:    importInlineSingleRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TAtom, TAtom, TList},
+				QuoteArgs:      map[int]bool{1: true},
+				NoEvalArgs:     map[int]bool{2: true},
+				Handler:        importInlineSingleRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 		},
 	})
@@ -271,6 +271,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.MemOps = parent.MemOps
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
+	// CheckMode is deliberately NOT propagated to the module sub-
+	// registry. Module bodies need concrete string literals (used as
+	// export names / map keys) which carrier-stripping under CheckMode
+	// destroys. A typo inside an inline module body therefore raises
+	// a hard `undefined_word` error from stepWord and aborts the
+	// import; the user sees a clear single-error diagnostic and can
+	// fix the body before re-running. Top-level / if / do / for / fn
+	// bodies all stay in CheckMode and collect every typo as usual.
 
 	// Let the native package (or other extension packages) register
 	// their words in the module's sub-registry. Propagate the hook
@@ -283,7 +291,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
 	if parentCtx := parent.ContextStore(); parentCtx != nil {
-		modReg.ctxStack = append(modReg.ctxStack, parentCtx)
+		modReg.PushExistingContext(parentCtx)
 	}
 
 	exports := make(map[string]*OrderedMap)
@@ -304,10 +312,10 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			{
 				Args: []Type{TAtom, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if eargs[1].Data == nil {
+					if !IsConcrete(eargs[1]) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
-					_as1, _ := eargs[0].AsAtom()
+					_as1, _ := eargs[0].AsConcreteAtom()
 					exportHandler(_as1, eargs[1].AsMap())
 					return nil, nil
 				},
@@ -316,10 +324,10 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			{
 				Args: []Type{TString, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					if eargs[1].Data == nil {
+					if !IsConcrete(eargs[1]) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
-					_as2, _ := eargs[0].AsString()
+					_as2, _ := eargs[0].AsConcreteString()
 					exportHandler(_as2, eargs[1].AsMap())
 					return nil, nil
 				},
@@ -622,9 +630,24 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	} else {
 		return v
 	}
-	stack := modReg.DefStacks[name]
-	if len(stack) > 0 {
-		val := stack[len(stack)-1]
+	// Resolution order: r.Types (canonical home for user-defined
+	// types post-§5.2) wins, then DefStacks (value defs and the
+	// fn-def stash). Without the r.Types check, exports of named
+	// types (`export "color" {Color:Color}`) would leave the value
+	// side as an unresolved Word.
+	if tv, ok := modReg.TopOfTypeStack(name); ok {
+		if fnDef, ok := tv.Data.(FnDefInfo); ok {
+			if fnDef.Registry == nil {
+				fnDef.Registry = modReg
+				if tv.VType.Equal(TFnDef) {
+					return NewFnDef(fnDef)
+				}
+				return NewFunction(fnDef)
+			}
+		}
+		return tv
+	}
+	if val, ok := modReg.TopOfDefStack(name); ok {
 		// Tag FnDef values with the module's registry so they can
 		// execute in the correct context (closure semantics).
 		if fnDef, ok := val.Data.(FnDefInfo); ok {

@@ -11,7 +11,7 @@ import (
 //   - [any]          — pads the string representation to the default width
 func RegisterPad(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "pad",
+		Name:              "pad",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
 			{
@@ -36,7 +36,7 @@ func padDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // padWidthHandler calls voxgigstruct.Pad with a specified width.
 func padWidthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	width, err := args[1].AsInteger()
+	width, err := args[1].AsConcreteInteger()
 	if err != nil {
 		return nil, err
 	}

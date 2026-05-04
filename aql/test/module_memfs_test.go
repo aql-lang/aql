@@ -57,11 +57,11 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 
 func TestMemFSModuleBasicImport(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export Config {version:42,name:"myapp"}`,
+		"config.aql": `export "Config" {version:42,name:"myapp"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./config.aql"`,
-		`Config version .`,
+		`Config.version`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +71,11 @@ func TestMemFSModuleBasicImport(t *testing.T) {
 
 func TestMemFSModuleStringExport(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export Config {version:42,name:"myapp"}`,
+		"config.aql": `export "Config" {version:42,name:"myapp"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./config.aql"`,
-		`Config name .`,
+		`Config.name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestMemFSModuleStringExport(t *testing.T) {
 func TestMemFSModuleFunctionExport(t *testing.T) {
 	files := map[string]string{
 		"math.aql": `def double fn [[n:Integer] [Integer] [n add n]]
-export Math {double:double}`,
+export "Math" {double:double}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.aql"`,
@@ -104,12 +104,12 @@ export Math {double:double}`,
 
 func TestMemFSModuleWithAqlJson(t *testing.T) {
 	files := map[string]string{
-		"mymod/index.aql":    `export API {x:42}`,
+		"mymod/index.aql":    `export "API" {x:42}`,
 		"mymod/.aql/aql.json": `{"name":"mymod","main":"index.aql"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./mymod"`,
-		`API x .`,
+		`API.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -121,12 +121,12 @@ func TestMemFSModuleWithAqlJson(t *testing.T) {
 
 func TestMemFSModuleCustomMain(t *testing.T) {
 	files := map[string]string{
-		"lib/core.aql":       `export Core {pi:3}`,
+		"lib/core.aql":       `export "Core" {pi:3}`,
 		"lib/.aql/aql.json":  `{"name":"lib","main":"core.aql"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./lib"`,
-		`Core pi .`,
+		`Core.pi`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -139,9 +139,9 @@ func TestMemFSModuleCustomMain(t *testing.T) {
 func TestMemFSModuleTwoImports(t *testing.T) {
 	files := map[string]string{
 		"math.aql":    `def add1 fn [[n:Integer] [Integer] [n add 1]]
-export Math {add1:add1}`,
+export "Math" {add1:add1}`,
 		"strings.aql": `def greet fn [[s:String] [String] ["hello " add s]]
-export Strings {greet:greet}`,
+export "Strings" {greet:greet}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.aql"`,
@@ -165,10 +165,10 @@ func TestMemFSModuleFolderWriteImport(t *testing.T) {
 		// Write aql.json using Path
 		`write (make Path ["mymod" ".aql" "aql.json"]) "{\"name\":\"mymod\",\"main\":\"index.aql\"}"`,
 		// Write module source using Path
-		`write (make Path ["mymod" "index.aql"]) "export API {answer:42}"`,
+		`write (make Path ["mymod" "index.aql"]) "export \"API\" {answer:42}"`,
 		// Import and use
 		`import "./mymod"`,
-		`API answer .`,
+		`API.answer`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -181,11 +181,11 @@ func TestMemFSModuleFolderWriteImport(t *testing.T) {
 func TestMemFSModuleExportIsolation(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def secret 999
-export Pub {visible:1}`,
+export "Pub" {visible:1}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
-		`Pub visible .`,
+		`Pub.visible`,
 	})
 	if err != nil {
 		t.Fatal(err)

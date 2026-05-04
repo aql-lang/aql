@@ -8,10 +8,10 @@ import (
 )
 
 // TestObjectTypeDefine defines a named object type and verifies its structure.
-// def Foo object {a:String,b:Boolean} → Object/Foo with fields a and b
+// type Foo object {a:String,b:Boolean} → Object/Foo with fields a and b
 func TestObjectTypeDefine(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Boolean}`,
+		`type Foo object {a:String,b:Boolean}`,
 		`Foo`,
 	})
 	if err != nil {
@@ -54,11 +54,11 @@ func TestObjectTypeAnonymous(t *testing.T) {
 }
 
 // TestObjectTypeInheritance defines a child object type that inherits fields.
-// def Bar object {d:Integer} Foo → Object/Foo/Bar with fields a,b,d
+// type Bar object {d:Integer} Foo → Object/Foo/Bar with fields a,b,d
 func TestObjectTypeInheritance(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Boolean}`,
-		`def Bar object {d:Integer} Foo`,
+		`type Foo object {a:String,b:Boolean}`,
+		`type Bar object {d:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -87,8 +87,8 @@ func TestObjectTypeInheritance(t *testing.T) {
 // through AllFields on the child type.
 func TestObjectTypeParentFields(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Boolean}`,
-		`def Bar object {d:Integer} Foo`,
+		`type Foo object {a:String,b:Boolean}`,
+		`type Bar object {d:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -109,8 +109,8 @@ func TestObjectTypeParentFields(t *testing.T) {
 // TestObjectTypeOwnFieldsOnly verifies that own fields do not include inherited.
 func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Boolean}`,
-		`def Bar object {d:Integer} Foo`,
+		`type Foo object {a:String,b:Boolean}`,
+		`type Bar object {d:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -129,9 +129,9 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 // TestObjectTypeDeepInheritance tests three-level inheritance: Foo → Bar → Baz.
 func TestObjectTypeDeepInheritance(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:Integer} Foo`,
-		`def Baz object {c:Boolean} Bar`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:Integer} Foo`,
+		`type Baz object {c:Boolean} Bar`,
 		`Baz`,
 	})
 	if err != nil {
@@ -158,8 +158,8 @@ func TestObjectTypeDeepInheritance(t *testing.T) {
 // TestObjectTypeUniqueID verifies that each object type gets a unique ID.
 func TestObjectTypeUniqueID(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:String}`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:String}`,
 		`Foo`,
 	})
 	if err != nil {
@@ -169,8 +169,8 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	fooID := _tmp1.ID
 
 	result2, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:String}`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:String}`,
 		`Bar`,
 	})
 	if err != nil {
@@ -193,7 +193,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 // TestObjectTypeParentIsNilForRoot verifies that a root object type has no parent.
 func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
+		`type Foo object {a:String}`,
 		`Foo`,
 	})
 	if err != nil {
@@ -211,8 +211,8 @@ func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 // TestObjectTypeParentReference verifies the parent reference in a child type.
 func TestObjectTypeParentReference(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:Integer} Foo`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -230,8 +230,8 @@ func TestObjectTypeParentReference(t *testing.T) {
 // TestObjectTypeFieldOverride verifies that a child can narrow parent fields.
 func TestObjectTypeFieldOverride(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:Number,b:Boolean}`,
-		`def Bar object {a:Integer} Foo`,
+		`type Foo object {a:Number,b:Boolean}`,
+		`type Bar object {a:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -252,8 +252,8 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 // TestObjectTypeVTypeMatches verifies VType hierarchy matching.
 func TestObjectTypeVTypeMatches(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:Integer} Foo`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:Integer} Foo`,
 		`Bar`,
 	})
 	if err != nil {
@@ -452,7 +452,7 @@ func objFields(t *testing.T, result []engine.Value) *engine.OrderedMap {
 // TestMakeObjectBasic creates an object instance with type-literal fields.
 func TestMakeObjectBasic(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo {x:"hello"}`,
 	})
 	if err != nil {
@@ -480,7 +480,7 @@ func TestMakeObjectBasic(t *testing.T) {
 // TestMakeObjectTypeConversion converts field values to match type constraints.
 func TestMakeObjectTypeConversion(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo {x:42}`,
 	})
 	if err != nil {
@@ -498,7 +498,7 @@ func TestMakeObjectTypeConversion(t *testing.T) {
 // TestMakeObjectDefaultValues uses concrete defaults when fields are omitted.
 func TestMakeObjectDefaultValues(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {}`,
 	})
 	if err != nil {
@@ -519,7 +519,7 @@ func TestMakeObjectDefaultValues(t *testing.T) {
 // TestMakeObjectOverrideDefault overrides a concrete default with a new value.
 func TestMakeObjectOverrideDefault(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {x:2}`,
 	})
 	if err != nil {
@@ -537,7 +537,7 @@ func TestMakeObjectOverrideDefault(t *testing.T) {
 // TestMakeObjectMultipleFields handles multiple fields with mixed types.
 func TestMakeObjectMultipleFields(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String,y:Integer}`,
+		`type Foo object {x:String,y:Integer}`,
 		`make Foo {x:"hi",y:7}`,
 	})
 	if err != nil {
@@ -561,7 +561,7 @@ func TestMakeObjectMultipleFields(t *testing.T) {
 // TestMakeObjectMixedDefaultsAndTypes mixes type-literal and concrete-default fields.
 func TestMakeObjectMixedDefaultsAndTypes(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String,y:10}`,
+		`type Foo object {x:String,y:10}`,
 		`make Foo {x:"hi"}`,
 	})
 	if err != nil {
@@ -585,7 +585,7 @@ func TestMakeObjectMixedDefaultsAndTypes(t *testing.T) {
 // TestMakeObjectUnknownFieldError rejects unknown fields.
 func TestMakeObjectUnknownFieldError(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo {x:"hi",z:1}`,
 	})
 	if err == nil {
@@ -599,7 +599,7 @@ func TestMakeObjectUnknownFieldError(t *testing.T) {
 // TestMakeObjectMissingRequiredFieldError rejects missing type-literal fields.
 func TestMakeObjectMissingRequiredFieldError(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo {}`,
 	})
 	if err == nil {
@@ -613,7 +613,7 @@ func TestMakeObjectMissingRequiredFieldError(t *testing.T) {
 // TestMakeObjectNonMapSourceError rejects non-map source values.
 func TestMakeObjectNonMapSourceError(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo [1 2 3]`,
 	})
 	if err == nil {
@@ -627,7 +627,7 @@ func TestMakeObjectNonMapSourceError(t *testing.T) {
 // TestMakeObjectEmptyMapAllDefaults creates instance with all-default fields.
 func TestMakeObjectEmptyMapAllDefaults(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1,y:"default"}`,
+		`type Foo object {x:1,y:"default"}`,
 		`make Foo {}`,
 	})
 	if err != nil {
@@ -651,8 +651,8 @@ func TestMakeObjectEmptyMapAllDefaults(t *testing.T) {
 // TestMakeObjectInheritedFields creates instance of child type with parent fields.
 func TestMakeObjectInheritedFields(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String,b:Integer}`,
-		`def Bar object {c:Boolean} Foo`,
+		`type Foo object {a:String,b:Integer}`,
+		`type Bar object {c:Boolean} Foo`,
 		`make Bar {a:"hi",b:3,c:true}`,
 	})
 	if err != nil {
@@ -680,8 +680,8 @@ func TestMakeObjectInheritedFields(t *testing.T) {
 // TestMakeObjectInheritedDefaults uses parent defaults in child type.
 func TestMakeObjectInheritedDefaults(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:1,b:2}`,
-		`def Bar object {c:3} Foo`,
+		`type Foo object {a:1,b:2}`,
+		`type Bar object {c:3} Foo`,
 		`make Bar {}`,
 	})
 	if err != nil {
@@ -711,8 +711,8 @@ func TestMakeObjectInheritedDefaults(t *testing.T) {
 // TestMakeObjectInheritedUnknownFieldError rejects fields not in parent or child.
 func TestMakeObjectInheritedUnknownFieldError(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:String}`,
-		`def Bar object {b:Integer} Foo`,
+		`type Foo object {a:String}`,
+		`type Bar object {b:Integer} Foo`,
 		`make Bar {a:"hi",b:1,z:99}`,
 	})
 	if err == nil {
@@ -726,8 +726,8 @@ func TestMakeObjectInheritedUnknownFieldError(t *testing.T) {
 // TestMakeObjectOverrideInheritedDefault overrides a parent's default in child instance.
 func TestMakeObjectOverrideInheritedDefault(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:1}`,
-		`def Bar object {b:String} Foo`,
+		`type Foo object {a:1}`,
+		`type Bar object {b:String} Foo`,
 		`make Bar {a:99,b:"x"}`,
 	})
 	if err != nil {
@@ -745,7 +745,7 @@ func TestMakeObjectOverrideInheritedDefault(t *testing.T) {
 // TestMakeObjectStringDefault uses string default value.
 func TestMakeObjectStringDefault(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:"hello"}`,
+		`type Foo object {x:"hello"}`,
 		`make Foo {}`,
 	})
 	if err != nil {
@@ -763,7 +763,7 @@ func TestMakeObjectStringDefault(t *testing.T) {
 // TestMakeObjectStringDefaultOverride overrides string default with different string.
 func TestMakeObjectStringDefaultOverride(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:"hello"}`,
+		`type Foo object {x:"hello"}`,
 		`make Foo {x:"world"}`,
 	})
 	if err != nil {
@@ -781,7 +781,7 @@ func TestMakeObjectStringDefaultOverride(t *testing.T) {
 // TestMakeObjectBooleanDefault uses boolean default value.
 func TestMakeObjectBooleanDefault(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:true}`,
+		`type Foo object {x:true}`,
 		`make Foo {}`,
 	})
 	if err != nil {
@@ -797,7 +797,7 @@ func TestMakeObjectBooleanDefault(t *testing.T) {
 // TestMakeObjectBooleanDefaultOverride overrides boolean default.
 func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:true}`,
+		`type Foo object {x:true}`,
 		`make Foo {x:false}`,
 	})
 	if err != nil {
@@ -813,7 +813,7 @@ func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
 // TestMakeObjectMultipleInstances creates multiple independent instances.
 func TestMakeObjectMultipleInstances(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {x:10}`,
 	})
 	if err != nil {
@@ -822,7 +822,7 @@ func TestMakeObjectMultipleInstances(t *testing.T) {
 	om1 := objFields(t, result)
 
 	result2, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {x:20}`,
 	})
 	if err != nil {
@@ -842,7 +842,7 @@ func TestMakeObjectMultipleInstances(t *testing.T) {
 // TestMakeObjectOnlyUnknownFieldsError rejects when only unknown fields given.
 func TestMakeObjectOnlyUnknownFieldsError(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:String}`,
+		`type Foo object {x:String}`,
 		`make Foo {z:"hi"}`,
 	})
 	if err == nil {
@@ -856,7 +856,7 @@ func TestMakeObjectOnlyUnknownFieldsError(t *testing.T) {
 // TestMakeObjectFieldOrderPreserved verifies field order matches type definition.
 func TestMakeObjectFieldOrderPreserved(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:1,b:2,c:3}`,
+		`type Foo object {a:1,b:2,c:3}`,
 		`make Foo {c:30,a:10,b:20}`,
 	})
 	if err != nil {
@@ -873,9 +873,9 @@ func TestMakeObjectFieldOrderPreserved(t *testing.T) {
 // TestMakeObjectDeepInheritance tests 3-level inheritance chain.
 func TestMakeObjectDeepInheritance(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def A object {x:1}`,
-		`def B object {y:2} A`,
-		`def C object {z:3} B`,
+		`type A object {x:1}`,
+		`type B object {y:2} A`,
+		`type C object {z:3} B`,
 		`make C {}`,
 	})
 	if err != nil {
@@ -900,8 +900,8 @@ func TestMakeObjectDeepInheritance(t *testing.T) {
 // replace one concrete value with a different concrete value (99 vs 1).
 func TestMakeObjectChildOverridesParentConcreteRejected(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
-		`def Bar object {x:99} Foo`,
+		`type Foo object {x:1}`,
+		`type Bar object {x:99} Foo`,
 	})
 	if err == nil {
 		t.Fatal("expected error: child concrete 99 cannot replace parent concrete 1")
@@ -914,7 +914,7 @@ func TestMakeObjectChildOverridesParentConcreteRejected(t *testing.T) {
 // TestMakeObjectInstanceTypeMatchesObjectType verifies instance type path matches its type.
 func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {x:5}`,
 	})
 	if err != nil {
@@ -933,8 +933,8 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 // TestMakeObjectInstanceChildTypeRef verifies child instance references child type.
 func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {a:1}`,
-		`def Bar object {b:2} Foo`,
+		`type Foo object {a:1}`,
+		`type Bar object {b:2} Foo`,
 		`make Bar {}`,
 	})
 	if err != nil {
@@ -955,7 +955,7 @@ func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
 // TestMakeObjectInstanceStringFormat verifies the String() representation.
 func TestMakeObjectInstanceStringFormat(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:1}`,
+		`type Foo object {x:1}`,
 		`make Foo {x:5}`,
 	})
 	if err != nil {
@@ -975,9 +975,9 @@ func TestMakeObjectInstanceStringFormat(t *testing.T) {
 // TestMakeObjectPrototypeBasic creates a child instance with an explicit prototype.
 func TestMakeObjectPrototypeBasic(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"A"} foo1`,
 	})
 	if err != nil {
@@ -1002,9 +1002,9 @@ func TestMakeObjectPrototypeBasic(t *testing.T) {
 // TestMakeObjectPrototypeChainRef verifies the prototype pointer is set correctly.
 func TestMakeObjectPrototypeChainRef(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:42}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"hi"} foo1`,
 	})
 	if err != nil {
@@ -1029,8 +1029,8 @@ func TestMakeObjectPrototypeChainRef(t *testing.T) {
 // prototype auto-creates a parent instance with base values.
 func TestMakeObjectAutoPrototypeBaseValues(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
-		`def Bar object {y:String} Foo`,
+		`type Foo object {x:Integer}`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"test"}`,
 	})
 	if err != nil {
@@ -1053,8 +1053,8 @@ func TestMakeObjectAutoPrototypeBaseValues(t *testing.T) {
 // concrete defaults from the parent type definition.
 func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:10}`,
-		`def Bar object {y:String} Foo`,
+		`type Foo object {x:10}`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"test"}`,
 	})
 	if err != nil {
@@ -1073,9 +1073,9 @@ func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 // TestMakeObjectPrototypeOverrideInherited overrides an inherited field via make source.
 func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"A",x:99} foo1`,
 	})
 	if err != nil {
@@ -1094,9 +1094,9 @@ func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 // TestMakeObjectPrototypeGetField tests GetField on the prototype chain.
 func TestMakeObjectPrototypeGetField(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:7}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`make Bar {y:"hi"} foo1`,
 	})
 	if err != nil {
@@ -1129,8 +1129,8 @@ func TestMakeObjectPrototypeGetField(t *testing.T) {
 func TestObjectTypeFieldNarrowingAllowed(t *testing.T) {
 	// Integer is narrower than Number — should be allowed.
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Number}`,
-		`def Bar object {x:Integer} Foo`,
+		`type Foo object {x:Number}`,
+		`type Bar object {x:Integer} Foo`,
 	})
 	if err != nil {
 		t.Fatalf("narrowing Number→Integer should be allowed: %s", err)
@@ -1141,8 +1141,8 @@ func TestObjectTypeFieldNarrowingAllowed(t *testing.T) {
 func TestObjectTypeFieldNarrowingConcreteAllowed(t *testing.T) {
 	// Concrete 42 narrows Integer — should be allowed.
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
-		`def Bar object {x:42} Foo`,
+		`type Foo object {x:Integer}`,
+		`type Bar object {x:42} Foo`,
 	})
 	if err != nil {
 		t.Fatalf("narrowing Integer→42 should be allowed: %s", err)
@@ -1153,8 +1153,8 @@ func TestObjectTypeFieldNarrowingConcreteAllowed(t *testing.T) {
 func TestObjectTypeFieldExpandingRejected(t *testing.T) {
 	// String does not unify with Integer — should be rejected.
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
-		`def Bar object {x:String} Foo`,
+		`type Foo object {x:Integer}`,
+		`type Bar object {x:String} Foo`,
 	})
 	if err == nil {
 		t.Fatal("expected error for expanding Integer→String")
@@ -1168,8 +1168,8 @@ func TestObjectTypeFieldExpandingRejected(t *testing.T) {
 func TestObjectTypeFieldExpandingConcreteRejected(t *testing.T) {
 	// "hello" (string) does not unify with Integer.
 	_, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
-		`def Bar object {x:"hello"} Foo`,
+		`type Foo object {x:Integer}`,
+		`type Bar object {x:"hello"} Foo`,
 	})
 	if err == nil {
 		t.Fatal("expected error for incompatible concrete override")
@@ -1184,13 +1184,13 @@ func TestObjectTypeFieldExpandingConcreteRejected(t *testing.T) {
 // TestObjectTypeDeep7Levels tests 7-level type hierarchy definition.
 func TestObjectTypeDeep7Levels(t *testing.T) {
 	_, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:Integer}`,
-		`def L2 object {b:String} L1`,
-		`def L3 object {c:Boolean} L2`,
-		`def L4 object {d:Integer} L3`,
-		`def L5 object {e:String} L4`,
-		`def L6 object {f:Boolean} L5`,
-		`def L7 object {g:Integer} L6`,
+		`type L1 object {a:Integer}`,
+		`type L2 object {b:String} L1`,
+		`type L3 object {c:Boolean} L2`,
+		`type L4 object {d:Integer} L3`,
+		`type L5 object {e:String} L4`,
+		`type L6 object {f:Boolean} L5`,
+		`type L7 object {g:Integer} L6`,
 	})
 	if err != nil {
 		t.Fatalf("7-level type hierarchy should succeed: %s", err)
@@ -1200,13 +1200,13 @@ func TestObjectTypeDeep7Levels(t *testing.T) {
 // TestMakeObjectDeep7LevelsAllDefaults tests 7-level instance with all defaults.
 func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:1}`,
-		`def L2 object {b:"two"} L1`,
-		`def L3 object {c:true} L2`,
-		`def L4 object {d:4} L3`,
-		`def L5 object {e:"five"} L4`,
-		`def L6 object {f:false} L5`,
-		`def L7 object {g:7} L6`,
+		`type L1 object {a:1}`,
+		`type L2 object {b:"two"} L1`,
+		`type L3 object {c:true} L2`,
+		`type L4 object {d:4} L3`,
+		`type L5 object {e:"five"} L4`,
+		`type L6 object {f:false} L5`,
+		`type L7 object {g:7} L6`,
 		`make L7 {}`,
 	})
 	if err != nil {
@@ -1248,19 +1248,19 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 // TestMakeObjectDeep7LevelsPrototypeChain tests 7-level prototype chain.
 func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:Integer}`,
+		`type L1 object {a:Integer}`,
 		`def l1 make L1 {a:10}`,
-		`def L2 object {b:String} L1`,
+		`type L2 object {b:String} L1`,
 		`def l2 make L2 {b:"twenty"} l1`,
-		`def L3 object {c:Boolean} L2`,
+		`type L3 object {c:Boolean} L2`,
 		`def l3 make L3 {c:true} l2`,
-		`def L4 object {d:Integer} L3`,
+		`type L4 object {d:Integer} L3`,
 		`def l4 make L4 {d:40} l3`,
-		`def L5 object {e:String} L4`,
+		`type L5 object {e:String} L4`,
 		`def l5 make L5 {e:"fifty"} l4`,
-		`def L6 object {f:Boolean} L5`,
+		`type L6 object {f:Boolean} L5`,
 		`def l6 make L6 {f:false} l5`,
-		`def L7 object {g:Integer} L6`,
+		`type L7 object {g:Integer} L6`,
 		`make L7 {g:70} l6`,
 	})
 	if err != nil {
@@ -1302,19 +1302,19 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 // TestMakeObjectDeep7LevelsPrototypeDepth verifies prototype chain has correct depth.
 func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:Integer}`,
+		`type L1 object {a:Integer}`,
 		`def l1 make L1 {a:1}`,
-		`def L2 object {b:String} L1`,
+		`type L2 object {b:String} L1`,
 		`def l2 make L2 {b:"x"} l1`,
-		`def L3 object {c:Boolean} L2`,
+		`type L3 object {c:Boolean} L2`,
 		`def l3 make L3 {c:true} l2`,
-		`def L4 object {d:Integer} L3`,
+		`type L4 object {d:Integer} L3`,
 		`def l4 make L4 {d:4} l3`,
-		`def L5 object {e:String} L4`,
+		`type L5 object {e:String} L4`,
 		`def l5 make L5 {e:"y"} l4`,
-		`def L6 object {f:Boolean} L5`,
+		`type L6 object {f:Boolean} L5`,
 		`def l6 make L6 {f:false} l5`,
-		`def L7 object {g:Integer} L6`,
+		`type L7 object {g:Integer} L6`,
 		`make L7 {g:7} l6`,
 	})
 	if err != nil {
@@ -1333,13 +1333,13 @@ func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 // TestMakeObjectDeep7GrandparentFieldAccess verifies field access from grandparent+.
 func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:Integer}`,
+		`type L1 object {a:Integer}`,
 		`def l1 make L1 {a:100}`,
-		`def L2 object {b:String} L1`,
+		`type L2 object {b:String} L1`,
 		`def l2 make L2 {b:"hi"} l1`,
-		`def L3 object {c:Boolean} L2`,
+		`type L3 object {c:Boolean} L2`,
 		`def l3 make L3 {c:true} l2`,
-		`def L4 object {d:Integer} L3`,
+		`type L4 object {d:Integer} L3`,
 		`make L4 {d:999} l3`,
 	})
 	if err != nil {
@@ -1373,11 +1373,11 @@ func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 // TestMakeObjectDeep7OverrideGrandparentField overrides grandparent field at make time.
 func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:Integer}`,
+		`type L1 object {a:Integer}`,
 		`def l1 make L1 {a:1}`,
-		`def L2 object {b:String} L1`,
+		`type L2 object {b:String} L1`,
 		`def l2 make L2 {b:"x"} l1`,
-		`def L3 object {c:Boolean} L2`,
+		`type L3 object {c:Boolean} L2`,
 		// Override grandparent field a at L3 make time.
 		`make L3 {c:true,a:999} l2`,
 	})
@@ -1398,9 +1398,9 @@ func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
 func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
 	// L1: x:Number, L2: x:Integer (narrows Number), L3: x:42 (narrows Integer)
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {x:Number}`,
-		`def L2 object {x:Integer} L1`,
-		`def L3 object {x:42} L2`,
+		`type L1 object {x:Number}`,
+		`type L2 object {x:Integer} L1`,
+		`type L3 object {x:42} L2`,
 		`make L3 {}`,
 	})
 	if err != nil {
@@ -1419,9 +1419,9 @@ func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
 // TestMakeObjectDeep7AutoPrototypeStringFormat tests String output with deep auto-prototype.
 func TestMakeObjectDeep7AutoPrototypeStringFormat(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def L1 object {a:1}`,
-		`def L2 object {b:2} L1`,
-		`def L3 object {c:3} L2`,
+		`type L1 object {a:1}`,
+		`type L2 object {b:2} L1`,
+		`type L3 object {c:3} L2`,
 		`make L3 {}`,
 	})
 	if err != nil {
@@ -1445,9 +1445,9 @@ func TestMakeObjectDeep7AutoPrototypeStringFormat(t *testing.T) {
 func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	// foo1.x => 1
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`foo1 x get`,
+		`foo1 get x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1460,11 +1460,11 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 
 	// barA.y => 'A'
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
-		`barA y get`,
+		`barA get y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1477,11 +1477,11 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 
 	// barA.x => 1 (from prototype foo1)
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
-		`barA x get`,
+		`barA get x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1498,10 +1498,10 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 // create barA with foo1 as prototype, then print each dot-access result.
 func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`foo1.x`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
 		`barA.y`,
 		`barA.x`,
@@ -1520,7 +1520,7 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	// Also verify each step individually in a single shared engine.
 	var results []string
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 	})
 	if err != nil {
@@ -1529,7 +1529,7 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 
 	// foo1.x => 1
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`foo1.x`,
 	})
@@ -1540,9 +1540,9 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 
 	// barA.y => A
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
 		`barA.y`,
 	})
@@ -1553,9 +1553,9 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 
 	// barA.x => 1
 	result, err = runNativeSteps(t, nil, []string{
-		`def Foo object {x:Integer}`,
+		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
-		`def Bar object {y:String} Foo`,
+		`type Bar object {y:String} Foo`,
 		`def barA make Bar {y:"A"} foo1`,
 		`barA.x`,
 	})

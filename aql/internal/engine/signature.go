@@ -32,20 +32,44 @@ type Signature struct {
 	Patterns map[int]Value
 
 	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
-	// When set, a Word value at that position is treated as an Atom for
-	// matching purposes and is captured without evaluation during forward
-	// collection.
+	// /q is a FORWARD-ONLY language rule: it intervenes during forward arg
+	// collection so that an upcoming Word is captured as an Atom rather than
+	// being executed by stepWord. This is what makes `def name body`,
+	// `set foo 42 store`, `get a {a:1}`, etc. work without an explicit `quote`.
+	//
+	// Outside a /q slot, an undefined word at the pointer is an error
+	// (see stepWord). To pass a name as data without /q, the caller must
+	// quote it explicitly: `quote foo`, `(quote foo)`, or a literal atom.
+	//
+	// /q has no effect on stack matching: by the time a value reaches the
+	// resolved stack it is no longer a Word — stepWord has either invoked a
+	// registered word, resolved a defined name, or (under CheckMode only)
+	// converted an undefined Word to an `Undefined=true` Atom. The only
+	// way to put a name on the stack as a value is `quote name`, which
+	// produces an Atom; that Atom matches an [Atom/q, X] sig via the
+	// normal sigTypeMatches fall-through. So a single [Atom/q, X] sig
+	// covers BOTH the forward Word case and the explicit-Atom case —
+	// there is no need to declare a separate non-/q Atom sig.
 	QuoteArgs map[int]bool
 
 	// NoEvalArgs marks arg positions where list auto-evaluation should be
 	// suppressed in execMatch. Unlike QuoteArgs, this does NOT affect
 	// forward collection or word→atom conversion — it only prevents
 	// autoEvalList from running on consumed list arguments at marked
-	// positions. Map auto-evaluation (autoEvalMap) is NOT affected.
+	// positions. Map auto-evaluation (autoEvalMap) is NOT affected;
+	// for that use NoEvalMapArgs.
 	// Use this for code-body positions (def body, if branches, for body,
 	// etc.) where the list contains code to execute later, not data to
 	// resolve now.
 	NoEvalArgs map[int]bool
+
+	// NoEvalMapArgs marks arg positions where map auto-evaluation
+	// (autoEvalMap) should be suppressed. Used by def's typed-name
+	// signature so a Word at the type position arrives raw — without
+	// this, a fn-as-type name (registered as a callable AND stored as
+	// a type value) would be called by the auto-eval pipeline before
+	// the handler could resolve it as a type.
+	NoEvalMapArgs map[int]bool
 
 	// BarrierPos is the arg index where forward collection must stop.
 	// Positions before BarrierPos are collected forward; positions from
@@ -76,7 +100,7 @@ type Signature struct {
 	ReturnsFn ReturnsFunc
 
 	// RunInCheckMode, when true, causes the engine to execute this
-	// signature's Handler even when Registry.CheckMode is on. Use it
+	// signature's Handler even when Registry.Check.Mode is on. Use it
 	// for words with registry-level side effects that later words
 	// rely on (def, undef, fn, type, import, export, module). The
 	// handler still runs against carrier args, so it must tolerate
@@ -183,7 +207,6 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	return nil
 }
 
-
 // flexibleMatch checks whether values match the given signature positionally.
 // Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
@@ -200,14 +223,40 @@ func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	return nil, false
 }
 
-// sigTypeMatches checks whether a value's type matches a signature arg type,
-// including metatype awareness: a type literal (Data==nil) whose metatype
-// matches a metatype signature arg (e.g. String literal matches TScalarType).
+// sigTypeMatches checks whether a value's type matches a signature arg
+// type, including metatype awareness: a type literal (Data==nil) whose
+// metatype matches a metatype signature arg (e.g. String literal
+// matches TScalarType).
+//
+// **The carrier rule.** Carriers occupy a deliberately ambiguous role
+// in the type system: they have a concrete VType (e.g. TInteger) and
+// nil Data, identical to a type literal at the field level. But
+// semantically they are abstract VALUES, not types. To preserve that
+// distinction at sig-match time, sigTypeMatches treats them as
+// values:
+//
+//   - Carrier{Integer} satisfies TInteger (the value-level slot).
+//   - Carrier{Integer} does NOT satisfy TScalarType (the metatype slot).
+//
+// Without the carrier exclusion at the metatype branch, every
+// check-mode pass through `is`/`typeof`/`unify` would silently
+// upgrade carriers into metatype matches and produce wrong
+// dispatch. The Carrier=false guard on the metatype path is the
+// only place this distinction is enforced — adding new metatype
+// branches must preserve it.
+//
+// Genuine type literals produced by stepWord on a type-name word
+// (e.g. the Word `Integer` resolves to NewTypeLiteral(TInteger))
+// always have Carrier=false, so they continue to match metatype
+// slots correctly.
+//
+// See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
+// user-facing description of this rule.
 func sigTypeMatches(v Value, t Type) bool {
 	if v.VType.Matches(t) {
 		return true
 	}
-	if v.Data == nil && IsMetaType(t) {
+	if v.Data == nil && !v.Carrier && IsMetaType(t) {
 		return MetatypeFor(v.VType).Matches(t)
 	}
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
@@ -228,10 +277,16 @@ func sigTypeMatches(v Value, t Type) bool {
 // positionalMatch checks whether values match the signature's types in order.
 // Handles the /q modifier: a Word value at a QuoteArgs position is treated
 // as an Atom for type matching purposes.
+//
+// /q is a forward-only language rule (see Signature.QuoteArgs doc). The
+// Word→Atom branch below is reachable only through the forward-collection
+// path, where a raw Word can land at the sig position. For stack-only
+// matching the value is never a Word (stepWord has already resolved it),
+// so the branch falls through to the regular sigTypeMatches check.
 func positionalMatch(values []Value, sig *Signature) bool {
 	for i, t := range sig.Args {
 		v := values[i]
-		// /q modifier: treat Word as Atom for matching.
+		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
 			if !TAtom.Matches(t) {
 				return false
@@ -255,7 +310,9 @@ func positionalMatch(values []Value, sig *Signature) bool {
 // earlier (tried first). Every type has a unique score. Unknown types
 // default to 1000.
 var typeInherentScores = map[string]int{
-	// Depth 1 — Any/None are special; concrete roots ordered by breadth.
+	// Depth 1 — Any/None/Never are special; concrete roots ordered by breadth.
+	// Never (uninhabited) is most specific, then None (unit), then Any (top).
+	"Never":  50,
 	"None":   100,
 	"Any":    200,
 	"Type":   300,
@@ -265,18 +322,18 @@ var typeInherentScores = map[string]int{
 	"Node":   700,
 
 	// Depth 2 — Word internals (structural tokens, narrow cardinality)
-	"Word/__DJ": 100,
-	"Word/__FN": 200,
-	"Word/__FW": 300,
+	"Word/__DJ":      100,
+	"Word/__FN":      200,
+	"Word/__FW":      300,
 	"Word/__IN":      400,
 	"Word/__IN/__DC": 400,
-	"Word/__MK": 500,
-	"Word/__MD": 600,
-	"Word/__MV": 700,
-	"Word/__OP": 800,
-	"Word/__PE": 900,
-	"Word/__RC": 1000,
-	"Word/__UF": 1100,
+	"Word/__MK":      500,
+	"Word/__MD":      600,
+	"Word/__MV":      700,
+	"Word/__OP":      800,
+	"Word/__PE":      900,
+	"Word/__RC":      1000,
+	"Word/__UF":      1100,
 
 	// Depth 2 — regular types, ordered by cardinality
 	"Scalar/Boolean":  1200,

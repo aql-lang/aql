@@ -35,7 +35,7 @@ def make-color fn [[hex:String] [Map] [
   make ColorHex {hex:hex r:rv g:gv b:bv}
 ]]
 
-export color {
+export "color" {
   Color:Color
   ColorHex:ColorHex
   hex2rgb:hex2rgb

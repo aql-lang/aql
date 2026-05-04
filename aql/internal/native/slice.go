@@ -14,7 +14,7 @@ import (
 // with positional matching.
 func RegisterSlice(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "slice",
+		Name:              "slice",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
 			{
@@ -47,7 +47,7 @@ func sliceAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 // sliceStartHandler calls voxgigstruct.Slice with a start index.
 // With forward-first matching: args[0]=start (forward), args[1]=data (stack).
 func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	start, err := args[0].AsInteger()
+	start, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, fmt.Errorf("slice: start: %w", err)
 	}
@@ -64,11 +64,11 @@ func sliceStartHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // With forward-first matching: args[0]=start (forward), args[1]=end (forward),
 // args[2]=data (stack).
 func sliceStartEndHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	start, err := args[0].AsInteger()
+	start, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, fmt.Errorf("slice: start: %w", err)
 	}
-	end, err := args[1].AsInteger()
+	end, err := args[1].AsConcreteInteger()
 	if err != nil {
 		return nil, fmt.Errorf("slice: end: %w", err)
 	}

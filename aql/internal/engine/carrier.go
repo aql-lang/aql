@@ -6,7 +6,7 @@ import "strings"
 //
 // A "carrier" is a normal Value with Carrier=true and (typically)
 // Data=nil: it carries only type information, not a concrete payload.
-// The engine is driven in check mode by Registry.CheckMode. In that
+// The engine is driven in check mode by Registry.Check.Mode. In that
 // mode, the same dispatch machinery (matchSignature, forward
 // collection, sort order, etc.) runs, but execMatch consults
 // Signature.Returns to synthesise carrier results instead of calling
@@ -123,6 +123,17 @@ func toCarrier(v Value) Value {
 	// Keep lists and maps concrete for now — matchSignature relies
 	// on Data presence for a few compound cases.
 	if v.VType.Equal(TList) || v.VType.Equal(TMap) {
+		return v
+	}
+	// Type literals (Data already nil) are already in the right
+	// shape for sig matching — preserve their Carrier=false marker
+	// so sigTypeMatches' metatype branch can still recognise them
+	// as type literals rather than as value-carriers. Without this
+	// guard, `Integer gt 10` under check mode loses the Integer
+	// type-literal distinction and falls through to the boolean
+	// sig instead of the dep-constructor sig. See depscalar.go's
+	// makeDepScalarSig + RunInCheckMode for the matching change.
+	if v.Data == nil {
 		return v
 	}
 	// Already a carrier.
@@ -317,11 +328,12 @@ func JoinCarriers(a, b Value) Value {
 		}
 	}
 	// Gather unique alternatives across a and b, subsume subtypes,
-	// then apply the width cap.
-	alts := mergeAlternatives(
-		flattenAlternatives(a),
-		flattenAlternatives(b),
-	)
+	// then apply the width cap. simplifyDisjunctAlts is the runtime
+	// path's helper but produces identical output for the
+	// type-literal-only inputs the carrier path supplies.
+	combined := append([]Value(nil), flattenAlternatives(a)...)
+	combined = append(combined, flattenAlternatives(b)...)
+	alts := simplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
 		return NewCarrier(alts[0].VType)
 	}
@@ -335,41 +347,6 @@ func JoinCarriers(a, b Value) Value {
 	v := NewDisjunct(alts)
 	v.Carrier = true
 	return v
-}
-
-// mergeAlternatives merges two slices of type-literal alternatives
-// into a single slice with subsumption: if one alternative is a
-// subtype of another, only the parent is kept. Duplicates are
-// removed.
-func mergeAlternatives(a, b []Value) []Value {
-	combined := append([]Value(nil), a...)
-	combined = append(combined, b...)
-	// Deduplicate by VType path, subsume subtypes.
-	out := combined[:0]
-outer:
-	for i, cand := range combined {
-		// Skip if already subsumed by an earlier entry.
-		for j := 0; j < i; j++ {
-			if combined[j].VType.Equal(cand.VType) {
-				continue outer // duplicate
-			}
-		}
-		// Drop candidates whose type is a strict subtype of any
-		// other candidate.
-		for j, other := range combined {
-			if j == i {
-				continue
-			}
-			if cand.VType.Equal(other.VType) {
-				continue
-			}
-			if cand.VType.Matches(other.VType) {
-				continue outer // subsumed
-			}
-		}
-		out = append(out, cand)
-	}
-	return out
 }
 
 // checkModeFallbackPositions returns up to n stack indices to use as
@@ -546,10 +523,7 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	}
 
 	// Snapshot def-stack depths (all known names).
-	snapshot := make(map[string]int, len(r.DefStacks))
-	for k, v := range r.DefStacks {
-		snapshot[k] = len(v)
-	}
+	snapshot := r.SnapshotDefDepths()
 
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
@@ -566,14 +540,13 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
 	adds := map[string]Value{}
-	for k, ds := range r.DefStacks {
+	for _, k := range r.DefNames() {
 		before := snapshot[k] // zero for names not present before
-		if len(ds) > before {
-			adds[k] = ds[len(ds)-1]
-			r.DefStacks[k] = ds[:before]
-			if len(r.DefStacks[k]) == 0 {
-				delete(r.DefStacks, k)
-			}
+		depth := r.DefStackDepth(k)
+		if depth > before {
+			top, _ := r.TopOfDefStack(k)
+			adds[k] = top
+			r.TruncateDefStack(k, before)
 		}
 	}
 	return result, adds
@@ -590,14 +563,14 @@ func installJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	for k, tv := range then {
 		seen[k] = true
 		if ev, ok := else_[k]; ok {
-			r.DefStacks[k] = append(r.DefStacks[k], JoinCarriers(tv, ev))
+			r.PushDef(k, JoinCarriers(tv, ev))
 			continue
 		}
 		// then-only: join with the pre-branch top-of-stack if any.
-		if ds := r.DefStacks[k]; len(ds) > 0 {
-			r.DefStacks[k] = append(ds, JoinCarriers(tv, ds[len(ds)-1]))
+		if pre, ok := r.TopOfDefStack(k); ok {
+			r.PushDef(k, JoinCarriers(tv, pre))
 		} else {
-			r.DefStacks[k] = append(r.DefStacks[k], tv)
+			r.PushDef(k, tv)
 		}
 	}
 	for k, ev := range else_ {
@@ -605,10 +578,10 @@ func installJoinedDefs(r *Registry, then, else_ map[string]Value) {
 			continue
 		}
 		// else-only: join with pre-branch top-of-stack.
-		if ds := r.DefStacks[k]; len(ds) > 0 {
-			r.DefStacks[k] = append(ds, JoinCarriers(ev, ds[len(ds)-1]))
+		if pre, ok := r.TopOfDefStack(k); ok {
+			r.PushDef(k, JoinCarriers(ev, pre))
 		} else {
-			r.DefStacks[k] = append(r.DefStacks[k], ev)
+			r.PushDef(k, ev)
 		}
 	}
 }
@@ -645,24 +618,24 @@ func JoinCarrierStacks(a, b []Value) []Value {
 // type reflects every write. Safe to call outside check mode — it
 // becomes a no-op.
 func (r *Registry) RecordContextSet(key string, carrier Value) {
-	if !r.CheckMode || key == "" {
+	if !r.IsCheckMode() || key == "" {
 		return
 	}
-	if r.CheckContextTypes == nil {
-		r.CheckContextTypes = map[string]Value{}
+	if r.Check.ContextTypes == nil {
+		r.Check.ContextTypes = map[string]Value{}
 	}
-	if existing, ok := r.CheckContextTypes[key]; ok {
-		r.CheckContextTypes[key] = JoinCarriers(existing, carrier)
+	if existing, ok := r.Check.ContextTypes[key]; ok {
+		r.Check.ContextTypes[key] = JoinCarriers(existing, carrier)
 		return
 	}
-	r.CheckContextTypes[key] = carrier
+	r.Check.ContextTypes[key] = carrier
 }
 
 // LookupContextType returns the carrier recorded for the given key
 // via a prior set, or an Any carrier + false when the key has not
 // been observed in this check run.
 func (r *Registry) LookupContextType(key string) (Value, bool) {
-	if v, ok := r.CheckContextTypes[key]; ok {
+	if v, ok := r.Check.ContextTypes[key]; ok {
 		return v, true
 	}
 	return NewCarrier(TAny), false
@@ -673,30 +646,30 @@ func (r *Registry) LookupContextType(key string) (Value, bool) {
 // end-of-run analysis can flag defs that were never referenced.
 // Names starting with "_" (engine internals) are ignored.
 func (r *Registry) recordCheckDef(name string, pos SrcPos) {
-	if !r.CheckMode || name == "" || strings.HasPrefix(name, "_") {
+	if !r.IsCheckMode() || name == "" || strings.HasPrefix(name, "_") {
 		return
 	}
-	if r.CheckDefsInstalled == nil {
-		r.CheckDefsInstalled = map[string]SrcPos{}
+	if r.Check.DefsInstalled == nil {
+		r.Check.DefsInstalled = map[string]SrcPos{}
 	}
-	r.CheckDefsInstalled[name] = pos
+	r.Check.DefsInstalled[name] = pos
 	// Any prior "use" count for this name was against an older
 	// (now-shadowed) def or against a lookup during def setup —
 	// reset so only uses AFTER this install count.
-	delete(r.CheckDefsUsed, name)
+	delete(r.Check.DefsUsed, name)
 }
 
 // recordCheckUse marks a name as referenced during check mode. It is
 // safe to call unconditionally; when CheckMode is off the call is a
 // no-op. Used by Registry.Lookup and stepWord's simple-value path.
 func (r *Registry) recordCheckUse(name string) {
-	if !r.CheckMode || name == "" {
+	if !r.IsCheckMode() || name == "" {
 		return
 	}
-	if r.CheckDefsUsed == nil {
-		r.CheckDefsUsed = map[string]bool{}
+	if r.Check.DefsUsed == nil {
+		r.Check.DefsUsed = map[string]bool{}
 	}
-	r.CheckDefsUsed[name] = true
+	r.Check.DefsUsed[name] = true
 }
 
 // EmitUnusedDefDiagnostics walks the set of defs installed during a
@@ -704,8 +677,8 @@ func (r *Registry) recordCheckUse(name string) {
 // never referenced. Call this at the end of a check pass, before
 // returning the CheckResult.
 func (r *Registry) EmitUnusedDefDiagnostics() {
-	for name, pos := range r.CheckDefsInstalled {
-		if r.CheckDefsUsed[name] {
+	for name, pos := range r.Check.DefsInstalled {
+		if r.Check.DefsUsed[name] {
 			continue
 		}
 		r.addCheckDiagnostic(CheckDiagnostic{
@@ -727,7 +700,7 @@ func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
 	}
-	r.CheckDiagnostics = append(r.CheckDiagnostics, d)
+	r.Check.Diagnostics = append(r.Check.Diagnostics, d)
 }
 
 // GuardClause describes one `x is T` clause detected in a condition.
@@ -766,8 +739,8 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		tv := elems[i+2]
 		if tv.Data != nil && tv.VType.Equal(TWord) {
 			inner, _ := tv.AsWord()
-			if ds := r.DefStacks[inner.Name]; len(ds) > 0 {
-				tv = ds[len(ds)-1]
+			if v, ok := r.TopOfDefStack(inner.Name); ok {
+				tv = v
 			}
 		}
 		if tv.Data != nil && !tv.IsObjectType() {
@@ -830,7 +803,7 @@ func literalCondValue(condList Value) (bool, bool) {
 // the narrowings after the then-branch runs.
 func applyGuardNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.CheckMode {
+	if !r.IsCheckMode() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -838,17 +811,11 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	for _, c := range clauses {
-		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], NewCarrier(c.Type))
+		r.PushDef(c.Name, NewCarrier(c.Type))
 	}
 	return func() {
 		for _, c := range clauses {
-			ds := r.DefStacks[c.Name]
-			if len(ds) > 0 {
-				r.DefStacks[c.Name] = ds[:len(ds)-1]
-			}
-			if len(r.DefStacks[c.Name]) == 0 {
-				delete(r.DefStacks, c.Name)
-			}
+			r.PopDef(c.Name)
 		}
 	}
 }
@@ -861,7 +828,7 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 // alternative is subtracted. Returns a restore func.
 func applyComplementNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if r == nil || !r.CheckMode {
+	if !r.IsCheckMode() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -871,11 +838,10 @@ func applyComplementNarrowing(r *Registry, condList Value) func() {
 	type applied struct{ name string }
 	var pushed []applied
 	for _, c := range clauses {
-		ds := r.DefStacks[c.Name]
-		if len(ds) == 0 {
+		cur, ok := r.TopOfDefStack(c.Name)
+		if !ok {
 			continue
 		}
-		cur := ds[len(ds)-1]
 		if !cur.IsDisjunct() {
 			continue
 		}
@@ -901,7 +867,7 @@ func applyComplementNarrowing(r *Registry, condList Value) func() {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
 		}
-		r.DefStacks[c.Name] = append(r.DefStacks[c.Name], narrowed)
+		r.PushDef(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})
 	}
 	if len(pushed) == 0 {
@@ -909,13 +875,7 @@ func applyComplementNarrowing(r *Registry, condList Value) func() {
 	}
 	return func() {
 		for _, p := range pushed {
-			ds := r.DefStacks[p.name]
-			if len(ds) > 0 {
-				r.DefStacks[p.name] = ds[:len(ds)-1]
-			}
-			if len(r.DefStacks[p.name]) == 0 {
-				delete(r.DefStacks, p.name)
-			}
+			r.PopDef(p.name)
 		}
 	}
 }
@@ -943,35 +903,32 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	key := sb.String()
 
-	if r.CheckFnSummaries == nil {
-		r.CheckFnSummaries = map[string][]Value{}
+	if r.Check.FnSummaries == nil {
+		r.Check.FnSummaries = map[string][]Value{}
 	}
-	if r.CheckFnInflight == nil {
-		r.CheckFnInflight = map[string]bool{}
+	if r.Check.FnInflight == nil {
+		r.Check.FnInflight = map[string]bool{}
 	}
-	if cached, ok := r.CheckFnSummaries[key]; ok {
+	if cached, ok := r.Check.FnSummaries[key]; ok {
 		return cached
 	}
-	if r.CheckFnInflight[key] {
+	if r.Check.FnInflight[key] {
 		// Recursion detected — break the cycle with an Any carrier.
 		return []Value{NewCarrier(TAny)}
 	}
-	r.CheckFnInflight[key] = true
-	defer delete(r.CheckFnInflight, key)
+	r.Check.FnInflight[key] = true
+	defer delete(r.Check.FnInflight, key)
 
 	// Snapshot def-stack depths so we can unwind any defs the body
 	// or parameter binding created.
-	snapshot := make(map[string]int, len(r.DefStacks))
-	for k, v := range r.DefStacks {
-		snapshot[k] = len(v)
-	}
+	snapshot := r.SnapshotDefDepths()
 
 	// Bind named parameters as simple defs (carrier-typed). Unnamed
 	// parameters flow through the stack — push them before the body.
 	var input []Value
 	for i, arg := range args {
 		if i < len(paramNames) && paramNames[i] != "" {
-			r.DefStacks[paramNames[i]] = append(r.DefStacks[paramNames[i]], arg)
+			r.PushDef(paramNames[i], arg)
 		} else {
 			input = append(input, arg)
 		}
@@ -990,16 +947,8 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 
 	// Restore def-stacks to snapshot.
-	for k := range r.DefStacks {
-		want := snapshot[k]
-		if len(r.DefStacks[k]) > want {
-			r.DefStacks[k] = r.DefStacks[k][:want]
-		}
-		if len(r.DefStacks[k]) == 0 {
-			delete(r.DefStacks, k)
-		}
-	}
+	r.RestoreToDefDepths(snapshot)
 
-	r.CheckFnSummaries[key] = result
+	r.Check.FnSummaries[key] = result
 	return result
 }

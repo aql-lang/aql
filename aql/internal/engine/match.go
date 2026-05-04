@@ -32,19 +32,19 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		insideForward = e.isInsidePendingForward()
 	}
 
-	// When the next forward token is a defined word, prefer signatures
-	// expecting TWord or /q at position 0 (inspect-style name capture).
-	// We handle this by trying TWord/q sigs first, then the rest, all
-	// within the single outer loop. bestMatch tracks the best result
-	// found so far; a TWord/q match is returned immediately if found.
+	// When the next forward token is a Word, prefer signatures
+	// expecting TWord or /q at position 0 (inspect-style name
+	// capture). The user wrote a Word, not a String — the /q sig
+	// captures the user's intent that the name is data, not a call
+	// site. The non-/q TString sister sig is for callers who pass a
+	// string literal. This also covers untype Foo (Foo in r.Types),
+	// `m.Color` after import (Color is a key in the imported map),
+	// and inspect-style name capture.
 	preferWordSig := false
 	if !skipForward && e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
 		if next.IsWord() {
-			nw, _ := next.AsWord()
-			if len(e.registry.DefStacks[nw.Name]) > 0 {
-				preferWordSig = true
-			}
+			preferWordSig = true
 		}
 	}
 
@@ -143,8 +143,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// Defined word: resolves to its def type.
-					if ds := e.registry.DefStacks[ww.Name]; len(ds) > 0 {
-						top := ds[len(ds)-1]
+					if top, ok := e.registry.TopOfDefStack(ww.Name); ok {
 						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
@@ -154,6 +153,22 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						if _, ok := top.Data.(FnDefInfo); !ok {
 							break // simple def, type mismatch
 						}
+					}
+
+					// Named type from r.Types: resolves to the type
+					// value (mirror of stepWord's r.Types lookup so the
+					// planner's expected type matches what stepWord
+					// will actually push at runtime). Predicate types
+					// arrive as TFnDef/TFunction values; plan against
+					// that VType for sig matching.
+					if tv, ok := e.registry.TopOfTypeStack(ww.Name); ok {
+						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break // named-type value doesn't fit this slot
 					}
 
 					// 1.4: function word — boundary, stop.
@@ -298,6 +313,13 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			stackVal := resolved[ri]
 			sigIdx := fwd + j
 
+			// /q is a forward-only rule (see Signature.QuoteArgs doc).
+			// stackVal cannot be a Word in normal execution: stepWord
+			// has already resolved any Word at the pointer to a function
+			// call, defined value, or Atom, and quote produces Atoms.
+			// The branch below is defensive only — a stack Atom matches
+			// an [Atom/q, ...] sig via the regular sigTypeMatches path
+			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
 				if !TAtom.Matches(sig.Args[sigIdx]) {
 					allMatch = false

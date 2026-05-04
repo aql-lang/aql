@@ -38,6 +38,20 @@ func Unify(a, b Value) (Value, bool) {
 		return unifyDisjunct(_as1, a)
 	}
 
+	// "never" is the bottom type — uninhabited, only unifies with
+	// itself. Unify(Never, T) for T != Never always fails: there is
+	// no value satisfying both types because Never has no values at
+	// all. Checked before None and Any so that Never on either side
+	// short-circuits before any other rule applies.
+	aNever := aType.Equal(TNever)
+	bNever := bType.Equal(TNever)
+	if aNever || bNever {
+		if aNever && bNever {
+			return a, true
+		}
+		return Value{}, false
+	}
+
 	// "none" only unifies with "none".
 	aNone := aType.Equal(TNone)
 	bNone := bType.Equal(TNone)
@@ -85,6 +99,85 @@ func Unify(a, b Value) (Value, bool) {
 	bMap := bType.Equal(TMap)
 	if aMap || bMap {
 		return unifyMaps(a, aMap, b, bMap)
+	}
+
+	// Dependent-scalar unification. A DepScalar carries a comparison
+	// constraint over a base scalar type (e.g. Integer ≥10, String
+	// <"z"). Three cases:
+	//   1. DepScalar vs concrete scalar: succeeds iff the scalar's
+	//      type matches the base AND the value satisfies the
+	//      comparison. Returns the plain scalar (not the DepScalar)
+	//      so downstream consumers see a normal value.
+	//   2. DepScalar vs DepScalar over the same leaf: combine the
+	//      constraints (intersection) — same-side bounds tighten,
+	//      opposite-side bounds form an interval. Empty result
+	//      (e.g. gt 10 vs lt 5) fails. Returns a fresh DepScalar.
+	//   3. DepScalar vs DepScalar over different leaves: fails
+	//      (incompatible bases).
+	if a.IsDepScalar() && b.IsDepScalar() {
+		aLeaf := dependentLeafFromType(aType)
+		bLeaf := dependentLeafFromType(bType)
+		if aLeaf != bLeaf {
+			return Value{}, false
+		}
+		aInfo, err := a.AsDepScalar()
+		if err != nil {
+			return Value{}, false
+		}
+		bInfo, err := b.AsDepScalar()
+		if err != nil {
+			return Value{}, false
+		}
+		combined, ok := combineDepScalars(aInfo, bInfo)
+		if !ok {
+			return Value{}, false
+		}
+		out := newValue(aType, combined)
+		return out, true
+	}
+	if a.IsDepScalar() && !b.IsDepScalar() && b.Data != nil {
+		if base, ok := dependentLeafBaseType(dependentLeafFromType(aType)); ok && bType.Matches(base) {
+			info, err := a.AsDepScalar()
+			if err != nil {
+				return Value{}, false
+			}
+			if depScalarCheck(info, b) {
+				return b, true
+			}
+			return Value{}, false
+		}
+	}
+	if b.IsDepScalar() && !a.IsDepScalar() && a.Data != nil {
+		if base, ok := dependentLeafBaseType(dependentLeafFromType(bType)); ok && aType.Matches(base) {
+			info, err := b.AsDepScalar()
+			if err != nil {
+				return Value{}, false
+			}
+			if depScalarCheck(info, a) {
+				return a, true
+			}
+			return Value{}, false
+		}
+	}
+
+	// Function-signature unification. A FnUndef value carries one or
+	// more (input, output) sig patterns and acts as a structural
+	// function-type constraint; the other side must be a function
+	// value (TFnDef or TFunction wrapping FnDefInfo) whose signatures
+	// cover the FnUndef pattern. The first slice uses exact-match
+	// rules — see the recommendation block in the commit message for
+	// the variance/overload extensions planned for a follow-up.
+	if aType.Equal(TFnUndef) && (bType.Equal(TFnDef) || bType.Equal(TFunction)) {
+		if fnUndefMatchesFnDef(a, b) {
+			return b, true
+		}
+		return Value{}, false
+	}
+	if bType.Equal(TFnUndef) && (aType.Equal(TFnDef) || aType.Equal(TFunction)) {
+		if fnUndefMatchesFnDef(b, a) {
+			return a, true
+		}
+		return Value{}, false
 	}
 
 	// Type literal unification: a type literal (Data==nil) unifies with
@@ -577,6 +670,25 @@ func valuesEqual(a, b Value) bool {
 	// One is a type literal and the other is a concrete value — not equal.
 	if a.Data == nil || b.Data == nil {
 		return false
+	}
+	// Dependent scalar: route to payload comparison BEFORE the
+	// Matches(TString)/Matches(TInteger)/... dispatch below. The
+	// lattice override makes DepString.Matches(TString)=true, so
+	// without this branch a DepScalar would fall into AsString and
+	// silently compare zero-value payloads.
+	if a.IsDepScalar() || b.IsDepScalar() {
+		if !a.IsDepScalar() || !b.IsDepScalar() {
+			return false
+		}
+		ai, err := a.AsDepScalar()
+		if err != nil {
+			return false
+		}
+		bi, err := b.AsDepScalar()
+		if err != nil {
+			return false
+		}
+		return depScalarsEqual(ai, bi)
 	}
 	switch {
 	case a.VType.Matches(TString):

@@ -9,9 +9,36 @@ func RegisterIs(r *Registry) {
 		Name:              "is",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args:       []Type{TAny, TAny},
+			BarrierPos: 1,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, b := args[1], args[0]
+				// Resolve `(quote name)` on the value side when the
+				// pattern is a function-shape type (FnUndef). quote
+				// produces an Atom, but a structural fn-type
+				// constraint wants the underlying FnDef value to
+				// compare against — same lookup defTypedHandler does.
+				if b.VType.Equal(TFnUndef) && a.IsAtom() {
+					name, _ := a.AsAtom()
+					if top, ok := r.TopOfDefStack(name); ok {
+						if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+							a = top
+						}
+					}
+				}
+				// Predicate-type check: if the pattern (b) is a fn
+				// (Quoted=true so it didn't auto-execute on the way
+				// here), call the predicate against a and report
+				// success iff it returned a non-None value.
+				// RunPredicate is the single source of truth for the
+				// None/value contract — see util.go.
+				if b.VType.Equal(TFnDef) || b.VType.Equal(TFunction) {
+					_, matched, err := r.RunPredicate(b, a)
+					if err != nil {
+						return []Value{NewBoolean(false)}, nil
+					}
+					return []Value{NewBoolean(matched)}, nil
+				}
 				// Metatype early-return: when pattern (b) is a metatype and
 				// value (a) is a type literal, directly check metatype matching.
 				// (a=value, b=pattern due to the swap above.)

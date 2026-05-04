@@ -13,6 +13,7 @@ var typeNameEntries = []struct {
 }{
 	{"Any", TAny},
 	{"None", TNone},
+	{"Never", TNever},
 	{"Scalar", TScalar},
 	{"Number", TNumber},
 	{"Integer", TInteger},
@@ -70,10 +71,15 @@ var typeNamesByTypeID = func() map[string]string {
 }()
 
 // ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
-// a richer definition in the registry's DefStacks (e.g. an ObjectTypeInfo
-// installed by RegisterResource). If so it returns that value; otherwise it
-// returns the original value unchanged. This lets the parser eagerly resolve
-// all type names while the engine still picks up installed ObjectType defs.
+// a richer definition installed under the same name (e.g. an ObjectTypeInfo
+// from RegisterResource or a `type Foo object {…}` binding). If so it
+// returns that value; otherwise it returns the original unchanged. This
+// lets the parser eagerly resolve all type names while the engine still
+// picks up installed ObjectType defs.
+//
+// User-defined types now live in r.Types (post-§5.2); the DefStacks
+// fallback is retained only for value-side ObjectType installations
+// from outside the type word (e.g. legacy RegisterResource paths).
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if v.Data != nil || reg == nil {
 		return v
@@ -82,8 +88,10 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if !ok {
 		return v
 	}
-	if ds := reg.DefStacks[name]; len(ds) > 0 {
-		top := ds[len(ds)-1]
+	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
+		return tv
+	}
+	if top, ok := reg.TopOfDefStack(name); ok {
 		if top.IsObjectType() {
 			return top
 		}
@@ -158,7 +166,66 @@ func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
 	}
 
 	src := e.effectiveSource()
-	return makeAqlError("signature_error", detail, name, src, hint.String())
+	return e.maybeAddFnShapeHint(makeAqlError("signature_error", detail, name, src, hint.String())).(*AqlError)
+}
+
+// isFnShapeTypedBindingContext reports whether the failing word is
+// positioned at the body slot of a typed binding whose constraint is
+// a function-shape type (TFnUndef).
+//
+// Forward-precedence collection works by inserting a Forward marker
+// after the func word and then letting the engine evaluate upcoming
+// tokens normally; the marker holds the matched signature. So when a
+// fn dispatch fails inside a deferred forward collection, walking
+// back through the stack finds the Forward marker for the outer
+// collector. If that collector is `def` and its typed-name map
+// (already on the stack at FuncIndex+1+CollectedArgs..) carries a
+// fn-shape constraint, the failing dispatch is exactly the §7.2
+// "user wrote a fn name where they meant `(quote name)`" case.
+func (e *Engine) isFnShapeTypedBindingContext() bool {
+	if e.registry == nil || e.pointer == 0 {
+		return false
+	}
+	for i := e.pointer - 1; i >= 0; i-- {
+		if e.stack[i].IsOpenParen() {
+			return false
+		}
+		if !e.stack[i].IsForward() {
+			continue
+		}
+		fwd, _ := e.stack[i].AsForward()
+		if fwd.FuncName != "def" || fwd.Sig == nil {
+			return false
+		}
+		// def's typed-name sig is the only one with TMap at position 0.
+		if len(fwd.Sig.Args) < 2 || !fwd.Sig.Args[0].Equal(TMap) {
+			return false
+		}
+		// stepLiteral moves each collected forward arg to the slot
+		// immediately before the func word, in collection order
+		// (first-collected = deepest). So position 0's value sits at
+		// FuncIndex - CollectedArgs, position 1 at FuncIndex - CollectedArgs + 1, etc.
+		if fwd.CollectedArgs < 1 {
+			return false
+		}
+		mapIdx := fwd.FuncIndex - fwd.CollectedArgs
+		if mapIdx < 0 || mapIdx >= len(e.stack) {
+			return false
+		}
+		m := e.stack[mapIdx].AsMap()
+		if m == nil || m.Len() != 1 {
+			return false
+		}
+		constraint, _ := m.Get(m.Keys()[0])
+		if constraint.IsWord() {
+			cw, _ := constraint.AsWord()
+			if tv, ok := e.registry.ResolveTypedName(cw.Name); ok {
+				constraint = tv
+			}
+		}
+		return constraint.VType.Equal(TFnUndef)
+	}
+	return false
 }
 
 // insufficientArgsError builds a detailed AqlError for forward argument
@@ -260,7 +327,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	// carriers before execution. The same dispatch/matching machinery
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
-	if e.registry != nil && e.registry.CheckMode {
+	if e.registry.IsCheckMode() {
 		input = StripToCarriers(input)
 	}
 
@@ -284,15 +351,15 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// Check-mode global step budget: abort the whole run
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
-		if e.registry != nil && e.registry.CheckMode {
-			budget := e.registry.CheckStepBudget
+		if e.registry.IsCheckMode() {
+			budget := e.registry.Check.StepBudget
 			if budget == 0 {
 				budget = DefaultCheckStepBudget
 			}
-			e.registry.CheckStepCount++
-			if e.registry.CheckStepCount > budget {
-				if !e.registry.CheckBudgetTripped {
-					e.registry.CheckBudgetTripped = true
+			e.registry.Check.StepCount++
+			if e.registry.Check.StepCount > budget {
+				if !e.registry.Check.BudgetTripped {
+					e.registry.Check.BudgetTripped = true
 					e.registry.addCheckDiagnostic(CheckDiagnostic{
 						Code:   "step_budget_exceeded",
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
@@ -397,33 +464,18 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		return nil, err
 	}
 
-	// Check for undefined words left on the result stack.
-	// Atoms marked Undefined came from words that were never defined;
-	// they are only allowed when consumed by a function expecting TAtom
-	// or in a quoted map/list (which skips evaluation entirely).
-	// In check mode, demote to a diagnostic and replace with an Any
-	// carrier so analysis of the surrounding program continues.
+	// Drain any Undefined-Atom values left on the stack. Outside check
+	// mode `stepWord` errors on undefined words so this loop is a
+	// no-op. Under CheckMode `stepWord` already emitted the diagnostic
+	// at the source token; here we only need to replace any dangling
+	// Undefined atoms with `Any` carriers so the residual stack stays
+	// type-clean for downstream consumers of CheckResult.Stack.
 	for i, v := range e.stack {
 		if !v.Undefined {
 			continue
 		}
-		name, _ := v.AsAtom()
-		if e.registry != nil && e.registry.CheckMode {
-			e.registry.addCheckDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + name,
-				Word:   name,
-				Row:    v.Pos.Row,
-				Col:    v.Pos.Col,
-			})
+		if e.registry.IsCheckMode() {
 			e.stack[i] = NewCarrier(TAny)
-			continue
-		}
-		return nil, &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + name,
-			Src:        name,
-			fullSource: e.effectiveSource(),
 		}
 	}
 
@@ -651,22 +703,45 @@ func (e *Engine) stepWord(val Value) error {
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
-		if stack, ok := e.registry.DefStacks[w.Name]; ok {
-			for i := len(stack) - 1; i >= 0; i-- {
-				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-					e.stack[e.pointer] = NewFunction(fnDef)
-					return e.stepLiteral()
-				}
+		stack := e.registry.DefStack(w.Name)
+		for i := len(stack) - 1; i >= 0; i-- {
+			if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+				e.stack[e.pointer] = NewFunction(fnDef)
+				return e.stepLiteral()
 			}
 		}
 		// Not a def fn — fall through to normal execution.
 	}
 
+	// Named user-defined types take priority over DefStacks: type
+	// bindings stack independently from def bindings, and a shadow-
+	// then-reveal pattern (`type Foo Integer; type Foo fn […]`)
+	// would otherwise see the legacy installDef mirror in DefStacks
+	// instead of the active fn-type binding. Pushed with Quoted=true
+	// for fn-shape types so execFnDefLiteral treats them as data.
+	//
+	// Word-capture cases (untype Foo, etc.) are intercepted earlier
+	// via hasPendingForwardExpectingWord — by the time we reach this
+	// priority block, no /q-Atom or Word slot is waiting for the
+	// name. The pushed value flows through stepLiteral so a pending
+	// forward can still consume it (e.g. `Color` as the value side
+	// of an export map entry).
+	if e.registry != nil {
+		if tv, ok := e.registry.TopOfTypeStack(w.Name); ok {
+			push := tv
+			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
+				push.Quoted = true
+			}
+			push.Pos = val.Pos
+			e.stack[e.pointer] = push
+			return e.stepLiteral()
+		}
+	}
+
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
-	if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
-		top := ds[len(ds)-1]
+	if top, ok := e.registry.TopOfDefStack(w.Name); ok {
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
@@ -712,6 +787,39 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
+		// (r.Types resolution lives in the priority block at the
+		// top of stepWord — before DefStacks substitution — so a
+		// named user-defined type is never reached here.)
+		// Strict rule: an undefined word at the pointer is an error.
+		// Names that need to be values must be quoted explicitly (`quote
+		// foo` or a literal atom) or land at a /q-quoted argument
+		// position, where forward collection captures the word as an
+		// Atom before it ever reaches stepWord.
+		//
+		// In CheckMode the engine emits a diagnostic and continues with
+		// an `Atom{Undefined:true}` so static analysis can keep going.
+		// The diagnostic is recorded HERE rather than at end-of-Run
+		// because the placeholder atom can be consumed by a downstream
+		// operation (e.g. a checkModeAssumeSig for `add`) and never
+		// reach the result stack — recording at the source guarantees
+		// every undefined word produces exactly one diagnostic.
+		if !e.registry.IsCheckMode() {
+			return &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		e.registry.addCheckDiagnostic(CheckDiagnostic{
+			Code:   "undefined_word",
+			Detail: "undefined word: " + w.Name,
+			Word:   w.Name,
+			Row:    val.Pos.Row,
+			Col:    val.Pos.Col,
+		})
 		v := NewAtom(w.Name)
 		v.Pos = val.Pos
 		v.Undefined = true
@@ -748,8 +856,7 @@ func (e *Engine) stepWord(val Value) error {
 	// typed signatures exist), treat it as an unmatched call and go
 	// through the assume-sig recovery path so the user gets a
 	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
-	if sig != nil && sig.Fallback &&
-		e.registry != nil && e.registry.CheckMode {
+	if sig != nil && sig.Fallback && e.registry.IsCheckMode() {
 		hasTyped := false
 		for i := range fn.Signatures {
 			if !fn.Signatures[i].Fallback {
@@ -769,7 +876,7 @@ func (e *Engine) stepWord(val Value) error {
 		// in place of the word + up to N adjacent arg slots.
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
-		if e.registry != nil && e.registry.CheckMode && len(fn.Signatures) > 0 {
+		if e.registry.IsCheckMode() && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn)
@@ -832,9 +939,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].VType.Equal(TMap) &&
 				match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
-				evaluated, err := e.autoEvalMap(match.Args[i])
-				if err == nil {
-					match.Args[i] = evaluated
+				// NoEvalMapArgs (separate from the list-only
+				// NoEvalArgs) suppresses map auto-evaluation at this
+				// slot. Used by def's typed-name sig so a Word at the
+				// type position arrives raw — important when the type
+				// is a fn that's also a registered callable.
+				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalMap(match.Args[i])
+					if err == nil {
+						match.Args[i] = evaluated
+					}
 				}
 			} else if match.Args[i].VType.Equal(TList) &&
 				match.Args[i].Data != nil && !match.Args[i].IsTypedList() && !match.Args[i].IsTableType() {
@@ -862,7 +977,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry != nil && e.registry.CheckMode && !match.Sig.RunInCheckMode {
+	if e.registry.IsCheckMode() && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
@@ -934,10 +1049,36 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
-		return err
+		return e.maybeAddFnShapeHint(err)
 	}
 
 	return e.spliceMatchResults(match, sortedIndices, n, results)
+}
+
+// maybeAddFnShapeHint wraps a signature_error from a fn-dispatch
+// failure with a §7.2 hint when the caller is `def`'s typed-binding
+// body slot expecting a fn-shape value. Without this, the user sees
+// a confusing "no matching signature for double" error pointing at
+// double's call site rather than the typed-binding context that
+// caused the fn to be invoked at all.
+func (e *Engine) maybeAddFnShapeHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	aqlErr, ok := err.(*AqlError)
+	if !ok || aqlErr.Code != "signature_error" {
+		return err
+	}
+	if !e.isFnShapeTypedBindingContext() {
+		return err
+	}
+	hint := "this is a typed-binding context expecting a function value — did you mean `(quote " + aqlErr.Src + ")`?"
+	if aqlErr.Hint != "" {
+		aqlErr.Hint = aqlErr.Hint + "\n  = " + hint
+	} else {
+		aqlErr.Hint = hint
+	}
+	return aqlErr
 }
 
 // spliceMatchResults replaces the word and its matched args on the
@@ -1602,7 +1743,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.ArgsStack = append(e.registry.ArgsStack, NewList(argsCopy))
+	e.registry.PushArgs(NewList(argsCopy))
 
 	var names []string
 	unnamedCount := 0
@@ -1740,11 +1881,10 @@ func (e *Engine) stepEnd() error {
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := val.AsDefCleanup()
 	reg := info.Registry
-	for name, stack := range reg.DefStacks {
+	for _, name := range reg.DefNames() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
-		for len(stack) > prevLen {
+		for reg.DefStackDepth(name) > prevLen {
 			uninstallDef(reg, name)
-			stack = reg.DefStacks[name]
 		}
 	}
 }
@@ -2259,11 +2399,10 @@ func (e *Engine) peekForwardValue() Value {
 			return NewBoolean(false)
 		default:
 			// If the word has a FnDef in DefStacks, peek as TFunction.
-			if stack, ok := e.registry.DefStacks[nw.Name]; ok {
-				for i := len(stack) - 1; i >= 0; i-- {
-					if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-						return NewFunction(fnDef)
-					}
+			stack := e.registry.DefStack(nw.Name)
+			for i := len(stack) - 1; i >= 0; i-- {
+				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+					return NewFunction(fnDef)
 				}
 			}
 			return NewAtom(nw.Name)

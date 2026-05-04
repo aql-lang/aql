@@ -73,9 +73,8 @@ func parseStrOpts(v Value) strOpts {
 	}
 	m := v.AsMap()
 
-	if val, ok := m.Get("u"); ok && val.VType.Matches(TBoolean) {
-		_as0, _ := val.AsBoolean()
-		o.u = _as0
+	if b, ok := MapFieldBoolean(m, "u"); ok {
+		o.u = b
 	}
 	if val, ok := m.Get("norm"); ok {
 		if val.VType.Matches(TBoolean) {
@@ -124,42 +123,34 @@ func parseStrOpts(v Value) strOpts {
 	if val, ok := m.Get("occ"); ok {
 		o.occ = valToString(val)
 	}
-	if val, ok := m.Get("from"); ok && val.VType.Matches(TInteger) {
-		_as2, _ := val.AsInteger()
-		o.from = _as2
+	if n, ok := MapFieldInteger(m, "from"); ok {
+		o.from = n
 		o.hasFrom = true
 	}
-	if val, ok := m.Get("count"); ok && val.VType.Matches(TInteger) {
-		_as3, _ := val.AsInteger()
-		o.count = _as3
+	if n, ok := MapFieldInteger(m, "count"); ok {
+		o.count = n
 		o.hasCount = true
 	}
-	if val, ok := m.Get("lim"); ok && val.VType.Matches(TInteger) {
-		_as4, _ := val.AsInteger()
-		o.lim = _as4
+	if n, ok := MapFieldInteger(m, "lim"); ok {
+		o.lim = n
 		o.hasLim = true
 	}
 
 	// boolean flags
-	if val, ok := m.Get("skipEmpty"); ok && val.VType.Matches(TBoolean) {
-		_as5, _ := val.AsBoolean()
-		o.skipEmpty = _as5
+	if b, ok := MapFieldBoolean(m, "skipEmpty"); ok {
+		o.skipEmpty = b
 	}
-	if val, ok := m.Get("skipNullish"); ok && val.VType.Matches(TBoolean) {
-		_as6, _ := val.AsBoolean()
-		o.skipNullish = _as6
+	if b, ok := MapFieldBoolean(m, "skipNullish"); ok {
+		o.skipNullish = b
 	}
-	if val, ok := m.Get("keepEmpty"); ok && val.VType.Matches(TBoolean) {
-		_as7, _ := val.AsBoolean()
-		o.keepEmpty = _as7
+	if b, ok := MapFieldBoolean(m, "keepEmpty"); ok {
+		o.keepEmpty = b
 	}
-	if val, ok := m.Get("trimParts"); ok && val.VType.Matches(TBoolean) {
-		_as8, _ := val.AsBoolean()
-		o.trimParts = _as8
+	if b, ok := MapFieldBoolean(m, "trimParts"); ok {
+		o.trimParts = b
 	}
-	if val, ok := m.Get("wholeWord"); ok && val.VType.Matches(TBoolean) {
-		_as9, _ := val.AsBoolean()
-		o.wholeWord = _as9
+	if b, ok := MapFieldBoolean(m, "wholeWord"); ok {
+		o.wholeWord = b
 	}
 	if val, ok := m.Get("anchored"); ok {
 		if val.VType.Matches(TBoolean) {
@@ -171,27 +162,22 @@ func parseStrOpts(v Value) strOpts {
 			o.anchored = valToString(val)
 		}
 	}
-	if val, ok := m.Get("fromEnd"); ok && val.VType.Matches(TBoolean) {
-		_as11, _ := val.AsBoolean()
-		o.fromEnd = _as11
+	if b, ok := MapFieldBoolean(m, "fromEnd"); ok {
+		o.fromEnd = b
 	}
-	if val, ok := m.Get("trunc"); ok && val.VType.Matches(TBoolean) {
-		_as12, _ := val.AsBoolean()
-		o.trunc = _as12
+	if b, ok := MapFieldBoolean(m, "trunc"); ok {
+		o.trunc = b
 	}
-	if val, ok := m.Get("litRepl"); ok && val.VType.Matches(TBoolean) {
-		_as13, _ := val.AsBoolean()
-		o.litRepl = _as13
+	if b, ok := MapFieldBoolean(m, "litRepl"); ok {
+		o.litRepl = b
 	}
 
 	// normalize-specific
-	if val, ok := m.Get("trim"); ok && val.VType.Matches(TBoolean) {
-		_as14, _ := val.AsBoolean()
-		o.trim = _as14
+	if b, ok := MapFieldBoolean(m, "trim"); ok {
+		o.trim = b
 	}
-	if val, ok := m.Get("collapseWs"); ok && val.VType.Matches(TBoolean) {
-		_as15, _ := val.AsBoolean()
-		o.collapseWs = _as15
+	if b, ok := MapFieldBoolean(m, "collapseWs"); ok {
+		o.collapseWs = b
 	}
 	if val, ok := m.Get("eol"); ok {
 		o.eol = valToString(val)

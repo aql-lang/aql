@@ -66,37 +66,19 @@ func RegisterUndef(r *Registry) {
 	})
 }
 
-// fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
-// (same param types and return types, ignoring param names).
-func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
-	if len(sig.Params) != len(spec.Params) {
-		return false
-	}
-	for i := range sig.Params {
-		if !sig.Params[i].Type.Equal(spec.Params[i].Type) {
-			return false
-		}
-	}
-	if len(sig.Returns) != len(spec.Returns) {
-		return false
-	}
-	for i := range sig.Returns {
-		if !sig.Returns[i].Equal(spec.Returns[i]) {
-			return false
-		}
-	}
-	return true
-}
+// fnSigMatchesSpec and fnSigSatisfiesSpec live in fnsig.go alongside
+// the other FnSig comparison helpers (fnUndefMatchesFnDef, fnDefHasSig).
 
 // uninstallFnSigs removes specific function signatures from a word's DefStack.
 // For each spec in the FnUndefInfo, it finds and removes the most recent
 // DefStack entry containing a matching signature, then rebuilds the
 // Function.Signatures slice from the remaining entries.
 func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
-	stack := r.DefStacks[name]
+	stack := r.DefStack(name)
 	if len(stack) == 0 {
 		return
 	}
+	stack = append([]Value(nil), stack...)
 
 	// For each spec, find and remove the most recent matching DefStack entry.
 	for _, spec := range specs.Sigs {
@@ -119,11 +101,10 @@ func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		}
 	}
 
-	r.DefStacks[name] = stack
+	r.SetDefStack(name, stack)
 
 	// If no DefStack entries remain, clean up entirely.
 	if len(stack) == 0 {
-		delete(r.DefStacks, name)
 		return
 	}
 

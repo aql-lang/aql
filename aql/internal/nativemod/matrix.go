@@ -293,11 +293,11 @@ func registerMatrixZeros(r *engine.Registry) {
 	r.Register("matrix-zeros", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[1].AsInteger()
+			r64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			c64, err := args[0].AsInteger()
+			c64, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -314,11 +314,11 @@ func registerMatrixOnes(r *engine.Registry) {
 	r.Register("matrix-ones", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[1].AsInteger()
+			r64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			c64, err := args[0].AsInteger()
+			c64, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -337,7 +337,7 @@ func registerMatrixEye(r *engine.Registry) {
 	r.Register("matrix-eye", engine.Signature{
 		Args: []engine.Type{engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n64, err := args[0].AsInteger()
+			n64, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -356,11 +356,11 @@ func registerMatrixFill(r *engine.Registry) {
 	r.Register("matrix-fill", engine.Signature{
 		Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TNumber},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[0].AsInteger()
+			r64, err := args[0].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			c64, err := args[1].AsInteger()
+			c64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -421,11 +421,11 @@ func registerMatrixAt(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			r64, err := args[1].AsInteger()
+			r64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
-			c64, err := args[2].AsInteger()
+			c64, err := args[2].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -444,7 +444,7 @@ func registerMatrixRow(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			r64, err := args[1].AsInteger()
+			r64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}
@@ -467,7 +467,7 @@ func registerMatrixCol(r *engine.Registry) {
 		Args: []engine.Type{engine.TMatrix, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			m := args[0].AsMatrix()
-			c64, err := args[1].AsInteger()
+			c64, err := args[1].AsConcreteInteger()
 			if err != nil {
 				return nil, err
 			}

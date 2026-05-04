@@ -13,7 +13,7 @@ import "fmt"
 //	[]    any   → false
 func RegisterAny(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return []Value{NewBoolean(false)}, nil
 		}
 		list := args[0].AsList()
@@ -51,7 +51,7 @@ func RegisterAny(r *Registry) {
 //	[]      all   → true
 func RegisterAll(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return []Value{NewBoolean(true)}, nil
 		}
 		list := args[0].AsList()
@@ -88,28 +88,33 @@ func RegisterAll(r *Registry) {
 //	[(String tor None) Number] tany → String|None|Number   (flattened)
 func RegisterTany(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("tany: expected a concrete list")
 		}
 		list := args[0].AsList()
 		n := list.Len()
+		// Empty list reduces to Never — the identity element for tor.
+		// Folding zero alternatives gives the union's empty case,
+		// which is the bottom type. Makes tany a full monoid over
+		// lists.
 		if n == 0 {
-			return nil, fmt.Errorf("tany: empty list has no alternatives")
+			return []Value{NewTypeLiteral(TNever)}, nil
 		}
 		if n == 1 {
 			return []Value{list.Get(0)}, nil
 		}
 		var alts []Value
 		for i := 0; i < n; i++ {
-			v := list.Get(i)
-			if v.IsDisjunct() {
-				d, _ := v.AsDisjunct()
-				alts = append(alts, d.Alternatives...)
-			} else {
-				alts = append(alts, v)
-			}
+			alts = append(alts, FlattenDisjunctAlts(list.Get(i))...)
 		}
-		return []Value{NewDisjunct(alts)}, nil
+		simplified := simplifyDisjunctAlts(alts)
+		if len(simplified) == 0 {
+			return []Value{NewTypeLiteral(TNever)}, nil
+		}
+		if len(simplified) == 1 {
+			return []Value{simplified[0]}, nil
+		}
+		return []Value{NewDisjunct(simplified)}, nil
 	}
 
 	r.RegisterNativeFunc(NativeFunc{
@@ -130,30 +135,20 @@ func RegisterTany(r *Registry) {
 //	[1 Integer Number] tall       → 1
 func RegisterTall(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("tall: expected a concrete list")
 		}
 		list := args[0].AsList()
 		n := list.Len()
+		// Empty list reduces to Any — the identity element for tand.
+		// Folding zero constraints leaves the type wide open, which
+		// is the top type. Makes tall a full monoid over lists.
 		if n == 0 {
-			return nil, fmt.Errorf("tall: empty list has no values to combine")
+			return []Value{NewTypeLiteral(TAny)}, nil
 		}
 		acc := list.Get(0)
 		for i := 1; i < n; i++ {
-			v := list.Get(i)
-			if isPlainConcreteMap(acc) && isPlainConcreteMap(v) {
-				merged, err := mergeMaps(acc.AsMap(), v.AsMap())
-				if err != nil {
-					return nil, err
-				}
-				acc = NewMap(merged)
-				continue
-			}
-			unified, ok := Unify(acc, v)
-			if !ok {
-				return nil, fmt.Errorf("tall: cannot unify values")
-			}
-			acc = unified
+			acc = tandValues(acc, list.Get(i))
 		}
 		return []Value{acc}, nil
 	}

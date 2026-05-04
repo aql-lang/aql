@@ -29,6 +29,10 @@ type NativeSig struct {
 	// suppressed.
 	NoEvalArgs map[int]bool
 
+	// NoEvalMapArgs marks arg positions where map auto-evaluation
+	// should be suppressed. See Signature.NoEvalMapArgs.
+	NoEvalMapArgs map[int]bool
+
 	// BarrierPos is the arg index where forward collection must stop.
 	BarrierPos int
 
@@ -62,6 +66,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			Patterns:         sig.Patterns,
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
+			NoEvalMapArgs:    sig.NoEvalMapArgs,
 			BarrierPos:       sig.BarrierPos,
 			Fallback:         sig.Fallback,
 			Returns:          sig.Returns,

@@ -25,14 +25,14 @@ import "fmt"
 func RegisterFor(r *Registry) {
 	// for [integer, list] — count from 0 to N-1
 	forCountHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		n, _ := args[0].AsInteger()
+		n, _ := args[0].AsConcreteInteger()
 		body := args[1]
 		return runForLoop(r, 0, n, 1, "i", body)
 	}
 
 	// for [list, list] — range spec [end] or [start,end] or [start,end,step]
 	forRangeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].Data == nil {
+		if !IsConcrete(args[0]) {
 			return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
 		}
 		rangeSpec := args[0].AsList().Slice()
@@ -102,15 +102,9 @@ func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc 
 	return func(args []Value) []Value {
 		// body is always the last arg (Integer,List or List,List).
 		body := args[len(args)-1]
-		r.DefStacks[iterName] = append(r.DefStacks[iterName], NewCarrier(iterType))
+		r.PushDef(iterName, NewCarrier(iterType))
 		stk, _ := runCarrierBodyWithDefs(r, body)
-		// Pop the iterator binding.
-		if ds := r.DefStacks[iterName]; len(ds) > 0 {
-			r.DefStacks[iterName] = ds[:len(ds)-1]
-			if len(r.DefStacks[iterName]) == 0 {
-				delete(r.DefStacks, iterName)
-			}
-		}
+		r.PopDef(iterName)
 		if len(stk) == 0 {
 			return []Value{NewCarrier(TList)}
 		}

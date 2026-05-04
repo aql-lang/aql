@@ -186,7 +186,8 @@ happens in two contexts for parser-created lists (`Eval=true`):
 
 1. **When consumed as a word argument**: `execMatch` (for registered words)
    and `execFnDefSig` (for FnDef auto-invocation) run `autoEvalList` on
-   list arguments with `Eval=true`, resolving word elements from DefStacks.
+   list arguments with `Eval=true`, resolving word elements via the def
+   stack (`r.TopOfDefStack`).
    For example: `def c1 10  def c2 20  [c1 c2] myword` passes `[10, 20]`
    to `myword`, not `[atom(c1), atom(c2)]`.
 
@@ -223,6 +224,145 @@ rule with `j.Rule()`, and add conversion logic in the appropriate
 with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
+
+## Registry Stacks (CRITICAL)
+
+The `Registry` holds two per-name stacks for user bindings:
+
+- **Def stack** (`r.defStacks`, unexported) — `def`-defined values,
+  fn bodies, fn-body parameters, carrier-merge join points, module
+  imports. Stack-per-name with shadowing semantics; `def x 1; def x 2`
+  → `x` is 2; `undef x` → `x` is 1.
+- **Type stack** (`r.types`, unexported) — `type`-defined values
+  (records, options, table, disjuncts, typed list/map, ObjectType,
+  DepScalar, predicate types, fn-shape types, plain literals).
+  Stack-per-name with the same shadow/pop semantics; `untype Foo`
+  pops; once a stack is empty the entry is removed from the map.
+
+Both fields are **unexported and accessed exclusively through the
+helper API in `util.go`**. Do not add `r.defStacks` or `r.types`
+indexing to new code — direct access is a compile error in external
+packages and will be rejected in code review for `package engine`
+code as well.
+
+**Read helpers**:
+- `r.TopOfDefStack(name) (Value, bool)` / `r.TopOfTypeStack(name)`
+- `r.HasDef(name) bool` / `r.HasType(name)`
+- `r.DefStackDepth(name) int` / `r.TypeStackDepth(name)`
+- `r.DefStack(name) []Value` (read-only view; do not mutate)
+- `r.DefNames() []string` / `r.TypeNames()`
+- `r.ResolveTypedName(name) (Value, bool)` — Type-first then Def
+  fallback; the canonical way to resolve a type-context name.
+
+**Write helpers**:
+- `r.PushDef(name, v)` / `r.PushType(name, v)`
+- `r.PopDef(name) bool` / `r.PopType(name) bool` (auto-deletes the
+  map entry when the stack empties)
+- `r.ReplaceDefTop(name, v) bool` — overwrite the top binding
+- `r.TruncateDefStack(name, depth)` — pop down to a specified depth
+- `r.SetDefStack(name, stack)` — replace the whole stack (rare;
+  used by uninstall paths that filter middle entries)
+- `r.DeleteDef(name)` — remove the entry entirely
+
+**Snapshot/restore**:
+- `r.SnapshotDefDepths() map[string]int` /
+  `r.RestoreToDefDepths(snap)` — depth-only; pair around a region
+  of code that may push but never pop. Used by fn-body sandboxing,
+  carrier merge join points.
+- `r.SnapshotTypeStacks() map[string][]Value` /
+  `r.RestoreTypeStacks(snap)` — full deep copy; pair around code
+  that may both pop and push (e.g. predicate sandbox).
+
+When adding a new feature that needs to read or write the stacks,
+extend the helper surface rather than reaching into the field.
+Future namespace changes (single store, scoped types, persistent
+overlays) only need to update the helpers.
+
+## Helper API discipline
+
+The engine consolidates several distributed implicit contracts behind
+helper APIs in `internal/engine/util.go`. Use the helpers rather than
+the underlying state. Adding direct field access regresses the
+consolidation and will be flagged in code review.
+
+**Concrete-value guards** (panic-prevention, type-literal vs concrete):
+- `IsTypeLiteral(v)` — true if `Data == nil` and not a carrier and not None.
+- `IsConcrete(v)` — true if `Data != nil` and not a carrier.
+- `RequireConcreteList(v, op) (ReadList, error)` — unwraps a list-typed
+  Value or returns an error when the value is a type literal/carrier.
+- `RequireConcreteMap(v, op) (ReadMap, error)` — same for maps.
+
+Handlers that take `TList`/`TMap`/`TAny` args should guard with
+`!IsConcrete(args[i])` (or use the `RequireConcreteX` helpers) before
+calling `AsList()`/`AsMap()` — otherwise carriers and type literals
+panic on `.Len()`.
+
+**DepScalar-rejecting accessors**:
+- `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteDecimal()`,
+  `v.AsConcreteBoolean()`, `v.AsConcreteAtom()` — reject DepScalar
+  payloads with a clear error rather than silently returning the zero
+  value. Always prefer these over the bare `AsX()` accessors when the
+  arg comes from a sig-matched value (a `TString` slot can secretly
+  hold a `DepString` constraint).
+
+**Check mode**:
+- `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
+  the `r != nil && r.Check.Mode` nil-guarded variants.
+- `r.BeginCheckMode() func()` — entry-side helper; resets per-pass
+  state and returns a deferred-cleanup function. Use as
+  `defer r.BeginCheckMode()()` in the analyser entry point.
+
+**Error construction**:
+- `r.AqlError(code, detail, word)` — handler-side error constructor;
+  picks up `r.Source` automatically. Replaces the recurring
+  `makeAqlError(code, detail, name, r.Source, "")` pattern.
+- `r.AqlErrorHint(code, detail, word, hint)` — same with an explicit
+  hint string. The engine-internal helpers (`signatureError`,
+  `insufficientArgsError`, etc. in `engine.go`) layer above these
+  with engine-specific source resolution.
+
+**Args stack** (per-fn-call args list, used by the `args` word):
+- `r.PushArgs(list)` / `r.PopArgs()` / `r.TopArgs() (Value, bool)`.
+  The underlying `argsStack` field is unexported.
+
+**Context stack** (scoped Store layers for `ctx-set`/`ctx-get`/etc.):
+- `r.PushContext(parent)` — push a new copy-on-write child layer.
+- `r.PushExistingContext(ctx)` — push an existing Store without
+  wrapping (rare; used by module loading to inherit the parent's ctx).
+- `r.PopContext()`, `r.Context()` (returns the data map),
+  `r.ContextStore()` (returns the StoreInstanceInfo),
+  `r.UpdateCtxStoreChain(orig, new)`.
+
+**Pos threading**:
+- `WithPos(v, src)` — return v with Pos copied from src. Use when a
+  handler constructs a new Value from an input — error reporting
+  downstream then has the source location.
+
+## Undefined Words (CRITICAL)
+
+An undefined word reaching the pointer is an **error**, not a value.
+A word that is not registered, not in the def stack, and not a known
+literal (`true`/`false`/a type name) raises `[aql/undefined_word]` at
+`stepWord`. There is no implicit `Word → Atom` fallback.
+
+Names that are meant as data must be quoted:
+
+- `quote foo` — captures the upcoming Word as `Atom(foo)`.
+- `(quote foo)` — same, inside a paren so forward collection can pick
+  up the resulting Atom.
+- A `/q`-marked sig position — captures the upcoming Word as an Atom
+  during forward collection (`def name body`, `get key map`,
+  `set key val store`, etc.).
+
+CheckMode is the single exception: `stepWord` keeps the lenient
+"undefined → `Atom{Undefined:true}`" path so static analysis can
+continue past a typo. Each dangling Undefined Atom is converted to a
+diagnostic + `Any` carrier in the end-of-`Run()` drain in
+`engine.go`.
+
+When adding a sig that should accept a bare-word name as data, add `/q`
+to the corresponding Atom position. Without `/q`, callers will see an
+`undefined_word` error and must wrap the name in `quote` themselves.
 
 ## Panic Prevention (CRITICAL)
 

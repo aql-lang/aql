@@ -12,7 +12,7 @@ import (
 //   - [any, string] — retrieves a value at a dot-separated path from the data
 func RegisterGetpath(r *engine.Registry) {
 	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "getpath",
+		Name:              "getpath",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
 			{
@@ -26,7 +26,7 @@ func RegisterGetpath(r *engine.Registry) {
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.
 func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
-	path, err := args[1].AsString()
+	path, err := args[1].AsConcreteString()
 	if err != nil {
 		return nil, err
 	}

@@ -58,8 +58,8 @@ func registerBinaryMathWord(
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		// When both args are integers, use the integer path to preserve type.
 		if intFn != nil && args[0].VType.Matches(TInteger) && args[1].VType.Matches(TInteger) {
-			a, _ := args[0].AsInteger()
-			b, _ := args[1].AsInteger()
+			a, _ := args[0].AsConcreteInteger()
+			b, _ := args[1].AsConcreteInteger()
 			return singleResult(intFn(b, a))
 		}
 		a, _ := args[0].AsNumber()

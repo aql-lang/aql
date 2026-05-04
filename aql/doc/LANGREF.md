@@ -50,13 +50,20 @@ Escape sequences in template strings: `\\`, `` \` ``, `\$`, `\n`,
 `\t`, `\r`. Use `\$` to include a literal `${` without triggering
 interpolation.
 
-**Atoms** are bare unquoted words that do not match any defined function,
-type name, or boolean. They represent symbolic names.
+**Atoms** represent symbolic names. They are produced explicitly with
+`quote`. A bare unquoted word that is not a defined function, a type
+name, or a boolean is **not** an atom — it is an `undefined_word`
+error. To use a name as data, quote it:
 
 ```
-foo             => foo
-abc             => abc
+quote foo       => foo
+quote abc       => abc
 ```
+
+Inside a `/q`-marked argument position the engine quotes for you, so
+`def foo 42`, `set foo 42 store`, `get foo {foo:1}` work without an
+explicit `quote`. Outside such a position, `foo` on its own raises
+`undefined_word`.
 
 **Booleans** are the bare words `true` and `false`.
 
@@ -1986,10 +1993,12 @@ first `x` gets 5, then `y` gets 3.
 **Variables do not leak:**
 
 ```
-5 var [[x] x mul x] x                 => 25 x
+5 var [[x] x mul x] (quote x)         => 25 x
 ```
 
-After `var` completes, `x` reverts to an unknown word (atom `x`).
+After `var` completes, `x` reverts to an undefined word; the explicit
+`(quote x)` produces the trailing atom in the example above. A bare `x`
+at this point would raise `undefined_word`.
 
 **Preserves existing definitions:**
 
@@ -3176,6 +3185,256 @@ When matching function signatures, the most specific match wins:
 longest argument list with narrowest types.
 
 
+## Type Algebra
+
+`tand` (intersection) and `tor` (union) compose types into a bounded
+distributive lattice. Both operators are forward-precedence with
+`BarrierPos=1` so chains don't greedily consume.
+
+```
+Integer tor String           → Integer | String
+Integer tor Number           → Number          (subsumption)
+Integer tor Integer          → Integer         (idempotence)
+Integer tand Number          → Integer         (narrower wins)
+Integer tand String          → Never           (disjoint)
+String tor Never             → String          (Never is identity for tor)
+String tand Any              → String          (Any is identity for tand)
+```
+
+**Algebraic laws.** `tand` and `tor` form a bounded distributive
+lattice over types. The laws are:
+
+| Law                      | tand                          | tor                          |
+|--------------------------|-------------------------------|------------------------------|
+| identity                 | `T tand Any = T`              | `T tor Never = T`            |
+| annihilator              | `T tand Never = Never`        | `T tor Any = Any`            |
+| idempotence              | `T tand T = T`                | `T tor T = T`                |
+| commutativity            | `A tand B = B tand A`         | `A tor B = B tor A`          |
+| associativity            | `(A tand B) tand C = …`       | `(A tor B) tor C = …`        |
+| distribution             | `(A tor B) tand C = (A tand C) tor (B tand C)` |    |
+
+Distribution is implemented at construction: `(Integer tor String)
+tand Integer` reduces to `Integer` directly (the cross product with
+`Never` filtered, results deduped).
+
+`tall [list]` and `tany [list]` fold these over a list. Both are
+full monoids:
+
+```
+[Integer Number Scalar] tall    → Integer  (tighten through chain)
+[] tall                         → Any      (identity for tand)
+[Integer String] tany           → Integer | String
+[] tany                         → Never    (identity for tor)
+```
+
+**`Never` (bottom type).** Uninhabited — no value satisfies `Never`.
+It is the dual of `Any`: where `Any` matches everything, `Never`
+matches nothing. Disjoint intersections collapse to `Never`
+automatically; `Never` literals can also be written explicitly.
+
+```
+v is Never                   → false  (for any concrete v)
+def x:Never 42               → error  (no value satisfies Never)
+type Bottom Never            → ok     (alias)
+```
+
+
+## Dependent Types
+
+Comparison operators with a type-literal arg construct a
+**dependent scalar** type — a value-level constraint over a base
+scalar type:
+
+```
+Integer gte 10               → DepInteger     (≥ 10)
+Integer gt 10                → DepInteger     (> 10)
+Integer lt 100               → DepInteger     (< 100)
+Integer lte 100              → DepInteger     (≤ 100)
+String lt "z"                → DepString      (< "z")
+Decimal gte 1.5              → DepDecimal     (≥ 1.5)
+```
+
+Dependent types live under `Type/Dependent/Dep<Leaf>` where `<Leaf>`
+is `Integer`, `Decimal`, `Number`, `String`, `Boolean`, or `Atom`.
+They satisfy any signature slot expecting the base type — `DepInteger`
+matches `Integer`, `Number`, `Scalar`, and `Any`.
+
+Unification:
+
+```
+(Integer gte 10) unify 15    → 15, true       (15 ≥ 10)
+(Integer gte 10) unify 5     → fail           (5 < 10)
+(Integer gte 10) unify "x"   → fail           (cross-type)
+```
+
+**Intervals.** `tand` of two same-base dependent scalars combines
+the constraints — same-side bounds tighten, opposite-side bounds
+form a closed interval. Empty intervals reduce to `Never`.
+
+```
+(Integer gte 10) tand (Integer lte 20)  → DepInteger [10, 20]
+(Integer gte 10) tand (Integer gte 5)   → DepInteger ≥ 10  (tighten)
+(Integer gt 10) tand (Integer lt 5)     → Never            (empty)
+```
+
+`between` is the surface form for closed intervals:
+
+```
+Integer between 10 20        → DepInteger [10, 20]
+String between "b" "d"       → DepString  ["b", "d"]
+Integer between 20 10        → Never                       (inverted)
+```
+
+
+## Predicate Types
+
+`type Foo fn [param:Any Any [body]]` registers a **predicate type**:
+a function whose body decides membership. Per the contract, the body
+returns:
+
+- `None` to signal "no match".
+- Any other value to signal "match" — typically the input itself, or
+  a transformed form (a coercive predicate).
+
+```
+type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+
+"c" is Bbd                   → true
+"e" is Bbd                   → false
+99 is Bbd                    → false
+def s:Bbd "c"                → ok
+def s:Bbd "e"                → error: value 'e' does not satisfy predicate type Bbd
+```
+
+**`guard` shorthand.** Every predicate body has the shape "compute
+a Boolean, return val on true / None on false". The `guard` word
+shortens this:
+
+```
+true guard 42                → 42
+false guard 42               → None
+
+# Predicate body using guard:
+type Bbd fn [x:Any Any [(x is String) and (x gte "b") and (x lte "d") guard x]]
+
+# Coercive (transforming) predicate:
+type Up fn [x:Any Any [(x is String) guard (x upper)]]
+def s:Up "hi"
+s                            → "HI"
+```
+
+**Predicate functions are not independently callable.** A name
+registered via `type Foo fn […]` lives in the type registry only —
+not in the def stack — so `Foo "x"` errors. Use `is` for membership
+checks and `def x:Foo …` for typed bindings.
+
+
+## Structural Function-Shape Types
+
+`type Foo fn [[input1 input2] [output]]` (no body — pair-of-lists
+form) registers a **structural function-shape type**: a constraint
+that matches function values by their signature shape rather than
+by name.
+
+```
+type Mapper fn [[Integer] [Integer]]
+def double fn [[Integer] [Integer] [1 add]]
+(quote double) is Mapper     → true
+def m:Mapper (quote double)  → ok (m bound to double)
+```
+
+**Variance.** Structural fn matching uses the standard subtyping
+rules:
+
+- **Inputs are contravariant.** Candidate's input must be a
+  supertype-or-equal of the spec's. A function that accepts `Number`
+  satisfies a constraint that demands `Integer`-acceptance.
+- **Returns are covariant.** Candidate's return must be a
+  subtype-or-equal of the spec's. A function that returns `Integer`
+  satisfies a constraint that promises `Number`.
+
+```
+type Mapper fn [[Integer] [Number]]   # accept Integer, return Number
+def f fn [[Number] [Integer] [convert Integer]]
+(quote f) is Mapper          → true   # broader input, narrower return
+```
+
+**`(quote name)` idiom.** When binding a function to a fn-shape
+type, wrap the source name in `quote` so it arrives as an Atom that
+the def handler can resolve to the function value. `def m:Mapper
+double` would invoke `double` with no args; `def m:Mapper (quote
+double)` binds `m` to the function itself.
+
+
+## Type and Def Naming
+
+- **Type names must start with a capital letter.** `type foo Integer`
+  is rejected.
+- **Def names must NOT start with a capital letter.** `def Foo 1` is
+  rejected.
+
+The case rule keeps the two namespaces from drifting. A name clash
+across `type` / `def` / native-fn registration is rejected at
+definition time.
+
+
+## Type Shadowing and `untype`
+
+Type bindings stack just like `def` bindings. `type Foo X; type Foo
+Y` pushes Y on top so subsequent uses see Y; `untype Foo` pops Y
+and X becomes active again. Once the stack empties, the name is
+unbound and a subsequent reference errors.
+
+```
+type Foo Integer
+42 is Foo                    → true
+type Foo String              # shadow
+"hi" is Foo                  → true
+42 is Foo                    → false
+untype Foo                   # pop the shadow
+42 is Foo                    → true
+untype Foo                   # pop the original
+42 is Foo                    → error: undefined word Foo
+```
+
+`untype` accepts the same name forms as `type` (a quoted string or a
+bare capitalised word). Lowercase names are rejected — the
+case rule applies the same way `type` enforces it.
+
+The shadow / pop pattern works uniformly across every kind of type
+body: literals, records, disjuncts, typed lists/maps, object types,
+dependent scalars, fn-shape types, and predicate types. A predicate
+shadowing a literal swaps the membership semantics for the duration
+of the shadow.
+
+
+## Type-Registry Internals
+
+User-defined types live in `Registry.Types`, a per-name stack
+(`map[string][]Value`) separate from `Registry.DefStacks` (which
+holds value defs and fn-defined words). Predicate-type and
+structural-fn-shape types are stored *only* in `Registry.Types`
+so they're not callable as ordinary words. Dependent and record
+types still mirror into `DefStacks` for legacy reasons; `untype`
+keeps both stacks in lock-step.
+
+Word resolution consults `r.Types` first (top of stack), then the
+DefStacks substitution path, then registered native fns, then the
+type-name lookup. The shadow ordering ensures a `type Foo …`
+re-binding always wins over a stale DefStacks mirror.
+
+Helpers on `Registry` for working with the type stack:
+
+- `r.PushType(name, value)` — install a new binding (shadows
+  previous).
+- `r.PopType(name)` — remove the top binding, return true on
+  success.
+- `r.TopOfTypeStack(name)` — fetch the active binding.
+- `r.HasType(name)` — does the name have any active binding.
+- `r.ResolveTypedName(name)` — type-stack first, DefStacks
+  fallback. Used by typed-def, `is`, and other type-aware sites.
+
+
 ## Error Codes
 
 | Code              | Meaning                                          |
@@ -3252,6 +3511,31 @@ The `CheckResult` JSON object has:
   (name, arg-type-tuple).
 - **Disjunction widening**: carrier disjunctions wider than `CarrierDisjunctCap`
   (8 alternatives) collapse to their common ancestor.
+
+### Carriers vs type literals at sig-match time
+
+Carriers and type literals share an important field-level shape — both
+have nil `Data` and a concrete `VType`. The `Carrier` flag is the only
+field that distinguishes them. The runtime relies on this distinction
+at signature-matching time:
+
+- A **carrier** of type `T` is an abstract VALUE of type `T`. It
+  satisfies value-level slots like `[TInteger]` but **not** metatype
+  slots like `[TScalarType]`.
+- A **type literal** for `T` (produced by stepWord on a type-name word
+  like `Integer`) IS a type, not a value. It satisfies metatype slots
+  but not value-level slots of the same name.
+
+Concretely, given `[TScalarType]` in a sig:
+- `Integer` (the word, parsed as type literal) — matches.
+- `Carrier{Integer}` (the result of analysing `1`) — does NOT match.
+
+The `sigTypeMatches` function (`internal/engine/signature.go`)
+implements this with an explicit `!v.Carrier` guard on the metatype
+branch. When adding a new metatype branch (a new `IsMetaType` family),
+preserve that guard — otherwise the analyser will silently upgrade
+carriers into metatype matches and break dispatch. See §6.2 in
+`doc/design/TYPE-SYSTEM-REVIEW.md` for the design rationale.
 
 ### Adding `Returns` to Custom Native Words
 

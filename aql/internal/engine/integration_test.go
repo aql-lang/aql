@@ -2291,7 +2291,7 @@ func TestEngineInspectUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("nonexistent")})
+	result := runAQL(t, r, []Value{NewWord("inspect"), NewAtom("nonexistent")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}

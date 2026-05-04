@@ -624,7 +624,7 @@ func TestDotMapAtom(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("get")})
 	_as0, _ := result[0].AsInteger()
 	if len(result) != 1 || _as0 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -677,7 +677,7 @@ func TestDotMapMissing(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("y"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
@@ -702,7 +702,7 @@ func TestDotNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -729,7 +729,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
-	result := runAQL(t, r, []Value{list, NewWord("x"), NewWord("get")})
+	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !result[0].VType.Equal(TNone) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
@@ -786,7 +786,7 @@ func TestDotMapThenList(t *testing.T) {
 	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
 	result := runAQL(t, r, []Value{
 		NewMap(m),
-		NewWord("items"), NewWord("get"),
+		NewAtom("items"), NewWord("get"),
 		NewInteger(1), NewWord("get"),
 	})
 	_as6, _ := result[0].AsInteger()
@@ -811,7 +811,7 @@ func TestDotListThenMap(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		list,
 		NewInteger(0), NewWord("get"),
-		NewWord("x"), NewWord("get"),
+		NewAtom("x"), NewWord("get"),
 	})
 	_as7, _ := result[0].AsInteger()
 	if len(result) != 1 || _as7 != 1 {
@@ -833,7 +833,7 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		list,
 		NewInteger(1), NewWord("get"),
-		NewWord("x"), NewWord("get"),
+		NewAtom("x"), NewWord("get"),
 	})
 	_as8, _ := result[0].AsInteger()
 	if len(result) != 1 || _as8 != 2 {
@@ -850,7 +850,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("key"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("get")})
 	_as9, _ := result[0].AsInteger()
 	if len(result) != 1 || _as9 != 99 {
 		t.Errorf("expected 99 via . alias, got %v", result)
@@ -888,9 +888,9 @@ func TestDotDeepListMapCombo(t *testing.T) {
 	outer.Set("a", NewList([]Value{NewMap(m0), NewMap(m1)}))
 	result := runAQL(t, r, []Value{
 		NewMap(outer),
-		NewWord("a"), NewWord("get"),
+		NewAtom("a"), NewWord("get"),
 		NewInteger(1), NewWord("get"),
-		NewWord("b"), NewWord("get"),
+		NewAtom("b"), NewWord("get"),
 		NewInteger(0), NewWord("get"),
 	})
 	_as11, _ := result[0].AsInteger()
@@ -906,7 +906,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("x"), NewWord("getr")})
+	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("getr")})
 	_as12, _ := result[0].AsInteger()
 	if len(result) != 1 || _as12 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -920,7 +920,7 @@ func TestDotrMapMissingError(t *testing.T) {
 	}
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewWord("y"), NewWord("getr")})
+	err = runAQLError(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -934,7 +934,7 @@ func TestDotrNoneError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewWord("x"), NewWord("getr")})
+	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}
@@ -1734,18 +1734,18 @@ func TestResolveTypeNameUnknown(t *testing.T) {
 }
 
 // ========================
-// isTypeValue tests
+// isTypeBody tests
 // ========================
 
 func TestIsTypeValueTypeLiteral(t *testing.T) {
-	if !isTypeValue(NewTypeLiteral(TNumber)) {
+	if !isTypeBody(NewTypeLiteral(TNumber)) {
 		t.Error("type literal should be a type value")
 	}
 }
 
 func TestIsTypeValueDisjunct(t *testing.T) {
 	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
-	if !isTypeValue(disj) {
+	if !isTypeBody(disj) {
 		t.Error("disjunct of types should be a type value")
 	}
 }
@@ -1754,27 +1754,27 @@ func TestIsTypeValueRecordType(t *testing.T) {
 	f := NewOrderedMap()
 	f.Set("x", NewTypeLiteral(TNumber))
 	rt := NewRecordType(f)
-	if !isTypeValue(rt) {
+	if !isTypeBody(rt) {
 		t.Error("record type should be a type value")
 	}
 }
 
 func TestIsTypeValueNotType(t *testing.T) {
-	if isTypeValue(NewInteger(42)) {
+	if isTypeBody(NewInteger(42)) {
 		t.Error("integer should not be a type value")
 	}
 }
 
 func TestIsTypeValueTypedList(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TString))
-	if !isTypeValue(tl) {
+	if !isTypeBody(tl) {
 		t.Error("typed list should be a type value")
 	}
 }
 
 func TestIsTypeValueTypedMap(t *testing.T) {
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
-	if !isTypeValue(tm) {
+	if !isTypeBody(tm) {
 		t.Error("typed map should be a type value")
 	}
 }
@@ -3972,11 +3972,10 @@ func TestCallAQLBasic(t *testing.T) {
 	})
 
 	// Look up the function
-	fnStack := r.DefStacks["double"]
-	if len(fnStack) == 0 {
+	fnVal, ok := r.TopOfDefStack("double")
+	if !ok {
 		t.Fatal("double not defined")
 	}
-	fnVal := fnStack[len(fnStack)-1]
 
 	args := []Value{NewInteger(5)}
 	sig := MatchFnSig(fnVal, args)
@@ -4018,7 +4017,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
 	})
 
-	fnVal := r.DefStacks["inc"][len(r.DefStacks["inc"])-1]
+	fnVal, _ := r.TopOfDefStack("inc")
 
 	// Call with wrong type — MatchFnSig returns nil
 	sig := MatchFnSig(fnVal, []Value{NewString("hello")})
@@ -4155,7 +4154,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Directly exercise the args stack by pushing and calling
-	r.ArgsStack = append(r.ArgsStack, NewList([]Value{NewInteger(42), NewString("hi")}))
+	r.PushArgs(NewList([]Value{NewInteger(42), NewString("hi")}))
 	e := New(r)
 	result, err := e.Run([]Value{NewWord("args")})
 	if err != nil {
@@ -4169,7 +4168,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}
 	// Clean up
-	r.ArgsStack = r.ArgsStack[:len(r.ArgsStack)-1]
+	r.PopArgs()
 }
 
 func TestArgsOutsideFnErrors(t *testing.T) {
@@ -4247,7 +4246,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 
 	// ResolveFieldType should resolve "MyNum" string to the type value
 	result := ResolveFieldType(r, NewString("MyNum"))
-	if !isTypeValue(result) {
+	if !isTypeBody(result) {
 		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
 	}
 }

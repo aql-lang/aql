@@ -16,8 +16,8 @@ func TestCheckStepBudgetTrip(t *testing.T) {
 	r.InitRootContext()
 	engine.RegisterAdd(r)
 
-	r.CheckMode = true
-	r.CheckStepBudget = 5 // tiny — any non-trivial program trips
+	r.Check.Mode = true
+	r.Check.StepBudget = 5 // tiny — any non-trivial program trips
 
 	// A small arithmetic program: in check mode this takes more
 	// than 5 engine steps.
@@ -34,13 +34,13 @@ func TestCheckStepBudgetTrip(t *testing.T) {
 	}
 
 	found := false
-	for _, d := range r.CheckDiagnostics {
+	for _, d := range r.Check.Diagnostics {
 		if d.Code == "step_budget_exceeded" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected step_budget_exceeded diagnostic, got: %+v", r.CheckDiagnostics)
+		t.Errorf("expected step_budget_exceeded diagnostic, got: %+v", r.Check.Diagnostics)
 	}
 }

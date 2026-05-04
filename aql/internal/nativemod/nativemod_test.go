@@ -34,9 +34,7 @@ func mathRegistry(t *testing.T) *engine.Registry {
 	}
 	// Install exports as defs — same as the import handler does.
 	for name, exportMap := range desc.Exports {
-		// Use installDef via Register with the def word simulation.
-		// We can just push the map onto DefStacks directly.
-		r.DefStacks[name] = append(r.DefStacks[name], engine.NewMap(exportMap))
+		r.PushDef(name, engine.NewMap(exportMap))
 	}
 	return r
 }

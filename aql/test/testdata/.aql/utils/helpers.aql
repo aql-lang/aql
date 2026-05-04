@@ -1,2 +1,2 @@
 def magicnum 42
-export Helpers {magicnum:magicnum}
+export "Helpers" {magicnum:magicnum}

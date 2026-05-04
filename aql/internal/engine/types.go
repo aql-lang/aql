@@ -23,13 +23,15 @@ type Type struct {
 // typeRoots are the top-level type hierarchy roots. If Parts[0] is already
 // one of these, the path is considered fully qualified and is not expanded.
 var typeRoots = map[string]bool{
-	"Scalar": true,
-	"Node":   true,
-	"Word":   true,
-	"Object": true,
-	"Any":    true,
-	"None":   true,
-	"Type":   true,
+	"Scalar":    true,
+	"Node":      true,
+	"Word":      true,
+	"Object":    true,
+	"Any":       true,
+	"None":      true,
+	"Never":     true,
+	"Type":      true,
+	"Dependent": true,
 }
 
 // typeAncestry maps short (legacy) first-part names to their full ancestry
@@ -74,12 +76,14 @@ var typeAncestry = map[string]string{
 	"Matrix":      "Scalar/Number/Matrix",
 	"Timeout":     "Object/Timeout",
 	"Interval":    "Object/Interval",
+	"DepInteger":  "Type/Dependent/DepInteger",
 }
 
 // Well-known types.
 var (
 	TAny            = mustType("Any")
 	TNone           = mustType("None")
+	TNever          = mustType("Never")
 	TScalar         = mustType("Scalar")
 	TString         = mustType("Scalar/String")
 	TStringProper   = mustType("Scalar/String/Proper")
@@ -137,6 +141,8 @@ var (
 	TTimezone       = mustType("Scalar/Time/Timezone")
 	TMatrix         = mustType("Scalar/Number/Matrix")
 	TTimeout        = mustType("Object/Timeout")
+	TDependent      = mustType("Type/Dependent")
+	TDepInteger     = mustType("Type/Dependent/DepInteger")
 	TInterval       = mustType("Object/Interval")
 )
 
@@ -144,53 +150,53 @@ var (
 // numeric IDs. These assignments are stable: new types are appended at the
 // end, existing numbers never change.
 var builtinTypeIDs = map[string]int{
-	"Any":                    1,
-	"None":                   2,
-	"Scalar":                 3,
-	"Scalar/String":          4,
-	"Scalar/String/Proper":   5,
-	"Scalar/String/Empty":    6,
-	"Scalar/Number":          7,
-	"Scalar/Number/Integer":  8,
-	"Scalar/Number/Decimal":  9,
-	"Scalar/Boolean":         10,
-	"Scalar/Path":            47,
-	"Node":                   11,
-	"Node/List":              12,
-	"Node/List/Args":         13,
-	"Node/Map":               14,
-	"Object/Table":           15,
-	"Object/Record":          16,
-	"Word":                   17,
-	"Scalar/Atom":            18,
-	"Word/Function":          19,
-	"Word/__IN":              20,
-	"Word/__IN/__DC":         20,
-	"Word/__FW":              21,
-	"Word/__OP":              22,
-	"Word/__FN":              23,
-	"Word/__UF":              24,
-	"Word/__RC":              25,
-	"Word/__DJ":              26,
-	"Word/__MK":              27,
-	"Word/__MV":              28,
-	"Word/__MD":              29,
-	"Node/Map/Options":       38,
-	"Object":                 30,
-	"Node/Map/Inspect":       31,
-	"Object/Fetch":           33,
-	"Object/Fetch/Request":   34,
-	"Object/Fetch/Response":  35,
-	"Object/Store":           42,
-	"Object/Store/System":    43,
-	"Object/Array":           44,
-	"Object/Error":           45,
-	"Object/Resource":        36,
-	"Object/Resource/Entity": 37,
-	"Type":                   39,
-	"Type/ScalarType":        40,
-	"Type/NodeType":          41,
-	"Type/ObjectType":        46,
+	"Any":                              1,
+	"None":                             2,
+	"Scalar":                           3,
+	"Scalar/String":                    4,
+	"Scalar/String/Proper":             5,
+	"Scalar/String/Empty":              6,
+	"Scalar/Number":                    7,
+	"Scalar/Number/Integer":            8,
+	"Scalar/Number/Decimal":            9,
+	"Scalar/Boolean":                   10,
+	"Scalar/Path":                      47,
+	"Node":                             11,
+	"Node/List":                        12,
+	"Node/List/Args":                   13,
+	"Node/Map":                         14,
+	"Object/Table":                     15,
+	"Object/Record":                    16,
+	"Word":                             17,
+	"Scalar/Atom":                      18,
+	"Word/Function":                    19,
+	"Word/__IN":                        20,
+	"Word/__IN/__DC":                   20,
+	"Word/__FW":                        21,
+	"Word/__OP":                        22,
+	"Word/__FN":                        23,
+	"Word/__UF":                        24,
+	"Word/__RC":                        25,
+	"Word/__DJ":                        26,
+	"Word/__MK":                        27,
+	"Word/__MV":                        28,
+	"Word/__MD":                        29,
+	"Node/Map/Options":                 38,
+	"Object":                           30,
+	"Node/Map/Inspect":                 31,
+	"Object/Fetch":                     33,
+	"Object/Fetch/Request":             34,
+	"Object/Fetch/Response":            35,
+	"Object/Store":                     42,
+	"Object/Store/System":              43,
+	"Object/Array":                     44,
+	"Object/Error":                     45,
+	"Object/Resource":                  36,
+	"Object/Resource/Entity":           37,
+	"Type":                             39,
+	"Type/ScalarType":                  40,
+	"Type/NodeType":                    41,
+	"Type/ObjectType":                  46,
 	"Scalar/Time":                      48,
 	"Scalar/Time/Date":                 49,
 	"Scalar/Number/Matrix":             50,
@@ -204,6 +210,7 @@ var builtinTypeIDs = map[string]int{
 	"Scalar/Time/Timezone":             58,
 	"Object/Timeout":                   59,
 	"Object/Interval":                  60,
+	"Never":                            61,
 }
 
 // formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
@@ -320,7 +327,7 @@ func (t Type) hasPrefix(prefix Type) bool {
 
 // builtinTypeList is the set of all known builtin types for path validation.
 var builtinTypeList = []Type{
-	TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
+	TAny, TNone, TNever, TScalar, TString, TStringProper, TStringEmpty,
 	TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 	TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction,
 	TObject, TStore, TStoreSystem, TArray, TError, TResource, TResourceEntity, TType, TScalarType, TNodeType, TObjectType,
@@ -333,11 +340,47 @@ var builtinTypeList = []Type{
 //   - "Any" pattern matches everything.
 //   - A child matches a parent: Scalar/String/Proper matches Scalar/String.
 //   - A parent does NOT match a child: Scalar/String does not match Scalar/String/Proper.
+//   - A Type/Dependent/Dep<X> path is treated as a subtype of <X> and any
+//     of <X>'s lattice ancestors. The Dependent branch lives under its own
+//     root for clear separation, but dependent values must satisfy any slot
+//     expecting the underlying base. Per-value satisfaction (does 5 lie in
+//     [10, ∞)?) is handled at Unify time; this method answers the type-level
+//     question only.
 func (t Type) Matches(pattern Type) bool {
 	// "Any" matches everything unconditionally.
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Any" {
 		return true
 	}
+	if leaf := dependentLeafFromType(t); leaf != "" {
+		if base, ok := dependentLeafBaseType(leaf); ok {
+			if base.Matches(pattern) {
+				return true
+			}
+		}
+	}
+	return t.PathSubtype(pattern)
+}
+
+// PathSubtype reports whether t is a strict path-prefix subtype of
+// pattern: every Part of pattern is a Part of t at the same index.
+// This is the LEXICAL subtype test — no `Any` matches-everything
+// special case, no Dep<Leaf> → base bolt-on, no metatype rules.
+//
+// When to use which:
+//
+//   - `Matches` is the LATTICE-aware test. Use it for sig matching
+//     and any logic that treats a `DepInteger` value as if it were
+//     an Integer (for assignability, signature dispatch, etc.).
+//   - `PathSubtype` is the LEXICAL test. Use it when you want to
+//     know "does this value really carry an X payload" — for
+//     example before a `v.AsX()` call where a `DepX` payload would
+//     be a category error. This is the safer guard for the panic-
+//     prevention pattern in CLAUDE.md; AsConcreteX is the same
+//     thing at the value-accessor level.
+//
+// `t.PathSubtype(t)` is always true (identity is a subtype of
+// itself).
+func (t Type) PathSubtype(pattern Type) bool {
 	if len(t.Parts) < len(pattern.Parts) {
 		return false
 	}
@@ -401,7 +444,7 @@ func (t Type) Equal(other Type) bool {
 func builtinTypeParts() map[string]bool {
 	parts := make(map[string]bool)
 	builtins := []Type{
-		TAny, TNone, TScalar, TString, TStringProper, TStringEmpty,
+		TAny, TNone, TNever, TScalar, TString, TStringProper, TStringEmpty,
 		TNumber, TInteger, TDecimal, TBoolean, TPath, TNode, TList, TListArgs,
 		TMap, TOptions, TTable, TRecord, TAtom, TWord, TFunction, TForward,
 		TOpenParen, TParenExpr, TInterpString, TFnDef, TFnUndef, TReturnCheck, TDefCleanup, TDisjunct, TMark,
@@ -453,4 +496,15 @@ func ValidateTypeNameParts(name string, known map[string]bool) error {
 		}
 	}
 	return nil
+}
+
+// IsCapitalisedName reports whether name starts with an ASCII upper-case
+// letter. The naming rule is: type names start with a capital, def names
+// don't. Empty names are not capitalised.
+func IsCapitalisedName(name string) bool {
+	if name == "" {
+		return false
+	}
+	c := name[0]
+	return c >= 'A' && c <= 'Z'
 }

@@ -365,7 +365,7 @@ func RegisterQuery(r *Registry) {
 
 	// from: [atom] -> [query-builder]
 	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name, _ := args[0].AsAtom()
+		name, _ := args[0].AsConcreteAtom()
 		val, ok := contextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
@@ -395,7 +395,7 @@ func RegisterQuery(r *Registry) {
 	// Usage: from people as p
 	asHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		alias, _ := args[1].AsAtom()
+		alias, _ := args[1].AsConcreteAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -578,7 +578,7 @@ func RegisterQuery(r *Registry) {
 	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
 	limitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n, _ := args[1].AsInteger()
+		n, _ := args[1].AsConcreteInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -599,7 +599,7 @@ func RegisterQuery(r *Registry) {
 	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
 	offsetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		n, _ := args[1].AsInteger()
+		n, _ := args[1].AsConcreteInteger()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {
@@ -806,7 +806,7 @@ func RegisterQuery(r *Registry) {
 func RegisterJoinWord(r *Registry, name string, joinType string) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		table := args[0]
-		tableName, _ := args[1].AsAtom()
+		tableName, _ := args[1].AsConcreteAtom()
 
 		qb, err := toQueryBuilder(r, table)
 		if err != nil {

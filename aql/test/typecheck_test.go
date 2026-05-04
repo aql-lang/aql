@@ -1035,7 +1035,7 @@ func TestCheckInlineModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`import module [export X {v:42}]  X.v`)
+	res, err := a.Check(`import module [export "X" {v:42}]  X.v`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -1253,5 +1253,276 @@ func TestCheckBuiltinsAnnotated(t *testing.T) {
 				t.Errorf("%q: expected %q, got %q", c.expr, c.expect, res.Stack[0])
 			}
 		}
+	}
+}
+
+// --- Type-check interaction with the strict undefined-word rule ---
+//
+// Outside check mode, an undefined word at the pointer is now a hard
+// error from `stepWord`. Inside check mode, `stepWord` deliberately
+// keeps the lenient `Atom{Undefined:true}` path so a single typo does
+// not blank out the rest of the analysis: each undefined word becomes a
+// diagnostic and the residual carrier is `Any` so downstream type
+// inference keeps making progress. The tests below pin that contract.
+
+// countUndefinedDiagnostics returns how many diagnostics carry the
+// undefined_word code, optionally filtered by Word name.
+func countUndefinedDiagnostics(diags []aql.CheckDiagnostic, name string) int {
+	n := 0
+	for _, d := range diags {
+		if d.Code != "undefined_word" {
+			continue
+		}
+		if name != "" && d.Word != name {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// TestCheckCollectsMultipleUndefinedWords verifies that the lenient
+// CheckMode path keeps analysing after the first undefined word —
+// every typo in a single source string produces its own diagnostic
+// rather than the analyser bailing at the first hit.
+func TestCheckCollectsMultipleUndefinedWords(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`first second third`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, name := range []string{"first", "second", "third"} {
+		if countUndefinedDiagnostics(res.Diagnostics, name) != 1 {
+			t.Errorf("expected one undefined_word diagnostic for %q; got %+v", name, res.Diagnostics)
+		}
+	}
+}
+
+// TestCheckUndefinedWordInIfThen confirms that an undefined word
+// buried in an `if` then-branch is reported as a diagnostic. The
+// branch sub-engine inherits CheckMode via runCarrierBodyWithDefs.
+func TestCheckUndefinedWordInIfThen(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [true] [missing-then] [42]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "missing-then") != 1 {
+		t.Errorf("expected undefined_word diagnostic for 'missing-then', got %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordInIfElse confirms the same for an else
+// branch — both branches must be analysed, not just the one the
+// runtime would have taken.
+func TestCheckUndefinedWordInIfElse(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`if [false] [42] [missing-else]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "missing-else") != 1 {
+		t.Errorf("expected undefined_word diagnostic for 'missing-else', got %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordInDoBody confirms `do`'s ReturnsFn (which
+// delegates to RunCarrierBody) propagates CheckMode into the body
+// sub-engine, so an undefined word inside the body shows up.
+func TestCheckUndefinedWordInDoBody(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`do [missing-in-do]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "missing-in-do") != 1 {
+		t.Errorf("expected undefined_word diagnostic for 'missing-in-do', got %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordInFnBody confirms that fn bodies analysed via
+// AnalyseFnBody report undefined words. The fn is invoked at the call
+// site so the sub-engine actually runs the body.
+func TestCheckUndefinedWordInFnBody(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`def f fn [[Integer] [Integer] [missing-in-fn add 1]]
+f 5`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "missing-in-fn") < 1 {
+		t.Errorf("expected at least one undefined_word diagnostic for 'missing-in-fn', got %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordInForBody confirms that for-loop bodies are
+// analysed as carrier bodies and surface undefined words.
+func TestCheckUndefinedWordInForBody(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`for 3 [missing-in-for]`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "missing-in-for") < 1 {
+		t.Errorf("expected undefined_word diagnostic for 'missing-in-for', got %+v", res.Diagnostics)
+	}
+}
+
+// TestCheckUndefinedWordInInlineModuleAborts pins the deliberate
+// non-propagation of CheckMode into module bodies: an inline
+// `import module [...]` runs the body in normal (strict) mode so its
+// concrete export-name strings survive carrier stripping. A typo
+// inside the body therefore aborts the import with a hard
+// undefined_word error rather than collecting per-typo diagnostics.
+// Top-level / fn / if / do / for bodies still keep CheckMode and
+// collect every typo as usual.
+func TestCheckUndefinedWordInInlineModuleAborts(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	_, err = a.Check(`import module [
+		def x missing-in-mod
+		export "M" {x:x}
+	]`)
+	if err == nil {
+		t.Fatal("expected undefined_word error from inline module body, got nil")
+	}
+	if !strings.Contains(err.Error(), "undefined_word") || !strings.Contains(err.Error(), "missing-in-mod") {
+		t.Errorf("expected undefined_word error mentioning 'missing-in-mod', got: %v", err)
+	}
+}
+
+// TestCheckUndefinedWordContinuesAnalysis pins the trade-off that
+// motivates the CheckMode carve-out: a typo must not stop the
+// analyser from typing the rest of the program. After `nope`, the
+// `1 add 2` should still be evaluated and produce an Integer carrier.
+func TestCheckUndefinedWordContinuesAnalysis(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`nope
+1 add 2`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "nope") != 1 {
+		t.Errorf("expected one undefined_word for 'nope', got %+v", res.Diagnostics)
+	}
+	// The post-typo expression should still produce a carrier.
+	foundInteger := false
+	for _, c := range res.Stack {
+		if c == "Scalar/Number/Integer" {
+			foundInteger = true
+			break
+		}
+	}
+	if !foundInteger {
+		t.Errorf("expected Integer carrier after `1 add 2`, got stack=%v", res.Stack)
+	}
+}
+
+// TestCheckUndefinedWordHasPosition confirms each diagnostic carries
+// row/col information so an editor can underline the exact source
+// token. Best-effort source-scan is run after the engine returns
+// (aql.go:184), so this guards against the scan regressing.
+func TestCheckUndefinedWordHasPosition(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check("\n\nhello-typo\n")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	var diag *aql.CheckDiagnostic
+	for i := range res.Diagnostics {
+		if res.Diagnostics[i].Code == "undefined_word" && res.Diagnostics[i].Word == "hello-typo" {
+			diag = &res.Diagnostics[i]
+			break
+		}
+	}
+	if diag == nil {
+		t.Fatalf("expected undefined_word diagnostic, got %+v", res.Diagnostics)
+	}
+	if diag.Row != 3 {
+		t.Errorf("expected Row=3 (1-based), got %d", diag.Row)
+	}
+	if diag.Col == 0 {
+		t.Errorf("expected non-zero Col, got %d", diag.Col)
+	}
+}
+
+// TestCheckModeDoesNotLeakAfterReturn confirms the strict runtime path
+// is restored after `Check` finishes. A second call (using the runtime
+// path through the public API) must error on an undefined word rather
+// than tolerating it. This guards against accidentally stripping the
+// `defer registry.Check.Mode = false` reset.
+func TestCheckModeDoesNotLeakAfterReturn(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	// First, run a check pass — this puts the registry into CheckMode
+	// briefly; the deferred reset in aql.Check() must clear it.
+	if _, err := a.Check(`some-typo`); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	// Now a normal Run should error strictly on the same kind of typo.
+	_, err = a.Run(`runtime-typo`)
+	if err == nil {
+		t.Fatalf("expected runtime undefined_word error, got nil")
+	}
+	if !strings.Contains(err.Error(), "undefined_word") || !strings.Contains(err.Error(), "runtime-typo") {
+		t.Errorf("expected runtime undefined_word error mentioning 'runtime-typo', got: %v", err)
+	}
+}
+
+// TestCheckUndefinedWordTypoNextToValid confirms the lenient
+// CheckMode path also handles the most common case — a typo right
+// next to a valid word — without disturbing the analysis of either
+// side. Here `upper "hi" typo`: we expect a String carrier from
+// `upper` plus an Any carrier from the typo (or the typo simply
+// reported and dropped from the visible stack), with one diagnostic.
+func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
+	a, err := aql.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`upper "hi" typo-here`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if countUndefinedDiagnostics(res.Diagnostics, "typo-here") != 1 {
+		t.Errorf("expected one undefined_word for 'typo-here', got %+v", res.Diagnostics)
+	}
+	foundString := false
+	for _, c := range res.Stack {
+		if c == "Scalar/String" {
+			foundString = true
+			break
+		}
+	}
+	if !foundString {
+		t.Errorf("expected String carrier from `upper \"hi\"`, got stack=%v", res.Stack)
 	}
 }

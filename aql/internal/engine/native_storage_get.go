@@ -109,7 +109,7 @@ func RegisterGet(r *Registry) {
 		if arr == nil {
 			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
 		}
-		_as3, _ := args[0].AsInteger()
+		_as3, _ := args[0].AsConcreteInteger()
 		val, ok := arr.Get(int(_as3))
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil

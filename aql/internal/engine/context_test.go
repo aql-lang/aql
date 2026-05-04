@@ -267,7 +267,7 @@ func TestContextModuleInherits(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("parent_val"), engine.NewInteger(77),
 		engine.NewWord("module"), engine.NewList([]engine.Value{
-			engine.NewWord("export"), engine.NewWord("result"),
+			engine.NewWord("export"), engine.NewAtom("result"),
 			engine.NewMap(func() *engine.OrderedMap {
 				m := engine.NewOrderedMap()
 				// We can't call "context get" inside a map literal directly.
@@ -296,7 +296,7 @@ func TestContextModuleIsolation(t *testing.T) {
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(1),
 		engine.NewWord("module"), engine.NewList([]engine.Value{
 			engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(999),
-			engine.NewWord("export"), engine.NewWord("dummy"),
+			engine.NewWord("export"), engine.NewAtom("dummy"),
 			engine.NewMap(func() *engine.OrderedMap {
 				m := engine.NewOrderedMap()
 				m.Set("v", engine.NewInteger(0))
