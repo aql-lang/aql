@@ -32,39 +32,38 @@ func RegisterTypeDef(r *Registry) {
 		if r.Lookup(name) != nil {
 			return fmt.Errorf("type %s: name clash — already a registered function", name)
 		}
-		if len(r.DefStacks[name]) > 0 && !r.HasType(name) {
-			// DefStacks may also hold the type's mirror (legacy
-			// installDef path). Distinguish "user-defined value with
-			// same name" (forbid) from "this same type's mirror"
-			// (allow shadowing).
+		if len(r.DefStacks[name]) > 0 {
 			return fmt.Errorf("type %s: name clash — already a def'd value", name)
 		}
-		// Type-defining functions (FnUndef = structural sig pattern,
-		// FnDef/Function = predicate) live ONLY in r.Types: they are
-		// not independently callable and only participate in type
-		// operations (`def n:T v`, `v is T`, `inspect T`). Routing
-		// them through installDef would either register Bbd as a
-		// free-standing callable word (FnDef path) or trigger the
-		// targeted-sig undef machinery (FnUndef path). Other type
-		// kinds (literals, records, disjuncts, typed list/map,
-		// ObjectType, DepScalar, …) keep the legacy installDef path
-		// so they continue to round-trip through DefStacks for
-		// auto-eval lookup. They're also mirrored into r.Types so
-		// type ops can resolve every named type uniformly.
-		if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) || body.VType.Equal(TFnUndef) {
-			r.PushType(name, body)
-		} else {
-			installDef(r, name, body)
-			// installDef may rewrite ObjectType bodies to inject the
-			// hierarchical Name (e.g. Object/Foo/Bar). Pull the
-			// canonical value back from DefStacks so r.Types always
-			// holds what type-operation lookups should see.
-			if ds := r.DefStacks[name]; len(ds) > 0 {
-				r.PushType(name, ds[len(ds)-1])
+		// All type bodies — fn-shape, predicate-fn, dependent scalar,
+		// record, options, table, disjunct, typed list/map, object,
+		// or plain type literal — live ONLY in r.Types. The previous
+		// implementation mirrored non-fn bodies into DefStacks via
+		// installDef so legacy resolution paths could find them; that
+		// dual storage was the source of the ObjectType-rename drift
+		// (§5.2 in TYPE-SYSTEM-REVIEW.md). With stepWord consulting
+		// TopOfTypeStack ahead of DefStacks, the mirror is unnecessary
+		// — and removing it eliminates an entire class of "the two
+		// stacks got out of sync" bugs.
+		//
+		// ObjectType bodies need a name-path rebuild before installation
+		// (Object, Object/Foo, Object/Foo/Bar) so MakeOrConvert and
+		// related machinery can walk the inheritance chain. The rewrite
+		// previously lived in installDef; it now happens here, keeping
+		// the type-handling logic in one file.
+		if body.IsObjectType() {
+			info, _ := body.AsObjectType()
+			if info.Parent != nil {
+				info.Name = info.Parent.Name + "/" + name
 			} else {
-				r.PushType(name, body)
+				info.Name = "Object/" + name
 			}
+			for _, p := range strings.Split(info.Name, "/") {
+				r.KnownTypeParts[p] = true
+			}
+			body = NewObjectType(info)
 		}
+		r.PushType(name, body)
 		// Register the new name parts as known. (Idempotent — already-
 		// known parts stay known; this matters only for first-time
 		// bindings of fresh names.)
@@ -115,10 +114,8 @@ func RegisterTypeDef(r *Registry) {
 //
 // Sig is [TAtom/q] (forward, /q so a bare word is captured as the
 // name without resolving to its type value first). Mirrors `undef`'s
-// shape. The stack-only legacy mirror in DefStacks is left alone —
-// runtime DepScalar / ObjectType resolution would otherwise see a
-// stale binding; the type-stack pop is sufficient because every
-// type-resolution site goes through TopOfTypeStack first.
+// shape. Types live exclusively in r.Types — there's no DefStacks
+// mirror to keep in sync.
 func registerUntype(r *Registry) {
 	untypeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
@@ -127,14 +124,6 @@ func registerUntype(r *Registry) {
 		}
 		if !r.PopType(name) {
 			return nil, fmt.Errorf("untype %s: no such type binding", name)
-		}
-		// Also pop the legacy DefStacks mirror so resolution paths
-		// that still consult DefStacks (records / ObjectType / DepScalar
-		// before the migration completes) don't see the popped entry.
-		// PushType installs both for non-fn types via installDef → the
-		// type stack and DefStacks tops are kept in lock-step.
-		if len(r.DefStacks[name]) > 0 {
-			uninstallDef(r, name)
 		}
 		return nil, nil
 	}

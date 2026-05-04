@@ -195,16 +195,16 @@ func RegisterModule(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TModule},
-				Handler: importAllHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TModule},
+				Handler:        importAllHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TList, TModule},
-				Handler: importRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TModule},
+				Handler:        importRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
 				Args: []Type{TAtom, TModule},
@@ -212,46 +212,46 @@ func RegisterModule(r *Registry) {
 					_as0, _ := args[0].AsAtom()
 					return importSingleRenameHandler(_as0, args)
 				},
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TString},
-				Handler: importFileHandler,
-				Returns: []Type{TModule},
-			RunInCheckMode: true,
+				Args:           []Type{TString},
+				Handler:        importFileHandler,
+				Returns:        []Type{TModule},
+				RunInCheckMode: true,
 			},
 			{
-				Args:    []Type{TList, TString},
-				Handler: importFileRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TString},
+				Handler:        importFileRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			// Inline module forms: use /q to capture "module" as a quoted word
 			// instead of executing it as a function.
 			{
-				Args:       []Type{TAtom, TList},
-				QuoteArgs:  map[int]bool{0: true},
-				NoEvalArgs: map[int]bool{1: true},
-				Handler:    importInlineHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TAtom, TList},
+				QuoteArgs:      map[int]bool{0: true},
+				NoEvalArgs:     map[int]bool{1: true},
+				Handler:        importInlineHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:       []Type{TList, TAtom, TList},
-				QuoteArgs:  map[int]bool{1: true},
-				NoEvalArgs: map[int]bool{2: true},
-				Handler:    importInlineRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TList, TAtom, TList},
+				QuoteArgs:      map[int]bool{1: true},
+				NoEvalArgs:     map[int]bool{2: true},
+				Handler:        importInlineRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 			{
-				Args:       []Type{TAtom, TAtom, TList},
-				QuoteArgs:  map[int]bool{1: true},
-				NoEvalArgs: map[int]bool{2: true},
-				Handler:    importInlineSingleRenameHandler,
-				Returns: []Type{},
-			RunInCheckMode: true,
+				Args:           []Type{TAtom, TAtom, TList},
+				QuoteArgs:      map[int]bool{1: true},
+				NoEvalArgs:     map[int]bool{2: true},
+				Handler:        importInlineSingleRenameHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
 			},
 		},
 	})
@@ -629,6 +629,23 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		name, _ = v.AsAtom()
 	} else {
 		return v
+	}
+	// Resolution order: r.Types (canonical home for user-defined
+	// types post-§5.2) wins, then DefStacks (value defs and the
+	// fn-def stash). Without the r.Types check, exports of named
+	// types (`export "color" {Color:Color}`) would leave the value
+	// side as an unresolved Word.
+	if tv, ok := modReg.TopOfTypeStack(name); ok {
+		if fnDef, ok := tv.Data.(FnDefInfo); ok {
+			if fnDef.Registry == nil {
+				fnDef.Registry = modReg
+				if tv.VType.Equal(TFnDef) {
+					return NewFnDef(fnDef)
+				}
+				return NewFunction(fnDef)
+			}
+		}
+		return tv
 	}
 	stack := modReg.DefStacks[name]
 	if len(stack) > 0 {

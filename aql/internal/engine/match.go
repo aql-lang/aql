@@ -32,19 +32,19 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		insideForward = e.isInsidePendingForward()
 	}
 
-	// When the next forward token is a defined word, prefer signatures
-	// expecting TWord or /q at position 0 (inspect-style name capture).
-	// We handle this by trying TWord/q sigs first, then the rest, all
-	// within the single outer loop. bestMatch tracks the best result
-	// found so far; a TWord/q match is returned immediately if found.
+	// When the next forward token is a Word, prefer signatures
+	// expecting TWord or /q at position 0 (inspect-style name
+	// capture). The user wrote a Word, not a String — the /q sig
+	// captures the user's intent that the name is data, not a call
+	// site. The non-/q TString sister sig is for callers who pass a
+	// string literal. This also covers untype Foo (Foo in r.Types),
+	// `m.Color` after import (Color is a key in the imported map),
+	// and inspect-style name capture.
 	preferWordSig := false
 	if !skipForward && e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
 		if next.IsWord() {
-			nw, _ := next.AsWord()
-			if len(e.registry.DefStacks[nw.Name]) > 0 {
-				preferWordSig = true
-			}
+			preferWordSig = true
 		}
 	}
 

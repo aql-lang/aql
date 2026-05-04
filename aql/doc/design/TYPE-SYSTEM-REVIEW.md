@@ -324,17 +324,44 @@ Tests in `aql/test/type_shadow_test.go` cover shadow / pop / pop-to-
 empty / untype-unbound / case-rule / predicate-over-literal /
 DepScalar / deep-stack scenarios.
 
-### 5.2 Double-write for non-fn types
+### 5.2 Double-write for non-fn types — RESOLVED
 
-Non-fn type bodies still pass through `installDef` AND get mirrored
-into `r.Types`
-(`internal/engine/native_type_typedef.go:65`-ish). The recent
-ObjectType-name-rebuild bug was exactly this drift — fixed by
-re-fetching from `DefStacks` after `installDef`. Two sources of
-truth that desync if anyone forgets the mirror.
+Type bodies — including non-fn ones (records, options, tables,
+disjuncts, typed list/map, ObjectType, DepScalar, plain literals)
+— now live ONLY in `r.Types`. The previous installDef-then-mirror
+path is gone. ObjectType name-path rebuild (Object, Object/Foo,
+Object/Foo/Bar) moved from `installDef` into the type handler.
 
-Status: not addressed. Medium-invasive structural fix; touches many
-call sites. Worth doing but not on the immediate slice.
+Resolution sites that previously consulted `DefStacks` for type
+bodies were updated to consult `r.Types` first:
+
+- `stepWord` priority block in `engine.go` — calls
+  `e.stepLiteral()` so the pushed type-value flows through forward
+  collection (matching the legacy DefStacks substitution path's
+  shape).
+- `lookupDefType` in `native_definition_fn.go` — used by `fn`
+  signature parsing so `[rgb:Color]` resolves the Color reference
+  at install time.
+- `ResolveFieldType` in `native_type_make.go` — used by `make` and
+  related to resolve field-level type names.
+- `ResolveTypeLiteralDef` in `engine.go` — used by `make` to
+  unwrap ObjectType references.
+- `resolveModuleExport` in `native_module_module.go` — used by
+  `export` to resolve names in the export map's value side.
+- `matchSignature`'s `preferWordSig` flag — now flips on whenever
+  the next forward token is a Word (was: only when the Word
+  resolved to a DefStacks entry). The /q sig is the right pick
+  when the user wrote a Word and the function offers both
+  `[TString]` and `[TAtom/q]` variants.
+
+The sources-of-truth drift that motivated the issue (the
+ObjectType-rename bug) is structurally impossible now — the type
+handler is the only writer to `r.Types`, and `untype` is the only
+remover.
+
+Tests: existing color/module test suite verifies module exports +
+record types in fn sigs continue to work. Type shadow tests
+verify the stack semantics through the new single store.
 
 ### 5.3 No `untype Foo` — RESOLVED
 
@@ -343,10 +370,9 @@ most recent type-stack binding for `name`. If a previous binding
 existed it becomes active again; otherwise the name becomes
 unbound. Sig is `[TString]` and `[TAtom/q]` mirroring `undef`'s
 shape. Capital-letter rule applies (lowercase names are rejected
-the same way as `type`). For non-fn types whose installation
-mirrors into DefStacks, the matching DefStacks entry is also
-popped via `uninstallDef` so subsequent resolution paths stay in
-lock-step with the type stack.
+the same way as `type`). With §5.2 resolved, types live only in
+`r.Types`; `untype` is just a `PopType` call — no DefStacks mirror
+to keep in lock-step.
 
 Tests in `aql/test/type_shadow_test.go`.
 
@@ -390,14 +416,18 @@ Status: not addressed. Mid effort; meaningful UX win for
 
 ## 7. Developer experience
 
-### 7.1 No inline disjunct syntax
+### 7.1 No inline disjunct syntax — DECLINED
 
-Every test writes `(Integer tor String)`. There's a `?:` shorthand
-for record fields (`{x?:Integer}` = `tor None`) but no general
-expression form like `Integer | String`.
+A `Integer | String` shorthand for `Integer tor String` would save
+a few keystrokes, but AQL's design philosophy prefers words over
+symbols: every operator in the language is a named word that
+participates in the same forward-precedence dispatch. Adding a
+punctuation operator for one type-algebra case introduces a
+discontinuity for marginal DX gain — `(Integer tor String)` is
+already the language's way of saying it.
 
-Status: not addressed. Parser change — needs a new lexer token plus
-grammar rule. Medium effort.
+Status: declined. The `?:` record-field shorthand stays (it's a
+field-declaration syntax, not an expression operator).
 
 ### 7.2 `(quote name)` for fn-shape constraints is unidiomatic
 
@@ -506,7 +536,8 @@ Discoverability gap closed for the algebraic and dependent surface.
 
 The post-survey work has cleared the high-correctness items
 (predicate sandboxing, CheckMode handling, fn-shape variance, panic
-audit, fn-shape inspect). The remaining open items, in priority
+audit, fn-shape inspect, type shadowing, `untype`, single source of
+truth for type values). The remaining open items, in priority
 order:
 
 1. **Forward planner narrowing** (6.3). When a typed-def constraint
@@ -517,15 +548,7 @@ order:
 2. **Better error for missing `(quote name)`** (7.2). ~10 lines to
    detect the typed-binding context and suggest the quote idiom.
 
-3. **Single source of truth for type values** (5.2). Drop the
-   double-write of non-fn types between `installDef` and `r.Types`.
-   Touches many call sites; safest done after the §3.x and §4.x
-   work has shaken out (which it now has).
-
-4. **Inline disjunct syntax** (7.1). `Integer | String` shorthand
-   for `Integer tor String`. Parser change; medium effort, big DX.
-
-5. **Closed family of leaves** (2.1). Move the hand-maintained
+3. **Closed family of leaves** (2.1). Move the hand-maintained
    leaf-name switches in `depscalar.go` to a registry-driven table.
    Defer until adding a new Dep leaf is needed.
 
@@ -533,11 +556,8 @@ After those, what remains is mostly research-level (predicate-vs-
 predicate compatibility, full predicate symbolic execution) or
 genuinely deferable until a concrete trigger arrives.
 
-After these, the most invasive remaining item is §5.2 (single source
-of truth for type values).
-
 Defer indefinitely without a concrete trigger: §1.4, §2.1, §2.2/§2.3
-beyond `between`, §3.1, §3.4, §4.2, §4.3, §5.1, §5.3, §7.1, §7.6.
+beyond `between`, §3.1, §3.4, §4.2, §4.3, §7.6.
 
 
 ## 9. Items not in scope of this report
@@ -576,12 +596,12 @@ For at-a-glance status:
 | §4.2  | `FnParam.Pattern` ignored            | RESOLVED |
 | §4.3  | `Optional`/`BarrierPos` not checked  | PARTIAL  |
 | §5.1  | Type shadowing                       | RESOLVED |
-| §5.2  | Double-write for non-fn types        | open     |
+| §5.2  | Double-write for non-fn types        | RESOLVED |
 | §5.3  | `untype Foo`                         | RESOLVED |
 | §6.1  | Predicate-type CheckMode analysis    | PARTIAL  |
 | §6.2  | `sigTypeMatches` carrier rule docs   | open     |
 | §6.3  | Forward planner narrowing            | open     |
-| §7.1  | Inline disjunct syntax (`|`)         | open     |
+| §7.1  | Inline disjunct syntax (`|`)         | declined |
 | §7.2  | `(quote name)` ergonomics            | open     |
 | §7.3  | Predicate `guard` word               | RESOLVED |
 | §7.4  | Name the type in errors              | RESOLVED |

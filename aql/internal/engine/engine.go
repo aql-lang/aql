@@ -71,10 +71,15 @@ var typeNamesByTypeID = func() map[string]string {
 }()
 
 // ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
-// a richer definition in the registry's DefStacks (e.g. an ObjectTypeInfo
-// installed by RegisterResource). If so it returns that value; otherwise it
-// returns the original value unchanged. This lets the parser eagerly resolve
-// all type names while the engine still picks up installed ObjectType defs.
+// a richer definition installed under the same name (e.g. an ObjectTypeInfo
+// from RegisterResource or a `type Foo object {…}` binding). If so it
+// returns that value; otherwise it returns the original unchanged. This
+// lets the parser eagerly resolve all type names while the engine still
+// picks up installed ObjectType defs.
+//
+// User-defined types now live in r.Types (post-§5.2); the DefStacks
+// fallback is retained only for value-side ObjectType installations
+// from outside the type word (e.g. legacy RegisterResource paths).
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if v.Data != nil || reg == nil {
 		return v
@@ -82,6 +87,9 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	name, ok := typeNamesByTypeID[v.VType.ID]
 	if !ok {
 		return v
+	}
+	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
+		return tv
 	}
 	if ds := reg.DefStacks[name]; len(ds) > 0 {
 		top := ds[len(ds)-1]
@@ -654,6 +662,13 @@ func (e *Engine) stepWord(val Value) error {
 	// would otherwise see the legacy installDef mirror in DefStacks
 	// instead of the active fn-type binding. Pushed with Quoted=true
 	// for fn-shape types so execFnDefLiteral treats them as data.
+	//
+	// Word-capture cases (untype Foo, etc.) are intercepted earlier
+	// via hasPendingForwardExpectingWord — by the time we reach this
+	// priority block, no /q-Atom or Word slot is waiting for the
+	// name. The pushed value flows through stepLiteral so a pending
+	// forward can still consume it (e.g. `Color` as the value side
+	// of an export map entry).
 	if e.registry != nil {
 		if tv, ok := e.registry.TopOfTypeStack(w.Name); ok {
 			push := tv
@@ -662,7 +677,7 @@ func (e *Engine) stepWord(val Value) error {
 			}
 			push.Pos = val.Pos
 			e.stack[e.pointer] = push
-			return nil
+			return e.stepLiteral()
 		}
 	}
 

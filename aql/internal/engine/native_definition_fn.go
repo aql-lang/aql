@@ -447,12 +447,23 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 	return TAny, nil, nil
 }
 
-// lookupDefType checks if a name is def'd as a type value in the registry.
-// Returns nil if the registry is nil, the name is not def'd, or the value
-// is not a type (record, disjunct, etc.).
+// lookupDefType resolves a name to its type value. Used by fn-sig
+// parsing so `def f fn [[rgb:Color] …]` can bind the Color
+// reference to its actual record/object/disjunct/etc. type at
+// install time.
+//
+// Resolution order matches stepWord: r.Types (the canonical home
+// for user-defined types) wins, then fall back to DefStacks for
+// any legacy installer that still drops a type body there. Returns
+// nil if the name is unbound or the binding isn't a type body.
 func lookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
+	}
+	if tv, ok := r.TopOfTypeStack(name); ok {
+		if isTypeBody(tv) {
+			return &tv
+		}
 	}
 	stack := r.DefStacks[name]
 	if len(stack) == 0 {
