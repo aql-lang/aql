@@ -176,6 +176,52 @@ func buildTypeInspection(name string, tv Value) Value {
 		child := _as2.Child
 		result.Set("child", NewString(child.VType.String()))
 
+	case tv.VType.Equal(TFnUndef):
+		// Structural fn-shape type: a FnUndef carries one or more
+		// (Params, Returns) specs. Render each spec as a `params` /
+		// `returns` pair so users can `inspect Mapper` and see the
+		// signature shape they need to satisfy. Without this case
+		// inspect's `signatures` slot would be empty for fn types.
+		result.Set("kind", NewAtom("function_shape"))
+		uInfo, _ := tv.Data.(FnUndefInfo)
+		sigs := make([]Value, 0, len(uInfo.Sigs))
+		for _, spec := range uInfo.Sigs {
+			sig := NewOrderedMap()
+			params := make([]Value, len(spec.Params))
+			for i, p := range spec.Params {
+				params[i] = NewString(p.Type.String())
+			}
+			sig.Set("params", NewList(params))
+			rets := make([]Value, len(spec.Returns))
+			for i, r := range spec.Returns {
+				rets[i] = NewString(r.String())
+			}
+			sig.Set("returns", NewList(rets))
+			sigs = append(sigs, NewMap(sig))
+		}
+		result.Set("signatures", NewList(sigs))
+
+	case tv.IsDepScalar():
+		// Dependent scalar: render the leaf and the populated
+		// bound(s). Either Lo, Hi, or both may be set; each is
+		// rendered as {kind: "gte"|"gt"|"lte"|"lt", value: <bound>}.
+		result.Set("kind", NewAtom("dependent_scalar"))
+		info, _ := tv.AsDepScalar()
+		leaf := dependentLeafFromType(tv.VType)
+		result.Set("leaf", NewString(leaf))
+		if info.Lo != nil {
+			lo := NewOrderedMap()
+			lo.Set("kind", NewString(boundToKind(info.Lo, true).String()))
+			lo.Set("value", info.Lo.Value)
+			result.Set("lo", NewMap(lo))
+		}
+		if info.Hi != nil {
+			hi := NewOrderedMap()
+			hi.Set("kind", NewString(boundToKind(info.Hi, false).String()))
+			hi.Set("value", info.Hi.Value)
+			result.Set("hi", NewMap(hi))
+		}
+
 	default:
 		// Simple type literal (Data==nil): number, string, boolean, etc.
 		result.Set("kind", NewAtom("literal"))

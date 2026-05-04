@@ -215,33 +215,30 @@ Status: not addressed. The cleaner path is via dependent types
 (constructors like `between`); parameterised predicate types remain
 a research direction.
 
-### 3.2 No CheckMode story
+### 3.2 No CheckMode story — RESOLVED
 
-Predicate evaluation goes through `Registry.CallAQL` against a
-*concrete* value at runtime. Under `aql check`, the value is a
-carrier (`Data=nil`); the predicate's `(x is String)` runs against a
-Carrier and falls back to `Unify`, which returns `false`. So the
-predicate always says "no" under check mode and every typed binding
-errors. No tests exercise this — it's a silent UX hole for static
-analysis users.
+`RunPredicate` (`internal/engine/util.go`) now short-circuits when
+`r.Check.Mode` is true, returning `(candidate, matched=true, nil)`
+without invoking the body. Typed bindings flow past the analyser
+slot; runtime catches actual violations later. `StripToCarriers`
+also preserves type literals (Data already nil) so the
+DepScalar-constructor sigs in `gt`/`gte`/`lt`/`lte`/`between`
+continue to fire under check mode.
 
-Status: not addressed. The minimal fix is to short-circuit predicate
-evaluation under CheckMode (return Any carrier, accept the binding)
-until a symbolic-execution story exists. ~10 lines, but needs a
-matching test plan.
+Tests in `aql/test/type_predicate_sandbox_test.go` cover the typed-
+predicate accept and the runtime-still-rejects paths.
 
-### 3.3 Predicate has full registry access (sandboxing gap)
+### 3.3 Predicate has full registry access (sandboxing gap) — RESOLVED
 
-`Registry.CallAQL` snapshots `DefStacks` lengths but not `r.Types`,
-the context store (`ctxStack`), `ArgsStack`, or `CheckMode` flags.
-A predicate body that calls `context set k v` mutates global state
-during a unify check; one that calls `def x …` *can* leak via the
-DefStacks restore window. Predicate bodies should run in a sandbox;
-today they don't.
+`RunPredicate` snapshots `r.Types`, `r.ctxStack`, and `r.Check`
+before the `CallAQL` invocation and restores them on return — so a
+predicate body that does `type Foo …` or `context set k v` cannot
+leak into the surrounding program. `r.DefStacks` is already
+protected by `CallAQL`'s own snapshot.
 
-Status: not addressed. Real correctness/security concern once AQL
-evaluates user-supplied predicates. Higher priority than 3.1, 3.2,
-3.4 if such a surface ships.
+Tests verify that a predicate body that defines `type Leaked …`
+during a `def x:Sneaky v` or `v is Sneaky` invocation does NOT
+expose `Leaked` to a subsequent `def n:Leaked …`.
 
 ### 3.4 No predicate-vs-predicate compatibility op
 
@@ -284,21 +281,27 @@ Tests in `aql/test/type_fnvariance_test.go` cover both the
 contravariant and covariant directions, exact match (regression),
 and Any/concrete edge cases.
 
-### 4.2 `FnParam.Pattern` ignored
+### 4.2 `FnParam.Pattern` ignored — RESOLVED
 
-The structural matcher only looks at `params[i].Type`. A pattern on
-the candidate (e.g. `[p:Point]`) is dropped on the floor.
+`fnSigSatisfiesSpec` (`internal/engine/fnsig.go`) now compares
+patterns: when the spec declares one, the candidate's pattern (if
+any) must unify with the spec's. A candidate without a pattern still
+satisfies a spec with one — the candidate's broader contract still
+admits everything the spec demands.
 
-Status: not addressed. Bigger fix; less commonly hit.
+### 4.3 `Optional` and `BarrierPos` not checked — PARTIAL (Optional resolved)
 
-### 4.3 `Optional` and `BarrierPos` not checked
+`Optional` is now part of the variance check. `spec.Optional[i]`
+implies `sig.Optional[i]` (covariant on optional flags). A candidate
+that's required where the spec is optional fails — the candidate
+can't accept the omission the spec is allowed to make.
 
-A candidate with the same arity but different optional flags or a
-different barrier position passes the structural matcher; downstream
-calls then fail or behave differently than the type promised.
-
-Status: not addressed. Bundled with 4.1 it's a single audit pass on
-the comparator.
+`BarrierPos` is intentionally NOT checked: `FnSigSpec` doesn't carry
+a BarrierPos field (it's a body-level collection setting on FnSig,
+not part of the structural shape), so the type system can't declare
+a barrier requirement. To enable BarrierPos in fn-shape types,
+`FnSigSpec` would first need the field plus a parser-side syntax —
+a deferrable extension.
 
 
 ## 5. `r.Types` registry (the post-namespace-split state)
@@ -335,18 +338,19 @@ Status: not addressed. Trivial fix; low immediate value.
 
 ## 6. Dispatch / planning gaps
 
-### 6.1 No predicate-type CheckMode analysis
+### 6.1 No predicate-type CheckMode analysis — PARTIAL (DepScalar resolved)
 
-Static analyser sees `def n:Bbd v` as "install n with whatever the
-predicate returns", carriers it as `Any`, doesn't try to evaluate
-the constraint. For `DepScalar` specifically, the constraint is a
-known shape (kind + bound) that *could* be checked symbolically
-against a carrier-typed input — `Integer/15` carrier vs `gt 10`
-constraint — but isn't. So check mode can't tell you ahead of time
-that `def n:G10 5` will fail at runtime.
+`defTypedHandler` now has a `r.Check.Mode && constraint.IsDepScalar()`
+short-circuit: when the body's VType matches the dependent's base
+type, the binding is accepted symbolically (the per-value check
+stays runtime-only). Cross-base mismatches still reject. This makes
+`def x:G10 15` flow through `aql check` cleanly — runtime catches
+genuine value-level violations later.
 
-Status: not addressed. Doable for `DepScalar` (mid effort); for
-arbitrary predicates it's a research problem.
+Predicate-fn constraints route through `RunPredicate`'s CheckMode
+short-circuit (see §3.2): under check mode the body isn't run, so
+the typed binding is accepted. Symbolic execution against the body
+remains a research problem (§3.4 territory).
 
 ### 6.2 `sigTypeMatches` carrier rule is implicit knowledge
 
@@ -438,14 +442,19 @@ error path of its own.
 
 Tests in `aql/test/type_error_messages_test.go`.
 
-### 7.5 `inspect` for fn-shape types is sparse
+### 7.5 `inspect` for fn-shape types is sparse — RESOLVED
 
-`inspect Mapper` (where Mapper is a `FnUndef`) returns the
-type-inspection map but `signatures` is `[]`. `buildTypeInspection`
-has no case for the structural-fn shape, so the user can't see what
-sigs Mapper requires without re-reading source.
+`buildTypeInspection` (`internal/engine/native_type_inspect.go`) now
+has cases for both fn-shape types (FnUndef) and dependent scalars
+(DepScalar):
 
-Status: not addressed. Single function to extend.
+- **Function shape**: `inspect Mapper` returns
+  `{kind: function_shape, signatures: [{params: […], returns: […]}, …]}`.
+- **Dependent scalar**: `inspect G10` returns
+  `{kind: dependent_scalar, leaf: 'Integer', lo: {kind: 'gt', value: 10}}`,
+  with `hi` populated for the upper-bound or interval cases.
+
+Tests in `aql/test/type_inspect_test.go`.
 
 ### 7.6 Two ways to express the same thing, with no nudge
 
@@ -480,33 +489,34 @@ Discoverability gap closed for the algebraic and dependent surface.
 
 ## 8. Recommended next slice
 
-The original five-item slice (variance, error names, guard, panic
-audit, LANGREF docs) has all landed. The remaining open items in
-priority order:
+The post-survey work has cleared the high-correctness items
+(predicate sandboxing, CheckMode handling, fn-shape variance, panic
+audit, fn-shape inspect). The remaining open items, in priority
+order:
 
-1. **Sandbox predicate evaluation** (3.3). Real correctness/security
-   concern once AQL ever evaluates user-supplied predicates. Wrap
-   `CallAQL` with snapshot/restore for `r.Types`, context store,
-   `ArgsStack`, and `CheckMode`.
-
-2. **Predicate CheckMode short-circuit** (3.2). Silent UX hole:
-   `aql check` over predicate-typed code currently false-negatives
-   every typed binding. Minimal fix is ~10 lines (short-circuit to
-   Any carrier) until full symbolic execution arrives.
-
-3. **`Value.AsConcreteScalar()` accessor** (2.4 follow-up). One
-   accessor that errors loudly on DepScalar payloads, used in place
-   of the bare `As*` calls. Eliminates the recurring "remember the
-   IsDepScalar guard" tax for new contributors.
-
-4. **Forward planner narrowing** (6.3). When a typed-def constraint
+1. **Forward planner narrowing** (6.3). When a typed-def constraint
    resolves to a static type literal at plan time, narrow the body's
    expected type so check-mode catches mismatches before runtime.
+   Mid-effort; meaningful UX win for `aql check` users.
 
-5. **`inspect` for fn-shape types** (7.5). Single function to extend.
-
-6. **Better error for missing `(quote name)`** (7.2). ~10 lines to
+2. **Better error for missing `(quote name)`** (7.2). ~10 lines to
    detect the typed-binding context and suggest the quote idiom.
+
+3. **Single source of truth for type values** (5.2). Drop the
+   double-write of non-fn types between `installDef` and `r.Types`.
+   Touches many call sites; safest done after the §3.x and §4.x
+   work has shaken out (which it now has).
+
+4. **Inline disjunct syntax** (7.1). `Integer | String` shorthand
+   for `Integer tor String`. Parser change; medium effort, big DX.
+
+5. **Closed family of leaves** (2.1). Move the hand-maintained
+   leaf-name switches in `depscalar.go` to a registry-driven table.
+   Defer until adding a new Dep leaf is needed.
+
+After those, what remains is mostly research-level (predicate-vs-
+predicate compatibility, full predicate symbolic execution) or
+genuinely deferable until a concrete trigger arrives.
 
 After these, the most invasive remaining item is §5.2 (single source
 of truth for type values).
@@ -544,22 +554,22 @@ For at-a-glance status:
 | §2.3  | Single-`Value` bound                 | PARTIAL  |
 | §2.4  | Display lossiness panic risk         | PARTIAL  |
 | §3.1  | Single-arg predicate                 | open     |
-| §3.2  | Predicate CheckMode story            | open     |
-| §3.3  | Predicate sandboxing                 | open     |
+| §3.2  | Predicate CheckMode story            | RESOLVED |
+| §3.3  | Predicate sandboxing                 | RESOLVED |
 | §3.4  | Predicate-vs-predicate compatibility | open     |
 | §4.1  | Variance in `fnSigMatchesSpec`       | RESOLVED |
-| §4.2  | `FnParam.Pattern` ignored            | open     |
-| §4.3  | `Optional`/`BarrierPos` not checked  | open     |
+| §4.2  | `FnParam.Pattern` ignored            | RESOLVED |
+| §4.3  | `Optional`/`BarrierPos` not checked  | PARTIAL  |
 | §5.1  | Type shadowing                       | open     |
 | §5.2  | Double-write for non-fn types        | open     |
 | §5.3  | `untype Foo`                         | open     |
-| §6.1  | Predicate-type CheckMode analysis    | open     |
+| §6.1  | Predicate-type CheckMode analysis    | PARTIAL  |
 | §6.2  | `sigTypeMatches` carrier rule docs   | open     |
 | §6.3  | Forward planner narrowing            | open     |
 | §7.1  | Inline disjunct syntax (`|`)         | open     |
 | §7.2  | `(quote name)` ergonomics            | open     |
 | §7.3  | Predicate `guard` word               | RESOLVED |
 | §7.4  | Name the type in errors              | RESOLVED |
-| §7.5  | `inspect` for fn-shape types         | open     |
+| §7.5  | `inspect` for fn-shape types         | RESOLVED |
 | §7.6  | DepScalar-vs-predicate nudge         | open     |
 | §7.7  | LANGREF docs                         | RESOLVED |

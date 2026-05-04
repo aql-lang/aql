@@ -225,10 +225,21 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // from `type Foo fn [x:Any Any [body]]` always satisfy this; other
 // shapes return an error.
 //
-// This is the common code between `defTypedHandler` (which uses
-// `out` as the rebound value) and `is` (which uses `matched` as the
-// Boolean result). Extracting it gives a single place to add
-// sandboxing (§3.3) when that work lands.
+// CheckMode short-circuit: when r.Check.Mode is true the predicate
+// body would run against carrier-typed input, which the body's
+// `(x is String)`/`(x gte 10)`/etc. checks can't usefully evaluate
+// (carriers fail those checks → every typed binding errors). Under
+// CheckMode this helper returns (candidate, matched=true, nil) so
+// downstream typed-def installation proceeds; the predicate's real
+// behaviour is exercised at runtime.
+//
+// Sandboxing: predicate bodies are user-controlled fn bodies that
+// could otherwise mutate registry state during a unify check.
+// runPredicateSandboxed snapshots r.Types and r.ctxStack before the
+// CallAQL invocation and restores them on return — additions to
+// r.Types via `type Foo …` and pushes onto the context stack are
+// rolled back. r.DefStacks is already protected by CallAQL's own
+// snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
 	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
 		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.VType.String())
@@ -240,6 +251,18 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must take exactly one argument")
 	}
+	// CheckMode: accept the binding without running the body. Real
+	// predicate behaviour is asserted at runtime; here we only need
+	// the analyser to keep flowing past the typed slot.
+	if r != nil && r.Check.Mode {
+		return candidate, true, nil
+	}
+	// Sandbox the call so a mischievous predicate body can't mutate
+	// r.Types or the context stack out from under the surrounding
+	// program.
+	saved := snapshotPredicateState(r)
+	defer restorePredicateState(r, saved)
+
 	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
 	if err != nil {
 		return Value{}, false, err
@@ -250,6 +273,44 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	out = result[0]
 	matched = !out.VType.Equal(TNone)
 	return out, matched, nil
+}
+
+// predicateSandbox holds the slice/map state that RunPredicate
+// snapshots before invoking a predicate body. DefStacks is NOT
+// included — CallAQL handles that itself. r.Check is preserved by
+// reference (the entire CheckState struct is copied) so any
+// per-call diagnostics or step counters set during the predicate
+// don't leak.
+type predicateSandbox struct {
+	types    map[string]Value
+	ctxStack []*StoreInstanceInfo
+	check    CheckState
+}
+
+func snapshotPredicateState(r *Registry) predicateSandbox {
+	if r == nil {
+		return predicateSandbox{}
+	}
+	typesCopy := make(map[string]Value, len(r.Types))
+	for k, v := range r.Types {
+		typesCopy[k] = v
+	}
+	ctxCopy := make([]*StoreInstanceInfo, len(r.ctxStack))
+	copy(ctxCopy, r.ctxStack)
+	return predicateSandbox{
+		types:    typesCopy,
+		ctxStack: ctxCopy,
+		check:    r.Check,
+	}
+}
+
+func restorePredicateState(r *Registry, s predicateSandbox) {
+	if r == nil {
+		return
+	}
+	r.Types = s.types
+	r.ctxStack = s.ctxStack
+	r.Check = s.check
 }
 
 // AsConcreteString unwraps a String-typed Value into its Go string,

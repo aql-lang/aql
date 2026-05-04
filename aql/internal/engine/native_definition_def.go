@@ -143,6 +143,23 @@ func RegisterDef(r *Registry) {
 			r.recordCheckDef(name, args[0].Pos)
 			return nil, nil
 		}
+		// CheckMode + DepScalar: under static analysis the body is
+		// frequently a carrier whose payload Unify's DepScalar
+		// branch can't compare against the bound — every typed
+		// binding would then error. For DepScalar constraints we
+		// answer the type-level question symbolically: if the
+		// body's VType matches the dependent's base type, accept
+		// the binding. The per-value test (does 5 lie in [10, ∞)?)
+		// stays runtime-only; the analyser only verifies the
+		// shape.
+		if r.Check.Mode && constraint.IsDepScalar() {
+			leaf := dependentLeafFromType(constraint.VType)
+			if base, ok := dependentLeafBaseType(leaf); ok && body.VType.Matches(base) {
+				installDef(r, name, body)
+				r.recordCheckDef(name, args[0].Pos)
+				return nil, nil
+			}
+		}
 		unified, ok := Unify(body, constraint)
 		if !ok {
 			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",

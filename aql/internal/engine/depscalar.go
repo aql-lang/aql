@@ -410,6 +410,13 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 //
 // Used by RegisterComparison to wire the same single-bound DepScalar
 // constructor onto each of `lt`, `gt`, `lte`, `gte`.
+//
+// RunInCheckMode=true so `type G10 (Integer gt 10)` produces a real
+// DepScalar value under static analysis — without it the check-mode
+// pipeline would push a TDependent carrier (Data=nil) and downstream
+// `def x:G10 …` would have no per-leaf shape to reason about. The
+// handler is a pure constructor with no registry side effects, so
+// running it during check is safe.
 func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
 		Args: []Type{TScalar, TScalarType},
@@ -434,7 +441,8 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 			}
 			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
-		Returns: []Type{TDependent},
+		Returns:        []Type{TDependent},
+		RunInCheckMode: true,
 	}
 }
 
@@ -489,7 +497,8 @@ func RegisterBetween(r *Registry) {
 					}
 					return []Value{newValue(t, info)}, nil
 				},
-				Returns: []Type{TDependent},
+				Returns:        []Type{TDependent},
+				RunInCheckMode: true,
 			},
 		},
 	})

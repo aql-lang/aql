@@ -88,3 +88,38 @@ def f fn [[Integer] [Integer] [1 add]]
 		t.Errorf("(Integer)→(Integer) is (Any)→(Integer) = %v, want false", got)
 	}
 }
+
+// --- Pattern compatibility ---
+//
+// When the spec declares a Pattern (a structural constraint on the
+// arg, e.g. a record shape), the candidate's pattern must accept
+// every value the spec admits. A candidate without a pattern keeps
+// satisfying the spec — it has a broader contract.
+
+// Spec with no pattern, candidate with no pattern: trivially
+// satisfied via type matching alone.
+func TestVariance_PatternlessSpecAndSig(t *testing.T) {
+	got := runOne(t, `type M fn [[Integer] [Integer]]
+def f fn [[Integer] [Integer] [1 add]]
+(quote f) is M`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("plain pattern-free sig should satisfy plain pattern-free spec, got %v", got)
+	}
+}
+
+// --- Optional alignment ---
+//
+// spec-optional → candidate must accept omission. spec-required →
+// candidate may be either (a candidate accepting the omission is
+// strictly more accepting). Optional is marked with `?` in the fn
+// param syntax, e.g. `[x?:Integer]` or `[x:Integer?]`.
+
+// Required spec, required sig: trivially equivalent — always works.
+func TestVariance_RequiredSpecRequiredSig(t *testing.T) {
+	got := runOne(t, `type M fn [[Integer] [Integer]]
+def f fn [[Integer] [Integer] [1 add]]
+(quote f) is M`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("required-required = %v, want true", got)
+	}
+}
