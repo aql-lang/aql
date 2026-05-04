@@ -1169,6 +1169,23 @@ true iff false          => false
 "" iff false            => true
 ```
 
+#### `xnor`
+
+Logical XNOR (NOT XOR). Synonym for `iff` — true when both operands
+have the same truth value. Non-boolean arguments are coerced via
+`convert boolean` rules.
+
+*Signatures:*
+- `[boolean, boolean] -> [boolean]`
+- `[any, any] -> [boolean]`
+
+```
+true xnor true          => true
+true xnor false         => false
+1 xnor 1                => true
+"" xnor false           => true
+```
+
 #### `otherwise`
 
 Null-coalescing: returns the first operand when it is not `None`,

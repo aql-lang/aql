@@ -53,6 +53,14 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "xnor",
+		Summary: "Logical XNOR (NOT XOR / equivalence).",
+		Description: "Returns true when both operands have the same truth value. " +
+			"Synonym for `iff`. Non-boolean inputs are coerced via " +
+			"`convert boolean` rules.",
+	})
+
+	register(&Entry{
 		Word:    "otherwise",
 		Summary: "Null-coalescing: returns left operand if not None, else right.",
 		Description: "Distinct from `or`, which short-circuits on falsy. " +

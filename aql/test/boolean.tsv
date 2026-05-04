@@ -115,7 +115,7 @@ not (0 not)	false
 not ("x" not)	true
 
 # =====================================================================
-# 5. xor / nand / nor / iff — coerce, return boolean
+# 5. xor / nand / nor / iff / xnor — coerce, return boolean
 # =====================================================================
 
 # xor (exclusive OR).
@@ -151,6 +151,16 @@ false iff false	true
 "x" iff true	true
 "" iff false	true
 0 iff 0	true
+
+# xnor (synonym for iff).
+true xnor true	true
+true xnor false	false
+false xnor false	true
+1 xnor 1	true
+1 xnor 0	false
+"x" xnor true	true
+"" xnor false	true
+0 xnor 0	true
 
 # =====================================================================
 # 6. implies — coerces, returns boolean

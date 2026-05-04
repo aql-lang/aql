@@ -693,6 +693,18 @@ false iff false	true
 "hello" iff true	true
 "" iff false	true
 
+# === xnor (synonym for iff) ===
+true xnor true	true
+true xnor false	false
+false xnor true	false
+false xnor false	true
+
+# xnor coerces non-boolean args
+1 xnor 1	true
+1 xnor 0	false
+"hello" xnor true	true
+"" xnor false	true
+
 # implies
 true implies true	true
 true implies false	false

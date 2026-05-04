@@ -579,6 +579,7 @@ func Register(r *Registry) {
 	RegisterNand(r)
 	RegisterNor(r)
 	RegisterIff(r)
+	RegisterXnor(r)
 	RegisterNot(r)
 	RegisterOtherwise(r)
 	RegisterAny(r)
