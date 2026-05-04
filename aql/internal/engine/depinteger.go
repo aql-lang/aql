@@ -47,10 +47,28 @@ func (k DepKind) String() string {
 // type, where <X> is the leaf name of the base scalar type. The
 // bit-field Kind selects which comparison(s) to apply against the
 // concrete Bound value. The Bound's VType pins the base scalar type.
+//
+// Kind2/Bound2 form an optional second constraint, used for
+// interval-style refinement (lower AND upper bound). When Kind2 is
+// zero the value carries a single comparison and behaves exactly as
+// the original implementation; when both are set, the value matches
+// iff both comparisons hold against the same input. The two halves
+// must be on opposite sides of the lattice (one lower-style — GT or
+// GTE — and one upper-style — LT or LTE); same-side combinations are
+// always tightened to a single bound during construction or
+// unification, so they never reach the dual-storage form.
 type DepScalarInfo struct {
-	Kind  DepKind
-	Bound Value
+	Kind   DepKind
+	Bound  Value
+	Kind2  DepKind
+	Bound2 Value
 }
+
+// isLowerKind reports whether k bounds the value from below.
+func isLowerKind(k DepKind) bool { return k == DepGT || k == DepGTE }
+
+// isUpperKind reports whether k bounds the value from above.
+func isUpperKind(k DepKind) bool { return k == DepLT || k == DepLTE }
 
 // NewDepScalar builds a DepScalar Value from a comparison kind and a
 // concrete bound. The bound's VType determines the base type of the
@@ -187,35 +205,160 @@ func (v Value) AsDepInteger() (DepIntegerInfo, error) {
 }
 
 // depScalarCheck returns true if `value` satisfies every comparison
-// bit set in `info.Kind` against `info.Bound`. Comparisons go through
-// compareValues so any orderable scalar type is supported (numbers,
-// strings, booleans, atoms). Bits are AND-combined so a future range
-// constraint (DepGTE | DepLTE) requires both halves.
+// in info against the corresponding bound. The primary comparison
+// (Kind/Bound) is required; the secondary (Kind2/Bound2) is also
+// applied when Kind2 != 0. Both halves are AND-combined.
 func depScalarCheck(info DepScalarInfo, value Value) bool {
 	if info.Kind == 0 {
 		return false
 	}
-	cmp, err := compareValues(value, info.Bound)
-	if err != nil {
+	if !depCompareCheck(info.Kind, info.Bound, value) {
 		return false
 	}
-	if info.Kind&DepGT != 0 && !(cmp > 0) {
-		return false
-	}
-	if info.Kind&DepGTE != 0 && !(cmp >= 0) {
-		return false
-	}
-	if info.Kind&DepLT != 0 && !(cmp < 0) {
-		return false
-	}
-	if info.Kind&DepLTE != 0 && !(cmp <= 0) {
+	if info.Kind2 != 0 && !depCompareCheck(info.Kind2, info.Bound2, value) {
 		return false
 	}
 	return true
+}
+
+// depCompareCheck applies a single comparison kind to value vs bound.
+// Returns false on any compareValues error so cross-type comparisons
+// (e.g. Integer DepScalar vs String value) reject cleanly.
+func depCompareCheck(kind DepKind, bound, value Value) bool {
+	cmp, err := compareValues(value, bound)
+	if err != nil {
+		return false
+	}
+	if kind&DepGT != 0 && !(cmp > 0) {
+		return false
+	}
+	if kind&DepGTE != 0 && !(cmp >= 0) {
+		return false
+	}
+	if kind&DepLT != 0 && !(cmp < 0) {
+		return false
+	}
+	if kind&DepLTE != 0 && !(cmp <= 0) {
+		return false
+	}
+	return true
+}
+
+// formatDepScalar renders a DepScalar's display form, surfacing the
+// secondary bound when present. Single-bound is "(Leaf op bound)";
+// interval is "(Leaf op1 bound1 op2 bound2)".
+func formatDepScalar(leaf string, info DepScalarInfo) string {
+	if info.Kind2 == 0 {
+		return fmt.Sprintf("(%s %s %s)", leaf, info.Kind, info.Bound.String())
+	}
+	return fmt.Sprintf("(%s %s %s %s %s)", leaf,
+		info.Kind, info.Bound.String(),
+		info.Kind2, info.Bound2.String())
 }
 
 // depIntegerCheck is the integer-specific shim; kept for any caller
 // using the int64 form directly.
 func depIntegerCheck(info DepIntegerInfo, n int64) bool {
 	return depScalarCheck(DepScalarInfo{Kind: info.Kind, Bound: NewInteger(info.Bound)}, NewInteger(n))
+}
+
+// tightenSameSide combines two same-side comparisons (both lower or
+// both upper) into the tighter single bound. The caller has verified
+// k1 and k2 are both lower-style or both upper-style. Errors on the
+// underlying compare propagate via ok=false (treated as Never).
+func tightenSameSide(k1 DepKind, b1 Value, k2 DepKind, b2 Value) (DepKind, Value, bool) {
+	cmp, err := compareValues(b1, b2)
+	if err != nil {
+		return 0, Value{}, false
+	}
+	// For lower bounds, the larger value is tighter; for upper bounds,
+	// the smaller. When the bounds are equal, prefer the strict form
+	// (GT over GTE, LT over LTE) — it's the narrower constraint.
+	lower := isLowerKind(k1)
+	if cmp == 0 {
+		strictGT := k1 == DepGT || k2 == DepGT
+		strictLT := k1 == DepLT || k2 == DepLT
+		if lower {
+			if strictGT {
+				return DepGT, b1, true
+			}
+			return DepGTE, b1, true
+		}
+		if strictLT {
+			return DepLT, b1, true
+		}
+		return DepLTE, b1, true
+	}
+	if (lower && cmp > 0) || (!lower && cmp < 0) {
+		return k1, b1, true
+	}
+	return k2, b2, true
+}
+
+// combineDepScalars computes the intersection of two single- or
+// dual-comparison DepScalar constraints over the same base type.
+// Returns ok=false when the result is empty (no value satisfies both).
+//
+//	(Integer gt 5) tand (Integer lt 10) → interval (5, 10)
+//	(Integer gte 10) tand (Integer gte 5) → gte 10 (tighter)
+//	(Integer gt 10) tand (Integer lt 5) → empty (Never)
+func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
+	// Split each side into lower and upper components.
+	type comp struct {
+		kind  DepKind
+		bound Value
+		set   bool
+	}
+	var lo, hi comp
+	add := func(k DepKind, v Value) bool {
+		if k == 0 {
+			return true
+		}
+		c := &lo
+		if isUpperKind(k) {
+			c = &hi
+		}
+		if !c.set {
+			c.kind, c.bound, c.set = k, v, true
+			return true
+		}
+		nk, nv, ok := tightenSameSide(c.kind, c.bound, k, v)
+		if !ok {
+			return false
+		}
+		c.kind, c.bound = nk, nv
+		return true
+	}
+	for _, p := range []struct {
+		k DepKind
+		v Value
+	}{{a.Kind, a.Bound}, {a.Kind2, a.Bound2}, {b.Kind, b.Bound}, {b.Kind2, b.Bound2}} {
+		if !add(p.k, p.v) {
+			return DepScalarInfo{}, false
+		}
+	}
+	// If both sides are present, verify the interval is non-empty.
+	if lo.set && hi.set {
+		cmp, err := compareValues(lo.bound, hi.bound)
+		if err != nil {
+			return DepScalarInfo{}, false
+		}
+		if cmp > 0 {
+			return DepScalarInfo{}, false
+		}
+		// Equal bounds: empty unless both sides are inclusive.
+		if cmp == 0 && (lo.kind == DepGT || hi.kind == DepLT) {
+			return DepScalarInfo{}, false
+		}
+	}
+	out := DepScalarInfo{}
+	if lo.set {
+		out.Kind, out.Bound = lo.kind, lo.bound
+		if hi.set {
+			out.Kind2, out.Bound2 = hi.kind, hi.bound
+		}
+	} else if hi.set {
+		out.Kind, out.Bound = hi.kind, hi.bound
+	}
+	return out, true
 }

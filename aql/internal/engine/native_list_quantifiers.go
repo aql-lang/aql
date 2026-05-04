@@ -93,8 +93,12 @@ func RegisterTany(r *Registry) {
 		}
 		list := args[0].AsList()
 		n := list.Len()
+		// Empty list reduces to Never — the identity element for tor.
+		// Folding zero alternatives gives the union's empty case,
+		// which is the bottom type. Makes tany a full monoid over
+		// lists.
 		if n == 0 {
-			return nil, fmt.Errorf("tany: empty list has no alternatives")
+			return []Value{NewTypeLiteral(TNever)}, nil
 		}
 		if n == 1 {
 			return []Value{list.Get(0)}, nil
@@ -109,20 +113,14 @@ func RegisterTany(r *Registry) {
 				alts = append(alts, v)
 			}
 		}
-		// Filter Never (identity for union); collapse trivial cases.
-		filtered := alts[:0]
-		for _, alt := range alts {
-			if !alt.VType.Equal(TNever) {
-				filtered = append(filtered, alt)
-			}
-		}
-		if len(filtered) == 0 {
+		simplified := simplifyDisjunctAlts(alts)
+		if len(simplified) == 0 {
 			return []Value{NewTypeLiteral(TNever)}, nil
 		}
-		if len(filtered) == 1 {
-			return []Value{filtered[0]}, nil
+		if len(simplified) == 1 {
+			return []Value{simplified[0]}, nil
 		}
-		return []Value{NewDisjunct(filtered)}, nil
+		return []Value{NewDisjunct(simplified)}, nil
 	}
 
 	r.RegisterNativeFunc(NativeFunc{
@@ -148,8 +146,11 @@ func RegisterTall(r *Registry) {
 		}
 		list := args[0].AsList()
 		n := list.Len()
+		// Empty list reduces to Any — the identity element for tand.
+		// Folding zero constraints leaves the type wide open, which
+		// is the top type. Makes tall a full monoid over lists.
 		if n == 0 {
-			return nil, fmt.Errorf("tall: empty list has no values to combine")
+			return []Value{NewTypeLiteral(TAny)}, nil
 		}
 		acc := list.Get(0)
 		for i := 1; i < n; i++ {

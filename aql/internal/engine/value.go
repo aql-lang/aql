@@ -1514,7 +1514,7 @@ func (v Value) String() string {
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
 		ds, _ := v.AsDepScalar()
-		return fmt.Sprintf("(%s %s %s)", dependentLeafFromType(v.VType), ds.Kind, ds.Bound.String())
+		return formatDepScalar(dependentLeafFromType(v.VType), ds)
 	case v.VType.Matches(TString):
 		return fmt.Sprintf("'%s'", v.Data)
 	case v.VType.Equal(TAtom):

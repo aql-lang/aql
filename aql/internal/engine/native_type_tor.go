@@ -5,11 +5,18 @@ func RegisterTor(r *Registry) {
 	// BarrierPos=1 prevents greedy forward consumption of chained `tor` words.
 	// args[0] = nearest (top/forward), args[1] = farther (stack).
 	//
-	// Never is the identity element for tor: T tor Never = T (the
-	// uninhabited alternative contributes no values to the union, so
-	// it drops out). When all alternatives are Never the result is
-	// Never; when one alternative remains it is returned bare rather
-	// than wrapped in a singleton disjunct.
+	// Algebra:
+	//   - Never is the identity element: T tor Never = T (filtered).
+	//   - Idempotence: T tor T = T (structurally identical alternatives
+	//     are deduped at construction).
+	//   - Subsumption: when one alternative is a subtype of another
+	//     (Integer tor Number → Number), the subtype drops out. Concrete
+	//     values absorbed by a covering type literal also drop
+	//     (5 tor Integer → Integer). Concrete values are NOT subsumed
+	//     by other concrete values of the same type — `1 tor 2` keeps
+	//     both, since each carries information the other doesn't.
+	//   - Singleton/empty disjuncts collapse: 0 alts → Never, 1 alt
+	//     → bare value (no wrapper).
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		var alts []Value
 		// Flatten left side (farther/stack) first to maintain source order.
@@ -26,20 +33,14 @@ func RegisterTor(r *Registry) {
 		} else {
 			alts = append(alts, args[0])
 		}
-		// Filter Never alternatives — they carry no values.
-		filtered := alts[:0]
-		for _, alt := range alts {
-			if !alt.VType.Equal(TNever) {
-				filtered = append(filtered, alt)
-			}
-		}
-		if len(filtered) == 0 {
+		simplified := simplifyDisjunctAlts(alts)
+		if len(simplified) == 0 {
 			return []Value{NewTypeLiteral(TNever)}, nil
 		}
-		if len(filtered) == 1 {
-			return []Value{filtered[0]}, nil
+		if len(simplified) == 1 {
+			return []Value{simplified[0]}, nil
 		}
-		return []Value{NewDisjunct(filtered)}, nil
+		return []Value{NewDisjunct(simplified)}, nil
 	}
 
 	r.RegisterNativeFunc(NativeFunc{
@@ -62,4 +63,60 @@ func RegisterTor(r *Registry) {
 			},
 		},
 	})
+}
+
+// simplifyDisjunctAlts filters Never, dedupes structurally identical
+// alternatives, and applies subsumption: a strict subtype drops in
+// favour of its supertype, and a concrete value drops if some other
+// alternative is a covering type literal. Two concrete values of the
+// same type are both kept — each one is a distinct piece of
+// information that the type literal couldn't replace.
+func simplifyDisjunctAlts(alts []Value) []Value {
+	// First pass: drop Never.
+	live := make([]Value, 0, len(alts))
+	for _, alt := range alts {
+		if alt.VType.Equal(TNever) {
+			continue
+		}
+		live = append(live, alt)
+	}
+	// Second pass: keep an alt only if no other live alt subsumes or
+	// duplicates it. "Earlier-wins" for duplicates so source order is
+	// preserved among survivors.
+	out := make([]Value, 0, len(live))
+outer:
+	for i, cand := range live {
+		// Drop if structurally equal to an earlier kept alt.
+		for j := 0; j < i; j++ {
+			if live[j].VType.Equal(cand.VType) && valuesEqual(live[j], cand) {
+				continue outer
+			}
+		}
+		// Drop if subsumed by some other alt:
+		//   - cand is a type literal whose VType is a strict subtype
+		//     of another's (Integer subsumed by Number).
+		//   - cand is a concrete value covered by another type literal
+		//     (5 subsumed by Integer).
+		// Strict subtype only: equal types are handled by dedup above.
+		for j, other := range live {
+			if i == j {
+				continue
+			}
+			if cand.VType.Equal(other.VType) {
+				continue
+			}
+			if !cand.VType.Matches(other.VType) {
+				continue
+			}
+			// cand's type is a strict subtype of other's.
+			if cand.Data == nil && other.Data == nil {
+				continue outer
+			}
+			if cand.Data != nil && other.Data == nil {
+				continue outer
+			}
+		}
+		out = append(out, cand)
+	}
+	return out
 }

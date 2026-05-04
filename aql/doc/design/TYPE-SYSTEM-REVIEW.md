@@ -55,16 +55,27 @@ disjuncts, and `tall` folds.
 De Morgan rewrites for `not` are not yet in scope — there is no
 type-level negation operator, so there is nothing to dualise.
 
-### 1.3 No `DepScalar ↔ DepScalar` unification
+### 1.3 No `DepScalar ↔ DepScalar` unification — RESOLVED
 
-`internal/engine/unify.go` Dependent-scalar branch handles
-`DepScalar ↔ scalar` only. `(Integer gte 10) tand (Integer lte 20)`
-constructs two `DepScalar` values and calls `tand` on them — `tand`
-falls through to `Unify`, which has no `DepScalar ↔ DepScalar` rule
-and reports failure. The `DepKind` bit field was deliberately sized
-to encode combined constraints (`internal/engine/depinteger.go:8-21`)
-but no path actually produces one. The "future extensibility" comment
-on the bit field is unredeemed.
+`internal/engine/unify.go` now handles `DepScalar ↔ DepScalar` over
+the same leaf type. `DepScalarInfo` carries an optional second
+constraint pair (`Kind2`, `Bound2`) so a single value can represent
+a closed interval `(gte 10) tand (lte 20)`. Combination rules:
+
+- Same-side bounds tighten: `gte 10 tand gte 5 = gte 10`.
+- Opposite-side bounds form an interval: `gt 5 tand lt 10 = (5, 10)`.
+- Empty intervals reduce to Never (caught at construction —
+  `gt 10 tand lt 5`, `gt 10 tand lt 10`, etc.).
+- Cross-base (`DepInteger tand DepString`) fails → Never.
+
+`between` (`internal/engine/compare.go`) is the surface form:
+`Integer between 10 20` ≡ `(Integer gte 10) tand (Integer lte 20)`.
+The "future extensibility" promise on the `DepKind` bit field is
+now redeemed via the dual-storage form.
+
+Tests: `aql/test/type_algebra_test.go` (interval, same-side
+tightening, empty interval, strict-touching, singleton, cross-base,
+`between` membership-equivalence with the long form).
 
 ### 1.4 Disjunct dedup uses structural `valuesEqual`
 

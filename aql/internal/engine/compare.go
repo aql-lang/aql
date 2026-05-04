@@ -311,6 +311,62 @@ func RegisterComparison(r *Registry) {
 		},
 	})
 
+	// between: [scalar, scalar, scalarType] -> [Dependent]
+	// Source form `Integer between 10 20` builds a closed-interval
+	// DepScalar — equivalent to `(Integer gte 10) tand (Integer lte 20)`
+	// but in one word. Sig order follows the concatenative mirror
+	// pattern: sig[0]=lo (innermost forward), sig[1]=hi, sig[2]=type
+	// (deepest, taken from the stack when the type is prefixed).
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "between",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TScalar, TScalar, TScalarType},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					if args[2].Data != nil {
+						return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
+							args[2].VType.String())
+					}
+					leaf := dependentLeafFromBoundType(args[2].VType)
+					if leaf == "" {
+						return nil, fmt.Errorf("between: unsupported base type %s",
+							args[2].VType.String())
+					}
+					base, _ := dependentLeafBaseType(leaf)
+					if !args[0].VType.Matches(base) {
+						return nil, fmt.Errorf("between: low bound %s does not match base %s",
+							args[0].VType.String(), base.String())
+					}
+					if !args[1].VType.Matches(base) {
+						return nil, fmt.Errorf("between: high bound %s does not match base %s",
+							args[1].VType.String(), base.String())
+					}
+					// Empty interval (lo > hi) reduces to Never. Equal
+					// bounds form a singleton, which the underlying
+					// closed interval already represents correctly.
+					cmp, err := compareValues(args[0], args[1])
+					if err != nil {
+						return nil, fmt.Errorf("between: %w", err)
+					}
+					if cmp > 0 {
+						return []Value{NewTypeLiteral(TNever)}, nil
+					}
+					info := DepScalarInfo{
+						Kind: DepGTE, Bound: args[0],
+						Kind2: DepLTE, Bound2: args[1],
+					}
+					t, err := NewType("Type/Dependent/Dep" + leaf)
+					if err != nil {
+						return nil, fmt.Errorf("between: %w", err)
+					}
+					return []Value{newValue(t, info)}, nil
+				},
+				Returns: []Type{TDependent},
+			},
+		},
+	})
+
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "eq",

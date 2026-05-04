@@ -776,7 +776,7 @@ func valToString(v Value) string {
 		// so without this case AsString would crash on the wrong
 		// payload type.
 		ds, _ := v.AsDepScalar()
-		return fmt.Sprintf("(%s %s %s)", dependentLeafFromType(v.VType), ds.Kind, ds.Bound.String())
+		return formatDepScalar(dependentLeafFromType(v.VType), ds)
 	case v.VType.Matches(TString):
 		_as8, _ := v.AsString()
 		return _as8

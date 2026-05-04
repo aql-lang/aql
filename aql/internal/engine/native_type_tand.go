@@ -70,34 +70,20 @@ func tandValues(a, b Value) Value {
 		var result []Value
 		for _, ax := range aAlts {
 			for _, bx := range bAlts {
-				r := tandValues(ax, bx)
-				if r.VType.Equal(TNever) {
-					continue
-				}
-				dup := false
-				for _, prev := range result {
-					// valuesEqual returns true for any two type
-					// literals (Data==nil); existing callers always
-					// pre-check VType. Mirror that here so disjoint
-					// type literals (Integer vs String) survive
-					// dedup.
-					if prev.VType.Equal(r.VType) && valuesEqual(prev, r) {
-						dup = true
-						break
-					}
-				}
-				if !dup {
-					result = append(result, r)
-				}
+				result = append(result, tandValues(ax, bx))
 			}
 		}
-		switch len(result) {
+		// Run the disjunct simplifier (Never filter, dedup,
+		// subsumption) so the cross-product output is canonicalised
+		// the same way `tor` would canonicalise an explicit union.
+		simplified := simplifyDisjunctAlts(result)
+		switch len(simplified) {
 		case 0:
 			return NewTypeLiteral(TNever)
 		case 1:
-			return result[0]
+			return simplified[0]
 		default:
-			return NewDisjunct(result)
+			return NewDisjunct(simplified)
 		}
 	}
 
@@ -130,20 +116,25 @@ func isPlainConcreteMap(v Value) bool {
 	return v.AsMap() != nil
 }
 
-// mergeMaps walks keys of a then b in order, unifying values for keys
-// present in both. Keys present in only one side are kept as-is.
+// mergeMaps walks keys of a then b in order, intersecting values for
+// keys present in both. Keys present in only one side are kept as-is.
 // Returns ok=false when any overlapping key has incompatible values —
 // the caller propagates that as Never (the empty intersection).
+//
+// Field-level uses tandValues so distribution applies inside fields:
+// {a:(Int tor Str)} tand {a:(Str tor Int)} produces {a:(Int tor Str)}
+// rather than a single-alt projection (which is what plain Unify
+// would do via "first matching alt" semantics).
 func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
 	result := NewOrderedMap()
 	for _, key := range a.Keys() {
 		aVal, _ := a.Get(key)
 		if bVal, present := b.Get(key); present {
-			unified, ok := Unify(aVal, bVal)
-			if !ok {
+			combined := tandValues(aVal, bVal)
+			if combined.VType.Equal(TNever) {
 				return nil, false
 			}
-			result.Set(key, unified)
+			result.Set(key, combined)
 			continue
 		}
 		result.Set(key, aVal)

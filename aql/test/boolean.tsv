@@ -226,9 +226,13 @@ Integer tor Decimal tor String tor None	Scalar/Number/Integer|Scalar/Number/Deci
 # Mixed concrete and type Literals.
 String tor 42	Scalar/String|42
 
-# Disjunct alternatives are kept as-is at runtime (no subsumption).
-Number tor Integer	Scalar/Number|Scalar/Number/Integer
-String tor String	Scalar/String|Scalar/String
+# Disjunct alternatives are simplified at construction:
+# - Identical alternatives dedupe (idempotence).
+# - Strict subtype is subsumed by its supertype.
+# These leave a single alternative, so the disjunct collapses to a
+# bare type literal.
+Number tor Integer	Scalar/Number
+String tor String	Scalar/String
 
 # Disjunct unifies with one of its alternatives.
 (String tor None) unify "hi"	'hi' true
@@ -754,10 +758,10 @@ quote [true false true] all	false
 [{x:1}] tall	{x:1}
 [Integer] tall	Scalar/Number/Integer
 
-# Repeated elements are kept (no dedup).
-[String String] tany	Scalar/String|Scalar/String
-[None None] tany	None|None
-[1 1 1] tany	1|1|1
+# Repeated elements dedupe (idempotence: T tor T = T).
+[String String] tany	Scalar/String
+[None None] tany	None
+[1 1 1] tany	1
 
 # =====================================================================
 # 34. tany — disjunct flattening
