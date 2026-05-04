@@ -243,11 +243,10 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			fnDef.Signatures = append(fnDef.Signatures, Signature{
 				Fallback: true,
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					stack := r.DefStacks[name]
-					if len(stack) == 0 {
+					top, ok := r.TopOfDefStack(name)
+					if !ok {
 						return nil, fmt.Errorf("undefined: %s", name)
 					}
-					top := stack[len(stack)-1]
 					if _, ok := top.Data.(FnDefInfo); ok {
 						if fn := r.Lookup(name); fn != nil {
 							for i := range fn.Signatures {
@@ -275,7 +274,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// with the new definition. Without this, redefining a fn-based
 		// word with the same signature leaves stale handlers that win
 		// matching over the new ones (equal scores, first match wins).
-		if stack := r.DefStacks[name]; len(stack) > 0 {
+		if stack := r.DefStack(name); len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
 			for _, entry := range stack {
@@ -287,7 +286,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 				filtered = append(filtered, entry)
 			}
 			if changed {
-				r.DefStacks[name] = filtered
+				r.SetDefStack(name, filtered)
 				// Rebuild: clear Signatures on the top FnDefInfo (keep fallback),
 				// then re-register from remaining DefStack entries.
 				if top := r.Lookup(name); top != nil {
@@ -309,7 +308,7 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		}
 		// Push the FnDefInfo to DefStacks first, then installFnDef→Register→
 		// upsertFnDef will update its Signatures in place.
-		r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+		r.PushDef(name, NewFnDef(fnDef))
 		installFnDef(r, name, fnDef, isStackOnly)
 		return
 	}
@@ -339,11 +338,11 @@ func installDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			r.KnownTypeParts[p] = true
 		}
 		body = NewObjectType(info)
-		r.DefStacks[name] = append(r.DefStacks[name], body)
+		r.PushDef(name, body)
 		return
 	}
 
-	r.DefStacks[name] = append(r.DefStacks[name], body)
+	r.PushDef(name, body)
 }
 
 // fnDefsOverlap returns true if any signature in a has the same parameter
@@ -373,17 +372,13 @@ func fnDefsOverlap(a, b FnDefInfo) bool {
 // remain, the function entry is removed so the word falls through to
 // normal resolution (unknown word → string).
 func uninstallDef(r *Registry, name string) {
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+	top, ok := r.TopOfDefStack(name)
+	if !ok {
 		return
 	}
+	r.PopDef(name)
 
-	top := stack[len(stack)-1]
-	r.DefStacks[name] = stack[:len(stack)-1]
-
-	// If DefStacks is now empty, clean up entirely.
-	if len(r.DefStacks[name]) == 0 {
-		delete(r.DefStacks, name)
+	if !r.HasDef(name) {
 		return
 	}
 
@@ -396,7 +391,7 @@ func uninstallDef(r *Registry, name string) {
 	// Rebuild: clear Signatures on the (now-top) entry, keep fallback,
 	// then re-register from remaining DefStack entries.
 	r.clearSigsKeepFallback(name)
-	for _, entry := range r.DefStacks[name] {
+	for _, entry := range r.DefStack(name) {
 		if fd, ok := entry.Data.(FnDefInfo); ok {
 			installFnDef(r, name, fd)
 		}

@@ -32,7 +32,7 @@ func RegisterTypeDef(r *Registry) {
 		if r.Lookup(name) != nil {
 			return fmt.Errorf("type %s: name clash — already a registered function", name)
 		}
-		if len(r.DefStacks[name]) > 0 {
+		if r.HasDef(name) {
 			return fmt.Errorf("type %s: name clash — already a def'd value", name)
 		}
 		// All type bodies — fn-shape, predicate-fn, dependent scalar,

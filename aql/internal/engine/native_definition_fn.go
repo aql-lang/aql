@@ -465,11 +465,10 @@ func lookupDefType(r *Registry, name string) *Value {
 			return &tv
 		}
 	}
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+	val, ok := r.TopOfDefStack(name)
+	if !ok {
 		return nil
 	}
-	val := stack[len(stack)-1]
 	if !isTypeBody(val) {
 		return nil
 	}
@@ -686,10 +685,7 @@ func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Snapshot DefStacks lengths after installing named params
 			// so we can clean up any defs created during body execution
 			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := make(map[string]int, len(r.DefStacks))
-			for dname, dstack := range r.DefStacks {
-				defSnapshot[dname] = len(dstack)
-			}
+			defSnapshot := r.SnapshotDefDepths()
 
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
@@ -860,10 +856,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// Snapshot DefStacks lengths before body execution so we can
 	// clean up any defs created during body execution (Issue 2
 	// from AQL-DX-REPORT: def leakage from fn bodies).
-	defSnapshot := make(map[string]int, len(r.DefStacks))
-	for name, stack := range r.DefStacks {
-		defSnapshot[name] = len(stack)
-	}
+	defSnapshot := r.SnapshotDefDepths()
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
@@ -884,8 +877,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// triggers installFnDef → Register → upsertFnDef which can
 	// modify DefStacks entries for other names).
 	var toClean []string
-	for name := range r.DefStacks {
-		if len(r.DefStacks[name]) > defSnapshot[name] {
+	for _, name := range r.DefNames() {
+		if r.DefStackDepth(name) > defSnapshot[name] {
 			toClean = append(toClean, name)
 		}
 	}
@@ -894,7 +887,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 		// Pop entries down to the snapshot length. Use a bounded
 		// loop to avoid infinite looping if uninstallDef's rebuild
 		// creates new entries.
-		for attempts := 0; attempts < 100 && len(r.DefStacks[name]) > target; attempts++ {
+		for attempts := 0; attempts < 100 && r.DefStackDepth(name) > target; attempts++ {
 			uninstallDef(r, name)
 		}
 	}

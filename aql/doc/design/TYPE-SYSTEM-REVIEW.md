@@ -560,6 +560,36 @@ Defer indefinitely without a concrete trigger: §1.4, §2.1, §2.2/§2.3
 beyond `between`, §3.1, §3.4, §4.2, §4.3, §7.6.
 
 
+## 8a. Registry interface consolidation
+
+Following §5.2, all access to the def-stack and type-stack registries
+goes through a unified helper API in `internal/engine/util.go`. The
+underlying fields are unexported (`r.defStacks`, `r.types`) so direct
+indexing from new code is a compile error in external packages and
+flagged in code review for the engine package itself. This closes the
+"distributed implicit contract" failure mode that made §5.2 painful:
+removing the DefStacks-as-type-mirror touched five distinct
+resolution sites scattered across the codebase, with each site
+encoding its own version of the lookup contract.
+
+**Helper surface** (see `util.go`):
+
+- Read: `TopOfDefStack`, `TopOfTypeStack`, `HasDef`, `HasType`,
+  `DefStackDepth`, `TypeStackDepth`, `DefStack` (read-only view),
+  `DefNames`, `TypeNames`, `ResolveTypedName`, `ResolveTypedNameValue`.
+- Write: `PushDef`, `PushType`, `PopDef`, `PopType`,
+  `ReplaceDefTop`, `TruncateDefStack`, `SetDefStack`, `DeleteDef`.
+- Snapshot/restore: `SnapshotDefDepths` /
+  `RestoreToDefDepths` (depth-only, for push-but-no-pop regions —
+  fn-body sandbox, carrier-merge join points, branch analysis);
+  `SnapshotTypeStacks` / `RestoreTypeStacks` (deep copy, for
+  arbitrary-mutation regions — predicate sandbox).
+
+The `Registry` doc-comment in `registry.go` lists the helpers a new
+caller should reach for. CLAUDE.md's "Registry Stacks" section is the
+canonical user-facing reference.
+
+
 ## 9. Items not in scope of this report
 
 - The bytecode AOT plan (`docs/reports/aql-bytecode-report.md`)

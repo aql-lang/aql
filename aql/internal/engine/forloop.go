@@ -102,15 +102,9 @@ func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc 
 	return func(args []Value) []Value {
 		// body is always the last arg (Integer,List or List,List).
 		body := args[len(args)-1]
-		r.DefStacks[iterName] = append(r.DefStacks[iterName], NewCarrier(iterType))
+		r.PushDef(iterName, NewCarrier(iterType))
 		stk, _ := runCarrierBodyWithDefs(r, body)
-		// Pop the iterator binding.
-		if ds := r.DefStacks[iterName]; len(ds) > 0 {
-			r.DefStacks[iterName] = ds[:len(ds)-1]
-			if len(r.DefStacks[iterName]) == 0 {
-				delete(r.DefStacks, iterName)
-			}
-		}
+		r.PopDef(iterName)
 		if len(stk) == 0 {
 			return []Value{NewCarrier(TList)}
 		}

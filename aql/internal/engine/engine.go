@@ -91,8 +91,7 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
 		return tv
 	}
-	if ds := reg.DefStacks[name]; len(ds) > 0 {
-		top := ds[len(ds)-1]
+	if top, ok := reg.TopOfDefStack(name); ok {
 		if top.IsObjectType() {
 			return top
 		}
@@ -645,12 +644,11 @@ func (e *Engine) stepWord(val Value) error {
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
-		if stack, ok := e.registry.DefStacks[w.Name]; ok {
-			for i := len(stack) - 1; i >= 0; i-- {
-				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-					e.stack[e.pointer] = NewFunction(fnDef)
-					return e.stepLiteral()
-				}
+		stack := e.registry.DefStack(w.Name)
+		for i := len(stack) - 1; i >= 0; i-- {
+			if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+				e.stack[e.pointer] = NewFunction(fnDef)
+				return e.stepLiteral()
 			}
 		}
 		// Not a def fn — fall through to normal execution.
@@ -684,8 +682,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
-	if ds := e.registry.DefStacks[w.Name]; len(ds) > 0 {
-		top := ds[len(ds)-1]
+	if top, ok := e.registry.TopOfDefStack(w.Name); ok {
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
@@ -1800,11 +1797,10 @@ func (e *Engine) stepEnd() error {
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := val.AsDefCleanup()
 	reg := info.Registry
-	for name, stack := range reg.DefStacks {
+	for _, name := range reg.DefNames() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
-		for len(stack) > prevLen {
+		for reg.DefStackDepth(name) > prevLen {
 			uninstallDef(reg, name)
-			stack = reg.DefStacks[name]
 		}
 	}
 }
@@ -2319,11 +2315,10 @@ func (e *Engine) peekForwardValue() Value {
 			return NewBoolean(false)
 		default:
 			// If the word has a FnDef in DefStacks, peek as TFunction.
-			if stack, ok := e.registry.DefStacks[nw.Name]; ok {
-				for i := len(stack) - 1; i >= 0; i-- {
-					if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-						return NewFunction(fnDef)
-					}
+			stack := e.registry.DefStack(nw.Name)
+			for i := len(stack) - 1; i >= 0; i-- {
+				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
+					return NewFunction(fnDef)
 				}
 			}
 			return NewAtom(nw.Name)

@@ -759,9 +759,7 @@ func ResolveFieldType(r *Registry, v Value) Value {
 				return tv
 			}
 		}
-		stack := r.DefStacks[name]
-		if len(stack) > 0 {
-			top := stack[len(stack)-1]
+		if top, ok := r.TopOfDefStack(name); ok {
 			if isTypeBody(top) {
 				return top
 			}

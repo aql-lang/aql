@@ -186,7 +186,8 @@ happens in two contexts for parser-created lists (`Eval=true`):
 
 1. **When consumed as a word argument**: `execMatch` (for registered words)
    and `execFnDefSig` (for FnDef auto-invocation) run `autoEvalList` on
-   list arguments with `Eval=true`, resolving word elements from DefStacks.
+   list arguments with `Eval=true`, resolving word elements via the def
+   stack (`r.TopOfDefStack`).
    For example: `def c1 10  def c2 20  [c1 c2] myword` passes `[10, 20]`
    to `myword`, not `[atom(c1), atom(c2)]`.
 
@@ -224,10 +225,63 @@ with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
+## Registry Stacks (CRITICAL)
+
+The `Registry` holds two per-name stacks for user bindings:
+
+- **Def stack** (`r.defStacks`, unexported) — `def`-defined values,
+  fn bodies, fn-body parameters, carrier-merge join points, module
+  imports. Stack-per-name with shadowing semantics; `def x 1; def x 2`
+  → `x` is 2; `undef x` → `x` is 1.
+- **Type stack** (`r.types`, unexported) — `type`-defined values
+  (records, options, table, disjuncts, typed list/map, ObjectType,
+  DepScalar, predicate types, fn-shape types, plain literals).
+  Stack-per-name with the same shadow/pop semantics; `untype Foo`
+  pops; once a stack is empty the entry is removed from the map.
+
+Both fields are **unexported and accessed exclusively through the
+helper API in `util.go`**. Do not add `r.defStacks` or `r.types`
+indexing to new code — direct access is a compile error in external
+packages and will be rejected in code review for `package engine`
+code as well.
+
+**Read helpers**:
+- `r.TopOfDefStack(name) (Value, bool)` / `r.TopOfTypeStack(name)`
+- `r.HasDef(name) bool` / `r.HasType(name)`
+- `r.DefStackDepth(name) int` / `r.TypeStackDepth(name)`
+- `r.DefStack(name) []Value` (read-only view; do not mutate)
+- `r.DefNames() []string` / `r.TypeNames()`
+- `r.ResolveTypedName(name) (Value, bool)` — Type-first then Def
+  fallback; the canonical way to resolve a type-context name.
+
+**Write helpers**:
+- `r.PushDef(name, v)` / `r.PushType(name, v)`
+- `r.PopDef(name) bool` / `r.PopType(name) bool` (auto-deletes the
+  map entry when the stack empties)
+- `r.ReplaceDefTop(name, v) bool` — overwrite the top binding
+- `r.TruncateDefStack(name, depth)` — pop down to a specified depth
+- `r.SetDefStack(name, stack)` — replace the whole stack (rare;
+  used by uninstall paths that filter middle entries)
+- `r.DeleteDef(name)` — remove the entry entirely
+
+**Snapshot/restore**:
+- `r.SnapshotDefDepths() map[string]int` /
+  `r.RestoreToDefDepths(snap)` — depth-only; pair around a region
+  of code that may push but never pop. Used by fn-body sandboxing,
+  carrier merge join points.
+- `r.SnapshotTypeStacks() map[string][]Value` /
+  `r.RestoreTypeStacks(snap)` — full deep copy; pair around code
+  that may both pop and push (e.g. predicate sandbox).
+
+When adding a new feature that needs to read or write the stacks,
+extend the helper surface rather than reaching into the field.
+Future namespace changes (single store, scoped types, persistent
+overlays) only need to update the helpers.
+
 ## Undefined Words (CRITICAL)
 
 An undefined word reaching the pointer is an **error**, not a value.
-A word that is not registered, not in `DefStacks`, and not a known
+A word that is not registered, not in the def stack, and not a known
 literal (`true`/`false`/a type name) raises `[aql/undefined_word]` at
 `stepWord`. There is no implicit `Word → Atom` fallback.
 

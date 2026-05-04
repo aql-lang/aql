@@ -393,7 +393,7 @@ func TestTopOfDefStack_Empty(t *testing.T) {
 
 func TestTopOfDefStack_SingleEntry(t *testing.T) {
 	r, _ := NewRegistry()
-	r.DefStacks["x"] = []Value{NewInteger(42)}
+	r.PushDef("x", NewInteger(42))
 	v, ok := r.TopOfDefStack("x")
 	if !ok {
 		t.Fatalf("expected ok=true")
@@ -406,7 +406,9 @@ func TestTopOfDefStack_SingleEntry(t *testing.T) {
 
 func TestTopOfDefStack_StackedReturnsTop(t *testing.T) {
 	r, _ := NewRegistry()
-	r.DefStacks["x"] = []Value{NewInteger(1), NewInteger(2), NewInteger(3)}
+	r.PushDef("x", NewInteger(1))
+	r.PushDef("x", NewInteger(2))
+	r.PushDef("x", NewInteger(3))
 	v, ok := r.TopOfDefStack("x")
 	if !ok {
 		t.Fatalf("expected ok=true")
@@ -431,7 +433,7 @@ func TestResolveTypedName_TypesPriority(t *testing.T) {
 	// r.Types should win over DefStacks for the same name.
 	r, _ := NewRegistry()
 	r.PushType("X", NewString("from-types"))
-	r.DefStacks["X"] = []Value{NewString("from-defstacks")}
+	r.PushDef("X", NewString("from-defstacks"))
 	v, ok := r.ResolveTypedName("X")
 	if !ok {
 		t.Fatalf("expected ok=true")
@@ -444,7 +446,7 @@ func TestResolveTypedName_TypesPriority(t *testing.T) {
 
 func TestResolveTypedName_FallbackToDefStacks(t *testing.T) {
 	r, _ := NewRegistry()
-	r.DefStacks["X"] = []Value{NewString("from-defstacks")}
+	r.PushDef("X", NewString("from-defstacks"))
 	v, ok := r.ResolveTypedName("X")
 	if !ok {
 		t.Fatalf("expected ok=true")

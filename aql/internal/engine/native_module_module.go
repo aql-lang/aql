@@ -647,9 +647,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		}
 		return tv
 	}
-	stack := modReg.DefStacks[name]
-	if len(stack) > 0 {
-		val := stack[len(stack)-1]
+	if val, ok := modReg.TopOfDefStack(name); ok {
 		// Tag FnDef values with the module's registry so they can
 		// execute in the correct context (closure semantics).
 		if fnDef, ok := val.Data.(FnDefInfo); ok {

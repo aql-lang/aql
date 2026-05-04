@@ -3972,11 +3972,10 @@ func TestCallAQLBasic(t *testing.T) {
 	})
 
 	// Look up the function
-	fnStack := r.DefStacks["double"]
-	if len(fnStack) == 0 {
+	fnVal, ok := r.TopOfDefStack("double")
+	if !ok {
 		t.Fatal("double not defined")
 	}
-	fnVal := fnStack[len(fnStack)-1]
 
 	args := []Value{NewInteger(5)}
 	sig := MatchFnSig(fnVal, args)
@@ -4018,7 +4017,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
 	})
 
-	fnVal := r.DefStacks["inc"][len(r.DefStacks["inc"])-1]
+	fnVal, _ := r.TopOfDefStack("inc")
 
 	// Call with wrong type — MatchFnSig returns nil
 	sig := MatchFnSig(fnVal, []Value{NewString("hello")})

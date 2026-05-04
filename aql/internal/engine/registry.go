@@ -10,14 +10,24 @@ import (
 )
 
 // Registry maps function names to their definitions.
+//
+// The def-stack and type-stack registries are stored in unexported
+// fields. ALL access — read, write, snapshot, restore — goes through
+// the helper API in util.go (PushDef/PopDef/TopOfDefStack/HasDef/
+// DefStackDepth/SetDefStack/DefStack/DefNames/SnapshotDefDepths/
+// RestoreToDefDepths/TruncateDefStack/ReplaceDefTop/DeleteDef and the
+// matching Type-side helpers PushType/PopType/HasType/TopOfTypeStack/
+// TypeStackDepth/TypeNames/SnapshotTypeStacks/RestoreTypeStacks). New
+// callers must use those methods; direct field access is deliberately
+// disabled by the lowercase identifiers.
 type Registry struct {
-	DefStacks map[string][]Value // stacked bodies for def-defined words
-	// Types holds named type definitions installed by the `type` word —
+	defStacks map[string][]Value // stacked bodies for def-defined words
+	// types holds named type definitions installed by the `type` word —
 	// type literals, records, disjuncts, typed lists/maps, options,
 	// records, object types, dependent scalars (DepInteger, DepString,
 	// …), function-shape types (FnUndef), and predicate types
 	// (FnDef/Function used as type-defining functions). Type values
-	// live here, not in DefStacks, because they are NOT independently
+	// live here, not in defStacks, because they are NOT independently
 	// callable — a predicate type Bbd is only ever consulted via type
 	// operations (`def n:Bbd v`, `v is Bbd`, `inspect Bbd`), never
 	// invoked as a free-standing fn.
@@ -27,9 +37,8 @@ type Registry struct {
 	// stack empties the entry is removed from the map. This mirrors
 	// `def`'s shadowing semantics so users can introduce a temporary
 	// alias inside a sub-program and revert it without registry
-	// surgery. Lookups go through `TopOfTypeStack` /
-	// `ResolveTypedName` rather than touching the map directly.
-	Types             map[string][]Value                                 // name → stack of type values
+	// surgery.
+	types             map[string][]Value                                 // name → stack of type values
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -195,8 +204,8 @@ func NewRegistry() (*Registry, error) {
 	}
 
 	r := &Registry{
-		DefStacks:      make(map[string][]Value),
-		Types:          make(map[string][]Value),
+		defStacks:      make(map[string][]Value),
+		types:          make(map[string][]Value),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,
@@ -367,15 +376,15 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
 // is pushed.
 func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
-	stack := r.DefStacks[name]
 	// If the top of the stack is already a FnDefInfo, update it in place.
-	if len(stack) > 0 {
-		if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+	if top, ok := r.TopOfDefStack(name); ok {
+		if fnDef, ok := top.Data.(FnDefInfo); ok {
 			fnDef.Signatures = append(fnDef.Signatures, sigs...)
 			SortSignatures(fnDef.Signatures)
 			fnDef.ForwardPrecedence = forwardPrec
 			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-			stack[len(stack)-1].Data = fnDef
+			top.Data = fnDef
+			r.ReplaceDefTop(name, top)
 			return
 		}
 	}
@@ -387,7 +396,7 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-	r.DefStacks[name] = append(r.DefStacks[name], NewFnDef(fnDef))
+	r.PushDef(name, NewFnDef(fnDef))
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args needed
@@ -416,7 +425,7 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // recorded by the engine.stepWord paths (simple-value substitution
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
-	stack := r.DefStacks[name]
+	stack := r.DefStack(name)
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			return &fnDef
@@ -439,13 +448,14 @@ func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *Mat
 // DefStacks[name] to only the Fallback entries (if any). Used during
 // rebuild after overlap filtering or undef.
 func (r *Registry) clearSigsKeepFallback(name string) {
-	stack := r.DefStacks[name]
-	if len(stack) == 0 {
+	top, ok := r.TopOfDefStack(name)
+	if !ok {
 		return
 	}
-	if fnDef, ok := stack[len(stack)-1].Data.(FnDefInfo); ok {
+	if fnDef, ok := top.Data.(FnDefInfo); ok {
 		fnDef.Signatures = KeepFallback(fnDef.Signatures)
-		stack[len(stack)-1].Data = fnDef
+		top.Data = fnDef
+		r.ReplaceDefTop(name, top)
 	}
 }
 

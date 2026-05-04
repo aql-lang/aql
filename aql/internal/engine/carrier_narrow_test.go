@@ -19,7 +19,7 @@ func TestApplyComplementNarrowing(t *testing.T) {
 		NewTypeLiteral(TString),
 	})
 	disjunct.Carrier = true
-	r.DefStacks["x"] = []Value{disjunct}
+	r.PushDef("x", disjunct)
 
 	// Build a condition list simulating `x is Integer`.
 	cond := NewEvalList([]Value{
@@ -31,11 +31,10 @@ func TestApplyComplementNarrowing(t *testing.T) {
 	restore := applyComplementNarrowing(r, cond)
 	defer restore()
 
-	ds := r.DefStacks["x"]
-	if len(ds) < 2 {
-		t.Fatalf("expected pushed narrow entry, got stack depth %d", len(ds))
+	if d := r.DefStackDepth("x"); d < 2 {
+		t.Fatalf("expected pushed narrow entry, got stack depth %d", d)
 	}
-	top := ds[len(ds)-1]
+	top, _ := r.TopOfDefStack("x")
 	if !top.VType.Equal(TString) {
 		t.Errorf("expected top to narrow to String, got %s", top.VType)
 	}
@@ -52,7 +51,7 @@ func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 	}
 	r.Check.Mode = true
 
-	r.DefStacks["x"] = []Value{NewCarrier(TInteger)}
+	r.PushDef("x", NewCarrier(TInteger))
 
 	cond := NewEvalList([]Value{
 		NewWord("x"),
@@ -63,7 +62,7 @@ func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 	restore := applyComplementNarrowing(r, cond)
 	defer restore()
 
-	if len(r.DefStacks["x"]) != 1 {
-		t.Errorf("expected DefStack depth to remain 1, got %d", len(r.DefStacks["x"]))
+	if d := r.DefStackDepth("x"); d != 1 {
+		t.Errorf("expected DefStack depth to remain 1, got %d", d)
 	}
 }

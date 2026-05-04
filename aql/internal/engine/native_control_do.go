@@ -105,8 +105,8 @@ func RegisterDo(r *Registry) {
 					body := args[0]
 					if body.IsWord() {
 						w, _ := body.AsWord()
-						if ds := r.DefStacks[w.Name]; len(ds) > 0 {
-							body = ds[len(ds)-1]
+						if v, ok := r.TopOfDefStack(w.Name); ok {
+							body = v
 						}
 					}
 					stk := RunCarrierBody(r, body)

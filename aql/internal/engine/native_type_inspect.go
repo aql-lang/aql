@@ -15,8 +15,7 @@ func RegisterInspect(r *Registry) {
 		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
-		if stack := r.DefStacks[name]; len(stack) > 0 {
-			top := stack[len(stack)-1]
+		if top, ok := r.TopOfDefStack(name); ok {
 			if isTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
@@ -30,8 +29,7 @@ func RegisterInspect(r *Registry) {
 		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
-		if stack := r.DefStacks[name]; len(stack) > 0 {
-			top := stack[len(stack)-1]
+		if top, ok := r.TopOfDefStack(name); ok {
 			if isTypeBody(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
@@ -80,7 +78,7 @@ func buildInspection(r *Registry, name string) Value {
 	fn := r.Lookup(name)
 	if fn == nil {
 		// No registered function — check if it's a simple def (list body).
-		if len(r.DefStacks[name]) > 0 {
+		if r.HasDef(name) {
 			result.Set("kind", NewAtom("defined"))
 			result.Set("signatures", NewList(nil))
 			return newValue(TInspect, result)

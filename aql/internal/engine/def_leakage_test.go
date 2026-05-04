@@ -39,8 +39,8 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 	}
 
 	// Verify 'localvar' does NOT leak into DefStacks after fn returns.
-	if stack := r.DefStacks["localvar"]; len(stack) > 0 {
-		t.Errorf("localvar leaked into DefStacks: %v", stack)
+	if r.HasDef("localvar") {
+		t.Errorf("localvar leaked into DefStacks (depth=%d)", r.DefStackDepth("localvar"))
 	}
 }
 
@@ -84,8 +84,8 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	}
 
 	// 'op' must not leak. Verify DefStacks is clean.
-	if stack := r.DefStacks["op"]; len(stack) > 0 {
-		t.Errorf("'op' leaked into DefStacks after process returned: %v", stack)
+	if r.HasDef("op") {
+		t.Errorf("'op' leaked into DefStacks after process returned (depth=%d)", r.DefStackDepth("op"))
 	}
 
 	// A subsequent dot-notation access on a different map should work:
@@ -137,7 +137,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 		}
 	}
 
-	if stack := r.DefStacks["tmp"]; len(stack) > 0 {
-		t.Errorf("tmp leaked after %d calls: stack len = %d", 5, len(stack))
+	if d := r.DefStackDepth("tmp"); d > 0 {
+		t.Errorf("tmp leaked after %d calls: stack len = %d", 5, d)
 	}
 }

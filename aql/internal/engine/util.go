@@ -155,20 +155,187 @@ func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
 
 // TopOfDefStack returns the most recent binding for a name in the
 // def stack, or zero Value and false if the stack is empty / name
-// unbound. Replaces the `if ds := r.DefStacks[name]; len(ds) > 0
-// { top := ds[len(ds)-1]; … }` indexing dance that appears 16+
-// times across carrier.go, forloop.go, native_definition_def.go,
-// native_help.go, native_type_is.go, native_type_typedef.go,
-// native_control_do.go, and match.go.
+// unbound. The canonical read for "what does this def-name resolve
+// to right now"; all consumer code outside this file goes through
+// this helper rather than indexing r.defStacks directly.
 func (r *Registry) TopOfDefStack(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	ds := r.DefStacks[name]
+	ds := r.defStacks[name]
 	if len(ds) == 0 {
 		return Value{}, false
 	}
 	return ds[len(ds)-1], true
+}
+
+// PushDef pushes a new binding for name onto the def stack. Mirrors
+// PushType for the def side. Carrier merging, fn-body parameter
+// installation, fold/scan/each accumulators, and module imports all
+// route their stack writes through this helper.
+func (r *Registry) PushDef(name string, v Value) {
+	if r == nil {
+		return
+	}
+	r.defStacks[name] = append(r.defStacks[name], v)
+}
+
+// PopDef pops the top binding for name. Returns true if there was a
+// binding to pop. Mirrors PopType: when the stack becomes empty the
+// entry is removed from the map so HasDef returns false.
+func (r *Registry) PopDef(name string) bool {
+	if r == nil {
+		return false
+	}
+	ds := r.defStacks[name]
+	if len(ds) == 0 {
+		return false
+	}
+	if len(ds) == 1 {
+		delete(r.defStacks, name)
+		return true
+	}
+	r.defStacks[name] = ds[:len(ds)-1]
+	return true
+}
+
+// HasDef reports whether name has any active def binding.
+func (r *Registry) HasDef(name string) bool {
+	if r == nil {
+		return false
+	}
+	return len(r.defStacks[name]) > 0
+}
+
+// DefStackDepth returns the number of bindings currently stacked for
+// name (0 if unbound). Used by the carrier-merge and fn-body sandbox
+// paths that need to truncate back to a specific depth.
+func (r *Registry) DefStackDepth(name string) int {
+	if r == nil {
+		return 0
+	}
+	return len(r.defStacks[name])
+}
+
+// ReplaceDefTop overwrites the top binding for name with v. Returns
+// true if there was a binding to replace; false (and no-op) if the
+// stack was empty. Used by carrier-narrowing in `is` to re-bind the
+// active iteration variable to a narrowed type.
+func (r *Registry) ReplaceDefTop(name string, v Value) bool {
+	if r == nil {
+		return false
+	}
+	ds := r.defStacks[name]
+	if len(ds) == 0 {
+		return false
+	}
+	ds[len(ds)-1] = v
+	return true
+}
+
+// TruncateDefStack pops bindings from the top of name's stack until
+// its depth equals want. If want >= current depth, no-op. If the
+// stack becomes empty the entry is removed from the map.
+func (r *Registry) TruncateDefStack(name string, want int) {
+	if r == nil {
+		return
+	}
+	ds := r.defStacks[name]
+	if want < 0 {
+		want = 0
+	}
+	if want >= len(ds) {
+		return
+	}
+	if want == 0 {
+		delete(r.defStacks, name)
+		return
+	}
+	r.defStacks[name] = ds[:want]
+}
+
+// DeleteDef removes name's stack entirely. No-op if name is unbound.
+func (r *Registry) DeleteDef(name string) {
+	if r == nil {
+		return
+	}
+	delete(r.defStacks, name)
+}
+
+// SetDefStack replaces name's entire stack with stack. If stack is
+// empty the entry is removed from the map. Used by uninstallFnSigs
+// (removes a specific middle entry then writes back) and by the
+// def-handler's compile-then-replace path that filters out fallback
+// entries before re-installing.
+func (r *Registry) SetDefStack(name string, stack []Value) {
+	if r == nil {
+		return
+	}
+	if len(stack) == 0 {
+		delete(r.defStacks, name)
+		return
+	}
+	r.defStacks[name] = stack
+}
+
+// DefStack returns a read-only view of the current bindings stacked
+// for name. The returned slice aliases the registry's storage —
+// callers must not mutate it. Returns an empty slice if name is
+// unbound.
+func (r *Registry) DefStack(name string) []Value {
+	if r == nil {
+		return nil
+	}
+	return r.defStacks[name]
+}
+
+// DefNames returns a snapshot of all names currently bound in the
+// def stacks. The slice is owned by the caller — mutating it has no
+// effect on the registry. Iteration order is map-iteration order.
+func (r *Registry) DefNames() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, 0, len(r.defStacks))
+	for k := range r.defStacks {
+		names = append(names, k)
+	}
+	return names
+}
+
+// SnapshotDefDepths returns a per-name depth map covering every
+// currently-bound def name. Pair with RestoreToDefDepths to roll a
+// region of code back to the snapshotted state — additions and pushes
+// during the region are unwound in one call. Used by the fn-body
+// sandbox, predicate sandboxing, and the carrier-merge join points
+// that need to compare branch states against a common pre-state.
+func (r *Registry) SnapshotDefDepths() map[string]int {
+	if r == nil {
+		return nil
+	}
+	snap := make(map[string]int, len(r.defStacks))
+	for k, v := range r.defStacks {
+		snap[k] = len(v)
+	}
+	return snap
+}
+
+// RestoreToDefDepths rolls every def stack back to the depths
+// recorded in snap (typically obtained from SnapshotDefDepths). Names
+// that are present in the registry but absent from snap are deleted
+// entirely. Names whose recorded depth is zero are also deleted.
+func (r *Registry) RestoreToDefDepths(snap map[string]int) {
+	if r == nil {
+		return
+	}
+	for name := range r.defStacks {
+		want, ok := snap[name]
+		if !ok {
+			delete(r.defStacks, name)
+			continue
+		}
+		r.TruncateDefStack(name, want)
+	}
 }
 
 // TopOfTypeStack returns the most recent binding for a type name in
@@ -178,7 +345,7 @@ func (r *Registry) TopOfTypeStack(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	ts := r.Types[name]
+	ts := r.types[name]
 	if len(ts) == 0 {
 		return Value{}, false
 	}
@@ -192,7 +359,7 @@ func (r *Registry) PushType(name string, v Value) {
 	if r == nil {
 		return
 	}
-	r.Types[name] = append(r.Types[name], v)
+	r.types[name] = append(r.types[name], v)
 }
 
 // PopType pops the top binding for name. Returns true if there was
@@ -202,15 +369,15 @@ func (r *Registry) PopType(name string) bool {
 	if r == nil {
 		return false
 	}
-	ts := r.Types[name]
+	ts := r.types[name]
 	if len(ts) == 0 {
 		return false
 	}
 	if len(ts) == 1 {
-		delete(r.Types, name)
+		delete(r.types, name)
 		return true
 	}
-	r.Types[name] = ts[:len(ts)-1]
+	r.types[name] = ts[:len(ts)-1]
 	return true
 }
 
@@ -219,12 +386,62 @@ func (r *Registry) HasType(name string) bool {
 	if r == nil {
 		return false
 	}
-	return len(r.Types[name]) > 0
+	return len(r.types[name]) > 0
+}
+
+// TypeStackDepth returns the number of bindings currently stacked for
+// type name (0 if unbound).
+func (r *Registry) TypeStackDepth(name string) int {
+	if r == nil {
+		return 0
+	}
+	return len(r.types[name])
+}
+
+// TypeNames returns a snapshot of all names currently bound in the
+// type stacks. Mirrors DefNames.
+func (r *Registry) TypeNames() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, 0, len(r.types))
+	for k := range r.types {
+		names = append(names, k)
+	}
+	return names
+}
+
+// SnapshotTypeStacks returns a deep copy of the type-stack registry.
+// Pair with RestoreTypeStacks to roll back arbitrary mutations
+// (push, pop, replace) — depth-only snapshots aren't sufficient for
+// callers like the predicate sandbox where the body may pop a stack
+// and then re-push a different value.
+func (r *Registry) SnapshotTypeStacks() map[string][]Value {
+	if r == nil {
+		return nil
+	}
+	dup := make(map[string][]Value, len(r.types))
+	for k, stack := range r.types {
+		s := make([]Value, len(stack))
+		copy(s, stack)
+		dup[k] = s
+	}
+	return dup
+}
+
+// RestoreTypeStacks replaces the entire type-stack registry with
+// snap. The caller is responsible for snap being a deep copy (see
+// SnapshotTypeStacks); RestoreTypeStacks does not duplicate again.
+func (r *Registry) RestoreTypeStacks(snap map[string][]Value) {
+	if r == nil {
+		return
+	}
+	r.types = snap
 }
 
 // ResolveTypedName resolves a name to its type value through the
 // type-resolution chain used by the typed-def handler and `is`:
-// r.Types first (the dedicated type registry), then DefStacks (legacy
+// r.types first (the dedicated type registry), then DefStacks (legacy
 // path for record/object/DepScalar definitions). Returns the resolved
 // value and true if found; zero Value and false otherwise.
 //
@@ -244,11 +461,11 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 // concrete type value, capturing the source name when the input was
 // a Word. Returns the resolved value, the source name (empty if v
 // wasn't a Word), and ok=false only when v WAS a Word but couldn't
-// be resolved through r.Types or DefStacks.
+// be resolved through r.types or DefStacks.
 //
 // Replaces the
 // `if v.IsWord() { w, _ := v.AsWord(); typeName = w.Name; if tv, ok :=
-// r.Types[w.Name]; ok { v = tv } else if ds := r.DefStacks[w.Name];
+// r.types[w.Name]; ok { v = tv } else if ds := r.defStacks[w.Name];
 // len(ds) > 0 { v = ds[len(ds)-1] } }` pattern in `defTypedHandler`,
 // `is`, `inspect`, and `typeof` — extracting the name capture so
 // downstream error messages can surface "type Bbd" rather than the
@@ -286,10 +503,10 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 //
 // Sandboxing: predicate bodies are user-controlled fn bodies that
 // could otherwise mutate registry state during a unify check.
-// runPredicateSandboxed snapshots r.Types and r.ctxStack before the
+// runPredicateSandboxed snapshots r.types and r.ctxStack before the
 // CallAQL invocation and restores them on return — additions to
-// r.Types via `type Foo …` and pushes onto the context stack are
-// rolled back. r.DefStacks is already protected by CallAQL's own
+// r.types via `type Foo …` and pushes onto the context stack are
+// rolled back. r.defStacks is already protected by CallAQL's own
 // snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
 	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
@@ -309,7 +526,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return candidate, true, nil
 	}
 	// Sandbox the call so a mischievous predicate body can't mutate
-	// r.Types or the context stack out from under the surrounding
+	// r.types or the context stack out from under the surrounding
 	// program.
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
@@ -342,19 +559,10 @@ func snapshotPredicateState(r *Registry) predicateSandbox {
 	if r == nil {
 		return predicateSandbox{}
 	}
-	// Deep-copy each type stack so a predicate body that calls
-	// PushType / PopType can't mutate our snapshot via slice
-	// aliasing.
-	typesCopy := make(map[string][]Value, len(r.Types))
-	for k, stack := range r.Types {
-		dup := make([]Value, len(stack))
-		copy(dup, stack)
-		typesCopy[k] = dup
-	}
 	ctxCopy := make([]*StoreInstanceInfo, len(r.ctxStack))
 	copy(ctxCopy, r.ctxStack)
 	return predicateSandbox{
-		types:    typesCopy,
+		types:    r.SnapshotTypeStacks(),
 		ctxStack: ctxCopy,
 		check:    r.Check,
 	}
@@ -364,7 +572,7 @@ func restorePredicateState(r *Registry, s predicateSandbox) {
 	if r == nil {
 		return
 	}
-	r.Types = s.types
+	r.RestoreTypeStacks(s.types)
 	r.ctxStack = s.ctxStack
 	r.Check = s.check
 }
