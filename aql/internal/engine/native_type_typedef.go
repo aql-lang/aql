@@ -13,22 +13,31 @@ func RegisterTypeDef(r *Registry) {
 		if !IsCapitalisedName(name) {
 			return fmt.Errorf("type %s: type names must start with a capital letter", name)
 		}
-		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
-			return err
+		// Skip the known-parts conflict check when re-binding a name
+		// that is already an active type — re-binding our own name
+		// is shadowing, not a conflict. KnownTypeParts records every
+		// part name we've ever installed and never shrinks; the
+		// per-stack push handles the actual duplicate.
+		if !r.HasType(name) {
+			if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
+				return err
+			}
 		}
 		// Refuse a type definition whose name already names a callable
 		// or a def'd value. Type and def share a single source-level
 		// namespace (the same Word resolves both), so allowing both
 		// to bind the same name would silently change behaviour
-		// depending on context.
+		// depending on context. Type-vs-type re-binding IS allowed —
+		// it shadows the previous type; `untype Foo` reverts.
 		if r.Lookup(name) != nil {
 			return fmt.Errorf("type %s: name clash — already a registered function", name)
 		}
-		if len(r.DefStacks[name]) > 0 {
+		if len(r.DefStacks[name]) > 0 && !r.HasType(name) {
+			// DefStacks may also hold the type's mirror (legacy
+			// installDef path). Distinguish "user-defined value with
+			// same name" (forbid) from "this same type's mirror"
+			// (allow shadowing).
 			return fmt.Errorf("type %s: name clash — already a def'd value", name)
-		}
-		if _, ok := r.Types[name]; ok {
-			return fmt.Errorf("type %s: already defined as a type", name)
 		}
 		// Type-defining functions (FnUndef = structural sig pattern,
 		// FnDef/Function = predicate) live ONLY in r.Types: they are
@@ -43,7 +52,7 @@ func RegisterTypeDef(r *Registry) {
 		// auto-eval lookup. They're also mirrored into r.Types so
 		// type ops can resolve every named type uniformly.
 		if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) || body.VType.Equal(TFnUndef) {
-			r.Types[name] = body
+			r.PushType(name, body)
 		} else {
 			installDef(r, name, body)
 			// installDef may rewrite ObjectType bodies to inject the
@@ -51,12 +60,14 @@ func RegisterTypeDef(r *Registry) {
 			// canonical value back from DefStacks so r.Types always
 			// holds what type-operation lookups should see.
 			if ds := r.DefStacks[name]; len(ds) > 0 {
-				r.Types[name] = ds[len(ds)-1]
+				r.PushType(name, ds[len(ds)-1])
 			} else {
-				r.Types[name] = body
+				r.PushType(name, body)
 			}
 		}
-		// Register the new name parts as known.
+		// Register the new name parts as known. (Idempotent — already-
+		// known parts stay known; this matters only for first-time
+		// bindings of fresh names.)
 		for _, p := range strings.Split(name, "/") {
 			r.KnownTypeParts[p] = true
 		}
@@ -88,6 +99,59 @@ func RegisterTypeDef(r *Registry) {
 				Args:           []Type{TAtom, TAny},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        typeHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
+			},
+		},
+	})
+
+	registerUntype(r)
+}
+
+// registerUntype installs `untype name` — the type counterpart of
+// `undef`. Pops the most recent binding for the named type so a
+// shadowed previous binding (if any) becomes active again, or the
+// name becomes unbound if the stack empties.
+//
+// Sig is [TAtom/q] (forward, /q so a bare word is captured as the
+// name without resolving to its type value first). Mirrors `undef`'s
+// shape. The stack-only legacy mirror in DefStacks is left alone —
+// runtime DepScalar / ObjectType resolution would otherwise see a
+// stale binding; the type-stack pop is sufficient because every
+// type-resolution site goes through TopOfTypeStack first.
+func registerUntype(r *Registry) {
+	untypeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		name := defName(args[0])
+		if !IsCapitalisedName(name) {
+			return nil, fmt.Errorf("untype %s: type names must start with a capital letter", name)
+		}
+		if !r.PopType(name) {
+			return nil, fmt.Errorf("untype %s: no such type binding", name)
+		}
+		// Also pop the legacy DefStacks mirror so resolution paths
+		// that still consult DefStacks (records / ObjectType / DepScalar
+		// before the migration completes) don't see the popped entry.
+		// PushType installs both for non-fn types via installDef → the
+		// type stack and DefStacks tops are kept in lock-step.
+		if len(r.DefStacks[name]) > 0 {
+			uninstallDef(r, name)
+		}
+		return nil, nil
+	}
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "untype",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:           []Type{TString},
+				Handler:        untypeHandler,
+				Returns:        []Type{},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        untypeHandler,
 				Returns:        []Type{},
 				RunInCheckMode: true,
 			},

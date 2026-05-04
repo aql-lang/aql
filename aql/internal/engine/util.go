@@ -171,6 +171,57 @@ func (r *Registry) TopOfDefStack(name string) (Value, bool) {
 	return ds[len(ds)-1], true
 }
 
+// TopOfTypeStack returns the most recent binding for a type name in
+// the type stack, or zero Value and false if the stack is empty /
+// name unbound. The type counterpart of TopOfDefStack.
+func (r *Registry) TopOfTypeStack(name string) (Value, bool) {
+	if r == nil {
+		return Value{}, false
+	}
+	ts := r.Types[name]
+	if len(ts) == 0 {
+		return Value{}, false
+	}
+	return ts[len(ts)-1], true
+}
+
+// PushType pushes a new binding for name onto the type stack. The
+// previous top (if any) becomes shadowed and is restored when an
+// `untype name` pops the new entry.
+func (r *Registry) PushType(name string, v Value) {
+	if r == nil {
+		return
+	}
+	r.Types[name] = append(r.Types[name], v)
+}
+
+// PopType pops the top binding for name. Returns true if there was
+// a binding to pop. If the stack becomes empty the entry is
+// removed from the map so HasType returns false.
+func (r *Registry) PopType(name string) bool {
+	if r == nil {
+		return false
+	}
+	ts := r.Types[name]
+	if len(ts) == 0 {
+		return false
+	}
+	if len(ts) == 1 {
+		delete(r.Types, name)
+		return true
+	}
+	r.Types[name] = ts[:len(ts)-1]
+	return true
+}
+
+// HasType reports whether name has any active type binding.
+func (r *Registry) HasType(name string) bool {
+	if r == nil {
+		return false
+	}
+	return len(r.Types[name]) > 0
+}
+
 // ResolveTypedName resolves a name to its type value through the
 // type-resolution chain used by the typed-def handler and `is`:
 // r.Types first (the dedicated type registry), then DefStacks (legacy
@@ -183,7 +234,7 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	if tv, ok := r.Types[name]; ok {
+	if tv, ok := r.TopOfTypeStack(name); ok {
 		return tv, true
 	}
 	return r.TopOfDefStack(name)
@@ -282,7 +333,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 // per-call diagnostics or step counters set during the predicate
 // don't leak.
 type predicateSandbox struct {
-	types    map[string]Value
+	types    map[string][]Value
 	ctxStack []*StoreInstanceInfo
 	check    CheckState
 }
@@ -291,9 +342,14 @@ func snapshotPredicateState(r *Registry) predicateSandbox {
 	if r == nil {
 		return predicateSandbox{}
 	}
-	typesCopy := make(map[string]Value, len(r.Types))
-	for k, v := range r.Types {
-		typesCopy[k] = v
+	// Deep-copy each type stack so a predicate body that calls
+	// PushType / PopType can't mutate our snapshot via slice
+	// aliasing.
+	typesCopy := make(map[string][]Value, len(r.Types))
+	for k, stack := range r.Types {
+		dup := make([]Value, len(stack))
+		copy(dup, stack)
+		typesCopy[k] = dup
 	}
 	ctxCopy := make([]*StoreInstanceInfo, len(r.ctxStack))
 	copy(ctxCopy, r.ctxStack)

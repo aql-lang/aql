@@ -21,7 +21,15 @@ type Registry struct {
 	// callable — a predicate type Bbd is only ever consulted via type
 	// operations (`def n:Bbd v`, `v is Bbd`, `inspect Bbd`), never
 	// invoked as a free-standing fn.
-	Types             map[string]Value                                   // name → type value
+	//
+	// Stacked: each name maps to a stack of definitions. `type Foo X`
+	// pushes; `untype Foo` pops. The top is the active type. Once a
+	// stack empties the entry is removed from the map. This mirrors
+	// `def`'s shadowing semantics so users can introduce a temporary
+	// alias inside a sub-program and revert it without registry
+	// surgery. Lookups go through `TopOfTypeStack` /
+	// `ResolveTypedName` rather than touching the map directly.
+	Types             map[string][]Value                                 // name → stack of type values
 	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
 	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
@@ -188,7 +196,7 @@ func NewRegistry() (*Registry, error) {
 
 	r := &Registry{
 		DefStacks:      make(map[string][]Value),
-		Types:          make(map[string]Value),
+		Types:          make(map[string][]Value),
 		FileOps:        ops,
 		Formats:        formats,
 		Output:         os.Stdout,

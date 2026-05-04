@@ -12,7 +12,7 @@ func RegisterInspect(r *Registry) {
 		// "isTypeBody(DefStacks top)" check; that's now bypassed
 		// because r.Types is the single source of truth for named
 		// types and native fns are NOT in it.
-		if tv, ok := r.Types[name]; ok {
+		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
 		if stack := r.DefStacks[name]; len(stack) > 0 {
@@ -27,7 +27,7 @@ func RegisterInspect(r *Registry) {
 	// Atom (now Scalar/Atom): inspect by name, same as words.
 	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name, _ := args[0].AsAtom()
-		if tv, ok := r.Types[name]; ok {
+		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
 		if stack := r.DefStacks[name]; len(stack) > 0 {

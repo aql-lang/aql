@@ -306,15 +306,23 @@ a deferrable extension.
 
 ## 5. `r.Types` registry (the post-namespace-split state)
 
-### 5.1 No shadowing
+### 5.1 No shadowing — RESOLVED
 
-`r.Types[name] = body` overwrites; `def` has stack semantics
-(`DefStacks[name] []Value`), `type` doesn't. Defensible if types are
-truly singletons (the case rule encourages that) but inconsistent —
-and there's no way to scope a temporary type for a sub-program.
+`r.Types` is now `map[string][]Value` — a stack per name, mirroring
+`DefStacks`. `type Foo X; type Foo Y` pushes Y on top so subsequent
+uses see Y; `untype Foo` (see §5.3) pops Y and X becomes active
+again. Once the stack empties, the entry is removed from the map.
 
-Status: not addressed. Defer until sub-program-scoped types are a
-real use case.
+stepWord consults `r.TopOfTypeStack` BEFORE the DefStacks
+substitution path, so a shadowed-then-revealed type binding always
+wins over the legacy installDef mirror that lives in DefStacks for
+non-fn types. Helpers (`PushType`, `PopType`, `HasType`,
+`TopOfTypeStack`) live in `util.go`; ResolveTypedName /
+ResolveTypedNameValue use them.
+
+Tests in `aql/test/type_shadow_test.go` cover shadow / pop / pop-to-
+empty / untype-unbound / case-rule / predicate-over-literal /
+DepScalar / deep-stack scenarios.
 
 ### 5.2 Double-write for non-fn types
 
@@ -328,12 +336,19 @@ truth that desync if anyone forgets the mirror.
 Status: not addressed. Medium-invasive structural fix; touches many
 call sites. Worth doing but not on the immediate slice.
 
-### 5.3 No `untype Foo`
+### 5.3 No `untype Foo` — RESOLVED
 
-No removal analogue to `undef foo`. To re-bind a type you start a
-new registry. Tests can't easily isolate.
+`untype name` (`internal/engine/native_type_typedef.go`) pops the
+most recent type-stack binding for `name`. If a previous binding
+existed it becomes active again; otherwise the name becomes
+unbound. Sig is `[TString]` and `[TAtom/q]` mirroring `undef`'s
+shape. Capital-letter rule applies (lowercase names are rejected
+the same way as `type`). For non-fn types whose installation
+mirrors into DefStacks, the matching DefStacks entry is also
+popped via `uninstallDef` so subsequent resolution paths stay in
+lock-step with the type stack.
 
-Status: not addressed. Trivial fix; low immediate value.
+Tests in `aql/test/type_shadow_test.go`.
 
 
 ## 6. Dispatch / planning gaps
@@ -560,9 +575,9 @@ For at-a-glance status:
 | §4.1  | Variance in `fnSigMatchesSpec`       | RESOLVED |
 | §4.2  | `FnParam.Pattern` ignored            | RESOLVED |
 | §4.3  | `Optional`/`BarrierPos` not checked  | PARTIAL  |
-| §5.1  | Type shadowing                       | open     |
+| §5.1  | Type shadowing                       | RESOLVED |
 | §5.2  | Double-write for non-fn types        | open     |
-| §5.3  | `untype Foo`                         | open     |
+| §5.3  | `untype Foo`                         | RESOLVED |
 | §6.1  | Predicate-type CheckMode analysis    | PARTIAL  |
 | §6.2  | `sigTypeMatches` carrier rule docs   | open     |
 | §6.3  | Forward planner narrowing            | open     |

@@ -430,7 +430,7 @@ func TestTopOfDefStack_NilRegistry(t *testing.T) {
 func TestResolveTypedName_TypesPriority(t *testing.T) {
 	// r.Types should win over DefStacks for the same name.
 	r, _ := NewRegistry()
-	r.Types["X"] = NewString("from-types")
+	r.PushType("X", NewString("from-types"))
 	r.DefStacks["X"] = []Value{NewString("from-defstacks")}
 	v, ok := r.ResolveTypedName("X")
 	if !ok {
@@ -568,7 +568,7 @@ func TestResolveTypedNameValue_NotAWord(t *testing.T) {
 
 func TestResolveTypedNameValue_WordResolved(t *testing.T) {
 	r, _ := NewRegistry()
-	r.Types["Bbd"] = NewString("from-types")
+	r.PushType("Bbd", NewString("from-types"))
 	out, name, ok := r.ResolveTypedNameValue(NewWord("Bbd"))
 	if !ok || name != "Bbd" {
 		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)

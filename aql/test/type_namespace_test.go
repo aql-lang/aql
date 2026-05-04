@@ -57,12 +57,17 @@ func TestNameConfusion_TypeOverNativeFn_CaseRule(t *testing.T) {
 }
 
 // Re-defining the same TYPE is also rejected (no shadow stack — type
-// names are intended to be singletons in a given registry). The
-// existing ValidateTypeNameParts check fires first and reports the
-// conflict in its own wording.
-func TestNameConfusion_TypeRedefinition(t *testing.T) {
-	expectError(t, `type Foo Integer
-type Foo String`, "conflicts with an existing type name")
+// Re-defining the same TYPE is allowed — type bindings stack like
+// def, and `untype Foo` reverts to the previous binding. The
+// shadow-and-revert tests live in aql/test/type_shadow_test.go;
+// here we only pin that the second `type Foo …` does NOT error.
+func TestNameConfusion_TypeRedefinitionShadows(t *testing.T) {
+	got := runOne(t, `type Foo Integer
+type Foo String
+"hello" is Foo`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("after shadow, \"hello\" is Foo = %v, want [\"true\"] (Foo now String)", got)
+	}
 }
 
 // --- `is` evaluates predicate types ---

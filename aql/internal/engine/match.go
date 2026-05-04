@@ -162,7 +162,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// will actually push at runtime). Predicate types
 					// arrive as TFnDef/TFunction values; plan against
 					// that VType for sig matching.
-					if tv, ok := e.registry.Types[ww.Name]; ok {
+					if tv, ok := e.registry.TopOfTypeStack(ww.Name); ok {
 						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++

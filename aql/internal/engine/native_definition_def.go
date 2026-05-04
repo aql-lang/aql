@@ -58,7 +58,7 @@ func RegisterDef(r *Registry) {
 		// Refuse a def whose name is already a registered TYPE — type
 		// and def share the same Word namespace so a single name
 		// must mean exactly one thing.
-		if _, ok := r.Types[name]; ok {
+		if r.HasType(name) {
 			return nil, fmt.Errorf("def %s: name clash — already a type", name)
 		}
 		installDef(r, name, body, stackOnly)
@@ -80,7 +80,7 @@ func RegisterDef(r *Registry) {
 		if IsCapitalisedName(name) {
 			return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
 		}
-		if _, ok := r.Types[name]; ok {
+		if r.HasType(name) {
 			return nil, fmt.Errorf("def %s: name clash — already a type", name)
 		}
 		constraint, _ := nameMap.Get(name)

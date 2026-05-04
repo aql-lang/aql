@@ -3378,15 +3378,61 @@ across `type` / `def` / native-fn registration is rejected at
 definition time.
 
 
+## Type Shadowing and `untype`
+
+Type bindings stack just like `def` bindings. `type Foo X; type Foo
+Y` pushes Y on top so subsequent uses see Y; `untype Foo` pops Y
+and X becomes active again. Once the stack empties, the name is
+unbound and a subsequent reference errors.
+
+```
+type Foo Integer
+42 is Foo                    → true
+type Foo String              # shadow
+"hi" is Foo                  → true
+42 is Foo                    → false
+untype Foo                   # pop the shadow
+42 is Foo                    → true
+untype Foo                   # pop the original
+42 is Foo                    → error: undefined word Foo
+```
+
+`untype` accepts the same name forms as `type` (a quoted string or a
+bare capitalised word). Lowercase names are rejected — the
+case rule applies the same way `type` enforces it.
+
+The shadow / pop pattern works uniformly across every kind of type
+body: literals, records, disjuncts, typed lists/maps, object types,
+dependent scalars, fn-shape types, and predicate types. A predicate
+shadowing a literal swaps the membership semantics for the duration
+of the shadow.
+
+
 ## Type-Registry Internals
 
-User-defined types live in `Registry.Types`, a separate map from
-`Registry.DefStacks` (which holds value defs and fn-defined words).
-Predicate-type and structural-fn-shape types are stored *only* in
-`Registry.Types` so they're not callable as ordinary words.
-Dependent and record types still pass through both maps for legacy
-reasons. Word resolution checks `r.Types` first when the call site
-is a typed-def constraint slot, then falls back to `DefStacks`.
+User-defined types live in `Registry.Types`, a per-name stack
+(`map[string][]Value`) separate from `Registry.DefStacks` (which
+holds value defs and fn-defined words). Predicate-type and
+structural-fn-shape types are stored *only* in `Registry.Types`
+so they're not callable as ordinary words. Dependent and record
+types still mirror into `DefStacks` for legacy reasons; `untype`
+keeps both stacks in lock-step.
+
+Word resolution consults `r.Types` first (top of stack), then the
+DefStacks substitution path, then registered native fns, then the
+type-name lookup. The shadow ordering ensures a `type Foo …`
+re-binding always wins over a stale DefStacks mirror.
+
+Helpers on `Registry` for working with the type stack:
+
+- `r.PushType(name, value)` — install a new binding (shadows
+  previous).
+- `r.PopType(name)` — remove the top binding, return true on
+  success.
+- `r.TopOfTypeStack(name)` — fetch the active binding.
+- `r.HasType(name)` — does the name have any active binding.
+- `r.ResolveTypedName(name)` — type-stack first, DefStacks
+  fallback. Used by typed-def, `is`, and other type-aware sites.
 
 
 ## Error Codes

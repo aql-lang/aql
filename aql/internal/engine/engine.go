@@ -648,6 +648,24 @@ func (e *Engine) stepWord(val Value) error {
 		// Not a def fn — fall through to normal execution.
 	}
 
+	// Named user-defined types take priority over DefStacks: type
+	// bindings stack independently from def bindings, and a shadow-
+	// then-reveal pattern (`type Foo Integer; type Foo fn […]`)
+	// would otherwise see the legacy installDef mirror in DefStacks
+	// instead of the active fn-type binding. Pushed with Quoted=true
+	// for fn-shape types so execFnDefLiteral treats them as data.
+	if e.registry != nil {
+		if tv, ok := e.registry.TopOfTypeStack(w.Name); ok {
+			push := tv
+			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
+				push.Quoted = true
+			}
+			push.Pos = val.Pos
+			e.stack[e.pointer] = push
+			return nil
+		}
+	}
+
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
@@ -698,22 +716,9 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil
 		}
-		// Named user-defined types live in r.Types (separate from
-		// DefStacks) so they're not independently callable. Pushing
-		// the type value with Quoted=true is what keeps a predicate
-		// type from auto-executing — execFnDefLiteral honours the
-		// Quoted flag and treats the FnDef as data, not a call site.
-		if e.registry != nil {
-			if tv, ok := e.registry.Types[w.Name]; ok {
-				push := tv
-				if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
-					push.Quoted = true
-				}
-				push.Pos = val.Pos
-				e.stack[e.pointer] = push
-				return nil
-			}
-		}
+		// (r.Types resolution lives in the priority block at the
+		// top of stepWord — before DefStacks substitution — so a
+		// named user-defined type is never reached here.)
 		// Strict rule: an undefined word at the pointer is an error.
 		// Names that need to be values must be quoted explicitly (`quote
 		// foo` or a literal atom) or land at a /q-quoted argument
