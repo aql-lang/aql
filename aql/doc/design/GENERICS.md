@@ -357,7 +357,153 @@ permitted. Substitution memoises on `(schema, normalised args)` to
 avoid loops. F-bounds work because of §7.3: the placeholder for `T`
 is in scope while the constraint is evaluated.
 
-## 8. Implementation plan
+## 8. Case study: the `aql:decision` module
+
+`internal/nativemod/decision.go` is a DMN-style decision module
+(decision tables and decision trees) implemented in pure AQL. It is
+a good case study because it has three independent shapes of
+`Any`-punt that generics resolve in distinct ways.
+
+### 8.1 The result-type punt
+
+Every record that carries a decision result types it as `Any` (or
+`Map`):
+
+```aql
+type Rule       record [when:Map  then:Map]
+type DTable     record [kind:String  rules:List  hit-policy:String]
+type DTree      record [kind:String  root:Atom  nodes:List]
+type LeafNode   record [id:Atom  kind:String  result:Any]
+def decide fn [[model:Map  input:Map] [Any] [...]]
+```
+
+A table that returns `{premium: 1.5}` records and a table that
+returns `Integer` codes have the same static type. The carrier
+checker cannot refine the result of `decide` past `Any`, so every
+caller has to dynamic-check.
+
+Threading a single result parameter `R` through the schema fixes it:
+
+```aql
+type Rule<R>     record [when:Pred  then:R]
+type DTable<R>   record [kind:String  rules:[:Rule<R>]  hit-policy:HitPolicy]
+type LeafNode<R> record [id:Atom  kind:String  result:R]
+type DTree<R>    record [kind:String  root:Atom  nodes:[:(BranchNode tor LeafNode<R>)]]
+
+# Combined with the Result<T, E> shape from §5.5:
+def decide fn [[model:(DTable<R> tor DTree<R>)  input:Map]
+               [Result<R, DecisionError>] [...]]
+```
+
+Or, in the canonical form:
+
+```aql
+type Rule gen [R] record [when:Pred  then:R]
+def decide gen [R] fn [
+  [model:((DTable apply [R]) tor (DTree apply [R]))  input:Map]
+  [Result apply [R DecisionError]]
+  [...]
+]
+```
+
+This is the highest-leverage change in the module — it propagates
+precision into every call site of `decide`.
+
+### 8.2 The comparison-operand punt
+
+`apply-op` is fully untyped:
+
+```aql
+def apply-op fn [[rhs:Any  op:String  lhs:Any] [Boolean] [...]]
+```
+
+`"hello" lt 5` passes the static check today because both operands
+satisfy `Any`. A bounded type parameter rejects it:
+
+```aql
+type Comparable Integer tor Decimal tor String
+
+def apply-op<T extends Comparable> fn [
+  [rhs:T  op:String  lhs:T] [Boolean] [...]
+]
+```
+
+The constraint reuses the existing type algebra — no new mechanism.
+This is the cheapest cleanup in the module: one signature change,
+one new type alias.
+
+### 8.3 The recursive-shape punt
+
+`Pred` flattens three structurally distinct cases into one record
+with `children:Any`:
+
+```aql
+type Pred record [kind:String  op:String  children:Any]
+```
+
+`children` is a list of sub-predicates for `all`/`any` and a single
+sub-predicate for `not`. Generics don't directly fix this — the
+right shape is a tagged union — but they unblock the cleaner
+formulation:
+
+```aql
+type AllPred  record [kind:String  op:String  children:[:Pred]]
+type AnyPred  record [kind:String  op:String  children:[:Pred]]
+type NotPred  record [kind:String  op:String  children:Pred]
+type CondPred record [field:Atom    op:String  value:Any]
+type Pred AllPred tor AnyPred tor NotPred tor CondPred
+```
+
+Builder functions then return the precise variant:
+
+```aql
+def all-of fn [[children:[:Pred]] [AllPred] [
+  make AllPred {kind:"group" op:"all" children:children}
+]]
+```
+
+Generics participate here for `Pred` carrying a phantom result
+parameter only if the predicate body branches on the same `R` as the
+enclosing rule — not the case here, so this part of the module
+benefits from the disjunct refactor more than from generics per se.
+
+### 8.4 Where generics don't help
+
+- **`Cond.value:Any`** is genuinely heterogeneous per condition: each
+  `Cond` compares a different input field, so the value type varies
+  row-by-row. This is a path-dependent / dependent-record problem,
+  not a parametric one. Best left as `Any` until AQL grows a
+  dependent-record story.
+- **The `collect` hit policy returns `[:R]`, not `R`.** Different
+  hit policies have different return-type variants, which
+  TypeScript expresses with conditional types — explicitly
+  out-of-scope (§3 non-goals). Workaround: split `decide` into
+  `decide-first<R>`, `decide-collect<R>`, etc., each with its own
+  return type. Each is parametric in `R`; the dispatch on
+  hit-policy moves from runtime to the type level.
+- **Stringly-typed field reads.** Most accesses go through
+  `(map get "field")` rather than typed-record dot access. Refining
+  types end-to-end requires also tightening those reads to dot
+  accessors against the now-precise record types. This is a
+  co-requisite refactor, not an extra cost — the current dynamic
+  accesses are a symptom of not having generics.
+
+### 8.5 Order of impact
+
+If only one piece landed, **§8.1 (`decide<R>` returning
+`Result<R, DecisionError>`)** is the highest-leverage change because
+it propagates precision into every caller. **§8.2 (bounded
+`apply-op`)** is the cheapest cleanup. **§8.3 (Pred disjunct)** is
+nice-to-have and largely about disjuncts rather than generics.
+
+This case study suggests a useful diagnostic for adopting generics
+elsewhere in the codebase: look for fields, parameters, or returns
+typed `Any` or `Map` that are *the same shape across all call
+sites of the surrounding function* — those are the parametric
+ones. `Any`s that genuinely vary per call site need a different
+tool (disjuncts, dependent records, or just leaving them as `Any`).
+
+## 9. Implementation plan
 
 ### Phase 0 — design lock-down
 
@@ -424,7 +570,7 @@ the sugar rewrite rules.
   the sugar/canonical correspondence.
 - A new `GENERICS.md` user-facing how-to in `aql/doc/`.
 
-## 9. Open questions
+## 10. Open questions
 
 1. **Default substitution timing.** Eagerly at parse time (simpler,
    no late binding) or lazily at `apply` time (allows defaults to
@@ -464,7 +610,7 @@ the sugar rewrite rules.
    undecidable in general. Document that predicate bodies are
    typed at instantiation time, not at declaration.
 
-## 10. Risk register
+## 11. Risk register
 
 - **Sugar-canonical drift.** The two surfaces must stay in lockstep.
   Mitigation: every sugar test in Phase 3 is a pair of programs (one
@@ -481,7 +627,7 @@ the sugar rewrite rules.
 - **Documentation drift.** Five doc files mention the type system.
   Phase 6 must touch all of them in one PR.
 
-## 11. Decision summary
+## 12. Decision summary
 
 - **Canonical form:** four engine words — `gen` (declare params),
   `extends` (constrain), `default` (default value), `apply`
