@@ -666,7 +666,164 @@ widening.
 Roughly 400-500 lines, concentrated in three new files plus targeted
 edits to `carrier.go`, `engine.go`, and `check.go`.
 
-## 10. Implementation plan
+## 10. Static compilation
+
+The proposed AQL bytecode compiler (`docs/reports/aql-bytecode-report.md`)
+is "the carrier checker with a recording side effect" — every dispatch
+decision the checker makes statically becomes a `CALL_NATIVE sig_id`
+in the bytecode, and dynamic corners fall back to the interpreter over
+the same stack representation. Generics fit this thesis cleanly,
+adding one new compile-time concept (monomorphization) that the
+existing fn-summary memo gives us almost for free.
+
+### 10.1 Bottom line
+
+**Generics are entirely a compile-time feature. Runtime cost is zero.**
+Every `gen` / `extends` / `default` / `apply` call is `RunInCheckMode`
+— they execute during the carrier pass to install schemas and produce
+instantiated type literals, but they emit no bytecode. By the time the
+compiler runs the same pass with the recording side effect on, every
+parameter has been substituted; the compiled program contains only
+concrete operations on concrete types. Same story as Rust generics or
+C++ templates.
+
+### 10.2 What each new word emits
+
+| Word | Compile-time effect | Bytecode emitted |
+|---|---|---|
+| `gen [...]` | Build a `GenSpec`, install `TypeParam` placeholders | none |
+| `extends`, `default` | Build `GenParam` entries for `gen` | none |
+| `apply` | Substitute schema body, install instantiated type | none unless the result flows to a runtime word that needs the type as a value (e.g. `is`), in which case the substituted type literal is interned in the constant pool |
+| `type Foo gen [...] record [...]` | Install `TypeSchema` in the type stack | none |
+| `fn name gen [...] [...]` | Install generic fn-def | one compiled body per distinct call-site instantiation, lazily |
+
+`apply` deserves a special note: in the overwhelmingly common case
+(annotation, `is` check, generic fn dispatch) the result is consumed
+at compile time and produces zero runtime instructions.
+`Box apply [Integer]` adds nothing to the bytecode stream. The
+compile-time work happens; runtime cost is zero.
+
+### 10.3 Each call-site class — generic dimension
+
+The bytecode report's §2.4 splits dispatch into monomorphic,
+polymorphic-with-disjunct, and value-dependent-return. Generics reuse
+the same three buckets:
+
+**Generic fn at a fully-resolved call site (the common case).**
+`[1 2 3] map (quote double)` compiles to one specialised `map_int_int`
+body. The checker's `unifyForBindings` (§9.2.2) runs at compile time,
+fixes `T=Integer, U=Integer`, the substituted body is compiled once
+and cached. The call site emits `CALL_USER map_int_int_id`. **Identical
+performance to a hand-written non-generic equivalent** — no boxing,
+no runtime type test, no parameter passing.
+
+**Generic fn at a polymorphic call site.** `xs map (quote double)`
+where `xs: Carrier<[:Integer] tor [:String]>`. Same choice the report
+already makes for non-generic disjuncts: split (compile both
+monomorphizations, dispatch via `CALL_NATIVE_POLY`) or keep one boxed
+copy. The first compiles to faster code; the second compiles to less
+code.
+
+**Generic fn at a fundamentally-dynamic site.** A program where the
+checker can't resolve a parameter falls into the §1.5
+`FALLBACK_INTERP` boundary — same as any other dynamic site today.
+Rare in well-typed code.
+
+### 10.4 The fn-summary memo IS the monomorphization cache
+
+`AnalyseFnBody`'s memoisation key is `(name, arg-type-paths)`
+(`internal/engine/carrier.go:892`). For a generic fn, distinct type
+instantiations produce distinct keys automatically. **Each cache
+entry becomes one `fn_id` in the compiled fn table.** The checker →
+compiler transition is: keep doing what `AnalyseFnBody` does, but
+each time the body is analysed for a fresh key, also feed it through
+the compile pass and record the resulting bytecode under that
+`fn_id`.
+
+No new data structure for monomorphization — the existing checker
+memo IS the spec.
+
+### 10.5 Compilation-specific concerns
+
+**Code bloat.** Monomorphization can blow up code size when a generic
+fn is called with many distinct type arguments — Rust hits this; we
+will too. Mitigation: a compiler flag capping monomorphizations per
+fn, falling back to a boxed `CALL_NATIVE_POLY` dispatch once the cap
+is hit. The polymorphic-dispatch path already exists in the proposal;
+this just adjusts the trigger condition.
+
+**Constant-pool entries for instantiated type literals.** Programs
+that pass `Box<Integer>` as a value (to `is`, to a typed-def
+annotation that the runtime evaluates) need the substituted type
+literal in the constant pool. The substitution memo deduplicates:
+same `(schema, args)` → same pool slot.
+
+**Cross-module generics.** Module A defines `Box gen [T] record [...]`;
+module B does `Box apply [Integer]`. The compiler must compile the
+specialisation triggered by B even though the schema lives in A. Two
+strategies:
+
+- **Importer-side specialisation** (Rust's approach): each module
+  compiles the specialisations its own code triggers. Simpler;
+  possible duplication across modules.
+- **Pre-specialised exports**: A's compiled artifact pre-compiles all
+  instantiations seen at compile time across importers. More complex
+  link step.
+
+Recommendation: importer-side. Matches the existing per-module
+sub-engine model (`native_module_module.go`) where each module has
+its own compile context.
+
+### 10.6 Coordinating with the value-dependent-return split
+
+§2.4 of the bytecode report describes value-dependent returns (e.g.
+`add` returns Integer or Decimal based on inputs) being split into
+two `sig_id`s with a dispatch opcode. Generics expand this: a
+generic `<T extends Number>` fn could split into `T=Integer` and
+`T=Decimal` versions, both specialised.
+
+The bytecode report's split-sig generator and the generics
+substitution engine end up doing the same thing from two directions.
+**Worth coordinating in implementation:** both should allocate
+`sig_id`s through a single per-instantiation registry, so that
+`add[Integer,Integer]→Integer` (from the value-dependent split) and
+`my-fn<Integer>` (from a generic instantiation) live in the same
+`sig_id` namespace and can chain monomorphically.
+
+### 10.7 Compile-time inference failure modes
+
+The compiler depends on the checker resolving every parameter for
+every reachable call site. When inference fails:
+
+- **`unbound_param` diagnostic at compile time.** The call site is
+  genuinely polymorphic at runtime → the compiler must emit a boxed
+  dispatch (or `FALLBACK_INTERP`) at that site, not a `CALL_USER`.
+- **`constraint_violation` at compile time.** Hard error — the
+  program does not compile. Same severity as the checker today.
+- **`arity_mismatch` at compile time.** Hard error.
+
+These are the same diagnostics §9.2 introduces for check mode; the
+compiler reuses them and treats `unbound_param` as a "fall back to
+boxed dispatch" trigger rather than a hard stop.
+
+### 10.8 Summary
+
+Generics extend the checker; the compiler is the checker plus
+recording; therefore generics extend the compiler — almost
+mechanically. The only genuinely new compile-time work is
+**monomorphization**, and the fn-summary memoisation table that
+already exists for the checker IS the monomorphization cache. Every
+generic fn call at a fully-resolved site compiles to a single
+`CALL_USER` against a specialised body — runtime cost identical to
+hand-written non-generic equivalents.
+
+The two implementation choices worth pinning before this lands:
+(a) importer-side cross-module specialisation, and (b) shared
+`sig_id` allocation between the value-dependent-return split and
+generic instantiation. Both decisions point in the same direction
+as the bytecode report's existing recommendations.
+
+## 11. Implementation plan
 
 ### Phase 0 — design lock-down
 
@@ -751,7 +908,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
   the sugar/canonical correspondence.
 - A new `GENERICS.md` user-facing how-to in `aql/doc/`.
 
-## 11. Open questions
+## 12. Open questions
 
 1. **Default substitution timing.** Eagerly at parse time (simpler,
    no late binding) or lazily at `apply` time (allows defaults to
@@ -791,7 +948,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
    undecidable in general. Document that predicate bodies are
    typed at instantiation time, not at declaration.
 
-## 12. Risk register
+## 13. Risk register
 
 - **Sugar-canonical drift.** The two surfaces must stay in lockstep.
   Mitigation: every sugar test in Phase 3 is a pair of programs (one
@@ -808,7 +965,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
 - **Documentation drift.** Five doc files mention the type system.
   Phase 6 must touch all of them in one PR.
 
-## 13. Decision summary
+## 14. Decision summary
 
 - **Canonical form:** four engine words — `gen` (declare params),
   `extends` (constrain), `default` (default value), `apply`
