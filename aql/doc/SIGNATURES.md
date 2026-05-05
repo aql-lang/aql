@@ -265,6 +265,8 @@ Consequences for sig design:
 | `or` | `[B, B]` | `[B]` | Short-circuit OR: returns first truthy operand or last falsy | — |
 | | `[Any, Any]` | `[Any]` | Same; truthiness via `convert boolean` rules | — |
 | `otherwise` | `[Any, Any]` | `[Any]` | Null-coalescing: first arg if not None, else second | — |
+| `xnor` | `[B, B]` | `[B]` | Logical XNOR (synonym for `iff`) | — |
+| | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 | `xor` | `[B, B]` | `[B]` | Logical XOR | — |
 | | `[Any, Any]` | `[B]` | Coerce both args (`convert boolean` rules) | — |
 

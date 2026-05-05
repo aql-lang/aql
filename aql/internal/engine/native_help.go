@@ -316,7 +316,7 @@ func isCompareWord(name string) bool {
 
 func isBoolWord(name string) bool {
 	switch name {
-	case "and", "or", "xor", "nand", "nor", "iff", "implies":
+	case "and", "or", "xor", "nand", "nor", "iff", "xnor", "implies":
 		return true
 	}
 	return false
