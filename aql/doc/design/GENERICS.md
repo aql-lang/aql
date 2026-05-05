@@ -29,563 +29,478 @@ Concrete pain points users hit today:
   type. Useful constructions like "a predicate that accepts any `T`
   and returns `T` if the guard passes" cannot be encoded.
 
-## 2. Goals and non-goals
+## 2. Design philosophy: concatenative core, angle-bracket sugar
+
+A type-parameter list is — structurally — an ordered list with one
+entry per parameter, where each entry carries a name plus optional
+constraint and default. AQL already has lists; AQL already has words
+that take quoted lists and do interesting things with them (`def`,
+`fn`, `record`, `for`, …). Generics fit the same mould.
+
+**The canonical surface** is fully concatenative: four new engine
+words (`gen`, `extends`, `default`, `apply`) extend the type and fn
+machinery with parametric polymorphism. **The angle-bracket form**
+(`Box<T>`, `<T extends C>`, `Box<Integer>`) is a documented
+parser-level sugar that desugars to the canonical form before any
+engine code runs.
+
+This split has three concrete benefits over an angle-bracket-native
+design:
+
+1. **One core machinery.** Generics are an extension of the existing
+   typed-def / record / fn pipeline. The static checker, error
+   reporting, and source-position threading work without bespoke
+   code paths.
+2. **Programmatic generics.** `def myParams [T (U extends Comparable)];
+   type Box gen myParams record [...]` — parameter lists can be
+   constructed at runtime or assembled by macros. This is impossible
+   with a pure-syntax angle-bracket form.
+3. **Smaller token surface.** `<` and `>` only need to exist in the
+   sugar layer (lexer rewrite). The grammar, AST, and engine never
+   see them.
+
+## 3. Goals and non-goals
 
 **Goals.**
 
 1. Add **type parameters** to records, fn-shape types, predicate types,
    typed-def, and fn definitions.
-2. Use the **angle-bracket convention** (`<T>`, `<T, U>`) at both
-   declaration and application sites.
-3. Support TypeScript-style **constraints** (`extends`) with semantics
+2. Express the feature in a **concatenative core** (`gen`, `extends`,
+   `default`, `apply`) so it composes with the rest of the language.
+3. Provide a **TypeScript-style angle-bracket sugar** so users
+   familiar with mainstream generics syntax can read and write the
+   feature without re-learning.
+4. Support TypeScript-style **constraints** (`extends`) with semantics
    that integrate naturally with the existing `tand`/`tor`/`Never`/
    `Any` algebra rather than reinventing them.
-4. Support **defaults** (`<T = Integer>`).
-5. Be **inferable** wherever the existing signature-matcher already
+5. Support **defaults** (`<T = Integer>` / `(T default Integer)`).
+6. Be **inferable** wherever the existing signature-matcher already
    has enough information — e.g. `Box<Integer>` should be inferable
    from a value of `{value: 42}` without an explicit annotation.
-6. Stay **concatenative-friendly**: a generic application like
-   `Box<Integer>` must be a single value-producing expression that
-   slots into existing forward / stack argument flow.
 7. Preserve `aql check` (carrier-based static checking) coverage —
    generics must produce carriers that the checker can refine.
 
 **Non-goals (deferred).**
 
-- Higher-kinded types (`<F<_>>`).
+- Higher-kinded types (parameters that are themselves generic).
 - Conditional types (`T extends U ? X : Y`).
 - Mapped types (`{[K in keyof T]: …}`).
 - Variance annotations richer than the inferred contravariant-input /
   covariant-return rule the fn-shape matcher already implements.
 - Generic modules. (Modules can re-export concrete instantiations.)
 
-## 3. Survey of the existing syntactic landscape
+## 4. Survey of the existing syntactic landscape
 
 What the parser and engine already use, that bears on the design:
 
 - **`<` and `>` are syntactically free.** Comparisons use `lt`, `gt`,
   `lte`, `gte` (`internal/engine/compare.go`). No existing word, sigil,
-  or jsonic token consumes `<` or `>`.
+  or jsonic token consumes `<` or `>`. They are available for the
+  sugar layer.
 - **Type names start with a capital letter, def names lower-case**
-  (`LANGREF.md` §"Type and Def Naming"). This case discipline is
-  already used to disambiguate words during parsing — the same rule
-  will apply inside `<…>` for type parameters.
-- **Typed-def uses `:`** — `def x:Integer 42`. The colon is a type
-  annotation operator. `<T:Comparable>` would be visually consistent
-  with this; we will use `extends` as the primary form (matching the
-  user's TS-style request) and keep `:` reserved for future use as a
-  shorthand if usability demands it.
-- **Type algebra uses `tand` / `tor`** — `Integer tor String`,
-  `Integer tand Number`. Constraints can lean on these directly:
-  `<T extends Comparable tand Hashable>` is read by the existing
-  algebra without a new intersection operator.
+  (`LANGREF.md` §"Type and Def Naming"). The same rule applies to
+  type parameters — `gen [T U V]` accepts capitals; `gen [t]` is
+  rejected at registration time.
+- **Typed-def uses `:`** — `def x:Integer 42`. Reserved as-is. We do
+  not introduce a colon-as-extends shorthand in v1.
+- **Type algebra uses `tand` / `tor`** — `Integer tor String`. The
+  `extends` constraint takes any type expression, so the algebra
+  composes for free: `(T extends Number tand Comparable)`.
 - **Fn-shape types already encode variance** (contravariant inputs,
   covariant returns; `LANGREF.md` §"Structural Function-Shape Types").
   Generic fn shapes inherit this for free.
 - **`Any` and `Never` are the lattice top and bottom.** Unconstrained
   type parameters default to `extends Any`; `Never`-bounded
   parameters are valid but uninhabited.
-- **Custom jsonic tokens** are registered in `parser/grammar.go`
-  alongside `(`, `)`, `.`, `;`, `?`, `!`, `|`. Adding `<` and `>`
-  follows the same pattern.
+- **`NoEvalArgs` already exists** for words that take a list as a
+  code body (`def`, `fn`, `if`, `for` branches, `each`, etc.) — the
+  list arrives quoted instead of being auto-evaluated. `gen` uses
+  the same mechanism.
 
-## 4. Syntax
+## 5. The canonical concatenative core
 
-### 4.1 Tokenization
+Four new engine words. All four are forward-precedence; `gen` and
+`apply` use `NoEvalArgs` on their list argument so the parser does
+not auto-evaluate it.
 
-Register `<` (`#LA`, "left angle") and `>` (`#RA`, "right angle") as
-fixed jsonic tokens, mirroring `(` and `)`:
-
-```go
-LA: j.Token("#LA", "<"),
-RA: j.Token("#RA", ">"),
-```
-
-Effect: `Box<Integer>` lexes as the four tokens
-`Box`, `<`, `Integer`, `>` even though they are written without
-whitespace. This matches how `foo.bar` already lexes as `foo`, `.`,
-`bar`.
-
-**No comparison-operator collision** — AQL has none. We commit to
-keeping `<`/`>` reserved for generic-application syntax (and any
-future syntax that fits inside `< … >`); comparison stays on the
-named-word `lt`/`gt`/`lte`/`gte` family.
-
-### 4.2 Grammar additions
-
-Extend the `"val"` rule with a new alternate for the application
-form. The opener is "an identifier or type expression immediately
-followed by `<`"; close is the matching `>`. Inside, the rule
-collects a comma-separated list of type expressions (the same grammar
-as a fn-shape type body, restricted to type-context conversion).
-
-A new `"tparams"` rule pair handles the **declaration** form
-(parameter list with optional `extends` clauses and `=` defaults):
+### 5.1 `gen` — declare type parameters
 
 ```
-tparams := '<' tparam (',' tparam)* '>'
-tparam  := TypeName ('extends' typeExpr)? ('=' typeExpr)?
+gen [T  (U extends Comparable)  (V default Integer)  (W extends Comparable default String)]
 ```
 
-Both rules use the existing `convertDataValue` machinery for the
-inner type expressions, so `tand` / `tor` / `Never` / `Any` /
-nested generic applications all work without further plumbing.
+Signature: `gen [List/q] -> [GenSpec]`. Walks the list, collecting one
+parameter spec per entry:
 
-### 4.3 Declaration sites
+- **Bare atom** (e.g. `T`): unconstrained parameter (`extends Any`,
+  no default).
+- **Paren-expression** (e.g. `(U extends Comparable)`): evaluated
+  with `U` bound as a fresh `TypeParam` placeholder in scope, so
+  later parameters can refer to earlier ones (`gen [T (U default T)]`)
+  and constraints can be F-bounded (`gen [(T extends Container apply [T])]`).
 
-#### Generic record types
+`gen` itself does not install a type. It produces a `GenSpec` value
+that the next type-introducing word (`type`, `fn`, `def`) consumes
+to build a generic schema.
+
+### 5.2 `extends` — attach a constraint
 
 ```
+T extends Comparable
+```
+
+Signature: `extends [Atom/q TypeExpr] -> [GenParam]`. Forward-collects
+the right-hand type expression. Errors with
+`[aql/extends_outside_gen]` if invoked outside a `gen` parameter
+list.
+
+### 5.3 `default` — attach a default
+
+```
+T default Integer
+T extends Comparable default String
+```
+
+Signature: `default [Atom/q TypeExpr] -> [GenParam]` and
+`default [GenParam TypeExpr] -> [GenParam]` (chains after `extends`).
+Same context restriction as `extends`.
+
+### 5.4 `apply` — instantiate a schema
+
+```
+Box apply [Integer]
+Pair apply [String  Integer]
+Tree apply [Tree apply [Integer]]
+```
+
+Signature: `apply [Schema List] -> [TypeLiteral]`. Looks up the
+schema, validates arity and constraints, substitutes each parameter,
+and returns a normal type-literal value (`RecordType`, `FnShape`,
+`PredicateType`, …) that the rest of the engine consumes without
+needing to know it came from a generic.
+
+### 5.5 Worked declarations in the canonical form
+
+```
+type Box gen [T] record [value:T]
+type Pair gen [K V] record [key:K  value:V]
+type Tree gen [T] record [value:T  left:Tree apply [T]  right:Tree apply [T]]
+type Mapper gen [T U] fn [[T] [U]]
+type Reducer gen [T A] fn [[A T] [A]]
+type Predicate gen [T] fn [[T] [Boolean]]
+type SortedList gen [(T extends Comparable)] record [items:[:T]]
+type Result gen [T (E default Error)] record [ok:T  err:E]
+
+fn identity gen [T] [[T] [T] [/* body */]]
+fn pair gen [K V] [[K V] [Pair apply [K V]] [{key:_  value:_}]]
+fn map gen [T U] [[fn:Mapper apply [T U]  [:T]] [:U] [/* body */]]
+```
+
+### 5.6 Worked applications
+
+```
+def intBox:(Box apply [Integer]) {value:42}
+def pairs:[:Pair apply [String Integer]] [{key:"x" value:1}]
+intBox is (Box apply [Integer])         # → true
+intBox is (Box apply [Number])          # → true (Integer extends Number)
+```
+
+The parens are needed only because `apply` is forward-precedence and
+we want it to bind tightly inside an annotation. In word context
+(top level) the parens are unnecessary: `Box apply [Integer]` stands
+alone.
+
+## 6. Angle-bracket sugar
+
+A lexer-level rewrite layer recognises two forms and emits the
+canonical token stream. The grammar, AST, and engine see no `<` or
+`>`.
+
+### 6.1 Reserved tokens
+
+`<` (`#LA`) and `>` (`#RA`) are registered as fixed jsonic tokens so
+they tokenize even when adjacent to text (`Box<T>` lexes as `Box`,
+`<`, `T`, `>` — same trick as `(`, `)`, `.`, `;`).
+
+### 6.2 Two rewrite rules
+
+| Sugar | Canonical |
+|---|---|
+| `Name<...>` immediately after a type/fn head (`type`, `fn`, etc.) | `Name gen [...]` |
+| `Name<...>` elsewhere (use site) | `Name apply [...]` |
+
+The list contents are themselves rewritten:
+
+| Sugar inside `<…>` | Canonical inside `[…]` |
+|---|---|
+| `T` (bare) | `T` |
+| `T extends C` | `(T extends C)` |
+| `T = D` | `(T default D)` |
+| `T extends C = D` | `(T extends C default D)` |
+| `,` separator | whitespace |
+
+### 6.3 Side-by-side
+
+```
+# Sugar
 type Box<T> record [value:T]
-type Pair<K, V> record [key:K  value:V]
+type Pair<K extends Comparable, V = Any> record [key:K  value:V]
 type Tree<T> record [value:T  left:Tree<T>  right:Tree<T>]
-```
-
-`T`, `K`, `V` are bound only inside the record body. They follow the
-type-name capitalisation rule (the parser rejects lowercase
-parameters: `type Box<t>` is a hard error).
-
-#### Generic fn-shape types
-
-```
 type Mapper<T, U> fn [[T] [U]]
-type Reducer<T, A> fn [[A T] [A]]
-type Predicate<T> fn [[T] [Boolean]]
+
+def intBox:Box<Integer> {value:42}
+intBox is Box<Number>
+
+fn map<T, U> [[fn:Mapper<T, U>  [:T]] [:U] [/* body */]]
+
+# Canonical (what the engine actually sees)
+type Box gen [T] record [value:T]
+type Pair gen [(K extends Comparable) (V default Any)] record [key:K  value:V]
+type Tree gen [T] record [value:T  left:Tree apply [T]  right:Tree apply [T]]
+type Mapper gen [T U] fn [[T] [U]]
+
+def intBox:(Box apply [Integer]) {value:42}
+intBox is (Box apply [Number])
+
+fn map gen [T U] [[fn:Mapper apply [T U]  [:T]] [:U] [/* body */]]
 ```
 
-The contravariance/covariance rules of fn-shape matching apply to the
-**instantiated** shape, not to the type parameters themselves —
-`Mapper<Integer, Number>` matches a function that accepts `Number`
-and returns `Integer`, exactly as `fn [[Integer] [Number]]` does
-today.
+### 6.4 Disambiguation
 
-#### Generic predicate types
+The sugar layer commits to the rule **`<` is only ever the start of a
+generic argument list**. Any `<` not followed by a valid type-param
+or type-arg list is a `[aql/syntax_error]`. This is a hard, long-term
+commitment: AQL will not later add `<` as a comparison operator
+(comparisons stay on `lt`/`gt`/`lte`/`gte`).
 
-```
-type NonEmpty<T> fn [x:T T [(x size gt 0) guard x]]
-```
+Whitespace is irrelevant: `Box<T>`, `Box< T >`, and `Box <T>` all
+lex the same.
 
-#### Generic typed defs
+## 7. Semantics
 
-```
-def stringBox:Box<String> {value:"hi"}
-def pairs:[:Pair<String, Integer>] [{key:"x" value:1} {key:"y" value:2}]
-```
+### 7.1 Schemas vs instantiated types
 
-#### Generic fn definitions
-
-```
-fn identity<T> [[T] [T] [/* body — argument is on the stack */]]
-fn pair<K, V> [[K V] [Pair<K, V>] [{key:_  value:_}]]
-fn map<T, U> [[fn:Mapper<T, U> [:T]] [:U] [/* body */]]
-```
-
-The type parameter list slots between the name and the
-`[[inputs] [outputs] [body]]` triple — the same position TS uses
-between the function name and the parameter list.
-
-### 4.4 Application sites
-
-```
-Box<Integer>                   # type literal
-Pair<String, List<Integer>>    # nested
-Tree<Tree<Integer>>            # recursive nesting
-```
-
-A generic application is a **type expression** — it lives in
-data-context (inside maps, type bodies, fn-shape inputs/outputs,
-typed-def annotations) just like any other type literal. In word
-context the parser converts it to a type-literal `Value` whose
-`VType` is the instantiated type and whose `Data` is `nil` (matching
-the existing `IsTypeLiteral` predicate).
-
-### 4.5 Constraints (`extends`)
-
-```
-type SortedList<T extends Comparable> record [items:[:T]]
-type Pair<K extends Hashable, V> record [key:K  value:V]
-```
-
-`extends` is parsed inside the `<…>` declaration form only — it is
-**not** a top-level word. Inside an `extends` clause the right-hand
-side is any type expression, including the algebra:
-
-```
-<T extends Number tand Comparable>      # intersection
-<T extends String tor Number>           # union
-<T extends Container<T>>                # F-bounded — references self
-<T extends Any>                         # explicit unconstrained (default)
-<T extends Never>                       # uninhabited; allowed but useless
-```
-
-**Semantics.** `T extends C` is enforced at instantiation: when a use
-site supplies `Foo<X>`, the engine checks `X` is a subtype of `C`
-under the existing `Unify` / `tand` machinery. Failure produces a
-new error code `[aql/constraint_violation]` with the parameter
-name, the supplied type, and the constraint type in the detail.
-
-**No new operator.** We do not add `&` or `|` to the surface — TS
-users will read `tand` / `tor` and concatenative users keep their
-operator vocabulary. The `extends` keyword is the only addition.
-
-### 4.6 Defaults
-
-```
-type Box<T = Integer> record [value:T]
-type Pair<K = String, V = Any> record [key:K  value:V]
-```
-
-`=` is currently unused at the surface (assignment is `def`, map keys
-use `:`). It is safe to introduce inside `<…>` as the default
-operator. Defaults follow the standard rule: parameters with defaults
-must come after parameters without defaults; partial application
-fills missing parameters from defaults.
-
-```
-Box                # = Box<Integer>
-Pair               # = Pair<String, Any>
-Pair<Integer>      # = Pair<Integer, Any>
-```
-
-Bare `Box` (no angle brackets) is interpreted as the fully-defaulted
-instantiation when every parameter has a default; otherwise it is a
-**type schema** value (see §6).
-
-### 4.7 Whitespace
-
-`Box<Integer>`, `Box< Integer >`, and `Box <Integer>` all parse the
-same. The opening `<` may appear on the same line as the type name
-(no whitespace required to separate them, because `<` is a fixed
-token) or after whitespace. Multi-line declarations are allowed:
-
-```
-type Pair<
-  K extends Comparable,
-  V = Any
-> record [key:K  value:V]
-```
-
-### 4.8 Disambiguation
-
-Because `<` and `>` are now fixed tokens, the only ambiguity is
-between **generic application** and **two unrelated tokens that
-happen to sit next to a `<`**. In practice this means we forbid `<`
-appearing immediately after a non-type-producing word in type
-context. The parser's two-pass approach (collect tokens, classify in
-the appropriate `convert*` function) makes this enforceable: a `<`
-in word context that is not preceded by an identifier or a closing
-`>` is a `syntax_error`.
-
-In data context (record bodies, fn input/output lists), the parser
-already classifies bare capital words as type names; `<…>` after such
-a word is the generic-application alternate.
-
-## 5. Semantics
-
-### 5.1 Type schemas vs. instantiated types
-
-A generic declaration installs a **type schema** in the type stack —
-a value of internal kind `TypeSchema` that holds:
+`gen` followed by `record` / `fn` / predicate body produces a
+`TypeSchema` value installed in the type stack. A schema holds:
 
 - the parameter list (names, constraints, defaults)
-- the body (record fields, fn shape, predicate body) with parameter
-  references left as `TypeParam(name)` placeholders
+- the body with parameter references left as `TypeParam(name)`
+  placeholders
 
-A generic application instantiates the schema by substituting each
-`TypeParam(name)` with the supplied argument, producing a normal
-type-literal value (`RecordType`, `FnShape`, `PredicateType`, …)
-that downstream code consumes without needing to know it came from
-a generic.
+`apply` substitutes each `TypeParam(name)` with the supplied
+argument and runs the existing normalisation (e.g. `tand`
+distribution over `tor`). The result is a normal type literal that
+downstream code consumes unchanged.
 
-### 5.2 Substitution
+### 7.2 Constraint checking
 
-Substitution is structural: walk the body, replace each `TypeParam`
-node, and run the existing normalisation (e.g. `tand` distribution
-over `tor`) on the result. This is the only new piece of engine
-logic that generics introduce.
-
-### 5.3 Constraint checking
-
-At instantiation time, for each parameter `T extends C`, run
+At each `apply`, for each parameter `T extends C`, run
 `isSubtype(arg, C)` — the same predicate used by `is`. Failure
 produces `[aql/constraint_violation]` with a hint pointing at the
-parameter declaration site (using the existing `Pos` threading via
-`WithPos`).
+parameter declaration site (using `WithPos`).
 
-### 5.4 Variance
+### 7.3 In-scope binding while evaluating constraints
+
+`gen` is **not** a vanilla word. It walks its list with `NoEvalArgs`
+on, processes entries left-to-right, and for each entry:
+
+1. Binds the parameter name as a fresh `TypeParam` placeholder in
+   the type stack (push).
+2. Evaluates the entry's `extends` and `default` expressions with
+   that binding visible — this makes both forward references between
+   parameters (`gen [T (U default T)]`) and F-bounded constraints
+   (`gen [(T extends Container apply [T])]`) work without special
+   casing.
+3. Records the resulting `GenParam` in the spec.
+
+After the body type is built, the placeholder bindings are popped.
+The resulting `TypeSchema` carries the parameter list independently
+of the type stack — instantiations re-bind the placeholders fresh
+at each `apply`.
+
+### 7.4 Variance
 
 Generic fn-shape types reuse the existing fn-shape variance rules:
 contravariant in input parameter positions, covariant in return
-positions. We do **not** add per-parameter variance markers
-(`<in T>`, `<out T>`) in the first cut — the inferred variance is
-sufficient for the use cases we have. If future use cases need
-explicit markers, the syntax slot is reserved.
+positions. No per-parameter variance markers in v1.
 
-### 5.5 Inference
+### 7.5 Inference
 
 Two inference sites are in scope:
 
-1. **Value-to-type inference at typed-def sites.** `def x:Box {value:42}`
-   should infer `Box<Integer>` rather than requiring `Box<Integer>`
-   explicitly. This is a unification problem: match the value against
-   the generic body, collect parameter bindings.
-
+1. **Value-to-type at typed-def sites.** `def x:Box {value:42}` — no
+   `apply` written — should infer `Box apply [Integer]` (sugar:
+   `Box<Integer>`) by unifying the value against the schema body.
 2. **Function-call inference.** `[1 2 3] map (quote double)` should
-   infer `T=Integer`, `U=Integer` for `map<T, U>` from the list and
-   the `Mapper<T, U>` argument shape. The carrier-based static
+   infer `T=Integer`, `U=Integer` for `map gen [T U]` from the list
+   and the `Mapper apply [T U]` argument shape. The carrier-based
    checker already tracks types through dispatch; inference extends
    this with a substitution-collecting step before subtype checking.
 
-Both forms degrade gracefully to "no inference, error, ask user to
-annotate" — they are an optimisation over explicit annotation, not a
-requirement.
+Both forms degrade gracefully — explicit annotation always works.
 
-### 5.6 Interaction with the existing algebra
+### 7.6 Interaction with the existing algebra
 
-- `Box<Integer> tand Box<Number>` reduces to `Box<Integer>` (the
-  intersection of the parameters wins, because the schema is
-  invariant in `T` by default — record fields are read-write).
-- `Box<Integer> tor Box<String>` stays as a disjunct; it does not
-  collapse to `Box<Integer tor String>` because the two types are
-  observationally distinct (a value's `value` field is one or the
-  other, not the union).
-- `Box<Never>` is **inhabited** at the type level (it is a record
-  type with a `Never`-typed field), but no concrete value satisfies
-  it because no value satisfies `Never`. The engine reports this as
-  a `static_warning` at instantiation — useful for catching dead code
-  but not a hard error.
+- `(Box apply [Integer]) tand (Box apply [Number])` reduces to
+  `Box apply [Integer]` (per-parameter intersection; record fields
+  are read-write so the schema is invariant in `T` by default).
+- `(Box apply [Integer]) tor (Box apply [String])` stays as a
+  disjunct — does not auto-collapse to `Box apply [Integer tor String]`,
+  because the two are observationally distinct.
+- `Box apply [Never]` is type-inhabited but value-uninhabited; the
+  engine emits a `static_warning` at instantiation.
 
-### 5.7 Recursion
+### 7.7 Recursion and F-bounds
 
-`type Tree<T> record [value:T  left:Tree<T>  right:Tree<T>]` is
-permitted. The schema body refers to its own name; substitution is
-performed lazily at field access (or eagerly with cycle detection,
-TBD — see §8).
+`type Tree gen [T] record [...  left:Tree apply [T] ...]` is
+permitted. Substitution memoises on `(schema, normalised args)` to
+avoid loops. F-bounds work because of §7.3: the placeholder for `T`
+is in scope while the constraint is evaluated.
 
-### 5.8 F-bounds
-
-`<T extends Container<T>>` is permitted. The constraint is not
-checked until instantiation, so the self-reference does not need a
-fixpoint at declaration time. At instantiation, the engine
-substitutes the supplied `T` into both occurrences and then runs
-the subtype check.
-
-## 6. Worked examples
-
-### 6.1 Generic container
-
-```
-type Box<T> record [value:T]
-
-# Application produces a concrete type literal:
-def intBox:Box<Integer> {value:42}
-def strBox:Box<String>  {value:"hi"}
-
-intBox is Box<Integer>      # → true
-intBox is Box<String>       # → false
-intBox is Box<Number>       # → true   (Integer extends Number)
-```
-
-### 6.2 Generic fn shape
-
-```
-type Mapper<T, U> fn [[T] [U]]
-
-fn double [[Integer] [Integer] [2 mul]]
-(quote double) is Mapper<Integer, Integer>      # → true
-(quote double) is Mapper<Number, Integer>       # → false (Integer ≠ Number for input)
-(quote double) is Mapper<Integer, Number>       # → true  (Integer is a subtype of Number for return)
-```
-
-### 6.3 Generic fn definition with inference
-
-```
-fn map<T, U> [[fn:Mapper<T, U>  [:T]] [:U] [
-  # body iterates the list and calls fn on each element
-]]
-
-[1 2 3] map (quote double)
-# Inference: the list is [:Integer], so T=Integer.
-# (quote double) matches Mapper<T=Integer, U=?>; double's return is Integer, so U=Integer.
-# Result type: [:Integer]
-```
-
-### 6.4 Constrained parameter
-
-```
-type Comparable tor [Integer Decimal String]
-type SortedList<T extends Comparable> record [items:[:T]]
-
-def names:SortedList<String> {items:["amy" "bob"]}    # OK
-def boxes:SortedList<Box<Integer>>                    # constraint_violation:
-                                                       #   Box<Integer> does not extend Comparable
-```
-
-### 6.5 Default
-
-```
-type Result<T, E = Error> record [ok:T  err:E]
-def r:Result<Integer> {ok:1  err:none}        # E defaults to Error
-```
-
-## 7. Implementation plan
+## 8. Implementation plan
 
 ### Phase 0 — design lock-down
 
 This document, plus a short follow-up RFC review with the team. Pin
-the syntax (especially the `extends` vs `:` decision and the `=`
-default-operator decision).
+the four core word names (`gen`, `extends`, `default`, `apply`) and
+the sugar rewrite rules.
 
-### Phase 1 — tokenization and grammar
+### Phase 1 — schemas, substitution, and the four core words
+
+- New `Value` kinds: `TypeSchema`, `GenSpec`, `GenParam`, and the
+  `TypeParam{name}` placeholder.
+- `RegisterGen`, `RegisterExtends`, `RegisterDefault`, `RegisterApply`
+  in `internal/engine/native_type_*.go` files (one per word, matching
+  the existing layout).
+- `instantiateSchema(schema, args)` performs constraint-checking and
+  substitution; memoises on `(schema, normalised args)`.
+- `type` and `fn` registrations recognise a `GenSpec` argument and
+  install a `TypeSchema` instead of a concrete type.
+- Tests: every form in §5.5 and §5.6 in canonical syntax only.
+
+### Phase 2 — typed-def, `is`, and pattern dispatch
+
+- Typed-def sites accept schema instantiations (`Box apply [...]`)
+  in annotations.
+- `is` accepts an instantiation on the right.
+- Signature matching learns `TypeParam` is "matches anything, binds
+  to whatever it sees" — the inference path for fn-defs.
+- Carrier values for generic record types preserve parameter
+  bindings so `aql check` reports precise types.
+
+### Phase 3 — angle-bracket sugar
 
 - Add `LA`/`RA` jsonic tokens in `parser/grammar.go`.
-- Extend the `"val"` rule with the application alternate.
-- Add `"tparams"` rule for declarations.
-- Add `convertGenericApp` and `convertTParams` helpers in
-  `parser/parse.go`.
-- Tests: parse-only round-trip tests for every form in §4.
+- Lexer-level rewrite producing the canonical token stream:
+  - `Name<...>` after `type`/`fn` → `Name gen [...]`.
+  - `Name<...>` elsewhere → `(Name apply [...])`.
+  - `T extends C` inside `<…>` → `(T extends C)`.
+  - `T = D` inside `<…>` → `(T default D)`.
+  - `,` inside `<…>` → whitespace.
+- Tests: every example in §6.3 produces the same engine behaviour
+  as its canonical twin.
 
-### Phase 2 — schema values and substitution
+### Phase 4 — inference
 
-- New `Value` kind: `TypeSchema` (held in the type stack, not the
-  def stack).
-- New placeholder: `TypeParam{name}` — a marker that flows through
-  the engine until substitution.
-- `instantiateSchema(schema, args)` performs constraint-checking and
-  substitution, returning a normal type literal.
-- `RegisterType` recognises the `<…>` declaration form and installs
-  a `TypeSchema` instead of a concrete type.
-- Tests: instantiation, substitution, normalisation interplay with
-  `tand`/`tor`.
+- Value-to-type inference at typed-def sites (§7.5.1).
+- Carrier-based call-site inference (§7.5.2).
+- Tests: cases that succeed without annotation; cases that fail
+  with helpful error messages.
 
-### Phase 3 — typed-def, `is`, and pattern dispatch
+### Phase 5 — generic fn definitions and higher-order word retrofit
 
-- Typed-def sites accept `Foo<…>` annotations.
-- `is` accepts a generic application on the right.
-- Signature matching learns `TypeParam` is "matches anything, binds
-  to whatever it sees" — this is the inference path for fn-defs.
-- Carrier values for generic record types preserve parameter
-  bindings so `aql check` can report precise types.
-
-### Phase 4 — defaults and constraints
-
-- Default substitution at the parser level (or at instantiation,
-  TBD).
-- `extends` clause checked against `Unify` — emit
-  `[aql/constraint_violation]` on failure.
-- Tests: every constraint shape from §4.5.
-
-### Phase 5 — generic fn definitions
-
-- Extend `fn` registration to accept a parameter list.
-- Per-call inference using carrier types.
-- Tests: `map`, `fold`, `pair`, `identity`, plus error cases where
-  inference fails (unannotated uses).
+- Extend `fn` registration to accept a `GenSpec`.
+- Retrofit `map`, `fold`, `outer`, `inner` to use generic fn-shape
+  types so the static checker can refine result types.
 
 ### Phase 6 — docs
 
 - LANGREF.md: new "Generic Types" section after "Predicate Types"
-  and before "Type and Def Naming".
-- SIGNATURES.md: add `extends` and the angle-bracket syntax to the
-  type-expression grammar.
-- TYPES.md: cover schemas, substitution, constraint checking.
+  and before "Type and Def Naming". Lead with sugar (the form most
+  users will write); cross-reference the canonical form.
+- SIGNATURES.md: add `gen`, `extends`, `default`, `apply` with their
+  signatures.
+- TYPES.md: cover schemas, substitution, constraint checking, and
+  the sugar/canonical correspondence.
 - A new `GENERICS.md` user-facing how-to in `aql/doc/`.
 
-## 8. Open questions
+## 9. Open questions
 
-1. **Eager vs. lazy substitution for recursive types.** Eager is
-   simpler but loops on `type Tree<T> record […  left:Tree<T> …]`.
-   Lazy avoids the loop but complicates equality. Probable answer:
-   memoise on `(schema, args)` pairs — check identity before
-   substituting deeper.
+1. **Default substitution timing.** Eagerly at parse time (simpler,
+   no late binding) or lazily at `apply` time (allows defaults to
+   reference parameters bound later in the schema). My
+   recommendation: lazy, because §7.3's binding mechanism makes it
+   nearly free.
 
-2. **`extends` vs `:` shorthand.** TS uses `extends`. AQL's existing
-   `def x:Type` and record field `name:Type` both use `:`. Should
-   `<T:Comparable>` be a sugar for `<T extends Comparable>`? My
-   recommendation: ship only `extends` first, add `:` later if
-   users find it natural. Cost of adding it later is low; cost of
-   removing it is high.
+2. **Sugar for `extends` outside `gen`.** Should we allow
+   `extends` as a standalone word for ad-hoc subtype assertions
+   (`x extends Comparable` ↔ `x is Comparable tand Comparable`)?
+   No — keep `extends` strictly bound to the `gen` parameter list
+   to avoid muddying its meaning.
 
-3. **Variance markers.** Defer. The fn-shape variance rules cover
-   the cases we have. If we add explicit markers later, `<in T>` /
-   `<out T>` (TS 4.7+) is the obvious choice and slots into the
-   existing tparam grammar.
+3. **`apply` arity inference for defaulted schemas.** Bare `Box`
+   (no `apply`) where every parameter has a default — does it
+   auto-instantiate to `Box apply []`? Probably yes, with a clear
+   error when not all parameters have defaults.
 
-4. **Generic word resolution order.** The type stack already
-   resolves before defs and natives. Schemas live in the type stack.
-   But an instantiated `Box<Integer>` must resolve `Box` first
-   (find the schema), then read `<Integer>` as the application.
-   This is straightforward but worth a test for the case where
-   `Box` is also shadowed by a non-generic type.
+4. **Generic word resolution order.** Schemas live in the type
+   stack; `apply` resolves the head against the type stack first,
+   def stack second. Worth a test for the case where `Box` is also
+   shadowed by a non-generic type.
 
-5. **Error messages for failed inference.** When inference can't
-   solve, we want the error to point at the call site and list
-   the parameters that could not be bound, not just say "no
-   matching signature". This needs new error infrastructure
-   parallel to `signatureError`.
+5. **Failed-inference error messages.** When inference can't solve,
+   the error should point at the call site and list the parameters
+   that could not be bound, not just say "no matching signature".
+   Needs new error infrastructure parallel to `signatureError`.
 
-6. **Module exports.** A module that defines `type Box<T>` exports
-   the schema, not an instantiation. Users of the module write
-   `module:Box<Integer>` at the call site. This Just Works under
-   the design above, but worth a test.
+6. **Module exports.** A module that defines `type Box gen [T] …`
+   exports the schema, not an instantiation. Users of the module
+   write `module:Box apply [Integer]` (or `module:Box<Integer>`)
+   at the call site. Should Just Work but worth a test.
 
 7. **Generic predicate types — what does "static" mean?** A
    predicate body that branches on `T` is genuinely generic, but
-   constraint checking the body across all possible `T` is
-   undecidable in general. We should document that predicate
-   bodies are typed at instantiation time, not at declaration.
+   constraint-checking the body across all possible `T` is
+   undecidable in general. Document that predicate bodies are
+   typed at instantiation time, not at declaration.
 
-## 9. Risk register
+## 10. Risk register
 
-- **Parser ambiguity creep.** Reserving `<`/`>` exclusively for
-  generics is a long-term commitment. We should not later add `<`
-  as a comparison operator. Document this in `LANGREF.md`'s syntax
-  section as a hard rule.
+- **Sugar-canonical drift.** The two surfaces must stay in lockstep.
+  Mitigation: every sugar test in Phase 3 is a pair of programs (one
+  in each surface) that must produce identical engine output.
+- **`<`/`>` reservation is permanent.** Once we ship the sugar, we
+  cannot use `<` for comparisons or as an operator anywhere. Document
+  this in `LANGREF.md`'s syntax section as a hard rule.
 - **Carrier-checker complexity.** Substitution must thread through
   the carrier path or `aql check` regresses. Plan to write
-  carrier-specific tests in Phase 3 alongside the dispatch work.
+  carrier-specific tests in Phase 2 alongside the dispatch work.
 - **Performance.** Repeated instantiations with the same args (e.g.
-  `Box<Integer>` mentioned 50 times in a program) should hit a
-  cache. The implementation should memoise on `(schema, normalised
-  args)` keys from the start.
+  `Box apply [Integer]` mentioned 50 times) hit the
+  `instantiateSchema` memo. Implement the memo from the start.
 - **Documentation drift.** Five doc files mention the type system.
-  Phase 6 must touch all of them in one PR or readers will see
-  inconsistent stories.
-
-## 10. A concatenative-friendly alternative (for the record)
-
-The user asked for angle brackets, and the analysis above commits to
-that direction. For completeness, a fully word-based alternative
-would look like:
-
-```
-type Box generic [T] record [value:T]
-type Pair generic [K V] record [key:K  value:V]
-Box of [Integer]
-Pair of [String Integer]
-```
-
-It is more in keeping with the rest of AQL's surface (no new
-brackets, no new infix-style keyword), and reuses the existing list
-syntax for parameter lists. The cost is that newcomers from
-TypeScript / Java / C# / Rust would not recognise it, and the
-declaration site is more verbose. We do not recommend this path,
-but it is a reasonable fallback if `<…>` proves to clash with
-something we have not anticipated.
+  Phase 6 must touch all of them in one PR.
 
 ## 11. Decision summary
 
-- **Syntax:** angle brackets, TS-style. `Box<T>`, `<T extends C>`,
-  `<T = D>`.
-- **Tokenization:** `<` and `>` become reserved fixed tokens.
-- **Constraints:** `extends` keyword inside `<…>`; right-hand side is
-  any type expression including `tand`/`tor`.
-- **Defaults:** `=` inside `<…>`.
-- **Variance:** inferred from fn-shape rules; no explicit markers in
-  v1.
+- **Canonical form:** four engine words — `gen` (declare params),
+  `extends` (constrain), `default` (default value), `apply`
+  (instantiate). All ordinary forward-precedence words; `gen` and
+  `apply` use `NoEvalArgs` on their list.
+- **Sugar:** angle brackets, TS-style. `Box<T>`, `<T extends C>`,
+  `<T = D>`, `Box<Integer>`. Pure lexer rewrite to the canonical
+  form; nothing downstream sees `<` or `>`.
+- **Constraints:** `extends` clause inside the parameter list;
+  right-hand side is any type expression including `tand`/`tor`.
+- **Defaults:** `default` word in the canonical form; `=` in the
+  sugar.
+- **Variance:** inferred from fn-shape rules; no explicit markers
+  in v1.
 - **Inference:** at typed-def and fn-call sites, via the existing
   carrier/unify machinery.
 - **Algebra:** generic instantiations participate in `tand`/`tor` as
   ordinary types (invariant per parameter; no auto-distribution
   through type constructors).
-- **Phased rollout:** six phases, each with its own test surface.
+- **Phased rollout:** six phases, with the canonical core landing
+  before the sugar so the engine is exercised independently of the
+  parser changes.
