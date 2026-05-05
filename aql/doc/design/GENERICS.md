@@ -503,13 +503,177 @@ sites of the surrounding function* — those are the parametric
 ones. `Any`s that genuinely vary per call site need a different
 tool (disjuncts, dependent records, or just leaving them as `Any`).
 
-## 9. Implementation plan
+## 9. Static check mode
+
+`aql check` runs programs through the same engine in **carrier mode** —
+literals become type-only abstractions, dispatch and signature
+matching are unchanged, and `Returns` / `ReturnsFn` annotations on
+each `NativeSig` propagate types through call sites. Generics integrate
+mostly through this existing infrastructure; the new analyser code is
+small (~400–500 lines including tests) and concentrated in two
+helpers plus three diagnostic codes.
+
+### 9.1 Existing infrastructure that helps
+
+- **`ReturnsFn`** is the natural extension point for `apply` and for
+  generic fn dispatch. `apply`'s `ReturnsFn` substitutes its supplied
+  args into the schema body and returns the substituted shape as a
+  carrier — same shape as the existing `ReturnsListElemAt` /
+  `ReturnsPreserveListAt` helpers.
+- **Fn-body memoisation keys on `(name, arg-type-paths)`**
+  (`AnalyseFnBody` in `internal/engine/carrier.go`). Different
+  instantiations of a generic fn produce distinct cache entries
+  automatically — polymorphic recursion converges per-instantiation
+  without new infrastructure.
+- **The `!Carrier` guard in `sigTypeMatches`** keeps carriers and
+  type literals distinguishable. A `TypeParam{T}` placeholder appears
+  in two roles — as a type literal during schema construction, as a
+  carrier-VType during fn-body analysis with `T` in scope — and the
+  existing distinction handles both.
+- **Common-ancestor widening** for `if` branches already does the
+  right thing for two carriers of the same instantiated type. Two
+  `Box<Integer>` carriers from the two arms join cleanly.
+
+### 9.2 New checker pieces
+
+**1. Substitution helper.** `substituteCarrier(carrier, bindings) Value`
+— structural walk that replaces each `TypeParam{T}` with
+`bindings[T]`. Used by `apply`'s `ReturnsFn` and by generic fn
+dispatch. Roughly:
+
+```go
+func substituteCarrier(v Value, b map[string]Value) Value {
+    if isTypeParam(v.VType) { return b[paramName(v.VType)] }
+    if isRecord(v.VType)    { return rebuildRecord(v, recurse on fields) }
+    // ... lists, maps, fn shapes recurse; scalars pass through
+}
+```
+
+**2. Unification for binding inference.**
+`unifyForBindings(paramType, argCarrierType) → bindings` — at a
+generic fn call site, walk the parameter types alongside the actual
+carriers and capture the bindings:
+
+- `TypeParam{T}` against any carrier → `bindings[T] = carrier` (or
+  `tor`-merge with an existing binding).
+- Record-against-record → recurse on fields.
+- List-against-list → recurse on element type.
+- Fn-shape-against-fn-shape → recurse on inputs (contravariantly)
+  and returns (covariantly).
+
+If the same parameter unifies against two incompatible types, take
+their `tor`. If unification fails outright, emit a diagnostic and
+fall back to `Any` for that binding so analysis continues.
+
+**3. Constraint check.** Once bindings are inferred, for each
+`T extends C` run `isSubtype(bindings[T], C)`. Reuses the existing
+`Unify` / `is` predicate. Failure is a diagnostic, not a panic.
+
+**4. Three new diagnostic codes:**
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `constraint_violation` | error | `Foo<X>` where `X` doesn't satisfy a parameter's `extends` bound |
+| `unbound_param` | error | A generic fn call where some `T` appears only in returns and couldn't be inferred from inputs — caller must annotate |
+| `arity_mismatch` | error | `Foo<X, Y>` when `Foo` takes a different number of parameters |
+
+All three slot into the existing `CheckDiagnostic` structure.
+
+### 9.3 What gets better for check-mode users
+
+Today's checker reports `Any` in many places where generics let it
+report a precise type:
+
+- **Higher-order words.** `[1 2 3] map (quote double)` reports
+  residual stack `[:Integer]` instead of `[:Any]`. This is the
+  highest-leverage win — every program using `map` / `fold` / `each`
+  benefits.
+- **Record fields.** `intBox.value` typechecks as `Integer` rather
+  than `Any` because the schema records `value:T` and the
+  instantiation supplies `T=Integer`.
+- **Comparison operands.** `<T extends Comparable> apply-op` rejects
+  `"hello" lt 5` at check time. Today the runtime check is the only
+  line of defence.
+- **Decision module returns.** Per the §8 case study, `decide` reports
+  `Result<R, DecisionError>` for the precise `R` of the table or
+  tree, propagating into every caller.
+
+### 9.4 Subtleties — decisions worth pinning before implementation
+
+**Disjunct widening of generic instantiations.** When two arms of an
+`if` produce `Box<Integer>` and `Box<String>`, today's
+common-ancestor rule widens to whatever ancestor the two records
+share — typically `Map`. Could improve to `Box<Integer tor String>`
+if records covary in their parameters. But §7.6 says generic record
+types are **invariant** in their parameters (record fields are
+read-write). Under invariance, `Box<Integer tor String>` is *not* a
+supertype of `Box<Integer>`, so the widening should stay at
+`Map`/`Any`.
+
+**Decision needed:** is invariance worth the loss of precision at
+branch joins? TypeScript's pragmatic answer is "covariant by default,
+fix it later" — recommendation is to do the same and revisit if
+mutation patterns make it unsound in practice.
+
+**Operations on unconstrained `TypeParam` carriers.** A fn body
+analysed with `TypeParam{T}` in the parameter slots sees abstract
+values whose VType is a placeholder. Operations on those carriers —
+`T add T`, `T size`, `T.field` — must produce sensible carrier
+results. Recommended rule: **a `TypeParam` carrier matches no
+signature except those whose param slot is also `T` or a
+constraint-satisfying broader type.** Stricter than TypeScript (which
+treats unconstrained type parameters loosely in some contexts) but
+sound: a generic fn body can only call operations that the
+constraints license. `<T extends Comparable>` lets you call
+`lt`/`gt` on a `T`; without the constraint, you cannot.
+
+**Carrier disjunct cap and generic explosions.** A program that
+instantiates the same schema with many different types builds wide
+disjuncts at join points. If `CarrierDisjunctCap` (8) kicks in
+mid-analysis the disjunct collapses to common-ancestor and we lose
+all parameter precision. **Mitigation:** treat instantiations of the
+same schema specially — collapse `Box<A> tor Box<B> tor … tor Box<H>`
+to `Box<A tor B tor … tor H>` (per-parameter `tor`) before applying
+the cap. Cheap to implement, preserves parameter precision under
+widening.
+
+### 9.5 Carrier shapes for the new value kinds
+
+- **`TypeSchema`** — installed in the type stack at declaration.
+  Carrier form is the schema itself (a metatype value). Satisfies
+  metatype slots; does not satisfy value-level slots.
+- **`TypeParam{name}`** — appears in two contexts:
+  - As a type-literal-level placeholder in schema bodies (during
+    schema construction). Substituted at `apply` time.
+  - As a carrier VType inside fn-body analysis when the parameter is
+    in scope (`Carrier{VType: TypeParam{T}}`). Substituted on call.
+- **Instantiated records / fn shapes / predicates** — ordinary
+  carriers with the substituted VType. Indistinguishable from
+  hand-written equivalents downstream.
+
+### 9.6 Cost summary
+
+| Piece | Lines (approx, with tests) | Where |
+|---|---|---|
+| `substituteCarrier` | 80 | `internal/engine/carrier.go` |
+| `unifyForBindings` | 120 | new `internal/engine/generics_unify.go` |
+| Constraint-check helper | 40 | new file alongside |
+| Three diagnostic codes | 20 | `internal/engine/check.go` |
+| `apply` `ReturnsFn` | 50 | `internal/engine/native_type_apply.go` |
+| Generic fn dispatch hook | 60 | `internal/engine/engine.go` |
+| Tests | 200 | `internal/engine/generics_check_test.go`, `aql/test/generics_*.go` |
+
+Roughly 400-500 lines, concentrated in three new files plus targeted
+edits to `carrier.go`, `engine.go`, and `check.go`.
+
+## 10. Implementation plan
 
 ### Phase 0 — design lock-down
 
 This document, plus a short follow-up RFC review with the team. Pin
 the four core word names (`gen`, `extends`, `default`, `apply`) and
-the sugar rewrite rules.
+the sugar rewrite rules. Pin the §9.4 decisions (variance,
+unconstrained-param strictness, per-schema disjunct collapse).
 
 ### Phase 1 — schemas, substitution, and the four core words
 
@@ -531,10 +695,26 @@ the sugar rewrite rules.
 - `is` accepts an instantiation on the right.
 - Signature matching learns `TypeParam` is "matches anything, binds
   to whatever it sees" — the inference path for fn-defs.
-- Carrier values for generic record types preserve parameter
-  bindings so `aql check` reports precise types.
 
-### Phase 3 — angle-bracket sugar
+### Phase 3 — static check mode
+
+- `substituteCarrier` (§9.2.1).
+- `unifyForBindings` (§9.2.2).
+- Constraint-check helper (§9.2.3).
+- Three new diagnostic codes (§9.2.4): `constraint_violation`,
+  `unbound_param`, `arity_mismatch`.
+- `apply`'s `ReturnsFn` substitutes the schema body with the supplied
+  args and returns the substituted carrier.
+- Generic fn-def dispatch in check mode: infer bindings from arg
+  carriers, run constraint checks, substitute the return type.
+- Per-schema disjunct collapse (§9.4) before `CarrierDisjunctCap` is
+  applied.
+- Tests: precise residual carriers for higher-order words, refined
+  record-field reads, constraint-violation diagnostics, unbound-param
+  diagnostics, arity-mismatch diagnostics. Carrier-shape tests for
+  the new value kinds (§9.5).
+
+### Phase 4 — angle-bracket sugar
 
 - Add `LA`/`RA` jsonic tokens in `parser/grammar.go`.
 - Lexer-level rewrite producing the canonical token stream:
@@ -546,31 +726,32 @@ the sugar rewrite rules.
 - Tests: every example in §6.3 produces the same engine behaviour
   as its canonical twin.
 
-### Phase 4 — inference
+### Phase 5 — value-to-type inference
 
 - Value-to-type inference at typed-def sites (§7.5.1).
-- Carrier-based call-site inference (§7.5.2).
 - Tests: cases that succeed without annotation; cases that fail
   with helpful error messages.
 
-### Phase 5 — generic fn definitions and higher-order word retrofit
+### Phase 6 — generic fn definitions and higher-order word retrofit
 
 - Extend `fn` registration to accept a `GenSpec`.
 - Retrofit `map`, `fold`, `outer`, `inner` to use generic fn-shape
   types so the static checker can refine result types.
 
-### Phase 6 — docs
+### Phase 7 — docs
 
 - LANGREF.md: new "Generic Types" section after "Predicate Types"
   and before "Type and Def Naming". Lead with sugar (the form most
   users will write); cross-reference the canonical form.
+- LANGREF.md "Static Type Checking" section: add the three new
+  diagnostic codes and document the per-schema disjunct collapse.
 - SIGNATURES.md: add `gen`, `extends`, `default`, `apply` with their
   signatures.
 - TYPES.md: cover schemas, substitution, constraint checking, and
   the sugar/canonical correspondence.
 - A new `GENERICS.md` user-facing how-to in `aql/doc/`.
 
-## 10. Open questions
+## 11. Open questions
 
 1. **Default substitution timing.** Eagerly at parse time (simpler,
    no late binding) or lazily at `apply` time (allows defaults to
@@ -610,7 +791,7 @@ the sugar rewrite rules.
    undecidable in general. Document that predicate bodies are
    typed at instantiation time, not at declaration.
 
-## 11. Risk register
+## 12. Risk register
 
 - **Sugar-canonical drift.** The two surfaces must stay in lockstep.
   Mitigation: every sugar test in Phase 3 is a pair of programs (one
@@ -627,7 +808,7 @@ the sugar rewrite rules.
 - **Documentation drift.** Five doc files mention the type system.
   Phase 6 must touch all of them in one PR.
 
-## 12. Decision summary
+## 13. Decision summary
 
 - **Canonical form:** four engine words — `gen` (declare params),
   `extends` (constrain), `default` (default value), `apply`
