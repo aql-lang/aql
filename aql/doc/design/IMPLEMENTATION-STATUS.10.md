@@ -149,11 +149,13 @@ Requires lexer integration for prefix detection.
 Algebraic generics with concatenative core and a sugar layer. No
 implementation yet — design draft only.
 
-### XML.0.md — XML format and embedding
+### XML.0.md — TSX-flavoured tree format and embedding
 
-Tree-structured XML alternate concrete syntax for AQL programs and
-data, with `${...}` interpolation, CSS-selector querying (`cs/`),
-and `<aql-embed lang="...">` for embedding foreign syntaxes.
+Tree-structured TSX-flavoured alternate concrete syntax for AQL
+programs and data, with single-`{}` JSX-style interpolation,
+self-closing tags, fragments, attribute spread, CSS-selector
+querying (`cs/`), and `<aql-embed lang="...">` for embedding
+foreign syntaxes.
 
 
 ## Reports and Reviews
