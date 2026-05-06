@@ -32,7 +32,7 @@ representation — no marshalling boundary.
 ### 1.1 What the carrier checker already gives us
 
 The static type-check mode described in
-`aql/doc/CARRIER-STATIC-TYPECHECK-REPORT.md` replaces concrete values
+`aql/doc/design/CARRIER-STATIC-TYPECHECK-REPORT.10.md` replaces concrete values
 on the stack with *carrier* values (`Value{Carrier:true, Data:nil}`)
 and runs the same engine. Because the machinery is shared — same
 `matchSignature`, same `SortSignatures`, same forward collection,

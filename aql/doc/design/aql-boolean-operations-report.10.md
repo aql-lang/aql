@@ -20,7 +20,7 @@ Sources reviewed:
 - `aql/internal/engine/conditional.go` (`isTruthy`, `if`)
 - `aql/internal/engine/signature.go` (`BarrierPos`, scoring)
 - `aql/internal/engine/match.go` (barrier/forward-collection logic)
-- `aql/doc/LANGREF.md` §"Boolean Words" and §"if"
+- `aql/doc/design/LANGREF.10.md` §"Boolean Words" and §"if"
 - `aql/test/basic.tsv`, `aql/test/sigmatch.tsv`, `aql/test/curry_test.go`
 
 ---

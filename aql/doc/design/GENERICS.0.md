@@ -668,7 +668,7 @@ edits to `carrier.go`, `engine.go`, and `check.go`.
 
 ## 10. Static compilation
 
-The proposed AQL bytecode compiler (`docs/reports/aql-bytecode-report.md`)
+The proposed AQL bytecode compiler (`aql/doc/design/aql-bytecode-report.0.md`)
 is "the carrier checker with a recording side effect" — every dispatch
 decision the checker makes statically becomes a `CALL_NATIVE sig_id`
 in the bytecode, and dynamic corners fall back to the interpreter over

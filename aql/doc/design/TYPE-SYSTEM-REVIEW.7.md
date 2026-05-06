@@ -645,7 +645,7 @@ canonical user-facing reference.
 
 ## 9. Items not in scope of this report
 
-- The bytecode AOT plan (`docs/reports/aql-bytecode-report.md`)
+- The bytecode AOT plan (`aql/doc/design/aql-bytecode-report.0.md`)
   intersects every type-system decision; weaknesses there are
   cataloged in that report.
 - The check-mode step-budget and recursion handling are orthogonal
