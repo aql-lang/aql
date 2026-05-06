@@ -390,7 +390,306 @@ Python's `textwrap.dedent`. The default policy preserves content
 verbatim.
 
 
-## 7. Status and open questions
+## 7. Plugin architecture: `lang` → jsonic plugin
+
+Each `<aql-embed lang="X">` block is parsed by a registered plugin
+keyed by `X`. The architecture matches existing AQL parser patterns
+(see `internal/parser/parse.go` — `j := jsonic.Make(opts)` followed
+by token registration, lex matchers, grammar rules, and a converter
+pass) so that adding a new embedded language is the same kind of
+work as adding a new piece of AQL syntax.
+
+### 7.1 Plugin shape
+
+A plugin owns a `jsonic.Jsonic` instance configured for its
+language and a converter that turns the jsonic output into an AQL
+`Value`:
+
+```go
+package embed
+
+import (
+    jsonic "github.com/jsonicjs/jsonic/go"
+    "github.com/metsitaba/voxgig-exp/aql/internal/engine"
+)
+
+// Plugin is the unit of registration. One plugin handles exactly
+// one lang attribute value.
+type Plugin struct {
+    Lang      string
+
+    // Setup runs once at plugin construction. It receives a fresh
+    // jsonic.Jsonic and registers tokens, lex matchers, grammar
+    // rules, and options for the language.
+    Setup     func(*jsonic.Jsonic) error
+
+    // MakeOpts returns the jsonic.Options used to construct the
+    // jsonic instance. Defaults are fine for JSON-like syntaxes;
+    // word-context languages override TextInfo, ListRef, etc.
+    MakeOpts  func() jsonic.Options
+
+    // Convert turns the jsonic parse result into an AQL Value.
+    // For raw-body plugins (markdown, regex), Convert receives the
+    // raw string body and runs an external parser instead.
+    Convert   func(parsed any, body string, opts ParseOpts) (engine.Value, error)
+
+    // Result is the declared engine.Type that Convert produces.
+    // Used by the carrier-based static type checker before any
+    // runtime parse occurs.
+    Result    engine.Type
+
+    // Mode declares whether the plugin wants a resolved string
+    // (AQL substitutes {…} before calling Convert) or the
+    // original template plus a Substitutions list (handler
+    // chooses how to splice). See §7.6.
+    Mode      InterpMode
+
+    // built lazily on first use; reused across parses
+    j         *jsonic.Jsonic
+}
+
+type ParseOpts struct {
+    Interpolate   bool                   // interpolate attribute set
+    Dedent        bool                   // dedent attribute set
+    Preserve      bool                   // xml:space="preserve"
+    Attrs         map[string]string      // every other attr on <aql-embed>
+    Substitutions []Substitution         // populated when Mode == InterpTemplate
+}
+
+type Substitution struct {
+    Offset int            // byte offset into body where {…} appeared
+    Length int            // length of the {…} span in the original body
+    Value  engine.Value   // the resolved AQL value
+}
+
+type InterpMode int
+
+const (
+    InterpResolved InterpMode = iota  // body has been substituted
+    InterpTemplate                    // body still has {…} markers
+)
+```
+
+### 7.2 Registry
+
+A package-level registry maps lang names to plugins. Lookups are
+case-sensitive; `markdown` and `Markdown` are different. Plugins
+self-register via `init()`:
+
+```go
+package embed
+
+var registry = map[string]*Plugin{}
+
+func Register(p *Plugin) error {
+    if _, dup := registry[p.Lang]; dup {
+        return fmt.Errorf("embed: lang %q already registered", p.Lang)
+    }
+    registry[p.Lang] = p
+    return nil
+}
+
+func Lookup(lang string) (*Plugin, bool) {
+    p, ok := registry[lang]
+    return p, ok
+}
+
+// Parse is what the XML literal parser calls when it encounters an
+// <aql-embed> end tag. The caller has already extracted body and
+// resolved attributes; opts.Substitutions is populated when the
+// outer parser ran AQL on the {…} spans.
+func Parse(lang, body string, opts ParseOpts) (engine.Value, error) {
+    p, ok := Lookup(lang)
+    if !ok {
+        return rawValue(lang, body), nil // §7.5 fallback
+    }
+    if p.j == nil {
+        p.j = jsonic.Make(p.MakeOpts())
+        if err := p.Setup(p.j); err != nil {
+            return engine.Value{}, fmt.Errorf("embed[%s]: setup: %w", lang, err)
+        }
+    }
+    if opts.Dedent { body = dedent(body) }
+
+    // Plugins that don't use jsonic at all (markdown, regex) leave
+    // Setup as a no-op and read body directly in Convert. The
+    // jsonic parse below produces a single string token in that
+    // case via a catch-all matcher registered in Setup.
+    parsed, perr := p.j.Parse(body)
+    if perr != nil {
+        return engine.Value{}, fmt.Errorf("embed[%s]: parse: %w", lang, perr)
+    }
+    return p.Convert(parsed, body, opts)
+}
+```
+
+### 7.3 Anatomy of a plugin: JSON
+
+A jsonic-shaped language reuses jsonic's strict-JSON dialect almost
+unchanged:
+
+```go
+func init() {
+    embed.Register(&embed.Plugin{
+        Lang: "json",
+        MakeOpts: func() jsonic.Options {
+            return jsonic.Options{
+                ListRef: boolPtr(true),
+                MapRef:  boolPtr(true),
+                Strict:  &jsonic.StrictOptions{Json: boolPtr(true)},
+            }
+        },
+        Setup:   func(j *jsonic.Jsonic) error { return nil },
+        Convert: convertJsonValue,
+        Result:  engine.TJson,
+        Mode:    embed.InterpResolved,
+    })
+}
+```
+
+`convertJsonValue` walks jsonic's typed list/map output and produces
+an `engine.Value` of type `Object/Map`/`Object/List`. Because
+jsonic's JSON support is built in, this plugin is ~30 lines.
+
+### 7.4 Anatomy of a plugin: regex
+
+A non-jsonic language uses a single catch-all matcher to consume
+the whole body as one token, then runs an external parser in
+`Convert`:
+
+```go
+func init() {
+    embed.Register(&embed.Plugin{
+        Lang: "regex",
+        MakeOpts: func() jsonic.Options { return jsonic.Options{} },
+        Setup: func(j *jsonic.Jsonic) error {
+            // One matcher: emit the whole input as a #BODY token.
+            // The "raw" rule replaces "val" so jsonic doesn't try
+            // to tokenise the body further.
+            return embed.InstallRawBodyRule(j)
+        },
+        Convert: func(parsed any, body string, _ embed.ParseOpts) (engine.Value, error) {
+            re, err := regexp.Compile(body)
+            if err != nil { return engine.Value{}, err }
+            return engine.NewMiniLang(engine.TRegExp, re, body), nil
+        },
+        Result: engine.TRegExp,
+        Mode:   embed.InterpResolved,
+    })
+}
+```
+
+`InstallRawBodyRule` is a helper that sets up the single-token
+shape so non-jsonic plugins don't repeat the same boilerplate.
+Plugins that genuinely use jsonic (json, jsonic itself, AQL
+self-embedding) skip the helper.
+
+### 7.5 Built-in plugins and the unknown-lang fallback
+
+A core set is registered at `embed` package init:
+
+| Lang        | Result type                       | Backing                                       |
+|-------------|-----------------------------------|-----------------------------------------------|
+| `aql`       | `Scalar/MiniLang/Aql`             | reuses `internal/parser/parse.go`             |
+| `json`      | `Object/Map` / `Object/List`      | jsonic strict-JSON dialect                    |
+| `jsonic`    | `Object/Map` / `Object/List`      | jsonic default dialect                        |
+| `xml`       | `Object/Xml`                      | the XML literal parser (re-entry)             |
+| `markdown`  | `Scalar/MiniLang/Markdown`        | external — `goldmark` (CommonMark)            |
+| `regex`     | `Scalar/MiniLang/RegExp`          | external — `regexp.Compile`                   |
+| `css`       | `Scalar/MiniLang/Css`             | external — `andybalholm/cascadia`             |
+| `sql`       | `Scalar/MiniLang/Sql`             | external — `pg_query_go` or `sqlparser`       |
+| `yaml`      | `Scalar/MiniLang/Yaml`            | external — `gopkg.in/yaml.v3`                 |
+| `toml`      | `Scalar/MiniLang/Toml`            | external — `BurntSushi/toml`                  |
+| `text`      | `Scalar/String`                   | identity — body is the value, after dedent    |
+
+Unknown `lang` values fall through to a generic raw plugin that
+captures `(lang, body, attrs)` into a `Scalar/MiniLang/Raw` value.
+Downstream code can route the raw value (e.g. by passing it to
+`embed-handle "graphviz" raw` once a graphviz plugin is loaded),
+so a document with unfamiliar embeds still loads, parses, and
+queries.
+
+### 7.6 Interpolation handoff
+
+When `interpolate` is set on the `<aql-embed>` element, the outer
+XML parser evaluates each `{…}` span as an AQL expression before
+the plugin runs. The plugin's `Mode` decides what arrives:
+
+- **`InterpResolved`** (default for markdown, regex, css). The
+  body is substituted in place; `Convert` receives a single
+  resolved string. Simple — no template state to manage.
+- **`InterpTemplate`** (used by sql, log-template). The body
+  retains `{…}` placeholder markers, and `opts.Substitutions`
+  carries the resolved values plus their byte offsets. The
+  plugin chooses how to splice — SQL emits `?` bind variables and
+  binds the values via `database/sql`; logging emits structured
+  fields; templated YAML emits anchors.
+
+The mode is declared at registration time, not per-call, because
+the security and correctness story differs sharply: a SQL plugin
+that accepts `InterpResolved` is a SQL-injection vulnerability,
+so the plugin author must opt in to template mode.
+
+### 7.7 Lazy mode
+
+`<aql-embed lang="X" lazy>` defers parsing. The XML literal parser
+records `(lang, body, opts)` in an `Object/Lazy<X>` value and
+returns immediately. The first operation that requires concrete
+content (`text`, `cs/`, `xml-attr`, `xml-print`, etc.) calls
+`embed.Parse` and memoises the result on the value. Errors from
+lazy plugins surface at first use, with the original
+`<aql-embed>` source position attached.
+
+Lazy mode is what makes a 50-block runbook cheap: only the blocks
+actually inspected pay the parsing cost.
+
+### 7.8 Registering plugins from AQL
+
+The Go-side `embed.Register` is matched by an AQL host word for
+runtime-loaded plugins:
+
+```
+embed-register "graphviz"
+  [ String -> Object/MiniLang/Graphviz ]
+  [ body -> body graphviz-parse ]
+```
+
+The body is captured as an AQL fn (with its declared signature)
+and wrapped in a `Plugin` whose `Convert` invokes the fn through
+`CallAQL`. The form is the dynamic counterpart to compile-time Go
+registration; both populate the same registry.
+
+### 7.9 Concurrency and reuse
+
+A `*Plugin`'s `j *jsonic.Jsonic` is built lazily once and reused
+for every parse of that lang. jsonic isolates per-parse state in
+its `Context` so a single instance can serve concurrent calls
+provided the configuration phase has completed. The first call
+into an unbuilt plugin takes a sync-once latch; subsequent calls
+take no lock.
+
+External parsers (goldmark, cascadia, regexp) are similarly
+long-lived — `regexp.Compile`'d patterns and goldmark instances
+are created once per plugin and reused.
+
+### 7.10 Error handling
+
+Plugin errors are wrapped in the AQL error code
+`[aql/embed/parse]` with three pieces of context:
+
+- `lang` — the value of the `lang` attribute
+- `pos` — the source position of the offending `<aql-embed>`
+- `cause` — the raw plugin error (jsonic parse failure,
+  goldmark error, `regexp.Compile` error, etc.)
+
+The hint string includes a 40-character snippet of the body
+around the error position so the user does not have to scroll
+back to the embed declaration. Lazy plugins attach the original
+`<aql-embed>` source position to the error even though the parse
+runs much later.
+
+
+## 8. Status and open questions
 
 This is a design sketch (completeness 0). No parser, runtime, or
 query support has been built. Main open questions:
