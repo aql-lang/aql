@@ -4,7 +4,7 @@
 
 AQL currently has no date/time types or words. The type system (`types.go`) is extensible, and `time` is already imported in `value.go`. This design defines time/date types and words for AQL, drawing from the JavaScript Temporal API as the conceptual model and using Go's `time` package as the implementation backend. The design complements the existing dataframe words (`doc/DATAFRAME-WORDS.md`) — all scalar date words compose with `apply`, `sift`, `group`, etc. for column-level operations.
 
-**Deliverable:** New design document at `aql/doc/TEMPORAL-WORDS.md`.
+**Deliverable:** New design document at `aql/doc/design/TEMPORAL-WORDS.1.md`.
 
 ---
 

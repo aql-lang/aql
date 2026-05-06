@@ -1,14 +1,19 @@
 # AQL Implementation Status
 
 Cross-reference of design documents in `aql/doc/design/` against the
-current codebase. Last updated: 2026-04-05.
+current codebase. Last updated: 2026-05-06.
+
+Filenames are suffixed with a 0–10 implementation completeness
+indicator (e.g. `PLAN.10.md` is fully implemented, `MINILANG.0.md`
+is design-only). The number after the dot is the indicator, not a
+version.
 
 ## Recent Changes
 
 - **String interpolation**: Backtick template strings with `${...}`
   syntax, parsed natively by jsonic using custom tokens (#BT, #IS, #TL)
   and grammar rules (interp/ielem/iexpr/ieval). Supports nested
-  interpolation to any depth. See LANGREF.md § Literals.
+  interpolation to any depth. See LANGREF.10.md § Literals.
 - **Timer/concurrency words**: `sleep`, `timeout`, `interval`, `cancel`,
   `await` with four parallel execution modes (all, full, first, any).
   New types: `Object/Timeout`, `Object/Interval`.
@@ -18,17 +23,17 @@ current codebase. Last updated: 2026-04-05.
 
 | Document | Description | Notes |
 |----------|-------------|-------|
-| PLAN.md | Core execution loop plan | All phases complete. |
-| ENGINE.md | Stack machine, forward scanning, argument equivalence | Working. /s /f modifiers, Forth primitives. |
-| ENGINE-UNIFIED-ALGO.md | Unified signature matching algorithm | Pending call frames, incremental constraint solving. |
-| SIGNATURE-MATCHING-PSEUDOCODE.md | Type matching, scoring, positional/forward/prefix matching | /q modifier, fallback signatures, specificity scoring. |
-| TYPES.md | Hierarchical type system (50+ types) | Scalar/Node/Word/Object/Type/Any/None, metatypes, Store. |
-| SIGNATURES.md | All 100+ builtin word signatures | Full match-order signatures with returns and notes. |
-| LANGREF.md | Language reference for all builtin words | All documented words registered in native_*.go. |
-| IMPORTS.md | Module system: descriptors, file imports, renaming | Bare name resolution, `aql:` prefix, isolation. |
-| NATIVE-MODULES.md | Native Go modules, `aql:math` | Module loading, dot-notation access, FnDef auto-invocation. |
-| FILE-ACCESS.md | read/write words, FileOps interface | CSV/TSV/JSON/jsonic/text, options maps, stdin/stdout/stderr. |
-| FOR-LOOP-REVIEW.md | For-loop design review | Sentinel errors for break/continue, mark/move, lazy ForCont. |
+| PLAN.10.md | Core execution loop plan | All phases complete. |
+| ENGINE.10.md | Stack machine, forward scanning, argument equivalence | Working. /s /f modifiers, Forth primitives. |
+| ENGINE-UNIFIED-ALGO.8.md | Unified signature matching algorithm | Pending call frames, incremental constraint solving. |
+| SIGNATURE-MATCHING-PSEUDOCODE.10.md | Type matching, scoring, positional/forward/prefix matching | /q modifier, fallback signatures, specificity scoring. |
+| TYPES.10.md | Hierarchical type system (50+ types) | Scalar/Node/Word/Object/Type/Any/None, metatypes, Store. |
+| SIGNATURES.10.md | All 100+ builtin word signatures | Full match-order signatures with returns and notes. |
+| LANGREF.10.md | Language reference for all builtin words | All documented words registered in native_*.go. |
+| IMPORTS.10.md | Module system: descriptors, file imports, renaming | Bare name resolution, `aql:` prefix, isolation. |
+| NATIVE-MODULES.10.md | Native Go modules, `aql:math` | Module loading, dot-notation access, FnDef auto-invocation. |
+| FILE-ACCESS.10.md | read/write words, FileOps interface | CSV/TSV/JSON/jsonic/text, options maps, stdin/stdout/stderr. |
+| FOR-LOOP-REVIEW.10.md | For-loop design review | Sentinel errors for break/continue, mark/move, lazy ForCont. |
 
 **109 native words** across: stack manipulation (15), math (6),
 boolean logic (6), string ops (15), comparison (7), type system (11),
@@ -40,7 +45,7 @@ timer/concurrency (6: sleep, timeout, interval, cancel, await, now).
 
 ## Partially Implemented
 
-### ARRAYIFICATION.md — ~60%
+### ARRAYIFICATION.6.md — ~60%
 
 **Done:** `iota`, `reshape`, `flatten`, `transpose`, `take`, `shed`,
 `reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
@@ -57,7 +62,7 @@ with SQLiteStore backing.
 
 ## Not Implemented
 
-### DATAFRAME-WORDS.md — 28+ words
+### DATAFRAME-WORDS.0.md — 28+ words
 
 SQL-style tabular data manipulation. Planned words:
 
@@ -78,7 +83,7 @@ SQL-style tabular data manipulation. Planned words:
 | Apply | `apply` (per column/element) |
 | Row access | `row`, `slice` (extend) |
 
-### MATRIX-WORDS.md — 83 words + 22 overloads
+### MATRIX-WORDS.0.md — 83 words + 22 overloads
 
 Linear algebra operations (gonum dependency). Planned words:
 
@@ -97,7 +102,7 @@ Linear algebra operations (gonum dependency). Planned words:
 | Comparison | `mat-eq?`, `mat-close?`, `mat-gt`, `mat-lt`, `mat-any?`, `mat-all?` |
 | Advanced | `mat-dot`, `mat-cross`, `mat-outer`, `mat-kron`, `mat-conv`, `mat-apply`, `mat-map-row`, `mat-map-col` |
 
-### TEMPORAL-WORDS.md — ~70 words (partially implemented)
+### TEMPORAL-WORDS.1.md — ~70 words (partially implemented)
 
 Date/time types and operations. Types implemented: Instant, DateTime,
 Date, TimeOfDay, CalDuration, ClkDuration, Timezone, Timeout, Interval.
@@ -117,7 +122,7 @@ Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
 | Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `dst?` |
 | Parsing | `parse-date`, `parse-datetime`, `auto-date` |
 
-### MINILANG.md — 10+ inline DSLs
+### MINILANG.0.md — 10+ inline DSLs
 
 Mini-language literals with `xy/...` two-letter prefix syntax.
 Requires lexer integration for prefix detection.
@@ -139,10 +144,63 @@ Requires lexer integration for prefix detection.
 | `ur/` | URL pattern | URL template matching |
 | `dt/` | Date/time format | Temporal formatting |
 
+### GENERICS.0.md — generic types
+
+Algebraic generics with concatenative core and a sugar layer. No
+implementation yet — design draft only.
+
+### XML.0.md — XML format and embedding
+
+Tree-structured XML alternate concrete syntax for AQL programs and
+data, with `${...}` interpolation, CSS-selector querying (`cs/`),
+and `<aql-embed lang="...">` for embedding foreign syntaxes.
+
+
+## Reports and Reviews
+
+These documents review existing implementation rather than propose
+new features. Their completeness suffix reflects how much of what
+they describe or recommend is in the codebase.
+
+| Document | Topic |
+|----------|-------|
+| AQL-CODE-REVIEW-REPORT.6.md | Architecture, safety, duplication review; most fixes landed, some remain. |
+| BATTERIES-INCLUDED-REPORT.5.md | Standard-library coverage analysis; partial uptake. |
+| CARRIER-STATIC-TYPECHECK-REPORT.10.md | Carrier-based static type checking — implemented. |
+| TYPE-SYSTEM-REVIEW.7.md | Algebraic + dependent type review; majority resolved. |
+| AQL-DX-REPORT.5.md | DX feedback from `aql:decision`; several issues open. |
+| jsonic-matcher-rule-access-report.10.md | Jsonic LexMatcher rule access; landed in jsonic v0.1.6. |
+| aql-boolean-operations-report.10.md | Boolean ops review; ops are implemented. |
+| aql-bytecode-outline.0.md | Bytecode AOT compilation outline. |
+| aql-bytecode-report.0.md | Full bytecode compilation feasibility report. |
+| amop-in-aql-report.0.md | Ambient-Oriented Programming feasibility. |
+| fsharp-units-in-aql-report.0.md | F# units of measure feasibility. |
+
+
+## Reference Documentation
+
+These describe the language itself; their completeness reflects
+parity with the codebase, not pending work.
+
+| Document | Topic |
+|----------|-------|
+| LANGREF.10.md | Language reference — all builtins. |
+| SIGNATURES.10.md | Builtin word signatures. |
+| TYPES.10.md | Type system. |
+| ENGINE.10.md | Stack machine. |
+| IMPORTS.10.md | Module / import system. |
+| NATIVE-MODULES.10.md | Native Go modules. |
+| FILE-ACCESS.10.md | File I/O API. |
+| SAMPLES.10.md | Code samples. |
+| tutorial.10.md | Diataxis tutorial. |
+| how-to.10.md | Diataxis how-to. |
+| reference.10.md | Diataxis reference. |
+| explanation.10.md | Diataxis explanation. |
+
 
 ## Open Design Issues
 
-From AQL-DX-REPORT.md (building `aql:decision`):
+From AQL-DX-REPORT.5.md (building `aql:decision`):
 
 | Priority | Issue | Status |
 |----------|-------|--------|
