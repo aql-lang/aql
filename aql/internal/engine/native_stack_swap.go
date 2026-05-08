@@ -6,10 +6,13 @@ func RegisterSwap(r *Registry) {
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
+			// Unified §1.4 dispatch: args[0]=stack top, args[1]=next-deeper.
+			// Returning [args[0], args[1]] writes them back in source order
+			// (deeper-then-top) — the two values come out swapped.
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{args[1], args[0]}, nil
+				return []Value{args[0], args[1]}, nil
 			},
-			ReturnsFn: ReturnsIdentity(1, 0),
+			ReturnsFn: ReturnsIdentity(0, 1),
 		}},
 	})
 }

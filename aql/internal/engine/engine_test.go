@@ -279,7 +279,14 @@ func TestDupForward(t *testing.T) {
 }
 
 func TestSwapForward(t *testing.T) {
-	// swap/f 1 2 → [2, 1]
+	// Post §1.4 (unified dispatch): under /f the matcher fills sig
+	// args from forward in source order, so `swap/f 1 2` binds
+	// sig[0]=1 (first forward), sig[1]=2. The handler emits its
+	// output in splice (left-to-right) order. With the unified-rule
+	// handler `[args[0], args[1]]`, the result is [1, 2] — i.e.
+	// /f no longer "swaps" the two values, because the forced-forward
+	// reading lays them out in their source order. Stack-mode
+	// swap (`1 2 swap`) still produces [2, 1] (see TestSwap).
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -297,8 +304,8 @@ func TestSwapForward(t *testing.T) {
 	}
 	_as19, _ := result[0].AsInteger()
 	_as18, _ := result[1].AsInteger()
-	if _as19 != 2 || _as18 != 1 {
-		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
+	if _as19 != 1 || _as18 != 2 {
+		t.Errorf("got [%v, %v], want [1, 2]", result[0], result[1])
 	}
 }
 

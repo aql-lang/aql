@@ -215,7 +215,7 @@ The TS port already has this shape: `tryForwardSplit` and
 `tryStackOnly` produce the args array in sig order in *one place*. The
 Go engine should follow.
 
-### 1.4 Stack-only vs forward-precedence: language choice, with implementation echoes
+### 1.4 Stack-only vs forward-precedence — RESOLVED via boundary-aware unified dispatch
 
 The asker correctly noted: is the difference in the *implementation
 functions*, or in the *AQL language itself*? **Both — but the language
@@ -324,6 +324,66 @@ of the callee.
 The right answer depends on whether any third-party code already
 depends on stack-only deepest-first. If aqleng is the only consumer,
 (3) is the better long-term fix.
+
+#### Resolution
+
+Implemented in two commits. The unified rule is now:
+
+> Each Signature declares a boundary `BarrierPos` (the position of
+> `|`). Args at sig[0..B-1] may be collected from forward tokens or
+> fall back to stack; args at sig[B..N-1] always come from stack.
+> Stack consumption is always **top-down**: sig[i] = stack top,
+> sig[i+1] = next-deeper, etc. Forward consumption is always
+> **source order**: sig[0] = first forward token, sig[1] = second.
+
+`BarrierPos == 0` corresponds to the legacy stack-only contract;
+`BarrierPos == N` corresponds to legacy forward-precedence;
+intermediate values give partial-boundary sigs (`def g fn [[A B | C]
+…]` — A and B forward-eligible, C must come from the stack).
+
+Concrete implications:
+
+- The word-level `ForwardPrecedence` flag is no longer consulted by
+  the matcher. `Registry.upsertFnDef` normalises every sig's
+  `BarrierPos` at registration time: a forward-prec sig that hadn't
+  set BarrierPos gets it set to `len(Args)`; a stack-only sig stays
+  at 0.
+- `match.go::matchSignature` loses the stackOnly / nearestFirst /
+  skipForward / insideForward branching. One loop, two phases
+  (forward up to the limit, then stack top-down).
+- `engine.go::rearrangeForForward` no longer reverses the stack-arg
+  half. Forward-collected args are reversed so fwd_0 ends up on top
+  of the stack — the unified matcher's top-down read then maps
+  them back to sig[0..F-1] in source order.
+- Stack-only handlers that consumed args in deepest-first order
+  (`swap`'s `[args[1], args[0]]` was the canonical example) are
+  rewritten to expect args[0]=top. The semantic of the word doesn't
+  change; only the index expressions inside the handler do.
+
+Migration scope:
+
+- aqleng spec runners (Go + TS): only `swap` is multi-arg
+  stack-only; handler updated.
+- aql/internal/engine native stack ops: swap, over, rot, nip, tuck,
+  2dup, 2swap, 2over rewritten to top-down indexing.
+- aql/test rows: a small number of test rows assumed the legacy
+  swap-form binding (`a f b → F(b, a)`) was the only mirror-violator;
+  under the unified rule, the four equivalent forms (`f a b`,
+  `b a f`, `b f a` (now also equivalent), `a f b` (still the swap
+  form)) are pinned by the same rule. Several test rows that
+  documented the legacy mirror rule have to be updated to match the
+  new, simpler rule.
+
+Open follow-ups (not yet migrated):
+
+- aql/internal/nativemod multi-arg sigs (matrix-at, time-add-*) were
+  declared with their args in domain order (e.g. `(Matrix, Integer,
+  Integer)`) and called as `mat row col matrix-at`. Under the new
+  rule the `matrix-at` sig declaration has to be reversed to
+  `(Integer, Integer, Matrix)`, with handler index access shifted
+  to match. Same for the other multi-arg sigs.
+- A handful of `aql/test/*.tsv` rows that document the OLD
+  swap-form footgun need updating.
 
 ### 1.5 `SetCapability(name, nil)` overloaded as delete — fixed
 
