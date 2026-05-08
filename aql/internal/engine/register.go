@@ -50,10 +50,9 @@ func Register(r *Registry) {
 	installResourceTypes(r)
 
 	// Control flow
-	RegisterDo(r)
-	RegisterIf(r)
-	RegisterFor(r)
-	RegisterError(r)
+	for _, n := range controlNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Accessors
 	for _, n := range accessorNatives {
