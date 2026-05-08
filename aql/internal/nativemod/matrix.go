@@ -124,6 +124,11 @@ func makeMatrixToIntFnDef(wordName string, subReg *engine.Registry) engine.Value
 }
 
 func makeMatrixIntIntToDecFnDef(wordName string, subReg *engine.Registry) engine.Value {
+	// FnDef.Params is matched deepest-first against the user stack. Keep the
+	// user-facing positional order `mat row col` (deepest→top) so the
+	// wrapper resolves correctly; the underlying NativeFunc sig is the
+	// reverse (top-down = stack[N-1], stack[N-2], …, stack[0]) and is
+	// "data-last" by virtue of mat being deepest.
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TInteger}, {Type: engine.TInteger}},
@@ -400,17 +405,20 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:              "matrix-at",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TMatrix, engine.TInteger, engine.TInteger},
+			// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
+			// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
+			// sig[2]=mat (deepest).
+			Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				c64, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
 				r64, err := args[1].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
-				c64, err := args[2].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
+				m := args[2].AsMatrix()
 				row, col := int(r64), int(c64)
 				if row < 0 || row >= m.Rows || col < 0 || col >= m.Cols {
 					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows, m.Cols)
@@ -424,13 +432,13 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:              "matrix-row",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TMatrix, engine.TInteger},
+			Args: []engine.Type{engine.TInteger, engine.TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
-				r64, err := args[1].AsConcreteInteger()
+				r64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
+				m := args[1].AsMatrix()
 				row := int(r64)
 				if row < 0 || row >= m.Rows {
 					return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows)
@@ -448,13 +456,13 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:              "matrix-col",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TMatrix, engine.TInteger},
+			Args: []engine.Type{engine.TInteger, engine.TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
-				c64, err := args[1].AsConcreteInteger()
+				c64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
+				m := args[1].AsMatrix()
 				col := int(c64)
 				if col < 0 || col >= m.Cols {
 					return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols)
@@ -532,13 +540,13 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:              "matrix-scale",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TMatrix, engine.TNumber},
+			Args: []engine.Type{engine.TNumber, engine.TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
-				s, err := args[1].AsNumber()
+				s, err := args[0].AsNumber()
 				if err != nil {
 					return nil, err
 				}
+				m := args[1].AsMatrix()
 				data := make([]float64, len(m.Data))
 				for i := range data {
 					data[i] = m.Data[i] * s

@@ -114,7 +114,9 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	exports.Set("parse-datetime", makeTimeFnDef("parse-datetime", []engine.FnParam{{Type: engine.TString}, {Type: engine.TString}}, []engine.Type{engine.TDateTime}, subReg))
 	exports.Set("auto-date", makeTimeFnDef("auto-date", []engine.FnParam{{Type: engine.TString}}, []engine.Type{engine.TDate}, subReg))
 
-	// Legacy arithmetic (Date Integer -> Date)
+	// Legacy arithmetic — FnDef params are in user-facing positional order
+	// (deepest-first match): `date n add-days`. The underlying NativeFunc
+	// sig is "data-last" (top-of-stack-first match): [TInteger, TDate].
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
 		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}, {Type: engine.TInteger}}, []engine.Type{engine.TDate}, subReg))
 	}
@@ -389,13 +391,13 @@ func addDateNative(name string, build func(n int) (years, months, days int)) eng
 		Name:              name,
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TDate, engine.TInteger},
+			Args: []engine.Type{engine.TInteger, engine.TDate},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				t := extractTime(args[0])
-				n, err := args[1].AsConcreteInteger()
+				n, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
+				t := extractTime(args[1])
 				y, m, d := build(int(n))
 				return []engine.Value{engine.NewDate(t.AddDate(y, m, d))}, nil
 			},
@@ -725,13 +727,13 @@ var TimeNatives = func() []engine.NativeFunc {
 			Name:              "format",
 			ForwardPrecedence: true,
 			Signatures: []engine.NativeSig{{
-				Args: []engine.Type{engine.TDate, engine.TString},
+				Args: []engine.Type{engine.TString, engine.TDate},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					layout, err := args[1].AsConcreteString()
+					layout, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewString(extractTime(args[0]).Format(layout))}, nil
+					return []engine.Value{engine.NewString(extractTime(args[1]).Format(layout))}, nil
 				},
 				Returns: []engine.Type{engine.TString},
 			}},
@@ -1098,13 +1100,13 @@ var TimeNatives = func() []engine.NativeFunc {
 			Name:              "start-of",
 			ForwardPrecedence: true,
 			Signatures: []engine.NativeSig{{
-				Args: []engine.Type{engine.TDate, engine.TString},
+				Args: []engine.Type{engine.TString, engine.TDate},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					t := extractTime(args[0])
-					unit, err := args[1].AsConcreteString()
+					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
+					t := extractTime(args[1])
 					var result time.Time
 					switch unit {
 					case "year":
@@ -1136,13 +1138,13 @@ var TimeNatives = func() []engine.NativeFunc {
 			Name:              "end-of",
 			ForwardPrecedence: true,
 			Signatures: []engine.NativeSig{{
-				Args: []engine.Type{engine.TDate, engine.TString},
+				Args: []engine.Type{engine.TString, engine.TDate},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					t := extractTime(args[0])
-					unit, err := args[1].AsConcreteString()
+					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
+					t := extractTime(args[1])
 					var result time.Time
 					switch unit {
 					case "year":
