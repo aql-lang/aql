@@ -16,7 +16,7 @@ func TestRegisterFormat(t *testing.T) {
 	a.RegisterFormat("bracket", &bracketFormat{})
 
 	// Verify the format was registered by checking the registry directly.
-	if a.registry.Formats["bracket"] == nil {
+	if engine.HostFormats(a.registry)["bracket"] == nil {
 		t.Fatal("expected bracket format to be registered")
 	}
 }

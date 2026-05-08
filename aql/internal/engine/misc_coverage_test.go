@@ -286,7 +286,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.jsonic"] = []byte(`{a: 1, b: "hello"}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.jsonic"),
@@ -313,7 +313,7 @@ func TestReadWriteJSON(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"x": 42}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.json"),
@@ -329,7 +329,7 @@ func TestReadWriteLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// Write lines format
 	opts := NewOrderedMap()
@@ -350,7 +350,7 @@ func TestReadWriteText(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["hello.txt"] = []byte("hello world")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("hello.txt"),
@@ -392,7 +392,7 @@ func TestWriteAppendMode(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["out.txt"] = []byte("first\n")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
@@ -543,7 +543,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	mem := fileops.NewMem()
 	// Module file that exports "greet" with value "hello"
 	mem.Files["mod.aql"] = []byte(`export greet {val: 'world'}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 	r.ParseFunc = func(src string) ([]Value, error) {
 		// Simple parse: export greet {val: 'world'}
 		m := NewOrderedMap()
@@ -571,7 +571,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["mod2.aql"] = []byte(`export foo {val: 42}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 	r.ParseFunc = func(src string) ([]Value, error) {
 		m := NewOrderedMap()
 		m.Set("val", NewInteger(42))

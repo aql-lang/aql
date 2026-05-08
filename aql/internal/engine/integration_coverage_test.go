@@ -861,7 +861,7 @@ func TestIntegDoListMultipleResults(t *testing.T) {
 func TestIntegFileIOWriteAndRead(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello world"
 	result := runAQL(t, r, []Value{
@@ -885,7 +885,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 func TestIntegFileIOWriteAppend(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello"
 	runAQL(t, r, []Value{
@@ -912,7 +912,7 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 func TestIntegFileIOWriteJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// Write a map as JSON
 	m := NewOrderedMap()
@@ -976,7 +976,7 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// Write JSON content to a txt file, read with explicit fmt
 	_ = mem.WriteFile("data.txt", []byte(`{"a":1}`), 0644)
@@ -993,7 +993,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 func TestIntegFileIOReadJsonExtension(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.json", []byte(`{"b":2}`), 0644)
 	result := runAQL(t, r, []Value{
@@ -1007,7 +1007,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
@@ -1027,7 +1027,7 @@ func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 func TestIntegCSVReadWrite(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	csvContent := "name,age\nAlice,30\nBob,25\n"
 	_ = mem.WriteFile("people.csv", []byte(csvContent), 0644)
@@ -1047,7 +1047,7 @@ func TestIntegCSVReadWrite(t *testing.T) {
 func TestIntegTSVRead(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	tsvContent := "col1\tcol2\nval1\tval2\n"
 	_ = mem.WriteFile("data.tsv", []byte(tsvContent), 0644)
@@ -1063,7 +1063,7 @@ func TestIntegTSVRead(t *testing.T) {
 func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	csvContent := "x,y\n1,2\n"
 	_ = mem.WriteFile("data.txt", []byte(csvContent), 0644)
@@ -1367,7 +1367,7 @@ func TestIntegContextPushesStore(t *testing.T) {
 func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// Write a list value with fmt:json
 	list := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
@@ -1389,7 +1389,7 @@ func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 func TestIntegFileIOReadLines(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("lines.txt", []byte("a\nb\nc"), 0644)
 	opts := NewOrderedMap()
@@ -1444,7 +1444,7 @@ func TestIntegVarWithDoBlock(t *testing.T) {
 func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.jsonic", []byte(`{x: 1, y: 2}`), 0644)
 	result := runAQL(t, r, []Value{
@@ -1458,7 +1458,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 	r, _ := DefaultRegistry()
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// append to non-existent file should just write
 	opts := NewOrderedMap()

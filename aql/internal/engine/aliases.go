@@ -30,14 +30,12 @@ type (
 	DisjunctInfo = aqleng.DisjunctInfo
 	Engine = aqleng.Engine
 	ErrorInfo = aqleng.ErrorInfo
-	FileOps = aqleng.FileOps
 	FnDefInfo = aqleng.FnDefInfo
 	FnParam = aqleng.FnParam
 	FnSig = aqleng.FnSig
 	FnSigSpec = aqleng.FnSigSpec
 	FnUndefInfo = aqleng.FnUndefInfo
 	ForCont = aqleng.ForCont
-	Format = aqleng.Format
 	ForwardInfo = aqleng.ForwardInfo
 	GuardClause = aqleng.GuardClause
 	Handler = aqleng.Handler

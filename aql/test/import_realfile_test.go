@@ -45,7 +45,7 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value,
 		t.Fatal(err)
 	}
 	native.Register(reg)
-	reg.SetFileOps(fileops.NewDefault())
+	engine.SetHostFileOps(reg, fileops.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	reg.BaseDir = absDir
 

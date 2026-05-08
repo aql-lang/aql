@@ -267,8 +267,15 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
-	modReg.FileOps = parent.FileOps
-	modReg.MemOps = parent.MemOps
+	// Inherit host-installed capabilities so the module body can read
+	// files, encode/decode formats, and query the SQLite store using
+	// the same backends as the parent registry.
+	if ops := HostFileOps(parent); ops != nil {
+		SetHostFileOps(modReg, ops)
+	}
+	if mem, ok := parent.Capability(CapMemFileOps); ok {
+		modReg.SetCapability(CapMemFileOps, mem)
+	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	// CheckMode is deliberately NOT propagated to the module sub-
@@ -384,7 +391,7 @@ func isDataFile(path string) bool {
 // returns the main file specified there. If the file doesn't exist or has
 // no main property, returns "index.aql".
 func resolveModuleMain(r *Registry, dir string) string {
-	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(dir, ".aql", "aql.json"))
 	if err != nil {
 		return "index.aql"
 	}
@@ -427,7 +434,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		startDir = r.BaseDir
 	} else {
 		var err error
-		startDir, err = r.EffectiveFileOps().ResolvePath(".")
+		startDir, err = EffectiveFileOps(r).ResolvePath(".")
 		if err != nil {
 			return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
 		}
@@ -438,7 +445,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		modDir := filepath.Join(dir, ".aql", name)
 		main := resolveModuleMain(r, modDir)
 		candidate := filepath.Join(modDir, main)
-		if _, err := r.EffectiveFileOps().ReadFile(candidate); err == nil {
+		if _, err := EffectiveFileOps(r).ReadFile(candidate); err == nil {
 			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
@@ -476,7 +483,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 
 	resolved := resolveImportPath(parent, path)
 
-	data, err := parent.EffectiveFileOps().ReadFile(resolved)
+	data, err := EffectiveFileOps(parent).ReadFile(resolved)
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %w", err)
 	}
@@ -510,7 +517,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 // property (map of key→filename). For each entry it loads the data file
 // from the module directory and adds a "resource" export to the descriptor.
 func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
-	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
 	if err != nil {
 		return nil // no aql.json — nothing to do
 	}

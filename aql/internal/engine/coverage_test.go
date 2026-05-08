@@ -2595,13 +2595,13 @@ func TestStepEndTerminatesDef(t *testing.T) {
 // ========================
 
 func TestNewRegistryHasStore(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Store field removed; context store is initialized by InitRootContext.
-	if r.Formats == nil {
-		t.Error("expected Formats to be initialized")
+	if HostFormats(r) == nil {
+		t.Error("expected Formats capability to be installed")
 	}
 }
 

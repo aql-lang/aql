@@ -22,7 +22,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 	native.Register(reg)
 	nativemod.InstallMathExports(reg)
 

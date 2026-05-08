@@ -37,15 +37,10 @@ type Registry struct {
 	// alias inside a sub-program and revert it without registry
 	// surgery.
 	types             map[string][]Value                                 // name → stack of type values
-	FileOps           FileOps                                            // file operations for read/write words; the host package installs a concrete impl
-	MemOps            FileOps                                            // in-memory file ops (used when __sys.fs.mem = true); created lazily via MemOpsFactory
-	MemOpsFactory     func() FileOps                                     // factory used by EffectiveFileOps when an in-memory ops is requested
-	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
-	OnSetFileOps      func(FileOps)                                      // optional hook invoked from SetFileOps; lets the host re-wire format-specific resolvers
+	capabilities      map[string]any                                     // host-installed plugin slots (see capability.go)
 	Output            io.Writer                                          // output writer for print/printstr and stdout
 	ErrOutput         io.Writer                                          // error output writer for stderr
 	Input             io.Reader                                          // input reader for stdin
-	SQLite            any                                                // host-installed SQLite store; opaque to the engine
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
@@ -191,14 +186,15 @@ type CheckDiagnostic struct {
 
 // NewRegistry creates an empty registry.
 //
-// The returned Registry has no FileOps, no Formats, and no SQLite store.
-// The host package is responsible for installing those before running
-// user code (see Registry.SetFileOps, Registry.Formats, Registry.SQLite).
+// The returned Registry has no built-in capabilities — no file
+// operations, no format registry, no SQL store. The host package
+// installs those via Registry.SetCapability before running user code.
+// See capability.go for the plugin contract.
 func NewRegistry() (*Registry, error) {
 	r := &Registry{
 		defStacks:      make(map[string][]Value),
 		types:          make(map[string][]Value),
-		Formats:        make(map[string]Format),
+		capabilities:   make(map[string]any),
 		Output:         os.Stdout,
 		ErrOutput:      os.Stderr,
 		Input:          os.Stdin,
@@ -212,59 +208,6 @@ func NewRegistry() (*Registry, error) {
 func (r *Registry) NextModuleID() string {
 	r.moduleSeq++
 	return fmt.Sprintf("mod_%d", r.moduleSeq)
-}
-
-// SetFileOps replaces the file operations implementation. If
-// OnSetFileOps is set, it is invoked with the new ops so the host can
-// re-wire format-specific resolvers (e.g. the jsonic multisource
-// resolver) without aqleng knowing about them.
-func (r *Registry) SetFileOps(ops FileOps) {
-	r.FileOps = ops
-	if r.OnSetFileOps != nil {
-		r.OnSetFileOps(ops)
-	}
-}
-
-// EffectiveFileOps returns the file operations to use based on __sys.fs.mem.
-// If mem is true, returns the in-memory file ops; otherwise the
-// configured FileOps. When the in-memory variant is requested but not
-// yet created, MemOpsFactory is called to construct one. If
-// MemOpsFactory is nil, the default FileOps is returned.
-func (r *Registry) EffectiveFileOps() FileOps {
-	store := r.ContextStore()
-	if store == nil {
-		return r.FileOps
-	}
-	sysVal, ok := store.Get("__sys")
-	if !ok {
-		return r.FileOps
-	}
-	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
-	if !ok {
-		return r.FileOps
-	}
-	fsVal, ok := sysStore.Get("fs")
-	if !ok {
-		return r.FileOps
-	}
-	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
-	if !ok {
-		return r.FileOps
-	}
-	memVal, ok := fsStore.Get("mem")
-	if !ok {
-		return r.FileOps
-	}
-	_as0, _ := memVal.AsBoolean()
-	if memVal.VType.Matches(TBoolean) && _as0 {
-		if r.MemOps == nil && r.MemOpsFactory != nil {
-			r.MemOps = r.MemOpsFactory()
-		}
-		if r.MemOps != nil {
-			return r.MemOps
-		}
-	}
-	return r.FileOps
 }
 
 // SetParseFunc sets the parser callback used by file-based import.

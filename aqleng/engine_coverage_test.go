@@ -375,27 +375,13 @@ func TestNewReadList(t *testing.T) {
 // --- DefaultFormats moved to the host package; verify formats slot is empty ---
 
 func TestRegistryFormatsStartEmpty(t *testing.T) {
-	// aqleng.NewRegistry deliberately returns an empty Formats map. The
-	// host package wires concrete formats in via DefaultRegistry. This
-	// test pins down the contract.
+	// aqleng.NewRegistry deliberately exposes no host concerns —
+	// no formats, no file ops, no SQL store, only a generic
+	// capability slot. The host package wires every external
+	// service in via Registry.SetCapability before running user
+	// code. Pinned here so future drift surfaces in CI.
 	r, _ := NewRegistry()
-	if len(r.Formats) != 0 {
-		t.Errorf("expected empty Formats map, got %d entries", len(r.Formats))
-	}
-}
-
-func TestRegistrySQLiteStartsNil(t *testing.T) {
-	// Same contract for SQLite — the engine doesn't know about it.
-	r, _ := NewRegistry()
-	if r.SQLite != nil {
-		t.Errorf("expected SQLite to be nil, got %T", r.SQLite)
-	}
-}
-
-func TestRegistryFileOpsStartsNil(t *testing.T) {
-	// Same contract for FileOps. The host installs an OS-backed default.
-	r, _ := NewRegistry()
-	if r.FileOps != nil {
-		t.Errorf("expected FileOps to be nil, got %T", r.FileOps)
+	if names := r.CapabilityNames(); len(names) != 0 {
+		t.Errorf("expected zero capabilities on a fresh registry, got %v", names)
 	}
 }

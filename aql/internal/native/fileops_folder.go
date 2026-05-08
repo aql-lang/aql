@@ -16,7 +16,7 @@ import (
 // directory already exists. Returns the Path on success, or an Error.
 func RegisterFolder(r *engine.Registry) {
 	doFolder := func(p engine.PathInfo, parents bool, reg *engine.Registry) ([]engine.Value, error) {
-		ops := reg.EffectiveFileOps()
+		ops := engine.EffectiveFileOps(reg)
 		pathStr := p.String()
 
 		if parents {

@@ -286,7 +286,7 @@ func TestEngineReadBasic(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("hello world")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("test.txt")})
 	_as16, _ := result[0].AsString()
@@ -302,7 +302,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a\nb\nc")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
@@ -323,7 +323,7 @@ func TestEngineReadJSON(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"x":1}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
@@ -339,7 +339,7 @@ func TestEngineReadNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	err = runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
 	if err == nil {
@@ -354,7 +354,7 @@ func TestEngineReadUnknownFormat(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["test.txt"] = []byte("data")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("yaml"))
@@ -370,7 +370,7 @@ func TestEngineWriteBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("write"), NewString("out.txt"), NewString("hello")})
 	_as17, _ := result[0].AsString()
@@ -388,7 +388,7 @@ func TestEngineWriteWithOpts(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("nl", NewString("crlf"))
@@ -408,7 +408,7 @@ func TestEngineWriteAppend(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["log.txt"] = []byte("first\n")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
@@ -424,7 +424,7 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
@@ -440,7 +440,7 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// write non-string (map) value with options → auto-serializes with jsonic
 	// The write [string, any, map] signature expects path, data, opts
@@ -463,7 +463,7 @@ func TestEngineReadLineEndings(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["crlf.txt"] = []byte("a\r\nb\r\nc")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	// Default nl:"lf" normalizes \r\n to \n
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("crlf.txt")})
@@ -492,9 +492,9 @@ func TestRegistrySetFileOps(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := fileops.NewMem()
-	r.SetFileOps(mem)
-	if r.FileOps != mem {
-		t.Error("SetFileOps did not set the FileOps")
+	SetHostFileOps(r, mem)
+	if HostFileOps(r) != mem {
+		t.Error("SetHostFileOps did not install the FileOps capability")
 	}
 }
 
@@ -2093,7 +2093,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.csv")})
 	if len(result) != 1 {
@@ -2126,7 +2126,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.tsv")})
 	if len(result) != 1 {
@@ -2149,7 +2149,7 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.txt"] = []byte("a,b\n1,2")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("csv"))
@@ -2170,7 +2170,7 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.csv"] = []byte("hello,world")
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
@@ -2196,7 +2196,7 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	}
 	mem := fileops.NewMem()
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
-	r.SetFileOps(mem)
+	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.json")})
 	if len(result) != 1 {

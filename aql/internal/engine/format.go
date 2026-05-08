@@ -12,7 +12,14 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-// Format is re-exported by aliases.go (defined in aqleng).
+// Format encodes and decodes file content for a named representation
+// (text, json, csv, …). The host package owns this interface — aqleng
+// has no knowledge of file formats. Word handlers look formats up via
+// HostFormats(r) (see capabilities.go).
+type Format interface {
+	Decode(content string) ([]Value, error)
+	Encode(v Value) (string, error)
+}
 
 // TextFormat handles plain text (no parsing).
 type TextFormat struct{}

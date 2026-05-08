@@ -370,7 +370,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 			return nil, fmt.Errorf("read: stdin: %w", err)
 		}
 	} else {
-		data, err = r.EffectiveFileOps().ReadFile(path)
+		data, err = EffectiveFileOps(r).ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read: %w", err)
 		}
@@ -378,7 +378,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 
 	content := applyNL(string(data), nl)
 
-	f, ok := r.Formats[format]
+	f, ok := HostFormats(r)[format]
 	if !ok {
 		return nil, fmt.Errorf("read: unknown format: %s", format)
 	}
@@ -389,7 +389,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 	}
 
 	// Store table data in SQLite for formats that produce tables.
-	if r.SQLite != nil && len(result) == 1 {
+	if HostSQLite(r) != nil && len(result) == 1 {
 		if td, ok := result[0].Data.(TableData); ok {
 			// Derive table name from file path (basename without extension).
 			baseName := path
@@ -403,7 +403,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 				baseName = baseName[:idx]
 			}
 
-			if err := sqliteStore(r).StoreTable(baseName, td); err != nil {
+			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
 				return nil, fmt.Errorf("read: sqlite store: %w", err)
 			}
 			td.SQLite = true
@@ -435,13 +435,13 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 	data := []byte(content)
 
 	if mode == "append" {
-		existing, err := r.EffectiveFileOps().ReadFile(path)
+		existing, err := EffectiveFileOps(r).ReadFile(path)
 		if err == nil {
 			data = append(existing, data...)
 		}
 	}
 
-	if err := r.EffectiveFileOps().WriteFile(path, data, 0644); err != nil {
+	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
 

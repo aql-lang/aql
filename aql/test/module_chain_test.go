@@ -425,7 +425,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 	// No ParseFunc.
 
 	vals, _ := parser.Parse(`import "./mod.aql"`)
@@ -447,7 +447,7 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 
 	vals, _ := parser.Parse(`import [M R] "./mod.aql"`)
 	eng := engine.New(reg)

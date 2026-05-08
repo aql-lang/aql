@@ -585,7 +585,7 @@ func TestRegistryJsonicFormatHasResolver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jf, ok := r.Formats["jsonic"].(*engine.JsonicFormat)
+	jf, ok := engine.HostFormats(r)["jsonic"].(*engine.JsonicFormat)
 	if !ok {
 		t.Fatal("jsonic format should be *JsonicFormat")
 	}
@@ -600,7 +600,7 @@ func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
 		t.Fatal(err)
 	}
 	// JSON format should remain unchanged — no multisource.
-	_, ok := r.Formats["json"].(*engine.JSONFormat)
+	_, ok := engine.HostFormats(r)["json"].(*engine.JSONFormat)
 	if !ok {
 		t.Fatal("json format should be *JSONFormat, not modified")
 	}
@@ -614,9 +614,9 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 
 	mem := fileops.NewMem()
 	mem.Files["test.jsonic"] = []byte(`{val:42}`)
-	r.SetFileOps(mem)
+	engine.SetHostFileOps(r, mem)
 
-	jf := r.Formats["jsonic"].(*engine.JsonicFormat)
+	jf := engine.HostFormats(r)["jsonic"].(*engine.JsonicFormat)
 	if jf.Resolver == nil {
 		t.Fatal("expected resolver to be updated after SetFileOps")
 	}

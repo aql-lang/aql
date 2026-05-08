@@ -145,10 +145,10 @@ func (qb *QueryBuilder) ensureSource() (string, bool, error) {
 		return qb.Source.TableName, false, nil
 	}
 	r := qb.Registry
-	if r.SQLite == nil {
+	if HostSQLite(r) == nil {
 		return "", false, fmt.Errorf("SQLite store not initialized")
 	}
-	tmpName, err := sqliteStore(r).StoreTempTable(qb.Source)
+	tmpName, err := HostSQLite(r).StoreTempTable(qb.Source)
 	if err != nil {
 		return "", false, err
 	}
@@ -161,7 +161,7 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 	var tmpNames []string
 	for i := range qb.Joins {
 		j := &qb.Joins[i]
-		if sqliteStore(qb.Registry).HasTable(j.Table) {
+		if HostSQLite(qb.Registry).HasTable(j.Table) {
 			continue
 		}
 		// Look up the table in the context store and load it.
@@ -176,7 +176,7 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if td.SQLite {
 			j.Table = td.TableName
 		} else {
-			tmpName, err := sqliteStore(qb.Registry).StoreTempTable(td)
+			tmpName, err := HostSQLite(qb.Registry).StoreTempTable(td)
 			if err != nil {
 				return tmpNames, err
 			}
@@ -223,7 +223,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer sqliteStore(qb.Registry).DropTable(tableName)
+		defer HostSQLite(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -231,7 +231,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer sqliteStore(qb.Registry).DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	// Ensure set-op right-hand sources are in SQLite.
@@ -240,12 +240,12 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer sqliteStore(qb.Registry).DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	schema := qb.mergedSchema()
 	query := qb.buildSQL(tableName, "*")
-	result, err := sqliteStore(qb.Registry).Query(query, &schema)
+	result, err := HostSQLite(qb.Registry).Query(query, &schema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -259,7 +259,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer sqliteStore(qb.Registry).DropTable(tableName)
+		defer HostSQLite(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -267,7 +267,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer sqliteStore(qb.Registry).DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	setOpTmps, err := qb.ensureSetOpSources()
@@ -275,7 +275,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer sqliteStore(qb.Registry).DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	var colSQL string
@@ -325,7 +325,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 	}
 
 	query := qb.buildSQL(tableName, colSQL)
-	result, err := sqliteStore(qb.Registry).Query(query, resultSchema)
+	result, err := HostSQLite(qb.Registry).Query(query, resultSchema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -340,7 +340,7 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 		if so.Right.Source.SQLite {
 			continue
 		}
-		tmpName, err := sqliteStore(qb.Registry).StoreTempTable(so.Right.Source)
+		tmpName, err := HostSQLite(qb.Registry).StoreTempTable(so.Right.Source)
 		if err != nil {
 			return tmpNames, err
 		}
