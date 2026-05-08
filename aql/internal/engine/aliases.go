@@ -295,10 +295,6 @@ var (
 	NextMarkID = aqleng.NextMarkID
 	OpenUnifyMap = aqleng.OpenUnifyMap
 	RankSignatures = aqleng.RankSignatures
-	RegisterBinaryBoolOp = aqleng.RegisterBinaryBoolOp
-	RegisterBinaryIntOp = aqleng.RegisterBinaryIntOp
-	RegisterBinaryNumOp = aqleng.RegisterBinaryNumOp
-	RegisterUnaryNumOp = aqleng.RegisterUnaryNumOp
 	UnaryNumOpNative = aqleng.UnaryNumOpNative
 	BinaryNumOpNative = aqleng.BinaryNumOpNative
 	BinaryIntOpNative = aqleng.BinaryIntOpNative
