@@ -183,6 +183,73 @@ func registerSpecWords(r *Registry) {
 			},
 		},
 	})
+
+	// fact, code, route: §1.1 literal-pattern dispatch via Patterns.
+	// Each declares a specific-value overload first plus a catch-all.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fact",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:     []Type{TInteger},
+				Patterns: map[int]Value{0: NewInteger(0)},
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{NewInteger(1)}, nil
+				},
+				Returns: []Type{TInteger},
+			},
+			{
+				Args: []Type{TInteger},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					n, _ := args[0].AsInteger()
+					return []Value{NewInteger(n)}, nil
+				},
+				Returns: []Type{TInteger},
+			},
+		},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "code",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:     []Type{TInteger},
+				Patterns: map[int]Value{0: NewInteger(99)},
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{NewString("ninety-nine")}, nil
+				},
+				Returns: []Type{TString},
+			},
+			{
+				Args: []Type{TInteger},
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{NewString("general")}, nil
+				},
+				Returns: []Type{TString},
+			},
+		},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "route",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args:     []Type{TString},
+				Patterns: map[int]Value{0: NewString("admin")},
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{NewString("matched-admin")}, nil
+				},
+				Returns: []Type{TString},
+			},
+			{
+				Args: []Type{TString},
+				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{NewString("other")}, nil
+				},
+				Returns: []Type{TString},
+			},
+		},
+	})
 }
 
 // tokenizeSpec converts a single space-separated input string from a

@@ -152,6 +152,54 @@ function registerSpecWords(r: Registry): void {
       },
     ],
   })
+
+  // fact, code, route: §1.1 literal-pattern dispatch via patterns.
+  // Each declares a specific-value overload first plus a catch-all.
+  reg({
+    name: 'fact',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger],
+        patterns: new Map([[0, newInteger(0n)]]),
+        handler: () => [newInteger(1n)],
+      },
+      {
+        args: [TInteger],
+        handler: (args) => [newInteger(args[0]!.asInteger())],
+      },
+    ],
+  })
+  reg({
+    name: 'code',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger],
+        patterns: new Map([[0, newInteger(99n)]]),
+        handler: () => [newString('ninety-nine')],
+      },
+      {
+        args: [TInteger],
+        handler: () => [newString('general')],
+      },
+    ],
+  })
+  reg({
+    name: 'route',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TString],
+        patterns: new Map([[0, newString('admin')]]),
+        handler: () => [newString('matched-admin')],
+      },
+      {
+        args: [TString],
+        handler: () => [newString('other')],
+      },
+    ],
+  })
 }
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────
