@@ -14,6 +14,7 @@ import type { Registry } from './registry.ts'
 import {
   TBoolean,
   TInteger,
+  TList,
   TString,
   TWord,
   typeNameTable,
@@ -85,9 +86,18 @@ export class Engine {
       return
     }
 
-    // Simple-value def substitution.
+    // Simple-value def substitution. If the def value is a List,
+    // treat it as a code body — splice its elements at the pointer
+    // so they execute inline. Otherwise replace the word with the
+    // value and let the next iteration pick it up as a literal.
     const top = this.registry.topOfDefStack(name)
     if (top !== undefined) {
+      if (top.vType.matches(TList) && top.isConcrete()) {
+        const elems = top.asList()
+        this.stack.splice(this.pointer, 1, ...elems)
+        // pointer stays — first body token executes next iteration.
+        return
+      }
       this.stack[this.pointer] = top
       // Don't advance: let the value go through literal-handling on
       // the next loop iteration so a pending forward can pick it up.

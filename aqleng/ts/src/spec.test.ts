@@ -262,6 +262,27 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // def: spec-subset code-body binding. Captures `def NAME body`
+  // where NAME arrives as a Word token (no /q machinery in this
+  // runner's tokenizer) and body is any value — typically a List
+  // literal that becomes a callable code body. The handler pushes
+  // the body onto the def stack under NAME.
+  reg({
+    name: 'def',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TWord, TAny],
+        noEvalArgs: new Set([1]),
+        handler: (args, _ctx, _stk, registry) => {
+          const w = args[0]!.asWord()
+          registry.pushDef(w.name, args[1]!)
+          return []
+        },
+      },
+    ],
+  })
+
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
   // dispatch, provided the value isn't an FnDef / ObjectType.

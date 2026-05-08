@@ -64,16 +64,24 @@ function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | unde
 }
 
 /**
- * Resolve a forward-side Word token. If the word's name has a simple
- * def in the registry (i.e. a non-fn, non-objecttype value), return
- * the def value so the matcher type-checks against it AND the handler
- * receives the substituted value rather than the raw Word. If the
- * registry isn't supplied, or no def exists, return the original
- * token unchanged so the existing behaviour is preserved.
+ * Resolve a forward-side Word token against the expected sig type.
+ *
+ * Order matters: if the raw Word value already satisfies the slot
+ * (e.g. sig expects TWord/TAny) we MUST keep the Word — handlers
+ * like `def` declare TWord precisely to capture the name as data,
+ * not to fall through to def-resolution. Only when the raw Word
+ * fails the type check do we look up a simple-value def and try
+ * again. Mirrors aqleng/go/match.go's order: TWord-matches-expected
+ * branch (line ~136) runs before the TopOfDefStack branch (line ~155).
  */
-function resolveForwardToken(tok: Value, registry: Registry | undefined): Value {
-  if (!registry) return tok
+function resolveForwardToken(
+  tok: Value,
+  expected: import('./type.ts').AqlType,
+  registry: Registry | undefined,
+): Value {
   if (!tok.isWord()) return tok
+  if (sigTypeMatches(tok, expected)) return tok
+  if (!registry) return tok
   const w = tok.asWord()
   const top = registry.topOfDefStack(w.name)
   if (!top) return tok
@@ -105,7 +113,7 @@ function tryMatch(
     const rawTok = stack[scanIdx]
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
-    const tok = resolveForwardToken(rawTok, registry)
+    const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
     if (!sigTypeMatches(tok, sig.args[fwd]!)) break
     args[fwd] = tok
     fwd++

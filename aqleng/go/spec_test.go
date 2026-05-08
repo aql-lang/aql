@@ -316,6 +316,26 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
+	// def: spec-subset code-body binding. Captures `def NAME body`
+	// where NAME arrives as a Word token (no /q machinery in this
+	// runner's tokenizer) and body is any value — typically a List
+	// literal that becomes a callable code body. The handler pushes
+	// the body onto the def stack under NAME.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "def",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TWord, TAny},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				w, _ := args[0].AsWord()
+				reg.PushDef(w.Name, args[1])
+				return []Value{}, nil
+			},
+			Returns: []Type{},
+		}},
+	})
+
 	// Simple-value defs the def.tsv spec references. A word whose name
 	// is in the def stack is substituted by its value before normal
 	// dispatch, provided the value isn't an FnDef / ObjectType.
