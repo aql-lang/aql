@@ -573,6 +573,71 @@ func RegisterBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	})
 }
 
+// UnaryNumOpNative builds a NativeFunc for a unary numeric operation with
+// two overloads: [integer] -> [decimal] and [decimal] -> [decimal]. This
+// is the value-returning sibling of RegisterUnaryNumOp; use it when
+// composing a NativeFunc slice instead of mutating a Registry.
+func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		v, _ := args[0].AsNumber()
+		return []Value{NewDecimal(op(v))}, nil
+	}
+	return NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TInteger}, Handler: handler, Returns: []Type{TDecimal}},
+			{Args: []Type{TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
+		},
+	}
+}
+
+// BinaryNumOpNative builds a NativeFunc for a binary numeric operation
+// with three float-typed overloads matching RegisterBinaryNumOp:
+// [decimal, decimal], [number, decimal], and [decimal, number].
+func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) NativeFunc {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		a, _ := args[0].AsNumber()
+		b, _ := args[1].AsNumber()
+		result, err := op(a, b)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewDecimal(result)}, nil
+	}
+	return NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TDecimal, TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
+			{Args: []Type{TNumber, TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
+			{Args: []Type{TDecimal, TNumber}, Handler: handler, Returns: []Type{TDecimal}},
+		},
+	}
+}
+
+// BinaryIntOpNative builds a NativeFunc for a binary integer operation
+// with one signature [integer, integer] -> [integer]. The
+// value-returning sibling of RegisterBinaryIntOp.
+func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFunc {
+	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		a, _ := args[0].AsConcreteInteger()
+		b, _ := args[1].AsConcreteInteger()
+		result, err := op(a, b)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewInteger(result)}, nil
+	}
+	return NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TInteger, TInteger}, Handler: handler, Returns: []Type{TInteger}},
+		},
+	}
+}
+
 // ValToString converts any scalar Value to its string representation.
 func ValToString(v Value) string {
 	if v.Data == nil && !v.VType.Equal(TNone) {

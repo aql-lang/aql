@@ -299,6 +299,9 @@ var (
 	RegisterBinaryIntOp = aqleng.RegisterBinaryIntOp
 	RegisterBinaryNumOp = aqleng.RegisterBinaryNumOp
 	RegisterUnaryNumOp = aqleng.RegisterUnaryNumOp
+	UnaryNumOpNative = aqleng.UnaryNumOpNative
+	BinaryNumOpNative = aqleng.BinaryNumOpNative
+	BinaryIntOpNative = aqleng.BinaryIntOpNative
 	ComparisonNatives = aqleng.ComparisonNatives
 	PrintNatives = aqleng.PrintNatives
 	TraceNatives = aqleng.TraceNatives
