@@ -24,8 +24,6 @@ func Register(r *Registry) {
 	for _, n := range booleanNatives {
 		r.RegisterNativeFunc(n)
 	}
-	RegisterAny(r)
-	RegisterAll(r)
 
 	// Comparison
 	RegisterComparison(r)
@@ -46,23 +44,10 @@ func Register(r *Registry) {
 	RegisterPopArgs(r)
 
 	// Type
-	RegisterConvert(r)
-	RegisterRecord(r)
-	RegisterTable(r)
-	RegisterObject(r)
-	RegisterResource(r)
-	RegisterMake(r)
-	RegisterTypeDef(r)
-	RegisterTypeof(r)
-	RegisterFullTypeof(r)
-	RegisterIs(r)
-	RegisterGuard(r)
-	RegisterInspect(r)
-	RegisterBase(r)
-	RegisterTor(r)
-	RegisterTand(r)
-	RegisterTany(r)
-	RegisterTall(r)
+	for _, n := range typeNatives {
+		r.RegisterNativeFunc(n)
+	}
+	installResourceTypes(r)
 
 	// Control flow
 	RegisterDo(r)

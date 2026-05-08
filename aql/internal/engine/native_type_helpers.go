@@ -1,73 +1,99 @@
 package engine
 
-func RegisterInspect(r *Registry) {
-	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		_as0, _ := args[0].AsWord()
-		name := _as0.Name
+// This file contains pure helper functions used by the type natives
+// (the typeNatives slice in native_type.go). Helpers that have a tight
+// coupling to one handler live alongside that handler; this file
+// hosts the cross-cutting builders used by `inspect`, `tor`, `tand`,
+// `tall`, etc.
 
-		// User-defined types live in r.Types — predicate types (FnDef)
-		// reach inspect through this branch and get the type-inspection
-		// view. Native fn-shadow entries in DefStacks (every native
-		// word has one for fallback dispatch) used to fool the old
-		// "IsTypeBody(DefStacks top)" check; that's now bypassed
-		// because r.Types is the single source of truth for named
-		// types and native fns are NOT in it.
-		if tv, ok := r.TopOfTypeStack(name); ok {
-			return []Value{buildTypeInspection(name, tv)}, nil
-		}
-		if top, ok := r.TopOfDefStack(name); ok {
-			if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
-				return []Value{buildTypeInspection(name, top)}, nil
+// tandValues computes the type-level intersection of a and b.
+// Distributes over disjuncts, propagates Never (annihilator), merges
+// concrete maps field-wise, and falls back to Unify for everything
+// else. Always returns a value — disjoint inputs collapse to Never.
+//
+// Distribution rule: (A tor B) tand C = (A tand C) tor (B tand C).
+// When both sides are disjuncts, the cross product is computed and
+// each pair recursively reduced. Never-valued cross-product entries
+// are filtered (Never is the identity for tor), and structurally
+// identical alternatives are deduped.
+func tandValues(a, b Value) Value {
+	if a.VType.Equal(TNever) || b.VType.Equal(TNever) {
+		return NewTypeLiteral(TNever)
+	}
+
+	if a.IsDisjunct() || b.IsDisjunct() {
+		aAlts := FlattenDisjunctAlts(a)
+		bAlts := FlattenDisjunctAlts(b)
+		var result []Value
+		for _, ax := range aAlts {
+			for _, bx := range bAlts {
+				result = append(result, tandValues(ax, bx))
 			}
 		}
-
-		return []Value{buildInspection(r, name)}, nil
-	}
-	// Atom (now Scalar/Atom): inspect by name, same as words.
-	atomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name, _ := args[0].AsConcreteAtom()
-		if tv, ok := r.TopOfTypeStack(name); ok {
-			return []Value{buildTypeInspection(name, tv)}, nil
+		simplified := SimplifyDisjunctAlts(result)
+		switch len(simplified) {
+		case 0:
+			return NewTypeLiteral(TNever)
+		case 1:
+			return simplified[0]
+		default:
+			return NewDisjunct(simplified)
 		}
-		if top, ok := r.TopOfDefStack(name); ok {
-			if IsTypeBody(top) {
-				return []Value{buildTypeInspection(name, top)}, nil
+	}
+
+	if isPlainConcreteMap(a) && isPlainConcreteMap(b) {
+		merged, ok := mergeMaps(a.AsMap(), b.AsMap())
+		if !ok {
+			return NewTypeLiteral(TNever)
+		}
+		return NewMap(merged)
+	}
+
+	unified, ok := Unify(a, b)
+	if !ok {
+		return NewTypeLiteral(TNever)
+	}
+	return unified
+}
+
+// isPlainConcreteMap reports whether v is a non-typed, non-record,
+// non-options concrete map (Data is *OrderedMap).
+func isPlainConcreteMap(v Value) bool {
+	if !v.VType.Equal(TMap) || v.Data == nil {
+		return false
+	}
+	if v.IsRecordType() || v.IsOptionsType() || v.IsTypedMap() {
+		return false
+	}
+	return v.AsMap() != nil
+}
+
+// mergeMaps walks keys of a then b in order, intersecting values for
+// keys present in both. Keys present in only one side are kept as-is.
+// Returns ok=false when any overlapping key has incompatible values —
+// the caller propagates that as Never (the empty intersection).
+func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
+	result := NewOrderedMap()
+	for _, key := range a.Keys() {
+		aVal, _ := a.Get(key)
+		if bVal, present := b.Get(key); present {
+			combined := tandValues(aVal, bVal)
+			if combined.VType.Equal(TNever) {
+				return nil, false
 			}
+			result.Set(key, combined)
+			continue
 		}
-		return []Value{buildInspection(r, name)}, nil
+		result.Set(key, aVal)
 	}
-
-	// Type literal (Data==nil): inspect number, inspect string, etc.
-	typeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{buildTypeInspection("", args[0])}, nil
+	for _, key := range b.Keys() {
+		if _, ok := a.Get(key); ok {
+			continue
+		}
+		bVal, _ := b.Get(key)
+		result.Set(key, bVal)
 	}
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "inspect",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args:    []Type{TWord},
-				Handler: wordHandler,
-				Returns: []Type{TInspect},
-			},
-			{
-				Args:    []Type{TAtom},
-				Handler: atomHandler,
-				Returns: []Type{TInspect},
-			},
-			{
-				Args:    []Type{TNode},
-				Handler: typeHandler,
-				Returns: []Type{TInspect},
-			},
-			{
-				Args:    []Type{TScalar},
-				Handler: typeHandler,
-				Returns: []Type{TInspect},
-			},
-		},
-	})
+	return result, true
 }
 
 // buildInspection constructs a word_inspection map for the named word.
@@ -77,7 +103,6 @@ func buildInspection(r *Registry, name string) Value {
 
 	fn := r.Lookup(name)
 	if fn == nil {
-		// No registered function — check if it's a simple def (list body).
 		if r.HasDef(name) {
 			result.Set("kind", NewAtom("defined"))
 			result.Set("signatures", NewList(nil))
@@ -88,17 +113,14 @@ func buildInspection(r *Registry, name string) Value {
 		return NewValueRaw(TInspect, result)
 	}
 
-	// Determine kind: AQL-defined functions have Sigs, Go-implemented do not.
 	if len(fn.Sigs) > 0 {
 		result.Set("kind", NewAtom("defined"))
 	} else {
 		result.Set("kind", NewAtom("native"))
 	}
 
-	// Add forward_precedence flag.
 	result.Set("forward_precedence", NewBoolean(fn.ForwardPrecedence))
 
-	// Build signature list.
 	var sigMaps []Value
 	for _, sig := range fn.Signatures {
 		sm := NewOrderedMap()
@@ -175,11 +197,6 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("child", NewString(child.VType.String()))
 
 	case tv.VType.Equal(TFnUndef):
-		// Structural fn-shape type: a FnUndef carries one or more
-		// (Params, Returns) specs. Render each spec as a `params` /
-		// `returns` pair so users can `inspect Mapper` and see the
-		// signature shape they need to satisfy. Without this case
-		// inspect's `signatures` slot would be empty for fn types.
 		result.Set("kind", NewAtom("function_shape"))
 		uInfo, _ := tv.Data.(FnUndefInfo)
 		sigs := make([]Value, 0, len(uInfo.Sigs))
@@ -200,9 +217,6 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("signatures", NewList(sigs))
 
 	case tv.IsDepScalar():
-		// Dependent scalar: render the leaf and the populated
-		// bound(s). Either Lo, Hi, or both may be set; each is
-		// rendered as {kind: "gte"|"gt"|"lte"|"lt", value: <bound>}.
 		result.Set("kind", NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
 		leaf := DependentLeafFromType(tv.VType)
@@ -221,7 +235,6 @@ func buildTypeInspection(name string, tv Value) Value {
 		}
 
 	default:
-		// Simple type literal (Data==nil): number, string, boolean, etc.
 		result.Set("kind", NewAtom("literal"))
 	}
 
