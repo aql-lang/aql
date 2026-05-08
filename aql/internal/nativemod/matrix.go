@@ -16,7 +16,9 @@ func BuildMatrixModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		return engine.ModuleDesc{}, err
 	}
 
-	registerAllMatrixWords(subReg)
+	for _, n := range MatrixNatives {
+		subReg.RegisterNativeFunc(n)
+	}
 
 	exports := engine.NewOrderedMap()
 
@@ -209,492 +211,482 @@ func makeListListToDecFnDef(wordName string, subReg *engine.Registry) engine.Val
 	})
 }
 
-// --- Word registration ---
+// --- Word definitions ---
 
-func registerAllMatrixWords(r *engine.Registry) {
-	registerMatrixMake(r)
-	registerMatrixZeros(r)
-	registerMatrixOnes(r)
-	registerMatrixEye(r)
-	registerMatrixFill(r)
-
-	registerMatrixRows(r)
-	registerMatrixCols(r)
-	registerMatrixSize(r)
-
-	registerMatrixAt(r)
-	registerMatrixRow(r)
-	registerMatrixCol(r)
-
-	registerMatrixAdd(r)
-	registerMatrixSub(r)
-	registerMatrixMul(r)
-	registerMatrixScale(r)
-	registerMatrixEmul(r)
-
-	registerMatrixTranspose(r)
-	registerMatrixFlatten(r)
-
-	registerMatrixSum(r)
-	registerMatrixTrace(r)
-	registerMatrixDet(r)
-
-	registerMatrixDot(r)
-}
-
-// --- Construction ---
-
-func registerMatrixMake(r *engine.Registry) {
-	r.Register("matrix-make", engine.Signature{
-		Args: []engine.Type{engine.TList},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			rl := args[0].AsList()
-			if rl.IsNil() {
-				return nil, fmt.Errorf("make: expected list of row lists")
-			}
-			rows := rl.Len()
-			if rows == 0 {
-				return nil, fmt.Errorf("make: empty list")
-			}
-			// Determine cols from first row
-			firstRow := rl.Get(0).AsList()
-			if firstRow.IsNil() {
-				return nil, fmt.Errorf("make: first element is not a list")
-			}
-			cols := firstRow.Len()
-			if cols == 0 {
-				return nil, fmt.Errorf("make: first row is empty")
-			}
-			data := make([]float64, 0, rows*cols)
-			for i := 0; i < rows; i++ {
-				row := rl.Get(i).AsList()
-				if row.IsNil() {
-					return nil, fmt.Errorf("make: row %d is not a list", i)
+// MatrixNatives is the consolidated NativeFunc slice for the matrix
+// module's Go-implemented words. Replaces the per-word
+// registerMatrix* functions and the master registerAllMatrixWords
+// aggregator.
+var MatrixNatives = []engine.NativeFunc{
+	// Construction.
+	{
+		Name:              "matrix-make",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TList},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				rl := args[0].AsList()
+				if rl.IsNil() {
+					return nil, fmt.Errorf("make: expected list of row lists")
 				}
-				if row.Len() != cols {
-					return nil, fmt.Errorf("make: row %d has %d elements, expected %d", i, row.Len(), cols)
+				rows := rl.Len()
+				if rows == 0 {
+					return nil, fmt.Errorf("make: empty list")
 				}
-				for j := 0; j < cols; j++ {
-					n, err := row.Get(j).AsNumber()
+				firstRow := rl.Get(0).AsList()
+				if firstRow.IsNil() {
+					return nil, fmt.Errorf("make: first element is not a list")
+				}
+				cols := firstRow.Len()
+				if cols == 0 {
+					return nil, fmt.Errorf("make: first row is empty")
+				}
+				data := make([]float64, 0, rows*cols)
+				for i := 0; i < rows; i++ {
+					row := rl.Get(i).AsList()
+					if row.IsNil() {
+						return nil, fmt.Errorf("make: row %d is not a list", i)
+					}
+					if row.Len() != cols {
+						return nil, fmt.Errorf("make: row %d has %d elements, expected %d", i, row.Len(), cols)
+					}
+					for j := 0; j < cols; j++ {
+						n, err := row.Get(j).AsNumber()
+						if err != nil {
+							return nil, err
+						}
+						data = append(data, n)
+					}
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
+		Name:              "matrix-zeros",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TInteger, engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				r64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				c64, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				rows, cols := int(r64), int(c64)
+				data := make([]float64, rows*cols)
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
+		Name:              "matrix-ones",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TInteger, engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				r64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				c64, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				rows, cols := int(r64), int(c64)
+				data := make([]float64, rows*cols)
+				for i := range data {
+					data[i] = 1.0
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		Name:              "matrix-eye",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				n64, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				n := int(n64)
+				data := make([]float64, n*n)
+				for i := 0; i < n; i++ {
+					data[i*n+i] = 1.0
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: n, Cols: n})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		Name:              "matrix-fill",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TNumber},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				r64, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				c64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				val, err := args[2].AsNumber()
+				if err != nil {
+					return nil, err
+				}
+				rows, cols := int(r64), int(c64)
+				data := make([]float64, rows*cols)
+				for i := range data {
+					data[i] = val
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	// Shape.
+	{
+		Name:              "matrix-rows",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				return []engine.Value{engine.NewInteger(int64(m.Rows))}, nil
+			},
+			Returns: []engine.Type{engine.TInteger},
+		}},
+	},
+	{
+		Name:              "matrix-cols",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				return []engine.Value{engine.NewInteger(int64(m.Cols))}, nil
+			},
+			Returns: []engine.Type{engine.TInteger},
+		}},
+	},
+	{
+		Name:              "matrix-size",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				return []engine.Value{engine.NewInteger(int64(m.Rows * m.Cols))}, nil
+			},
+			Returns: []engine.Type{engine.TList},
+		}},
+	},
+	// Access.
+	{
+		Name:              "matrix-at",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TInteger, engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				r64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				c64, err := args[2].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				row, col := int(r64), int(c64)
+				if row < 0 || row >= m.Rows || col < 0 || col >= m.Cols {
+					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows, m.Cols)
+				}
+				return []engine.Value{engine.NewDecimal(m.Data[row*m.Cols+col])}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	},
+	{
+		Name:              "matrix-row",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				r64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				row := int(r64)
+				if row < 0 || row >= m.Rows {
+					return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows)
+				}
+				elems := make([]engine.Value, m.Cols)
+				for j := 0; j < m.Cols; j++ {
+					elems[j] = engine.NewDecimal(m.Data[row*m.Cols+j])
+				}
+				return []engine.Value{engine.NewList(elems)}, nil
+			},
+			Returns: []engine.Type{engine.TList},
+		}},
+	},
+	{
+		Name:              "matrix-col",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TInteger},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				c64, err := args[1].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				col := int(c64)
+				if col < 0 || col >= m.Cols {
+					return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols)
+				}
+				elems := make([]engine.Value, m.Rows)
+				for i := 0; i < m.Rows; i++ {
+					elems[i] = engine.NewDecimal(m.Data[i*m.Cols+col])
+				}
+				return []engine.Value{engine.NewList(elems)}, nil
+			},
+			Returns: []engine.Type{engine.TList},
+		}},
+	},
+	// Arithmetic.
+	{
+		Name:              "matrix-mat-add",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				a := args[0].AsMatrix()
+				b := args[1].AsMatrix()
+				if a.Rows != b.Rows || a.Cols != b.Cols {
+					return nil, fmt.Errorf("mat-add: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
+				}
+				data := make([]float64, len(a.Data))
+				for i := range data {
+					data[i] = a.Data[i] + b.Data[i]
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		// a b mat-sub → args[0]=b (top), args[1]=a
+		Name:              "matrix-mat-sub",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				a := args[1].AsMatrix()
+				b := args[0].AsMatrix()
+				if a.Rows != b.Rows || a.Cols != b.Cols {
+					return nil, fmt.Errorf("mat-sub: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
+				}
+				data := make([]float64, len(a.Data))
+				for i := range data {
+					data[i] = a.Data[i] - b.Data[i]
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		// a b mat-mul → args[0]=b (top), args[1]=a
+		Name:              "matrix-mat-mul",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				a := args[1].AsMatrix()
+				b := args[0].AsMatrix()
+				result, err := matMul(a, b)
+				if err != nil {
+					return nil, err
+				}
+				return []engine.Value{engine.NewMatrix(result)}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		Name:              "matrix-scale",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TNumber},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				s, err := args[1].AsNumber()
+				if err != nil {
+					return nil, err
+				}
+				data := make([]float64, len(m.Data))
+				for i := range data {
+					data[i] = m.Data[i] * s
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Rows, Cols: m.Cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		Name:              "matrix-mat-emul",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix, engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				a := args[0].AsMatrix()
+				b := args[1].AsMatrix()
+				if a.Rows != b.Rows || a.Cols != b.Cols {
+					return nil, fmt.Errorf("mat-emul: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
+				}
+				data := make([]float64, len(a.Data))
+				for i := range data {
+					data[i] = a.Data[i] * b.Data[i]
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	// Transform.
+	{
+		Name:              "matrix-transpose",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				data := make([]float64, len(m.Data))
+				for i := 0; i < m.Rows; i++ {
+					for j := 0; j < m.Cols; j++ {
+						data[j*m.Rows+i] = m.Data[i*m.Cols+j]
+					}
+				}
+				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Cols, Cols: m.Rows})}, nil
+			},
+			Returns: []engine.Type{engine.TMatrix},
+		}},
+	},
+	{
+		Name:              "matrix-flatten",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				elems := make([]engine.Value, len(m.Data))
+				for i, v := range m.Data {
+					elems[i] = engine.NewDecimal(v)
+				}
+				return []engine.Value{engine.NewList(elems)}, nil
+			},
+			Returns: []engine.Type{engine.TList},
+		}},
+	},
+	// Aggregation.
+	{
+		Name:              "matrix-sum",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				s := 0.0
+				for _, v := range m.Data {
+					s += v
+				}
+				return []engine.Value{engine.NewDecimal(s)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	},
+	{
+		Name:              "matrix-trace",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				if m.Rows != m.Cols {
+					return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows, m.Cols)
+				}
+				s := 0.0
+				for i := 0; i < m.Rows; i++ {
+					s += m.Data[i*m.Cols+i]
+				}
+				return []engine.Value{engine.NewDecimal(s)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	},
+	{
+		Name:              "matrix-det",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TMatrix},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				m := args[0].AsMatrix()
+				d, err := matDet(m)
+				if err != nil {
+					return nil, err
+				}
+				return []engine.Value{engine.NewDecimal(d)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	},
+	// Vector.
+	{
+		Name:              "matrix-dot",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TList, engine.TList},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				a := args[0].AsList()
+				b := args[1].AsList()
+				if a.IsNil() || b.IsNil() {
+					return nil, fmt.Errorf("dot: expected two lists")
+				}
+				if a.Len() != b.Len() {
+					return nil, fmt.Errorf("dot: length mismatch %d vs %d", a.Len(), b.Len())
+				}
+				s := 0.0
+				for i := 0; i < a.Len(); i++ {
+					av, err := a.Get(i).AsNumber()
 					if err != nil {
 						return nil, err
 					}
-					data = append(data, n)
+					bv, err := b.Get(i).AsNumber()
+					if err != nil {
+						return nil, err
+					}
+					s += av * bv
 				}
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixZeros(r *engine.Registry) {
-	// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
-	r.Register("matrix-zeros", engine.Signature{
-		Args: []engine.Type{engine.TInteger, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			c64, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			rows, cols := int(r64), int(c64)
-			data := make([]float64, rows*cols)
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixOnes(r *engine.Registry) {
-	// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
-	r.Register("matrix-ones", engine.Signature{
-		Args: []engine.Type{engine.TInteger, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			c64, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			rows, cols := int(r64), int(c64)
-			data := make([]float64, rows*cols)
-			for i := range data {
-				data[i] = 1.0
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixEye(r *engine.Registry) {
-	r.Register("matrix-eye", engine.Signature{
-		Args: []engine.Type{engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			n64, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			n := int(n64)
-			data := make([]float64, n*n)
-			for i := 0; i < n; i++ {
-				data[i*n+i] = 1.0
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: n, Cols: n})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixFill(r *engine.Registry) {
-	r.Register("matrix-fill", engine.Signature{
-		Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TNumber},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			r64, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			c64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			val, err := args[2].AsNumber()
-			if err != nil {
-				return nil, err
-			}
-			rows, cols := int(r64), int(c64)
-			data := make([]float64, rows*cols)
-			for i := range data {
-				data[i] = val
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-// --- Shape ---
-
-func registerMatrixRows(r *engine.Registry) {
-	r.Register("matrix-rows", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			return []engine.Value{engine.NewInteger(int64(m.Rows))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerMatrixCols(r *engine.Registry) {
-	r.Register("matrix-cols", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			return []engine.Value{engine.NewInteger(int64(m.Cols))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerMatrixSize(r *engine.Registry) {
-	r.Register("matrix-size", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			return []engine.Value{engine.NewInteger(int64(m.Rows * m.Cols))}, nil
-		},
-		Returns: []engine.Type{engine.TList},
-	})
-}
-
-// --- Access ---
-
-func registerMatrixAt(r *engine.Registry) {
-	r.Register("matrix-at", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TInteger, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			r64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			c64, err := args[2].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			row, col := int(r64), int(c64)
-			if row < 0 || row >= m.Rows || col < 0 || col >= m.Cols {
-				return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows, m.Cols)
-			}
-			return []engine.Value{engine.NewDecimal(m.Data[row*m.Cols+col])}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-func registerMatrixRow(r *engine.Registry) {
-	r.Register("matrix-row", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			r64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			row := int(r64)
-			if row < 0 || row >= m.Rows {
-				return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows)
-			}
-			elems := make([]engine.Value, m.Cols)
-			for j := 0; j < m.Cols; j++ {
-				elems[j] = engine.NewDecimal(m.Data[row*m.Cols+j])
-			}
-			return []engine.Value{engine.NewList(elems)}, nil
-		},
-		Returns: []engine.Type{engine.TList},
-	})
-}
-
-func registerMatrixCol(r *engine.Registry) {
-	r.Register("matrix-col", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			c64, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			col := int(c64)
-			if col < 0 || col >= m.Cols {
-				return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols)
-			}
-			elems := make([]engine.Value, m.Rows)
-			for i := 0; i < m.Rows; i++ {
-				elems[i] = engine.NewDecimal(m.Data[i*m.Cols+col])
-			}
-			return []engine.Value{engine.NewList(elems)}, nil
-		},
-		Returns: []engine.Type{engine.TList},
-	})
-}
-
-// --- Arithmetic ---
-
-func registerMatrixAdd(r *engine.Registry) {
-	r.Register("matrix-mat-add", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a := args[0].AsMatrix()
-			b := args[1].AsMatrix()
-			if a.Rows != b.Rows || a.Cols != b.Cols {
-				return nil, fmt.Errorf("mat-add: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
-			}
-			data := make([]float64, len(a.Data))
-			for i := range data {
-				data[i] = a.Data[i] + b.Data[i]
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixSub(r *engine.Registry) {
-	// a b mat-sub → args[0]=b (top), args[1]=a
-	r.Register("matrix-mat-sub", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a := args[1].AsMatrix()
-			b := args[0].AsMatrix()
-			if a.Rows != b.Rows || a.Cols != b.Cols {
-				return nil, fmt.Errorf("mat-sub: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
-			}
-			data := make([]float64, len(a.Data))
-			for i := range data {
-				data[i] = a.Data[i] - b.Data[i]
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixMul(r *engine.Registry) {
-	// a b mat-mul → args[0]=b (top), args[1]=a
-	r.Register("matrix-mat-mul", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a := args[1].AsMatrix()
-			b := args[0].AsMatrix()
-			result, err := matMul(a, b)
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewMatrix(result)}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixScale(r *engine.Registry) {
-	r.Register("matrix-scale", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TNumber},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			s, err := args[1].AsNumber()
-			if err != nil {
-				return nil, err
-			}
-			data := make([]float64, len(m.Data))
-			for i := range data {
-				data[i] = m.Data[i] * s
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Rows, Cols: m.Cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixEmul(r *engine.Registry) {
-	r.Register("matrix-mat-emul", engine.Signature{
-		Args: []engine.Type{engine.TMatrix, engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a := args[0].AsMatrix()
-			b := args[1].AsMatrix()
-			if a.Rows != b.Rows || a.Cols != b.Cols {
-				return nil, fmt.Errorf("mat-emul: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
-			}
-			data := make([]float64, len(a.Data))
-			for i := range data {
-				data[i] = a.Data[i] * b.Data[i]
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-// --- Transform ---
-
-func registerMatrixTranspose(r *engine.Registry) {
-	r.Register("matrix-transpose", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			data := make([]float64, len(m.Data))
-			for i := 0; i < m.Rows; i++ {
-				for j := 0; j < m.Cols; j++ {
-					data[j*m.Rows+i] = m.Data[i*m.Cols+j]
-				}
-			}
-			return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Cols, Cols: m.Rows})}, nil
-		},
-		Returns: []engine.Type{engine.TMatrix},
-	})
-}
-
-func registerMatrixFlatten(r *engine.Registry) {
-	r.Register("matrix-flatten", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			elems := make([]engine.Value, len(m.Data))
-			for i, v := range m.Data {
-				elems[i] = engine.NewDecimal(v)
-			}
-			return []engine.Value{engine.NewList(elems)}, nil
-		},
-		Returns: []engine.Type{engine.TList},
-	})
-}
-
-// --- Aggregation ---
-
-func registerMatrixSum(r *engine.Registry) {
-	r.Register("matrix-sum", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			s := 0.0
-			for _, v := range m.Data {
-				s += v
-			}
-			return []engine.Value{engine.NewDecimal(s)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-func registerMatrixTrace(r *engine.Registry) {
-	r.Register("matrix-trace", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			if m.Rows != m.Cols {
-				return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows, m.Cols)
-			}
-			s := 0.0
-			for i := 0; i < m.Rows; i++ {
-				s += m.Data[i*m.Cols+i]
-			}
-			return []engine.Value{engine.NewDecimal(s)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-func registerMatrixDet(r *engine.Registry) {
-	r.Register("matrix-det", engine.Signature{
-		Args: []engine.Type{engine.TMatrix},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			m := args[0].AsMatrix()
-			d, err := matDet(m)
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewDecimal(d)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-// --- Vector ---
-
-func registerMatrixDot(r *engine.Registry) {
-	r.Register("matrix-dot", engine.Signature{
-		Args: []engine.Type{engine.TList, engine.TList},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a := args[0].AsList()
-			b := args[1].AsList()
-			if a.IsNil() || b.IsNil() {
-				return nil, fmt.Errorf("dot: expected two lists")
-			}
-			if a.Len() != b.Len() {
-				return nil, fmt.Errorf("dot: length mismatch %d vs %d", a.Len(), b.Len())
-			}
-			s := 0.0
-			for i := 0; i < a.Len(); i++ {
-				av, err := a.Get(i).AsNumber()
-				if err != nil {
-					return nil, err
-				}
-				bv, err := b.Get(i).AsNumber()
-				if err != nil {
-					return nil, err
-				}
-				s += av * bv
-			}
-			return []engine.Value{engine.NewDecimal(s)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
+				return []engine.Value{engine.NewDecimal(s)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	},
 }
 
 // --- Internal helpers ---
