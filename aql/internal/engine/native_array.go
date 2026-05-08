@@ -238,9 +238,12 @@ var arrayNatives = []NativeFunc{
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
-				// With initial value: init body data → result
-				Args:       []Type{TAny, TList, TList},
-				NoEvalArgs: map[int]bool{1: true},
+				// With initial value: init fold body data → result.
+				// Sig is body-first (matching each/scan) so the swap form
+				// `init fold body data` collects body+data forward and
+				// init from the stack.
+				Args:       []Type{TList, TList, TAny},
+				NoEvalArgs: map[int]bool{0: true},
 				Handler:    foldWithInitHandler,
 				ReturnsFn:  foldWithInitReturnsFn,
 			},
@@ -997,13 +1000,13 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...Type) []Value {
 // ---- fold ----
 
 func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	// args[0]=init, args[1]=body, args[2]=data
-	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
+	// Sig is [TList, TList, TAny]: args[0]=body, args[1]=data, args[2]=init.
+	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("fold: expected concrete lists")
 	}
-	init := args[0]
-	bodySlice := args[1].AsList().Slice()
-	dataList := args[2].AsList()
+	bodySlice := args[0].AsList().Slice()
+	dataList := args[1].AsList()
+	init := args[2]
 	return doFold(reg, init, bodySlice, dataList)
 }
 
@@ -1013,8 +1016,8 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 // the accumulator type stabilises — one pass is a close
 // approximation for bounded-lattice types.
 func foldWithInitReturnsFn(args []Value, r *Registry) []Value {
-	elem := DataListElemTypeFromValue(args[2])
-	stk := analyseHigherOrderBody(r, args[1], args[0].VType, elem)
+	elem := DataListElemTypeFromValue(args[1])
+	stk := analyseHigherOrderBody(r, args[0], args[2].VType, elem)
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TAny)}
 	}
