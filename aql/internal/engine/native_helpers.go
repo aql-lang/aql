@@ -1,28 +1,5 @@
 package engine
 
-import "fmt"
-
-// registerUnaryStringWord registers a word that takes a single string arg
-// (TString or TAtom), applies fn, and returns a NewString result.
-// Covers the common pattern used by upper, lower, and similar transforms.
-func registerUnaryStringWord(r *Registry, name string, fn func(string) string) {
-	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		s, ok := args[0].Data.(string)
-		if !ok {
-			return nil, fmt.Errorf("%s: expected string, got %s", name, args[0].String())
-		}
-		return []Value{NewString(fn(s))}, nil
-	}
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TString}, Handler: handler, Returns: []Type{TString}},
-			{Args: []Type{TAtom}, Handler: handler, Returns: []Type{TString}},
-		},
-	})
-}
-
 // registerBinaryMathWord registers a word with a single [TNumber, TNumber]
 // signature. The fn receives (farther, nearest) as float64 and returns the
 // result. When both inputs are integers and intFn is non-nil, intFn is

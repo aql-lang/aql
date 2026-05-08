@@ -6,20 +6,9 @@ package engine
 // alongside their handlers.
 func Register(r *Registry) {
 	// String
-	RegisterUpper(r)
-	RegisterLower(r)
-	RegisterConcat(r)
-	RegisterSplit(r)
-	RegisterTrim(r)
-	RegisterContains(r)
-	RegisterIndexOf(r)
-	RegisterReplace(r)
-	RegisterChangeCase(r)
-	RegisterNormalize(r)
-	RegisterRepeat(r)
-	RegisterPad(r)
-	RegisterMatch(r)
-	RegisterEscape(r)
+	for _, n := range stringNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Stack ops
 	for _, n := range stackNatives {
@@ -42,9 +31,9 @@ func Register(r *Registry) {
 	RegisterComparison(r)
 
 	// Storage
-	RegisterSet(r)
-	RegisterGet(r)
-	RegisterContext(r)
+	for _, n := range storageNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Definition
 	RegisterDef(r)
@@ -82,7 +71,9 @@ func Register(r *Registry) {
 	RegisterError(r)
 
 	// Accessors
-	RegisterGetr(r)
+	for _, n := range accessorNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// I/O
 	RegisterFileIO(r)
