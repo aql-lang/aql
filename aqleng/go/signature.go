@@ -120,13 +120,16 @@ type Signature struct {
 // CheckFullStackFunc produces the full base..pointer replacement
 // for a FullStack signature in check mode. args are the matched
 // carrier args in signature order; stack is the preserved carrier
-// stack segment below the args.
-type CheckFullStackFunc func(args []Value, stack []Value) []Value
+// stack segment below the args; r is the registry the analysis is
+// running against (for emitting diagnostics, reading defs, etc.).
+type CheckFullStackFunc func(args []Value, stack []Value, r *Registry) []Value
 
 // ReturnsFunc computes the carrier return values for a signature in
 // static type-check mode. args are the carrier-typed input values in
-// signature order.
-type ReturnsFunc func(args []Value) []Value
+// signature order; r is the registry (for emitting diagnostics,
+// reading defs, running sub-analyses, etc.) — the same one passed to
+// the runtime Handler.
+type ReturnsFunc func(args []Value, r *Registry) []Value
 
 // TotalArgs returns the number of arguments.
 func (s *Signature) TotalArgs() int {

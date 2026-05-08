@@ -21,7 +21,7 @@ func RegisterPick(r *Registry) {
 			// a carrier whose type is the join of all existing
 			// stack carrier types (we don't know statically which
 			// index pick will hit, so widen).
-			CheckFullStackFn: func(_ []Value, stack []Value) []Value {
+			CheckFullStackFn: func(_ []Value, stack []Value, _ *Registry) []Value {
 				if len(stack) == 0 {
 					return append(append([]Value(nil), stack...), NewCarrier(TAny))
 				}

@@ -12,7 +12,7 @@ func RegisterDepth(r *Registry) {
 			// Check-mode FullStack: preserve the carrier stack and
 			// append one Integer (carrier depth is unknown
 			// statically, but the runtime value type is fixed).
-			CheckFullStackFn: func(_ []Value, stack []Value) []Value {
+			CheckFullStackFn: func(_ []Value, stack []Value, _ *Registry) []Value {
 				return append(append([]Value(nil), stack...), NewCarrier(TInteger))
 			},
 		}},

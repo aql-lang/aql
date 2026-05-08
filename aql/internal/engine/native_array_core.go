@@ -24,7 +24,7 @@ func RegisterIota(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value {
+			ReturnsFn: func(_ []Value, _ *Registry) []Value {
 				return []Value{NewCarrierTypedList(TInteger)}
 			},
 		}},
@@ -49,7 +49,7 @@ func RegisterShape(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
+			ReturnsFn: func(_ []Value, _ *Registry) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -389,7 +389,7 @@ func RegisterWhere(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
+			ReturnsFn: func(_ []Value, _ *Registry) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -454,7 +454,7 @@ func RegisterGrade(r *Registry) {
 				}
 				return []Value{NewList(elems)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
+			ReturnsFn: func(_ []Value, _ *Registry) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -577,7 +577,7 @@ func RegisterMember(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TBoolean)} },
+			ReturnsFn: func(_ []Value, _ *Registry) []Value { return []Value{NewCarrierTypedList(TBoolean)} },
 		}},
 	})
 }
@@ -618,7 +618,7 @@ func RegisterArrIndexof(r *Registry) {
 				}
 				return []Value{NewList(result)}, nil
 			},
-			ReturnsFn: func(_ []Value) []Value { return []Value{NewCarrierTypedList(TInteger)} },
+			ReturnsFn: func(_ []Value, _ *Registry) []Value { return []Value{NewCarrierTypedList(TInteger)} },
 		}},
 	})
 }
@@ -805,7 +805,7 @@ func RegisterWindow(r *Registry) {
 			},
 			// window yields a TList<TList<sameElem>>: wrap the
 			// source-data element carrier twice.
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				elem := DataListElemTypeFromValue(args[1])
 				inner := NewCarrierTypedList(elem)
 				return []Value{NewCarrierTypedListValue(inner)}
@@ -838,7 +838,7 @@ func RegisterPairs(r *Registry) {
 				return []Value{NewList(result)}, nil
 			},
 			// pairs yields TList<TList<sameElem>> (2-tuples).
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				elem := DataListElemTypeFromValue(args[0])
 				inner := NewCarrierTypedList(elem)
 				return []Value{NewCarrierTypedListValue(inner)}

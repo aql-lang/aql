@@ -99,7 +99,7 @@ func RegisterFor(r *Registry) {
 // then popped. Returns a typed list whose element type mirrors the
 // body's residual top-of-stack.
 func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc {
-	return func(args []Value) []Value {
+	return func(args []Value, _ *Registry) []Value {
 		// body is always the last arg (Integer,List or List,List).
 		body := args[len(args)-1]
 		r.PushDef(iterName, NewCarrier(iterType))

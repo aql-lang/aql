@@ -292,7 +292,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		declaredReturns := append([]Type(nil), s.Returns...)
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
-		returnsFn := func(args []Value) []Value {
+		returnsFn := func(args []Value, _ *Registry) []Value {
 			// Pattern / record-shape check: for each declared
 			// record-typed param, verify the arg map carries each
 			// declared field key. Skip calls whose arg is empty or

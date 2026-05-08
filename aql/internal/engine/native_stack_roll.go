@@ -26,7 +26,7 @@ func RegisterRoll(r *Registry) {
 			// the top without changing the total count. We don't
 			// know statically which element; return a copy of the
 			// stack whose new top is the join of existing elements.
-			CheckFullStackFn: func(_ []Value, stack []Value) []Value {
+			CheckFullStackFn: func(_ []Value, stack []Value, _ *Registry) []Value {
 				if len(stack) == 0 {
 					return nil
 				}

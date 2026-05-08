@@ -60,7 +60,7 @@ func NewCarrierTypedListValue(child Value) Value {
 // unique, at, sortby — they return a list of the same element type
 // as their input.
 func ReturnsPreserveListAt(i int) ReturnsFunc {
-	return func(args []Value) []Value {
+	return func(args []Value, _ *Registry) []Value {
 		if i < 0 || i >= len(args) {
 			return []Value{NewCarrier(TList)}
 		}
@@ -73,7 +73,7 @@ func ReturnsPreserveListAt(i int) ReturnsFunc {
 // type carrier of the data-list arg at index i. Used by words like
 // head/first (if added) that pick a single element out of a list.
 func ReturnsListElemAt(i int) ReturnsFunc {
-	return func(args []Value) []Value {
+	return func(args []Value, _ *Registry) []Value {
 		if i < 0 || i >= len(args) {
 			return []Value{NewCarrier(TAny)}
 		}
@@ -172,7 +172,7 @@ func StripToCarriers(in []Value) []Value {
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
 	if sig.ReturnsFn != nil {
-		raw := sig.ReturnsFn(args)
+		raw := sig.ReturnsFn(args, r)
 		out := make([]Value, len(raw))
 		for i, v := range raw {
 			out[i] = toCarrier(v)
@@ -206,7 +206,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 // The mapping is a permutation-description slice: result[i] = args[mapping[i]].
 // Example: swap is ReturnsIdentity(1, 0); over is ReturnsIdentity(0, 1, 0).
 func ReturnsIdentity(mapping ...int) ReturnsFunc {
-	return func(args []Value) []Value {
+	return func(args []Value, _ *Registry) []Value {
 		out := make([]Value, len(mapping))
 		for i, m := range mapping {
 			if m < 0 || m >= len(args) {
@@ -223,7 +223,7 @@ func ReturnsIdentity(mapping ...int) ReturnsFunc {
 // of carrier types, independent of args. Equivalent to setting Returns
 // directly; provided so ReturnsFn call sites can be uniform.
 func ReturnsStatic(types ...Type) ReturnsFunc {
-	return func(_ []Value) []Value {
+	return func(_ []Value, _ *Registry) []Value {
 		out := make([]Value, len(types))
 		for i, t := range types {
 			out[i] = NewCarrier(t)
@@ -237,7 +237,7 @@ func ReturnsStatic(types ...Type) ReturnsFunc {
 // result is a decimal. Applies to add, sub, mul, div, mod, pow when
 // the matched signature is [TNumber, TNumber].
 func ReturnsNumericBinary() ReturnsFunc {
-	return func(args []Value) []Value {
+	return func(args []Value, _ *Registry) []Value {
 		if len(args) == 2 &&
 			args[0].VType.Matches(TInteger) &&
 			args[1].VType.Matches(TInteger) {

@@ -87,7 +87,7 @@ func RegisterIf(r *Registry) {
 				// means both branches are parser-produced code
 				// lists with Eval=true (NoEvalArgs suppresses
 				// auto-eval so we get the raw body).
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					// Flow typing: detect `x is Type` in the
 					// condition and narrow x in the then-branch;
 					// apply the complement in the else-branch.
@@ -153,7 +153,7 @@ func RegisterIf(r *Registry) {
 				// then-branch created are joined with the pre-branch
 				// binding (or dropped if the name wasn't bound
 				// before) — mirrors the 3-arg semantics.
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 						r.AddCheckDiagnostic(CheckDiagnostic{
 							Code:     "unreachable_branch",

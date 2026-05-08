@@ -130,14 +130,14 @@ func RegisterGet(r *Registry) {
 			// typed carrier for previously-set keys.
 			{
 				Args: []Type{TString, TStore}, BarrierPos: 1, Handler: storeHandler,
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					v, _ := r.LookupContextType(StoreKey(args[0]))
 					return []Value{v}
 				},
 			},
 			{
 				Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: storeHandler,
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					v, _ := r.LookupContextType(StoreKey(args[0]))
 					return []Value{v}
 				},

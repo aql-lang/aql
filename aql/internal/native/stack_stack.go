@@ -29,7 +29,7 @@ func RegisterStackCollect(r *engine.Registry) {
 			// preserved stack below it. Net effect: stack count
 			// reduces by an unknown amount. Conservative model:
 			// keep the whole stack, append the typed-list carrier.
-			CheckFullStackFn: func(_ []engine.Value, stack []engine.Value) []engine.Value {
+			CheckFullStackFn: func(_ []engine.Value, stack []engine.Value, _ *engine.Registry) []engine.Value {
 				var elem engine.Type = engine.TAny
 				if len(stack) > 0 {
 					elem = stack[0].VType

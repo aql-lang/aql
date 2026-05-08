@@ -44,7 +44,7 @@ func RegisterTor(r *Registry) {
 				// Builds a disjunction carrier that flattens incoming
 				// disjuncts, subsumes subtypes, and applies
 				// CarrierDisjunctCap widening.
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					if len(args) != 2 {
 						return []Value{NewCarrier(TAny)}
 					}

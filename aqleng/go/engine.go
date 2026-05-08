@@ -1009,7 +1009,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				}
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
-			results := match.Sig.CheckFullStackFn(match.Args, preserved)
+			results := match.Sig.CheckFullStackFn(match.Args, preserved, e.registry)
 			e.stackSplice(base, end+1-base, results...)
 			e.pointer = base
 			return nil

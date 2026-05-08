@@ -43,7 +43,7 @@ func RegisterEach(r *Registry) {
 			// body's top-of-stack produces. Pass the concrete data
 			// list's element carrier into the body so diagnostics
 			// fire against realistic types.
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				elem := DataListElemTypeFromValue(args[1])
 				stk := analyseHigherOrderBody(r, args[0], elem)
 				if len(stk) == 0 {
@@ -116,7 +116,7 @@ func RegisterFold(r *Registry) {
 				// result. A proper fixed-point would iterate until
 				// the accumulator type stabilises — one pass is a
 				// close approximation for bounded-lattice types.
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					elem := DataListElemTypeFromValue(args[2])
 					stk := analyseHigherOrderBody(r, args[1], args[0].VType, elem)
 					if len(stk) == 0 {
@@ -149,7 +149,7 @@ func RegisterFold(r *Registry) {
 				},
 				// No init — accumulator type and element type both
 				// come from the data list.
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					elem := DataListElemTypeFromValue(args[1])
 					stk := analyseHigherOrderBody(r, args[0], elem, elem)
 					if len(stk) == 0 {
@@ -230,7 +230,7 @@ func RegisterScan(r *Registry) {
 				}
 				return []Value{NewList(results)}, nil
 			},
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				elem := DataListElemTypeFromValue(args[1])
 				stk := analyseHigherOrderBody(r, args[0], elem, elem)
 				if len(stk) == 0 {
@@ -285,7 +285,7 @@ func RegisterOuter(r *Registry) {
 				}
 				return []Value{NewList(rows)}, nil
 			},
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				leftElem := DataListElemTypeFromValue(args[1])
 				rightElem := DataListElemTypeFromValue(args[2])
 				stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
@@ -418,7 +418,7 @@ func RegisterInner(r *Registry) {
 				}
 				return []Value{NewList(rows)}, nil
 			},
-			ReturnsFn: func(args []Value) []Value {
+			ReturnsFn: func(args []Value, r *Registry) []Value {
 				leftElem := DataListElemTypeFromValue(args[2])
 				rightElem := DataListElemTypeFromValue(args[3])
 				// pair op consumes (left-elem, right-elem); agg

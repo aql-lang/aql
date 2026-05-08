@@ -101,7 +101,7 @@ func RegisterDo(r *Registry) {
 				// reference to a def'd list, resolve via DefStacks
 				// first. Falls back to TAny for truly computed
 				// bodies.
-				ReturnsFn: func(args []Value) []Value {
+				ReturnsFn: func(args []Value, r *Registry) []Value {
 					body := args[0]
 					if body.IsWord() {
 						w, _ := body.AsWord()
