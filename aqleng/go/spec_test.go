@@ -250,6 +250,13 @@ func registerSpecWords(r *Registry) {
 			},
 		},
 	})
+
+	// Simple-value defs the def.tsv spec references. A word whose name
+	// is in the def stack is substituted by its value before normal
+	// dispatch, provided the value isn't an FnDef / ObjectType.
+	r.PushDef("pi", NewInteger(3))
+	r.PushDef("tau", NewInteger(6))
+	r.PushDef("greeting", NewString("hello"))
 }
 
 // tokenizeSpec converts a single space-separated input string from a

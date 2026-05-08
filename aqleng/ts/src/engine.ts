@@ -89,7 +89,7 @@ export class Engine {
       throw new AqlError('undefined_word', `undefined word: ${name}`, name)
     }
 
-    const result = matchEntry(fn, this.stack, this.pointer)
+    const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
       throw new AqlError(
         'signature_error',

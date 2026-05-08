@@ -23,7 +23,7 @@
 //   3 10 sub   → fwd=0, stack top=10, next=3   → sig[0]=10, sig[1]=3   → 7
 //   10 sub 3   → fwd=1 [3],  stack top=10      → sig[0]=3,  sig[1]=10  → -7  (swap form)
 
-import type { FunctionEntry } from './registry.ts'
+import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
 import { TWord } from './type.ts'
 import type { Value, WordInfo } from './value.ts'
@@ -42,6 +42,7 @@ export function matchEntry(
   fn: FunctionEntry,
   stack: readonly Value[],
   pointer: number,
+  registry?: Registry,
 ): MatchResult | null {
   // The dispatching word lives at stack[pointer]. Its WordInfo may
   // carry /s or /f modifiers that override the sig's BarrierPos.
@@ -50,7 +51,7 @@ export function matchEntry(
     const n = sig.args.length
     if (n === 0) continue
 
-    const r = tryMatch(sig, n, stack, pointer, wordInfo)
+    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry)
     if (r) return r
   }
   return null
@@ -62,12 +63,30 @@ function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | unde
   return v.asWord()
 }
 
+/**
+ * Resolve a forward-side Word token. If the word's name has a simple
+ * def in the registry (i.e. a non-fn, non-objecttype value), return
+ * the def value so the matcher type-checks against it AND the handler
+ * receives the substituted value rather than the raw Word. If the
+ * registry isn't supplied, or no def exists, return the original
+ * token unchanged so the existing behaviour is preserved.
+ */
+function resolveForwardToken(tok: Value, registry: Registry | undefined): Value {
+  if (!registry) return tok
+  if (!tok.isWord()) return tok
+  const w = tok.asWord()
+  const top = registry.topOfDefStack(w.name)
+  if (!top) return tok
+  return top
+}
+
 function tryMatch(
   sig: Signature,
   n: number,
   stack: readonly Value[],
   pointer: number,
   word: WordInfo | undefined,
+  registry: Registry | undefined,
 ): MatchResult | null {
   // sig.barrierPos: 0 = boundary at start (all stack), N = boundary
   // at end (all forward-eligible). The Registry has already
@@ -83,9 +102,10 @@ function tryMatch(
   let fwd = 0
   let scanIdx = pointer + 1
   while (fwd < forwardLimit && scanIdx < stack.length) {
-    const tok = stack[scanIdx]
-    if (!tok) break
-    if (isStructuralBoundary(tok)) break
+    const rawTok = stack[scanIdx]
+    if (!rawTok) break
+    if (isStructuralBoundary(rawTok)) break
+    const tok = resolveForwardToken(rawTok, registry)
     if (!sigTypeMatches(tok, sig.args[fwd]!)) break
     args[fwd] = tok
     fwd++
