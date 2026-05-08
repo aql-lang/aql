@@ -41,19 +41,34 @@ Why this is surprising:
 
 **Recommended replacement.** Decouple "what type is this?" from
 "what specific literal is this?". Type identity stays at the *kind*
-level (`Scalar/Number/Integer`); literal-pattern dispatch moves to a
-first-class `Pattern` field on the signature. Concretely:
+level (`Scalar/Number/Integer`); literal-value dispatch moves to the
+existing `Signature.Patterns map[int]Value` slot — the same field
+records / typed-lists already use for shape patterns. Concretely:
 
 ```
-v.VType            // = Scalar/Number/Integer (always, for any integer)
-v.Data             // = the actual int64
-v.LiteralPattern   // optional: a Value the matcher compares structurally
-                   //   when present, used by `def double[2] (x => 4)` style sigs
+v.VType    // = Scalar/Number/Integer (always, for any integer)
+v.Data     // = the actual int64
+
+// A handler that fires only on integer 2:
+Signature{
+    Args:     []Type{TInteger, TInteger},
+    Patterns: map[int]Value{0: NewInteger(2)}, // arg[0] must compare equal to 2
+    Handler:  ...,
+}
 ```
 
-The Go engine already has `Signature.Patterns map[int]Value` for
-record/list patterns; integer-literal dispatch can ride on the same
-mechanism instead of being smuggled through type paths. The benefit:
+`match.go` already consults `Patterns` for `record{...}` / `[…]` shape
+matching; teaching it to do a structural compare on a scalar literal
+when `Patterns[i]` is a concrete scalar is a few extra lines, not a
+new mechanism. *No* new field on `Value`, *no* new term — the
+literal-pattern slot is just a `Value` used as a comparand.
+
+(An earlier draft of this section invented a `LiteralPattern` field
+on Value. That was wrong: there's nothing to add to `Value` — `Data`
+already carries the int64. The pattern lives on the signature, not
+the value.)
+
+The benefit:
 
 - `Equal(TInteger)` works as users expect.
 - Cardinality of `Type` is bounded by the lattice (~80 known kinds),
