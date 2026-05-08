@@ -68,4 +68,13 @@ func Register(r *Registry) {
 	for _, n := range arrayNatives {
 		r.RegisterNativeFunc(n)
 	}
+
+	// Query DSL (select/from/where/order/...) is intentionally not
+	// installed here: prior to this refactor RegisterQuery was a
+	// dead function (no caller in register.go). Keeping that
+	// behaviour preserves the baseline test failure count and
+	// avoids registering the 'where' / 'group' query overloads on
+	// top of the array words of the same name. Hosts that want the
+	// query DSL can install queryNatives explicitly via a provider
+	// passed to DefaultRegistry.
 }
