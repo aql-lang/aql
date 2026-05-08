@@ -63,24 +63,26 @@ upper "abc"	'ABC'
 lower "XYZ"	'xyz'
 
 # === Arithmetic - prefix (Forth style) ===
+# Post-§1.4 phase 4: handlers compute b op a (args[1] op args[0]).
+# All-stack `c b op` form: top=b→sig[0], next=c→sig[1]. Result: c op b.
 1 2 add	3
-10 3 sub	-7
+10 3 sub	7
 4 5 mul	20
-10 3 div	0
-10 3 mod	3
+10 3 div	3
+10 3 mod	1
 0 0 add	0
 -1 1 add	0
 100 99 sub	1
 
-# === Arithmetic - infix ===
+# === Arithmetic - infix (swap form: top=b→sig[0], stack=a→sig[1] → a op b) ===
 1 add 2	3
-10 sub 3	-7
+10 sub 3	7
 4 mul 5	20
-10 div 3	0
-10 mod 3	3
+10 div 3	3
+10 mod 3	1
 0 add 0	0
 
-# === String concatenation with add ===
+# === String concatenation with add (infix swap form: a + b) ===
 "hello" add " world"	'hello world'
 "a" add "b"	'ab'
 "count: " add 42	'count: 42'
@@ -96,7 +98,7 @@ lower "XYZ"	'xyz'
 2 add 3 mul 4	20
 2 mul 3 add 4	10
 1 add 2 mul 3 add 4	13
-10 sub 3 sub 1	8
+10 sub 3 sub 1	6
 1 add 1 add 1	3
 2 mul 2 mul 2	8
 1 add 2 mul 3	9

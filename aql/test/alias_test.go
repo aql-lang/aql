@@ -554,8 +554,8 @@ func TestAliasGetpath(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "getpath",
 		defStep:   "def mygetpath [getpath]",
-		origSteps: []string{`getpath {a:{b:42}} "a.b"`},
-		aliaSteps: []string{`mygetpath {a:{b:42}} "a.b"`},
+		origSteps: []string{`getpath "a.b" {a:{b:42}}`},
+		aliaSteps: []string{`mygetpath "a.b" {a:{b:42}}`},
 	})
 }
 
@@ -580,8 +580,8 @@ func TestAliasValidate(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "validate",
 		defStep:   "def myvalidate [validate]",
-		origSteps: []string{`validate {name:"Alice" age:30} {name:"$STRING" age:"$NUMBER"}`},
-		aliaSteps: []string{`myvalidate {name:"Alice" age:30} {name:"$STRING" age:"$NUMBER"}`},
+		origSteps: []string{`validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
+		aliaSteps: []string{`myvalidate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
 	})
 }
 

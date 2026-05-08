@@ -927,7 +927,7 @@ func TestAddDateCalDuration(t *testing.T) {
 	// "2024-01-31" date add 1 months → need date + CalDuration on stack
 	d := engine.NewDate(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
 	cd := engine.NewCalDuration(0, 1, 0)
-	result, err := e.Run([]engine.Value{d, cd, engine.NewWord("add")})
+	result, err := e.Run([]engine.Value{cd, d, engine.NewWord("add")})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -947,7 +947,7 @@ func TestSubDateCalDuration(t *testing.T) {
 	e := engine.New(r)
 	d := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	cd := engine.NewCalDuration(0, 1, 0)
-	result, err := e.Run([]engine.Value{d, cd, engine.NewWord("sub")})
+	result, err := e.Run([]engine.Value{cd, d, engine.NewWord("sub")})
 	if err != nil {
 		t.Fatalf("sub: %v", err)
 	}
@@ -966,7 +966,7 @@ func TestAddInstantClkDuration(t *testing.T) {
 	e := engine.New(r)
 	ins := engine.NewInstant(time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC))
 	dur := engine.NewClkDuration(30 * time.Minute)
-	result, err := e.Run([]engine.Value{ins, dur, engine.NewWord("add")})
+	result, err := e.Run([]engine.Value{dur, ins, engine.NewWord("add")})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}

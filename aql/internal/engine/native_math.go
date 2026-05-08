@@ -142,7 +142,7 @@ var mathNatives = []NativeFunc{
 }
 
 func addConcatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(ValToString(args[0]) + ValToString(args[1]))}, nil
+	return []Value{NewString(ValToString(args[1]) + ValToString(args[0]))}, nil
 }
 
 func addDateCalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
