@@ -20,11 +20,14 @@ import {
   typeNameTable,
 } from './type.ts'
 import {
+  type FnDefInfo,
   newBoolean,
   newTypeLiteral,
   Value,
   type WordInfo,
 } from './value.ts'
+import type { FunctionEntry } from './registry.ts'
+import type { Signature } from './signature.ts'
 
 const STEP_LIMIT = 22222
 
@@ -86,12 +89,21 @@ export class Engine {
       return
     }
 
-    // Simple-value def substitution. If the def value is a List,
-    // treat it as a code body — splice its elements at the pointer
-    // so they execute inline. Otherwise replace the word with the
-    // value and let the next iteration pick it up as a literal.
+    // Def-stack substitution. Three paths:
+    //   1. FnDef (typed-param fn): match args against the synthesised
+    //      sig from params, bind each param on the def stack, run the
+    //      body in a sub-engine, splice the result back in place of
+    //      the consumed word + prefix + forward args.
+    //   2. List (code body): splice its elements at the pointer to
+    //      execute inline against the current stack.
+    //   3. Anything else (simple value): replace the word with the
+    //      value and let the next iteration pick it up as a literal.
     const top = this.registry.topOfDefStack(name)
     if (top !== undefined) {
+      if (top.isFnDef()) {
+        this.dispatchFnDef(name, top.asFnDef())
+        return
+      }
       if (top.vType.matches(TList) && top.isConcrete()) {
         const elems = top.asList()
         this.stack.splice(this.pointer, 1, ...elems)
@@ -229,6 +241,67 @@ export class Engine {
       resolved++
       scanIdx++
     }
+  }
+
+  /**
+   * Dispatch a fn-typed def at the pointer. Synthesises a Signature
+   * from the FnDef's params (one overload, all-forward-eligible),
+   * matches it against the current stack/forward window, binds each
+   * param onto the def stack, runs the body in a sub-engine, then
+   * splices the result back in place of the consumed prefix + word
+   * + forward args. The bound params are popped after the sub-engine
+   * returns so they don't leak into the surrounding scope.
+   *
+   * Mirrors aqleng/go/engine.go's FnDef dispatch path (the "stepWord
+   * → execFnDefSig" arc) compressed into a single function.
+   */
+  private dispatchFnDef(name: string, info: FnDefInfo): void {
+    // Pre-evaluate forward parens so the matcher sees concrete values.
+    this.preEvalParens(info.params.length)
+
+    const sig: Signature = {
+      args: info.params.map((p) => p.type),
+      barrierPos: info.params.length,
+      handler: () => [],
+    }
+    const fakeEntry: FunctionEntry = {
+      name,
+      signatures: [sig],
+      forwardPrecedence: true,
+      maxForwardArgs: info.params.length,
+    }
+    const result = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+    if (!result) {
+      throw new AqlError(
+        'signature_error',
+        `no matching signature for ${name}\n  = expected: ${name} (${describeExpected(fakeEntry)})\n  = stack: ${this.describeStack()}`,
+        name,
+      )
+    }
+
+    // Bind each param on the def stack so the body can reference it.
+    for (let i = 0; i < info.params.length; i++) {
+      this.registry.pushDef(info.params[i]!.name, result.args[i]!)
+    }
+
+    let bodyResult: Value[]
+    try {
+      const sub = new Engine(this.registry)
+      bodyResult = sub.run([...info.body])
+    } finally {
+      // Pop in reverse to keep the def stack consistent with multiple
+      // params sharing a name (rare but possible).
+      for (let i = info.params.length - 1; i >= 0; i--) {
+        this.registry.popDef(info.params[i]!.name)
+      }
+    }
+
+    // Splice the result over the consumed range (prefix + word +
+    // forward args), exactly like a native handler.
+    const replaceFrom = this.pointer - result.prefixCount
+    const replaceCount = result.prefixCount + 1 + result.forwardCount
+    this.stack.splice(replaceFrom, replaceCount, ...bodyResult)
+    this.pointer = replaceFrom + bodyResult.length
   }
 
   private describeStack(): string {

@@ -52,10 +52,11 @@ export {
   newAtom,
   newBoolean,
   newDecimal,
+  newFnDef,
   newInteger,
   newList,
   newString,
   newTypeLiteral,
   newWord,
 } from './value.ts'
-export type { WordInfo } from './value.ts'
+export type { FnDefInfo, FnParam, WordInfo } from './value.ts'

@@ -12,6 +12,7 @@ import {
   TAtom,
   TBoolean,
   TDecimal,
+  TFunction,
   TInteger,
   TList,
   TNone,
@@ -26,6 +27,24 @@ export interface WordInfo {
   argCount?: number
   forceStack?: boolean
   forceForward?: boolean
+}
+
+/** A typed parameter on a function definition. */
+export interface FnParam {
+  name: string
+  type: AqlType
+}
+
+/**
+ * A user-defined function: typed params + return-type slots + a body
+ * the engine runs when the fn is invoked. The spec subset uses a
+ * single-overload shape; the full Go FnDefInfo carries multiple
+ * overloads (Sigs[]) plus optional Patterns / NoEvalArgs.
+ */
+export interface FnDefInfo {
+  params: FnParam[]
+  returns: AqlType[]
+  body: Value[]
 }
 
 export class Value {
@@ -108,6 +127,18 @@ export class Value {
       throw new Error(`AsList: not a list value`)
     }
     return this.data as Value[]
+  }
+
+  asFnDef(): FnDefInfo {
+    if (this.data === null) throw new Error('AsFnDef: nil data')
+    if (typeof this.data !== 'object') {
+      throw new Error(`AsFnDef: not a function value`)
+    }
+    return this.data as FnDefInfo
+  }
+
+  isFnDef(): boolean {
+    return this.vType.matches(TFunction) && this.data !== null
   }
 
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
@@ -205,4 +236,13 @@ export function newAny(data: unknown): Value {
  */
 export function newList(elems: Value[]): Value {
   return new Value(TList, elems)
+}
+
+/**
+ * Construct a function-definition value. VType = Word/Function so
+ * sigTypeMatches can route fn refs through TFunction sig slots, and
+ * the engine's def-sub branch knows to dispatch instead of substitute.
+ */
+export function newFnDef(info: FnDefInfo): Value {
+  return new Value(TFunction, info)
 }

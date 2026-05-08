@@ -329,10 +329,67 @@ func registerSpecWords(r *Registry) {
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				w, _ := args[0].AsWord()
+				// FnDef body: register a synthesised native that
+				// matches the param types, binds them onto the def
+				// stack, runs the body via a sub-engine, then pops.
+				// Bypassing InstallFnDef avoids that helper's
+				// dependency on internal `__pa` / paren-marker words
+				// which only exist in the production aql/internal
+				// engine, not the bare aqleng spec runner.
+				if info, ok := args[1].Data.(FnDefInfo); ok && len(info.Sigs) == 1 {
+					installSpecFnDef(reg, w.Name, info.Sigs[0])
+					return []Value{}, nil
+				}
 				reg.PushDef(w.Name, args[1])
 				return []Value{}, nil
 			},
 			Returns: []Type{},
+		}},
+	})
+
+	// fn: builds a function definition value from
+	// `fn [ params ] [ returns ] [ body ]`. Each param is a single
+	// Word token of the form `name:TypeName` — the spec tokenizer is
+	// whitespace-only so a typed param arrives as one Word and the
+	// handler splits on `:` to recover the (name, type) pair.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fn",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList, TList, TList},
+			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				paramsList := args[0].AsList()
+				returnsList := args[1].AsList()
+				body := args[2].AsList()
+
+				params := make([]FnParam, paramsList.Len())
+				for i := 0; i < paramsList.Len(); i++ {
+					p, err := parseSpecFnParam(paramsList.Get(i))
+					if err != nil {
+						return nil, err
+					}
+					params[i] = p
+				}
+				returns := make([]Type, returnsList.Len())
+				for i := 0; i < returnsList.Len(); i++ {
+					t, err := parseSpecFnReturn(returnsList.Get(i))
+					if err != nil {
+						return nil, err
+					}
+					returns[i] = t
+				}
+
+				info := FnDefInfo{
+					Sigs: []FnSig{{
+						Params:  params,
+						Returns: returns,
+						Body:    body.Slice(),
+					}},
+				}
+				return []Value{NewFnDef(info)}, nil
+			},
+			Returns: []Type{TFunction},
 		}},
 	})
 
@@ -342,6 +399,77 @@ func registerSpecWords(r *Registry) {
 	r.PushDef("pi", NewInteger(3))
 	r.PushDef("tau", NewInteger(6))
 	r.PushDef("greeting", NewString("hello"))
+}
+
+// installSpecFnDef wires a single fn signature into the spec runner's
+// registry as a synthesised native. The handler binds each named
+// param onto the def stack, runs the body in a fresh sub-engine, then
+// pops the bindings. Mirrors the param-binding portion of the full
+// engine's InstallFnDef without pulling in __pa / paren-marker
+// machinery that the spec runner's word table doesn't carry.
+func installSpecFnDef(r *Registry, name string, sig FnSig) {
+	argTypes := make([]Type, len(sig.Params))
+	for i, p := range sig.Params {
+		argTypes[i] = p.Type
+	}
+	bodyCopy := append([]Value{}, sig.Body...)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: argTypes,
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				for i, p := range sig.Params {
+					reg.PushDef(p.Name, args[i])
+				}
+				defer func() {
+					for i := len(sig.Params) - 1; i >= 0; i-- {
+						reg.PopDef(sig.Params[i].Name)
+					}
+				}()
+				sub := New(reg)
+				input := append([]Value{}, bodyCopy...)
+				return sub.Run(input)
+			},
+		}},
+	})
+}
+
+// parseSpecFnParam splits a `name:TypeName` Word into an FnParam.
+// The spec tokenizer is whitespace-only, so a typed param arrives as
+// one Word token; we recover the (name, type) pair here.
+func parseSpecFnParam(v Value) (FnParam, error) {
+	if !v.IsWord() {
+		return FnParam{}, fmt.Errorf("fn: expected param Word, got %s", v.String())
+	}
+	w, _ := v.AsWord()
+	idx := strings.Index(w.Name, ":")
+	if idx < 0 {
+		return FnParam{}, fmt.Errorf("fn: param %q missing ':TypeName' suffix", w.Name)
+	}
+	name := w.Name[:idx]
+	typeName := w.Name[idx+1:]
+	t, err := parseSpecTypeName(typeName)
+	if err != nil {
+		return FnParam{}, err
+	}
+	return FnParam{Name: name, Type: t}, nil
+}
+
+func parseSpecFnReturn(v Value) (Type, error) {
+	if !v.IsWord() {
+		return Type{}, fmt.Errorf("fn: expected return-type Word, got %s", v.String())
+	}
+	w, _ := v.AsWord()
+	return parseSpecTypeName(w.Name)
+}
+
+func parseSpecTypeName(name string) (Type, error) {
+	tn, ok := TypeNameTable()[name]
+	if !ok {
+		return Type{}, fmt.Errorf("fn: unknown type %q", name)
+	}
+	return tn, nil
 }
 
 // tokenizeSpec converts a single space-separated input string from a

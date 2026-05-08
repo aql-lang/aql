@@ -27,14 +27,17 @@ import {
   TList,
   TWord,
   Value,
+  type FnParam,
   type WordInfo,
   newBoolean,
   newDecimal,
+  newFnDef,
   newInteger,
   newList,
   newString,
   newTypeLiteral,
   newWord,
+  typeNameTable,
 } from './index.ts'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -283,6 +286,32 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // fn: builds a function definition value from
+  // `fn [ params ] [ returns ] [ body ]`. Each param is a single
+  // Word token of the form `name:Type` (the spec tokenizer is
+  // whitespace-only so we don't get a separate `:` token). The
+  // handler parses each param, resolves the type via the type-name
+  // table, and produces a TFunction Value the engine dispatches
+  // when the surrounding `def` binding is later invoked.
+  reg({
+    name: 'fn',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList, TList, TList],
+        noEvalArgs: new Set([0, 1, 2]),
+        handler: (args) => {
+          const paramsList = args[0]!.asList()
+          const returnsList = args[1]!.asList()
+          const body = args[2]!.asList()
+          const params = paramsList.map((p) => parseFnParam(p))
+          const returns = returnsList.map((r) => parseFnReturn(r))
+          return [newFnDef({ params, returns, body })]
+        },
+      },
+    ],
+  })
+
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
   // dispatch, provided the value isn't an FnDef / ObjectType.
@@ -394,6 +423,37 @@ function newWordWithModifiers(name: string, forceStack: boolean, forceForward: b
   if (forceStack) wi.forceStack = true
   if (forceForward) wi.forceForward = true
   return new Value(TWord, wi)
+}
+
+/**
+ * Parse one fn-param token. The spec tokenizer produces a Word per
+ * whitespace-split chunk, so a typed param like `n:Integer` arrives
+ * as a single Word with name `n:Integer`. Split on the first `:`,
+ * resolve the type name, build an FnParam.
+ */
+function parseFnParam(v: Value): FnParam {
+  if (!v.isWord()) {
+    throw new Error(`fn: expected param Word, got ${v.toString()}`)
+  }
+  const w = v.asWord()
+  const idx = w.name.indexOf(':')
+  if (idx < 0) {
+    throw new Error(`fn: param ${JSON.stringify(w.name)} missing ':TypeName' suffix`)
+  }
+  const name = w.name.slice(0, idx)
+  const typeName = w.name.slice(idx + 1)
+  const type = typeNameTable().get(typeName)
+  if (!type) throw new Error(`fn: unknown type ${JSON.stringify(typeName)}`)
+  return { name, type }
+}
+
+/** Parse one fn-return token (a bare TypeName Word). */
+function parseFnReturn(v: Value) {
+  if (!v.isWord()) throw new Error(`fn: expected return type Word`)
+  const w = v.asWord()
+  const type = typeNameTable().get(w.name)
+  if (!type) throw new Error(`fn: unknown return type ${JSON.stringify(w.name)}`)
+  return type
 }
 
 function renderStack(stack: Value[]): string {
