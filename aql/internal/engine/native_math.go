@@ -11,6 +11,13 @@ import (
 // temporal overloads (date+CalDuration, datetime+ClkDuration, etc.)
 // and add carries the [TScalar, TScalar] string-concatenation
 // overload used when both inputs coerce to strings.
+//
+// All [TNumber, TNumber] handlers compute b op a (i.e.
+// args[1] op args[0]). Under §1.4 the swap form `a op b` is the
+// preferred surface syntax, and binds args[0]=b, args[1]=a; the
+// b-op-a body therefore yields the natural reading (`10 sub 3` → 7,
+// `10 div 3` → 3). The mirror forms (`op a b`, `b op a`, `b a op`)
+// produce the reversed result.
 var mathNatives = []NativeFunc{
 	{
 		Name:              "add",
@@ -19,8 +26,8 @@ var mathNatives = []NativeFunc{
 			{
 				Args: []Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
-					func(a, b int64) (Value, error) { return NewInteger(a + b), nil },
-					func(a, b float64) (Value, error) { return NewDecimal(a + b), nil },
+					func(a, b int64) (Value, error) { return NewInteger(b + a), nil },
+					func(a, b float64) (Value, error) { return NewDecimal(b + a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(),
 			},
@@ -38,8 +45,8 @@ var mathNatives = []NativeFunc{
 			{
 				Args: []Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
-					func(a, b int64) (Value, error) { return NewInteger(a - b), nil },
-					func(a, b float64) (Value, error) { return NewDecimal(a - b), nil },
+					func(a, b int64) (Value, error) { return NewInteger(b - a), nil },
+					func(a, b float64) (Value, error) { return NewDecimal(b - a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(),
 			},
@@ -54,8 +61,8 @@ var mathNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args: []Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
-				func(a, b int64) (Value, error) { return NewInteger(a * b), nil },
-				func(a, b float64) (Value, error) { return NewDecimal(a * b), nil },
+				func(a, b int64) (Value, error) { return NewInteger(b * a), nil },
+				func(a, b float64) (Value, error) { return NewDecimal(b * a), nil },
 			),
 			ReturnsFn: ReturnsNumericBinary(),
 		}},
@@ -67,16 +74,16 @@ var mathNatives = []NativeFunc{
 			Args: []Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
-					if b == 0 {
+					if a == 0 {
 						return Value{}, fmt.Errorf("division by zero")
 					}
-					return NewInteger(a / b), nil
+					return NewInteger(b / a), nil
 				},
 				func(a, b float64) (Value, error) {
-					if b == 0 {
+					if a == 0 {
 						return Value{}, fmt.Errorf("division by zero")
 					}
-					return NewDecimal(a / b), nil
+					return NewDecimal(b / a), nil
 				},
 			),
 			ReturnsFn: ReturnsNumericBinary(),
@@ -89,16 +96,16 @@ var mathNatives = []NativeFunc{
 			Args: []Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
-					if b == 0 {
+					if a == 0 {
 						return Value{}, fmt.Errorf("modulo by zero")
 					}
-					return NewInteger(a % b), nil
+					return NewInteger(b % a), nil
 				},
 				func(a, b float64) (Value, error) {
-					if b == 0 {
+					if a == 0 {
 						return Value{}, fmt.Errorf("modulo by zero")
 					}
-					return NewDecimal(math.Mod(a, b)), nil
+					return NewDecimal(math.Mod(b, a)), nil
 				},
 			),
 			ReturnsFn: ReturnsNumericBinary(),
@@ -110,23 +117,24 @@ var mathNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args: []Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
-				func(base, exp int64) (Value, error) {
-					if exp < 0 {
-						return Value{}, fmt.Errorf("pow: negative exponent %d", exp)
+				func(a, b int64) (Value, error) {
+					// Compute b ** a under §1.4 swap-form preference.
+					if a < 0 {
+						return Value{}, fmt.Errorf("pow: negative exponent %d", a)
 					}
 					result := int64(1)
-					b := base
-					e := exp
-					for e > 0 {
-						if e%2 == 1 {
-							result *= b
+					base := b
+					exp := a
+					for exp > 0 {
+						if exp%2 == 1 {
+							result *= base
 						}
-						b *= b
-						e /= 2
+						base *= base
+						exp /= 2
 					}
 					return NewInteger(result), nil
 				},
-				func(base, exp float64) (Value, error) { return NewDecimal(math.Pow(base, exp)), nil },
+				func(a, b float64) (Value, error) { return NewDecimal(math.Pow(b, a)), nil },
 			),
 			ReturnsFn: ReturnsNumericBinary(),
 		}},
