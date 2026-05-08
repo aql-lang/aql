@@ -44,12 +44,12 @@ def g fn [[n:Integer s:String] [String] [s add n]] "val:" 5 g	'val:5'
 # =====================================================================
 
 # sub: sig[0]=Number, sig[1]=Number. Handler: args[1]-args[0].
-# 10 sub 3: fwd=[3]→sig[0], stack=[10]→sig[1]. 10-3=7
-# 10 3 sub: nearest=3→sig[0], next=10→sig[1]. 10-3=7
-# sub 10 3: fwd=[10,3]→sig[0]=10, sig[1]=3. 3-10=-7
-10 3 sub	7
-10 sub 3	7
-sub 10 3	-7
+# 10 sub 3: fwd=[3]→sig[0], stack=[10]→sig[1]. 3-10=-7  (swap form)
+# 10 3 sub: top=3→sig[0], next=10→sig[1]. 3-10=-7
+# sub 10 3: fwd=[10,3]→sig[0]=10, sig[1]=3. 10-3=7   (canonical)
+10 3 sub	-7
+10 sub 3	-7
+sub 10 3	7
 
 # =====================================================================
 # 3-param: [Opts Integer String] — three distinct types
