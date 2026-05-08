@@ -14,7 +14,7 @@ func TestCheckStepBudgetTrip(t *testing.T) {
 		t.Fatalf("new registry: %v", err)
 	}
 	r.InitRootContext()
-	engine.RegisterAdd(r)
+	engine.Register(r)
 
 	r.Check.Mode = true
 	r.Check.StepBudget = 5 // tiny — any non-trivial program trips

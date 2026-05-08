@@ -38,12 +38,9 @@ func Register(r *Registry) {
 	RegisterRoll(r)
 
 	// Math: basic arithmetic.
-	RegisterAdd(r)
-	RegisterSub(r)
-	RegisterMul(r)
-	RegisterDiv(r)
-	RegisterMod(r)
-	RegisterPow(r)
+	for _, n := range mathNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Boolean.
 	RegisterOr(r)
