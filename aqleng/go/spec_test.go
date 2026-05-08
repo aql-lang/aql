@@ -236,7 +236,25 @@ func tokenizeSpec(s string) ([]Value, error) {
 			} else if f, err := strconv.ParseFloat(tok, 64); err == nil {
 				out = append(out, NewDecimal(f))
 			} else {
-				out = append(out, NewWord(tok))
+				// /s and /f trailing modifiers — at the call site, force
+				// stack-only or forward-only dispatch regardless of the
+				// sig's declared BarrierPos. Mirrors the lexer's
+				// handling of these modifiers in the full parser.
+				name := tok
+				forceStack := false
+				forceForward := false
+				if strings.HasSuffix(name, "/s") {
+					forceStack = true
+					name = name[:len(name)-2]
+				} else if strings.HasSuffix(name, "/f") {
+					forceForward = true
+					name = name[:len(name)-2]
+				}
+				if forceStack || forceForward {
+					out = append(out, NewWordModified(name, -1, forceStack, forceForward))
+				} else {
+					out = append(out, NewWord(name))
+				}
 			}
 		}
 	}

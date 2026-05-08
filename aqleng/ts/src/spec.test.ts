@@ -24,7 +24,9 @@ import {
   TInteger,
   TNone,
   TString,
-  type Value,
+  TWord,
+  Value,
+  type WordInfo,
   newBoolean,
   newDecimal,
   newInteger,
@@ -194,9 +196,31 @@ function tokenize(s: string): Value[] {
       out.push(newDecimal(Number.parseFloat(tok)))
       continue
     }
-    out.push(newWord(tok))
+    // /s and /f trailing modifiers — at the call site, force
+    // stack-only or forward-only dispatch regardless of the sig's
+    // declared barrierPos. Mirrors the lexer's handling of these
+    // modifiers in the full parser.
+    let name = tok
+    let forceStack = false
+    let forceForward = false
+    if (name.endsWith('/s')) {
+      forceStack = true
+      name = name.slice(0, -2)
+    } else if (name.endsWith('/f')) {
+      forceForward = true
+      name = name.slice(0, -2)
+    }
+    out.push(newWordWithModifiers(name, forceStack, forceForward))
   }
   return out
+}
+
+function newWordWithModifiers(name: string, forceStack: boolean, forceForward: boolean): Value {
+  if (!forceStack && !forceForward) return newWord(name)
+  const wi: WordInfo = { name }
+  if (forceStack) wi.forceStack = true
+  if (forceForward) wi.forceForward = true
+  return new Value(TWord, wi)
 }
 
 function renderStack(stack: Value[]): string {

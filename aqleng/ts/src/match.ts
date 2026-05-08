@@ -26,7 +26,7 @@
 import type { FunctionEntry } from './registry.ts'
 import type { Signature } from './signature.ts'
 import { TWord } from './type.ts'
-import type { Value } from './value.ts'
+import type { Value, WordInfo } from './value.ts'
 
 export interface MatchResult {
   sig: Signature
@@ -43,14 +43,23 @@ export function matchEntry(
   stack: readonly Value[],
   pointer: number,
 ): MatchResult | null {
+  // The dispatching word lives at stack[pointer]. Its WordInfo may
+  // carry /s or /f modifiers that override the sig's BarrierPos.
+  const wordInfo = readWordInfo(stack, pointer)
   for (const sig of fn.signatures) {
     const n = sig.args.length
     if (n === 0) continue
 
-    const r = tryMatch(sig, n, stack, pointer)
+    const r = tryMatch(sig, n, stack, pointer, wordInfo)
     if (r) return r
   }
   return null
+}
+
+function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | undefined {
+  const v = stack[pointer]
+  if (!v || !v.isWord()) return undefined
+  return v.asWord()
 }
 
 function tryMatch(
@@ -58,11 +67,15 @@ function tryMatch(
   n: number,
   stack: readonly Value[],
   pointer: number,
+  word: WordInfo | undefined,
 ): MatchResult | null {
   // sig.barrierPos: 0 = boundary at start (all stack), N = boundary
   // at end (all forward-eligible). The Registry has already
-  // normalised this on registration.
-  const forwardLimit = sig.barrierPos ?? 0
+  // normalised this on registration. /s and /f modifiers on the call
+  // site override it: /s → 0, /f → N.
+  let forwardLimit = sig.barrierPos ?? 0
+  if (word?.forceStack) forwardLimit = 0
+  else if (word?.forceForward) forwardLimit = n
 
   const args: Value[] = new Array(n)
 
@@ -78,6 +91,10 @@ function tryMatch(
     fwd++
     scanIdx++
   }
+
+  // /f forbids stack supplementation: every sig position must come
+  // from forward. If the forward scan stopped short, this sig fails.
+  if (word?.forceForward && fwd < n) return null
 
   // Phase 2: stack, top-down.
   const remaining = n - fwd
