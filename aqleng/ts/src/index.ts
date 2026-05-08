@@ -53,6 +53,7 @@ export {
   newBoolean,
   newDecimal,
   newInteger,
+  newList,
   newString,
   newTypeLiteral,
   newWord,

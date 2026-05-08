@@ -13,6 +13,7 @@ import {
   TBoolean,
   TDecimal,
   TInteger,
+  TList,
   TNone,
   TString,
   TWord,
@@ -101,6 +102,14 @@ export class Value {
     return this.data
   }
 
+  asList(): Value[] {
+    if (this.data === null) throw new Error('AsList: nil data')
+    if (!Array.isArray(this.data)) {
+      throw new Error(`AsList: not a list value`)
+    }
+    return this.data as Value[]
+  }
+
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
   toString(): string {
     if (this.data === null) {
@@ -124,6 +133,10 @@ export class Value {
     }
     if (this.vType.matches(TAtom)) {
       return `atom(${this.data})`
+    }
+    if (this.vType.matches(TList) && Array.isArray(this.data)) {
+      const elems = (this.data as Value[]).map((v) => v.toString())
+      return `[${elems.join(' ')}]`
     }
     return String(this.data)
   }
@@ -183,4 +196,13 @@ export function newWord(name: string): Value {
 /** Convenience for constructing an Any-typed carrier (test harness use). */
 export function newAny(data: unknown): Value {
   return new Value(TAny, data)
+}
+
+/**
+ * Construct a list value with VType = Node/List. Data is the array
+ * of element Values. Mirrors Go's NewList — no `Eval=true` flag here
+ * because the spec subset doesn't reach the auto-evaluation path.
+ */
+export function newList(elems: Value[]): Value {
+  return new Value(TList, elems)
 }

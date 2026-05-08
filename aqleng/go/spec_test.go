@@ -287,6 +287,35 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
+	// length, first: list-aware test words for list.tsv.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "length",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TList},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				lst := args[0].AsList()
+				return []Value{NewInteger(int64(lst.Len()))}, nil
+			},
+			Returns: []Type{TInteger},
+		}},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "first",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TList},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				lst := args[0].AsList()
+				if lst.Len() == 0 {
+					return []Value{NewTypeLiteral(TNone)}, nil
+				}
+				return []Value{lst.Get(0)}, nil
+			},
+			Returns: []Type{TAny},
+		}},
+	})
+
 	// Simple-value defs the def.tsv spec references. A word whose name
 	// is in the def stack is substituted by its value before normal
 	// dispatch, provided the value isn't an FnDef / ObjectType.
@@ -297,10 +326,15 @@ func registerSpecWords(r *Registry) {
 
 // tokenizeSpec converts a single space-separated input string from a
 // TSV row into a slice of engine values. It is intentionally minimal:
-// integers, decimals, "quoted" strings, true/false/null, and bare
-// identifiers (treated as words).
+// integers, decimals, "quoted" strings, true/false/null, list
+// literals via `[` ... `]`, and bare identifiers (treated as words).
+// `(` and `)` are not collected here — they remain as Word values so
+// the engine's paren pre-evaluation handles them at runtime.
 func tokenizeSpec(s string) ([]Value, error) {
-	var out []Value
+	// stack[0] is the top-level token stream; deeper entries are list
+	// literals being collected. `[` opens a new frame, `]` closes the
+	// current one and pushes the assembled List into the parent.
+	stack := [][]Value{nil}
 	i := 0
 	for i < len(s) {
 		// Skip whitespace.
@@ -320,7 +354,8 @@ func tokenizeSpec(s string) ([]Value, error) {
 			if j >= len(s) {
 				return nil, fmt.Errorf("unterminated string at %d", i)
 			}
-			out = append(out, NewString(s[i+1:j]))
+			top := len(stack) - 1
+			stack[top] = append(stack[top], NewString(s[i+1:j]))
 			i = j + 1
 			continue
 		}
@@ -333,18 +368,39 @@ func tokenizeSpec(s string) ([]Value, error) {
 		tok := s[i:j]
 		i = j
 
+		top := len(stack) - 1
+
+		// List literal open / close.
+		if tok == "[" {
+			stack = append(stack, nil)
+			continue
+		}
+		if tok == "]" {
+			if top == 0 {
+				return nil, fmt.Errorf("tokenize: unmatched ']' at %d", i-1)
+			}
+			collected := stack[top]
+			if collected == nil {
+				collected = []Value{}
+			}
+			stack = stack[:top]
+			parent := len(stack) - 1
+			stack[parent] = append(stack[parent], NewList(collected))
+			continue
+		}
+
 		switch tok {
 		case "true":
-			out = append(out, NewBoolean(true))
+			stack[top] = append(stack[top], NewBoolean(true))
 		case "false":
-			out = append(out, NewBoolean(false))
+			stack[top] = append(stack[top], NewBoolean(false))
 		case "null":
-			out = append(out, NewTypeLiteral(TNone))
+			stack[top] = append(stack[top], NewTypeLiteral(TNone))
 		default:
 			if n, err := strconv.ParseInt(tok, 10, 64); err == nil {
-				out = append(out, NewInteger(n))
+				stack[top] = append(stack[top], NewInteger(n))
 			} else if f, err := strconv.ParseFloat(tok, 64); err == nil {
-				out = append(out, NewDecimal(f))
+				stack[top] = append(stack[top], NewDecimal(f))
 			} else {
 				// /s and /f trailing modifiers — at the call site, force
 				// stack-only or forward-only dispatch regardless of the
@@ -361,14 +417,17 @@ func tokenizeSpec(s string) ([]Value, error) {
 					name = name[:len(name)-2]
 				}
 				if forceStack || forceForward {
-					out = append(out, NewWordModified(name, -1, forceStack, forceForward))
+					stack[top] = append(stack[top], NewWordModified(name, -1, forceStack, forceForward))
 				} else {
-					out = append(out, NewWord(name))
+					stack[top] = append(stack[top], NewWord(name))
 				}
 			}
 		}
 	}
-	return out, nil
+	if len(stack) > 1 {
+		return nil, fmt.Errorf("tokenize: unterminated list literal '['")
+	}
+	return stack[0], nil
 }
 
 // renderStack renders a result stack back into the same syntax used
@@ -401,6 +460,16 @@ func renderValue(v Value) string {
 			return "true"
 		}
 		return "false"
+	case v.VType.Matches(TList) && v.Data != nil:
+		// Recursive list rendering. Use space-separated elements
+		// in [ ... ] so the spec format matches the TS engine's
+		// toString output exactly.
+		lst := v.AsList()
+		parts := make([]string, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			parts[i] = renderValue(lst.Get(i))
+		}
+		return "[" + strings.Join(parts, " ") + "]"
 	default:
 		return v.String()
 	}

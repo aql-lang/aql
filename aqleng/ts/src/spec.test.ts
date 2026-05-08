@@ -24,12 +24,14 @@ import {
   TInteger,
   TNone,
   TString,
+  TList,
   TWord,
   Value,
   type WordInfo,
   newBoolean,
   newDecimal,
   newInteger,
+  newList,
   newString,
   newTypeLiteral,
   newWord,
@@ -234,6 +236,32 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // length, first: list-aware test words for list.tsv.
+  reg({
+    name: 'length',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        handler: (args) => [newInteger(BigInt(args[0]!.asList().length))],
+      },
+    ],
+  })
+  reg({
+    name: 'first',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        handler: (args) => {
+          const lst = args[0]!.asList()
+          if (lst.length === 0) return [newTypeLiteral(TNone)]
+          return [lst[0]!]
+        },
+      },
+    ],
+  })
+
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
   // dispatch, provided the value isn't an FnDef / ObjectType.
@@ -244,26 +272,59 @@ function registerSpecWords(r: Registry): void {
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────
 
-function tokenize(s: string): Value[] {
-  const out: Value[] = []
-  let i = 0
-  while (i < s.length) {
-    while (i < s.length && (s[i] === ' ' || s[i] === '\t')) i++
-    if (i >= s.length) break
+interface TokenStream {
+  s: string
+  i: number
+}
 
-    if (s[i] === '"') {
-      let j = i + 1
-      while (j < s.length && s[j] !== '"') j++
-      if (j >= s.length) throw new Error(`unterminated string at ${i}`)
-      out.push(newString(s.slice(i + 1, j)))
-      i = j + 1
+function tokenize(s: string): Value[] {
+  const stream: TokenStream = { s, i: 0 }
+  const result = readTokens(stream, null)
+  if (stream.i < stream.s.length) {
+    throw new Error(`tokenize: unexpected ']' at ${stream.i}`)
+  }
+  return result
+}
+
+/**
+ * Read tokens from `stream` until end-of-string or the matching close
+ * bracket `until` (the character `]` for list bodies). Returns the
+ * collected Values. Lists nest recursively — `[ [ 1 ] 2 ]` becomes
+ * a TList containing a TList of Integer(1) plus an Integer(2).
+ */
+function readTokens(stream: TokenStream, until: ']' | null): Value[] {
+  const out: Value[] = []
+  while (stream.i < stream.s.length) {
+    while (stream.i < stream.s.length && (stream.s[stream.i] === ' ' || stream.s[stream.i] === '\t')) {
+      stream.i++
+    }
+    if (stream.i >= stream.s.length) break
+
+    if (stream.s[stream.i] === '"') {
+      let j = stream.i + 1
+      while (j < stream.s.length && stream.s[j] !== '"') j++
+      if (j >= stream.s.length) throw new Error(`unterminated string at ${stream.i}`)
+      out.push(newString(stream.s.slice(stream.i + 1, j)))
+      stream.i = j + 1
       continue
     }
 
-    let j = i
-    while (j < s.length && s[j] !== ' ' && s[j] !== '\t') j++
-    const tok = s.slice(i, j)
-    i = j
+    let j = stream.i
+    while (j < stream.s.length && stream.s[j] !== ' ' && stream.s[j] !== '\t') j++
+    const tok = stream.s.slice(stream.i, j)
+    stream.i = j
+
+    if (tok === '[') {
+      const elems = readTokens(stream, ']')
+      out.push(newList(elems))
+      continue
+    }
+    if (tok === ']') {
+      if (until !== ']') {
+        throw new Error(`tokenize: unmatched ']' at ${stream.i - 1}`)
+      }
+      return out
+    }
 
     switch (tok) {
       case 'true':
@@ -299,6 +360,9 @@ function tokenize(s: string): Value[] {
       name = name.slice(0, -2)
     }
     out.push(newWordWithModifiers(name, forceStack, forceForward))
+  }
+  if (until === ']') {
+    throw new Error(`tokenize: unterminated list literal '['`)
   }
   return out
 }
