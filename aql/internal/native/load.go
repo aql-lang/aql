@@ -16,15 +16,17 @@ func loadEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 }
 
 // loadEntityOptsHandler handles load with an Entity object instance and an options map.
+// Sig is opts-first: args[0]=opts, args[1]=entity.
 func loadEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
 	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // loadAPIOptsHandler handles load with {kind:"api",...} and an extra options map.
 // The options map is merged into the query field of the API map.
+// Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func loadAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
 	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -60,8 +62,8 @@ func loadRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // loadHandler finds and returns a single record matching the filter.
 // Returns an error if no matching record is found.
 func loadHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	filter := args[1].AsMap()
+	filter := args[0].AsMap()
+	rows := args[1].AsList().Slice()
 
 	for _, row := range rows {
 		if !row.VType.Matches(engine.TMap) {

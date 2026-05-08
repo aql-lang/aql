@@ -415,7 +415,7 @@ func TestListEntityWithQuery(t *testing.T) {
 	a := newAQLWithSDK(t)
 
 	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
-list planets {id:"planet01"}`)
+planets list {id:"planet01"}`)
 	if err != nil {
 		t.Fatalf("list entity with query failed: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestLoadEntity(t *testing.T) {
 	a := newAQLWithSDK(t)
 
 	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
-load planets {id:"planet01"}`)
+planets load {id:"planet01"}`)
 	if err != nil {
 		t.Fatalf("load entity failed: %v", err)
 	}
@@ -461,7 +461,7 @@ func TestCreateEntity(t *testing.T) {
 	a := newAQLWithSDK(t)
 
 	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
-create planets {name:"Mars", kind:"terrestrial", diameter:6792}`)
+planets create {name:"Mars", kind:"terrestrial", diameter:6792}`)
 	if err != nil {
 		t.Fatalf("create entity failed: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestUpdateEntity(t *testing.T) {
 	a := newAQLWithSDK(t)
 
 	result, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
-update planets {id:"planet01", name:"Mercury Updated"}`)
+planets update {id:"planet01", name:"Mercury Updated"}`)
 	if err != nil {
 		t.Fatalf("update entity failed: %v", err)
 	}
@@ -507,7 +507,7 @@ func TestRemoveEntity(t *testing.T) {
 	a := newAQLWithSDK(t)
 
 	_, err := a.Run(`def planets make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"}
-remove planets {id:"planet01"}`)
+planets remove {id:"planet01"}`)
 	if err != nil {
 		t.Fatalf("remove entity failed: %v", err)
 	}

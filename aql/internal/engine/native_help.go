@@ -77,7 +77,7 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 		if sig.Fallback {
 			continue
 		}
-		si := help.SigInfo{}
+		si := help.SigInfo{BarrierPos: sig.BarrierPos}
 		for _, t := range sig.Args {
 			si.Args = append(si.Args, t.String())
 		}

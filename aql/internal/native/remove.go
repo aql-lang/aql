@@ -16,15 +16,17 @@ func removeEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack
 }
 
 // removeEntityOptsHandler handles remove with an Entity object instance and an options map.
+// Sig is opts-first: args[0]=opts, args[1]=entity.
 func removeEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
 	return removeAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // removeAPIOptsHandler handles remove with {kind:"api",...} and an extra options map.
 // The options map is merged into the query field of the API map.
+// Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func removeAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
 	return removeAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -60,8 +62,8 @@ func removeRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // removeHandler finds a record by its "id" field and removes it from the table.
 // Returns the updated table. The map must contain an "id" field.
 func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	filter := args[1].AsMap()
+	filter := args[0].AsMap()
+	rows := args[1].AsList().Slice()
 
 	idVal, ok := filter.Get("id")
 	if !ok {

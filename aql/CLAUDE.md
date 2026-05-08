@@ -163,20 +163,23 @@ c b a h     → forward [], stack top=a, deeper=b, deepest=c → sig=[a,b,c]
 
 ### Non-commutative two-arg sanity check
 
-With `sub` declared as a 2-arg forward-eligible word implementing
-`sub(a, b) = a - b`:
+With `sub` declared as a 2-arg forward-eligible word — handler computes
+`args[1] - args[0]` (post-§1.4 phase 4: every binary math handler
+computes `b op a` so the swap form reads naturally):
 
 ```
-sub 10 3    → forward [10,3]                  → sig=[10,3] → 7
-3 sub 10    → forward [10], stack top=3       → sig=[10,3] → 7
-3 10 sub    → forward [],   stack top=10…3    → sig=[10,3] → 7
-10 sub 3    → forward [3],  stack top=10      → sig=[3,10] → -7  (swap form)
+sub 10 3    → forward [10,3]                  → sig=[10,3] → 3-10 = -7
+3 sub 10    → forward [10], stack top=3       → sig=[10,3] → 3-10 = -7
+3 10 sub    → forward [],   stack top=10…3    → sig=[10,3] → 3-10 = -7
+10 sub 3    → forward [3],  stack top=10      → sig=[3,10] → 10-3 =  7  (swap form)
 ```
 
 `a f b` is the **swap form**: it binds sig[0] from the forward side
 (b) and sig[1] from the prefix (a). The mirror equivalence
 `f a b ≡ b f a ≡ b a f` holds; `a f b` is the only non-equivalent
-two-arg arrangement.
+two-arg arrangement. The phase-4 handler convention picks the swap
+form as the canonical surface syntax: `10 sub 3 = 7` matches how
+a reader scans left-to-right.
 
 ### Implementation
 

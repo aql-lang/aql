@@ -18,15 +18,17 @@ func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 }
 
 // listEntityOptsHandler handles list with an Entity object instance and an options map.
+// Sig is opts-first per the data-last principle: args[0]=opts, args[1]=entity.
 func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // listAPIOptsHandler handles list with {kind:"api",...} and an extra options map.
 // The options map is merged into the query field of the API map.
+// Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -66,10 +68,11 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listFilterHandler returns records from a table that match the given map.
 // A record matches when every key-value pair in the filter map has an equal
-// value in the corresponding record field.
+// value in the corresponding record field. Sig is opts-first: args[0]=filter,
+// args[1]=list.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	filter := args[1].AsMap()
+	rows := args[1].AsList().Slice()
+	filter := args[0].AsMap()
 
 	var matched []engine.Value
 	for _, row := range rows {

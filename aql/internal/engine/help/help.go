@@ -20,8 +20,9 @@ type Entry struct {
 
 // SigInfo holds the dynamically extracted signature data for formatting.
 type SigInfo struct {
-	Args    []string // type names per arg, e.g. ["Integer", "Integer"]
-	Returns []string // inferred return type abbreviations
+	Args       []string // type names per arg, e.g. ["Integer", "Integer"]
+	Returns    []string // inferred return type abbreviations
+	BarrierPos int      // forward-eligible boundary; positions [BarrierPos..N-1] are stack-only
 }
 
 // FuncInfo carries everything needed for dynamic help rendering.
@@ -389,15 +390,20 @@ func ExampleExprs(info FuncInfo) []string {
 			vals[i] = exampleVal(a, &c)
 			counters[leaf] = c
 		}
+		minPrefix := nArgs - sig.BarrierPos
+		if minPrefix < 0 {
+			minPrefix = 0
+		}
 		var prefixes []int
 		if !info.ForwardPrecedence {
 			prefixes = []int{nArgs}
 		} else if sigArgsSameType(sig) {
-			for p := 0; p <= nArgs; p++ {
+			for p := minPrefix; p <= nArgs; p++ {
 				prefixes = append(prefixes, p)
 			}
 		} else {
-			prefixes = []int{configIdx % (nArgs + 1)}
+			window := nArgs - minPrefix + 1
+			prefixes = []int{minPrefix + (configIdx % window)}
 		}
 		for _, prefix := range prefixes {
 			exprs = append(exprs, buildExampleExpr(info.Name, vals, prefix, nArgs))
@@ -450,15 +456,24 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		// Stack-only words: only all-prefix config.
 		// Same-type args: show all prefix/forward configs.
 		// Otherwise: one config, cycling.
+		// `prefix` is the count of stack-side args (the last `prefix`
+		// sig positions go on the stack). A sig with BarrierPos=B
+		// requires positions [B..N-1] on the stack, so the minimum
+		// valid prefix is N-B.
+		minPrefix := nArgs - sig.BarrierPos
+		if minPrefix < 0 {
+			minPrefix = 0
+		}
 		var prefixes []int
 		if !info.ForwardPrecedence {
 			prefixes = []int{nArgs} // all on stack
 		} else if sigArgsSameType(sig) {
-			for p := 0; p <= nArgs; p++ {
+			for p := minPrefix; p <= nArgs; p++ {
 				prefixes = append(prefixes, p)
 			}
 		} else {
-			prefixes = []int{configIdx % (nArgs + 1)}
+			window := nArgs - minPrefix + 1
+			prefixes = []int{minPrefix + (configIdx % window)}
 		}
 
 		for _, prefix := range prefixes {

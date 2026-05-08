@@ -16,15 +16,17 @@ func updateEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack
 }
 
 // updateEntityOptsHandler handles update with an Entity object instance and a data map.
+// Sig is opts-first: args[0]=data, args[1]=entity.
 func updateEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "data")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "data")
 	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // updateAPIOptsHandler handles update with {kind:"api",...} and an extra data map.
 // The options map is merged into the data field of the API map.
+// Sig is opts-first: args[0]=data, args[1]=apiMap (pattern-matched).
 func updateAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "data")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "data")
 	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -60,8 +62,8 @@ func updateRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // updateHandler finds a record by its "id" field and merges the provided
 // fields into it. Returns the updated table. The map must contain an "id" field.
 func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	patch := args[1].AsMap()
+	patch := args[0].AsMap()
+	rows := args[1].AsList().Slice()
 
 	idVal, ok := patch.Get("id")
 	if !ok {
