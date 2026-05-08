@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 // MaxArgs is the maximum number of arguments a signature may declare.
 const MaxArgs = 32
@@ -168,7 +168,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		top := stack[base:]
 
 		// Try flexible match.
-		ordered, ok := flexibleMatch(top, sig)
+		ordered, ok := FlexibleMatch(top, sig)
 		if !ok {
 			continue
 		}
@@ -183,7 +183,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 					pattern.Data != nil && ordered[idx].Data != nil &&
 					!pattern.IsOptionsType() &&
 					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
-					if !openUnifyMap(pattern, ordered[idx]) {
+					if !OpenUnifyMap(pattern, ordered[idx]) {
 						patternOk = false
 						break
 					}
@@ -207,10 +207,10 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 	return nil
 }
 
-// flexibleMatch checks whether values match the given signature positionally.
+// FlexibleMatch checks whether values match the given signature positionally.
 // Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
-func flexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
+func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	n := len(sig.Args)
 	if len(values) < n {
 		return nil, false

@@ -5,7 +5,7 @@ package engine
 //   - Object/Resource has field kind:String
 //   - Object/Resource/Entity inherits kind from Resource and adds spec:String, entity:String
 //
-// These are registered via installDef so they get proper handler resolution
+// These are registered via InstallDef so they get proper handler resolution
 // and can be referenced by name in AQL code (e.g. make Entity {...}).
 func RegisterResource(r *Registry) {
 	// --- Resource: {kind:String} ---
@@ -15,10 +15,10 @@ func RegisterResource(r *Registry) {
 	resourceInfo := ObjectTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     formatFixedTypeID("Object/Resource", builtinTypeIDs["Object/Resource"]),
+		ID:     FormatFixedTypeID("Object/Resource", BuiltinTypeIDs["Object/Resource"]),
 	}
 
-	installDef(r, "Resource", NewObjectType(resourceInfo))
+	InstallDef(r, "Resource", NewObjectType(resourceInfo))
 
 	// Retrieve the installed Resource type so Entity can reference it as parent.
 	resourceVal, _ := r.TopOfDefStack("Resource")
@@ -32,8 +32,8 @@ func RegisterResource(r *Registry) {
 	entityInfo := ObjectTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     formatFixedTypeID("Object/Resource/Entity", builtinTypeIDs["Object/Resource/Entity"]),
+		ID:     FormatFixedTypeID("Object/Resource/Entity", BuiltinTypeIDs["Object/Resource/Entity"]),
 	}
 
-	installDef(r, "Entity", NewObjectType(entityInfo))
+	InstallDef(r, "Entity", NewObjectType(entityInfo))
 }

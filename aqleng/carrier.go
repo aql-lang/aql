@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import "strings"
 
@@ -24,7 +24,7 @@ import "strings"
 // TMap). Typed-list carriers (element type known) are produced via
 // NewCarrierTypedList / NewCarrierTypedListValue.
 func NewCarrier(t Type) Value {
-	v := newValue(t, nil)
+	v := NewValueRaw(t, nil)
 	v.Carrier = true
 	if t.Equal(TList) || t.Equal(TMap) {
 		v.Data = ChildTypeInfo{Child: Value{VType: TAny, Carrier: true}}
@@ -64,7 +64,7 @@ func ReturnsPreserveListAt(i int) ReturnsFunc {
 		if i < 0 || i >= len(args) {
 			return []Value{NewCarrier(TList)}
 		}
-		elem := dataListElemTypeFromValue(args[i])
+		elem := DataListElemTypeFromValue(args[i])
 		return []Value{NewCarrierTypedList(elem)}
 	}
 }
@@ -77,16 +77,16 @@ func ReturnsListElemAt(i int) ReturnsFunc {
 		if i < 0 || i >= len(args) {
 			return []Value{NewCarrier(TAny)}
 		}
-		elem := dataListElemTypeFromValue(args[i])
+		elem := DataListElemTypeFromValue(args[i])
 		return []Value{NewCarrier(elem)}
 	}
 }
 
-// dataListElemTypeFromValue is a package-level duplicate of
+// DataListElemTypeFromValue is a package-level duplicate of
 // dataListElemType that lives in carrier.go so ReturnsFunc helpers
 // don't depend on the native_array_higher.go symbol. It reads the
 // ChildTypeInfo first, then joins concrete element VTypes.
-func dataListElemTypeFromValue(data Value) Type {
+func DataListElemTypeFromValue(data Value) Type {
 	if data.Data == nil {
 		return TAny
 	}
@@ -182,7 +182,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// Explicit nil (no annotation) triggers the fallback. An empty but
 	// non-nil slice is a valid "returns nothing" declaration.
 	if sig.Returns == nil {
-		r.addCheckDiagnostic(CheckDiagnostic{
+		r.AddCheckDiagnostic(CheckDiagnostic{
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
 			Word:   word,
@@ -328,12 +328,12 @@ func JoinCarriers(a, b Value) Value {
 		}
 	}
 	// Gather unique alternatives across a and b, subsume subtypes,
-	// then apply the width cap. simplifyDisjunctAlts is the runtime
+	// then apply the width cap. SimplifyDisjunctAlts is the runtime
 	// path's helper but produces identical output for the
 	// type-literal-only inputs the carrier path supplies.
 	combined := append([]Value(nil), flattenAlternatives(a)...)
 	combined = append(combined, flattenAlternatives(b)...)
-	alts := simplifyDisjunctAlts(combined)
+	alts := SimplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
 		return NewCarrier(alts[0].VType)
 	}
@@ -445,7 +445,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 	}
 	sig := best
-	e.registry.addCheckDiagnostic(CheckDiagnostic{
+	e.registry.AddCheckDiagnostic(CheckDiagnostic{
 		Code:   "no_signature",
 		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
 		Word:   w.Name,
@@ -499,11 +499,11 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 // Used by branch-aware words (e.g. `if`) to analyse each branch
 // symbolically.
 func RunCarrierBody(r *Registry, body Value) []Value {
-	stk, _ := runCarrierBodyWithDefs(r, body)
+	stk, _ := RunCarrierBodyWithDefs(r, body)
 	return stk
 }
 
-// runCarrierBodyWithDefs is the branch-aware helper that snapshots
+// RunCarrierBodyWithDefs is the branch-aware helper that snapshots
 // DefStack depths, runs the body through a sub-engine in check
 // mode, and returns both the residual carrier stack and a map of
 // every DefStacks[name] -> top-of-stack entry that was added
@@ -513,7 +513,7 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 // Only per-name "net additions" are reported. If a branch both
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
-func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
+func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -530,7 +530,7 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	sub := New(r)
 	result, err := sub.Run(tokens)
 	if err != nil {
-		r.addCheckDiagnostic(CheckDiagnostic{
+		r.AddCheckDiagnostic(CheckDiagnostic{
 			Code:   "branch_error",
 			Detail: "branch analysis error: " + err.Error(),
 		})
@@ -552,13 +552,13 @@ func runCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	return result, adds
 }
 
-// installJoinedDefs merges the `adds` maps from two branches back
+// InstallJoinedDefs merges the `adds` maps from two branches back
 // into r.DefStacks. If both branches defined the same name, their
 // carriers are joined via JoinCarriers and the joined carrier is
 // pushed. If only one branch defined it, that def is pushed back —
 // but joined with the pre-branch carrier (if any) since the other
 // branch's path kept the original binding.
-func installJoinedDefs(r *Registry, then, else_ map[string]Value) {
+func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	seen := make(map[string]bool)
 	for k, tv := range then {
 		seen[k] = true
@@ -641,11 +641,11 @@ func (r *Registry) LookupContextType(key string) (Value, bool) {
 	return NewCarrier(TAny), false
 }
 
-// recordCheckDef is called by the def/undef handlers when running
+// RecordCheckDef is called by the def/undef handlers when running
 // under check mode. It remembers the name the user bound so that
 // end-of-run analysis can flag defs that were never referenced.
 // Names starting with "_" (engine internals) are ignored.
-func (r *Registry) recordCheckDef(name string, pos SrcPos) {
+func (r *Registry) RecordCheckDef(name string, pos SrcPos) {
 	if !r.IsCheckMode() || name == "" || strings.HasPrefix(name, "_") {
 		return
 	}
@@ -681,7 +681,7 @@ func (r *Registry) EmitUnusedDefDiagnostics() {
 		if r.Check.DefsUsed[name] {
 			continue
 		}
-		r.addCheckDiagnostic(CheckDiagnostic{
+		r.AddCheckDiagnostic(CheckDiagnostic{
 			Code:     "unused_def",
 			Detail:   "def " + name + " is never used",
 			Word:     name,
@@ -696,7 +696,7 @@ func (r *Registry) EmitUnusedDefDiagnostics() {
 // outside of check mode — it simply records the finding. If the
 // diagnostic's Severity is empty, the default mapping from its Code
 // is applied via SeverityFor.
-func (r *Registry) addCheckDiagnostic(d CheckDiagnostic) {
+func (r *Registry) AddCheckDiagnostic(d CheckDiagnostic) {
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
 	}
@@ -751,21 +751,21 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	return out
 }
 
-// boolWord returns "true" / "false" for use in human-readable
+// BoolWord returns "true" / "false" for use in human-readable
 // diagnostic text.
-func boolWord(b bool) string {
+func BoolWord(b bool) string {
 	if b {
 		return "true"
 	}
 	return "false"
 }
 
-// literalCondValue inspects a condition list for a single boolean
+// LiteralCondValue inspects a condition list for a single boolean
 // literal (true/false word or Boolean carrier). Returns (value,
 // true) when the condition is statically determinable, or (false,
 // false) otherwise. Used by `if` analysis to warn about
 // unreachable branches.
-func literalCondValue(condList Value) (bool, bool) {
+func LiteralCondValue(condList Value) (bool, bool) {
 	if condList.Data == nil {
 		return false, false
 	}
@@ -798,10 +798,10 @@ func literalCondValue(condList Value) (bool, bool) {
 	return false, false
 }
 
-// applyGuardNarrowing installs then-branch narrowings for each
+// ApplyGuardNarrowing installs then-branch narrowings for each
 // `x is T` clause in the condition. Returns a restore func to pop
 // the narrowings after the then-branch runs.
-func applyGuardNarrowing(r *Registry, condList Value) func() {
+func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
 	if !r.IsCheckMode() {
 		return noop
@@ -820,13 +820,13 @@ func applyGuardNarrowing(r *Registry, condList Value) func() {
 	}
 }
 
-// applyComplementNarrowing installs else-branch narrowings — for
+// ApplyComplementNarrowing installs else-branch narrowings — for
 // each `x is T` clause it tries to compute the complement of T in
 // x's current carrier type and, if non-trivial, pushes the
 // complement carrier onto x's DefStack. Currently only refines
 // when x's existing binding is a disjunction: the matching
 // alternative is subtracted. Returns a restore func.
-func applyComplementNarrowing(r *Registry, condList Value) func() {
+func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
 	if !r.IsCheckMode() {
 		return noop
@@ -938,7 +938,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	sub := New(r)
 	result, err := sub.Run(input)
 	if err != nil {
-		r.addCheckDiagnostic(CheckDiagnostic{
+		r.AddCheckDiagnostic(CheckDiagnostic{
 			Code:   "fn_body_error",
 			Detail: "fn body analysis error for " + name + ": " + err.Error(),
 			Word:   name,

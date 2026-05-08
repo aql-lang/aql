@@ -403,12 +403,12 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 				baseName = baseName[:idx]
 			}
 
-			if err := r.SQLite.StoreTable(baseName, td); err != nil {
+			if err := sqliteStore(r).StoreTable(baseName, td); err != nil {
 				return nil, fmt.Errorf("read: sqlite store: %w", err)
 			}
 			td.SQLite = true
 			td.TableName = baseName
-			result[0] = newValue(TList, td)
+			result[0] = NewValueRaw(TList, td)
 		}
 	}
 

@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
@@ -97,10 +97,10 @@ func kindToBound(kind DepKind, value Value) (*DepBound, bool, bool) {
 	return nil, false, false
 }
 
-// boundToKind translates a (bound, isLower) pair back into the
+// BoundToKind translates a (bound, isLower) pair back into the
 // equivalent DepKind. Used by formatDepScalar so the surface form
 // stays stable across the redesign (`(Integer gte 10 lte 20)`).
-func boundToKind(b *DepBound, lower bool) DepKind {
+func BoundToKind(b *DepBound, lower bool) DepKind {
 	if b == nil {
 		return 0
 	}
@@ -139,7 +139,7 @@ func NewDepScalar(kind DepKind, bound Value) Value {
 	} else {
 		info.Hi = db
 	}
-	return newValue(t, info)
+	return NewValueRaw(t, info)
 }
 
 // dependentLeafFromBoundType returns the leaf name to use in a
@@ -172,9 +172,9 @@ func dependentLeafFromBoundType(t Type) string {
 	return ""
 }
 
-// dependentLeafBaseType returns the scalar base type for a given
+// DependentLeafBaseType returns the scalar base type for a given
 // dependent leaf name, or (TNone, false) if the leaf is unknown.
-func dependentLeafBaseType(leaf string) (Type, bool) {
+func DependentLeafBaseType(leaf string) (Type, bool) {
 	switch leaf {
 	case "Integer":
 		return TInteger, true
@@ -192,11 +192,11 @@ func dependentLeafBaseType(leaf string) (Type, bool) {
 	return TNone, false
 }
 
-// dependentLeafFromType extracts the leaf name from a Type/Dependent/
+// DependentLeafFromType extracts the leaf name from a Type/Dependent/
 // Dep<Leaf> path, or "" if the type is not a dependent scalar path.
 // Accepts trailing path components (forward-compat) so a future
 // value-tagged DepInteger subtype keeps reporting "Integer".
-func dependentLeafFromType(t Type) string {
+func DependentLeafFromType(t Type) string {
 	if len(t.Parts) < 3 || t.Parts[0] != "Type" || t.Parts[1] != "Dependent" {
 		return ""
 	}
@@ -208,7 +208,7 @@ func dependentLeafFromType(t Type) string {
 
 // IsDepScalar reports whether the value is any dependent scalar type.
 func (v Value) IsDepScalar() bool {
-	return dependentLeafFromType(v.VType) != ""
+	return DependentLeafFromType(v.VType) != ""
 }
 
 // AsDepScalar extracts the DepScalarInfo payload.
@@ -236,11 +236,11 @@ func depScalarCheck(info DepScalarInfo, value Value) bool {
 
 // depBoundCheck applies a single-side bound to value. lower=true
 // requires value > bound (or ≥ if Inclusive); lower=false requires
-// value < bound (or ≤). Returns false on any compareValues error so
+// value < bound (or ≤). Returns false on any CompareValues error so
 // cross-type comparisons (e.g. Integer DepScalar vs String value)
 // reject cleanly.
 func depBoundCheck(b *DepBound, lower bool, value Value) bool {
-	cmp, err := compareValues(value, b.Value)
+	cmp, err := CompareValues(value, b.Value)
 	if err != nil {
 		return false
 	}
@@ -272,7 +272,7 @@ func boundsEqual(a, b *DepBound) bool {
 	if !a.Value.VType.Equal(b.Value.VType) {
 		return false
 	}
-	return valuesEqual(a.Value, b.Value)
+	return ValuesEqual(a.Value, b.Value)
 }
 
 // depScalarsEqual reports whether two DepScalar payloads describe the
@@ -285,20 +285,20 @@ func depScalarsEqual(a, b DepScalarInfo) bool {
 // formatDepScalar renders a DepScalar's display form. Single-bound is
 // "(Leaf op bound)"; interval is "(Leaf op1 bound1 op2 bound2)" with
 // the lower bound rendered first for stability. Each side is
-// translated back through boundToKind so the surface form matches
+// translated back through BoundToKind so the surface form matches
 // the gt/gte/lt/lte vocabulary the user wrote.
 func formatDepScalar(leaf string, info DepScalarInfo) string {
 	switch {
 	case info.Lo != nil && info.Hi != nil:
 		return fmt.Sprintf("(%s %s %s %s %s)", leaf,
-			boundToKind(info.Lo, true), info.Lo.Value.String(),
-			boundToKind(info.Hi, false), info.Hi.Value.String())
+			BoundToKind(info.Lo, true), info.Lo.Value.String(),
+			BoundToKind(info.Hi, false), info.Hi.Value.String())
 	case info.Lo != nil:
 		return fmt.Sprintf("(%s %s %s)", leaf,
-			boundToKind(info.Lo, true), info.Lo.Value.String())
+			BoundToKind(info.Lo, true), info.Lo.Value.String())
 	case info.Hi != nil:
 		return fmt.Sprintf("(%s %s %s)", leaf,
-			boundToKind(info.Hi, false), info.Hi.Value.String())
+			BoundToKind(info.Hi, false), info.Hi.Value.String())
 	default:
 		return fmt.Sprintf("(%s)", leaf)
 	}
@@ -306,7 +306,7 @@ func formatDepScalar(leaf string, info DepScalarInfo) string {
 
 // renderDepScalar is the canonical Value-shaped wrapper around
 // formatDepScalar. Every display surface in the engine — Value.String,
-// valToString, formatValueJSON, formatForPrint, aql_error stack
+// ValToString, FormatValueJSON, FormatForPrint, aql_error stack
 // rendering — funnels DepScalar values through here so the surface
 // representation stays consistent across paths and the
 // IsDepScalar→AsDepScalar dance happens in exactly one place.
@@ -322,7 +322,7 @@ func renderDepScalar(v Value) string {
 	if err != nil {
 		return ""
 	}
-	return formatDepScalar(dependentLeafFromType(v.VType), info)
+	return formatDepScalar(DependentLeafFromType(v.VType), info)
 }
 
 // tightenSameSide combines two same-side bounds (both lower, or both
@@ -330,7 +330,7 @@ func renderDepScalar(v Value) string {
 // lower matches both inputs. Errors on the underlying compare
 // propagate via ok=false (treated as Never).
 func tightenSameSide(a, b *DepBound, lower bool) (*DepBound, bool) {
-	cmp, err := compareValues(a.Value, b.Value)
+	cmp, err := CompareValues(a.Value, b.Value)
 	if err != nil {
 		return nil, false
 	}
@@ -384,7 +384,7 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 	}
 	// Verify the resulting interval is non-empty.
 	if out.Lo != nil && out.Hi != nil {
-		cmp, err := compareValues(out.Lo.Value, out.Hi.Value)
+		cmp, err := CompareValues(out.Lo.Value, out.Hi.Value)
 		if err != nil {
 			return DepScalarInfo{}, false
 		}
@@ -434,7 +434,7 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 					opName, args[1].VType.String())
 			}
 			// Bound must be the same scalar base as the type literal.
-			base, _ := dependentLeafBaseType(leaf)
+			base, _ := DependentLeafBaseType(leaf)
 			if !args[0].VType.Matches(base) {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
 					opName, args[0].VType.String(), base.String())
@@ -471,7 +471,7 @@ func RegisterBetween(r *Registry) {
 						return nil, fmt.Errorf("between: unsupported base type %s",
 							args[2].VType.String())
 					}
-					base, _ := dependentLeafBaseType(leaf)
+					base, _ := DependentLeafBaseType(leaf)
 					if !args[0].VType.Matches(base) {
 						return nil, fmt.Errorf("between: low bound %s does not match base %s",
 							args[0].VType.String(), base.String())
@@ -480,7 +480,7 @@ func RegisterBetween(r *Registry) {
 						return nil, fmt.Errorf("between: high bound %s does not match base %s",
 							args[1].VType.String(), base.String())
 					}
-					cmp, err := compareValues(args[0], args[1])
+					cmp, err := CompareValues(args[0], args[1])
 					if err != nil {
 						return nil, fmt.Errorf("between: %w", err)
 					}
@@ -495,7 +495,7 @@ func RegisterBetween(r *Registry) {
 					if err != nil {
 						return nil, fmt.Errorf("between: %w", err)
 					}
-					return []Value{newValue(t, info)}, nil
+					return []Value{NewValueRaw(t, info)}, nil
 				},
 				Returns:        []Type{TDependent},
 				RunInCheckMode: true,

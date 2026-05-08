@@ -376,8 +376,8 @@ func TestArrayMutationSharedReference(t *testing.T) {
 	// Two values wrapping the same ArrayInstanceInfo see mutations
 	r, _ := DefaultRegistry()
 	ai := &ArrayInstanceInfo{Elems: []Value{NewInteger(0)}}
-	ref1 := newValue(TArray, ai)
-	ref2 := newValue(TArray, ai)
+	ref1 := NewValueRaw(TArray, ai)
+	ref2 := NewValueRaw(TArray, ai)
 
 	runAQL(t, r, []Value{
 		ref1, NewWord("set"), NewInteger(0), NewInteger(42),

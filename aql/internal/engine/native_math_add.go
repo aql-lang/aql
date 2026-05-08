@@ -6,7 +6,7 @@ func RegisterAdd(r *Registry) {
 	// String concatenation: [TScalar, TScalar] converts both to strings.
 	// The more specific [TNumber, TNumber] sig wins for numeric args.
 	concatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return []Value{NewString(valToString(args[1]) + valToString(args[0]))}, nil
+		return []Value{NewString(ValToString(args[1]) + ValToString(args[0]))}, nil
 	}
 
 	// Temporal: Date + CalDuration → Date

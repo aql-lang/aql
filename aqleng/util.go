@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import "fmt"
 
@@ -263,7 +263,7 @@ func (r *Registry) DeleteDef(name string) {
 }
 
 // SetDefStack replaces name's entire stack with stack. If stack is
-// empty the entry is removed from the map. Used by uninstallFnSigs
+// empty the entry is removed from the map. Used by UninstallFnSigs
 // (removes a specific middle entry then writes back) and by the
 // def-handler's compile-then-replace path that filters out fallback
 // entries before re-installing.

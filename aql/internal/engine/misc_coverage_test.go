@@ -499,35 +499,35 @@ func TestRegistryMatchNoSig(t *testing.T) {
 	}
 }
 
-// ── traceColorize coverage ──────────────────────────────────────────
+// ── TraceColorize coverage ──────────────────────────────────────────
 
 func TestTraceColorizeCoverage(t *testing.T) {
-	// Exercise traceColorize with different value types
-	s := traceColorize(NewInteger(42))
+	// Exercise TraceColorize with different value types
+	s := TraceColorize(NewInteger(42))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewString("hello"))
+	s = TraceColorize(NewString("hello"))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewBoolean(true))
+	s = TraceColorize(NewBoolean(true))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewWord("add"))
+	s = TraceColorize(NewWord("add"))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewAtom("test"))
+	s = TraceColorize(NewAtom("test"))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewList([]Value{}))
+	s = TraceColorize(NewList([]Value{}))
 	if s == "" {
 		t.Error("expected non-empty")
 	}
-	s = traceColorize(NewMap(NewOrderedMap()))
+	s = TraceColorize(NewMap(NewOrderedMap()))
 	if s == "" {
 		t.Error("expected non-empty")
 	}

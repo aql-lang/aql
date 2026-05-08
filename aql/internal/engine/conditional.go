@@ -93,7 +93,7 @@ func RegisterIf(r *Registry) {
 					// apply the complement in the else-branch.
 					// Def-joining: any new defs either branch
 					// creates are snapshotted/restored per branch,
-					// then joined via installJoinedDefs so a
+					// then joined via InstallJoinedDefs so a
 					// following word sees the post-if binding.
 					//
 					// Unreachable-branch warning: when the
@@ -101,42 +101,42 @@ func RegisterIf(r *Registry) {
 					// literal, the opposite branch never runs.
 					// Emit a warning and skip that branch's
 					// contribution so downstream types stay tight.
-					if lit, ok := literalCondValue(args[0]); ok {
+					if lit, ok := LiteralCondValue(args[0]); ok {
 						branch := "else"
 						if !lit {
 							branch = "then"
 						}
-						r.addCheckDiagnostic(CheckDiagnostic{
+						r.AddCheckDiagnostic(CheckDiagnostic{
 							Code:     "unreachable_branch",
-							Detail:   "if condition is a constant " + boolWord(lit) + "; " + branch + "-branch is unreachable",
+							Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
 							Severity: SeverityWarning,
 						})
 						if lit {
-							restoreThen := applyGuardNarrowing(r, args[0])
-							stk, defs := runCarrierBodyWithDefs(r, args[1])
+							restoreThen := ApplyGuardNarrowing(r, args[0])
+							stk, defs := RunCarrierBodyWithDefs(r, args[1])
 							restoreThen()
-							installJoinedDefs(r, defs, nil)
+							InstallJoinedDefs(r, defs, nil)
 							if len(stk) == 0 {
 								return nil
 							}
 							return []Value{stk[len(stk)-1]}
 						}
-						restoreElse := applyComplementNarrowing(r, args[0])
-						stk, defs := runCarrierBodyWithDefs(r, args[2])
+						restoreElse := ApplyComplementNarrowing(r, args[0])
+						stk, defs := RunCarrierBodyWithDefs(r, args[2])
 						restoreElse()
-						installJoinedDefs(r, nil, defs)
+						InstallJoinedDefs(r, nil, defs)
 						if len(stk) == 0 {
 							return nil
 						}
 						return []Value{stk[len(stk)-1]}
 					}
-					restoreThen := applyGuardNarrowing(r, args[0])
-					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
+					restoreThen := ApplyGuardNarrowing(r, args[0])
+					thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
 					restoreThen()
-					restoreElse := applyComplementNarrowing(r, args[0])
-					elseStk, elseDefs := runCarrierBodyWithDefs(r, args[2])
+					restoreElse := ApplyComplementNarrowing(r, args[0])
+					elseStk, elseDefs := RunCarrierBodyWithDefs(r, args[2])
 					restoreElse()
-					installJoinedDefs(r, thenDefs, elseDefs)
+					InstallJoinedDefs(r, thenDefs, elseDefs)
 					joined := JoinCarrierStacks(thenStk, elseStk)
 					if len(joined) == 0 {
 						return nil
@@ -154,17 +154,17 @@ func RegisterIf(r *Registry) {
 				// binding (or dropped if the name wasn't bound
 				// before) — mirrors the 3-arg semantics.
 				ReturnsFn: func(args []Value) []Value {
-					if lit, ok := literalCondValue(args[0]); ok && !lit {
-						r.addCheckDiagnostic(CheckDiagnostic{
+					if lit, ok := LiteralCondValue(args[0]); ok && !lit {
+						r.AddCheckDiagnostic(CheckDiagnostic{
 							Code:     "unreachable_branch",
 							Detail:   "if condition is a constant false; then-branch is unreachable",
 							Severity: SeverityWarning,
 						})
 					}
-					restore := applyGuardNarrowing(r, args[0])
-					thenStk, thenDefs := runCarrierBodyWithDefs(r, args[1])
+					restore := ApplyGuardNarrowing(r, args[0])
+					thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
 					restore()
-					installJoinedDefs(r, thenDefs, nil)
+					InstallJoinedDefs(r, thenDefs, nil)
 					if len(thenStk) == 0 {
 						return []Value{NewCarrier(TNone)}
 					}

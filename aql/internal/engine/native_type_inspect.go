@@ -9,14 +9,14 @@ func RegisterInspect(r *Registry) {
 		// reach inspect through this branch and get the type-inspection
 		// view. Native fn-shadow entries in DefStacks (every native
 		// word has one for fallback dispatch) used to fool the old
-		// "isTypeBody(DefStacks top)" check; that's now bypassed
+		// "IsTypeBody(DefStacks top)" check; that's now bypassed
 		// because r.Types is the single source of truth for named
 		// types and native fns are NOT in it.
 		if tv, ok := r.TopOfTypeStack(name); ok {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.TopOfDefStack(name); ok {
-			if isTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
+			if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -30,7 +30,7 @@ func RegisterInspect(r *Registry) {
 			return []Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.TopOfDefStack(name); ok {
-			if isTypeBody(top) {
+			if IsTypeBody(top) {
 				return []Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -81,11 +81,11 @@ func buildInspection(r *Registry, name string) Value {
 		if r.HasDef(name) {
 			result.Set("kind", NewAtom("defined"))
 			result.Set("signatures", NewList(nil))
-			return newValue(TInspect, result)
+			return NewValueRaw(TInspect, result)
 		}
 		result.Set("kind", NewAtom("unknown"))
 		result.Set("signatures", NewList(nil))
-		return newValue(TInspect, result)
+		return NewValueRaw(TInspect, result)
 	}
 
 	// Determine kind: AQL-defined functions have Sigs, Go-implemented do not.
@@ -119,7 +119,7 @@ func buildInspection(r *Registry, name string) Value {
 	}
 	result.Set("signatures", NewList(sigMaps))
 
-	return newValue(TInspect, result)
+	return NewValueRaw(TInspect, result)
 }
 
 // buildTypeInspection constructs a type_inspection map for a type value.
@@ -205,17 +205,17 @@ func buildTypeInspection(name string, tv Value) Value {
 		// rendered as {kind: "gte"|"gt"|"lte"|"lt", value: <bound>}.
 		result.Set("kind", NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		leaf := dependentLeafFromType(tv.VType)
+		leaf := DependentLeafFromType(tv.VType)
 		result.Set("leaf", NewString(leaf))
 		if info.Lo != nil {
 			lo := NewOrderedMap()
-			lo.Set("kind", NewString(boundToKind(info.Lo, true).String()))
+			lo.Set("kind", NewString(BoundToKind(info.Lo, true).String()))
 			lo.Set("value", info.Lo.Value)
 			result.Set("lo", NewMap(lo))
 		}
 		if info.Hi != nil {
 			hi := NewOrderedMap()
-			hi.Set("kind", NewString(boundToKind(info.Hi, false).String()))
+			hi.Set("kind", NewString(BoundToKind(info.Hi, false).String()))
 			hi.Set("value", info.Hi.Value)
 			result.Set("hi", NewMap(hi))
 		}
@@ -225,5 +225,5 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("kind", NewAtom("literal"))
 	}
 
-	return newValue(TInspect, result)
+	return NewValueRaw(TInspect, result)
 }

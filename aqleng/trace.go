@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
@@ -21,8 +21,8 @@ const (
 	cGray    = "\033[90m"
 )
 
-// traceColorize returns a colored string representation of a Value for trace output.
-func traceColorize(v Value) string {
+// TraceColorize returns a colored string representation of a Value for trace output.
+func TraceColorize(v Value) string {
 	switch {
 	case v.IsWord():
 		w, _ := v.AsWord()
@@ -61,7 +61,7 @@ func traceColorize(v Value) string {
 		elems := v.AsList().Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
-			parts[i] = traceColorize(e)
+			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
 	case v.VType.Equal(TMap):
@@ -69,7 +69,7 @@ func traceColorize(v Value) string {
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)
-			parts = append(parts, cWhite+k+cReset+cDim+":"+cReset+traceColorize(val))
+			parts = append(parts, cWhite+k+cReset+cDim+":"+cReset+TraceColorize(val))
 		}
 		return cDim + "{" + cReset + strings.Join(parts, " ") + cDim + "}" + cReset
 	default:
@@ -78,7 +78,7 @@ func traceColorize(v Value) string {
 }
 
 // traceStripANSI returns the visible length of a string, excluding ANSI escape codes.
-func traceVisibleLen(s string) int {
+func TraceVisibleLen(s string) int {
 	n := 0
 	inEsc := false
 	for _, r := range s {
@@ -114,16 +114,16 @@ func RegisterTrace(r *Registry) {
 					return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 				}
 				elems := args[0].AsList().Slice()
-				return runTrace(r, elems, r.Output)
+				return RunTrace(r, elems, r.Output)
 			},
 			Returns: []Type{TAny},
 		}},
 	})
 }
 
-// runTrace executes tokens in a sub-engine with tracing enabled,
+// RunTrace executes tokens in a sub-engine with tracing enabled,
 // printing the stack evolution to w.
-func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
+func RunTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 	const termWidth = 120
 	const stepWidth = 4 // "NNN "
 
@@ -151,7 +151,7 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 		// Format: [ val val ^val val | pending pending ]
 		var leftParts []string
 		for i, v := range s.stack {
-			tok := traceColorize(v)
+			tok := TraceColorize(v)
 			if i == s.pointer {
 				tok = cBold + cWhite + "^" + cReset + tok
 			}
@@ -181,7 +181,7 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 		}
 
 		leftDisplay := cDim + "[" + cReset + " " + leftStr + " " + cDim + "]" + cReset
-		leftVisLen := traceVisibleLen(leftDisplay)
+		leftVisLen := TraceVisibleLen(leftDisplay)
 
 		// Step number: right-aligned, 3 digits.
 		stepStr := fmt.Sprintf("%s%3d%s", cGray, s.step, cReset)
@@ -191,7 +191,7 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 		noteVisLen := 0
 		if s.note != "" {
 			noteStr = cGray + s.note + cReset
-			noteVisLen = traceVisibleLen(noteStr)
+			noteVisLen = TraceVisibleLen(noteStr)
 		}
 
 		// Determine if we need wrapping.
@@ -218,7 +218,7 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 			}
 		} else {
 			// Multi-line: wrap the stack display.
-			lines := traceWrap(leftParts, s.pointer, termWidth-stepWidth-4)
+			lines := TraceWrap(leftParts, s.pointer, termWidth-stepWidth-4)
 			for i, line := range lines {
 				if i == 0 {
 					fmt.Fprintf(w, "%s %s\n", stepStr, line)
@@ -240,7 +240,7 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 	if result != nil {
 		var resParts []string
 		for _, v := range result {
-			resParts = append(resParts, traceColorize(v))
+			resParts = append(resParts, TraceColorize(v))
 		}
 		fmt.Fprintf(w, "%s%s─── result: %s%s[ %s %s]%s\n\n",
 			cBold, cCyan, cReset,
@@ -255,9 +255,9 @@ func runTrace(r *Registry, tokens []Value, w io.Writer) ([]Value, error) {
 	return result, nil
 }
 
-// traceWrap wraps a list of colored tokens into multiple display lines,
+// TraceWrap wraps a list of colored tokens into multiple display lines,
 // each fitting within maxWidth visible characters. Maintains the [ ] and | framing.
-func traceWrap(parts []string, pointer int, maxWidth int) []string {
+func TraceWrap(parts []string, pointer int, maxWidth int) []string {
 	if maxWidth < 20 {
 		maxWidth = 20
 	}
@@ -292,7 +292,7 @@ func traceWrap(parts []string, pointer int, maxWidth int) []string {
 			addedSep = true
 		}
 
-		partLen := traceVisibleLen(part)
+		partLen := TraceVisibleLen(part)
 		if curLen+partLen+1 > maxWidth && len(curLine) > 0 {
 			flush()
 		}

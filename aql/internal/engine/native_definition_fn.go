@@ -166,7 +166,7 @@ func isSigTypeValue(v Value) bool {
 	if v.IsWord() {
 		_as0, _ := v.AsWord()
 		name := _as0.Name
-		if _, ok := typeNames[name]; ok {
+		if _, ok := TypeNameTable()[name]; ok {
 			return true
 		}
 		if _, ok := ResolveTypePath(name); ok {
@@ -177,7 +177,7 @@ func isSigTypeValue(v Value) bool {
 	// Atom or String that is a type name.
 	if v.VType.Matches(TAtom) || v.VType.Matches(TString) {
 		name, _ := v.AsString()
-		if _, ok := typeNames[name]; ok {
+		if _, ok := TypeNameTable()[name]; ok {
 			return true
 		}
 		if _, ok := ResolveTypePath(name); ok {
@@ -461,7 +461,7 @@ func lookupDefType(r *Registry, name string) *Value {
 		return nil
 	}
 	if tv, ok := r.TopOfTypeStack(name); ok {
-		if isTypeBody(tv) {
+		if IsTypeBody(tv) {
 			return &tv
 		}
 	}
@@ -469,7 +469,7 @@ func lookupDefType(r *Registry, name string) *Value {
 	if !ok {
 		return nil
 	}
-	if !isTypeBody(val) {
+	if !IsTypeBody(val) {
 		return nil
 	}
 	return &val
@@ -526,375 +526,11 @@ func resolveTypeName(name string) (Type, error) {
 	}
 }
 
-// expandOptionalSigs expands signatures with optional parameters into
-// additional signatures for each combination of omitted optional params.
-// Each generated sig's body calls the function with base values for the
-// omitted params. Present params are referenced by name (if named) or
-// via args.N (if unnamed), avoiding synthetic param names.
-//
-// For example:
-//
-//	def foo fn [[Map? Integer] [Integer] [body]]
-//
-// expands to add:
-//
-//	[Integer] [Integer] [foo {} args.0]
-//
-// where {} is the base value for Map, and args.0 references the first
-// argument of the reduced signature.
-func expandOptionalSigs(name string, sigs []FnSig) []FnSig {
-	var expanded []FnSig
-	for _, sig := range sigs {
-		expanded = append(expanded, sig)
+// ExpandOptionalSigs: re-exported from aqleng via aliases.go
 
-		// Find optional param indices.
-		var optIndices []int
-		for i, p := range sig.Params {
-			if p.Optional {
-				optIndices = append(optIndices, i)
-			}
-		}
-		if len(optIndices) == 0 {
-			continue
-		}
+// InstallFnDef: re-exported from aqleng via aliases.go
 
-		// Generate combinations: each subset of optional params to omit.
-		// We iterate from 1 to 2^N-1 (skip 0 = no omissions, which is
-		// the original sig). Bit i set means optional param i is omitted.
-		numOpt := len(optIndices)
-		for mask := 1; mask < (1 << numOpt); mask++ {
-			// Build omitted set.
-			omitted := make(map[int]bool)
-			for bit := 0; bit < numOpt; bit++ {
-				if mask&(1<<bit) != 0 {
-					omitted[optIndices[bit]] = true
-				}
-			}
-
-			// Build reduced params (only non-omitted).
-			// Named params keep their names; unnamed params stay unnamed.
-			var reducedParams []FnParam
-			for i, p := range sig.Params {
-				if !omitted[i] {
-					reducedParams = append(reducedParams, FnParam{
-						Name:    p.Name,
-						Type:    p.Type,
-						Pattern: p.Pattern,
-					})
-				}
-			}
-
-			// Build body: call the function with all original params,
-			// inserting base values for omitted ones. Present params
-			// are referenced by name or via args.N positional access.
-			var body []Value
-			body = append(body, NewWord(name))
-			presentIdx := 0
-			for i, p := range sig.Params {
-				if omitted[i] {
-					// Insert base value for the omitted param's type.
-					bv, err := baseValue(p.Type)
-					if err != nil {
-						continue
-					}
-					body = append(body, bv)
-				} else {
-					if p.Name != "" {
-						// Named param: reference by name.
-						body = append(body, NewWord(p.Name))
-					} else {
-						// Unnamed param: use args.N (paren-wrapped dot access).
-						body = append(body,
-							NewOpenParen(),
-							NewWord("args"),
-							NewAtom(fmt.Sprintf("%d", presentIdx)),
-							NewWord("get"),
-							NewWord(")"),
-						)
-					}
-					presentIdx++
-				}
-			}
-
-			expanded = append(expanded, FnSig{
-				Params:  reducedParams,
-				Returns: sig.Returns,
-				Body:    body,
-			})
-		}
-	}
-	return expanded
-}
-
-// installFnDef registers typed signatures for a function definition.
-// For each signature, it creates a handler that binds named parameters
-// via installDef, returns body tokens, and appends undef cleanup.
-func installFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
-	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	// Expand optional parameters into additional signatures.
-	fnDef.Sigs = expandOptionalSigs(name, fnDef.Sigs)
-	for _, sig := range fnDef.Sigs {
-		argTypes := make([]Type, len(sig.Params))
-		var patterns map[int]Value
-		for i, p := range sig.Params {
-			argTypes[i] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[i] = *p.Pattern
-			}
-		}
-		s := sig // capture for closure
-		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			var result []Value
-			var names []string
-			// Wrap the entire expansion (unnamed args + body + undef
-			// cleanup) in parens so it evaluates as a single
-			// sub-expression. Without this, an outer forward can grab
-			// intermediate values from the body before the body
-			// finishes executing (e.g. recursive factorial: the outer
-			// mul's forward grabs x=1 from the inner body instead of
-			// waiting for the full result).
-			result = append(result, NewOpenParen())
-
-			// Push args list onto the args stack for access via the
-			// "args" word (args.0, args.1, etc.).
-			argsCopy := make([]Value, len(args))
-			copy(argsCopy, args)
-			argsList := NewList(argsCopy)
-			r.PushArgs(argsList)
-
-			unnamedCount := 0
-			for i, p := range s.Params {
-				if p.Name != "" {
-					arg := args[i]
-					// Quote list params so they're treated as data values
-					// when referenced in the body, not expanded as code bodies.
-					if arg.VType.Equal(TList) && !arg.Quoted {
-						arg.Quoted = true
-					}
-					installDef(r, p.Name, arg)
-					names = append(names, p.Name)
-				} else {
-					// Unnamed parameter: push value back for the body to use
-					result = append(result, args[i])
-					unnamedCount++
-				}
-			}
-			// Snapshot DefStacks lengths after installing named params
-			// so we can clean up any defs created during body execution
-			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := r.SnapshotDefDepths()
-
-			body := make([]Value, len(s.Body))
-			copy(body, s.Body)
-			result = append(result, body...)
-			// Clean up defs created during body execution, then pop
-			// the args stack to restore the previous args (for nesting).
-			result = append(result, NewDefCleanup(DefCleanupInfo{
-				Snapshot: defSnapshot,
-				Registry: r,
-			}))
-			result = append(result, NewWord("__pa"))
-			for i := len(names) - 1; i >= 0; i-- {
-				// Force forward so undef takes the name word that follows,
-				// not a same-typed value from the prefix stack (e.g. a
-				// string return value when the param is also a string).
-				result = append(result,
-					NewWordModified("undef", -1, false, true),
-					NewWord(names[i]),
-				)
-			}
-			// Inject return-check if return types are declared.
-			if len(s.Returns) > 0 {
-				result = append(result, NewReturnCheck(ReturnCheckInfo{
-					FuncName:     name,
-					Returns:      s.Returns,
-					UnnamedCount: unnamedCount,
-				}))
-			}
-			result = append(result, NewWord(")"))
-			return result, nil
-		}
-		// Static type-check: analyse the body once per arg-type
-		// tuple via AnalyseFnBody. If declared return types are
-		// present, use them verbatim (no analysis needed); otherwise
-		// use the residual top-of-stack carrier(s).
-		paramNames := make([]string, len(s.Params))
-		paramPatterns := make([]*Value, len(s.Params))
-		for i, p := range s.Params {
-			paramNames[i] = p.Name
-			paramPatterns[i] = p.Pattern
-		}
-		declaredReturns := append([]Type(nil), s.Returns...)
-		bodyCopy := append([]Value(nil), s.Body...)
-		nameCopy := name
-		returnsFn := func(args []Value) []Value {
-			// Pattern / record-shape check: for each declared
-			// record-typed param, verify the arg map carries each
-			// declared field key. Skip calls whose arg is empty or
-			// whose key set doesn't overlap the pattern at all
-			// (that pattern is typically the one used during fn
-			// body analysis, not a real user call).
-			for i, pat := range paramPatterns {
-				if pat == nil || i >= len(args) {
-					continue
-				}
-				val := args[i]
-				if !pat.VType.Equal(TMap) || !val.VType.Equal(TMap) ||
-					pat.Data == nil || val.Data == nil {
-					continue
-				}
-				pMap := pat.AsMap()
-				vMap := val.AsMap()
-				if pMap == nil || vMap == nil || vMap.Len() == 0 {
-					continue
-				}
-				// Overlap gate: only emit if val's keys intersect
-				// the pattern at all. This avoids false positives
-				// when analysing with synthetic/default arg maps.
-				overlap := 0
-				for _, k := range pMap.Keys() {
-					if _, ok := vMap.Get(k); ok {
-						overlap++
-					}
-				}
-				if overlap == 0 {
-					continue
-				}
-				for _, key := range pMap.Keys() {
-					pv, _ := pMap.Get(key)
-					av, hasKey := vMap.Get(key)
-					if !hasKey {
-						r.addCheckDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + " missing field: " + key,
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-						continue
-					}
-					if pv.Data == nil && !av.VType.Matches(pv.VType) && !av.VType.Equal(TAny) {
-						r.addCheckDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.VType.String() + ", got " + av.VType.String(),
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-					}
-				}
-			}
-			// Always analyse the body so diagnostics emitted by stepWord
-			// (undefined_word, no_signature, …) inside the body propagate
-			// up to the parent registry. When the fn declares an explicit
-			// return type, we use that for the carrier result and drop
-			// the analyser's residual stack — the analyser is run purely
-			// for its side-effecting diagnostic collection. Memoisation
-			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
-			if len(declaredReturns) > 0 {
-				out := make([]Value, len(declaredReturns))
-				for i, t := range declaredReturns {
-					out[i] = NewCarrier(t)
-				}
-				return out
-			}
-			if len(stk) == 0 {
-				return []Value{NewCarrier(TAny)}
-			}
-			return stk
-		}
-
-		r.RegisterNativeFunc(NativeFunc{
-			Name:              name,
-			ForwardPrecedence: !isStackOnly,
-			Signatures: []NativeSig{{
-				Args:       argTypes,
-				Handler:    handler,
-				Patterns:   patterns,
-				BarrierPos: s.BarrierPos,
-				ReturnsFn:  returnsFn,
-			}},
-		})
-	}
-}
-
-// CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
-// signature and arguments in a sub-engine. The caller is responsible for
-// signature matching — use MatchFnSig to find the matching sig.
-//
-//	sig := MatchFnSig(fn, args)
-//	result, err := r.CallAQL(sig, args)
-func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
-	// Build token sequence (same as installFnDef handler).
-	var tokens []Value
-	var names []string
-
-	// Push args list onto the args stack.
-	argsCopy := make([]Value, len(args))
-	copy(argsCopy, args)
-	argsList := NewList(argsCopy)
-	r.PushArgs(argsList)
-
-	for i, p := range sig.Params {
-		if p.Name != "" {
-			arg := args[i]
-			if arg.VType.Equal(TList) && !arg.Quoted {
-				arg.Quoted = true
-			}
-			installDef(r, p.Name, arg)
-			names = append(names, p.Name)
-		} else {
-			tokens = append(tokens, args[i])
-		}
-	}
-	body := make([]Value, len(sig.Body))
-	copy(body, sig.Body)
-	tokens = append(tokens, body...)
-
-	// Snapshot DefStacks lengths before body execution so we can
-	// clean up any defs created during body execution (Issue 2
-	// from AQL-DX-REPORT: def leakage from fn bodies).
-	defSnapshot := r.SnapshotDefDepths()
-
-	// Evaluate in a sub-engine with higher step limit for complex bodies.
-	sub := NewTop(r)
-	result, err := sub.Run(tokens)
-
-	// Cleanup: pop args stack, undef named params, then clean up
-	// any defs that were created during body execution.
-	r.PopArgs()
-	for i := len(names) - 1; i >= 0; i-- {
-		uninstallDef(r, names[i])
-	}
-
-	// Remove defs that were added during body execution.
-	// Collect names first, then clean up outside the range loop
-	// to avoid mutating DefStacks during iteration (uninstallDef
-	// triggers installFnDef → Register → upsertFnDef which can
-	// modify DefStacks entries for other names).
-	var toClean []string
-	for _, name := range r.DefNames() {
-		if r.DefStackDepth(name) > defSnapshot[name] {
-			toClean = append(toClean, name)
-		}
-	}
-	for _, name := range toClean {
-		target := defSnapshot[name]
-		// Pop entries down to the snapshot length. Use a bounded
-		// loop to avoid infinite looping if uninstallDef's rebuild
-		// creates new entries.
-		for attempts := 0; attempts < 100 && r.DefStackDepth(name) > target; attempts++ {
-			uninstallDef(r, name)
-		}
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("CallAQL: %w", err)
-	}
-	return result, nil
-}
+// CallAQL: re-exported from aqleng via aliases.go
 
 // MatchFnSig finds the first FnSig in a FnDef value whose params match the
 // given args. Returns nil if no signature matches.
@@ -918,7 +554,7 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 				pat := *p.Pattern
 				if pat.VType.Equal(TMap) && args[j].VType.Equal(TMap) &&
 					pat.Data != nil && args[j].Data != nil {
-					if !openUnifyMap(pat, args[j]) {
+					if !OpenUnifyMap(pat, args[j]) {
 						match = false
 						break
 					}

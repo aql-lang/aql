@@ -552,13 +552,13 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 func installExports(r *Registry, desc ModuleDesc, names []string) {
 	if names == nil {
 		for name, exportMap := range desc.Exports {
-			installDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewMap(exportMap))
 		}
 		return
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
-			installDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewMap(exportMap))
 		}
 	}
 }
@@ -582,7 +582,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			installDef(r, toName, NewMap(exportMap))
+			InstallDef(r, toName, NewMap(exportMap))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -595,7 +595,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		installDef(r, toName, NewMap(exportMap))
+		InstallDef(r, toName, NewMap(exportMap))
 	}
 	return nil
 }
@@ -610,7 +610,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
 	for _, exportMap := range desc.Exports {
-		installDef(r, newName, NewMap(exportMap))
+		InstallDef(r, newName, NewMap(exportMap))
 	}
 	return nil
 }

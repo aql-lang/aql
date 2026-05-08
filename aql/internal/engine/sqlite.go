@@ -264,7 +264,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 			return int64(0)
 		}
 		// Fallback: store as text.
-		return valToString(v)
+		return ValToString(v)
 
 	case colType.Matches(TNumber):
 		// Column wants REAL.
@@ -282,7 +282,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 				return f
 			}
 		}
-		return valToString(v)
+		return ValToString(v)
 
 	case colType.Matches(TBoolean):
 		// Column stored as INTEGER (0/1).
@@ -300,7 +300,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 			}
 			return int64(0)
 		}
-		return valToString(v)
+		return ValToString(v)
 
 	default:
 		// TEXT column.
@@ -308,7 +308,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 			_as8, _ := v.AsString()
 			return _as8
 		}
-		return valToString(v)
+		return ValToString(v)
 	}
 }
 
@@ -316,7 +316,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 // AQL Value based on the expected column type.
 func sqlResultToAQLValue(raw interface{}, colType Type) Value {
 	if raw == nil {
-		return newValue(TNone, nil)
+		return NewValueRaw(TNone, nil)
 	}
 
 	switch {

@@ -581,7 +581,7 @@ func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
 }
 
 func TestRegistryJsonicFormatHasResolver(t *testing.T) {
-	r, err := engine.NewRegistry()
+	r, err := engine.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +595,7 @@ func TestRegistryJsonicFormatHasResolver(t *testing.T) {
 }
 
 func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
-	r, err := engine.NewRegistry()
+	r, err := engine.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -607,7 +607,7 @@ func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
 }
 
 func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
-	r, err := engine.NewRegistry()
+	r, err := engine.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}

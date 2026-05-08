@@ -41,7 +41,7 @@ func doConcat(listVal Value, o strOpts) ([]Value, error) {
 			parts = append(parts, "")
 			continue
 		}
-		s := valToString(e)
+		s := ValToString(e)
 		if s == "" && o.skipEmpty {
 			continue
 		}

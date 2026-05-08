@@ -107,7 +107,7 @@ func RegisterTany(r *Registry) {
 		for i := 0; i < n; i++ {
 			alts = append(alts, FlattenDisjunctAlts(list.Get(i))...)
 		}
-		simplified := simplifyDisjunctAlts(alts)
+		simplified := SimplifyDisjunctAlts(alts)
 		if len(simplified) == 0 {
 			return []Value{NewTypeLiteral(TNever)}, nil
 		}

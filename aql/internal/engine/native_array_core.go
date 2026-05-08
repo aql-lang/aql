@@ -459,10 +459,10 @@ func RegisterGrade(r *Registry) {
 	})
 }
 
-// arrCompareValues is a non-error variant of compareValues for use in sort functions.
-// Falls back to string comparison if compareValues returns an error.
+// arrCompareValues is a non-error variant of CompareValues for use in sort functions.
+// Falls back to string comparison if CompareValues returns an error.
 func arrCompareValues(a, b Value) int {
-	cmp, err := compareValues(a, b)
+	cmp, err := CompareValues(a, b)
 	if err != nil {
 		// Fallback: compare string representations
 		as, bs := a.String(), b.String()
@@ -806,7 +806,7 @@ func RegisterWindow(r *Registry) {
 			// window yields a TList<TList<sameElem>>: wrap the
 			// source-data element carrier twice.
 			ReturnsFn: func(args []Value) []Value {
-				elem := dataListElemTypeFromValue(args[1])
+				elem := DataListElemTypeFromValue(args[1])
 				inner := NewCarrierTypedList(elem)
 				return []Value{NewCarrierTypedListValue(inner)}
 			},
@@ -839,7 +839,7 @@ func RegisterPairs(r *Registry) {
 			},
 			// pairs yields TList<TList<sameElem>> (2-tuples).
 			ReturnsFn: func(args []Value) []Value {
-				elem := dataListElemTypeFromValue(args[0])
+				elem := DataListElemTypeFromValue(args[0])
 				inner := NewCarrierTypedList(elem)
 				return []Value{NewCarrierTypedListValue(inner)}
 			},

@@ -1086,7 +1086,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 	// def mix4 fn [[string integer boolean string] [string]
 	//              [drop drop drop drop args concat]] end
 	// 4 args: string, integer, boolean, string -> concat reveals ordering.
-	// valToString: integer->digits, boolean->"true"/"false"
+	// ValToString: integer->digits, boolean->"true"/"false"
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("String"), NewWord("Integer"), NewWord("Boolean"), NewWord("String")}),
 		NewList([]Value{NewWord("String")}),
@@ -2063,7 +2063,7 @@ func TestEngineAddStrings(t *testing.T) {
 	}
 }
 
-// --- valToString coverage ---
+// --- ValToString coverage ---
 
 func TestValToString(t *testing.T) {
 	tests := []struct {
@@ -2078,9 +2078,9 @@ func TestValToString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := valToString(tt.val)
+			got := ValToString(tt.val)
 			if got != tt.want {
-				t.Errorf("valToString(%s) = %q, want %q", tt.val, got, tt.want)
+				t.Errorf("ValToString(%s) = %q, want %q", tt.val, got, tt.want)
 			}
 		})
 	}

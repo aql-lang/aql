@@ -28,8 +28,8 @@ func RegisterSet(r *Registry) {
 		if store == nil {
 			return nil, fmt.Errorf("set: expected a Store, got %s", args[2].VType.String())
 		}
-		key := storeKey(args[0])
-		cowSet(store, key, args[1], reg)
+		key := StoreKey(args[0])
+		CowSet(store, key, args[1], reg)
 		return nil, nil
 	}
 
@@ -38,7 +38,7 @@ func RegisterSet(r *Registry) {
 		if container.Data == nil {
 			return nil, fmt.Errorf("set: cannot set field on type literal")
 		}
-		key := storeKey(args[0])
+		key := StoreKey(args[0])
 		oi, ok := container.Data.(ObjectInstanceInfo)
 		if !ok {
 			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
@@ -73,7 +73,7 @@ func RegisterSet(r *Registry) {
 				// tracker so `get key store` can later produce a
 				// typed carrier instead of Any.
 				ReturnsFn: func(args []Value) []Value {
-					r.RecordContextSet(storeKey(args[0]), args[1])
+					r.RecordContextSet(StoreKey(args[0]), args[1])
 					return nil
 				},
 			},
@@ -83,7 +83,7 @@ func RegisterSet(r *Registry) {
 				Handler:   storeHandler,
 				Returns:   []Type{},
 				ReturnsFn: func(args []Value) []Value {
-					r.RecordContextSet(storeKey(args[0]), args[1])
+					r.RecordContextSet(StoreKey(args[0]), args[1])
 					return nil
 				},
 			},
@@ -109,56 +109,4 @@ func RegisterSet(r *Registry) {
 	})
 }
 
-// cowSet performs a copy-on-write set on a Store. It creates a new Store
-// layer whose prototype is the old Store, sets the key in the new layer,
-// and propagates the update up through parent Stores to the ctxStack.
-func cowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
-	// Create new COW layer: only the changed key, prototype = old store.
-	newStore := &StoreInstanceInfo{
-		TypeName:  store.TypeName,
-		Data:      map[string]Value{key: val},
-		Prototype: store,
-		Parent:    store.Parent,
-		ParentKey: store.ParentKey,
-	}
-
-	// Track parent for nested Store values.
-	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {
-		childStore.Parent = newStore
-		childStore.ParentKey = key
-	}
-
-	// Propagate up the parent chain: each parent Store gets a new COW
-	// layer with the updated child reference.
-	current := newStore
-	parent := store.Parent
-	parentKey := store.ParentKey
-
-	for parent != nil {
-		newParent := &StoreInstanceInfo{
-			TypeName:  parent.TypeName,
-			Data:      map[string]Value{parentKey: NewStoreValue(current)},
-			Prototype: parent,
-			Parent:    parent.Parent,
-			ParentKey: parent.ParentKey,
-		}
-		current.Parent = newParent
-		current.ParentKey = parentKey
-
-		current = newParent
-		parentKey = parent.ParentKey
-		parent = parent.Parent
-	}
-
-	// current is the topmost COW'd Store. Update the ctxStack entry that
-	// references the original store (either directly or via prototype chain).
-	// The topmost COW'd store's prototype is the original root store.
-	// Walk each ctxStack entry's prototype chain to see if it passes
-	// through the original root, and if so, create a new ctxStack entry
-	// that uses the COW'd store.
-	origRoot := current.Prototype
-	if origRoot == nil {
-		origRoot = store
-	}
-	r.UpdateCtxStoreChain(origRoot, current)
-}
+// CowSet: re-exported from aqleng via aliases.go

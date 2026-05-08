@@ -1,8 +1,8 @@
-package engine
+package aqleng
 
 import "fmt"
 
-// compareValues returns -1, 0, or 1 for natural ordering of two values.
+// CompareValues returns -1, 0, or 1 for natural ordering of two values.
 // Comparison rules:
 //   - Integers: numeric order
 //   - Strings: lexicographic order
@@ -10,7 +10,7 @@ import "fmt"
 //   - Atoms: lexicographic order on atom name
 //   - Cross-type: ordered by type name (atom < boolean < number < string)
 //   - Lists, maps, and other types: not orderable, returns error
-func compareValues(a, b Value) (int, error) {
+func CompareValues(a, b Value) (int, error) {
 	// DepScalar values represent type-level constraints, not concrete
 	// scalars. Ordering them as if they were scalar values is a
 	// category error — refuse rather than silently coerce zero
@@ -74,11 +74,11 @@ func compareValues(a, b Value) (int, error) {
 	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
 }
 
-// exactEqual returns true if two values are exactly equal.
+// ExactEqual returns true if two values are exactly equal.
 // For scalars (integer, string, boolean, atom, none): compares by value.
-// For types: compares structurally via valuesEqual.
+// For types: compares structurally via ValuesEqual.
 // For non-scalars (list, map): compares by identity (same pointer).
-func exactEqual(a, b Value) bool {
+func ExactEqual(a, b Value) bool {
 	// none == none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
 		return true
@@ -88,17 +88,17 @@ func exactEqual(a, b Value) bool {
 	// dispatch below: the lattice override would otherwise route
 	// DepInteger payloads into AsNumber and silently compare zero
 	// values. Two DepScalars are equal iff their constraint shapes
-	// match (delegated through valuesEqual).
+	// match (delegated through ValuesEqual).
 	if a.IsDepScalar() || b.IsDepScalar() {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && valuesEqual(a, b)
+		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
 	}
 
 	// Types: structural comparison.
-	if isTypeBody(a) && isTypeBody(b) {
-		return a.VType.Equal(b.VType) && valuesEqual(a, b)
+	if IsTypeBody(a) && IsTypeBody(b) {
+		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
 	}
 
 	// Scalars: compare by value.
@@ -134,22 +134,22 @@ func exactEqual(a, b Value) bool {
 	return false
 }
 
-// deepEqual returns true if two values are deeply equal.
+// DeepEqual returns true if two values are deeply equal.
 // Traverses lists and maps depth-first comparing all leaf values.
-func deepEqual(a, b Value) bool {
+func DeepEqual(a, b Value) bool {
 	// none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
 		return true
 	}
 
-	// DepScalar pre-empts scalar dispatch — see exactEqual for the
+	// DepScalar pre-empts scalar dispatch — see ExactEqual for the
 	// reasoning. Two DepScalars compare equal iff their type and
 	// constraint payload match.
 	if a.IsDepScalar() || b.IsDepScalar() {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && valuesEqual(a, b)
+		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
 	}
 
 	// Scalars.
@@ -186,7 +186,7 @@ func deepEqual(a, b Value) bool {
 			return false
 		}
 		for i := range aElems {
-			if !deepEqual(aElems[i], bElems[i]) {
+			if !DeepEqual(aElems[i], bElems[i]) {
 				return false
 			}
 		}
@@ -210,7 +210,7 @@ func deepEqual(a, b Value) bool {
 			if !bHas {
 				return false
 			}
-			if !deepEqual(aVal, bVal) {
+			if !DeepEqual(aVal, bVal) {
 				return false
 			}
 		}
@@ -233,7 +233,7 @@ func RegisterComparison(r *Registry) {
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					cmp, err := compareValues(args[1], args[0])
+					cmp, err := CompareValues(args[1], args[0])
 					if err != nil {
 						return nil, fmt.Errorf("lt: %w", err)
 					}
@@ -253,7 +253,7 @@ func RegisterComparison(r *Registry) {
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					cmp, err := compareValues(args[1], args[0])
+					cmp, err := CompareValues(args[1], args[0])
 					if err != nil {
 						return nil, fmt.Errorf("gt: %w", err)
 					}
@@ -273,7 +273,7 @@ func RegisterComparison(r *Registry) {
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					cmp, err := compareValues(args[1], args[0])
+					cmp, err := CompareValues(args[1], args[0])
 					if err != nil {
 						return nil, fmt.Errorf("lte: %w", err)
 					}
@@ -293,7 +293,7 @@ func RegisterComparison(r *Registry) {
 			{
 				Args: []Type{TAny, TAny},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					cmp, err := compareValues(args[1], args[0])
+					cmp, err := CompareValues(args[1], args[0])
 					if err != nil {
 						return nil, fmt.Errorf("gte: %w", err)
 					}
@@ -316,7 +316,7 @@ func RegisterComparison(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewBoolean(exactEqual(args[0], args[1]))}, nil
+				return []Value{NewBoolean(ExactEqual(args[0], args[1]))}, nil
 			},
 			Returns: []Type{TBoolean},
 		}},
@@ -329,7 +329,7 @@ func RegisterComparison(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewBoolean(!exactEqual(args[0], args[1]))}, nil
+				return []Value{NewBoolean(!ExactEqual(args[0], args[1]))}, nil
 			},
 			Returns: []Type{TBoolean},
 		}},
@@ -342,7 +342,7 @@ func RegisterComparison(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewBoolean(deepEqual(args[0], args[1]))}, nil
+				return []Value{NewBoolean(DeepEqual(args[0], args[1]))}, nil
 			},
 			Returns: []Type{TBoolean},
 		}},

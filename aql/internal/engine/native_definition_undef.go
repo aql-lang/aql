@@ -17,7 +17,7 @@ import "fmt"
 func RegisterUndef(r *Registry) {
 	undefHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name := defName(args[0])
-		uninstallDef(r, name)
+		UninstallDef(r, name)
 		return nil, nil
 	}
 
@@ -28,7 +28,7 @@ func RegisterUndef(r *Registry) {
 		if !ok {
 			return nil, fmt.Errorf("undef: expected fn undef spec, got %s", args[1].String())
 		}
-		uninstallFnSigs(r, name, undefInfo)
+		UninstallFnSigs(r, name, undefInfo)
 		return nil, nil
 	}
 
@@ -66,54 +66,7 @@ func RegisterUndef(r *Registry) {
 	})
 }
 
-// fnSigMatchesSpec and fnSigSatisfiesSpec live in fnsig.go alongside
-// the other FnSig comparison helpers (fnUndefMatchesFnDef, fnDefHasSig).
+// FnSigMatchesSpec and FnSigSatisfiesSpec live in fnsig.go alongside
+// the other FnSig comparison helpers (FnUndefMatchesFnDef, FnDefHasSig).
 
-// uninstallFnSigs removes specific function signatures from a word's DefStack.
-// For each spec in the FnUndefInfo, it finds and removes the most recent
-// DefStack entry containing a matching signature, then rebuilds the
-// Function.Signatures slice from the remaining entries.
-func uninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
-	stack := r.DefStack(name)
-	if len(stack) == 0 {
-		return
-	}
-	stack = append([]Value(nil), stack...)
-
-	// For each spec, find and remove the most recent matching DefStack entry.
-	for _, spec := range specs.Sigs {
-		for j := len(stack) - 1; j >= 0; j-- {
-			fnDef, ok := stack[j].Data.(FnDefInfo)
-			if !ok {
-				continue
-			}
-			matched := false
-			for _, sig := range fnDef.Sigs {
-				if fnSigMatchesSpec(sig, spec) {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				stack = append(stack[:j], stack[j+1:]...)
-				break
-			}
-		}
-	}
-
-	r.SetDefStack(name, stack)
-
-	// If no DefStack entries remain, clean up entirely.
-	if len(stack) == 0 {
-		return
-	}
-
-	// Rebuild: clear Signatures on the top entry (keep fallback),
-	// then re-register from remaining DefStack entries.
-	r.clearSigsKeepFallback(name)
-	for _, entry := range stack {
-		if fnDef, ok := entry.Data.(FnDefInfo); ok {
-			installFnDef(r, name, fnDef)
-		}
-	}
-}
+// UninstallFnSigs: re-exported from aqleng via aliases.go

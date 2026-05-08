@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"encoding/hex"
@@ -15,6 +15,13 @@ import (
 // Node list values expose this via AsList(). To mutate, use AsMutableList().
 type ReadList struct {
 	elems []Value
+}
+
+// NewReadList wraps a slice of Values as a ReadList. External callers
+// (outside the aqleng package) use this constructor because the elems
+// field is unexported.
+func NewReadList(elems []Value) ReadList {
+	return ReadList{elems: elems}
 }
 
 // Get returns the element at index i.
@@ -185,13 +192,13 @@ type FnSig struct {
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
-// Name is the function's registered name (set by installDef). If Registry is
+// Name is the function's registered name (set by InstallDef). If Registry is
 // non-nil, the function was defined in a module and should execute in that
 // registry's context (closure semantics).
 //
 // Signatures is the compiled dispatch table (typed args + Go handlers).
 // For Go builtins, Sigs is nil and Signatures holds the native handlers.
-// For AQL fn defs, installFnDef converts Sigs into Signatures with handler
+// For AQL fn defs, InstallFnDef converts Sigs into Signatures with handler
 // closures that splice body tokens. ForwardPrecedence controls whether the
 // engine tries forward collection before stack matching.
 type FnDefInfo struct {
@@ -337,7 +344,7 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 }
 
 // Set stores a key-value pair directly (for internal/init use only).
-// AQL code should use the set word which does COW via cowSet.
+// AQL code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
 	si.Data[key] = val
 	// Track parent relationship for nested Stores.
@@ -521,8 +528,8 @@ func IDPrefixForType(t Type) string {
 	return IDPrefixForParts(t.Parts)
 }
 
-// newValue creates a Value with an auto-generated ID based on the type category.
-func newValue(t Type, data interface{}) Value {
+// NewValueRaw creates a Value with an auto-generated ID based on the type category.
+func NewValueRaw(t Type, data interface{}) Value {
 	return Value{
 		ID:    GenerateID(IDPrefixForType(t)),
 		VType: t,
@@ -533,9 +540,9 @@ func newValue(t Type, data interface{}) Value {
 // NewString creates a string value. Empty strings get type string/empty.
 func NewString(s string) Value {
 	if s == "" {
-		return newValue(TStringEmpty, s)
+		return NewValueRaw(TStringEmpty, s)
 	}
-	return newValue(TStringProper, s)
+	return NewValueRaw(TStringProper, s)
 }
 
 // NewInteger creates a number/integer value with a literal type.
@@ -545,29 +552,29 @@ func NewString(s string) Value {
 func NewInteger(n int64) Value {
 	// Format always starts with "Number/Integer/" — cannot fail.
 	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
-	return newValue(t, n)
+	return NewValueRaw(t, n)
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.
 func NewDecimal(f float64) Value {
-	return newValue(TDecimal, f)
+	return NewValueRaw(TDecimal, f)
 }
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	return newValue(TBoolean, b)
+	return NewValueRaw(TBoolean, b)
 }
 
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
-	return newValue(TList, elems)
+	return NewValueRaw(TList, elems)
 }
 
 // NewEvalList creates a list value that is marked for auto-evaluation
 // at the end of execution. Used by the parser for source-code lists.
 func NewEvalList(elems []Value) Value {
-	v := newValue(TList, elems)
+	v := NewValueRaw(TList, elems)
 	v.Eval = true
 	return v
 }
@@ -575,18 +582,18 @@ func NewEvalList(elems []Value) Value {
 // NewTypedList creates a typed list value with a child type constraint.
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
-	return newValue(TList, ChildTypeInfo{Child: child})
+	return NewValueRaw(TList, ChildTypeInfo{Child: child})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
-	return newValue(TMap, entries)
+	return NewValueRaw(TMap, entries)
 }
 
 // NewEvalMap creates a map value marked for auto-evaluation at end of
 // execution. Used by the parser for source-code maps.
 func NewEvalMap(entries *OrderedMap) Value {
-	v := newValue(TMap, entries)
+	v := NewValueRaw(TMap, entries)
 	v.Eval = true
 	return v
 }
@@ -596,13 +603,13 @@ func NewEvalMap(entries *OrderedMap) Value {
 // (e.g., [x:Integer]), while explicit maps are structural patterns.
 func NewImplicitMap(entries *OrderedMap) Value {
 	entries.Implicit = true
-	return newValue(TMap, entries)
+	return NewValueRaw(TMap, entries)
 }
 
 // NewTypedMap creates a typed map value with a child type constraint.
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
-	return newValue(TMap, ChildTypeInfo{Child: child})
+	return NewValueRaw(TMap, ChildTypeInfo{Child: child})
 }
 
 // NewRecordType creates a record type value from a field schema.
@@ -610,47 +617,47 @@ func NewTypedMap(child Value) Value {
 // For example, record{x:number, y:number} constrains maps to have exactly
 // keys x and y with number-typed values.
 func NewRecordType(fields *OrderedMap) Value {
-	return newValue(TMap, RecordTypeInfo{Fields: fields})
+	return NewValueRaw(TMap, RecordTypeInfo{Fields: fields})
 }
 
 // NewOptionsType creates an options type value from a field schema map.
 func NewOptionsType(fields *OrderedMap) Value {
-	return newValue(TMap, OptionsTypeInfo{Fields: fields})
+	return NewValueRaw(TMap, OptionsTypeInfo{Fields: fields})
 }
 
 // NewTableType creates a table type value from a record type.
 // A table type constrains a list so that each element is a map conforming
 // to the given record schema.
 func NewTableType(record RecordTypeInfo) Value {
-	return newValue(TList, TableTypeInfo{Record: record})
+	return NewValueRaw(TList, TableTypeInfo{Record: record})
 }
 
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
-	return newValue(TAtom, name)
+	return NewValueRaw(TAtom, name)
 }
 
 // NewPath creates a Path value from parts and an absolute flag.
 func NewPath(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return newValue(TPath, PathInfo{Parts: p, Abs: abs})
+	return NewValueRaw(TPath, PathInfo{Parts: p, Abs: abs})
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
-	return newValue(t, nil)
+	return NewValueRaw(t, nil)
 }
 
 // NewWord creates a word value (function reference) with no modifiers.
 func NewWord(name string) Value {
-	return newValue(TWord, WordInfo{Name: name, ArgCount: -1})
+	return NewValueRaw(TWord, WordInfo{Name: name, ArgCount: -1})
 }
 
 // NewWordModified creates a word value with explicit modifiers.
 func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value {
-	return newValue(TWord, WordInfo{
+	return NewValueRaw(TWord, WordInfo{
 		Name:         name,
 		ArgCount:     argCount,
 		ForceStack:   forceStack,
@@ -660,12 +667,12 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 
 // NewForward creates a forward primitive value for forward argument tracking.
 func NewForward(info ForwardInfo) Value {
-	return newValue(TForward, info)
+	return NewValueRaw(TForward, info)
 }
 
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
-	return newValue(TOpenParen, nil)
+	return NewValueRaw(TOpenParen, nil)
 }
 
 // NewParenExpr creates a paren expression value containing items to evaluate.
@@ -673,7 +680,7 @@ func NewOpenParen() Value {
 // autoEvalMap evaluates these by running the items in a sub-engine with
 // paren markers, producing a single result value.
 func NewParenExpr(items []Value) Value {
-	return newValue(TParenExpr, items)
+	return NewValueRaw(TParenExpr, items)
 }
 
 // InterpPart represents one segment of an interpolated string.
@@ -688,7 +695,7 @@ type InterpPart struct {
 // literal and expression parts. The engine evaluates expression parts in
 // a sub-engine, converts results to strings, and concatenates everything.
 func NewInterpString(parts []InterpPart) Value {
-	return newValue(TInterpString, parts)
+	return NewValueRaw(TInterpString, parts)
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -697,45 +704,45 @@ func NewInterpString(parts []InterpPart) Value {
 func NewMark(id string, body ...Value) Value {
 	b := make([]Value, len(body))
 	copy(b, body)
-	return newValue(TMark, MarkInfo{ID: id, Body: b})
+	return NewValueRaw(TMark, MarkInfo{ID: id, Body: b})
 }
 
 // NewMove creates a move value targeting the mark with the given ID.
 // The reason string describes why this move exists (used in error messages).
 func NewMove(to string, reason string) Value {
-	return newValue(TMove, MoveInfo{To: to, Reason: reason})
+	return NewValueRaw(TMove, MoveInfo{To: to, Reason: reason})
 }
 
 // NewMoveCont creates a move value with for-loop continuation state.
 func NewMoveCont(to, reason string, cont *ForCont) Value {
-	return newValue(TMove, MoveInfo{To: to, Reason: reason, Cont: cont})
+	return NewValueRaw(TMove, MoveInfo{To: to, Reason: reason, Cont: cont})
 }
 
 // NewMoveIf creates a move value with if-statement continuation state.
 func NewMoveIf(to, reason string, ifCont *IfCont) Value {
-	return newValue(TMove, MoveInfo{To: to, Reason: reason, IfCont: ifCont})
+	return NewValueRaw(TMove, MoveInfo{To: to, Reason: reason, IfCont: ifCont})
 }
 
 // NewFnDef creates a function definition value for storage on DefStacks.
 func NewFnDef(info FnDefInfo) Value {
-	return newValue(TFnDef, info)
+	return NewValueRaw(TFnDef, info)
 }
 
 // NewFunction creates a function reference value. The underlying data is a
 // FnDefInfo, but the type is TFunction so it can be matched by function-typed
 // parameters and passed to other functions without being called.
 func NewFunction(info FnDefInfo) Value {
-	return newValue(TFunction, info)
+	return NewValueRaw(TFunction, info)
 }
 
 // NewFnUndef creates a function undef spec value for targeted signature removal.
 func NewFnUndef(info FnUndefInfo) Value {
-	return newValue(TFnUndef, info)
+	return NewValueRaw(TFnUndef, info)
 }
 
 // NewReturnCheck creates a return-check marker for fn return type validation.
 func NewReturnCheck(info ReturnCheckInfo) Value {
-	return newValue(TReturnCheck, info)
+	return NewValueRaw(TReturnCheck, info)
 }
 
 // DefCleanupInfo holds a snapshot of DefStacks lengths taken before fn body
@@ -748,12 +755,12 @@ type DefCleanupInfo struct {
 
 // NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
 func NewDefCleanup(info DefCleanupInfo) Value {
-	return newValue(TDefCleanup, info)
+	return NewValueRaw(TDefCleanup, info)
 }
 
 // NewDisjunct creates a disjunction type value from a list of alternatives.
 func NewDisjunct(alternatives []Value) Value {
-	return newValue(TDisjunct, DisjunctInfo{Alternatives: alternatives})
+	return NewValueRaw(TDisjunct, DisjunctInfo{Alternatives: alternatives})
 }
 
 // NewObjectType creates an object type value. The type path is derived from
@@ -765,7 +772,7 @@ func NewObjectType(info ObjectTypeInfo) Value {
 		name = "Object/" + info.ID
 	}
 	t, _ := NewType(name)
-	return newValue(t, info)
+	return NewValueRaw(t, info)
 }
 
 // NewObjectInstance creates an object instance value. The type path matches
@@ -776,7 +783,7 @@ func NewObjectInstance(info ObjectInstanceInfo) Value {
 		name = "Object/" + info.TypeRef.ID
 	}
 	t, _ := NewType(name)
-	return newValue(t, info)
+	return NewValueRaw(t, info)
 }
 
 // NewStore creates a Store value with the given type name.
@@ -786,7 +793,7 @@ func NewStore(typeName string) Value {
 		typeName = "Object/Store"
 	}
 	t, _ := NewType(typeName)
-	return newValue(t, &StoreInstanceInfo{
+	return NewValueRaw(t, &StoreInstanceInfo{
 		TypeName: typeName,
 		Data:     make(map[string]Value),
 	})
@@ -799,7 +806,7 @@ func NewStoreValue(si *StoreInstanceInfo) Value {
 		typeName = "Object/Store"
 	}
 	t, _ := NewType(typeName)
-	return newValue(t, si)
+	return NewValueRaw(t, si)
 }
 
 // NewStoreWithPrototype creates a Store value with a prototype chain.
@@ -808,7 +815,7 @@ func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value 
 		typeName = "Object/Store"
 	}
 	t, _ := NewType(typeName)
-	return newValue(t, &StoreInstanceInfo{
+	return NewValueRaw(t, &StoreInstanceInfo{
 		TypeName:  typeName,
 		Data:      make(map[string]Value),
 		Prototype: prototype,
@@ -819,17 +826,17 @@ func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value 
 func NewArray(elems []Value) Value {
 	data := make([]Value, len(elems))
 	copy(data, elems)
-	return newValue(TArray, &ArrayInstanceInfo{Elems: data})
+	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: data})
 }
 
 // NewArrayEmpty creates an empty mutable Array value.
 func NewArrayEmpty() Value {
-	return newValue(TArray, &ArrayInstanceInfo{Elems: nil})
+	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: nil})
 }
 
 // NewModule creates a module descriptor value.
 func NewModule(desc ModuleDesc) Value {
-	return newValue(TModule, desc)
+	return NewValueRaw(TModule, desc)
 }
 
 // MatrixData holds a dense matrix as a flat float64 slice in row-major order.
@@ -841,7 +848,7 @@ type MatrixData struct {
 
 // NewDate creates a Date value from a time.Time (date only, midnight UTC).
 func NewDate(t time.Time) Value {
-	return newValue(TDate, t)
+	return NewValueRaw(TDate, t)
 }
 
 // AsDate returns the time.Time for a Date value.
@@ -854,7 +861,7 @@ func (v Value) AsDate() time.Time {
 
 // NewDateTime creates a DateTime value from a time.Time (date+time, no timezone).
 func NewDateTime(t time.Time) Value {
-	return newValue(TDateTime, t)
+	return NewValueRaw(TDateTime, t)
 }
 
 // AsDateTime returns the time.Time for a DateTime value.
@@ -867,7 +874,7 @@ func (v Value) AsDateTime() time.Time {
 
 // NewInstant creates an Instant value from a time.Time (absolute UTC timestamp).
 func NewInstant(t time.Time) Value {
-	return newValue(TInstant, t.UTC())
+	return NewValueRaw(TInstant, t.UTC())
 }
 
 // AsInstant returns the time.Time for an Instant value.
@@ -880,7 +887,7 @@ func (v Value) AsInstant() time.Time {
 
 // NewTimeOfDay creates a TimeOfDay value from a time.Duration (offset from midnight).
 func NewTimeOfDay(d time.Duration) Value {
-	return newValue(TTimeOfDay, d)
+	return NewValueRaw(TTimeOfDay, d)
 }
 
 // AsTimeOfDay returns the time.Duration for a TimeOfDay value.
@@ -900,7 +907,7 @@ type CalDurationData struct {
 
 // NewCalDuration creates a CalDuration value.
 func NewCalDuration(years, months, days int) Value {
-	return newValue(TCalDuration, CalDurationData{Years: years, Months: months, Days: days})
+	return NewValueRaw(TCalDuration, CalDurationData{Years: years, Months: months, Days: days})
 }
 
 // AsCalDuration returns the CalDurationData for a CalDuration value.
@@ -913,7 +920,7 @@ func (v Value) AsCalDuration() (CalDurationData, bool) {
 
 // NewClkDuration creates a ClkDuration value from a time.Duration.
 func NewClkDuration(d time.Duration) Value {
-	return newValue(TClkDuration, d)
+	return NewValueRaw(TClkDuration, d)
 }
 
 // AsClkDuration returns the time.Duration for a ClkDuration value.
@@ -926,7 +933,7 @@ func (v Value) AsClkDuration() (time.Duration, bool) {
 
 // NewTimezone creates a Timezone value from a *time.Location.
 func NewTimezone(loc *time.Location) Value {
-	return newValue(TTimezone, loc)
+	return NewValueRaw(TTimezone, loc)
 }
 
 // AsTimezone returns the *time.Location for a Timezone value.
@@ -939,7 +946,7 @@ func (v Value) AsTimezone() *time.Location {
 
 // NewMatrix creates a Matrix value from a MatrixData.
 func NewMatrix(m MatrixData) Value {
-	return newValue(TMatrix, m)
+	return NewValueRaw(TMatrix, m)
 }
 
 // AsMatrix returns the MatrixData for a Matrix value.
@@ -957,7 +964,7 @@ type ErrorInfo struct {
 
 // NewError creates an error value from a Go error.
 func NewError(err error) Value {
-	return newValue(TError, ErrorInfo{Message: err.Error()})
+	return NewValueRaw(TError, ErrorInfo{Message: err.Error()})
 }
 
 // IsError reports whether this value is an error.
@@ -983,7 +990,7 @@ type TimeoutInfo struct {
 
 // NewTimeout creates a Timeout value.
 func NewTimeout(info *TimeoutInfo) Value {
-	return newValue(TTimeout, info)
+	return NewValueRaw(TTimeout, info)
 }
 
 // IsTimeout reports whether this value is a Timeout.
@@ -1010,7 +1017,7 @@ type IntervalInfo struct {
 
 // NewInterval creates an Interval value.
 func NewInterval(info *IntervalInfo) Value {
-	return newValue(TInterval, info)
+	return NewValueRaw(TInterval, info)
 }
 
 // IsInterval reports whether this value is an Interval.
@@ -1301,7 +1308,7 @@ func (v Value) IsTableType() bool {
 		if _, ok := v.Data.(TableData); ok {
 			return true
 		}
-		if _, ok := v.Data.(QueryBuilder); ok {
+		if _, ok := v.Data.(Materializer); ok {
 			return true
 		}
 	}
@@ -1313,8 +1320,8 @@ func (v Value) AsTableType() (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return TableTypeInfo{Record: td.Record}, nil
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
-		return TableTypeInfo{Record: qb.Source.Record}, nil
+	if mz, ok := v.Data.(Materializer); ok {
+		return TableTypeInfo{Record: mz.SourceRecord()}, nil
 	}
 	info, ok := v.Data.(TableTypeInfo)
 	if !ok {
@@ -1410,8 +1417,8 @@ func (v Value) AsBoolean() (bool, error) {
 }
 
 // AsList returns the []Value payload, or nil if the data is not a []Value.
-// Also works for TableData and QueryBuilder, returning the rows.
-// For QueryBuilder, this triggers materialization.
+// Also works for TableData and Materializer, returning the rows.
+// For Materializer, this triggers materialization.
 // AsList returns a read-only view of the list payload.
 // Returns a ReadList with nil backing if the data is not a list.
 func (v Value) AsList() ReadList {
@@ -1421,8 +1428,8 @@ func (v Value) AsList() ReadList {
 	if td, ok := v.Data.(TableData); ok {
 		return ReadList{elems: td.Rows}
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
-		td, err := qb.Materialize()
+	if mz, ok := v.Data.(Materializer); ok {
+		td, err := mz.Materialize()
 		if err != nil {
 			return ReadList{}
 		}
@@ -1601,12 +1608,12 @@ func (v Value) String() string {
 			}
 			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
 		}
-		if qb, ok := v.Data.(QueryBuilder); ok {
-			td, err := qb.Materialize()
+		if mz, ok := v.Data.(Materializer); ok {
+			td, err := mz.Materialize()
 			if err != nil {
 				return "query(error:" + err.Error() + ")"
 			}
-			v2 := newValue(TList, td)
+			v2 := NewValueRaw(TList, td)
 			return v2.String()
 		}
 		if ct, ok := v.Data.(ChildTypeInfo); ok {

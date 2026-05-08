@@ -67,7 +67,7 @@ func tandValues(a, b Value) Value {
 		// Run the disjunct simplifier (Never filter, dedup,
 		// subsumption) so the cross-product output is canonicalised
 		// the same way `tor` would canonicalise an explicit union.
-		simplified := simplifyDisjunctAlts(result)
+		simplified := SimplifyDisjunctAlts(result)
 		switch len(simplified) {
 		case 0:
 			return NewTypeLiteral(TNever)

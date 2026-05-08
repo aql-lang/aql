@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
@@ -146,10 +146,10 @@ var (
 	TInterval       = mustType("Object/Interval")
 )
 
-// builtinTypeIDs maps fully-qualified builtin type paths to their fixed
+// BuiltinTypeIDs maps fully-qualified builtin type paths to their fixed
 // numeric IDs. These assignments are stable: new types are appended at the
 // end, existing numbers never change.
-var builtinTypeIDs = map[string]int{
+var BuiltinTypeIDs = map[string]int{
 	"Any":                              1,
 	"None":                             2,
 	"Scalar":                           3,
@@ -213,10 +213,10 @@ var builtinTypeIDs = map[string]int{
 	"Never":                            61,
 }
 
-// formatFixedTypeID formats a fixed numeric ID with the appropriate prefix
+// FormatFixedTypeID formats a fixed numeric ID with the appropriate prefix
 // for the given type path, producing the same 14-character format as random
 // IDs: "<prefix>_" + 12 hex digits.
-func formatFixedTypeID(path string, num int) string {
+func FormatFixedTypeID(path string, num int) string {
 	prefix := IDPrefixForParts(strings.Split(path, "/"))
 	return fmt.Sprintf("%s%012x", prefix, num)
 }
@@ -245,15 +245,15 @@ func IDPrefixForParts(parts []string) string {
 // mustType is used only for well-known type constants at init time.
 // It panics on invalid paths — acceptable because these are compile-time
 // constants whose correctness is verified by tests.
-// Builtin types receive a fixed ID from the builtinTypeIDs table.
+// Builtin types receive a fixed ID from the BuiltinTypeIDs table.
 func mustType(path string) Type {
 	t, err := NewType(path)
 	if err != nil {
 		panic(err)
 	}
 	fullPath := strings.Join(t.Parts, "/")
-	if num, ok := builtinTypeIDs[fullPath]; ok {
-		t.ID = formatFixedTypeID(fullPath, num)
+	if num, ok := BuiltinTypeIDs[fullPath]; ok {
+		t.ID = FormatFixedTypeID(fullPath, num)
 	}
 	return t
 }
@@ -351,8 +351,8 @@ func (t Type) Matches(pattern Type) bool {
 	if len(pattern.Parts) == 1 && pattern.Parts[0] == "Any" {
 		return true
 	}
-	if leaf := dependentLeafFromType(t); leaf != "" {
-		if base, ok := dependentLeafBaseType(leaf); ok {
+	if leaf := DependentLeafFromType(t); leaf != "" {
+		if base, ok := DependentLeafBaseType(leaf); ok {
 			if base.Matches(pattern) {
 				return true
 			}

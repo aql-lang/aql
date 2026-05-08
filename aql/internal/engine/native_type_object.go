@@ -32,7 +32,7 @@ func RegisterObject(r *Registry) {
 			Fields: fields,
 			Parent: nil,
 			ID:     id,
-			Name:   "", // set by installDef when used with def
+			Name:   "", // set by InstallDef when used with def
 		}
 		return []Value{NewObjectType(info)}, nil
 	}
@@ -83,7 +83,7 @@ func RegisterObject(r *Registry) {
 			Fields: fields,
 			Parent: &parentInfo,
 			ID:     id,
-			Name:   "", // set by installDef when used with def
+			Name:   "", // set by InstallDef when used with def
 		}
 		return []Value{NewObjectType(info)}, nil
 	}

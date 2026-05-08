@@ -6,6 +6,7 @@ require (
 	github.com/chzyer/readline v1.5.1
 	github.com/jsonicjs/csv/go v0.1.2
 	github.com/jsonicjs/jsonic/go v0.1.6
+	github.com/metsitaba/voxgig-exp/aqleng v0.0.0
 	golang.org/x/text v0.21.0
 	modernc.org/sqlite v1.46.1
 	voxgiguniversalsdk v0.1.1
@@ -35,3 +36,5 @@ require (
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 
 replace voxgiguniversalsdk v0.1.1 => github.com/voxgig/udk/go v0.1.1
+
+replace github.com/metsitaba/voxgig-exp/aqleng v0.0.0 => ../aqleng

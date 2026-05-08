@@ -366,7 +366,7 @@ func RegisterHelp(r *Registry) {
 
 	// help: [atom] -> [] or [string] -> []
 	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := valToString(args[0])
+		name := ValToString(args[0])
 		info := BuildFuncInfo(r, name)
 		if info == nil {
 			fmt.Fprintf(r.Output, "help: no help available for %q\n", name)

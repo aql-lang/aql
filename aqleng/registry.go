@@ -1,12 +1,10 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
 	"io"
 	"os"
 	"strconv"
-
-	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
 // Registry maps function names to their definitions.
@@ -39,13 +37,15 @@ type Registry struct {
 	// alias inside a sub-program and revert it without registry
 	// surgery.
 	types             map[string][]Value                                 // name → stack of type values
-	FileOps           fileops.FileOps                                    // file operations for read/write words (OS-backed default)
-	MemOps            *fileops.MemFileOps                                // in-memory file ops (used when __sys.fs.mem = true)
+	FileOps           FileOps                                            // file operations for read/write words; the host package installs a concrete impl
+	MemOps            FileOps                                            // in-memory file ops (used when __sys.fs.mem = true); created lazily via MemOpsFactory
+	MemOpsFactory     func() FileOps                                     // factory used by EffectiveFileOps when an in-memory ops is requested
 	Formats           map[string]Format                                  // format registry for read/write (keyed by name)
+	OnSetFileOps      func(FileOps)                                      // optional hook invoked from SetFileOps; lets the host re-wire format-specific resolvers
 	Output            io.Writer                                          // output writer for print/printstr and stdout
 	ErrOutput         io.Writer                                          // error output writer for stderr
 	Input             io.Reader                                          // input reader for stdin
-	SQLite            *SQLiteStore                                       // in-memory SQLite store for table data
+	SQLite            any                                                // host-installed SQLite store; opaque to the engine
 	moduleSeq         int                                                // counter for generating module IDs
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
@@ -118,7 +118,7 @@ type CheckState struct {
 
 	// DefsInstalled records the names (and source positions) that
 	// the user's program defined during a check run via the def
-	// word. Populated by recordCheckDef; consulted at end of run
+	// word. Populated by RecordCheckDef; consulted at end of run
 	// to emit unused_def warnings.
 	DefsInstalled map[string]SrcPos
 
@@ -190,29 +190,18 @@ type CheckDiagnostic struct {
 }
 
 // NewRegistry creates an empty registry.
+//
+// The returned Registry has no FileOps, no Formats, and no SQLite store.
+// The host package is responsible for installing those before running
+// user code (see Registry.SetFileOps, Registry.Formats, Registry.SQLite).
 func NewRegistry() (*Registry, error) {
-	sqlStore, err := NewSQLiteStore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
-	}
-	ops := fileops.NewDefault()
-	formats := DefaultFormats()
-
-	// Wire the multisource resolver into the jsonic format so that
-	// @"path" references in .jsonic files are resolved via FileOps.
-	if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
-		jf.Resolver = MakeFileOpsResolver(ops)
-	}
-
 	r := &Registry{
 		defStacks:      make(map[string][]Value),
 		types:          make(map[string][]Value),
-		FileOps:        ops,
-		Formats:        formats,
+		Formats:        make(map[string]Format),
 		Output:         os.Stdout,
 		ErrOutput:      os.Stderr,
 		Input:          os.Stdin,
-		SQLite:         sqlStore,
 		KnownTypeParts: builtinTypeParts(),
 		SDKCache:       make(map[string]any),
 	}
@@ -225,18 +214,23 @@ func (r *Registry) NextModuleID() string {
 	return fmt.Sprintf("mod_%d", r.moduleSeq)
 }
 
-// SetFileOps replaces the file operations implementation and updates the
-// jsonic format's multisource resolver to use the new ops.
-func (r *Registry) SetFileOps(ops fileops.FileOps) {
+// SetFileOps replaces the file operations implementation. If
+// OnSetFileOps is set, it is invoked with the new ops so the host can
+// re-wire format-specific resolvers (e.g. the jsonic multisource
+// resolver) without aqleng knowing about them.
+func (r *Registry) SetFileOps(ops FileOps) {
 	r.FileOps = ops
-	if jf, ok := r.Formats["jsonic"].(*JsonicFormat); ok {
-		jf.Resolver = MakeFileOpsResolver(ops)
+	if r.OnSetFileOps != nil {
+		r.OnSetFileOps(ops)
 	}
 }
 
 // EffectiveFileOps returns the file operations to use based on __sys.fs.mem.
-// If mem is true, returns the in-memory file ops; otherwise the OS-backed default.
-func (r *Registry) EffectiveFileOps() fileops.FileOps {
+// If mem is true, returns the in-memory file ops; otherwise the
+// configured FileOps. When the in-memory variant is requested but not
+// yet created, MemOpsFactory is called to construct one. If
+// MemOpsFactory is nil, the default FileOps is returned.
+func (r *Registry) EffectiveFileOps() FileOps {
 	store := r.ContextStore()
 	if store == nil {
 		return r.FileOps
@@ -263,10 +257,12 @@ func (r *Registry) EffectiveFileOps() fileops.FileOps {
 	}
 	_as0, _ := memVal.AsBoolean()
 	if memVal.VType.Matches(TBoolean) && _as0 {
-		if r.MemOps == nil {
-			r.MemOps = fileops.NewMem()
+		if r.MemOps == nil && r.MemOpsFactory != nil {
+			r.MemOps = r.MemOpsFactory()
 		}
-		return r.MemOps
+		if r.MemOps != nil {
+			return r.MemOps
+		}
 	}
 	return r.FileOps
 }
@@ -495,195 +491,12 @@ func (r *Registry) InitRootContext() {
 	r.PushExistingContext(root)
 }
 
-// DefaultRegistry returns a registry populated with built-in primitives
-// plus any additional provider functions passed in. Each provider is a
-// function that registers words (e.g. engine.Register, native.Register).
-// Called with no providers, it registers only engine's built-in core words.
-func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
-	r, err := NewRegistry()
-	if err != nil {
-		return nil, err
-	}
-	Register(r)
-	for _, p := range providers {
-		p(r)
-	}
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	r.InitRootContext()
-	return r, nil
-}
-
 // Err returns the first registration error, or nil if none occurred.
 func (r *Registry) Err() error {
 	if len(r.errs) == 0 {
 		return nil
 	}
 	return r.errs[0]
-}
-
-func Register(r *Registry) {
-	// String
-	RegisterUpper(r)
-	RegisterLower(r)
-	RegisterConcat(r)
-	RegisterSplit(r)
-	RegisterTrim(r)
-	RegisterContains(r)
-	RegisterIndexOf(r)
-	RegisterReplace(r)
-	RegisterChangeCase(r)
-	RegisterNormalize(r)
-	RegisterRepeat(r)
-	RegisterPad(r)
-	// slice moved to native.
-	RegisterMatch(r)
-	RegisterEscape(r)
-
-	// Stack ops (StackCollect moved to native; rest stay because engine
-	// internal tests depend on them).
-	RegisterDup(r)
-	RegisterSwap(r)
-	RegisterDrop(r)
-	RegisterOver(r)
-	RegisterRot(r)
-	RegisterNip(r)
-	RegisterTuck(r)
-	Register2dup(r)
-	Register2swap(r)
-	Register2drop(r)
-	Register2over(r)
-	RegisterDepth(r)
-	RegisterPick(r)
-	RegisterRoll(r)
-
-	// String slice moved to native.
-
-	// Math: basic arithmetic (always available)
-	RegisterAdd(r)
-	RegisterSub(r)
-	RegisterMul(r)
-	RegisterDiv(r)
-	RegisterMod(r)
-	RegisterPow(r)
-
-	// Math: extended operations are in the "aql:math" native module.
-	// Use: "aql:math" import
-
-	// Boolean: implies moved to native. or, not, and, xor, nand stay because
-	// engine tests depend on them (or uses disjunct specially).
-	RegisterOr(r)
-	RegisterAnd(r)
-	RegisterXor(r)
-	RegisterNand(r)
-	RegisterNor(r)
-	RegisterIff(r)
-	RegisterXnor(r)
-	RegisterNot(r)
-	RegisterOtherwise(r)
-	RegisterAny(r)
-	RegisterAll(r)
-
-	// Comparison
-	RegisterComparison(r)
-
-	// Storage
-	RegisterSet(r)
-	RegisterGet(r)
-	RegisterContext(r)
-
-	// Definition — popargs moved to native. var, call, dblcall, args stay
-	// because engine tests depend on them.
-	RegisterDef(r)
-	RegisterUndef(r)
-	RegisterVar(r)
-	RegisterFn(r)
-	RegisterCall(r)
-	RegisterDblcall(r)
-	RegisterArgs(r)
-	RegisterPopArgs(r)
-
-	// Type — record, table, typeof, fulltypeof stay because engine tests
-	// depend on them.
-	RegisterConvert(r)
-	RegisterRecord(r)
-	RegisterTable(r)
-	RegisterObject(r)
-	RegisterResource(r)
-	RegisterMake(r)
-	RegisterTypeDef(r)
-	RegisterTypeof(r)
-	RegisterFullTypeof(r)
-	RegisterIs(r)
-	RegisterGuard(r)
-	RegisterInspect(r)
-	RegisterBase(r)
-	RegisterTor(r)
-	RegisterTand(r)
-	RegisterTany(r)
-	RegisterTall(r)
-
-	// Control flow — quote moved to native.
-	RegisterDo(r)
-	RegisterIf(r)
-	RegisterFor(r)
-	RegisterError(r)
-
-	// Accessors — getr stays because engine tests depend on dotr/getr.
-	RegisterGetr(r)
-
-	// I/O — folder moved to native.
-	RegisterFileIO(r)
-	RegisterPrint(r)
-	RegisterTrace(r)
-
-	// Query (temporarily disabled — precedence removal)
-	// RegisterQuery(r)
-
-	// Unify
-	RegisterUnify(r)
-
-	// Module
-	RegisterModule(r)
-
-	// Array
-	RegisterIota(r)
-	RegisterShape(r)
-	RegisterRank(r)
-	RegisterLength(r)
-	RegisterReshape(r)
-	RegisterArrFlatten(r)
-	RegisterArrTranspose(r)
-	RegisterReverse(r)
-	RegisterTake(r)
-	RegisterShed(r)
-	RegisterWhere(r)
-	RegisterUnique(r)
-	RegisterGrade(r)
-	RegisterAt(r)
-	RegisterSortby(r)
-	RegisterMember(r)
-	RegisterArrIndexof(r)
-	RegisterGroup(r)
-	RegisterReplicate(r)
-	RegisterExpand(r)
-	RegisterWindow(r)
-	RegisterPairs(r)
-
-	// Array higher-order
-	RegisterEach(r)
-	RegisterFold(r)
-	RegisterScan(r)
-	RegisterOuter(r)
-	RegisterInner(r)
-
-	// Temporal — now, sleep, interval, cancel moved to native.
-	RegisterTimeout(r)
-	RegisterAwait(r)
-
-	// Help
-	RegisterHelp(r)
 }
 
 // IsNativeModLoaded returns true if the named native module has already been loaded.
@@ -804,8 +617,8 @@ func RegisterBinaryBoolOp(r *Registry, name string, op func(a, b bool) bool) {
 	})
 }
 
-// valToString converts any scalar Value to its string representation.
-func valToString(v Value) string {
+// ValToString converts any scalar Value to its string representation.
+func ValToString(v Value) string {
 	if v.Data == nil && !v.VType.Equal(TNone) {
 		return v.VType.String()
 	}
@@ -845,9 +658,9 @@ func valToString(v Value) string {
 	}
 }
 
-// contextStoreLookup looks up a key in the registry's context store,
+// ContextStoreLookup looks up a key in the registry's context store,
 // walking the prototype chain. Returns the value and true if found.
-func contextStoreLookup(r *Registry, key string) (Value, bool) {
+func ContextStoreLookup(r *Registry, key string) (Value, bool) {
 	store := r.ContextStore()
 	if store == nil {
 		return Value{}, false
@@ -866,8 +679,8 @@ func (r *Registry) ContextSet(key string, val Value) {
 	store.Set(key, val)
 }
 
-// storeKey converts a Value to a string key for the store.
-func storeKey(v Value) string {
+// StoreKey converts a Value to a string key for the store.
+func StoreKey(v Value) string {
 	if v.Data == nil {
 		return v.VType.String()
 	}

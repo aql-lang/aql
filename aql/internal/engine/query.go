@@ -148,7 +148,7 @@ func (qb *QueryBuilder) ensureSource() (string, bool, error) {
 	if r.SQLite == nil {
 		return "", false, fmt.Errorf("SQLite store not initialized")
 	}
-	tmpName, err := r.SQLite.StoreTempTable(qb.Source)
+	tmpName, err := sqliteStore(r).StoreTempTable(qb.Source)
 	if err != nil {
 		return "", false, err
 	}
@@ -161,11 +161,11 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 	var tmpNames []string
 	for i := range qb.Joins {
 		j := &qb.Joins[i]
-		if qb.Registry.SQLite.HasTable(j.Table) {
+		if sqliteStore(qb.Registry).HasTable(j.Table) {
 			continue
 		}
 		// Look up the table in the context store and load it.
-		val, ok := contextStoreLookup(qb.Registry, j.Table)
+		val, ok := ContextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
 		}
@@ -176,7 +176,7 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if td.SQLite {
 			j.Table = td.TableName
 		} else {
-			tmpName, err := qb.Registry.SQLite.StoreTempTable(td)
+			tmpName, err := sqliteStore(qb.Registry).StoreTempTable(td)
 			if err != nil {
 				return tmpNames, err
 			}
@@ -197,7 +197,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	}
 	// Add joined table fields.
 	for _, j := range qb.Joins {
-		val, ok := contextStoreLookup(qb.Registry, j.Table)
+		val, ok := ContextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			// Try the original name if it was remapped to a temp table.
 			continue
@@ -223,7 +223,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer qb.Registry.SQLite.DropTable(tableName)
+		defer sqliteStore(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -231,7 +231,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer sqliteStore(qb.Registry).DropTable(t)
 	}
 
 	// Ensure set-op right-hand sources are in SQLite.
@@ -240,12 +240,12 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer sqliteStore(qb.Registry).DropTable(t)
 	}
 
 	schema := qb.mergedSchema()
 	query := qb.buildSQL(tableName, "*")
-	result, err := qb.Registry.SQLite.Query(query, &schema)
+	result, err := sqliteStore(qb.Registry).Query(query, &schema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -259,7 +259,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer qb.Registry.SQLite.DropTable(tableName)
+		defer sqliteStore(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -267,7 +267,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer sqliteStore(qb.Registry).DropTable(t)
 	}
 
 	setOpTmps, err := qb.ensureSetOpSources()
@@ -275,7 +275,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer sqliteStore(qb.Registry).DropTable(t)
 	}
 
 	var colSQL string
@@ -325,7 +325,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 	}
 
 	query := qb.buildSQL(tableName, colSQL)
-	result, err := qb.Registry.SQLite.Query(query, resultSchema)
+	result, err := sqliteStore(qb.Registry).Query(query, resultSchema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -340,7 +340,7 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 		if so.Right.Source.SQLite {
 			continue
 		}
-		tmpName, err := qb.Registry.SQLite.StoreTempTable(so.Right.Source)
+		tmpName, err := sqliteStore(qb.Registry).StoreTempTable(so.Right.Source)
 		if err != nil {
 			return tmpNames, err
 		}
@@ -366,7 +366,7 @@ func RegisterQuery(r *Registry) {
 	// from: [atom] -> [query-builder]
 	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		name, _ := args[0].AsConcreteAtom()
-		val, ok := contextStoreLookup(r, name)
+		val, ok := ContextStoreLookup(r, name)
 		if !ok {
 			return nil, fmt.Errorf("from: unknown table %q", name)
 		}
@@ -380,7 +380,7 @@ func RegisterQuery(r *Registry) {
 		}
 
 		qb := NewQueryBuilder(r, td)
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("from",
@@ -402,7 +402,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("as: %w", err)
 		}
 		qb.Alias = alias
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("as",
@@ -502,7 +502,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("where: %w", err)
 		}
 		qb.Where = clause
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("where",
@@ -528,7 +528,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("order: %w", err)
 		}
 		qb.OrderBy = clause
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	orderAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -541,7 +541,7 @@ func RegisterQuery(r *Registry) {
 		}
 		_as4, _ := col.AsAtom()
 		qb.OrderBy = quoteIdent(_as4)
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("order",
@@ -585,7 +585,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("limit: %w", err)
 		}
 		qb.Limit = int(n)
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("limit",
@@ -606,7 +606,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("offset: %w", err)
 		}
 		qb.Offset = int(n)
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("offset",
@@ -626,7 +626,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("distinct: %w", err)
 		}
 		qb.Distinct = true
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("distinct",
@@ -655,7 +655,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("group: %w", err)
 		}
 		qb.GroupBy = clause
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	groupAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -668,7 +668,7 @@ func RegisterQuery(r *Registry) {
 		}
 		_as5, _ := col.AsAtom()
 		qb.GroupBy = quoteIdent(_as5)
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("group",
@@ -705,7 +705,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("having: %w", err)
 		}
 		qb.Having = clause
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("having",
@@ -743,7 +743,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("on: no preceding join")
 		}
 		qb.Joins[len(qb.Joins)-1].On = clause
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("on",
@@ -778,7 +778,7 @@ func RegisterQuery(r *Registry) {
 			return nil, fmt.Errorf("using: no preceding join")
 		}
 		qb.Joins[len(qb.Joins)-1].UsingCols = strings.Join(cols, ", ")
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register("using",
@@ -816,7 +816,7 @@ func RegisterJoinWord(r *Registry, name string, joinType string) {
 			Type:  joinType,
 			Table: tableName,
 		})
-		return []Value{newValue(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, qb)}, nil
 	}
 
 	r.Register(name,
@@ -847,7 +847,7 @@ func RegisterSetOpWord(r *Registry, name string, op string) {
 			Op:    op,
 			Right: rightQB,
 		})
-		return []Value{newValue(TList, leftQB)}, nil
+		return []Value{NewValueRaw(TList, leftQB)}, nil
 	}
 
 	r.Register(name,
@@ -1117,7 +1117,7 @@ func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
-	return []Value{newValue(TList, result)}, nil
+	return []Value{NewValueRaw(TList, result)}, nil
 }
 
 // comparisonOps maps AQL comparison word names to SQL operators.

@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import "fmt"
 
@@ -21,8 +21,8 @@ func Unify(a, b Value) (Value, bool) {
 	// Resolve words to their semantic values (true/false → boolean,
 	// type names → type literal, other words → atom) so that
 	// unresolved words inside list literals participate correctly.
-	a = resolveWordsDeep(a)
-	b = resolveWordsDeep(b)
+	a = ResolveWordsDeep(a)
+	b = ResolveWordsDeep(b)
 
 	aType := a.VType
 	bType := b.VType
@@ -115,8 +115,8 @@ func Unify(a, b Value) (Value, bool) {
 	//   3. DepScalar vs DepScalar over different leaves: fails
 	//      (incompatible bases).
 	if a.IsDepScalar() && b.IsDepScalar() {
-		aLeaf := dependentLeafFromType(aType)
-		bLeaf := dependentLeafFromType(bType)
+		aLeaf := DependentLeafFromType(aType)
+		bLeaf := DependentLeafFromType(bType)
 		if aLeaf != bLeaf {
 			return Value{}, false
 		}
@@ -132,11 +132,11 @@ func Unify(a, b Value) (Value, bool) {
 		if !ok {
 			return Value{}, false
 		}
-		out := newValue(aType, combined)
+		out := NewValueRaw(aType, combined)
 		return out, true
 	}
 	if a.IsDepScalar() && !b.IsDepScalar() && b.Data != nil {
-		if base, ok := dependentLeafBaseType(dependentLeafFromType(aType)); ok && bType.Matches(base) {
+		if base, ok := DependentLeafBaseType(DependentLeafFromType(aType)); ok && bType.Matches(base) {
 			info, err := a.AsDepScalar()
 			if err != nil {
 				return Value{}, false
@@ -148,7 +148,7 @@ func Unify(a, b Value) (Value, bool) {
 		}
 	}
 	if b.IsDepScalar() && !a.IsDepScalar() && a.Data != nil {
-		if base, ok := dependentLeafBaseType(dependentLeafFromType(bType)); ok && aType.Matches(base) {
+		if base, ok := DependentLeafBaseType(DependentLeafFromType(bType)); ok && aType.Matches(base) {
 			info, err := b.AsDepScalar()
 			if err != nil {
 				return Value{}, false
@@ -168,13 +168,13 @@ func Unify(a, b Value) (Value, bool) {
 	// rules — see the recommendation block in the commit message for
 	// the variance/overload extensions planned for a follow-up.
 	if aType.Equal(TFnUndef) && (bType.Equal(TFnDef) || bType.Equal(TFunction)) {
-		if fnUndefMatchesFnDef(a, b) {
+		if FnUndefMatchesFnDef(a, b) {
 			return b, true
 		}
 		return Value{}, false
 	}
 	if bType.Equal(TFnUndef) && (aType.Equal(TFnDef) || aType.Equal(TFunction)) {
-		if fnUndefMatchesFnDef(b, a) {
+		if FnUndefMatchesFnDef(b, a) {
 			return a, true
 		}
 		return Value{}, false
@@ -191,7 +191,7 @@ func Unify(a, b Value) (Value, bool) {
 
 	// If both types are exactly equal, compare literal values.
 	if aType.Equal(bType) {
-		if valuesEqual(a, b) {
+		if ValuesEqual(a, b) {
 			return a, true
 		}
 		// Same type, different literal values — cannot unify.
@@ -661,8 +661,8 @@ func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
 	return NewOptionsType(result), true
 }
 
-// valuesEqual compares the data payloads of two values with the same type.
-func valuesEqual(a, b Value) bool {
+// ValuesEqual compares the data payloads of two values with the same type.
+func ValuesEqual(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
 	if a.Data == nil && b.Data == nil {
 		return true
@@ -715,7 +715,7 @@ func valuesEqual(a, b Value) bool {
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
-			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+			return aCT.Child.VType.Equal(bCT.Child.VType) && ValuesEqual(aCT.Child, bCT.Child)
 		}
 		if aOk != bOk {
 			return false
@@ -741,7 +741,7 @@ func valuesEqual(a, b Value) bool {
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
-			return aCT.Child.VType.Equal(bCT.Child.VType) && valuesEqual(aCT.Child, bCT.Child)
+			return aCT.Child.VType.Equal(bCT.Child.VType) && ValuesEqual(aCT.Child, bCT.Child)
 		}
 		if aOk != bOk {
 			return false
@@ -758,7 +758,7 @@ func listsEqual(a, b []Value) bool {
 		return false
 	}
 	for i := range a {
-		if !a[i].VType.Equal(b[i].VType) || !valuesEqual(a[i], b[i]) {
+		if !a[i].VType.Equal(b[i].VType) || !ValuesEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -776,7 +776,7 @@ func mapsEqual(a, b ReadMap) bool {
 		if !ok {
 			return false
 		}
-		if !aVal.VType.Equal(bVal.VType) || !valuesEqual(aVal, bVal) {
+		if !aVal.VType.Equal(bVal.VType) || !ValuesEqual(aVal, bVal) {
 			return false
 		}
 	}
@@ -801,7 +801,7 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 			!alt.IsTypedMap() && !val.IsTypedMap() &&
 			!alt.IsOptionsType() && !val.IsOptionsType() {
 			if alt.Data != nil && val.Data != nil {
-				if openUnifyMap(alt, val) {
+				if OpenUnifyMap(alt, val) {
 					return val, true
 				}
 				continue
@@ -817,9 +817,9 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 	return Value{}, false
 }
 
-// openUnifyMap checks whether candidate contains at least the key-value pairs
+// OpenUnifyMap checks whether candidate contains at least the key-value pairs
 // of pattern. Extra keys in candidate are allowed (open/subset matching).
-func openUnifyMap(pattern, candidate Value) bool {
+func OpenUnifyMap(pattern, candidate Value) bool {
 	pMap := pattern.AsMap()
 	cMap := candidate.AsMap()
 
@@ -836,18 +836,18 @@ func openUnifyMap(pattern, candidate Value) bool {
 	return true
 }
 
-// resolveWordsDeep recursively resolves word values to their semantic form.
+// ResolveWordsDeep recursively resolves word values to their semantic form.
 // For lists, each element is resolved; for maps, each value is resolved.
-// Scalar words are resolved via resolveWordValue.
-func resolveWordsDeep(v Value) Value {
+// Scalar words are resolved via ResolveWordValue.
+func ResolveWordsDeep(v Value) Value {
 	if v.IsWord() {
-		return resolveWordValue(v)
+		return ResolveWordValue(v)
 	}
 	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
 		elems := v.AsList().Slice()
 		resolved := make([]Value, len(elems))
 		for i, e := range elems {
-			resolved[i] = resolveWordsDeep(e)
+			resolved[i] = ResolveWordsDeep(e)
 		}
 		return NewList(resolved)
 	}
@@ -856,7 +856,7 @@ func resolveWordsDeep(v Value) Value {
 		result := NewOrderedMap()
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
-			result.Set(key, resolveWordsDeep(val))
+			result.Set(key, ResolveWordsDeep(val))
 		}
 		return NewMap(result)
 	}

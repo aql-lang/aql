@@ -74,7 +74,7 @@ func RegisterFor(r *Registry) {
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return nil, errBreak
+				return nil, ErrBreak
 			},
 			Returns: []Type{},
 		}},
@@ -86,7 +86,7 @@ func RegisterFor(r *Registry) {
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return nil, errContinue
+				return nil, ErrContinue
 			},
 			Returns: []Type{},
 		}},
@@ -103,7 +103,7 @@ func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc 
 		// body is always the last arg (Integer,List or List,List).
 		body := args[len(args)-1]
 		r.PushDef(iterName, NewCarrier(iterType))
-		stk, _ := runCarrierBodyWithDefs(r, body)
+		stk, _ := RunCarrierBodyWithDefs(r, body)
 		r.PopDef(iterName)
 		if len(stk) == 0 {
 			return []Value{NewCarrier(TList)}
@@ -112,21 +112,9 @@ func forCarrierReturns(r *Registry, iterName string, iterType Type) ReturnsFunc 
 	}
 }
 
-// Sentinel errors for break and continue.
-var (
-	errBreak    = fmt.Errorf("break")
-	errContinue = fmt.Errorf("continue")
-)
-
-// isBreak reports whether the error is a break sentinel.
-func isBreak(err error) bool {
-	return err == errBreak
-}
-
-// isContinue reports whether the error is a continue sentinel.
-func isContinue(err error) bool {
-	return err == errContinue
-}
+// ErrBreak, ErrContinue: re-exported from aqleng via aliases.go
+// IsBreak: re-exported from aqleng via aliases.go
+// IsContinue: re-exported from aqleng via aliases.go
 
 // runForLoop builds the mark+body+move tokens for a for loop and returns
 // them. The engine splices these onto the stack and processes them; the
@@ -148,7 +136,7 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	bodySlice := body.AsList().Slice()
 
 	// Install the iterator variable for the first iteration.
-	installDef(r, iterName, NewInteger(start))
+	InstallDef(r, iterName, NewInteger(start))
 
 	// Create the continuation state.
 	bodyCopy := make([]Value, len(bodySlice))

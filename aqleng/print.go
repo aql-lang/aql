@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ import (
 func RegisterPrint(r *Registry) {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
-		out := formatForPrint(v)
+		out := FormatForPrint(v)
 		fmt.Fprintln(r.Output, out)
 		return nil, nil
 	}
@@ -32,7 +32,7 @@ func RegisterPrint(r *Registry) {
 
 	handlerStr := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v := args[0]
-		out := formatForPrint(v)
+		out := FormatForPrint(v)
 		fmt.Fprint(r.Output, out)
 		return nil, nil
 	}
@@ -48,8 +48,8 @@ func RegisterPrint(r *Registry) {
 	})
 }
 
-// formatForPrint returns the print representation of a value.
-func formatForPrint(v Value) string {
+// FormatForPrint returns the print representation of a value.
+func FormatForPrint(v Value) string {
 	// Type literals (Data==nil) — print the type name; None prints "null".
 	if v.Data == nil {
 		if v.VType.Equal(TNone) {
@@ -63,8 +63,8 @@ func formatForPrint(v Value) string {
 		if td, ok := v.Data.(TableData); ok {
 			return formatTable(td)
 		}
-		if qb, ok := v.Data.(QueryBuilder); ok {
-			td, err := qb.Materialize()
+		if mz, ok := v.Data.(Materializer); ok {
+			td, err := mz.Materialize()
 			if err != nil {
 				return "query(error:" + err.Error() + ")"
 			}
@@ -82,7 +82,7 @@ func formatForPrint(v Value) string {
 	// Must run before TString / TInteger / etc. matches because a
 	// DepScalar's VType also matches its base via the lattice override.
 	if v.IsDepScalar() {
-		return valToString(v)
+		return ValToString(v)
 	}
 
 	// String: printed as-is (no quotes).
@@ -106,8 +106,8 @@ func formatForPrint(v Value) string {
 		return formatListJSON(v)
 	}
 
-	// Everything else: use valToString (integers, booleans, atoms).
-	return valToString(v)
+	// Everything else: use ValToString (integers, booleans, atoms).
+	return ValToString(v)
 }
 
 // formatMapJSON formats a map value as a JSON-like string.
@@ -119,7 +119,7 @@ func formatMapJSON(v Value) string {
 	parts := make([]string, 0, om.Len())
 	for _, k := range om.Keys() {
 		val, _ := om.Get(k)
-		parts = append(parts, fmt.Sprintf("%q: %s", k, formatValueJSON(val)))
+		parts = append(parts, fmt.Sprintf("%q: %s", k, FormatValueJSON(val)))
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
@@ -129,13 +129,13 @@ func formatListJSON(v Value) string {
 	elems := v.AsList()
 	parts := make([]string, elems.Len())
 	for i, e := range elems.Slice() {
-		parts[i] = formatValueJSON(e)
+		parts[i] = FormatValueJSON(e)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// formatValueJSON formats any value for JSON-like output.
-func formatValueJSON(v Value) string {
+// FormatValueJSON formats any value for JSON-like output.
+func FormatValueJSON(v Value) string {
 	if v.Data == nil {
 		if v.VType.Equal(TNone) {
 			return "null"
@@ -187,7 +187,7 @@ func formatTable(td TableData) string {
 		om := row.AsMap()
 		for j, col := range columns {
 			if val, ok := om.Get(col); ok {
-				cells[i][j] = valToString(val)
+				cells[i][j] = ValToString(val)
 			}
 		}
 	}
@@ -212,7 +212,7 @@ func formatTable(td TableData) string {
 		if j > 0 {
 			b.WriteString(" | ")
 		}
-		b.WriteString(padRight(col, widths[j]))
+		b.WriteString(PadRight(col, widths[j]))
 	}
 	b.WriteByte('\n')
 
@@ -231,7 +231,7 @@ func formatTable(td TableData) string {
 			if j > 0 {
 				b.WriteString(" | ")
 			}
-			b.WriteString(padRight(cell, widths[j]))
+			b.WriteString(PadRight(cell, widths[j]))
 		}
 		b.WriteByte('\n')
 	}
@@ -239,8 +239,8 @@ func formatTable(td TableData) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// padRight pads s with spaces on the right to reach width.
-func padRight(s string, width int) string {
+// PadRight pads s with spaces on the right to reach width.
+func PadRight(s string, width int) string {
 	if len(s) >= width {
 		return s
 	}

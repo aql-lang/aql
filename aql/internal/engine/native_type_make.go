@@ -35,7 +35,7 @@ func RegisterMake(r *Registry) {
 				if !ok {
 					if useBase {
 						// base:true — fill with base value for the field type.
-						bv, err := baseValueForConstraint(constraint)
+						bv, err := BaseValueForConstraint(constraint)
 						if err != nil {
 							return fmt.Errorf("make: field %q: %w", key, err)
 						}
@@ -133,7 +133,7 @@ func RegisterMake(r *Registry) {
 			return false, fmt.Errorf("make: expected concrete options map")
 		}
 		if v, ok := m.Get("base"); ok {
-			v = resolveWordValue(v)
+			v = ResolveWordValue(v)
 			if b, bOk := v.Data.(bool); bOk && b {
 				useBase = true
 			}
@@ -163,7 +163,7 @@ func RegisterMake(r *Registry) {
 				fields.Set(key, constraint)
 			} else {
 				// Type literal: use base value for that type.
-				bv, err := baseValueForConstraint(constraint)
+				bv, err := BaseValueForConstraint(constraint)
 				if err != nil {
 					return nil, fmt.Errorf("make: field %q: %w", key, err)
 				}
@@ -236,7 +236,7 @@ func RegisterMake(r *Registry) {
 				return nil, fmt.Errorf("make: missing field %q for object type %s", key, objType.Name)
 			}
 
-			val = resolveWordValue(val)
+			val = ResolveWordValue(val)
 
 			if constraint.Data == nil {
 				// Type-literal constraint: convert value to that type.
@@ -271,7 +271,7 @@ func RegisterMake(r *Registry) {
 				if _, ownOk := ownFields.Get(key); !ownOk {
 					// This field comes from a parent — set it on the prototype.
 					val, _ := provided.Get(key)
-					val = resolveWordValue(val)
+					val = ResolveWordValue(val)
 					setPrototypeField(prototype, key, val)
 				}
 			}
@@ -291,7 +291,7 @@ func RegisterMake(r *Registry) {
 			elems := srcVal.AsList()
 			parts := make([]string, elems.Len())
 			for i := 0; i < elems.Len(); i++ {
-				parts[i] = valToString(elems.Get(i))
+				parts[i] = ValToString(elems.Get(i))
 			}
 			return []Value{NewPath(parts, abs)}, nil
 		case srcVal.VType.Matches(TString) && srcVal.Data != nil:
@@ -630,10 +630,10 @@ func RegisterMake(r *Registry) {
 func makeConvert(src Value, targetType Type) (Value, error) {
 	switch {
 	case targetType.Matches(TString):
-		return NewString(valToString(src)), nil
+		return NewString(ValToString(src)), nil
 
 	case targetType.Matches(TDecimal):
-		text := valToString(src)
+		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
 			return Value{}, fmt.Errorf("make: cannot convert %q to decimal", text)
@@ -641,7 +641,7 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 		return NewDecimal(f), nil
 
 	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
-		text := valToString(src)
+		text := ValToString(src)
 		n, err := strconv.ParseInt(text, 10, 64)
 		if err != nil {
 			// Try parsing as float and truncating to integer.
@@ -661,7 +661,7 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 			_as0, _ := src.AsNumber()
 			return NewBoolean(_as0 != 0), nil
 		default:
-			text := valToString(src)
+			text := ValToString(src)
 			switch text {
 			case "true":
 				return NewBoolean(true), nil
@@ -673,7 +673,7 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 		}
 
 	case targetType.Equal(TAtom):
-		return NewAtom(valToString(src)), nil
+		return NewAtom(ValToString(src)), nil
 
 	default:
 		return Value{}, fmt.Errorf("make: unsupported target type %s", targetType)
@@ -685,7 +685,7 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 // If the value already matches, it is returned as-is.
 func makeFieldValue(val Value, constraint Value) (Value, error) {
 	// Resolve words to their semantic value first (e.g. word(false) → boolean false).
-	val = resolveWordValue(val)
+	val = ResolveWordValue(val)
 
 	// If the constraint is a type literal (Data==nil), convert the value.
 	if constraint.Data == nil {
@@ -704,27 +704,7 @@ func makeFieldValue(val Value, constraint Value) (Value, error) {
 	return unified, nil
 }
 
-// resolveWordValue converts a word value to its semantic value.
-// Words named "true"/"false" become booleans, known type names become type
-// literals, and other words become atoms (bare strings).
-func resolveWordValue(v Value) Value {
-	if !v.IsWord() {
-		return v
-	}
-	_as1, _ := v.AsWord()
-	name := _as1.Name
-	switch name {
-	case "true":
-		return NewBoolean(true)
-	case "false":
-		return NewBoolean(false)
-	default:
-		if t, ok := typeNames[name]; ok {
-			return NewTypeLiteral(t)
-		}
-		return NewAtom(name)
-	}
-}
+// ResolveWordValue: re-exported from aqleng via aliases.go
 
 // ResolveFieldType resolves a record field's type constraint value.
 //
@@ -755,12 +735,12 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		// fall back to DefStacks for any legacy installer that still
 		// drops a type body there.
 		if tv, ok := r.TopOfTypeStack(name); ok {
-			if isTypeBody(tv) {
+			if IsTypeBody(tv) {
 				return tv
 			}
 		}
 		if top, ok := r.TopOfDefStack(name); ok {
-			if isTypeBody(top) {
+			if IsTypeBody(top) {
 				return top
 			}
 		}

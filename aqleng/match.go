@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 // matchSignature is the unified signature matching function.
 //
@@ -354,7 +354,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					pattern.Data != nil && val.Data != nil &&
 					!pattern.IsOptionsType() &&
 					!val.IsRecordType() && !val.IsTypedMap() && !val.IsOptionsType() {
-					if !openUnifyMap(pattern, val) {
+					if !OpenUnifyMap(pattern, val) {
 						patternOk = false
 						break
 					}

@@ -53,11 +53,11 @@ func RegisterIs(r *Registry) {
 				// Compare against the resolved form of a so that words
 				// (true/false, atoms) inside lists are treated as their
 				// semantic values.
-				resolved := resolveWordsDeep(a)
+				resolved := ResolveWordsDeep(a)
 				if !unified.VType.Equal(resolved.VType) {
 					return []Value{NewBoolean(false)}, nil
 				}
-				if !valuesEqual(unified, resolved) {
+				if !ValuesEqual(unified, resolved) {
 					return []Value{NewBoolean(false)}, nil
 				}
 				return []Value{NewBoolean(true)}, nil

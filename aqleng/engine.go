@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 import (
 	"fmt"
@@ -248,7 +248,7 @@ func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError 
 func (e *Engine) returnTypeError(funcName string, index int, expected Type, got Value) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
 		funcName, index, expected, got.VType)
-	hint := "value: " + valToString(got)
+	hint := "value: " + ValToString(got)
 	src := e.effectiveSource()
 	return makeAqlError("type_error", detail, funcName, src, hint)
 }
@@ -360,7 +360,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			if e.registry.Check.StepCount > budget {
 				if !e.registry.Check.BudgetTripped {
 					e.registry.Check.BudgetTripped = true
-					e.registry.addCheckDiagnostic(CheckDiagnostic{
+					e.registry.AddCheckDiagnostic(CheckDiagnostic{
 						Code:   "step_budget_exceeded",
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
 					})
@@ -382,12 +382,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		switch {
 		case val.IsWord():
 			if err := e.stepWord(val); err != nil {
-				if isBreak(err) {
+				if IsBreak(err) {
 					if e.handleLoopBreak() {
 						continue
 					}
 				}
-				if isContinue(err) {
+				if IsContinue(err) {
 					if e.handleLoopContinue() {
 						continue
 					}
@@ -716,7 +716,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Named user-defined types take priority over DefStacks: type
 	// bindings stack independently from def bindings, and a shadow-
 	// then-reveal pattern (`type Foo Integer; type Foo fn […]`)
-	// would otherwise see the legacy installDef mirror in DefStacks
+	// would otherwise see the legacy InstallDef mirror in DefStacks
 	// instead of the active fn-type binding. Pushed with Quoted=true
 	// for fn-shape types so execFnDefLiteral treats them as data.
 	//
@@ -813,7 +813,7 @@ func (e *Engine) stepWord(val Value) error {
 				fullSource: e.effectiveSource(),
 			}
 		}
-		e.registry.addCheckDiagnostic(CheckDiagnostic{
+		e.registry.AddCheckDiagnostic(CheckDiagnostic{
 			Code:   "undefined_word",
 			Detail: "undefined word: " + w.Name,
 			Word:   w.Name,
@@ -1399,7 +1399,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 				return Value{}, err
 			}
 			for _, r := range result {
-				buf.WriteString(valToString(r))
+				buf.WriteString(ValToString(r))
 			}
 		}
 	}
@@ -1444,7 +1444,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				} else if keyResult[0].IsAtom() {
 					resolvedKey, _ = keyResult[0].AsAtom()
 				} else {
-					resolvedKey = valToString(keyResult[0])
+					resolvedKey = ValToString(keyResult[0])
 				}
 			}
 		}
@@ -1589,7 +1589,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 					if pat.VType.Equal(TMap) && resolved[ri].VType.Equal(TMap) &&
 						pat.Data != nil && resolved[ri].Data != nil &&
 						!pat.IsOptionsType() {
-						if !openUnifyMap(pat, resolved[ri]) {
+						if !OpenUnifyMap(pat, resolved[ri]) {
 							match = false
 							break
 						}
@@ -1622,7 +1622,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 					if pat.VType.Equal(TMap) && candidate[j].VType.Equal(TMap) &&
 						pat.Data != nil && candidate[j].Data != nil &&
 						!pat.IsOptionsType() {
-						if !openUnifyMap(pat, candidate[j]) {
+						if !OpenUnifyMap(pat, candidate[j]) {
 							match = false
 							break
 						}
@@ -1749,7 +1749,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			installDef(e.registry, p.Name, args[i])
+			InstallDef(e.registry, p.Name, args[i])
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
@@ -1877,14 +1877,14 @@ func (e *Engine) stepEnd() error {
 // stepMark records the mark's ID in the marks hash table and advances.
 // stepDefCleanup removes defs that were created during fn body execution.
 // The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
-// the body ran. Any defs added since are popped via uninstallDef.
+// the body ran. Any defs added since are popped via UninstallDef.
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := val.AsDefCleanup()
 	reg := info.Registry
 	for _, name := range reg.DefNames() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
 		for reg.DefStackDepth(name) > prevLen {
-			uninstallDef(reg, name)
+			UninstallDef(reg, name)
 		}
 	}
 }
@@ -1981,8 +1981,8 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	if moreIterations {
 		// Update iterator: uninstall old value, install new one.
 		// This keeps the DefStacks depth at 1 throughout the loop.
-		uninstallDef(cont.Registry, cont.IterName)
-		installDef(cont.Registry, cont.IterName, NewInteger(cont.Current))
+		UninstallDef(cont.Registry, cont.IterName)
+		InstallDef(cont.Registry, cont.IterName, NewInteger(cont.Current))
 
 		// Generate new mark ID.
 		id := NextMarkID()
@@ -2011,7 +2011,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	}
 
 	// Done — uninstall iterator, splice in accumulated results.
-	uninstallDef(cont.Registry, cont.IterName)
+	UninstallDef(cont.Registry, cont.IterName)
 	delete(e.marks, info.To)
 	e.stackSplice(markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
@@ -2082,7 +2082,7 @@ func (e *Engine) handleLoopBreak() bool {
 				}
 
 				// Uninstall iterator, splice in accumulated results.
-				uninstallDef(info.Cont.Registry, info.Cont.IterName)
+				UninstallDef(info.Cont.Registry, info.Cont.IterName)
 				delete(e.marks, info.To)
 				e.stackSplice(markIdx, i-markIdx+1, info.Cont.Results...)
 				e.pointer = markIdx

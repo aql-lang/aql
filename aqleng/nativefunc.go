@@ -1,4 +1,4 @@
-package engine
+package aqleng
 
 // NativeFunc describes a built-in native function with its name, signatures,
 // and configuration. All predefined words (core and extension) use this

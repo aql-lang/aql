@@ -8,7 +8,7 @@ import (
 func TestFlexibleMatchPositional(t *testing.T) {
 	// Positional match should always be preferred.
 	vals := []Value{NewAtom("x"), NewList(nil)}
-	ordered, ok := flexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
+	ordered, ok := FlexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
 	if !ok {
 		t.Fatal("expected positional match")
 	}
@@ -21,7 +21,7 @@ func TestFlexibleMatchPositional(t *testing.T) {
 func TestFlexibleMatchNoPermutation(t *testing.T) {
 	// Values in wrong positional order should NOT match — no permutation.
 	vals := []Value{NewList(nil), NewAtom("x")}
-	_, ok := flexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
+	_, ok := FlexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
 	if ok {
 		t.Fatal("expected no match — arguments must not be permuted")
 	}
@@ -30,7 +30,7 @@ func TestFlexibleMatchNoPermutation(t *testing.T) {
 func TestFlexibleMatchNoMatch(t *testing.T) {
 	// No valid permutation exists.
 	vals := []Value{NewAtom("a"), NewAtom("b")}
-	_, ok := flexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
+	_, ok := FlexibleMatch(vals, &Signature{Args: []Type{TAtom, TList}})
 	if ok {
 		t.Fatal("expected no match for incompatible types")
 	}
@@ -41,7 +41,7 @@ func TestFlexibleMatchPrefersLeastDisplacement(t *testing.T) {
 	// [atom, atom, list] with types [atom, atom, list] — positional wins (0 displacements).
 	vals := []Value{NewAtom("a"), NewAtom("b"), NewList(nil)}
 	types := []Type{TAtom, TAtom, TList}
-	ordered, ok := flexibleMatch(vals, &Signature{Args: types})
+	ordered, ok := FlexibleMatch(vals, &Signature{Args: types})
 	if !ok {
 		t.Fatal("expected match")
 	}

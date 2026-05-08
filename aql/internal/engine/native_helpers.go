@@ -90,46 +90,4 @@ func singleResult(v Value, err error) ([]Value, error) {
 	return []Value{v}, nil
 }
 
-// CoerceBoolean converts any value to a boolean using the same rules
-// as `convert boolean`: booleans pass through, numbers are non-zero,
-// none is false, lists/maps are non-empty, "true"/"false" parse
-// literally, all other values are non-empty.
-func CoerceBoolean(v Value) bool {
-	switch {
-	case v.VType.Matches(TBoolean):
-		b, _ := v.AsBoolean()
-		return b
-	case v.VType.Matches(TNumber):
-		n, _ := v.AsNumber()
-		return n != 0
-	case v.VType.Equal(TNone):
-		return false
-	case v.VType.Equal(TList):
-		if v.Data == nil {
-			return false
-		}
-		if elems, ok := v.Data.([]Value); ok {
-			return len(elems) > 0
-		}
-		// Non-[]Value list backings (table types, query builders) are truthy.
-		return true
-	case v.VType.Equal(TMap):
-		if v.Data == nil {
-			return false
-		}
-		if om, ok := v.Data.(*OrderedMap); ok {
-			return om.Len() > 0
-		}
-		// Non-*OrderedMap map backings (record/options/child types) are truthy.
-		return true
-	}
-	text := valToString(v)
-	switch text {
-	case "true":
-		return true
-	case "false", "":
-		return false
-	default:
-		return text != ""
-	}
-}
+// CoerceBoolean is re-exported by aliases.go (defined in aqleng).

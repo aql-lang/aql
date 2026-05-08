@@ -14,12 +14,12 @@ func TestCompareValuesIntegers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := compareValues(NewInteger(tt.a), NewInteger(tt.b))
+			got, err := CompareValues(NewInteger(tt.a), NewInteger(tt.b))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tt.want {
-				t.Errorf("compareValues(%d, %d) = %d, want %d", tt.a, tt.b, got, tt.want)
+				t.Errorf("CompareValues(%d, %d) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}
@@ -37,12 +37,12 @@ func TestCompareValuesStrings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := compareValues(NewString(tt.a), NewString(tt.b))
+			got, err := CompareValues(NewString(tt.a), NewString(tt.b))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tt.want {
-				t.Errorf("compareValues(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+				t.Errorf("CompareValues(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}
@@ -61,7 +61,7 @@ func TestCompareValuesBooleans(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := compareValues(NewBoolean(tt.a), NewBoolean(tt.b))
+			got, err := CompareValues(NewBoolean(tt.a), NewBoolean(tt.b))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -84,7 +84,7 @@ func TestCompareValuesAtoms(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := compareValues(NewAtom(tt.a), NewAtom(tt.b))
+			got, err := CompareValues(NewAtom(tt.a), NewAtom(tt.b))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -96,14 +96,14 @@ func TestCompareValuesAtoms(t *testing.T) {
 }
 
 func TestCompareValuesCrossTypeError(t *testing.T) {
-	_, err := compareValues(NewInteger(1), NewString("a"))
+	_, err := CompareValues(NewInteger(1), NewString("a"))
 	if err == nil {
 		t.Fatal("expected error for cross-type comparison")
 	}
 }
 
 func TestCompareValuesListError(t *testing.T) {
-	_, err := compareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)}))
+	_, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)}))
 	if err == nil {
 		t.Fatal("expected error for list comparison")
 	}
@@ -128,9 +128,9 @@ func TestExactEqual(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := exactEqual(tt.a, tt.b)
+			got := ExactEqual(tt.a, tt.b)
 			if got != tt.want {
-				t.Errorf("exactEqual = %v, want %v", got, tt.want)
+				t.Errorf("ExactEqual = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -138,10 +138,10 @@ func TestExactEqual(t *testing.T) {
 
 func TestExactEqualDifferentTypes(t *testing.T) {
 	// Different types should not be equal
-	if exactEqual(NewInteger(1), NewBoolean(true)) {
+	if ExactEqual(NewInteger(1), NewBoolean(true)) {
 		t.Error("int and bool should not be exactly equal")
 	}
-	if exactEqual(NewString("1"), NewAtom("1")) {
+	if ExactEqual(NewString("1"), NewAtom("1")) {
 		t.Error("string and atom should not be exactly equal")
 	}
 }
@@ -150,7 +150,7 @@ func TestExactEqualMapIdentity(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	a := NewMap(m)
-	if !exactEqual(a, a) {
+	if !ExactEqual(a, a) {
 		t.Error("same map should be equal to itself")
 	}
 }
@@ -174,9 +174,9 @@ func TestDeepEqual(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := deepEqual(tt.a, tt.b)
+			got := DeepEqual(tt.a, tt.b)
 			if got != tt.want {
-				t.Errorf("deepEqual = %v, want %v", got, tt.want)
+				t.Errorf("DeepEqual = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -188,13 +188,13 @@ func TestDeepEqualLists(t *testing.T) {
 	c := NewList([]Value{NewInteger(1), NewInteger(2)})
 	d := NewList([]Value{NewInteger(1), NewInteger(9), NewInteger(3)})
 
-	if !deepEqual(a, b) {
+	if !DeepEqual(a, b) {
 		t.Error("equal lists should be deeply equal")
 	}
-	if deepEqual(a, c) {
+	if DeepEqual(a, c) {
 		t.Error("different length lists should not be deeply equal")
 	}
-	if deepEqual(a, d) {
+	if DeepEqual(a, d) {
 		t.Error("different element lists should not be deeply equal")
 	}
 }
@@ -215,13 +215,13 @@ func TestDeepEqualMaps(t *testing.T) {
 	m4 := NewOrderedMap()
 	m4.Set("x", NewInteger(1))
 
-	if !deepEqual(NewMap(m1), NewMap(m2)) {
+	if !DeepEqual(NewMap(m1), NewMap(m2)) {
 		t.Error("equal maps should be deeply equal")
 	}
-	if deepEqual(NewMap(m1), NewMap(m3)) {
+	if DeepEqual(NewMap(m1), NewMap(m3)) {
 		t.Error("different value maps should not be deeply equal")
 	}
-	if deepEqual(NewMap(m1), NewMap(m4)) {
+	if DeepEqual(NewMap(m1), NewMap(m4)) {
 		t.Error("different size maps should not be deeply equal")
 	}
 }
@@ -235,7 +235,7 @@ func TestDeepEqualMapsMissingKey(t *testing.T) {
 	m2.Set("x", NewInteger(1))
 	m2.Set("z", NewInteger(2))
 
-	if deepEqual(NewMap(m1), NewMap(m2)) {
+	if DeepEqual(NewMap(m1), NewMap(m2)) {
 		t.Error("maps with different keys should not be deeply equal")
 	}
 }

@@ -382,7 +382,7 @@ func TestExtraCSVEncodeNonStringValues(t *testing.T) {
 	}
 }
 
-// ── 6. Unify: lists, maps, valuesEqual, listsEqual, mapsEqual ───────────
+// ── 6. Unify: lists, maps, ValuesEqual, listsEqual, mapsEqual ───────────
 
 func TestExtraUnifyListsDifferentLengths(t *testing.T) {
 	a := NewList([]Value{NewInteger(1), NewInteger(2)})
@@ -568,7 +568,7 @@ func TestExtraUnifyMapVsNonMap(t *testing.T) {
 }
 
 func TestExtraUnifyTypeLiteralsSameType(t *testing.T) {
-	// Two type literals of the same type should unify (valuesEqual nil/nil)
+	// Two type literals of the same type should unify (ValuesEqual nil/nil)
 	a := NewTypeLiteral(TString)
 	b := NewTypeLiteral(TString)
 	_, ok := Unify(a, b)
@@ -874,14 +874,7 @@ func TestExtraNewTypeSinglePart(t *testing.T) {
 	}
 }
 
-func TestExtraMustTypePanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("mustType with lowercase should panic")
-		}
-	}()
-	mustType("bad/type")
-}
+// TestExtraMustTypePanics moved to aqleng (mustType is engine-internal).
 
 func TestExtraTypeSpecificity(t *testing.T) {
 	tp, _ := NewType("Number/Integer")
@@ -927,7 +920,7 @@ func TestExtraTypeMatches(t *testing.T) {
 	}
 }
 
-// ── Additional coverage: valuesEqual edge cases ─────────────────────────
+// ── Additional coverage: ValuesEqual edge cases ─────────────────────────
 
 func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 	// One nil Data, one concrete — should not be equal, so Unify fails
@@ -963,7 +956,7 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 		t.Fatalf("unify: got %d results", len(result))
 	}
 	// Different decimals should fail to unify (same type, different values)
-	// valuesEqual falls through to default fmt.Sprintf comparison
+	// ValuesEqual falls through to default fmt.Sprintf comparison
 	_as4, _ := result[1].AsBoolean()
 	if _as4 {
 		t.Error("different decimals should not unify")

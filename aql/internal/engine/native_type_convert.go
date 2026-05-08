@@ -13,7 +13,7 @@ func RegisterConvert(r *Registry) {
 		case targetType.Matches(TString):
 			// Convert to string.
 			if base == "" {
-				return NewString(valToString(src)), nil
+				return NewString(ValToString(src)), nil
 			}
 			// Base-based string conversion (only for integer numbers).
 			if !src.VType.Matches(TInteger) {
@@ -37,7 +37,7 @@ func RegisterConvert(r *Registry) {
 
 		case targetType.Matches(TDecimal):
 			// Convert to decimal.
-			text := valToString(src)
+			text := ValToString(src)
 			f, err := strconv.ParseFloat(text, 64)
 			if err != nil {
 				return Value{}, fmt.Errorf("convert: cannot convert %q to decimal", text)
@@ -46,7 +46,7 @@ func RegisterConvert(r *Registry) {
 
 		case targetType.Matches(TNumber) || targetType.Matches(TInteger):
 			// Convert to number.
-			text := valToString(src)
+			text := ValToString(src)
 			if base == "" {
 				n, err := strconv.ParseInt(text, 10, 64)
 				if err != nil {
@@ -75,7 +75,7 @@ func RegisterConvert(r *Registry) {
 			return NewBoolean(CoerceBoolean(src)), nil
 
 		case targetType.Equal(TAtom):
-			return NewAtom(valToString(src)), nil
+			return NewAtom(ValToString(src)), nil
 
 		default:
 			return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)
@@ -112,7 +112,7 @@ func RegisterConvert(r *Registry) {
 			m := opts.AsMap()
 			if m != nil {
 				if bv, ok := m.Get("base"); ok {
-					base = valToString(bv)
+					base = ValToString(bv)
 				}
 			}
 		}

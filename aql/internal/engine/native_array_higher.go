@@ -44,7 +44,7 @@ func RegisterEach(r *Registry) {
 			// list's element carrier into the body so diagnostics
 			// fire against realistic types.
 			ReturnsFn: func(args []Value) []Value {
-				elem := dataListElemType(args[1])
+				elem := DataListElemTypeFromValue(args[1])
 				stk := analyseHigherOrderBody(r, args[0], elem)
 				if len(stk) == 0 {
 					return []Value{NewCarrier(TList)}
@@ -55,34 +55,7 @@ func RegisterEach(r *Registry) {
 	})
 }
 
-// dataListElemType inspects a data list Value and returns a
-// conservative element type. Handles three cases:
-//
-//  1. Typed-list carrier (ChildTypeInfo{Child: ...}): return the
-//     child carrier's VType directly.
-//  2. Concrete list with real elements: join all element VTypes
-//     via CommonAncestorType.
-//  3. Empty / non-concrete / nil-data list: TAny.
-func dataListElemType(data Value) Type {
-	if data.Data == nil {
-		return TAny
-	}
-	if ct, ok := data.Data.(ChildTypeInfo); ok {
-		return ct.Child.VType
-	}
-	list := data.AsList()
-	if list.IsNil() || list.Len() == 0 {
-		return TAny
-	}
-	t := list.Get(0).VType
-	for i := 1; i < list.Len(); i++ {
-		t = CommonAncestorType(t, list.Get(i).VType)
-		if t.Equal(TAny) {
-			break
-		}
-	}
-	return t
-}
+// DataListElemTypeFromValue: provided by aqleng (callers updated from dataListElemType).
 
 // analyseHigherOrderBody runs a literal code-body list through a
 // sub-engine in check mode, prepending the given element carrier
@@ -106,7 +79,7 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...Type) []Value {
 	sub := New(r)
 	result, err := sub.Run(input)
 	if err != nil {
-		r.addCheckDiagnostic(CheckDiagnostic{
+		r.AddCheckDiagnostic(CheckDiagnostic{
 			Code:   "body_error",
 			Detail: "higher-order body analysis error: " + err.Error(),
 		})
@@ -144,7 +117,7 @@ func RegisterFold(r *Registry) {
 				// the accumulator type stabilises — one pass is a
 				// close approximation for bounded-lattice types.
 				ReturnsFn: func(args []Value) []Value {
-					elem := dataListElemType(args[2])
+					elem := DataListElemTypeFromValue(args[2])
 					stk := analyseHigherOrderBody(r, args[1], args[0].VType, elem)
 					if len(stk) == 0 {
 						return []Value{NewCarrier(TAny)}
@@ -171,13 +144,13 @@ func RegisterFold(r *Registry) {
 					for i := 1; i < dataList.Len(); i++ {
 						rest[i-1] = dataList.Get(i)
 					}
-					restList := ReadList{elems: rest}
+					restList := NewReadList(rest)
 					return doFold(reg, init, bodySlice, restList)
 				},
 				// No init — accumulator type and element type both
 				// come from the data list.
 				ReturnsFn: func(args []Value) []Value {
-					elem := dataListElemType(args[1])
+					elem := DataListElemTypeFromValue(args[1])
 					stk := analyseHigherOrderBody(r, args[0], elem, elem)
 					if len(stk) == 0 {
 						return []Value{NewCarrier(TAny)}
@@ -258,7 +231,7 @@ func RegisterScan(r *Registry) {
 				return []Value{NewList(results)}, nil
 			},
 			ReturnsFn: func(args []Value) []Value {
-				elem := dataListElemType(args[1])
+				elem := DataListElemTypeFromValue(args[1])
 				stk := analyseHigherOrderBody(r, args[0], elem, elem)
 				if len(stk) == 0 {
 					return []Value{NewCarrier(TList)}
@@ -313,8 +286,8 @@ func RegisterOuter(r *Registry) {
 				return []Value{NewList(rows)}, nil
 			},
 			ReturnsFn: func(args []Value) []Value {
-				leftElem := dataListElemType(args[1])
-				rightElem := dataListElemType(args[2])
+				leftElem := DataListElemTypeFromValue(args[1])
+				rightElem := DataListElemTypeFromValue(args[2])
 				stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
 				// outer produces a 2D list: TList<TList<body-result>>.
 				var innerElem Type = TAny
@@ -446,8 +419,8 @@ func RegisterInner(r *Registry) {
 				return []Value{NewList(rows)}, nil
 			},
 			ReturnsFn: func(args []Value) []Value {
-				leftElem := dataListElemType(args[2])
-				rightElem := dataListElemType(args[3])
+				leftElem := DataListElemTypeFromValue(args[2])
+				rightElem := DataListElemTypeFromValue(args[3])
 				// pair op consumes (left-elem, right-elem); agg
 				// consumes (accumulator, pair-result). Without
 				// carrier list element tracking we use the pair

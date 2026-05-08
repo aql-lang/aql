@@ -1,16 +1,16 @@
-package engine
+package aqleng
 
 // Function-signature comparison helpers — the single home for FnSig
 // shape-matching across the engine. Two distinct rules live side by
 // side:
 //
-//   - **Exact match** (fnSigMatchesSpec) — same arity AND pairwise
+//   - **Exact match** (FnSigMatchesSpec) — same arity AND pairwise
 //     Type.Equal on params and returns. Used by `undef name fn [spec]`
 //     to identify the precise previously-installed signature to remove.
-//   - **Structural subtyping** (fnSigSatisfiesSpec) — same arity,
+//   - **Structural subtyping** (FnSigSatisfiesSpec) — same arity,
 //     contravariant inputs (`spec ⊆ sig`) and covariant returns (`sig
 //     ⊆ spec`). Used by `type Foo fn [...]` constraint matching via
-//     `fnDefHasSig` / `fnUndefMatchesFnDef`.
+//     `FnDefHasSig` / `FnUndefMatchesFnDef`.
 //
 // A FnUndef value (Type/Word/__UF) carries a list of FnSigSpec entries
 // — each one a (Params, Returns) pair without a body. It's produced
@@ -18,11 +18,11 @@ package engine
 // constraint. Pattern (FnParam.Pattern) and Optional/BarrierPos
 // differences are not yet considered.
 
-// fnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
+// FnSigMatchesSpec returns true if a FnSig matches a FnSigSpec
 // exactly: same arity, same param types pairwise, same return types
 // pairwise. Variance is intentionally NOT applied — `undef name fn
 // [spec]` names a specific shape to discard.
-func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
+func FnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 	if len(sig.Params) != len(spec.Params) {
 		return false
 	}
@@ -42,7 +42,7 @@ func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 	return true
 }
 
-// fnSigSatisfiesSpec returns true if a candidate FnSig satisfies a
+// FnSigSatisfiesSpec returns true if a candidate FnSig satisfies a
 // FnSigSpec under structural function subtyping:
 //
 //   - **Inputs are contravariant on Type.** Each spec param type
@@ -68,7 +68,7 @@ func fnSigMatchesSpec(sig FnSig, spec FnSigSpec) bool {
 // carry one (it's a body-level collection setting, not part of the
 // structural shape), so the type system can't declare a barrier
 // requirement. Candidates may have any BarrierPos.
-func fnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
+func FnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
 	if len(sig.Params) != len(spec.Params) {
 		return false
 	}
@@ -113,10 +113,10 @@ func fnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
 	return true
 }
 
-// fnUndefMatchesFnDef reports whether the candidate function value
+// FnUndefMatchesFnDef reports whether the candidate function value
 // (TFnDef or TFunction wrapping FnDefInfo) satisfies every FnSigSpec
 // declared by the FnUndef constraint.
-func fnUndefMatchesFnDef(undef Value, fnVal Value) bool {
+func FnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 	uInfo, ok := undef.Data.(FnUndefInfo)
 	if !ok {
 		return false
@@ -132,22 +132,22 @@ func fnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 		return true
 	}
 	for _, want := range uInfo.Sigs {
-		if !fnDefHasSig(fnDef, want) {
+		if !FnDefHasSig(fnDef, want) {
 			return false
 		}
 	}
 	return true
 }
 
-// fnDefHasSig reports whether the candidate has at least one
+// FnDefHasSig reports whether the candidate has at least one
 // signature that satisfies `want` under structural subtyping. Both
 // AQL-defined Sigs (with FnParam payload) and compiled Signatures
 // (with raw Type payload) are considered so Go-implemented words can
 // also satisfy a FnUndef type. The variance rule is delegated to
-// fnSigSatisfiesSpec.
-func fnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
+// FnSigSatisfiesSpec.
+func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 	for _, s := range fnDef.Sigs {
-		if fnSigSatisfiesSpec(s, want) {
+		if FnSigSatisfiesSpec(s, want) {
 			return true
 		}
 	}
@@ -161,7 +161,7 @@ func fnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 		for i, t := range sig.Args {
 			params[i] = FnParam{Type: t}
 		}
-		if fnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns}, want) {
+		if FnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns}, want) {
 			return true
 		}
 	}
