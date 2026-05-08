@@ -201,6 +201,23 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // trip: 3-arg integer formatter. Default barrier = N so all
+  // position-mixing arrangements (all-forward through all-stack)
+  // bind sig[0..2] to the same source-order args.
+  reg({
+    name: 'trip',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger, TInteger, TInteger],
+        handler: (args) =>
+          [newString(
+            `${args[0]!.asInteger().toString()},${args[1]!.asInteger().toString()},${args[2]!.asInteger().toString()}`,
+          )],
+      },
+    ],
+  })
+
   // pair: mixed-barrier sig [Integer | Integer]. Forward fills
   // sig[0]; sig[1] must come from the stack. The handler formats
   // "args[0]:args[1]" so the binding is visible in the output.

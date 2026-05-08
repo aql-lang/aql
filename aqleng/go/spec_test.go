@@ -251,6 +251,24 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 
+	// trip: 3-arg integer formatter. Default barrier = N so all
+	// position-mixing arrangements (all-forward through all-stack)
+	// bind sig[0..2] to the same source-order args.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "trip",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TInteger, TInteger, TInteger},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				a, _ := args[0].AsInteger()
+				b, _ := args[1].AsInteger()
+				c, _ := args[2].AsInteger()
+				return []Value{NewString(fmt.Sprintf("%d,%d,%d", a, b, c))}, nil
+			},
+			Returns: []Type{TString},
+		}},
+	})
+
 	// pair: mixed-barrier sig [Integer | Integer]. Forward fills
 	// sig[0]; sig[1] must come from the stack. The handler formats
 	// "args[0]:args[1]" so the binding is visible in the output.
