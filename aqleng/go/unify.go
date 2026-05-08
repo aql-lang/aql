@@ -863,18 +863,9 @@ func ResolveWordsDeep(v Value) Value {
 	return v
 }
 
-// RegisterUnify registers the "unify" word in the given registry.
-func RegisterUnify(r *Registry) {
-	unifyHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		unified, ok := Unify(args[0], args[1])
-		if ok {
-			return []Value{unified, NewBoolean(true)}, nil
-		}
-		return []Value{NewString("~unify-fail"), NewBoolean(false)}, nil
-	}
-
-	// unify: [any, any] -> [any, boolean]
-	r.RegisterNativeFunc(NativeFunc{
+// UnifyNatives defines the "unify" word: [any, any] -> [any, boolean].
+var UnifyNatives = []NativeFunc{
+	{
 		Name:              "unify",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
@@ -882,5 +873,13 @@ func RegisterUnify(r *Registry) {
 			Handler: unifyHandler,
 			Returns: []Type{TAny, TBoolean},
 		}},
-	})
+	},
+}
+
+func unifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	unified, ok := Unify(args[0], args[1])
+	if ok {
+		return []Value{unified, NewBoolean(true)}, nil
+	}
+	return []Value{NewString("~unify-fail"), NewBoolean(false)}, nil
 }

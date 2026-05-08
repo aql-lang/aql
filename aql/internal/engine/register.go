@@ -26,7 +26,9 @@ func Register(r *Registry) {
 	}
 
 	// Comparison
-	RegisterComparison(r)
+	for _, n := range ComparisonNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Storage
 	for _, n := range storageNatives {
@@ -58,11 +60,17 @@ func Register(r *Registry) {
 	for _, n := range miscNatives {
 		r.RegisterNativeFunc(n)
 	}
-	RegisterPrint(r)
-	RegisterTrace(r)
+	for _, n := range PrintNatives {
+		r.RegisterNativeFunc(n)
+	}
+	for _, n := range TraceNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Unify
-	RegisterUnify(r)
+	for _, n := range UnifyNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Array (core + higher-order)
 	for _, n := range arrayNatives {

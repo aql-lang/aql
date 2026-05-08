@@ -5,47 +5,46 @@ import (
 	"strings"
 )
 
-// RegisterPrint registers the "print" and "printstr" words.
-// print consumes one value from the stack and writes its formatted
-// representation to the registry's Output writer followed by a newline.
-// printstr does the same but without a trailing newline.
+// PrintNatives consolidates the "print" and "printstr" words. print
+// consumes one value from the stack and writes its formatted
+// representation to the registry's Output writer followed by a
+// newline. printstr does the same but without a trailing newline.
 //   - strings: printed as-is
 //   - maps/lists: printed as JSON-like text
 //   - tables: printed as a formatted table with column headers
-func RegisterPrint(r *Registry) {
-	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		v := args[0]
-		out := FormatForPrint(v)
-		fmt.Fprintln(r.Output, out)
-		return nil, nil
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
+var PrintNatives = []NativeFunc{
+	{
 		Name:              "print",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
-			Handler: handler,
+			Handler: printHandler,
 			Returns: []Type{},
 		}},
-	})
-
-	handlerStr := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		v := args[0]
-		out := FormatForPrint(v)
-		fmt.Fprint(r.Output, out)
-		return nil, nil
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
+	},
+	{
 		Name:              "printstr",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny},
-			Handler: handlerStr,
+			Handler: printstrHandler,
 			Returns: []Type{},
 		}},
-	})
+	},
+}
+
+func printHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	v := args[0]
+	out := FormatForPrint(v)
+	fmt.Fprintln(r.Output, out)
+	return nil, nil
+}
+
+func printstrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	v := args[0]
+	out := FormatForPrint(v)
+	fmt.Fprint(r.Output, out)
+	return nil, nil
 }
 
 // FormatForPrint returns the print representation of a value.

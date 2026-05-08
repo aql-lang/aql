@@ -97,28 +97,30 @@ func TraceVisibleLen(s string) int {
 	return n
 }
 
-// RegisterTrace registers the "trace" word for debugging.
+// TraceNatives defines the "trace" word for debugging.
 //
-// trace operates like do: it takes a list, evaluates it in a sub-engine,
-// and prints a step-by-step trace of the stack evolution.
+// trace operates like do: it takes a list, evaluates it in a
+// sub-engine, and prints a step-by-step trace of the stack evolution.
 //
 //	trace [1 add 2 mul 3]
-func RegisterTrace(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+var TraceNatives = []NativeFunc{
+	{
 		Name:              "trace",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TList},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if !IsConcrete(args[0]) {
-					return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
-				}
-				elems := args[0].AsList().Slice()
-				return RunTrace(r, elems, r.Output)
-			},
+			Args:    []Type{TList},
+			Handler: traceHandler,
 			Returns: []Type{TAny},
 		}},
-	})
+	},
+}
+
+func traceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
+	}
+	elems := args[0].AsList().Slice()
+	return RunTrace(r, elems, r.Output)
 }
 
 // RunTrace executes tokens in a sub-engine with tracing enabled,
