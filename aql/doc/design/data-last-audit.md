@@ -210,35 +210,40 @@ in user-facing positional order so existing call-site syntax stays
 correct (FnDef matches deepest-first, NativeFunc matches
 top-of-stack-first — they compose).
 
-## Ambiguous cases (not reordered)
+## Ambiguous cases — user decisions
 
-User decision needed before any further reorder:
+The user resolved the ambiguous cases as follows:
 
-- **engine/array reshape, at, sortby, member, arr-indexof, group, replicate, expand**: two-list signatures where which list is "more data" depends on the operation. Current order is consistent with each handler's intent.
-  *Recommendation:* leave as-is unless a clear convention is adopted.
+- **engine/string concat [List, Map(opts)]** → **REORDERED to [Map, List]**.
+  Decision: opts goes BEFORE data when both are present.
+  Other string handlers ([String, Map], [String, String, Map], etc.) stay
+  as-is because their non-opts args are scalars (VACUOUS).
 
-- **engine/string concat [List, Map(opts)]**: list=data, map=opts; opts trailer puts opts AFTER data, contradicting `pad`'s opts-in-the-middle pattern.
-  *Question:* should opts always trail (current concat) or always be middle (current pad)?
-  *Recommendation:* canonicalise to opts-in-middle (data last). Defer until policy decided.
+- **engine/array reshape, at, sortby, member, arr-indexof, group,
+  replicate, expand** — leave as-is. Two-list semantics are
+  per-handler-specific; no global convention adopted.
 
-- **engine/misc read / write**: `read` already has both `[Path, Map]` and `[Map, Path]` (reverse) sigs. `write` has `[Path, content, Map]`.
-  *Question:* is the path the "data" (file location), or the content?
-  *Recommendation:* leave alone — both interpretations are defensible and tests rely on the current shape.
+- **engine/misc read / write** — leave as-is. Path is the address
+  (universal I/O convention), not the data.
 
-- **engine/native make** (3-arg overloads): `[ObjectType, Map]`, `[Object, Any, Object]`, `[Any, Any, Map]` — handler is position-agnostic and disambiguates by type.
-  *Recommendation:* leave alone.
+- **engine/native make** — leave as-is. Position-agnostic
+  type-dispatch.
 
-- **engine/query DSL** (from/as/select/where/order/by/limit/offset/distinct/group/having/on/using/joins/setops): table-first in every sig; designed for SQL-style chained syntax. Currently disabled in tests.
-  *Question:* should the DSL switch to data-last semantics, or preserve the chained infix shape?
-  *Recommendation:* leave alone until query DSL is re-enabled and a policy is set.
+- **engine/query DSL** — leave as-is. Table-first chainable syntax;
+  to be revisited if DSL is re-enabled.
 
-- **native list/create/load/update/remove** (Entity-API-table family): each has 6 overloads covering Entity object instances, API maps, list tables, and record types. Position is governed by the SDK shape.
-  *Recommendation:* leave alone (SDK convention, not principle violation).
+- **native list / create / load / update / remove** — leave as-is.
+  SDK-shape convention.
 
-- **native merge / inject / setpath**: symmetric or position-agnostic.
-  *Recommendation:* leave alone.
+- **native merge / inject / setpath / fetch** — leave as-is.
+  Symmetric, position-agnostic, or URL-as-address conventional.
 
-- **native fetch [String, Map]**: URL-or-data ambiguity (string IS the data; map is opts). Already sticks the URL at sig[0].
+- **matrix mat-add / sub / mul / emul, dot** — leave as-is.
+  Homogeneous binary ops.
+
+- **time before? / after? / equal? / until / since / diff /
+  earliest / latest / compare / between?** — leave as-is.
+  Homogeneous binary ops.
   *Question:* is URL "data" or "address"?
   *Recommendation:* leave alone (URL-as-address convention is universal).
 
@@ -267,4 +272,5 @@ After all data-last reorders:
 
 1. `0fdc3e2` — aqleng: data-last sig review — native data-ops
 2. `d64354a` — aqleng: data-last sig review — nativemod matrix and time
-3. (this report)
+3. `fcf6fbf` — initial audit report
+4. *(this update)* — concat reordered to [Map, List]; ambiguous cases resolved per user decision

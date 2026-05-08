@@ -21,7 +21,7 @@ var stringNatives = []NativeFunc{
 		Name:              "concat",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList, TMap}, Handler: concatOptsHandler, Returns: []Type{TString}},
+			{Args: []Type{TMap, TList}, Handler: concatOptsHandler, Returns: []Type{TString}},
 			{Args: []Type{TList}, Handler: concatHandler, Returns: []Type{TString}},
 		},
 	},
@@ -148,8 +148,8 @@ func concatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 }
 
 func concatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	opts := parseStrOpts(args[1])
-	return doConcat(args[0], opts)
+	opts := parseStrOpts(args[0])
+	return doConcat(args[1], opts)
 }
 
 func doConcat(listVal Value, o strOpts) ([]Value, error) {
