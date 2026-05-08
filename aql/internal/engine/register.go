@@ -54,26 +54,18 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
-	// I/O
-	RegisterFileIO(r)
+	// I/O, help, module, temporal (consolidated)
+	for _, n := range miscNatives {
+		r.RegisterNativeFunc(n)
+	}
 	RegisterPrint(r)
 	RegisterTrace(r)
 
 	// Unify
 	RegisterUnify(r)
 
-	// Module
-	RegisterModule(r)
-
 	// Array (core + higher-order)
 	for _, n := range arrayNatives {
 		r.RegisterNativeFunc(n)
 	}
-
-	// Temporal
-	RegisterTimeout(r)
-	RegisterAwait(r)
-
-	// Help
-	RegisterHelp(r)
 }

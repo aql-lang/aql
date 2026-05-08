@@ -1,98 +1,11 @@
 package engine
 
 import (
-	"fmt"
 	"sync"
 )
 
-// RegisterAwait registers the "await" word.
-//
-// await: [(make Options {mode:'all'})? parallels:[:Any]/q] → results
-//
-// Runs each element of the parallels list in parallel using do semantics.
-// Each element should be a list (code body) that is evaluated in its own
-// sub-engine goroutine. Elements that produce an error value "reject".
-//
-// Modes (correspond to JS Promise utility functions):
-//
-//   - 'all (default): waits for all to succeed. If any reject, returns the
-//     first error. Otherwise returns a list of all results.
-//   - 'full (JS allSettled): waits for all to complete. Returns a list of
-//     maps, each with {status:'ok, value:...} or {status:'error, value:...}.
-//   - 'first (JS race): returns the result of whichever finishes first,
-//     whether success or error.
-//   - 'any: returns the first successful result. If all reject, returns
-//     the last error.
-func RegisterAwait(r *Registry) {
-	awaitHandler := func(mode string, parallels Value) ([]Value, error) {
-		if parallels.Data == nil {
-			return nil, fmt.Errorf("await: parallels must be a concrete list, got type literal")
-		}
-		elems := parallels.AsList().Slice()
-		if len(elems) == 0 {
-			return []Value{NewList([]Value{})}, nil
-		}
-
-		switch mode {
-		case "all":
-			return awaitAll(r, elems)
-		case "full":
-			return awaitFull(r, elems)
-		case "first":
-			return awaitFirst(r, elems)
-		case "any":
-			return awaitAny(r, elems)
-		default:
-			return nil, fmt.Errorf("await: unknown mode %q, expected all, full, first, or any", mode)
-		}
-	}
-
-	withOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		// args[0] = Options, args[1] = List (parallels)
-		mode := "all"
-		if oi, err := args[0].AsOptionsType(); err == nil {
-			if v, ok := oi.Fields.Get("mode"); ok {
-				if s, err := v.AsString(); err == nil {
-					mode = s
-				} else if a, err := v.AsAtom(); err == nil {
-					mode = a
-				}
-			}
-		} else if optsMap := args[0].AsMap(); optsMap != nil {
-			if v, ok := optsMap.Get("mode"); ok {
-				if s, err := v.AsString(); err == nil {
-					mode = s
-				} else if a, err := v.AsAtom(); err == nil {
-					mode = a
-				}
-			}
-		}
-		return awaitHandler(mode, args[1])
-	}
-
-	defaultHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		return awaitHandler("all", args[0])
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "await",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args:       []Type{TOptions, TList},
-				NoEvalArgs: map[int]bool{1: true},
-				Handler:    withOptsHandler,
-				Returns: []Type{TAny},
-			},
-			{
-				Args:       []Type{TList},
-				NoEvalArgs: map[int]bool{0: true},
-				Handler:    defaultHandler,
-				Returns: []Type{TAny},
-			},
-		},
-	})
-}
+// The "await" word lives in miscNatives (native_misc.go). Below
+// are the parallel-branch helpers used by the dispatcher.
 
 // parallelResult holds the outcome of one parallel branch.
 type parallelResult struct {

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -352,43 +351,3 @@ func inferUnaryMathReturns(name string, sig Signature) []string {
 	}
 }
 
-func RegisterHelp(r *Registry) {
-	// help: [] -> [] (print self-help)
-	selfHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		fmt.Fprintln(r.Output, "help — Show help for an AQL word.")
-		fmt.Fprintln(r.Output, "")
-		fmt.Fprintln(r.Output, "Usage:")
-		fmt.Fprintln(r.Output, "  help              Show this message.")
-		fmt.Fprintln(r.Output, "  <word> help       Show help for a word (e.g. add help).")
-		fmt.Fprintln(r.Output, "  \"<name>\" help     Show help by string name (e.g. \"concat\" help).")
-		return nil, nil
-	}
-
-	// help: [atom] -> [] or [string] -> []
-	wordHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := ValToString(args[0])
-		info := BuildFuncInfo(r, name)
-		if info == nil {
-			fmt.Fprintf(r.Output, "help: no help available for %q\n", name)
-			return nil, nil
-		}
-		fmt.Fprint(r.Output, help.FormatDynamic(*info))
-		return nil, nil
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "help",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TString}, Handler: wordHandler},
-			{Args: []Type{TAtom}, Handler: wordHandler},
-			{
-				Args:      []Type{TAtom},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   wordHandler,
-				Returns:   []Type{},
-			},
-			{Args: []Type{}, Handler: selfHandler},
-		},
-	})
-}
