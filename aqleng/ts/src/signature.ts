@@ -15,9 +15,19 @@ export type Handler = (
 ) => Value[] | Promise<Value[]>
 
 export interface Signature {
-  /** Argument types, deepest-first (Args[0] = deepest stack / first forward). */
+  /** Argument types in sig order (sig[0] is the first arg the handler sees). */
   args: AqlType[]
   handler: Handler
+  /**
+   * Position of the boundary marker `|` in the sig (post-§1.4).
+   * Args before the boundary may be collected from forward tokens or
+   * fall back to the stack; args from the boundary onward must come
+   * from the stack. 0 = all stack (old "stack-only"); N = all
+   * forward-eligible (old "forward-precedence"); 0 < B < N = mixed.
+   * Set automatically by Registry.registerNativeFunc when the
+   * NativeSig leaves it unset.
+   */
+  barrierPos?: number
   /**
    * Optional value-patterns indexed by arg position. A concrete-scalar
    * pattern fires the §1.1 literal-dispatch path: the matched arg
@@ -37,6 +47,7 @@ export interface Signature {
 export interface NativeSig {
   args: AqlType[]
   handler: Handler
+  barrierPos?: number
   patterns?: Map<number, Value>
   noEvalArgs?: Set<number>
   fallback?: boolean

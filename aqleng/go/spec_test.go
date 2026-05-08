@@ -88,8 +88,14 @@ func registerSpecWords(r *Registry) {
 		Name: "swap",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
+			// Under the unified §1.4 dispatch rule, args[0] is the
+			// top of the stack and args[1] is the next-deeper. The
+			// splice writes the handler's return slice in source
+			// order, so emitting [args[0], args[1]] places the old
+			// top at the deeper position and the old next-deeper at
+			// the top — i.e. the two values are swapped on the stack.
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{args[1], args[0]}, nil
+				return []Value{args[0], args[1]}, nil
 			},
 		}},
 	})

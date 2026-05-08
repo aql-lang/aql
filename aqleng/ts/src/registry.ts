@@ -71,14 +71,21 @@ export class Registry {
     return this.functions.get(name)
   }
 
-  /** Register a NativeFunc — converts NativeSig → Signature and stores under name. */
+  /**
+   * Register a NativeFunc. Each signature gets a boundary normalised:
+   * if the NativeSig leaves `barrierPos` unset, it defaults to the
+   * sig's arg count when `forwardPrecedence: true` (old forward-prec
+   * semantics → all args forward-eligible) and to 0 otherwise (old
+   * stack-only → all args from stack).
+   */
   registerNativeFunc(fn: NativeFunc): void {
-    const entry = this.upsert(fn.name, fn.forwardPrecedence ?? false)
+    const forwardPrec = fn.forwardPrecedence ?? false
+    const entry = this.upsert(fn.name, forwardPrec)
     for (const ns of fn.signatures) {
-      entry.signatures.push(this.toSignature(ns))
+      entry.signatures.push(this.toSignature(ns, forwardPrec))
     }
     sortSignatures(entry.signatures)
-    entry.maxForwardArgs = computeMaxForward(entry, fn.forwardPrecedence ?? false)
+    entry.maxForwardArgs = computeMaxForward(entry)
   }
 
   private upsert(name: string, forward: boolean): FunctionEntry {
@@ -87,16 +94,20 @@ export class Registry {
       entry = { name, signatures: [], forwardPrecedence: forward, maxForwardArgs: 0 }
       this.functions.set(name, entry)
     } else {
-      // Forward-precedence sticks once set.
       entry.forwardPrecedence = entry.forwardPrecedence || forward
     }
     return entry
   }
 
-  private toSignature(ns: NativeSig): Signature {
+  private toSignature(ns: NativeSig, forwardPrec: boolean): Signature {
+    let barrierPos = ns.barrierPos
+    if (barrierPos === undefined) {
+      barrierPos = forwardPrec ? ns.args.length : 0
+    }
     return {
       args: ns.args,
       handler: ns.handler,
+      barrierPos,
       patterns: ns.patterns,
       noEvalArgs: ns.noEvalArgs,
       fallback: ns.fallback,
@@ -142,11 +153,11 @@ export class Registry {
   }
 }
 
-function computeMaxForward(entry: FunctionEntry, forwardPrecedence: boolean): number {
-  if (!forwardPrecedence) return 0
+function computeMaxForward(entry: FunctionEntry): number {
   let max = 0
   for (const sig of entry.signatures) {
-    if (sig.args.length > max) max = sig.args.length
+    const limit = sig.barrierPos ?? 0
+    if (limit > max) max = limit
   }
   return max
 }

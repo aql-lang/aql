@@ -25,12 +25,15 @@ package aqleng
 // deferred collection. Positions < pointer are stack args. Returns nil
 // sig if no signature matches.
 func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
-	stackOnly := !fn.ForwardPrecedence && !w.ForceForward
-	skipForward := (stackOnly || w.ForceStack) && !w.ForceForward
-	insideForward := false
-	if !stackOnly {
-		insideForward = e.isInsidePendingForward()
-	}
+	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
+	// dichotomy at the word level. Each sig declares its own boundary
+	// via BarrierPos — the count of leading args that may be collected
+	// from forward tokens. Args at sig[BarrierPos..N-1] always come
+	// from the stack, top-down. The /s and /f modifiers override
+	// BarrierPos at the call site:
+	//   - /s (ForceStack)   → boundary at 0, all stack
+	//   - /f (ForceForward) → boundary at N, all forward
+	insideForward := e.isInsidePendingForward()
 
 	// When the next forward token is a Word, prefer signatures
 	// expecting TWord or /q at position 0 (inspect-style name
@@ -41,7 +44,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// `m.Color` after import (Color is a key in the imported map),
 	// and inspect-style name capture.
 	preferWordSig := false
-	if !skipForward && e.pointer+1 < len(e.stack) {
+	if e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
 		if next.IsWord() {
 			preferWordSig = true
@@ -82,23 +85,29 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		isPreferred := preferWordSig && nArgs > 0 &&
 			(sig.Args[0].Equal(TWord) || (sig.QuoteArgs != nil && sig.QuoteArgs[0]))
 
+		// Effective forward limit for this match attempt. /s and /f
+		// override the sig's declared boundary.
+		forwardLimit := sig.BarrierPos
+		switch {
+		case w.ForceStack:
+			forwardLimit = 0
+		case w.ForceForward:
+			forwardLimit = nArgs
+		}
+
 		// ── Step 1: forward matching ─────────────────────────────
 
 		positions := make([]int, nArgs)
 		fwd := 0 // number of params matched by forward tokens
 
-		// 1.1: if stack-only and not /f, skip forward scan entirely.
-		if !skipForward {
+		// Always run the forward scan up to forwardLimit; if it's 0
+		// the loop simply doesn't execute and all args come from
+		// the stack below.
+		{
 			scanIdx := e.pointer + 1
 
 			// One inner loop over parameters, matching forward tokens.
-			for fwd < nArgs && scanIdx < len(e.stack) {
-				// 1.3: stop at /N limit (encoded as BarrierPos).
-				// Only apply when stack args exist; in pure prefix
-				// position, allow collecting all args forward.
-				if sig.BarrierPos > 0 && fwd >= sig.BarrierPos && len(resolved) > 0 {
-					break
-				}
+			for fwd < forwardLimit && scanIdx < len(e.stack) {
 
 				tok := e.stack[scanIdx]
 				expectedType := sig.Args[fwd]
@@ -288,8 +297,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 
-		// /f means all args must come from forward.
-		if w.ForceForward && fwd > 0 {
+		// /f means all args must come from forward — if any args
+		// remain unmatched after the forward scan, this sig fails.
+		if w.ForceForward && fwd < nArgs {
 			continue
 		}
 
@@ -300,25 +310,15 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue // not enough stack values
 		}
 
-		// 2.1: match remaining params against the stack.
-		// Forward-prec words: nearest first (top → sig.Args[fwd]).
-		// Stack-only / ForceStack: deepest first.
-		nearestFirst := !stackOnly && !w.ForceStack
-
-		// When forward matched some args (fwd > 0), only nearest-first
-		// is valid for the stack remainder.
-		if fwd > 0 && !nearestFirst {
-			continue
-		}
+		// 2.1: match remaining sig positions against the stack,
+		// top-down. sig[fwd] = top of stack, sig[fwd+1] = next deeper,
+		// etc. This is the "stack in reverse order" half of the
+		// unified rule — same for stack-only sigs (BarrierPos=0)
+		// as for partial-boundary sigs.
 
 		allMatch := true
 		for j := 0; j < remaining; j++ {
-			var ri int
-			if nearestFirst {
-				ri = len(resolvedIdx) - 1 - j
-			} else {
-				ri = len(resolvedIdx) - remaining + j
-			}
+			ri := len(resolvedIdx) - 1 - j
 			stackVal := resolved[ri]
 			sigIdx := fwd + j
 

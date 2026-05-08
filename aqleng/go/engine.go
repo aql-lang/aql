@@ -1123,13 +1123,20 @@ func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n i
 	return nil
 }
 
-// rearrangeForForward reorders the N = stackArgs + forwardArgs resolved values
-// before the current pointer so that forward-collected args come first (mapped
-// to the beginning of the signature) and stack args follow in reverse order
-// (top of stack → first remaining sig arg).
+// rearrangeForForward reorders the N = stackArgs + forwardArgs resolved
+// values before the current pointer to match what the unified matcher
+// (post §1.4) will read with ForceStack on retry: stack-top-down is sig
+// order. The first-collected forward arg is the canonical sig[0], so it
+// has to sit on top of the stack. The pre-existing prefix args stay
+// where they were (their order maps to sig[fwdCount..N-1] under the
+// same top-down read).
 //
-// Before: [..., stack_0, stack_1, ..., stack_{S-1}, fwd_0, fwd_1, ..., fwd_{F-1}, WORD]
-// After:  [..., fwd_0, fwd_1, ..., fwd_{F-1}, stack_{S-1}, ..., stack_1, stack_0, WORD]
+// Before: [..., stk_0, stk_1, ..., stk_{S-1}, fwd_0, fwd_1, ..., fwd_{F-1}, WORD]
+// After:  [..., stk_0, stk_1, ..., stk_{S-1}, fwd_{F-1}, ..., fwd_1, fwd_0, WORD]
+//
+// Under the post-rearrange layout, stack-top-down = [fwd_0, fwd_1, …,
+// fwd_{F-1}, stk_{S-1}, stk_{S-2}, …, stk_0], which the unified
+// matcher reads as sig[0..N-1] in order.
 func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 	total := stackArgs + forwardArgs
 	if total == 0 {
@@ -1147,13 +1154,14 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 		values[i] = e.stack[idx]
 	}
 
-	// Reorder: forward args first, then stack args reversed.
+	// Reorder: stack args stay in source order; forward args go after
+	// them in REVERSED collection order so fwd_0 sits at the top.
 	reordered := make([]Value, total)
-	for i := 0; i < forwardArgs; i++ {
-		reordered[i] = values[stackArgs+i]
-	}
 	for i := 0; i < stackArgs; i++ {
-		reordered[forwardArgs+i] = values[stackArgs-1-i]
+		reordered[i] = values[i]
+	}
+	for i := 0; i < forwardArgs; i++ {
+		reordered[stackArgs+i] = values[total-1-i]
 	}
 
 	// Write back.

@@ -83,7 +83,13 @@ function registerSpecWords(r: Registry): void {
     signatures: [
       {
         args: [TAny, TAny],
-        handler: (args) => [args[1]!, args[0]!],
+        // Under the unified §1.4 dispatch rule, args[0] is the top
+        // of the stack and args[1] is the next-deeper. The splice
+        // writes the handler's return slice in source order, so
+        // returning [args[0], args[1]] places the old top at the
+        // deeper position and the old next-deeper at the top — the
+        // two values come out swapped on the stack.
+        handler: (args) => [args[0]!, args[1]!],
       },
     ],
   })

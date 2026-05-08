@@ -315,7 +315,21 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // and appends the given compiled signatures. If the top entry is already a
 // FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
 // is pushed.
+//
+// Normalisation: every appended sig has its BarrierPos set on the way in.
+// BarrierPos is the position of the boundary marker (`|`) in the sig:
+// args before it can be forward-collected, args from it onward must come
+// from the stack (top-down). When forwardPrec is true and BarrierPos is
+// still zero, we set it to len(Args) — i.e. the boundary is at the end,
+// every arg is forward-eligible. When forwardPrec is false (old
+// stack-only registration), BarrierPos stays at zero — boundary at the
+// start, every arg from the stack.
 func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
+	for i := range sigs {
+		if sigs[i].BarrierPos == 0 && forwardPrec && len(sigs[i].Args) > 0 {
+			sigs[i].BarrierPos = len(sigs[i].Args)
+		}
+	}
 	// If the top of the stack is already a FnDefInfo, update it in place.
 	if top, ok := r.TopOfDefStack(name); ok {
 		if fnDef, ok := top.Data.(FnDefInfo); ok {
@@ -340,16 +354,15 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args needed
-// across all signatures. For sigs with a barrier, only positions before
-// the barrier count. This tells the engine how far ahead to scan and
+// across all signatures. Under the unified dispatch rule, the forward
+// limit is exactly sig.BarrierPos (which has been normalised at
+// registration to len(Args) for old forward-prec sigs and 0 for
+// old stack-only). This tells the engine how far ahead to scan and
 // pre-evaluate paren expressions before signature matching.
 func calcMaxForwardArgs(sigs []Signature) int {
 	max := 0
 	for i := range sigs {
-		n := len(sigs[i].Args)
-		if sigs[i].BarrierPos > 0 && sigs[i].BarrierPos < n {
-			n = sigs[i].BarrierPos
-		}
+		n := sigs[i].BarrierPos
 		if n > max {
 			max = n
 		}
