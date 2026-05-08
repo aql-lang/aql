@@ -1,12 +1,13 @@
 // Engine.run is the interpreter loop. It walks left-to-right through
-// the input values, dispatching words via signature matching and
-// passing literals through.
+// the input values, dispatching words via signature matching, passing
+// literals through, and pre-evaluating paren groups so a function
+// word's forward scan sees fully-resolved values.
 //
 // PARITY GAP: the Go engine has step budgets, check-mode, trace,
-// loop break/continue handling, paren pre-evaluation, mark/move
-// continuation, args-stack, context-store push/pop, interpolated
-// strings, parser-eval lists, and module sub-engines. The TS port
-// here is the interpreter slice that the current TSV specs reach.
+// loop break/continue handling, mark/move continuation, args-stack,
+// context-store push/pop, interpolated strings, parser-eval lists,
+// and module sub-engines. The TS port here is the interpreter slice
+// that the current TSV specs reach.
 import { AqlError } from './error.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
@@ -14,6 +15,7 @@ import {
   TBoolean,
   TInteger,
   TString,
+  TWord,
   typeNameTable,
 } from './type.ts'
 import {
@@ -47,6 +49,14 @@ export class Engine {
 
       const val = this.stack[this.pointer]!
       if (val.isWord()) {
+        const w = val.asWord() as WordInfo
+        if (w.name === '(') {
+          this.evalParenAt(this.pointer)
+          continue
+        }
+        if (w.name === ')') {
+          throw new AqlError('syntax_error', `unmatched ')'`, ')')
+        }
         this.stepWord(val)
       } else {
         this.pointer++
@@ -89,6 +99,11 @@ export class Engine {
       throw new AqlError('undefined_word', `undefined word: ${name}`, name)
     }
 
+    // Pre-evaluate any paren groups in the forward window so the
+    // matcher sees concrete values. The window is bounded by the
+    // function's largest forward-eligible arg count across all sigs.
+    this.preEvalParens(fn.maxForwardArgs)
+
     const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
       throw new AqlError(
@@ -116,6 +131,96 @@ export class Engine {
     this.pointer = replaceFrom + out.length
   }
 
+  /**
+   * Evaluate the paren group whose `(` sits at `idx`. Finds the
+   * matching `)` (accounting for nesting), runs a sub-engine on the
+   * contents, and splices the results back in place of the
+   * `(...)`. The pointer is positioned at the first result so the
+   * outer interpreter can pick it up on the next iteration.
+   */
+  private evalParenAt(idx: number): void {
+    const closeIdx = this.findMatchingClose(idx)
+    if (closeIdx < 0) {
+      throw new AqlError('syntax_error', `unmatched '('`, '(')
+    }
+    const inner = this.stack.slice(idx + 1, closeIdx)
+    const sub = new Engine(this.registry)
+    const results = sub.run(inner)
+    this.stack.splice(idx, closeIdx - idx + 1, ...results)
+    // Don't advance the pointer; the next iteration will process the
+    // first spliced result.
+  }
+
+  /**
+   * Find the index of the `)` that closes the `(` at `openIdx`.
+   * Returns -1 if no matching close is found. Tracks paren depth so
+   * nested groups don't break out prematurely.
+   */
+  private findMatchingClose(openIdx: number): number {
+    let depth = 1
+    for (let i = openIdx + 1; i < this.stack.length; i++) {
+      const v = this.stack[i]!
+      if (!v.isWord()) continue
+      const name = (v.asWord() as WordInfo).name
+      if (name === '(') depth++
+      else if (name === ')') {
+        depth--
+        if (depth === 0) return i
+      }
+    }
+    return -1
+  }
+
+  /**
+   * Pre-evaluate paren groups in the forward window so matchSignature
+   * sees concrete values. Scans from pointer+1 forward; for each `(`
+   * encountered within the window, evaluates that paren in-place
+   * (which splices its results back into the main stack). Stops at a
+   * structural boundary or a registered function word.
+   *
+   * `maxFwd` is the upper bound on how many forward values we might
+   * need to resolve — taken from FunctionEntry.maxForwardArgs.
+   */
+  private preEvalParens(maxFwd: number): void {
+    if (maxFwd <= 0) return
+    let resolved = 0
+    let scanIdx = this.pointer + 1
+    let guard = 0
+    while (resolved < maxFwd && scanIdx < this.stack.length && guard < 2222) {
+      guard++
+      const tok = this.stack[scanIdx]!
+      if (!tok.isWord()) {
+        resolved++
+        scanIdx++
+        continue
+      }
+      const name = (tok.asWord() as WordInfo).name
+      if (name === ')' || name === 'end') break
+      if (name === '(') {
+        const before = this.stack.length
+        this.evalParenAt(scanIdx)
+        const produced = this.stack.length - (before - 1) // closeIdx - openIdx + 1 was removed; results were inserted
+        // After the splice the first result is at `scanIdx`. Each
+        // produced value counts toward the resolved budget. If the
+        // paren produced zero values, advance scanIdx to skip the
+        // (now-empty) slot — but since we removed (openIdx..closeIdx)
+        // and inserted N values, scanIdx still points at the first
+        // result (or past it if N==0).
+        if (produced <= 0) continue
+        resolved += produced
+        scanIdx += produced
+        continue
+      }
+      // A registered function word in the forward window is a
+      // boundary — leave it for the outer matcher to either consume
+      // (e.g. if the sig accepts TWord) or reject. Simple-def words
+      // count as one resolved value.
+      if (this.registry.lookup(name)) break
+      resolved++
+      scanIdx++
+    }
+  }
+
   private describeStack(): string {
     return this.stack
       .map((v, i) => (i === this.pointer ? `>>>${v.toString()}<<<` : v.toString()))
@@ -133,4 +238,4 @@ function describeExpected(fn: import('./registry.js').FunctionEntry): string {
 // Suppress "imported but unused" in stricter setups where these are
 // referenced only in match.ts. They're re-exported here for users
 // that want a single import point.
-export { TBoolean, TInteger, TString }
+export { TBoolean, TInteger, TString, TWord, Value }
