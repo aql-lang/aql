@@ -16,7 +16,7 @@ func TestFetchFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	RegisterFetch(r)
+	Register(r)
 	fn := r.Lookup("fetch")
 	if fn == nil {
 		t.Fatal("expected word 'fetch' to be registered")

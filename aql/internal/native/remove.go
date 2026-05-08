@@ -6,51 +6,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// removeFunc returns the "remove" native function definition.
-// remove has forward precedence and three signatures:
-//   - [map(kind:"api")] — removes an entity via the SDK
-//   - [table, map]      — removes the record whose "id" matches the map's "id" field
-//   - [map, map]        — record type + filter: returns empty table
-func RegisterRemove(r *engine.Registry) {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "remove",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: removeEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: removeEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  removeAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  removeAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: removeHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: removeRecordHandler,
-			},
-		},
-	})
-}
-
+// The "remove" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // removeEntityHandler handles remove with an Entity object instance.
 func removeEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])

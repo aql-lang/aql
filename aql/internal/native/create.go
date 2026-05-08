@@ -6,51 +6,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// createFunc returns the "create" native function definition.
-// create has forward precedence and three signatures:
-//   - [map(kind:"api")] — creates an entity via the SDK
-//   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
-//   - [map, map]        — record type + record: returns empty table
-func RegisterCreate(r *engine.Registry) {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "create",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: createEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: createEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  createAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  createAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: createHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: createRecordHandler,
-			},
-		},
-	})
-}
-
+// The "create" word is registered via the consolidated Natives slice in
+// natives.go. Handlers below cover the SDK/table/record overloads.
+//
 // createEntityHandler handles create with an Entity object instance.
 func createEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])

@@ -7,22 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// itemsFunc returns the "items" native function definition.
-// items has forward precedence and one signature:
-//   - [any] — returns key-value pairs as a list of [key, value] lists
-func RegisterItems(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "items",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny},
-				Handler: itemsHandler,
-			},
-		},
-	})
-}
-
+// The "items" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // itemsHandler calls voxgigstruct.Items and converts the result to a list of
 // two-element lists [key, value].
 func itemsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {

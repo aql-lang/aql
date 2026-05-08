@@ -7,22 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// selectorFunc returns the "selector" native function definition.
-// selector has forward precedence and one signature:
-//   - [any, map] — selects children matching the query map using voxgig struct Select
-func RegisterSelector(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "selector",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TMap},
-				Handler: selectorHandler,
-			},
-		},
-	})
-}
-
+// The "selector" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // selectorHandler calls voxgig struct Select, converting between
 // engine.Value and Go any types.
 func selectorHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {

@@ -6,61 +6,11 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// listFunc returns the "list" native function definition.
-// list has forward precedence and four signatures:
-//   - [table, map]  — returns records whose fields match the map's key-value pairs
-//   - [table]       — returns all records from the table
-//   - [map, map]    — record type + filter: returns empty table
-//   - [map]         — record type: returns empty table
-func RegisterList(r *engine.Registry) {
-	// Pattern for {kind:"api", ...} — matches maps where kind is literal "api".
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "list",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: listEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: listEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  listAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  listAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: listFilterHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: listAllHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: listRecordFilterHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap},
-				Handler: listRecordAllHandler,
-			},
-		},
-	})
-}
-
+// The "list" word is registered via the consolidated Natives slice in
+// natives.go. This file keeps the SDK/table/record-type handlers along
+// with shared helpers (recordMatches, valuesEqual) used by load/update/
+// remove.
+//
 // listEntityHandler handles list with an Entity object instance.
 func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])

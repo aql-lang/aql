@@ -7,27 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// flattenFunc returns the "flatten" native function definition.
-// flatten has forward precedence and two signatures:
-//   - [list, integer] — flattens the list to the given depth
-//   - [list]          — flattens the list by one level
-func RegisterFlatten(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "flatten",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TList, engine.TInteger},
-				Handler: flattenDepthHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: flattenDefaultHandler,
-			},
-		},
-	})
-}
-
+// The "flatten" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // flattenDefaultHandler calls voxgigstruct.Flatten with default depth (1).
 func flattenDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])

@@ -8,32 +8,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// mergeFunc returns the "merge" native function definition.
-// merge has forward precedence and multiple signatures:
-//   - [list, map] — create new list with map's integer keys replacing elements
-//   - [map, list] — create new list from list, appending map's in-range integer-keyed values
-//   - [any, any]  — deep-merges the second value into the first using voxgig struct Merge
-func RegisterMerge(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "merge",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: mergeListMapHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TList},
-				Handler: mergeMapListHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TAny, engine.TAny},
-				Handler: mergeHandler,
-			},
-		},
-	})
-}
-
+// The "merge" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // mergeHandler calls voxgigstruct.Merge on two values, returning the merged result.
 func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	a := valueToAny(args[0])

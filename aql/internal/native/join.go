@@ -7,27 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// joinFunc returns the "join" native function definition.
-// join has forward precedence and two signatures:
-//   - [list, string] — joins the list elements with the given separator
-//   - [list]         — joins the list elements with a comma
-func RegisterJoin(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "join",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TList, engine.TString},
-				Handler: joinSepHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: joinDefaultHandler,
-			},
-		},
-	})
-}
-
+// The "join" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // joinDefaultHandler calls voxgigstruct.Join with default separator (comma).
 func joinDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])

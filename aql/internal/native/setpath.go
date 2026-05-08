@@ -7,30 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// setpathFunc returns the "setpath" native function definition.
-// setpath has forward precedence and two signatures covering both
-// calling conventions:
-//   - [string, any, any] — "data setpath path newVal" (string nearest forward)
-//   - [any, string, any] — "setpath data path newVal" (all forward, data first)
+// The "setpath" word is registered via the consolidated Natives slice in
+// natives.go.
 //
-// The handler is position-agnostic: it finds the string arg as the path.
-func RegisterSetpath(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "setpath",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TString, engine.TAny, engine.TAny},
-				Handler: setpathHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TAny, engine.TString, engine.TAny},
-				Handler: setpathHandler,
-			},
-		},
-	})
-}
-
 // setpathHandler calls voxgigstruct.SetPath to set a nested value.
 // Position-agnostic: finds the string arg (path), then determines
 // which of the remaining args is data vs new value.

@@ -460,43 +460,26 @@ func TestWalkHandlerEmpty(t *testing.T) {
 // --- Register functions ---
 
 func TestRegisterFunctions(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   func(*engine.Registry)
-	}{
-		{"clone", RegisterClone},
-		{"create", RegisterCreate},
-		{"filter", RegisterFilter},
-		{"flatten", RegisterFlatten},
-		{"getpath", RegisterGetpath},
-		{"inject", RegisterInject},
-		{"items", RegisterItems},
-		{"join", RegisterJoin},
-		{"jsonify", RegisterJsonify},
-		{"list", RegisterList},
-		{"load", RegisterLoad},
-		{"merge", RegisterMerge},
-		{"pad", RegisterPad},
-		{"remove", RegisterRemove},
-		{"selector", RegisterSelector},
-		{"setpath", RegisterSetpath},
-		{"size", RegisterSize},
-		{"slice", RegisterSlice},
-		{"transform", RegisterTransform},
-		{"update", RegisterUpdate},
-		{"validate", RegisterValidate},
-		{"walk", RegisterWalk},
+	// After consolidation, registration is driven by a single Natives slice
+	// installed via the public Register entry point. Verify each formerly
+	// per-word name still resolves to a registered function with at least
+	// one signature whose handler is non-nil.
+	names := []string{
+		"clone", "create", "filter", "flatten", "getpath", "inject",
+		"items", "join", "jsonify", "list", "load", "merge", "pad",
+		"remove", "selector", "setpath", "size", "slice", "transform",
+		"update", "validate", "walk",
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
 			r, err := engine.NewRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			tt.fn(r)
-			fn := r.Lookup(tt.name)
+			Register(r)
+			fn := r.Lookup(name)
 			if fn == nil {
-				t.Fatalf("expected word %q to be registered", tt.name)
+				t.Fatalf("expected word %q to be registered", name)
 			}
 			if len(fn.Signatures) == 0 {
 				t.Error("expected at least one signature")

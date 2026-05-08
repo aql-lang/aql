@@ -7,22 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// getpathFunc returns the "getpath" native function definition.
-// getpath has forward precedence and one signature:
-//   - [any, string] — retrieves a value at a dot-separated path from the data
-func RegisterGetpath(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "getpath",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TString},
-				Handler: getpathHandler,
-			},
-		},
-	})
-}
-
+// The "getpath" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.
 func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
