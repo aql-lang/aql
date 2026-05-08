@@ -201,6 +201,22 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // pair: mixed-barrier sig [Integer | Integer]. Forward fills
+  // sig[0]; sig[1] must come from the stack. The handler formats
+  // "args[0]:args[1]" so the binding is visible in the output.
+  reg({
+    name: 'pair',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger, TInteger],
+        barrierPos: 1,
+        handler: (args) =>
+          [newString(`${args[0]!.asInteger().toString()}:${args[1]!.asInteger().toString()}`)],
+      },
+    ],
+  })
+
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
   // dispatch, provided the value isn't an FnDef / ObjectType.

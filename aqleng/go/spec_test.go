@@ -251,6 +251,24 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 
+	// pair: mixed-barrier sig [Integer | Integer]. Forward fills
+	// sig[0]; sig[1] must come from the stack. The handler formats
+	// "args[0]:args[1]" so the binding is visible in the output.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "pair",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TInteger, TInteger},
+			BarrierPos: 1,
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				a, _ := args[0].AsInteger()
+				b, _ := args[1].AsInteger()
+				return []Value{NewString(fmt.Sprintf("%d:%d", a, b))}, nil
+			},
+			Returns: []Type{TString},
+		}},
+	})
+
 	// Simple-value defs the def.tsv spec references. A word whose name
 	// is in the def stack is substituted by its value before normal
 	// dispatch, provided the value isn't an FnDef / ObjectType.
