@@ -34,14 +34,9 @@ func Register(r *Registry) {
 	}
 
 	// Definition
-	RegisterDef(r)
-	RegisterUndef(r)
-	RegisterVar(r)
-	RegisterFn(r)
-	RegisterCall(r)
-	RegisterDblcall(r)
-	RegisterArgs(r)
-	RegisterPopArgs(r)
+	for _, n := range definitionNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Type
 	for _, n := range typeNatives {
