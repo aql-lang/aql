@@ -2,11 +2,12 @@
 //
 // Reads the SAME .tsv files at ../test/spec/ relative to this
 // project (i.e. aqleng/test/spec/) and runs each row through the
-// TypeScript engine. The runner registers the same fixed test
-// words (add/sub/mul/neg/dup/swap/drop/concat/not/describe/tag) as
-// the Go runner so the spec set is shared.
+// TypeScript engine. Uses the built-in node:test runner (Node 24+);
+// the project relies on Node's experimental type-stripping so the
+// .ts source executes without a transpile step.
 
-import { describe, expect, it } from 'vitest'
+import { describe, it } from 'node:test'
+import { strict as assert } from 'node:assert'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,14 +24,14 @@ import {
   TInteger,
   TNone,
   TString,
-  Value,
+  type Value,
   newBoolean,
   newDecimal,
   newInteger,
   newString,
   newTypeLiteral,
   newWord,
-} from './index.js'
+} from './index.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -274,17 +275,18 @@ describe('spec', () => {
           const result = runRow(row)
           if (row.expected.startsWith('ERROR:')) {
             const want = row.expected.slice('ERROR:'.length)
-            expect(result.ok, `expected error containing ${JSON.stringify(want)}`).toBe(false)
-            if (!result.ok) {
-              if (want !== '') {
-                expect(result.err.toLowerCase()).toContain(want.toLowerCase())
-              }
+            assert.ok(!result.ok, `expected error containing ${JSON.stringify(want)}`)
+            if (!result.ok && want !== '') {
+              assert.ok(
+                result.err.toLowerCase().includes(want.toLowerCase()),
+                `error ${JSON.stringify(result.err)} does not contain ${JSON.stringify(want)}`,
+              )
             }
             return
           }
-          expect(result.ok, result.ok ? '' : `unexpected error: ${result.err}`).toBe(true)
+          assert.ok(result.ok, result.ok ? '' : `unexpected error: ${result.err}`)
           if (result.ok) {
-            expect(result.got).toBe(row.expected)
+            assert.equal(result.got, row.expected)
           }
         })
       }

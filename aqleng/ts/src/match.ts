@@ -22,10 +22,10 @@
 //   3 10 sub       → f=0, p=2 [3,10] nearest-first      → sig[0]=10, sig[1]=3   → 7
 //   10 sub 3       → f=1 [3],  p=1 [10] nearest         → sig[0]=3,  sig[1]=10  → -7  (swap form)
 
-import type { FunctionEntry } from './registry.js'
-import type { Signature } from './signature.js'
-import { TAtom, TBoolean, TWord } from './type.js'
-import type { Value } from './value.js'
+import type { FunctionEntry } from './registry.ts'
+import type { Signature } from './signature.ts'
+import { TAtom, TBoolean, TWord } from './type.ts'
+import type { Value } from './value.ts'
 
 export interface MatchResult {
   /** The matched signature. */
@@ -157,7 +157,7 @@ function tryStackOnly(
  * Any-matches-everything, lattice subtype, and treats words / atoms /
  * booleans for the limited dispatch the spec uses.
  */
-export function sigTypeMatches(v: Value, expected: import('./type.js').AqlType): boolean {
+export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
   return v.vType.matches(expected)
 }
 

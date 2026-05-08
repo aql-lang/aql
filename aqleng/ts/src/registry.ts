@@ -7,9 +7,9 @@
 // stack). Those are intentionally omitted here — adding them would
 // inflate the port without helping the specs run. A full-parity
 // version would mirror them one-for-one.
-import type { NativeFunc, NativeSig, Signature } from './signature.js'
-import { sortSignatures } from './signature.js'
-import type { Value } from './value.js'
+import type { NativeFunc, NativeSig, Signature } from './signature.ts'
+import { sortSignatures } from './signature.ts'
+import type { Value } from './value.ts'
 
 /** A registered word with its overloaded signatures + dispatch flags. */
 export interface FunctionEntry {
@@ -26,16 +26,38 @@ export class Registry {
   private capabilities = new Map<string, unknown>()
 
   // ── Capabilities ──────────────────────────────────────────────────────
-  capability(name: string): unknown | undefined {
-    return this.capabilities.get(name)
+
+  /** Returns true iff a capability is registered under `name`. */
+  hasCapability(name: string): boolean {
+    return this.capabilities.has(name)
   }
 
+  /**
+   * Look up the value stored under `name`. Returns a tuple analogous
+   * to Go's (value, ok) so a stored null/undefined value is
+   * distinguishable from "no capability registered".
+   */
+  capability(name: string): [unknown, true] | [undefined, false] {
+    if (!this.capabilities.has(name)) return [undefined, false]
+    return [this.capabilities.get(name), true]
+  }
+
+  /**
+   * Install or replace the capability value under `name`.
+   *
+   * Storing `null` or `undefined` is a real STORE — the capability is
+   * present and its value is null/undefined. Use deleteCapability to
+   * remove an entry. The previous version conflated the two; passing
+   * a possibly-undefined argument silently became a delete instead of
+   * an "install undefined" call.
+   */
   setCapability(name: string, value: unknown): void {
-    if (value === undefined || value === null) {
-      this.capabilities.delete(name)
-      return
-    }
     this.capabilities.set(name, value)
+  }
+
+  /** Remove the capability for `name`. Returns true if one was present. */
+  deleteCapability(name: string): boolean {
+    return this.capabilities.delete(name)
   }
 
   capabilityNames(): string[] {

@@ -30,10 +30,26 @@ func TestCapabilityRoundTrip(t *testing.T) {
 		t.Errorf("after replace: got %v, want \"replaced\"", v)
 	}
 
-	// Pass nil to clear.
+	// SetCapability(name, nil) STORES nil — it no longer doubles as
+	// a delete. Use DeleteCapability for that.
 	r.SetCapability("foo", nil)
+	v, ok = r.Capability("foo")
+	if !ok {
+		t.Error("capability should still be present after storing a nil value")
+	}
+	if v != nil {
+		t.Errorf("got %v, want nil", v)
+	}
+
+	// Delete and verify.
+	if !r.DeleteCapability("foo") {
+		t.Error("DeleteCapability should report true on existing key")
+	}
 	if _, ok := r.Capability("foo"); ok {
-		t.Error("capability should be cleared after SetCapability(name, nil)")
+		t.Error("capability should be gone after DeleteCapability")
+	}
+	if r.DeleteCapability("foo") {
+		t.Error("DeleteCapability should report false on missing key")
 	}
 }
 

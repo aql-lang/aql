@@ -3,8 +3,8 @@
 // no checker mode, no Patterns, no FullStack, no Returns lists for
 // type-check propagation.
 
-import type { AqlType } from './type.js'
-import type { Value } from './value.js'
+import type { AqlType } from './type.ts'
+import type { Value } from './value.ts'
 
 /** A handler receives matched args and the registry, returns the values to push. */
 export type Handler = (
@@ -61,4 +61,4 @@ export function sortSignatures(sigs: Signature[]): void {
 }
 
 // Forward-declared type — the actual class lives in registry.ts.
-import type { Registry } from './registry.js'
+import type { Registry } from './registry.ts'

@@ -7,21 +7,21 @@
 // continuation, args-stack, context-store push/pop, interpolated
 // strings, parser-eval lists, and module sub-engines. The TS port
 // here is the interpreter slice that the current TSV specs reach.
-import { AqlError } from './error.js'
-import { matchEntry } from './match.js'
-import type { Registry } from './registry.js'
+import { AqlError } from './error.ts'
+import { matchEntry } from './match.ts'
+import type { Registry } from './registry.ts'
 import {
   TBoolean,
   TInteger,
   TString,
   typeNameTable,
-} from './type.js'
+} from './type.ts'
 import {
   newBoolean,
   newTypeLiteral,
   Value,
   type WordInfo,
-} from './value.js'
+} from './value.ts'
 
 const STEP_LIMIT = 22222
 

@@ -20,6 +20,14 @@ package aqleng
 // owns. Multiple capabilities (multiple file-ops backends, formats
 // keyed by name, etc.) are typically grouped behind one capability
 // whose value is a map.
+//
+// SetCapability INSTALLS or REPLACES; DeleteCapability REMOVES. The
+// previous version overloaded SetCapability(name, nil) to also delete,
+// which made `SetCapability("flag", aMaybeNilPointer)` a footgun: a
+// typed-nil interface argument silently became a delete instead of a
+// "store the nil value" call. The two-method form removes the
+// ambiguity. Storing an explicit nil value is now a real operation
+// (the capability is present and its value is nil).
 
 // Capability returns the value stored under name and true, or nil and
 // false if no capability is registered under that name.
@@ -31,22 +39,30 @@ func (r *Registry) Capability(name string) (any, bool) {
 	return v, ok
 }
 
-// SetCapability installs (or replaces) the value under name. Pass
-// value=nil to remove the entry.
+// SetCapability installs (or replaces) the value under name. To
+// remove a capability, call DeleteCapability — passing a nil value
+// here STORES nil, it does not delete.
 func (r *Registry) SetCapability(name string, value any) {
 	if r == nil {
-		return
-	}
-	if value == nil {
-		if r.capabilities != nil {
-			delete(r.capabilities, name)
-		}
 		return
 	}
 	if r.capabilities == nil {
 		r.capabilities = make(map[string]any)
 	}
 	r.capabilities[name] = value
+}
+
+// DeleteCapability removes the entry for name. Returns true if a
+// capability was present and removed, false if no capability existed.
+func (r *Registry) DeleteCapability(name string) bool {
+	if r == nil || r.capabilities == nil {
+		return false
+	}
+	if _, ok := r.capabilities[name]; !ok {
+		return false
+	}
+	delete(r.capabilities, name)
+	return true
 }
 
 // CapabilityNames returns the set of registered capability names in

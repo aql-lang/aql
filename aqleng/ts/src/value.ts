@@ -19,7 +19,7 @@ import {
   TStringProper,
   TWord,
   newType,
-} from './type.js'
+} from './type.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {

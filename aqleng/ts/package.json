@@ -11,16 +11,17 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:spec": "vitest run spec.test.ts"
+    "typecheck": "tsc",
+    "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
+    "test:spec": "node --test --experimental-strip-types --no-warnings src/spec.test.ts"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8",
-    "@types/node": "^22.10.0"
+    "typescript": "^6.0.3",
+    "@types/node": "^24.7.0"
   },
   "files": [
     "dist",

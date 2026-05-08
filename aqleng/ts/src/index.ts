@@ -1,21 +1,21 @@
 // Public entry point for the TypeScript port of aqleng.
 
-export { AqlError } from './error.js'
-export { cap } from './capability.js'
-export { Engine } from './engine.js'
-export type { FunctionEntry } from './registry.js'
-export { Registry } from './registry.js'
+export { AqlError } from './error.ts'
+export { cap } from './capability.ts'
+export { Engine } from './engine.ts'
+export type { FunctionEntry } from './registry.ts'
+export { Registry } from './registry.ts'
 export type {
   Handler,
   NativeFunc,
   NativeSig,
   Signature,
-} from './signature.js'
+} from './signature.ts'
 export {
   signatureScore,
   sortSignatures,
-} from './signature.js'
-export type { AqlType } from './type.js'
+} from './signature.ts'
+export type { AqlType } from './type.ts'
 export {
   TAny,
   TAtom,
@@ -45,7 +45,7 @@ export {
   TWord,
   newType,
   typeNameTable,
-} from './type.js'
+} from './type.ts'
 export {
   Value,
   newAny,
@@ -56,5 +56,5 @@ export {
   newString,
   newTypeLiteral,
   newWord,
-} from './value.js'
-export type { WordInfo } from './value.js'
+} from './value.ts'
+export type { WordInfo } from './value.ts'

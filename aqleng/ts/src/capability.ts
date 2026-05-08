@@ -10,7 +10,7 @@
 // unchecked: it trusts the host to install a value of the expected
 // shape under the agreed-upon name.
 
-import type { Registry } from './registry.js'
+import type { Registry } from './registry.ts'
 
 /**
  * Typed convenience accessor. Mirrors `aqleng.Cap[T]` from Go.
@@ -19,7 +19,7 @@ import type { Registry } from './registry.js'
  * capability is missing.
  */
 export function cap<T>(r: Registry, name: string): [T, true] | [undefined, false] {
-  const v = r.capability(name)
-  if (v === undefined) return [undefined, false]
+  const [v, ok] = r.capability(name)
+  if (!ok) return [undefined, false]
   return [v as T, true]
 }
