@@ -65,36 +65,10 @@ func Register(r *Registry) {
 	// Module
 	RegisterModule(r)
 
-	// Array
-	RegisterIota(r)
-	RegisterShape(r)
-	RegisterRank(r)
-	RegisterLength(r)
-	RegisterReshape(r)
-	RegisterArrFlatten(r)
-	RegisterArrTranspose(r)
-	RegisterReverse(r)
-	RegisterTake(r)
-	RegisterShed(r)
-	RegisterWhere(r)
-	RegisterUnique(r)
-	RegisterGrade(r)
-	RegisterAt(r)
-	RegisterSortby(r)
-	RegisterMember(r)
-	RegisterArrIndexof(r)
-	RegisterGroup(r)
-	RegisterReplicate(r)
-	RegisterExpand(r)
-	RegisterWindow(r)
-	RegisterPairs(r)
-
-	// Array higher-order
-	RegisterEach(r)
-	RegisterFold(r)
-	RegisterScan(r)
-	RegisterOuter(r)
-	RegisterInner(r)
+	// Array (core + higher-order)
+	for _, n := range arrayNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Temporal
 	RegisterTimeout(r)
