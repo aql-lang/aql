@@ -537,22 +537,25 @@ func NewValueRaw(t Type, data interface{}) Value {
 	}
 }
 
-// NewString creates a string value. Empty strings get type string/empty.
+// NewString creates a string value with VType = Scalar/String.
+//
+// Earlier versions of this engine returned String/Empty for "" and
+// String/Proper otherwise (a "value-tagged subtype" trick that fed
+// into signature dispatch). The trick made `v.VType.Equal(TString)`
+// return false for any concrete string and bloated the type lattice
+// per literal payload. Specific-value dispatch now goes through
+// Signature.Patterns (see match.go) so the type stays at the kind
+// level and `Equal(TString)` does what users expect.
 func NewString(s string) Value {
-	if s == "" {
-		return NewValueRaw(TStringEmpty, s)
-	}
-	return NewValueRaw(TStringProper, s)
+	return NewValueRaw(TString, s)
 }
 
-// NewInteger creates a number/integer value with a literal type.
-// The literal value is encoded in the type path (e.g., number/integer/5),
-// making it a subtype of number/integer. This enables pattern matching
-// on specific values in function signatures.
+// NewInteger creates a number/integer value with VType = Scalar/Number/Integer.
+// Specific-value dispatch (e.g. `def fact[0] (1)`) routes through
+// Signature.Patterns, not through a per-value type-path leaf. See
+// the NewString comment for the rationale.
 func NewInteger(n int64) Value {
-	// Format always starts with "Number/Integer/" — cannot fail.
-	t, _ := NewType(fmt.Sprintf("Number/Integer/%d", n))
-	return NewValueRaw(t, n)
+	return NewValueRaw(TInteger, n)
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.

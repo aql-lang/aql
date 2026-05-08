@@ -4350,19 +4350,24 @@ func TestResolveSigTypeList(t *testing.T) {
 	}
 }
 
-func TestResolveSigTypeDecimalDefault(t *testing.T) {
-	// Decimal is not integer or boolean, and has Data != nil, so falls through
-	// to the map/list checks and then to TAny.
+func TestResolveSigTypeDecimalLiteral(t *testing.T) {
+	// Post §1.1 fix: scalar literals (Integer, Decimal, Boolean,
+	// String, Atom) are routed through Signature.Patterns. The type
+	// is normalised to the kind, and the literal value lands in the
+	// pattern slot.
 	v := NewDecimal(3.14)
 	tp, pattern, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Equal(TAny) {
-		t.Errorf("expected Any for decimal, got %s", tp)
+	if !tp.Equal(TDecimal) {
+		t.Errorf("expected TDecimal kind for decimal literal, got %s", tp)
 	}
-	if pattern != nil {
-		t.Errorf("expected nil pattern for decimal, got %v", pattern)
+	if pattern == nil {
+		t.Fatal("expected pattern to carry the literal value, got nil")
+	}
+	if got, _ := pattern.AsDecimal(); got != 3.14 {
+		t.Errorf("pattern value = %v, want 3.14", got)
 	}
 }
 

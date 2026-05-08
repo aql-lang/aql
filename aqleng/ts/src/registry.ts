@@ -97,6 +97,7 @@ export class Registry {
     return {
       args: ns.args,
       handler: ns.handler,
+      patterns: ns.patterns,
       noEvalArgs: ns.noEvalArgs,
       fallback: ns.fallback,
     }

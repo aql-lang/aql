@@ -270,8 +270,8 @@ typeof None	Type
 
 # fulltypeof - returns full type Path
 fulltypeof 42	Scalar/Number/Integer
-fulltypeof "hello"	Scalar/String/Proper
-fulltypeof ""	Scalar/String/Empty
+fulltypeof "hello"	Scalar/String
+fulltypeof ""	Scalar/String
 fulltypeof true	Scalar/Boolean
 fulltypeof false	Scalar/Boolean
 fulltypeof [1 2 3]	Node/List

@@ -1486,23 +1486,26 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 }
 
 func TestIntegerLiteralType(t *testing.T) {
-	// NewInteger encodes literal value in type path: number/integer/5
+	// Post §1.1 fix: NewInteger no longer encodes the value in the
+	// type path. All integers share VType=Scalar/Number/Integer;
+	// specific-value dispatch goes through Signature.Patterns.
 	v := NewInteger(5)
-	if !v.VType.Matches(TInteger) {
-		t.Errorf("NewInteger(5).VType = %s, want matches number/integer", v.VType)
+	if !v.VType.Equal(TInteger) {
+		t.Errorf("NewInteger(5).VType = %s, want Scalar/Number/Integer", v.VType)
 	}
 	if !v.VType.Matches(TNumber) {
 		t.Errorf("NewInteger(5).VType = %s, want matches number", v.VType)
 	}
-	// Different integers have different types
+	// Two different integers now share the same VType — pattern
+	// dispatch uses Signature.Patterns instead of type-path leaves.
 	v0 := NewInteger(0)
 	v1 := NewInteger(1)
-	if v0.VType.Equal(v1.VType) {
-		t.Errorf("NewInteger(0) and NewInteger(1) should have different types")
+	if !v0.VType.Equal(v1.VType) {
+		t.Errorf("NewInteger(0) and NewInteger(1) should share VType=Scalar/Number/Integer; got %s vs %s", v0.VType, v1.VType)
 	}
-	// But both match integer
+	// And both still match Integer / Number / Scalar.
 	if !v0.VType.Matches(TInteger) || !v1.VType.Matches(TInteger) {
-		t.Error("both should match integer")
+		t.Error("both should match Integer")
 	}
 }
 

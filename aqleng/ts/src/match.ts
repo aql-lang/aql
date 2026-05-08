@@ -122,6 +122,12 @@ function tryForwardSplit(
     if (!sigTypeMatches(args[i]!, sig.args[i]!)) return null
   }
 
+  // §1.1 pattern check: scalar-literal patterns are enforced on
+  // every position (forward + stack); non-scalar patterns are
+  // checked only on stack positions to preserve the legacy
+  // "handler may further constrain inside the body" semantic.
+  if (!patternsOk(sig, args, forwardCount)) return null
+
   return { sig, args, forwardCount, prefixCount }
 }
 
@@ -149,7 +155,44 @@ function tryStackOnly(
   for (let i = 0; i < n; i++) {
     if (!sigTypeMatches(args[i]!, sig.args[i]!)) return null
   }
+  // All positions came from the prefix → pattern check applies
+  // unconditionally (forwardCount=0 means nothing is "forward").
+  if (!patternsOk(sig, args, 0)) return null
   return { sig, args, forwardCount: 0, prefixCount: n }
+}
+
+/**
+ * Run sig.patterns against the resolved arg values. Concrete-scalar
+ * patterns (Data != null) are enforced on every position; non-scalar
+ * patterns are checked only on stack positions (`idx >= forwardCount`)
+ * because handlers historically used the forward-arg pattern slot for
+ * shape hints rather than hard constraints. See match.go's `patternsOk`
+ * for the same rule.
+ */
+function patternsOk(sig: Signature, args: Value[], forwardCount: number): boolean {
+  if (!sig.patterns) return true
+  for (const [idx, pattern] of sig.patterns) {
+    if (idx < 0 || idx >= args.length) continue
+    const isForward = idx < forwardCount
+    if (isForward && pattern.data === null) continue
+    const val = args[idx]!
+    if (pattern.data === null) {
+      // Type-literal pattern, stack position: arg's type must match.
+      if (!val.vType.matches(pattern.vType)) return false
+      continue
+    }
+    // Concrete pattern: kinds must match and Data must compare equal.
+    if (!val.vType.matches(pattern.vType)) return false
+    if (val.data === null) return false
+    if (!dataEqual(val.data, pattern.data)) return false
+  }
+  return true
+}
+
+function dataEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a === 'bigint' && typeof b === 'bigint') return a === b
+  return false
 }
 
 /**

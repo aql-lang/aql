@@ -379,16 +379,21 @@ func parseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			params = append(params, FnParam{Type: elem.VType})
 
 		case elem.VType.Matches(TInteger):
-			// Integer literal as type constraint (e.g., 0 matches number/integer/0)
-			params = append(params, FnParam{Type: elem.VType})
+			// Integer literal as value pattern (post §1.1 fix:
+			// dispatched via Signature.Patterns, not by a
+			// value-tagged type-path leaf).
+			pat := elem
+			params = append(params, FnParam{Type: TInteger, Pattern: &pat})
 
 		case elem.VType.Matches(TBoolean):
-			// Boolean literal as type constraint
-			params = append(params, FnParam{Type: elem.VType})
+			// Boolean literal as value pattern.
+			pat := elem
+			params = append(params, FnParam{Type: TBoolean, Pattern: &pat})
 
 		case elem.VType.Matches(TString):
-			// String literal as type constraint
-			params = append(params, FnParam{Type: elem.VType})
+			// String literal as value pattern.
+			pat := elem
+			params = append(params, FnParam{Type: TString, Pattern: &pat})
 
 		default:
 			return nil, 0, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
@@ -433,9 +438,35 @@ func resolveSigType(r *Registry, v Value) (Type, *Value, error) {
 		t, err := resolveTypeName(name)
 		return t, nil, err
 	}
-	// Literal values (integers, booleans) carry their literal type.
-	if v.VType.Matches(TInteger) || v.VType.Matches(TBoolean) {
-		return v.VType, nil, nil
+	// Scalar literal in sig position (e.g. `_:0`, `flag:true`,
+	// `name:"alice"`, `pi:3.14`). The kind goes into the param's
+	// Type; the specific value goes into the Pattern slot so the
+	// matcher dispatches via Signature.Patterns + Unify (which
+	// compares Data when both sides have equal types). This replaces
+	// the older "value-tagged subtype" path that encoded the literal
+	// in the type itself.
+	if v.Data != nil && (v.VType.Matches(TInteger) ||
+		v.VType.Matches(TDecimal) ||
+		v.VType.Matches(TBoolean) ||
+		v.VType.Matches(TString) ||
+		v.VType.Matches(TAtom)) {
+		pattern := v
+		// Normalise the param type to the kind so `Equal(TInteger)`
+		// works for callers that inspect it.
+		var kind Type
+		switch {
+		case v.VType.Matches(TInteger):
+			kind = TInteger
+		case v.VType.Matches(TDecimal):
+			kind = TDecimal
+		case v.VType.Matches(TBoolean):
+			kind = TBoolean
+		case v.VType.Matches(TString):
+			kind = TString
+		default:
+			kind = TAtom
+		}
+		return kind, &pattern, nil
 	}
 	// Map/list literals: match by type and store pattern for structural unification.
 	if v.VType.Equal(TMap) {

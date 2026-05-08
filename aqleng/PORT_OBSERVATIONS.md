@@ -221,19 +221,30 @@ The asker correctly noted: is the difference in the *implementation
 functions*, or in the *AQL language itself*? **Both — but the language
 choice is the cause and the implementation is the effect.**
 
-The language semantics:
+The language semantics. To compare apples to apples, use the SAME
+physical stack `[1, 2, op]` (1 at the bottom, 2 on top, `op` a 2-arg
+word with sig `[A, B]`):
 
-- For a **forward-precedence** word `f` declared with sig `[A, B]`:
-  - `f x y`     → handler sees `(A=x, B=y)`
-  - `y f x`     → handler sees `(A=x, B=y)`  (mirror)
-  - `y x f`     → handler sees `(A=x, B=y)`  (mirror, all-prefix nearest-first)
-  - `x f y`     → handler sees `(A=y, B=x)`  (swap form)
-- For a **stack-only** word `g` declared with sig `[A, B]`:
-  - `x y g`     → handler sees `(A=x, B=y)`  (deepest-first)
+| If `op` is registered as | A binds to | B binds to | Reason |
+|---|---|---|---|
+| **forward-precedence**   | `2` (top)    | `1` (bottom) | nearest-first; mirror rule (`b a f → sig[0]=a, sig[1]=b`) |
+| **stack-only**           | `1` (bottom) | `2` (top)    | deepest-first |
 
-Same physical stack `1 2 op` produces opposite arg bindings depending
-on how `op` was registered. Authors of `op` know; readers of the call
-site cannot tell without looking up the registration.
+So `1 2 sub` gives `sub(2, 1) = 1` if `sub` is forward-prec
+(matches `add 2 3 == 2 3 add == 5`), but a hypothetical stack-only
+`subso` would give `subso(1, 2) = -1` for the same `1 2 subso` call
+site. Same physical stack, opposite arg bindings, *invisible at the
+call site*. Verified empirically: `1 2 swap → 2 1` works only because
+`swap`'s handler `(args) => [args[1], args[0]]` is written assuming
+stack-only deepest-first (`args[0]=1, args[1]=2`) — flipping to
+nearest-first would make `swap` a no-op without rewriting the
+handler.
+
+(An earlier draft of this section used different variable names for
+the two cases — `y x f` vs `x y g` — which accidentally hid the
+inconsistency by aligning the variable letters instead of the stack
+positions. This corrected version uses literal `1 2` so the
+divergence is visible.)
 
 The implementation echoes this:
 
@@ -256,17 +267,63 @@ binding without consulting the word's registration flag. The same
 visual call site means two different things depending on a property
 of the callee.
 
-**Recommendations:**
+**Recommendations, in order of increasing scope:**
 
-- Document this in a single highlighted block in CLAUDE.md (the
-  "Argument Ordering" section currently mentions the mirror but
-  doesn't contrast against stack-only).
-- Add TSV rows demonstrating the contrast: a hypothetical 2-arg
-  stack-only `divmod` and a 2-arg forward-precedence `divmod` with
-  the same physical stack and different observed bindings.
-- Consider a *visible marker* at the call site for stack-only words —
-  e.g., suffix `:s` to disambiguate. Probably unnecessary in practice,
-  but worth weighing.
+1. **Document the divergence.** The CLAUDE.md "Argument Ordering"
+   section covers the mirror rule for forward-prec words but never
+   contrasts it against stack-only. A single highlighted block (or
+   the table above, copied in) would make the gap visible to anyone
+   designing a new word.
+
+2. **Lock the divergence into specs.** Add TSV rows to
+   `aqleng/test/spec/` covering the same physical stack with both a
+   forward-prec and a stack-only word. The current `1 2 swap → 2 1`
+   row passes only because of deepest-first; a parallel
+   forward-prec sibling (e.g. `1 2 mul → 2` for the integer `mul`,
+   though commutative obscures the difference) should be replaced
+   with a non-commutative pair like `1 2 sub` (forward-prec, gives
+   `-1`) and a hypothetical `1 2 subso` (stack-only, would give
+   `1`). Even just registering both during the spec setup and
+   emitting one row per binding would lock the contrast.
+
+3. **Consider unifying.** The strongest recommendation: drop
+   stack-only's deepest-first ordering and use **nearest-first
+   everywhere**. Justifications:
+
+   - Eliminates the "same call site, different binding" footgun
+     entirely. `1 2 op` always means `op(top=2, second=1)` regardless
+     of registration.
+   - The mirror rule's design goal (all four equivalent forms agree)
+     extends naturally — stack-only is just "the all-prefix form for
+     a word that doesn't accept forward args".
+   - No more `nearestFirst := !stackOnly && !w.ForceStack` in
+     match.go; the matcher loses a parameter.
+
+   The cost is a one-time rewrite of every stack-only handler that
+   currently relies on deepest-first. In aqleng's spec set:
+   - `swap` (sig `[TAny, TAny]`): handler `(args) => [args[1], args[0]]`
+     → keep as-is, but now args[0]=top, args[1]=bottom; the splice still
+     produces the swapped pair. Result-equivalent under the new
+     ordering.
+   - `dup`, `drop` (1 arg): unaffected.
+
+   So the impact on the spec set is zero — the regression suite
+   doesn't catch this. In the Go engine's full word library, the
+   audit list is every word registered without `ForwardPrecedence:
+   true`; each handler needs to be checked for index-order
+   assumptions. Most are 0- or 1-arg ops where order doesn't matter;
+   the genuine 2+-arg stack-only words are few (the stack manipulators).
+
+4. **Or, if not unifying, add a visible marker** at registration —
+   e.g. `RegisterStackOnly` already exists; rename to make it
+   explicit (`RegisterPostfix` to flag the different ordering
+   convention) or require a bare `BindingOrder: DeepestFirst` field
+   so the choice is visible at every registration site. Lower
+   payoff than (3) but cheaper.
+
+The right answer depends on whether any third-party code already
+depends on stack-only deepest-first. If aqleng is the only consumer,
+(3) is the better long-term fix.
 
 ### 1.5 `SetCapability(name, nil)` overloaded as delete — fixed
 

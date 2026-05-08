@@ -15,10 +15,7 @@ import {
   TInteger,
   TNone,
   TString,
-  TStringEmpty,
-  TStringProper,
   TWord,
-  newType,
 } from './type.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
@@ -135,19 +132,23 @@ export class Value {
 // ── Constructors ────────────────────────────────────────────────────────────
 
 /**
- * NewInteger embeds the literal value in the type path:
- * `Scalar/Number/Integer/42`. This is a deliberate "value-tagged
- * subtype" choice in the Go engine — it lets pattern matchers
- * dispatch on specific numeric values. PARITY: same lattice shape.
+ * Construct an integer value with VType = Scalar/Number/Integer.
+ *
+ * Earlier versions of this engine encoded the literal in the type
+ * path (e.g. `Scalar/Number/Integer/42`) so that signature dispatch
+ * could fire on specific numeric values via subtype matching. That
+ * "value-tagged subtype" trick made `v.vType.equal(TInteger)` return
+ * false for any concrete integer, bloated the type lattice per
+ * literal payload, and forced consumers to use `matches` everywhere.
+ * Specific-value dispatch now goes through `Signature.patterns`
+ * instead — see PORT_OBSERVATIONS.md §1.1.
  *
  * BigInt is used because the Go engine carries int64 — TS's number
- * loses precision past 2^53. A spec runner that compares string-
- * formatted outputs handles either; calls that need integer math
- * inside handlers should use bigint arithmetic.
+ * loses precision past 2^53.
  */
 export function newInteger(n: bigint | number): Value {
   const big = typeof n === 'bigint' ? n : BigInt(n)
-  return new Value(newType(`Number/Integer/${big.toString()}`), big)
+  return new Value(TInteger, big)
 }
 
 export function newDecimal(f: number): Value {
@@ -155,11 +156,12 @@ export function newDecimal(f: number): Value {
 }
 
 /**
- * NewString chooses Scalar/String/Empty for "" and Scalar/String/Proper
- * for everything else, matching the Go engine.
+ * Construct a string value with VType = Scalar/String. Empty vs
+ * non-empty no longer affects the type — they share the kind, which
+ * is what `equal(TString)` checks against.
  */
 export function newString(s: string): Value {
-  return new Value(s === '' ? TStringEmpty : TStringProper, s)
+  return new Value(TString, s)
 }
 
 export function newBoolean(b: boolean): Value {

@@ -37,9 +37,12 @@ func TestTypeMatches(t *testing.T) {
 // --- Value constructor tests ---
 
 func TestNewString(t *testing.T) {
+	// Post §1.1 fix: all strings carry VType=Scalar/String. The
+	// String/Empty vs String/Proper subtypes were a value-tagged
+	// dispatch trick that's been replaced with Signature.Patterns.
 	v := NewString("hello")
-	if !v.VType.Equal(TStringProper) {
-		t.Errorf("type = %s, want string/proper", v.VType)
+	if !v.VType.Equal(TString) {
+		t.Errorf("type = %s, want Scalar/String", v.VType)
 	}
 	_as0, _ := v.AsString()
 	if _as0 != "hello" {
@@ -48,8 +51,8 @@ func TestNewString(t *testing.T) {
 	}
 
 	empty := NewString("")
-	if !empty.VType.Equal(TStringEmpty) {
-		t.Errorf("empty type = %s, want string/empty", empty.VType)
+	if !empty.VType.Equal(TString) {
+		t.Errorf("empty type = %s, want Scalar/String", empty.VType)
 	}
 }
 

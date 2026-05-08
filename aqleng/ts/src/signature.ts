@@ -19,6 +19,13 @@ export interface Signature {
   args: AqlType[]
   handler: Handler
   /**
+   * Optional value-patterns indexed by arg position. A concrete-scalar
+   * pattern fires the §1.1 literal-dispatch path: the matched arg
+   * must have the same Data as the pattern. See match.ts for the
+   * forward-vs-stack rules.
+   */
+  patterns?: Map<number, Value>
+  /**
    * NoEvalArgs marks positions where list auto-evaluation is suppressed.
    * Unused in the spec subset; included for shape parity.
    */
@@ -30,6 +37,7 @@ export interface Signature {
 export interface NativeSig {
   args: AqlType[]
   handler: Handler
+  patterns?: Map<number, Value>
   noEvalArgs?: Set<number>
   fallback?: boolean
 }
@@ -49,6 +57,14 @@ export interface NativeFunc {
 export function signatureScore(sig: Signature): number {
   let s = 0
   for (const t of sig.args) s += t.specificity()
+  // Concrete-value patterns make the sig more specific than one
+  // with the same arg types but no pattern (parity with Go's
+  // post-§1.1 score boost).
+  if (sig.patterns) {
+    for (const v of sig.patterns.values()) {
+      if (v.data !== null) s += 10
+    }
+  }
   return s
 }
 

@@ -401,6 +401,18 @@ func signatureScore(sig *Signature) int {
 		score += t.Specificity() * 10_000
 		score += typeInherentScore(t)
 	}
+	// Post §1.1 fix: scalar-literal dispatch lives in Patterns
+	// rather than in value-tagged subtype paths. A sig with a
+	// concrete-value pattern at position i is MORE SPECIFIC than
+	// one without — give each pattern entry the same boost a
+	// type-path leaf used to provide. Without this, two sigs with
+	// equal arg-types tie on score and registration order picks
+	// the winner, defeating literal-value overloads.
+	for _, pat := range sig.Patterns {
+		if pat.Data != nil {
+			score += 10_000
+		}
+	}
 	return score
 }
 
