@@ -1,0 +1,10 @@
+# String dispatch via test-registered `concat` and `not` words.
+
+# tokens	expected	note
+"hello"	"hello"	string literal
+concat "hello" " world"	"hello world"	all-forward: sig[0]="hello", sig[1]=" world"
+" world" concat "hello"	"hello world"	mirror form (1-prefix 1-forward): sig[0]="hello", sig[1]=" world"
+"hello" concat " world"	" worldhello"	swap form `a f b` reverses sig: sig[0]=" world", sig[1]="hello"
+"a" "b" concat	"ba"	all-prefix: top-first → sig[0]="b", sig[1]="a"
+not true	false	boolean negation
+not false	true	boolean negation

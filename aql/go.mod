@@ -37,4 +37,4 @@ replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 
 replace voxgiguniversalsdk v0.1.1 => github.com/voxgig/udk/go v0.1.1
 
-replace github.com/metsitaba/voxgig-exp/aqleng v0.0.0 => ../aqleng
+replace github.com/metsitaba/voxgig-exp/aqleng v0.0.0 => ../aqleng/go
