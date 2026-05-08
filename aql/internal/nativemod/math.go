@@ -22,7 +22,9 @@ func BuildMathModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	}
 
 	// Register all math words into the sub-registry.
-	registerAllMathWords(subReg)
+	for _, n := range MathNatives {
+		subReg.RegisterNativeFunc(n)
+	}
 
 	// Build the export map with FnDef wrappers.
 	exports := engine.NewOrderedMap()
@@ -107,258 +109,286 @@ func makeConstFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(fnDef)
 }
 
-// registerAllMathWords registers the Go-implemented math words into a registry.
-// These are the internal implementations used by the FnDef wrappers.
-func registerAllMathWords(r *engine.Registry) {
-	registerAbs(r)
-	registerNegate(r)
-	registerSign(r)
-	registerMin(r)
-	registerMax(r)
+// MathNatives is the consolidated NativeFunc slice for the math module's
+// Go-implemented words. Replaces the per-word register*Math* functions
+// and the master registerAllMathWords aggregator.
+var MathNatives = func() []engine.NativeFunc {
+	out := []engine.NativeFunc{
+		// abs: integer or decimal -> matching numeric.
+		{
+			Name:              "abs",
+			ForwardPrecedence: true,
+			Signatures: []engine.NativeSig{
+				{
+					Args: []engine.Type{engine.TInteger},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						v, err := args[0].AsConcreteInteger()
+						if err != nil {
+							return nil, err
+						}
+						if v < 0 {
+							v = -v
+						}
+						return []engine.Value{engine.NewInteger(v)}, nil
+					},
+					Returns: []engine.Type{engine.TInteger},
+				},
+				{
+					Args: []engine.Type{engine.TDecimal},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						d, err := args[0].AsConcreteDecimal()
+						if err != nil {
+							return nil, err
+						}
+						return []engine.Value{engine.NewDecimal(math.Abs(d))}, nil
+					},
+					Returns: []engine.Type{engine.TDecimal},
+				},
+			},
+		},
+		// negate: integer or decimal.
+		{
+			Name:              "negate",
+			ForwardPrecedence: true,
+			Signatures: []engine.NativeSig{
+				{
+					Args: []engine.Type{engine.TInteger},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						v, err := args[0].AsConcreteInteger()
+						if err != nil {
+							return nil, err
+						}
+						return []engine.Value{engine.NewInteger(-v)}, nil
+					},
+					Returns: []engine.Type{engine.TInteger},
+				},
+				{
+					Args: []engine.Type{engine.TDecimal},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						d, err := args[0].AsConcreteDecimal()
+						if err != nil {
+							return nil, err
+						}
+						return []engine.Value{engine.NewDecimal(-d)}, nil
+					},
+					Returns: []engine.Type{engine.TDecimal},
+				},
+			},
+		},
+		// sign: integer or decimal -> integer (-1/0/1).
+		{
+			Name:              "sign",
+			ForwardPrecedence: true,
+			Signatures: []engine.NativeSig{
+				{
+					Args: []engine.Type{engine.TInteger},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						v, err := args[0].AsConcreteInteger()
+						if err != nil {
+							return nil, err
+						}
+						switch {
+						case v < 0:
+							return []engine.Value{engine.NewInteger(-1)}, nil
+						case v > 0:
+							return []engine.Value{engine.NewInteger(1)}, nil
+						default:
+							return []engine.Value{engine.NewInteger(0)}, nil
+						}
+					},
+					Returns: []engine.Type{engine.TInteger},
+				},
+				{
+					Args: []engine.Type{engine.TDecimal},
+					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+						v, err := args[0].AsConcreteDecimal()
+						if err != nil {
+							return nil, err
+						}
+						switch {
+						case v < 0:
+							return []engine.Value{engine.NewInteger(-1)}, nil
+						case v > 0:
+							return []engine.Value{engine.NewInteger(1)}, nil
+						default:
+							return []engine.Value{engine.NewInteger(0)}, nil
+						}
+					},
+					Returns: []engine.Type{engine.TInteger},
+				},
+			},
+		},
+		// min / max — built from the BinaryIntOpNative + BinaryNumOpNative
+		// pair so each word carries an integer overload and a decimal
+		// overload, matching the historical RegisterBinaryIntOp +
+		// RegisterBinaryNumOp split.
+		mergeBinaryNumNatives("min",
+			engine.BinaryIntOpNative("min", func(a, b int64) (int64, error) {
+				if a < b {
+					return a, nil
+				}
+				return b, nil
+			}),
+			engine.BinaryNumOpNative("min", func(a, b float64) (float64, error) {
+				if a < b {
+					return a, nil
+				}
+				return b, nil
+			}),
+		),
+		mergeBinaryNumNatives("max",
+			engine.BinaryIntOpNative("max", func(a, b int64) (int64, error) {
+				if a > b {
+					return a, nil
+				}
+				return b, nil
+			}),
+			engine.BinaryNumOpNative("max", func(a, b float64) (float64, error) {
+				if a > b {
+					return a, nil
+				}
+				return b, nil
+			}),
+		),
+		// ceil/floor/round/trunc: decimal -> integer.
+		ceilFloorNative("ceil", math.Ceil),
+		ceilFloorNative("floor", math.Floor),
+		ceilFloorNative("round", math.Round),
+		ceilFloorNative("trunc", math.Trunc),
+	}
 
-	registerCeil(r)
-	registerFloor(r)
-	registerRound(r)
-	registerTrunc(r)
+	// Unary float -> float words. Each becomes a NativeFunc with two
+	// overloads ([integer] and [decimal]) returning Decimal, courtesy of
+	// engine.UnaryNumOpNative.
+	for _, p := range []struct {
+		name string
+		fn   func(float64) float64
+	}{
+		{"sqrt", math.Sqrt},
+		{"cbrt", math.Cbrt},
+		{"exp", math.Exp},
+		{"log", math.Log},
+		{"log2", math.Log2},
+		{"log10", math.Log10},
+		{"sin", math.Sin},
+		{"cos", math.Cos},
+		{"tan", math.Tan},
+		{"asin", math.Asin},
+		{"acos", math.Acos},
+		{"atan", math.Atan},
+	} {
+		out = append(out, engine.UnaryNumOpNative(p.name, p.fn))
+	}
 
-	registerSqrt(r)
-	registerCbrt(r)
-	registerExp(r)
-	registerLog(r)
-	registerLog2(r)
-	registerLog10(r)
+	// atan2: standard binary-num overloads + an integer-integer overload.
+	out = append(out, atan2Native())
+	// hypot: same shape as atan2.
+	out = append(out, hypotNative())
 
-	registerSin(r)
-	registerCos(r)
-	registerTan(r)
-	registerAsin(r)
-	registerAcos(r)
-	registerAtan(r)
-	registerAtan2(r)
-	registerHypot(r)
+	// Math constants — zero-arg stack-only.
+	out = append(out, engine.NativeFunc{
+		Name:              "math-pi",
+		ForwardPrecedence: false,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{},
+			Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				return []engine.Value{engine.NewDecimal(math.Pi)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	})
+	out = append(out, engine.NativeFunc{
+		Name:              "math-e",
+		ForwardPrecedence: false,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{},
+			Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				return []engine.Value{engine.NewDecimal(math.E)}, nil
+			},
+			Returns: []engine.Type{engine.TDecimal},
+		}},
+	})
 
-	registerMathConstants(r)
+	return out
+}()
+
+// mergeBinaryNumNatives combines an integer-overload NativeFunc and a
+// number-overload NativeFunc (typically produced by BinaryIntOpNative
+// and BinaryNumOpNative) into one NativeFunc, preserving signature
+// order: integer overloads first, then number overloads.
+func mergeBinaryNumNatives(name string, intNative, numNative engine.NativeFunc) engine.NativeFunc {
+	sigs := make([]engine.NativeSig, 0, len(intNative.Signatures)+len(numNative.Signatures))
+	sigs = append(sigs, intNative.Signatures...)
+	sigs = append(sigs, numNative.Signatures...)
+	return engine.NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures:        sigs,
+	}
 }
 
-// --- Registration functions (Go implementations) ---
-
-func registerAbs(r *engine.Registry) {
-	r.Register("abs", engine.Signature{
-		Args: []engine.Type{engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			if v < 0 {
-				v = -v
-			}
-			return []engine.Value{engine.NewInteger(v)}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-	r.Register("abs", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewDecimal(math.Abs(d))}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
+// ceilFloorNative builds a NativeFunc for ceil/floor/round/trunc-style
+// words: decimal -> integer via int64(fn(d)).
+func ceilFloorNative(name string, fn func(float64) float64) engine.NativeFunc {
+	return engine.NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{{
+			Args: []engine.Type{engine.TDecimal},
+			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+				d, err := args[0].AsConcreteDecimal()
+				if err != nil {
+					return nil, err
+				}
+				return []engine.Value{engine.NewInteger(int64(fn(d)))}, nil
+			},
+			Returns: []engine.Type{engine.TInteger},
+		}},
+	}
 }
 
-func registerNegate(r *engine.Registry) {
-	r.Register("negate", engine.Signature{
-		Args: []engine.Type{engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewInteger(-v)}, nil
+// atan2Native builds the atan2 NativeFunc. Note the atan2 number
+// overload swaps argument order historically (atan2(b, a)), so we use a
+// custom binary-num builder rather than engine.BinaryNumOpNative.
+func atan2Native() engine.NativeFunc {
+	numHandler := func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+		a, _ := args[0].AsNumber()
+		b, _ := args[1].AsNumber()
+		return []engine.Value{engine.NewDecimal(math.Atan2(b, a))}, nil
+	}
+	return engine.NativeFunc{
+		Name:              "atan2",
+		ForwardPrecedence: true,
+		Signatures: []engine.NativeSig{
+			{Args: []engine.Type{engine.TDecimal, engine.TDecimal}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
+			{Args: []engine.Type{engine.TNumber, engine.TDecimal}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
+			{Args: []engine.Type{engine.TDecimal, engine.TNumber}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
+			{
+				Args: []engine.Type{engine.TInteger, engine.TInteger},
+				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+					a0, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					a1, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					return []engine.Value{engine.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
+				},
+				Returns: []engine.Type{engine.TDecimal},
+			},
 		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-	r.Register("negate", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewDecimal(-d)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
+	}
 }
 
-func registerSign(r *engine.Registry) {
-	r.Register("sign", engine.Signature{
-		Args: []engine.Type{engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			switch {
-			case v < 0:
-				return []engine.Value{engine.NewInteger(-1)}, nil
-			case v > 0:
-				return []engine.Value{engine.NewInteger(1)}, nil
-			default:
-				return []engine.Value{engine.NewInteger(0)}, nil
-			}
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-	r.Register("sign", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			v, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			switch {
-			case v < 0:
-				return []engine.Value{engine.NewInteger(-1)}, nil
-			case v > 0:
-				return []engine.Value{engine.NewInteger(1)}, nil
-			default:
-				return []engine.Value{engine.NewInteger(0)}, nil
-			}
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerMin(r *engine.Registry) {
-	engine.RegisterBinaryIntOp(r, "min", func(a, b int64) (int64, error) {
-		if a < b {
-			return a, nil
-		}
-		return b, nil
-	})
-	engine.RegisterBinaryNumOp(r, "min", func(a, b float64) (float64, error) {
-		if a < b {
-			return a, nil
-		}
-		return b, nil
-	})
-}
-
-func registerMax(r *engine.Registry) {
-	engine.RegisterBinaryIntOp(r, "max", func(a, b int64) (int64, error) {
-		if a > b {
-			return a, nil
-		}
-		return b, nil
-	})
-	engine.RegisterBinaryNumOp(r, "max", func(a, b float64) (float64, error) {
-		if a > b {
-			return a, nil
-		}
-		return b, nil
-	})
-}
-
-func registerCeil(r *engine.Registry) {
-	r.Register("ceil", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewInteger(int64(math.Ceil(d)))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerFloor(r *engine.Registry) {
-	r.Register("floor", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewInteger(int64(math.Floor(d)))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerRound(r *engine.Registry) {
-	r.Register("round", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewInteger(int64(math.Round(d)))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerTrunc(r *engine.Registry) {
-	r.Register("trunc", engine.Signature{
-		Args: []engine.Type{engine.TDecimal},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			d, err := args[0].AsConcreteDecimal()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewInteger(int64(math.Trunc(d)))}, nil
-		},
-		Returns: []engine.Type{engine.TInteger},
-	})
-}
-
-func registerSqrt(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "sqrt", math.Sqrt) }
-func registerCbrt(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "cbrt", math.Cbrt) }
-func registerExp(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "exp", math.Exp) }
-func registerLog(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "log", math.Log) }
-func registerLog2(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "log2", math.Log2) }
-func registerLog10(r *engine.Registry) { engine.RegisterUnaryNumOp(r, "log10", math.Log10) }
-func registerSin(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "sin", math.Sin) }
-func registerCos(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "cos", math.Cos) }
-func registerTan(r *engine.Registry)   { engine.RegisterUnaryNumOp(r, "tan", math.Tan) }
-func registerAsin(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "asin", math.Asin) }
-func registerAcos(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "acos", math.Acos) }
-func registerAtan(r *engine.Registry)  { engine.RegisterUnaryNumOp(r, "atan", math.Atan) }
-
-func registerAtan2(r *engine.Registry) {
-	engine.RegisterBinaryNumOp(r, "atan2", func(a, b float64) (float64, error) {
-		return math.Atan2(b, a), nil
-	})
-	r.Register("atan2", engine.Signature{
-		Args: []engine.Type{engine.TInteger, engine.TInteger},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			a0, err := args[0].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			a1, err := args[1].AsConcreteInteger()
-			if err != nil {
-				return nil, err
-			}
-			return []engine.Value{engine.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-func registerHypot(r *engine.Registry) {
-	engine.RegisterBinaryNumOp(r, "hypot", func(a, b float64) (float64, error) {
+// hypotNative builds the hypot NativeFunc with the standard binary-num
+// overloads plus the integer-integer overload.
+func hypotNative() engine.NativeFunc {
+	base := engine.BinaryNumOpNative("hypot", func(a, b float64) (float64, error) {
 		return math.Hypot(a, b), nil
 	})
-	r.Register("hypot", engine.Signature{
+	intSig := engine.NativeSig{
 		Args: []engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			a0, err := args[0].AsConcreteInteger()
@@ -372,22 +402,10 @@ func registerHypot(r *engine.Registry) {
 			return []engine.Value{engine.NewDecimal(math.Hypot(float64(a0), float64(a1)))}, nil
 		},
 		Returns: []engine.Type{engine.TDecimal},
-	})
-}
-
-func registerMathConstants(r *engine.Registry) {
-	r.RegisterStackOnly("math-pi", engine.Signature{
-		Args: []engine.Type{},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(math.Pi)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
-	r.RegisterStackOnly("math-e", engine.Signature{
-		Args: []engine.Type{},
-		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			return []engine.Value{engine.NewDecimal(math.E)}, nil
-		},
-		Returns: []engine.Type{engine.TDecimal},
-	})
+	}
+	return engine.NativeFunc{
+		Name:              base.Name,
+		ForwardPrecedence: true,
+		Signatures:        append(append([]engine.NativeSig{}, base.Signatures...), intSig),
+	}
 }
