@@ -22,20 +22,9 @@ func Register(r *Registry) {
 	RegisterEscape(r)
 
 	// Stack ops
-	RegisterDup(r)
-	RegisterSwap(r)
-	RegisterDrop(r)
-	RegisterOver(r)
-	RegisterRot(r)
-	RegisterNip(r)
-	RegisterTuck(r)
-	Register2dup(r)
-	Register2swap(r)
-	Register2drop(r)
-	Register2over(r)
-	RegisterDepth(r)
-	RegisterPick(r)
-	RegisterRoll(r)
+	for _, n := range stackNatives {
+		r.RegisterNativeFunc(n)
+	}
 
 	// Math: basic arithmetic.
 	for _, n := range mathNatives {
@@ -43,15 +32,9 @@ func Register(r *Registry) {
 	}
 
 	// Boolean.
-	RegisterOr(r)
-	RegisterAnd(r)
-	RegisterXor(r)
-	RegisterNand(r)
-	RegisterNor(r)
-	RegisterIff(r)
-	RegisterXnor(r)
-	RegisterNot(r)
-	RegisterOtherwise(r)
+	for _, n := range booleanNatives {
+		r.RegisterNativeFunc(n)
+	}
 	RegisterAny(r)
 	RegisterAll(r)
 

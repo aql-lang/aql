@@ -23,26 +23,6 @@ func registerUnaryStringWord(r *Registry, name string, fn func(string) string) {
 	})
 }
 
-// registerBinaryBoolWord registers a word that takes two boolean-ish
-// args, applies fn, and returns a NewBoolean result. Non-boolean
-// inputs are coerced via CoerceBoolean (same rules as `convert
-// boolean`). Covers the common pattern used by xor, nand.
-func registerBinaryBoolWord(r *Registry, name string, fn func(a, b bool) bool) {
-	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		a := CoerceBoolean(args[0])
-		b := CoerceBoolean(args[1])
-		return []Value{NewBoolean(fn(a, b))}, nil
-	}
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, Handler: handler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, Handler: handler, Returns: []Type{TBoolean}},
-		},
-	})
-}
-
 // registerBinaryMathWord registers a word with a single [TNumber, TNumber]
 // signature. The fn receives (farther, nearest) as float64 and returns the
 // result. When both inputs are integers and intFn is non-nil, intFn is
