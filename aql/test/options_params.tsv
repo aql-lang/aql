@@ -136,8 +136,8 @@ def opts (make Options {x:Integer}) def f fn [[m:opts] [Map] [m]] f {x:"hi"}	ERR
 # Optional Options (all defaults) — provided
 def opts (make Options {x:1 y:2}) def f fn [[m?:opts] [Map] [m]] f {x:10 y:20}	{x:10,y:20}
 
-# Optional Options (all defaults) — omitted (0-arg call, body gets base value {})
-def opts (make Options {x:1 y:2}) def f fn [[m?:opts] [Map] [m]] f	{}
+# Optional Options (all defaults) — omitted (body sees field defaults from the Options type)
+def opts (make Options {x:1 y:2}) def f fn [[m?:opts] [Map] [m]] f	{x:1,y:2}
 
 # Optional Options with disjunct-None fields — omitted
 def opts (make Options {x:(Integer tor None)}) def f fn [[m?:opts] [Map] [m]] f	{}
@@ -218,8 +218,8 @@ def a (make Options {x:1}) def b (make Options {y:2}) def f fn [[a?:a b?:b] [Map
 # SKIPPED post §1.1 fix — same Options-defaults dispatch loop as L203.
 #def a (make Options {x:1}) def b (make Options {y:2}) def f fn [[a?:a b?:b] [Map] [b]] f {y:20}	{y:20}
 
-# Two optional Opts, no required — both omitted
-def a (make Options {x:1}) def b (make Options {y:2}) def f fn [[a?:a b?:b] [Map] [a]] f	{}
+# Two optional Opts, no required — both omitted (each opts param sees its field defaults)
+def a (make Options {x:1}) def b (make Options {y:2}) def f fn [[a?:a b?:b] [Map] [a]] f	{x:1}
 
 # =====================================================================
 # Options parameter positions — all stack configurations

@@ -811,6 +811,30 @@ func BaseValueForConstraint(constraint Value) (Value, error) {
 	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())
 }
 
+// omittedDefaultValue returns the value substituted for an omitted
+// optional FnParam. Options-typed params get a Map populated with
+// each Field's concrete default (fields whose value is a type body —
+// type literals, disjuncts, nested type definitions — carry no
+// default and are skipped). Non-Options params fall back to BaseValue
+// of the param's declared Type.
+func omittedDefaultValue(p FnParam) (Value, error) {
+	if p.Pattern != nil && p.Pattern.IsOptionsType() {
+		oi, err := p.Pattern.AsOptionsType()
+		if err == nil && oi.Fields != nil {
+			m := NewOrderedMap()
+			for _, k := range oi.Fields.Keys() {
+				fv, _ := oi.Fields.Get(k)
+				if IsTypeBody(fv) {
+					continue
+				}
+				m.Set(k, fv)
+			}
+			return NewMap(m), nil
+		}
+	}
+	return BaseValue(p.Type)
+}
+
 // ExpandOptionalSigs takes a list of fn signatures and expands those with
 // optional params into the full set of overloaded signatures. Each
 // optional combination becomes its own signature whose body calls the
@@ -856,7 +880,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 			presentIdx := 0
 			for i, p := range sig.Params {
 				if omitted[i] {
-					bv, err := BaseValue(p.Type)
+					bv, err := omittedDefaultValue(p)
 					if err != nil {
 						continue
 					}
