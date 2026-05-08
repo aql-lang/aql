@@ -23,11 +23,11 @@ func flattenDefaultHandler(args []engine.Value, ctx map[string]engine.Value, sta
 
 // flattenDepthHandler calls voxgigstruct.Flatten with a specified depth.
 func flattenDepthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	depth, err := args[1].AsConcreteInteger()
+	depth, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, fmt.Errorf("flatten: depth: %w", err)
 	}
+	data := valueToAny(args[1])
 	result := voxgigstruct.Flatten(data, int(depth))
 	val, err := anyToValue(result)
 	if err != nil {

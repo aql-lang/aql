@@ -13,8 +13,8 @@ import (
 // selectorHandler calls voxgig struct Select, converting between
 // engine.Value and Go any types.
 func selectorHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	children := valueToAny(args[0])
-	query := valueToAny(args[1])
+	query := valueToAny(args[0])
+	children := valueToAny(args[1])
 
 	result := voxgigstruct.Select(children, query)
 

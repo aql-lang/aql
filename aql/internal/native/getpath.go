@@ -12,11 +12,11 @@ import (
 //
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.
 func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	path, err := args[1].AsConcreteString()
+	path, err := args[0].AsConcreteString()
 	if err != nil {
 		return nil, err
 	}
+	data := valueToAny(args[1])
 
 	result := voxgigstruct.GetPath(path, data)
 

@@ -201,7 +201,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "validate",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TMap}, Handler: validateHandler},
+			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: validateHandler},
 		},
 	},
 
@@ -210,7 +210,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "getpath",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TString}, Handler: getpathHandler},
+			{Args: []engine.Type{engine.TString, engine.TAny}, Handler: getpathHandler},
 		},
 	},
 
@@ -247,8 +247,8 @@ var Natives = []engine.NativeFunc{
 		Name:              "walk",
 		ForwardPrecedence: false,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TFunction, engine.TFunction}, Handler: walkBeforeAfterHandler},
-			{Args: []engine.Type{engine.TAny, engine.TFunction}, Handler: walkBeforeHandler},
+			{Args: []engine.Type{engine.TFunction, engine.TFunction, engine.TAny}, Handler: walkBeforeAfterHandler},
+			{Args: []engine.Type{engine.TFunction, engine.TAny}, Handler: walkBeforeHandler},
 			{Args: []engine.Type{engine.TAny}, Handler: walkHandler},
 		},
 	},
@@ -258,7 +258,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "selector",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TMap}, Handler: selectorHandler},
+			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: selectorHandler},
 		},
 	},
 
@@ -276,7 +276,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "pad",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TInteger}, Handler: padWidthHandler},
+			{Args: []engine.Type{engine.TInteger, engine.TAny}, Handler: padWidthHandler},
 			{Args: []engine.Type{engine.TAny}, Handler: padDefaultHandler},
 		},
 	},
@@ -324,7 +324,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "flatten",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TList, engine.TInteger}, Handler: flattenDepthHandler},
+			{Args: []engine.Type{engine.TInteger, engine.TList}, Handler: flattenDepthHandler},
 			{Args: []engine.Type{engine.TList}, Handler: flattenDefaultHandler},
 		},
 	},
@@ -334,7 +334,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "filter",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TFunction}, Handler: filterHandler},
+			{Args: []engine.Type{engine.TFunction, engine.TAny}, Handler: filterHandler},
 		},
 	},
 
@@ -343,7 +343,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "join",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TList, engine.TString}, Handler: joinSepHandler},
+			{Args: []engine.Type{engine.TString, engine.TList}, Handler: joinSepHandler},
 			{Args: []engine.Type{engine.TList}, Handler: joinDefaultHandler},
 		},
 	},
@@ -353,7 +353,7 @@ var Natives = []engine.NativeFunc{
 		Name:              "jsonify",
 		ForwardPrecedence: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TMap}, Handler: jsonifyFlagsHandler},
+			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: jsonifyFlagsHandler},
 			{Args: []engine.Type{engine.TAny}, Handler: jsonifyDefaultHandler},
 		},
 	},

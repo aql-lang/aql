@@ -13,8 +13,8 @@ import (
 // validateHandler calls voxgigstruct.Validate on data with the given spec.
 // Returns the validated data, or an error if validation fails.
 func validateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	spec := valueToAny(args[1])
+	spec := valueToAny(args[0])
+	data := valueToAny(args[1])
 
 	result, err := voxgigstruct.Validate(data, spec)
 	if err != nil {

@@ -23,14 +23,14 @@ func joinDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 
 // joinSepHandler calls voxgigstruct.Join with a specified separator.
 func joinSepHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
+	sep, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, fmt.Errorf("join: separator: %w", err)
+	}
+	data := valueToAny(args[1])
 	arr, ok := data.([]any)
 	if !ok {
 		return nil, fmt.Errorf("join: expected list, got %T", data)
-	}
-	sep, err := args[1].AsConcreteString()
-	if err != nil {
-		return nil, fmt.Errorf("join: separator: %w", err)
 	}
 	result := voxgigstruct.Join(arr, sep)
 	return []engine.Value{engine.NewString(result)}, nil

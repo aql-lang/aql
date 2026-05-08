@@ -93,8 +93,8 @@ func makeWalkApply(cb engine.Value, r *engine.Registry, callErr *error) func(*st
 // The callback receives a {key, value, path} map for each node and its return
 // value replaces the node. Returns the transformed tree.
 func walkBeforeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	beforeCb := args[1]
+	beforeCb := args[0]
+	data := valueToAny(args[1])
 
 	var callErr error
 	beforeApply := makeWalkApply(beforeCb, r, &callErr)
@@ -116,9 +116,9 @@ func walkBeforeHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // and after (post-order) callbacks. Both callbacks receive a {key, value, path}
 // map and their return values replace the node. Returns the transformed tree.
 func walkBeforeAfterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	beforeCb := args[1]
-	afterCb := args[2]
+	beforeCb := args[0]
+	afterCb := args[1]
+	data := valueToAny(args[2])
 
 	var callErr error
 	beforeApply := makeWalkApply(beforeCb, r, &callErr)

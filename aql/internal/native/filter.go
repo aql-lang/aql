@@ -14,8 +14,8 @@ import (
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
 func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	cb := args[1]
+	cb := args[0]
+	data := valueToAny(args[1])
 
 	var callErr error
 	result := voxgigstruct.Filter(data, func(pair [2]any) bool {
