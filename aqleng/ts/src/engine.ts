@@ -400,16 +400,19 @@ export class Engine {
       )
     }
 
-    // Bind each param on the def stack so the body can reference it.
+    // Bind each param on the def stack so the body can reference it,
+    // and push the args list for the `args` word.
     for (let i = 0; i < info.params.length; i++) {
       this.registry.pushDef(info.params[i]!.name, result.args[i]!)
     }
+    this.registry.pushArgs([...result.args])
 
     let bodyResult: Value[]
     try {
       const sub = new Engine(this.registry)
       bodyResult = sub.run([...info.body])
     } finally {
+      this.registry.popArgs()
       // Pop in reverse to keep the def stack consistent with multiple
       // params sharing a name (rare but possible).
       for (let i = info.params.length - 1; i >= 0; i--) {

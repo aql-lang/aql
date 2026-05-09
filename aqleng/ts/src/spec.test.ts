@@ -350,6 +350,25 @@ function registerSpecWords(r: Registry): void {
   // it as a normal native — the engine intercepts the Word at the
   // pointer and removes / fires accordingly (see Engine.stepEnd).
 
+  // args: 0-arg word that returns the current fn-call's argument
+  // frame as a list. dispatchFnDef pushes the matched args (in sig
+  // order) before running the body so bodies can reference
+  // positional args by index without naming each param. Empty list
+  // when there's no active fn call.
+  reg({
+    name: 'args',
+    forwardPrecedence: false,
+    signatures: [
+      {
+        args: [],
+        handler: (_args, _ctx, _stk, registry) => {
+          const top = registry.topArgs()
+          return [newList(top ? [...top] : [], { eval: false })]
+        },
+      },
+    ],
+  })
+
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
   // dispatch, provided the value isn't an FnDef / ObjectType.

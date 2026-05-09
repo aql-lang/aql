@@ -24,6 +24,13 @@ export class Registry {
   private functions = new Map<string, FunctionEntry>()
   private defStacks = new Map<string, Value[]>()
   private capabilities = new Map<string, unknown>()
+  /**
+   * Per-call args frames. dispatchFnDef pushes a frame containing
+   * the matched args (in sig order) before running the body, and
+   * pops after. The `args` word returns the top frame so a body can
+   * read positional args by index without naming each param.
+   */
+  private argsStack: Value[][] = []
 
   // ── Capabilities ──────────────────────────────────────────────────────
 
@@ -150,6 +157,19 @@ export class Registry {
 
   defNames(): string[] {
     return [...this.defStacks.keys()]
+  }
+
+  // ── Args stack ────────────────────────────────────────────────────────
+  pushArgs(args: Value[]): void {
+    this.argsStack.push(args)
+  }
+
+  popArgs(): Value[] | undefined {
+    return this.argsStack.pop()
+  }
+
+  topArgs(): Value[] | undefined {
+    return this.argsStack[this.argsStack.length - 1]
   }
 }
 

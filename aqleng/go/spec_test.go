@@ -433,6 +433,23 @@ func registerSpecWords(r *Registry) {
 	// `end` is a structural keyword the engine handles directly via
 	// stepEnd in aqleng/go/engine.go — no spec registration needed.
 
+	// args: 0-arg word that returns the current fn-call's argument
+	// frame as a list. dispatchFnDef pushes the matched args (in sig
+	// order) before running the body.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "args",
+		Signatures: []NativeSig{{
+			Args: []Type{},
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				if top, ok := reg.TopArgs(); ok {
+					return []Value{top}, nil
+				}
+				return []Value{NewList(nil)}, nil
+			},
+			Returns: []Type{TList},
+		}},
+	})
+
 	// Simple-value defs the def.tsv spec references. A word whose name
 	// is in the def stack is substituted by its value before normal
 	// dispatch, provided the value isn't an FnDef / ObjectType.
@@ -462,7 +479,13 @@ func installSpecFnDef(r *Registry, name string, sig FnSig) {
 				for i, p := range sig.Params {
 					reg.PushDef(p.Name, args[i])
 				}
+				// Push the args list so the body can read positional
+				// args via the `args` word. Mirrors the InstallFnDef
+				// path in core_helpers.go that does the same.
+				argsCopy := append([]Value{}, args...)
+				reg.PushArgs(NewList(argsCopy))
 				defer func() {
+					reg.PopArgs()
 					for i := len(sig.Params) - 1; i >= 0; i-- {
 						reg.PopDef(sig.Params[i].Name)
 					}

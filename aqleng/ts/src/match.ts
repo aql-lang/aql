@@ -68,6 +68,13 @@ export function matchEntry(
     const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, true)
     if (r) return r
   }
+  // 0-arg fallback: if the function declares a 0-arg sig (e.g. `args`,
+  // bare keywords), match it with no consumed prefix or forward.
+  for (const sig of fn.signatures) {
+    if (sig.args.length === 0) {
+      return { sig, args: [], forwardCount: 0, prefixCount: 0 }
+    }
+  }
   return null
 }
 
