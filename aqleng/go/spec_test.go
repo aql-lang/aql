@@ -3,6 +3,7 @@ package aqleng
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,57 +24,123 @@ var replayCounter int
 // Keep this list small and stable — the specs are easier to read
 // when there's no surprise about what each word does.
 func registerSpecWords(r *Registry) {
-	// add, sub, mul: integer arithmetic via forward precedence.
+	// add, sub, mul: numeric arithmetic via forward precedence.
+	//
+	// Sig is [TNumber, TNumber] so Integer and Decimal both match
+	// (Integer/Decimal are subtypes of Number). The handler dispatches
+	// on the runtime VType of each arg:
+	//   - both Integer  → integer op, returns NewInteger
+	//   - any Decimal   → float op,   returns NewDecimal
+	// This is the "decimal contagion" rule: any decimal in either slot
+	// promotes the result to Decimal. Mirrors the production engine's
+	// numericBinaryHandler in aql/internal/engine/native_math.go.
+	//
+	// Convention: handler computes args[0] op args[1] (so the canonical
+	// form `op a b` reads `a op b`; the swap form `a op b` becomes
+	// `b op a` — see arithmetic.tsv / mirror.tsv).
+	toFloat := func(v Value) float64 {
+		if v.VType.Matches(TInteger) {
+			n, _ := v.AsInteger()
+			return float64(n)
+		}
+		f, _ := v.AsDecimal()
+		return f
+	}
+	numericBinary := func(intOp func(int64, int64) int64, floatOp func(float64, float64) float64) Handler {
+		return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			if args[0].VType.Matches(TInteger) && args[1].VType.Matches(TInteger) {
+				a, _ := args[0].AsInteger()
+				b, _ := args[1].AsInteger()
+				return []Value{NewInteger(intOp(a, b))}, nil
+			}
+			return []Value{NewDecimal(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
+		}
+	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "add",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger, TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
-				return []Value{NewInteger(a + b)}, nil
-			},
-			Returns: []Type{TInteger},
+			Args:    []Type{TNumber, TNumber},
+			Handler: numericBinary(func(a, b int64) int64 { return a + b }, func(a, b float64) float64 { return a + b }),
+			Returns: []Type{TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "sub",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger, TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
-				return []Value{NewInteger(a - b)}, nil
-			},
-			Returns: []Type{TInteger},
+			Args:    []Type{TNumber, TNumber},
+			Handler: numericBinary(func(a, b int64) int64 { return a - b }, func(a, b float64) float64 { return a - b }),
+			Returns: []Type{TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "mul",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger, TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
-				return []Value{NewInteger(a * b)}, nil
-			},
-			Returns: []Type{TInteger},
+			Args:    []Type{TNumber, TNumber},
+			Handler: numericBinary(func(a, b int64) int64 { return a * b }, func(a, b float64) float64 { return a * b }),
+			Returns: []Type{TNumber},
 		}},
 	})
 
-	// neg: stack-only unary integer negation.
+	// neg: stack-only unary numeric negation. Same Integer/Decimal
+	// dispatch as the binary ops — Integer in, Integer out;
+	// Decimal in, Decimal out. Kept as the stack-only witness
+	// (used by stack.tsv and force.tsv); the forward-prec sister
+	// `negate` lives below and mirrors aql/internal/nativemod/math.go.
+	negateHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		if args[0].VType.Matches(TInteger) {
+			n, _ := args[0].AsInteger()
+			return []Value{NewInteger(-n)}, nil
+		}
+		f, _ := args[0].AsDecimal()
+		return []Value{NewDecimal(-f)}, nil
+	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "neg",
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger},
+			Args:    []Type{TNumber},
+			Handler: negateHandler,
+			Returns: []Type{TNumber},
+		}},
+	})
+
+	// negate: forward-precedence unary negation. Mirror of `neg`'s
+	// semantics but with default forward dispatch (matches the
+	// production aql:math module's `negate` word). Decimal in,
+	// Decimal out — preserves the type tag.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "negate",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:    []Type{TNumber},
+			Handler: negateHandler,
+			Returns: []Type{TNumber},
+		}},
+	})
+
+	// abs: forward-precedence absolute value. Integer or Decimal in,
+	// matching type out. Mirrors aql/internal/nativemod/math.go::abs.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "abs",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TNumber},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				n, _ := args[0].AsInteger()
-				return []Value{NewInteger(-n)}, nil
+				if args[0].VType.Matches(TInteger) {
+					n, _ := args[0].AsInteger()
+					if n < 0 {
+						n = -n
+					}
+					return []Value{NewInteger(n)}, nil
+				}
+				f, _ := args[0].AsDecimal()
+				// math.Abs handles IEEE 754 corner cases correctly:
+				// -0.0 → 0.0 (sign bit cleared), NaN → NaN, ±Inf → +Inf.
+				return []Value{NewDecimal(math.Abs(f))}, nil
 			},
-			Returns: []Type{TInteger},
+			Returns: []Type{TNumber},
 		}},
 	})
 
