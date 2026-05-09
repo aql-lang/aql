@@ -117,52 +117,84 @@ func registerCoreDef(r *Registry) {
 	})
 }
 
-// registerCoreFn installs `fn [params] [returns] [body]`. The params
-// list and returns list are walked by the canonical parser in
-// fn_params.go (ParseFnParams + ParseFnReturns) — same code path the
-// production aql `def`/`fn` use. That parser handles:
+// registerCoreFn installs `fn`. Two overloads:
 //
-//   - `?` marker for optional params
-//   - `|` marker for the BarrierPos
-//   - `{name:Type}` implicit-pair maps (with optional `?` name suffix)
+//   fn [triples-list]       — multi-sig form. The single list arg
+//                             contains [input-sig, output-sig, body]
+//                             repeated as many times as there are
+//                             overloads. This is the production aql
+//                             form, and is required for multi-sig.
+//
+//   fn [input] [output] [body]
+//                           — single-sig sugar. Equivalent to wrapping
+//                             the three lists in an outer list and
+//                             passing to the multi-sig form. Kept for
+//                             ergonomics; existing single-sig spec
+//                             rows don't need the outer-bracket pair.
+//
+// Both forms route through ParseFnDef in fn_def.go — same code path
+// the production aql `def`/`fn` use. The shared parser handles:
+//
+//   - signature triples [input-sig output-sig body], repeated
+//   - `?` marker for optional params, `|` for BarrierPos
+//   - `{name:Type}` implicit-pair maps (with optional `?` suffix)
 //   - bare type-name Words and type literals
 //   - paren-expr type slots and disjuncts containing None
 //   - concrete-value patterns (Integer/Boolean/String literals)
+//   - return-by-value output sigs (`[42 "ok"]`) appended to the body
 //
-// At def-time the FnSig is fed through ExpandOptionalSigs so every
+// At def-time each FnSig is fed through ExpandOptionalSigs so every
 // present/omitted combination of optional params becomes its own
 // callable overload, with omitted params filled by their type's
 // BaseValue.
+//
+// Multi-sig dispatch then happens at call time via matchSignature,
+// which picks the best (highest-arity, most-specific) match per call
+// site.
 func registerCoreFn(r *Registry) {
+	multiHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		// args[0] is a list of triples — pass its elements to ParseFnDef.
+		if args[0].Data == nil {
+			return nil, &AqlError{
+				Code:   "fn_invalid_spec",
+				Detail: "fn: multi-sig form requires a concrete list of triples",
+			}
+		}
+		spec := args[0].AsList().Slice()
+		info, err := ParseFnDef(reg, spec)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewFnDef(info)}, nil
+	}
+	sugarHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		// Three-arg sugar: assemble [args[0], args[1], args[2]] and
+		// route through ParseFnDef. Equivalent in every way to the
+		// multi-sig form's single-triple case.
+		spec := []Value{args[0], args[1], args[2]}
+		info, err := ParseFnDef(reg, spec)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewFnDef(info)}, nil
+	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TList, TList, TList},
-			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				params, barrierPos, err := ParseFnParams(reg, args[0])
-				if err != nil {
-					return nil, err
-				}
-				returns, err := ParseFnReturns(args[1])
-				if err != nil {
-					return nil, err
-				}
-				body := args[2].AsList()
-
-				info := FnDefInfo{
-					Sigs: []FnSig{{
-						Params:     params,
-						Returns:    returns,
-						BarrierPos: barrierPos,
-						Body:       body.Slice(),
-					}},
-				}
-				return []Value{NewFnDef(info)}, nil
+		Signatures: []NativeSig{
+			{
+				Args:       []Type{TList, TList, TList},
+				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+				Handler:    sugarHandler,
+				Returns:    []Type{TFunction},
 			},
-			Returns: []Type{TFunction},
-		}},
+			{
+				Args:       []Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    multiHandler,
+				Returns:    []Type{TFunction},
+			},
+		},
 	})
 }
 
@@ -205,6 +237,14 @@ func registerCoreQuote(r *Registry) {
 // fn-call's argument frame as a List. Outside any fn call, returns
 // the empty list — consistent with "no args available" rather than
 // raising.
+//
+// Also installs the engine-internal marker `__pa` (pop args). The
+// engine emits `__pa` at the tail of fn-body expansions in
+// execFnDefSig (engine.go) and InstallFnDef (core_helpers.go) — its
+// only job is to pop the args frame that the call-site pushed via
+// PushArgs. Without it, an FnDef literal that lands at a non-forward
+// position (e.g. paren-wrapped, then auto-called) reaches stepWord
+// with an unregistered word and fails with `undefined_word`.
 func registerCoreArgs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "args",
@@ -217,6 +257,18 @@ func registerCoreArgs(r *Registry) {
 				return []Value{NewList(nil)}, nil
 			},
 			Returns: []Type{TList},
+		}},
+	})
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "__pa",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{},
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				reg.PopArgs()
+				return nil, nil
+			},
+			Returns: []Type{},
 		}},
 	})
 }
