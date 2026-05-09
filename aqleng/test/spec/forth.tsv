@@ -1,0 +1,228 @@
+# =====================================================================
+# Principle: Forth-style new-word definitions via `def NAME [body]`.
+# =====================================================================
+#
+# Classic Forth defines new words with a colon definition:
+#
+#     : square dup * ;
+#     : cube  dup dup * * ;
+#     : 1+    1 + ;
+#     : -rot  rot rot ;
+#
+# In aqleng the equivalent is `def NAME [body]` — a list-bound def
+# whose body is spliced in-place at every use site (NOT an `fn` call
+# with named parameters; see fn.tsv for that). The body executes
+# against the current stack, exactly like a Forth colon definition.
+# Per code-splice.tsv:
+#
+#     def NAME [body]    →   register list-body
+#     ... NAME ...       →   stepWord splices the body's tokens at
+#                            the pointer; they execute in-place
+#
+# This file pins the canonical Forth idioms expressed under aqleng's
+# core word set. Math operations are spelled with the q-suffix
+# (`addq`, `mulq`, `subq`, `negq` — they're test fixtures in the
+# spec runner; the production AQL has bare `add`, `mul`, etc.). The
+# stack ops and `not`/`and`/`or` are core words from aqleng proper
+# (no q suffix; see core_words.go and core_boolean.go).
+#
+# What this file does NOT cover
+# -----------------------------
+# Words that require `if`/`then`/`else` or `for`/`while` are
+# deliberately omitted. The classic Forth `abs`, `max`, `min`,
+# tail-recursive `factorial`, etc. all need conditionals which
+# aqleng's spec runner doesn't yet register. They land once the
+# `if`/`for` core words do.
+#
+# What this file DOES cover
+# -------------------------
+# 1. Forth-style "increment" / "decrement" / "double" / "halve" words
+#    (only the integer ones — no integer-divide in core).
+# 2. Squaring and cubing via `dup`/`mulq`.
+# 3. Sum-of-squares (Pythagorean a²+b²) — composing `dup`, `mulq`,
+#    `swap`, `addq`.
+# 4. Stack-manipulation words DEFINED in terms of the lower-level
+#    primitives — `2dup-alt = over over`, `nip-alt = swap drop`,
+#    `tuck-alt = swap over`. Verifies that the core ops aqleng
+#    inherits from production are *equivalent* to their Forth
+#    definitions, not just lookalike names.
+# 5. Anti-rotate `-rot` as `rot rot`.
+# 6. Negation as `0 swap subq` — the classic Forth definition that
+#    doesn't need a dedicated `negate` primitive.
+# 7. Boolean wrappers: `both-true`, `either`.
+# 8. Composition — defining a word in terms of an already-defined
+#    word (square applied twice = quart).
+#
+# Why this matters
+# ----------------
+# The list-body splice is the foundational definition mechanism for
+# any concatenative language. Pinning down the classic Forth idioms
+# in regression rows lets future engine refactors detect any drift
+# in splice semantics, in arg-binding under inline-spliced ops, or
+# in the matcher's interaction with multi-defined words.
+
+# tokens	expected	note
+
+# ---------- 1. Increment / decrement / scale ----------
+# Classic Forth: `: 1+ 1 + ;`. In our spec runner: `1 addq`.
+# `5 1+` splices to `5 1 addq`. Stack=[5, 1] for addq → sig=[1, 5]
+# → handler returns 5+1=6.
+def 1+ [ 1 addq ] 5 1+	6	classic Forth `: 1+ 1 + ;` — increment top of stack
+def 1+ [ 1 addq ] 0 1+	1	1+ on zero
+def 1+ [ 1 addq ] -3 1+	-2	1+ on a negative
+
+def 1- [ 1 subq ] 5 1-	4	classic `: 1- 1 - ;` — decrement; subq sig=[1, 5] → 5-1=4
+def 1- [ 1 subq ] 1 1-	0	1- on one
+def 1- [ 1 subq ] 0 1-	-1	1- on zero (rolls negative)
+
+def 2+ [ 2 addq ] 5 2+	7	`: 2+ 2 + ;` — add 2
+def 2- [ 2 subq ] 5 2-	3	`: 2- 2 - ;` — subtract 2
+def 2x [ 2 mulq ] 5 2x	10	`: 2* 2 * ;` — Forth's classic `2*` (here named 2x to avoid the lexer treating leading-2 as a number-prefix)
+def 2x [ 2 mulq ] -3 2x	-6	2x on a negative
+
+# Double via dup-and-add — alternative to `2 *` that avoids loading
+# the literal 2 first. Same result, slightly different stack churn.
+def double [ dup addq ] 5 double	10	`: double dup + ;`
+def double [ dup addq ] 7 double	14
+def double [ dup addq ] 0 double	0
+
+# ---------- 2. Square / cube ----------
+# Classic: `: square dup * ;` — duplicate top, multiply, leaving a²
+# on the stack. cube is `dup dup * *` (or `dup square *`).
+def square [ dup mulq ] 5 square	25	`: square dup * ;`
+def square [ dup mulq ] -4 square	16	negative input still squares to positive
+def square [ dup mulq ] 0 square	0	zero squared is zero
+
+def cube [ dup dup mulq mulq ] 4 cube	64	`: cube dup dup * * ;` — n*n*n
+def cube [ dup dup mulq mulq ] 3 cube	27	3³ = 27
+def cube [ dup dup mulq mulq ] -2 cube	-8	(-2)³ = -8
+
+# ---------- 3. Sum-of-squares (Pythagorean a²+b²) ----------
+# Classic Forth `: sumsq dup * swap dup * + ;` — given (a b) on stack,
+# computes a²+b². Useful as the body of `: hyp sumsq sqrt ;` once
+# sqrt exists.
+#
+# Trace for `3 4 sumsq`:
+#   stack [3, 4]
+#   dup    → [3, 4, 4]
+#   mulq   → addq sig=[4,4], stk top=4 deeper=4 → 4*4=16; stack [3, 16]
+#   swap   → [16, 3]
+#   dup    → [16, 3, 3]
+#   mulq   → 3*3 = 9; stack [16, 9]
+#   addq   → sig=[9, 16] → 16+9 = 25; stack [25]
+def sumsq [ dup mulq swap dup mulq addq ] 3 4 sumsq	25	a²+b² for (3, 4) → 9+16 = 25
+def sumsq [ dup mulq swap dup mulq addq ] 1 1 sumsq	2	1²+1² = 2
+def sumsq [ dup mulq swap dup mulq addq ] 5 12 sumsq	169	5²+12² = 169 (Pythagorean triple)
+def sumsq [ dup mulq swap dup mulq addq ] 0 0 sumsq	0	zero case
+
+# ---------- 4. Stack-manipulation words from primitives ----------
+# Classic Forth defines composite stack ops in terms of lower-level
+# primitives. These rows verify that aqleng's core stack ops behave
+# identically to their Forth-textbook definitions.
+
+# `: 2dup over over ;` — duplicate top pair via two `over` calls.
+# Trace [a, b]: over → [a, b, a]; over → [a, b, a, b]. So 2dup-alt
+# produces the same result as the core `2dup` word.
+def 2dup-alt [ over over ] 1 2 2dup-alt	1 2 1 2	classic `: 2dup over over ;`
+def 2dup-alt [ over over ] "x" "y" 2dup-alt	"x" "y" "x" "y"	any-typed
+def 2dup-alt [ over over ] 1 2 2dup-alt 2dup	1 2 1 2 1 2	chained: alt then core 2dup
+
+# `: nip swap drop ;` — drop second-from-top, keeping the top.
+# Trace [a, b]: swap → [b, a]; drop → [b]. Matches core `nip`.
+def nip-alt [ swap drop ] 1 2 nip-alt	2	classic `: nip swap drop ;`
+def nip-alt [ swap drop ] 1 2 3 nip-alt	1 3	deeper untouched
+
+# `: tuck swap over ;` — copy the top under the second.
+# Trace [a, b]: swap → [b, a]; over → [b, a, b]. Matches core `tuck`.
+def tuck-alt [ swap over ] 1 2 tuck-alt	2 1 2	classic `: tuck swap over ;`
+
+# ---------- 5. Anti-rotate (-rot) ----------
+# Classic Forth: `: -rot rot rot ;` — rotate the top three the OTHER
+# way, i.e. (a b c — c a b). Two applications of rot get there.
+# Trace [a, b, c]: rot → [b, c, a]; rot → [c, a, b].
+def -rot [ rot rot ] 1 2 3 -rot	3 1 2	`: -rot rot rot ;` — anti-rotate
+def -rot [ rot rot ] "a" "b" "c" -rot	"c" "a" "b"	any-typed
+def -rot [ rot rot ] 0 1 2 3 -rot	0 3 1 2	deeper element (0) untouched
+
+# ---------- 6. Negation via `0 swap subq` ----------
+# Classic Forth: `: negate 0 swap - ;` — push 0 under the operand,
+# then subtract. n becomes 0 - n (= -n) by the b-a convention.
+# Trace [n]: 0 → [n, 0]; swap → [0, n]; subq sig=[n, 0] (top=n,
+# deeper=0) → handler b-a = 0-n = -n. Stack [-n].
+def fneg [ 0 swap subq ] 5 fneg	-5	classic `: negate 0 swap - ;`
+def fneg [ 0 swap subq ] -3 fneg	3	-(-3) = 3
+def fneg [ 0 swap subq ] 0 fneg	0	-0 = 0 (Integer; no IEEE sign-flip for Integer)
+
+# Compare to the bare `negq` from core_words.go — should agree.
+def fneg [ 0 swap subq ] 7 fneg	-7	matches `7 negq` from numbers.tsv
+5 negq	-5	control: bare negq for the same input
+
+# ---------- 7. Boolean wrappers ----------
+def both-true [ and ] true true both-true	true	classic and via wrapper
+def both-true [ and ] true false both-true	false	short-circuits on falsy second arg
+def both-true [ and ] false true both-true	false	short-circuits on falsy first arg
+
+def either [ or ] true false either	true	classic or via wrapper
+def either [ or ] false false either	false	both falsy → falsy
+
+def neither [ or not ] false false neither	true	classic NOR via composition: `or not`
+def neither [ or not ] true false neither	false	or fires first (true), then not flips it
+
+# ---------- 8. Composition: word built from defined words ----------
+# Classic Forth lets you build complex words from simpler defined
+# ones. Each splice happens at use site, so the inner def must be
+# established BEFORE the outer is invoked.
+
+# square applied twice — quartic.
+def square [ dup mulq ] def quart [ square square ] 3 quart	81	3⁴ = 81 via square applied twice
+def square [ dup mulq ] def quart [ square square ] 2 quart	16	2⁴ = 16
+def square [ dup mulq ] def quart [ square square ] -2 quart	16	(-2)⁴ = 16
+
+# Increment-twice composing a defined `1+`.
+def 1+ [ 1 addq ] def 2incr [ 1+ 1+ ] 5 2incr	7	double-applying 1+ via composition
+def 1+ [ 1 addq ] def 4incr [ 1+ 1+ 1+ 1+ ] 5 4incr	9	four-fold increment chain
+
+# Square-then-double — square first (5²=25), then double (25 dup +).
+def square [ dup mulq ] def double [ dup addq ] 5 square double	50	pipeline: 5 → 25 → 50
+
+# Sum-of-squares of two squared values (square ∘ square ∘ +).
+# This row exposes a subtle interaction worth pinning: list-body
+# splicing + forward-precedence.
+#
+# `3 square 4 square addq` does NOT compute `(3² + 4²) = 25`. The
+# first `square` splices `[dup mulq]`. After dup the stream is
+# `3 3 mulq 4 square addq`. mulq is forward-precedence with sig
+# `[TNumber, TNumber]`, so its fwd-scan sees the `4` (matches Number,
+# fwd=1), then `square` (def-as-TList, which fails the Number type
+# at sig[1] and acts as a boundary). With one forward arg + one
+# stack arg, mulq fires `args=[4, 3]` → `b*a = 3*4 = 12`. The first
+# square has consumed BOTH the dup'd 3 AND the literal 4. The second
+# square then squares 12 → 144, and addq finally combines with the
+# remaining 3 → 3 + 144 = 147.
+#
+# To get the intended `9 + 16 = 25`, isolate each square call in a
+# paren so the inner mulq's fwd-scan can't reach across.
+def square [ dup mulq ] 3 square 4 square addq	147	NAIVE form: shows the body-splice/fwd-prec interaction. mulq inside the first square greedily consumes the literal 4 → 3*4=12, then 12*12=144, plus residue 3 → 147
+def square [ dup mulq ] ( 3 square ) ( 4 square ) addq	25	FIXED form: paren isolates each square call. (3 square)=9, (4 square)=16, addq=25.
+
+# Sum-of-squares of two squared values (square ∘ square ∘ +).
+# `3 4` → squares to (9, 16) — but with a single sumsq we just want
+# a²+b². Show via independent squares + addq, paren-isolated.
+def square [ dup mulq ] ( 3 square ) ( 4 square ) addq	25	square 3 → 9; square 4 → 16; addq → 25 (paren-isolated form)
+
+# ---------- 9. Limits — what NEEDS conditionals ----------
+# These rows are commented documentation of what's deliberately
+# absent. None of them appear as test rows because they don't yet
+# work in the spec runner.
+#
+#   : abs    dup 0 < if negate then ;       — needs if/then
+#   : max    2dup < if swap then drop ;     — needs if/then
+#   : min    2dup > if swap then drop ;     — needs if/then
+#   : sign   dup 0 < if drop -1 else
+#                       0 = if 0 else 1 then then ;  — needs if/else
+#   : factorial dup 1 = if drop 1
+#                          else dup 1- recurse * then ;  — needs recurse/if
+#
+# Once the engine grows `if`/`then`/`for`, these classic idioms can
+# land — and will live in this file alongside the conditional-free
+# rows above.
