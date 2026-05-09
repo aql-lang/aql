@@ -88,6 +88,10 @@ export class Engine {
       }
     }
 
+    // End-of-run drain: any residual eval-list on the stack runs its
+    // contents and is replaced by the residual sub-stack as a list.
+    this.autoEvalStack()
+
     return this.stack
   }
 
@@ -125,7 +129,12 @@ export class Engine {
         this.dispatchFnDef(name, top.asFnDef())
         return
       }
-      if (top.vType.matches(TList) && top.isConcrete()) {
+      if (top.vType.matches(TList) && top.isConcrete() && !top.quoted) {
+        // Unquoted list → code body: splice its elements at the
+        // pointer so they execute inline. A quoted list (set via
+        // `quote`) is data and falls through to the literal-substitute
+        // branch below. Mirrors aqleng/go/engine.go's def-sub
+        // `!top.Quoted` check.
         const elems = top.asList()
         this.stack.splice(this.pointer, 1, ...elems)
         // pointer stays — first body token executes next iteration.
@@ -172,13 +181,16 @@ export class Engine {
   }
 
   /**
-   * Run a fully-resolved match: execute the handler and splice the
-   * result over the consumed prefix + word + forward range.
+   * Run a fully-resolved match: auto-evaluate any list args whose
+   * sig position isn't NoEvalArgs-marked, then execute the handler
+   * and splice the result over the consumed prefix + word + forward
+   * range.
    */
   private dispatch(
     result: import('./match.ts').MatchResult,
     name: string,
   ): void {
+    this.autoEvalArgs(result.args, result.sig)
     const handlerResult = result.sig.handler(result.args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new AqlError(
@@ -554,6 +566,7 @@ export class Engine {
 
   /** Run the marker's handler with `args` and replace it with the result. */
   private fireMarker(fwdIdx: number, m: ForwardMarker, args: Value[]): void {
+    this.autoEvalArgs(args, m.sig)
     const handlerResult = m.sig.handler(args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new AqlError(
@@ -565,6 +578,50 @@ export class Engine {
     const out = handlerResult as Value[]
     this.stack.splice(fwdIdx, 1, ...out)
     this.pointer = fwdIdx
+  }
+
+  /**
+   * Auto-evaluate any TList args carrying `eval=true && !quoted`,
+   * unless the sig declares NoEvalArgs for that position. Mirrors
+   * aqleng/go/engine.go's pre-handler autoEvalList step in execMatch.
+   * Mutates `args` in place.
+   */
+  private autoEvalArgs(args: Value[], sig: Signature): void {
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]!
+      if (sig.noEvalArgs?.has(i)) continue
+      if (!a.vType.matches(TList)) continue
+      if (!a.eval || a.quoted) continue
+      if (!a.isConcrete()) continue
+      args[i] = this.autoEvalList(a)
+    }
+  }
+
+  /**
+   * Auto-evaluate a single TList: run a fresh sub-engine on its
+   * elements and wrap the residual stack as a new (non-eval) list.
+   * The result is data — clearing eval=true ensures it doesn't
+   * recursively re-evaluate when consumed by an outer caller.
+   */
+  private autoEvalList(list: Value): Value {
+    const elems = list.asList()
+    const sub = new Engine(this.registry)
+    const result = sub.run([...elems])
+    return new Value(list.vType, result, { eval: false, quoted: false })
+  }
+
+  /**
+   * End-of-Run pass: any TList still on the stack with eval=true and
+   * !quoted gets auto-evaluated. Mirrors Go's autoEvalStack drain.
+   */
+  private autoEvalStack(): void {
+    for (let i = 0; i < this.stack.length; i++) {
+      const v = this.stack[i]!
+      if (!v.vType.matches(TList)) continue
+      if (!v.eval || v.quoted) continue
+      if (!v.isConcrete()) continue
+      this.stack[i] = this.autoEvalList(v)
+    }
   }
 
   private describeStack(): string {

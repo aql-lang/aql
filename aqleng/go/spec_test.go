@@ -410,9 +410,20 @@ func registerSpecWords(r *Registry) {
 				Returns: []Type{TAtom},
 			},
 			{
-				Args: []Type{TAny},
+				// NoEvalArgs keeps the list raw (not auto-evaluated)
+				// so we can flag it Quoted=true and have the def-sub
+				// path treat it as data instead of splicing it as a
+				// code body. Without this, `def y quote [1 add 2]`
+				// would bind y to a code list and `y` would inline-
+				// execute its tokens.
+				Args:       []Type{TAny},
+				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					return []Value{args[0]}, nil
+					v := args[0]
+					if v.VType.Equal(TList) && v.Data != nil {
+						v.Quoted = true
+					}
+					return []Value{v}, nil
 				},
 				Returns: []Type{TAny},
 			},
@@ -562,7 +573,11 @@ func tokenizeSpec(s string) ([]Value, error) {
 			}
 			stack = stack[:top]
 			parent := len(stack) - 1
-			stack[parent] = append(stack[parent], NewList(collected))
+			// Tokenizer-built lists carry Eval=true so the engine's
+			// auto-evaluation paths (execMatch and end-of-Run drain)
+			// fire on them, mirroring the parser's NewEvalList output
+			// in the production aql package.
+			stack[parent] = append(stack[parent], NewEvalList(collected))
 			continue
 		}
 

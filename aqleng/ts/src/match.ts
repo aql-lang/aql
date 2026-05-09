@@ -47,11 +47,25 @@ export function matchEntry(
   // The dispatching word lives at stack[pointer]. Its WordInfo may
   // carry /s or /f modifiers that override the sig's BarrierPos.
   const wordInfo = readWordInfo(stack, pointer)
+  // Strict pass: forward stops on type mismatch, stack fills the
+  // rest. Most calls bind here.
   for (const sig of fn.signatures) {
     const n = sig.args.length
     if (n === 0) continue
-
-    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry)
+    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, false)
+    if (r) return r
+  }
+  // Optimistic pass: a forward-side Word that names a registered
+  // function is accepted even when the sig wants a different type;
+  // engine.shouldDeferDispatch will then defer dispatch via
+  // insertForward, and stepLiteral re-type-checks the resolved value
+  // when it flows back. Only used as a fallback so we don't override
+  // a legitimate stack fill (e.g. inside a fn body where the trailing
+  // word is the OUTER caller, not an arg to the inner one).
+  for (const sig of fn.signatures) {
+    const n = sig.args.length
+    if (n === 0) continue
+    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, true)
     if (r) return r
   }
   return null
@@ -95,6 +109,7 @@ function tryMatch(
   pointer: number,
   word: WordInfo | undefined,
   registry: Registry | undefined,
+  optimistic: boolean,
 ): MatchResult | null {
   // sig.barrierPos: 0 = boundary at start (all stack), N = boundary
   // at end (all forward-eligible). The Registry has already
@@ -114,7 +129,27 @@ function tryMatch(
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
     const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
-    if (!sigTypeMatches(tok, sig.args[fwd]!)) break
+    if (!sigTypeMatches(tok, sig.args[fwd]!)) {
+      // Optimistic-deferral case (second pass only): a Word naming
+      // a registered function may dispatch to a value of the right
+      // type. Accept the raw Word here so engine.shouldDeferDispatch
+      // defers the outer dispatch via insertForward; stepLiteral will
+      // re-type-check the resolved value at collection time. Strict
+      // pass leaves it to the regular forward-stop / stack-fallback
+      // path; this avoids stealing stack-fillable args inside fn
+      // bodies (e.g. `a b add c add` where the trailing add is the
+      // OUTER caller, not an arg to the inner add).
+      if (optimistic && rawTok.isWord() && registry) {
+        const w = rawTok.asWord() as { name: string }
+        if (registry.lookup(w.name)) {
+          args[fwd] = rawTok
+          fwd++
+          scanIdx++
+          continue
+        }
+      }
+      break
+    }
     args[fwd] = tok
     fwd++
     scanIdx++
@@ -145,6 +180,11 @@ export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType):
 }
 
 function isStructuralBoundary(v: Value): boolean {
+  // ForwardMarker values share the Word lattice (TForward = Word/__FW)
+  // but are internal control values, not data. Forward scan must
+  // not collect one as a Word/TAny arg, and stack phase must not
+  // pick one up either.
+  if (v.isForward()) return true
   if (!v.vType.matches(TWord)) return false
   const name = (v.data as { name?: string } | null)?.name
   return name === '(' || name === ')' || name === 'end'

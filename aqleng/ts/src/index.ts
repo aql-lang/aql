@@ -53,10 +53,12 @@ export {
   newBoolean,
   newDecimal,
   newFnDef,
+  newForwardMarker,
   newInteger,
   newList,
   newString,
   newTypeLiteral,
   newWord,
+  withQuoted,
 } from './value.ts'
-export type { FnDefInfo, FnParam, WordInfo } from './value.ts'
+export type { FnDefInfo, FnParam, ForwardMarker, WordInfo } from './value.ts'

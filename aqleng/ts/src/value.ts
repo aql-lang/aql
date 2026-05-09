@@ -76,12 +76,25 @@ export interface FnDefInfo {
 export class Value {
   readonly vType: AqlType
   readonly data: unknown
+  /**
+   * For TList values: when true, the list contents will auto-evaluate
+   * when the list is consumed as a word argument (or when it's
+   * unconsumed at end of Run). Parser/tokenizer produces lists with
+   * eval=true; quote produces lists with quoted=true to suppress.
+   * Mirrors Go Value.Eval / Value.Quoted on TList.
+   */
+  readonly eval: boolean
   readonly quoted: boolean
   readonly carrier: boolean
 
-  constructor(vType: AqlType, data: unknown, opts?: { quoted?: boolean; carrier?: boolean }) {
+  constructor(
+    vType: AqlType,
+    data: unknown,
+    opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean },
+  ) {
     this.vType = vType
     this.data = data
+    this.eval = opts?.eval ?? false
     this.quoted = opts?.quoted ?? false
     this.carrier = opts?.carrier ?? false
   }
@@ -266,11 +279,18 @@ export function newAny(data: unknown): Value {
 
 /**
  * Construct a list value with VType = Node/List. Data is the array
- * of element Values. Mirrors Go's NewList — no `Eval=true` flag here
- * because the spec subset doesn't reach the auto-evaluation path.
+ * of element Values. The `eval` option controls auto-evaluation when
+ * the list is consumed as a word argument: parser/tokenizer-built
+ * lists pass true; lists synthesised by handlers (e.g. quote, fn
+ * params) pass false. Mirrors Go's NewList vs NewEvalList split.
  */
-export function newList(elems: Value[]): Value {
-  return new Value(TList, elems)
+export function newList(elems: Value[], opts?: { eval?: boolean; quoted?: boolean }): Value {
+  return new Value(TList, elems, { eval: opts?.eval, quoted: opts?.quoted })
+}
+
+/** Clone a Value with `quoted=true` (used by `quote` for lists). */
+export function withQuoted(v: Value): Value {
+  return new Value(v.vType, v.data, { eval: v.eval, quoted: true, carrier: v.carrier })
 }
 
 /**

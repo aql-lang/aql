@@ -38,6 +38,7 @@ import {
   newString,
   newTypeLiteral,
   newWord,
+  withQuoted,
   typeNameTable,
 } from './index.ts'
 
@@ -323,6 +324,8 @@ function registerSpecWords(r: Registry): void {
   reg({
     name: 'quote',
     forwardPrecedence: true,
+    // The TAny slot needs noEvalArgs so a List arg arrives raw
+    // rather than auto-evaluating before the handler sees it.
     signatures: [
       {
         args: [TWord],
@@ -330,7 +333,14 @@ function registerSpecWords(r: Registry): void {
       },
       {
         args: [TAny],
-        handler: (args) => [args[0]!],
+        noEvalArgs: new Set([0]),
+        handler: (args) => {
+          const v = args[0]!
+          if (v.vType.matches(TList) && v.isConcrete()) {
+            return [withQuoted(v)]
+          }
+          return [v]
+        },
       },
     ],
   })
@@ -394,7 +404,10 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
 
     if (tok === '[') {
       const elems = readTokens(stream, ']')
-      out.push(newList(elems))
+      // Tokenizer-built lists default to eval=true so auto-evaluation
+      // fires when they're consumed as a word arg, mirroring the Go
+      // parser's NewEvalList semantics.
+      out.push(newList(elems, { eval: true }))
       continue
     }
     if (tok === ']') {
