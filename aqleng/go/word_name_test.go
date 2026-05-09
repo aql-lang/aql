@@ -27,8 +27,9 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		"odd?", "prime-factor?",
 		// Single letter.
 		"a", "x", "n",
-		// Engine internals (exempted).
-		"__pa", "__mark", "__internal-marker",
+		// Underscore-prefix (discard placeholder, engine internals).
+		"_", "__pa", "__mark", "_internal", "_-leading",
+		"_unused-arg",
 	}
 	for _, name := range good {
 		if err := ValidateWordName(name); err != nil {
@@ -44,23 +45,22 @@ func TestValidateWordNameRejects(t *testing.T) {
 		wantInMsg string // substring expected in the error detail
 	}{
 		{"", "empty"},
-		{"Integer", "lowercase"},      // uppercase first
-		{"String", "lowercase"},       // uppercase first
-		{"X", "lowercase"},            // uppercase first
-		{"123", "lowercase"},          // digit first
-		{"2dup", "lowercase"},         // digit first
-		{"-rot", "lowercase"},         // hyphen first
-		{"_internal", "lowercase"},    // single underscore first
-		{"?question", "lowercase"},    // ? first
-		{"!bang", "lowercase"},        // ! first
-		{"foo bar", "illegal"},        // space mid-name
-		{"foo!bar", "illegal"},        // ! mid-name
-		{"foo*bar", "illegal"},        // * mid-name
-		{"foo+bar", "illegal"},        // + mid-name
-		{"foo.bar", "illegal"},        // . mid-name
-		{"fooBar", "illegal"},         // uppercase mid-name (first char ok; B fails)
-		{"foo$", "illegal"},           // $ mid-name
-		{"foo/", "illegal"},           // / mid-name
+		{"Integer", "[a-z_]"},     // uppercase first
+		{"String", "[a-z_]"},      // uppercase first
+		{"X", "[a-z_]"},           // uppercase first
+		{"123", "[a-z_]"},         // digit first
+		{"2dup", "[a-z_]"},        // digit first
+		{"-rot", "[a-z_]"},        // hyphen first
+		{"?question", "[a-z_]"},   // ? first
+		{"!bang", "[a-z_]"},       // ! first
+		{"foo bar", "illegal"},    // space mid-name
+		{"foo!bar", "illegal"},    // ! mid-name
+		{"foo*bar", "illegal"},    // * mid-name
+		{"foo+bar", "illegal"},    // + mid-name
+		{"foo.bar", "illegal"},    // . mid-name
+		{"fooBar", "illegal"},     // uppercase mid-name
+		{"foo$", "illegal"},       // $ mid-name
+		{"foo/", "illegal"},       // / mid-name
 	}
 	for _, c := range cases {
 		err := ValidateWordName(c.name)
@@ -125,12 +125,17 @@ func TestDefRejectsBadName(t *testing.T) {
 	}
 }
 
-// TestEngineInternalExempt — the engine-internal __-prefix exemption
-// stays available for plumbing tokens like __pa.
-func TestEngineInternalExempt(t *testing.T) {
-	for _, name := range []string{"__pa", "__mark", "__a-very-internal_marker?"} {
+// TestUnderscoreLeading covers the underscore-as-first-char rule:
+// `_` (single discard placeholder) and `__pa` (engine-internal
+// marker) are both valid under the unified [a-z_] first-char rule.
+func TestUnderscoreLeading(t *testing.T) {
+	for _, name := range []string{
+		"_",                       // discard placeholder
+		"__pa", "__mark", "__fw",  // engine-internal markers
+		"_unused", "_tmp-result",  // user-facing leading underscore
+	} {
 		if err := ValidateWordName(name); err != nil {
-			t.Errorf("__-prefixed %q should be exempt, got %v", name, err)
+			t.Errorf("underscore-leading %q should be valid, got %v", name, err)
 		}
 	}
 }

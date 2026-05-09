@@ -5,33 +5,32 @@ import "fmt"
 // ValidateWordName enforces the language-fundamental rule for word
 // identifiers:
 //
-//   - The first character must be in [a-z].
-//   - Subsequent characters must be in [a-z], digits [0-9], hyphen
-//     `-`, underscore `_`, or trailing `?` (predicate convention).
+//   - The first character must be in [a-z_] (lowercase letter or
+//     underscore).
+//   - Subsequent characters must be in [a-z0-9_-?] (lowercase
+//     letter, digit, hyphen, underscore, or `?`).
 //
 // This is the rule the language design fixes for ALL user-facing
 // words: native registrations, `def` bindings, `fn` parameter names,
 // and any other path that introduces a name into the def stack.
 //
-// Engine-internal markers prefixed with `__` are exempt — they're
-// plumbing tokens (paren markers, mark/move IDs, return-checks)
-// that never appear in user source. The rule is meant to constrain
-// what users can name, not what the engine names its own machinery.
-//
 // Why these characters and not others
 // -----------------------------------
-//   `[a-z]` first  — uppercase is reserved for type names
+//   `[a-z_]` first — uppercase is reserved for type names
 //                    (Integer, String, …) so that the engine can
 //                    disambiguate type-literal words from value-
-//                    word resolution at lookup time. Forcing the
-//                    first character to lowercase keeps type-name
-//                    words disjoint from user-defined words.
+//                    word resolution at lookup time. Lowercase and
+//                    underscore as starting characters keep user
+//                    words disjoint from type-name fallback words.
+//                    Underscore as a leading character covers the
+//                    discard-placeholder convention (`_`) and the
+//                    engine-internal-marker convention (`__pa`,
+//                    `__mark`, …) under one rule.
 //   `0-9` rest     — common idiom (dup2, swap2, add-two).
 //   `-`            — kebab-case is the language's chosen separator
 //                    convention (anti-rot, add-two, dup2-alt).
-//   `_`            — accepted in mid-name for snake-case
-//                    interoperability (fact_acc, double_then_inc),
-//                    but NOT as the first character.
+//   `_`            — also accepted mid-name for snake-case
+//                    interoperability (fact_acc, double_then_inc).
 //   `?`            — Lisp/Scheme/Ruby predicate convention. Common
 //                    enough that production words like `leap-year?`,
 //                    `before?`, `equal?` need it. Allowed anywhere
@@ -49,16 +48,12 @@ func ValidateWordName(name string) error {
 			Detail: "word name cannot be empty",
 		}
 	}
-	// Engine-internal marker exemption.
-	if len(name) >= 2 && name[0] == '_' && name[1] == '_' {
-		return nil
-	}
 	first := name[0]
-	if first < 'a' || first > 'z' {
+	if !(first >= 'a' && first <= 'z') && first != '_' {
 		return &AqlError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
-				"word %q must begin with a lowercase letter [a-z]; got %q",
+				"word %q must begin with [a-z_]; got %q",
 				name, string(first),
 			),
 		}
