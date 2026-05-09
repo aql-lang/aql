@@ -22,8 +22,8 @@
 # 6. `concatq "" "x"` returns `"x"` — empty is the identity for
 #    string concatenation. (Same in the swap form.)
 # 7. Nested empties — a list containing an empty string `[ "" ]` has
-#    lengthq 1 (the empty string is still a value); a list containing
-#    an empty list `[ [ ] ]` has lengthq 1 (the empty list is one
+#    length 1 (the empty string is still a value); a list containing
+#    an empty list `[ [ ] ]` has length 1 (the empty list is one
 #    element).
 # 8. Empty literals satisfy concrete-typed sigs. Per match.go's
 #    sig-match step, `[]` (Data!=nil) DOES match a concrete TList
@@ -62,7 +62,7 @@
 [ ] ""	[] ""	mixed: empty list + empty string
 
 # Words that introspect collections handle empty cleanly.
-lengthq [ ]	0	empty list has lengthq 0
+lengthq [ ]	0	empty list has length 0
 firstq [ ]	null	first of empty list returns the None sentinel
 lengthq [ "" ]	1	empty string is still a list element
 lengthq [ [ ] ]	1	empty list is still a list element

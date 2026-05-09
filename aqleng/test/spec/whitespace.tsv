@@ -4,7 +4,7 @@
 # =====================================================================
 #
 # AQL is a whitespace-delimited language at the lexical level. The
-# only role of whitespace is to separate tokens; runs of any lengthq
+# only role of whitespace is to separate tokens; runs of any length
 # are equivalent to a single delimiter. This file pins down that
 # rule across the spec runner's tokenizer.
 #

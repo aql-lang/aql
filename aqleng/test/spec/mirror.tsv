@@ -53,7 +53,7 @@
 # These three arrangements are equivalent by the matching algorithm.
 10 subq 3	7	infix: stk=[10], fwd=[3] → sig[0]=3 (fwd), sig[1]=10 (stk) → handler returns 10-3
 10 3 subq	7	postfix: stk=[10, 3] with 3 on top → sig[0]=3 (top), sig[1]=10 (deeper) → 10-3
-subq 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3 — same class as the two above; intentional that the prefix form lists the "right operand" firstq
+subq 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3 — same class as the two above; intentional that the prefix form lists the "right operand" first
 
 # Class B (sig=[10, 3] for X=10, Y=3): result = 3 - 10 = -7.
 # These three arrangements are also equivalent — they just map to
