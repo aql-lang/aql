@@ -35,9 +35,23 @@ func registerSpecWords(r *Registry) {
 	// promotes the result to Decimal. Mirrors the production engine's
 	// numericBinaryHandler in aql/internal/engine/native_math.go.
 	//
-	// Convention: handler computes args[0] op args[1] (so the canonical
-	// form `op a b` reads `a op b`; the swap form `a op b` becomes
-	// `b op a` — see arithmetic.tsv / mirror.tsv).
+	// Handler convention: result = b OP a where a = args[0] and
+	// b = args[1]. This is the production-engine convention (see
+	// native_math.go) — for non-commutative ops it makes the natural
+	// infix reading work:
+	//
+	//   10 sub 3   → matching algo: forward [3], stack [10]
+	//                → sig[0]=3 (fwd), sig[1]=10 (stk top)
+	//                → args = [3, 10]
+	//                → handler returns b - a = 10 - 3 = 7
+	//
+	// The same matching algorithm gives sig=[3, 10] for `sub 3 10`
+	// (forward in source order) and `10 3 sub` (stack top-down), so
+	// all three forms produce 7. The other three arrangements
+	// (`sub 10 3`, `3 sub 10`, `3 10 sub`) produce sig=[10, 3] and
+	// thus -7. There is no "swap form" — every form is an equally
+	// valid surface arrangement; the matching algorithm just maps
+	// each one to a specific (args[0], args[1]) pair.
 	toFloat := func(v Value) float64 {
 		if v.VType.Matches(TInteger) {
 			n, _ := v.AsInteger()
@@ -46,7 +60,7 @@ func registerSpecWords(r *Registry) {
 		f, _ := v.AsDecimal()
 		return f
 	}
-	numericBinary := func(intOp func(int64, int64) int64, floatOp func(float64, float64) float64) Handler {
+	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) Handler {
 		return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			if args[0].VType.Matches(TInteger) && args[1].VType.Matches(TInteger) {
 				a, _ := args[0].AsInteger()
@@ -61,7 +75,7 @@ func registerSpecWords(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
-			Handler: numericBinary(func(a, b int64) int64 { return a + b }, func(a, b float64) float64 { return a + b }),
+			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
 			Returns: []Type{TNumber},
 		}},
 	})
@@ -70,7 +84,7 @@ func registerSpecWords(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
-			Handler: numericBinary(func(a, b int64) int64 { return a - b }, func(a, b float64) float64 { return a - b }),
+			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
 			Returns: []Type{TNumber},
 		}},
 	})
@@ -79,7 +93,7 @@ func registerSpecWords(r *Registry) {
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
-			Handler: numericBinary(func(a, b int64) int64 { return a * b }, func(a, b float64) float64 { return a * b }),
+			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
 			Returns: []Type{TNumber},
 		}},
 	})
@@ -171,6 +185,10 @@ func registerSpecWords(r *Registry) {
 	})
 
 	// concat: string concatenation, forward precedence.
+	// Handler convention: result = b + a (= args[1] + args[0]) so
+	// the natural infix reading `"hello" concat " world" → "hello world"`
+	// works. Same pattern as sub above. Mirrors the production engine's
+	// addConcatHandler in aql/internal/engine/native_math.go.
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "concat",
 		ForwardPrecedence: true,
@@ -179,7 +197,7 @@ func registerSpecWords(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, _ := args[0].AsString()
 				b, _ := args[1].AsString()
-				return []Value{NewString(a + b)}, nil
+				return []Value{NewString(b + a)}, nil
 			},
 			Returns: []Type{TString},
 		}},

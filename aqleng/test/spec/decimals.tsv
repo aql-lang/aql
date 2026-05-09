@@ -105,26 +105,48 @@ add -1.5 4.5	3.0	negative + positive
 add 0.0 0.0	0.0	zero plus zero stays Decimal
 
 # ---------- 3. sub — all four type-combinations ----------
-# sub is non-commutative so each row exercises a specific form.
-# Mirror forms (`sub a b`, `b sub a`, `b a sub`) → handler sees
-# sig=[a,b], result a-b. Swap form (`a sub b`) → sig=[b,a], result b-a.
-sub 10 3	7	II canonical (mirror form)
-sub 10 3.0	7.0	ID canonical: 10 - 3.0 = 7.0
-sub 10.0 3	7.0	DI canonical: 10.0 - 3 = 7.0
-sub 10.0 3.0	7.0	DD canonical
-3 sub 10	7	II mirror form (1-prefix 1-fwd): handler sees sig=[10,3] → 10-3=7
-3.0 sub 10	7.0	DI mirror form: handler sees sig=[10,3.0] → 7.0
-3 sub 10.0	7.0	ID mirror form: handler sees sig=[10.0,3] → 7.0
-3.0 sub 10.0	7.0	DD mirror form
-3 10 sub	7	II all-prefix mirror
-3.0 10.0 sub	7.0	DD all-prefix mirror
-10 sub 3	-7	II SWAP form: sig=[3,10] → 3-10 = -7
-10 sub 3.0	-7.0	ID SWAP: sig=[3.0,10] → 3.0-10 = -7.0
-10.0 sub 3	-7.0	DI SWAP: sig=[3,10.0] → 3-10.0 = -7.0
-10.0 sub 3.0	-7.0	DD SWAP
+# sub is non-commutative. Handler convention (mirror.tsv): result =
+# b - a where a = args[0], b = args[1]. The matching algorithm fills
+# sig from forward tokens (source order), then stack (top down).
+#
+# So the natural infix reading `10 sub 3` produces sig=[3, 10] and
+# returns 10 - 3 = 7. The arrangements `10 3 sub` (postfix) and
+# `sub 3 10` (prefix) belong to the same equivalence class.
+# `sub 10 3`, `3 sub 10`, `3 10 sub` are the OTHER class with
+# sig=[10, 3] and return 3 - 10 = -7.
+#
+# Each row exercises one of these arrangements across all four
+# type-combinations (II, ID, DI, DD).
 
-# A specific decimal-only subtraction surfaces a float artefact:
-sub 1.0 0.9	0.09999999999999998	IEEE 754 imprecision: 1.0 - 0.9 is NOT exactly 0.1
+# Class returning 10 - X (= 7 with X=3, in II):
+10 sub 3	7	II infix: stk=[10], fwd=[3] → sig=[3, 10] → 10-3
+10 sub 3.0	7.0	ID infix: same matching, contagion → Decimal
+10.0 sub 3	7.0	DI infix
+10.0 sub 3.0	7.0	DD infix
+10 3 sub	7	II postfix: stk=[10, 3] top=3 → sig=[3, 10] → 10-3
+10.0 3.0 sub	7.0	DD postfix
+sub 3 10	7	II prefix: fwd=[3, 10] → sig=[3, 10] → 10-3
+sub 3 10.0	7.0	mixed: fwd=[3, 10.0] → 10.0-3 = 7.0
+sub 3.0 10	7.0	mixed: fwd=[3.0, 10] → 10-3.0 = 7.0
+sub 3.0 10.0	7.0	DD prefix
+
+# Other class returning X - 10 (= -7 with X=3, in II):
+sub 10 3	-7	II prefix: fwd=[10, 3] → sig=[10, 3] → 3-10
+sub 10 3.0	-7.0	ID prefix: contagion
+sub 10.0 3	-7.0	DI prefix
+sub 10.0 3.0	-7.0	DD prefix
+3 sub 10	-7	II infix: stk=[3], fwd=[10] → sig=[10, 3] → 3-10
+3.0 sub 10	-7.0	DI infix
+3 sub 10.0	-7.0	ID infix
+3.0 sub 10.0	-7.0	DD infix
+3 10 sub	-7	II postfix: stk=[3, 10] top=10 → sig=[10, 3] → 3-10
+3.0 10.0 sub	-7.0	DD postfix
+
+# A specific decimal-only subtraction surfaces a float artefact.
+# Per the handler convention `b - a`, the form `sub a b` returns
+# b - a, so `sub 0.9 1.0 → 1.0 - 0.9 = 0.0999...`.
+sub 0.9 1.0	0.09999999999999998	IEEE 754 imprecision: 1.0 - 0.9 is NOT exactly 0.1
+1.0 sub 0.9	0.09999999999999998	infix form of the same — sig=[0.9, 1.0] → 1.0-0.9
 
 # ---------- 4. mul — all four type-combinations ----------
 # mul is commutative.
@@ -196,7 +218,7 @@ add 0.1 0.2 add 0.3	0.6000000000000001	left-to-right: 0.1+0.2=0.3000000000000000
 # Composition with parens (parens force the inner to evaluate before
 # the outer's slot is filled — same nesting rule as integers).
 add 1.5 ( add 2 3 )	6.5	inner integer add → 5; outer 1.5 + 5 → 6.5 (contagion)
-mul 2.0 ( sub 5 1 )	8.0	inner integer sub → 4; outer 2.0 * 4 → 8.0 (contagion)
+mul 2.0 ( sub 1 5 )	8.0	inner sub: fwd=[1, 5] → sig=[1, 5] → 5-1 = 4; outer 2.0 * 4 → 8.0 (contagion)
 mul ( add 1 2 ) ( add 1.5 0.5 )	6.0	left=3 (I), right=2.0 (D); mul(3, 2.0)=6.0 (DI contagion at outer)
 
 # ---------- 7. Type mismatches still error ----------

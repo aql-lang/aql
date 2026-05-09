@@ -62,8 +62,8 @@ first [ 7 ] "post"	7 "post"	first consumes the list; "post" stays
 
 # 2. 2-arg word: one forward arg, mismatch, stack fills the rest.
 1 add 2 "stop"	3 "stop"	add: fwd=1 (matches Integer "2"), then "stop" fails Integer match — break. Stack=[1]. remaining=1, sig[1]=1 (top). add(2,1)=3. "stop" stays.
-"a" concat "b" 99	"ba" 99	concat: fwd=1 ("b"), 99 fails String at sig[1] — break. Stack=["a"]. sig[0]="b" (fwd), sig[1]="a" (stk). concat("b","a")="ba". 99 stays as residue.
-"a" "b" concat 99	"ba" 99	all-prefix concat with stack [a,b]; 99 fails String mismatch in fwd scan → break at fwd=0. sig[0]=top=b, sig[1]=deeper=a → "ba". 99 residue.
+"a" concat "b" 99	"ab" 99	concat: fwd=1 ("b"), 99 fails String at sig[1] — break. Stack=["a"]. sig[0]="b" (fwd), sig[1]="a" (stk). handler returns b+a = "a"+"b" = "ab". 99 stays as residue.
+"a" "b" concat 99	"ab" 99	all-prefix concat with stack [a,b], top="b"; 99 fails String fwd match → break at fwd=0. sig=[b, a] → handler returns "a"+"b" = "ab". 99 residue.
 
 # 3. 2-arg word: no stack, mismatching forward → signature error.
 add "stop"	ERROR:signature	add expects Integer Integer; "stop" fails sig[0]

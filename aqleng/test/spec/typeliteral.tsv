@@ -120,7 +120,7 @@ tag Boolean	"any"	Boolean type literal — no [Boolean] overload, falls to [Any]
 # type literals as if they were 0.
 add Integer 1	1	Integer type literal + 1 → handler reads Integer.AsInteger()=0 → 0+1=1
 add Integer Integer	0	0+0 — both args are type literals, both read as 0
-sub 5 Integer	5	5 - 0 = 5 (Integer type literal as second arg)
+sub 5 Integer	-5	fwd=[5, Integer] → sig=[5, 0]; handler returns b-a = 0-5 = -5 (Integer type literal silently reads as 0)
 
 # To get the Atom version of a type-name word, quote it.
 quote Integer	atom(Integer)	quote captures the upcoming Word as Atom; suppresses type-name resolution

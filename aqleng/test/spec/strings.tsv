@@ -1,10 +1,19 @@
 # String dispatch via test-registered `concat` and `not` words.
+# concat is non-commutative; handler convention is `result = b + a`
+# where a = args[0], b = args[1] (matches the production engine's
+# addConcatHandler in aql/internal/engine/native_math.go and the
+# numericBinary convention used by sub/add/mul). The natural infix
+# reading therefore works:  `"hello" concat " world" → "hello world"`.
+#
+# Equivalence-class enumeration is in mirror.tsv.
 
 # tokens	expected	note
 "hello"	"hello"	string literal
-concat "hello" " world"	"hello world"	all-forward: sig[0]="hello", sig[1]=" world"
-" world" concat "hello"	"hello world"	mirror form (1-prefix 1-forward): sig[0]="hello", sig[1]=" world"
-"hello" concat " world"	" worldhello"	swap form `a f b` reverses sig: sig[0]=" world", sig[1]="hello"
-"a" "b" concat	"ba"	all-prefix: top-first → sig[0]="b", sig[1]="a"
+"hello" concat " world"	"hello world"	infix natural reading: stk=["hello"], fwd=[" world"] → sig=[" world", "hello"] → handler returns "hello"+" world"
+"hello" " world" concat	"hello world"	postfix: stk=["hello", " world"] top=" world" → sig=[" world", "hello"] → "hello"+" world"
+concat " world" "hello"	"hello world"	prefix in the same equivalence class: fwd=[" world", "hello"] → sig=[" world", "hello"]
+concat "hello" " world"	" worldhello"	other class: fwd=["hello", " world"] → sig=["hello", " world"] → handler returns " world"+"hello"
+" world" concat "hello"	" worldhello"	other class infix: stk=[" world"], fwd=["hello"] → sig=["hello", " world"]
+"a" "b" concat	"ab"	postfix in class A: stk=["a", "b"] top="b" → sig=["b", "a"] → handler returns "a"+"b"
 not true	false	boolean negation
 not false	true	boolean negation

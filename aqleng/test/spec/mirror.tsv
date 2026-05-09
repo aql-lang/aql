@@ -1,57 +1,73 @@
 # =====================================================================
-# Principle: The four-form mirror equivalence rule for 2-arg words.
+# Principle: 2-arg surface arrangements split into two equivalence
+# classes by the matching algorithm.
 # =====================================================================
 #
-# Per CLAUDE.md (Argument Ordering, post-§1.4): every Signature has
-# a BarrierPos. For a 2-arg signature with the default barrier (= N),
-# all four physical arrangements of word + args produce the SAME sig
-# binding, EXCEPT one — the so-called "swap form".
+# AQL has SIX surface arrangements for any 2-arg word `f` applied to
+# values X and Y:
 #
-# Given a non-commutative 2-arg word `f` with handler that computes
-# `args[1] - args[0]`, the canonical four forms are:
+#   f X Y      f Y X      X f Y      Y f X      X Y f      Y X f
 #
-#   f a b    — all-forward                : sig=[a,b]
-#   b f a    — 1 prefix + 1 forward (post)  : sig=[a,b]    (mirror of all-forward)
-#   b a f    — all-prefix                  : sig=[a,b]    (mirror)
-#   a f b    — 1 prefix + 1 forward (pre)   : sig=[b,a]    (SWAP — the only odd one)
+# The unified §1.4 matching algorithm assigns each arrangement to one
+# of two equivalence classes based on what (args[0], args[1]) the
+# handler ultimately receives:
 #
-# Three of the four forms are equivalent; the fourth — the swap form
-# — is the only arrangement where the prefix value lands at sig[1]
-# instead of sig[0]. This is intentional: it lets the source `10
-# sub 3` read left-to-right as "10 minus 3", matching how a human
-# parser scans the line.
+#   - forward-collected args fill sig[0..F-1] in source order, then
+#   - stack-resident args fill sig[F..N-1] from the top down.
 #
-# This file uses the spec runner's `sub` word (registered with handler
-# `args[0] - args[1]`) so the four expected outcomes are -7, -7, -7, +7
-# for the four forms applied to (10, 3). A clean four-row table.
+# For X = 10, Y = 3 this gives:
+#
+#   sig=[3, 10]  ←  10 sub 3   (stk=[10], fwd=[3])
+#                   10 3 sub   (stk=[10, 3] top=3, deeper=10)
+#                   sub 3 10   (fwd=[3, 10])
+#
+#   sig=[10, 3]  ←  3 sub 10   (stk=[3],  fwd=[10])
+#                   3 10 sub   (stk=[3, 10] top=10, deeper=3)
+#                   sub 10 3   (fwd=[10, 3])
+#
+# The handler convention is `result = b op a` where `a = args[0]`
+# and `b = args[1]` (mirrors the production engine's
+# numericBinaryHandler in `aql/internal/engine/native_math.go`, where
+# every non-commutative binary handler computes `b - a`, `b + a`, etc).
+#
+# So sub with sig=[3, 10] returns 10 - 3 = 7, and with sig=[10, 3]
+# returns 3 - 10 = -7. The natural infix reading `10 sub 3 → 7`
+# (analogous to `10 - 3`) follows directly from this convention.
+#
+# There is NO "swap form". Every arrangement is an equally valid
+# surface syntax; the matching algorithm just maps each one to a
+# specific (args[0], args[1]) pair.
 #
 # Why this matters
 # ----------------
-# The mirror rule is the cleanest user-visible knob in the dispatch
-# system. If it ever broke (e.g. a refactor of matchSignature changed
-# the stack-walk direction or rearrangeForForward shifted a slot),
-# every infix-style call site in the language would silently swap.
-# This is precisely the kind of regression a test row should catch
-# at PR time, not after a release. CLAUDE.md describes the rule in
-# prose — these rows lock the prose into executable form.
-#
-# Algebraic note: the rule is sometimes phrased as "left-to-right
-# nearest-first": forward-collected args fill sig from index 0
-# upward in source order; remaining sig slots fill from the stack
-# top downward. The four forms above just enumerate the (forward,
-# prefix) splits for arity 2. See multiarg.tsv for the arity-3
-# extension.
+# The matching algorithm is the most-cited contract in the language
+# — every infix-style call site in user code depends on it. Pinning
+# both equivalence classes (rather than just one of them as
+# "canonical") in regression rows means a refactor that flips the
+# class assignment for any single arrangement surfaces here at PR
+# time.
 
 # tokens	expected	note
-sub 10 3	7	form: f a b      → forward=[a=10,b=3], sig=[10,3], 10-3 = 7
-3 sub 10	7	form: b f a      → forward=[a=10],     stk top=b=3,    sig=[10,3], 10-3 = 7
-3 10 sub	7	form: b a f      → forward=[],         stk top=a=10 deeper=b=3, sig=[10,3], 10-3 = 7
-10 sub 3	-7	form: a f b      → SWAP: forward=[b=3], stk top=a=10, sig=[3,10], 3-10 = -7
 
-# Cross-check with `concat` (also forward-prec, also non-commutative).
-# Handler is plain string concatenation (args[0] + args[1]); inputs
-# chosen so source-order vs swapped is visually obvious.
-concat "ab" "cd"	"abcd"	mirror: forward=[a="ab",b="cd"], sig[0]=ab sig[1]=cd → "abcd"
-"cd" concat "ab"	"abcd"	mirror: 1 prefix + 1 forward (b f a)
-"cd" "ab" concat	"abcd"	mirror: all-prefix; stack top=ab, deeper=cd, sig=[ab,cd]
-"ab" concat "cd"	"cdab"	SWAP: forward=[b="cd"], stk top=a="ab", sig=[cd,ab] → "cdab"
+# Class A (sig=[3, 10] for X=10, Y=3): result = 10 - 3 = 7.
+# These three arrangements are equivalent by the matching algorithm.
+10 sub 3	7	infix: stk=[10], fwd=[3] → sig[0]=3 (fwd), sig[1]=10 (stk) → handler returns 10-3
+10 3 sub	7	postfix: stk=[10, 3] with 3 on top → sig[0]=3 (top), sig[1]=10 (deeper) → 10-3
+sub 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3 — same class as the two above; intentional that the prefix form lists the "right operand" first
+
+# Class B (sig=[10, 3] for X=10, Y=3): result = 3 - 10 = -7.
+# These three arrangements are also equivalent — they just map to
+# the other (args[0], args[1]) ordering.
+sub 10 3	-7	prefix: fwd=[10, 3] → sig=[10, 3] → handler returns 3-10
+3 sub 10	-7	infix: stk=[3], fwd=[10] → sig[0]=10 (fwd), sig[1]=3 (stk) → 3-10
+3 10 sub	-7	postfix: stk=[3, 10] with 10 on top → sig[0]=10, sig[1]=3 → 3-10
+
+# Cross-check with `concat` (also non-commutative, also a forward-prec
+# handler computing `b + a`). Class A produces "hello world", class B
+# produces " worldhello".
+"hello" concat " world"	"hello world"	infix: handler returns "hello"+" world" via sig=[" world", "hello"]
+"hello" " world" concat	"hello world"	postfix
+concat " world" "hello"	"hello world"	prefix (note the arg order)
+concat "hello" " world"	" worldhello"	prefix in the OTHER class
+" world" concat "hello"	" worldhello"	infix in the OTHER class
+" world" "hello" concat	" worldhello"	postfix in the OTHER class

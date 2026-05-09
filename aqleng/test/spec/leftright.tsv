@@ -49,7 +49,7 @@
 2 add 3 mul 4	20	(2+3)*4 = 20 — add fires, mul reads stack
 2 mul 3 add 4	10	(2*3)+4 = 10 — mul fires, add reads stack
 1 add 2 add 3	6	(1+2)+3 = 6 — chained add
-10 sub 3 sub 2	9	first sub: `10 sub 3` is the SWAP form (sig[0]=3,sig[1]=10) → 3-10=-7; second sub: `-7 sub 2` is the swap-then-mirror? See note. Actually -7 is now on the stack; sub takes 2 forward and -7 stack: sig[0]=2, sig[1]=-7 → 2-(-7)=9.
+10 sub 3 sub 2	5	first sub: stk=[10], fwd=[3] → sig=[3,10] → 10-3=7 on stack; second sub: stk=[7], fwd=[2] → sig=[2,7] → 7-2=5
 
 # Three- and four-op chains.
 1 add 2 mul 3 add 4	13	((1+2)*3)+4 = 13

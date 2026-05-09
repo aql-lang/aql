@@ -30,7 +30,7 @@ def square ( fn [ x:Integer ] [ Integer ] [ x x mul ] ) 6 square	36	x=6; body 6 
 
 # Two Integer params (forward + stack split).
 def addAB ( fn [ a:Integer b:Integer ] [ Integer ] [ a b add ] ) 3 addAB 4	7	a=4 (fwd), b=3 (stk); body 4 3 add → 7
-def subAB ( fn [ a:Integer b:Integer ] [ Integer ] [ sub a b ] ) 10 subAB 3	-7	a=3 (fwd), b=10 (stk); body sub a b → sub 3 10 = -7
+def subAB ( fn [ a:Integer b:Integer ] [ Integer ] [ sub a b ] ) 10 subAB 3	7	a=3 (fwd), b=10 (stk); body `sub a b` → `sub 3 10` → sig=[3,10] → handler returns 10-3 = 7
 
 # Three Integer params, all-stack call form.
 def trip3 ( fn [ a:Integer b:Integer c:Integer ] [ Integer ] [ a b add c add ] ) 1 2 3 trip3	6	a=top=3, b=2, c=1; body computes (3+2)+1 = 6
