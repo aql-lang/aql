@@ -393,6 +393,35 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
+	// quote: capture the next forward token as data.
+	//   sig [TWord]: convert Word→Atom so `quote dup` yields
+	//                atom(dup) even when dup is registered.
+	//   sig [TAny]:  catch-all passthrough.
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "quote",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{
+				Args: []Type{TWord},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					w, _ := args[0].AsWord()
+					return []Value{NewAtom(w.Name)}, nil
+				},
+				Returns: []Type{TAtom},
+			},
+			{
+				Args: []Type{TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					return []Value{args[0]}, nil
+				},
+				Returns: []Type{TAny},
+			},
+		},
+	})
+
+	// `end` is a structural keyword the engine handles directly via
+	// stepEnd in aqleng/go/engine.go — no spec registration needed.
+
 	// Simple-value defs the def.tsv spec references. A word whose name
 	// is in the def stack is substituted by its value before normal
 	// dispatch, provided the value isn't an FnDef / ObjectType.
@@ -608,6 +637,12 @@ func renderValue(v Value) string {
 			return "true"
 		}
 		return "false"
+	case v.VType.Equal(TAtom) && v.Data != nil:
+		// Render as `atom(name)` so the spec format matches TS's
+		// Value.toString output exactly. Go's default Value.String
+		// for an atom prints just the bare name.
+		s, _ := v.AsAtom()
+		return "atom(" + s + ")"
 	case v.VType.Matches(TList) && v.Data != nil:
 		// Recursive list rendering. Use space-separated elements
 		// in [ ... ] so the spec format matches the TS engine's

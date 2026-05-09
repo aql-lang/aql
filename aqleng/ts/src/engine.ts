@@ -65,6 +65,10 @@ export class Engine {
         if (w.name === ')') {
           throw new AqlError('syntax_error', `unmatched ')'`, ')')
         }
+        if (w.name === 'end') {
+          this.stepEnd()
+          continue
+        }
         // If a pending forward marker is waiting for a Word-typed
         // arg, capture this word as data instead of executing it.
         // Mirrors aqleng/go/engine.go's hasPendingForwardExpectingWord
@@ -159,7 +163,7 @@ export class Engine {
     // (or, for sub-call results) flow back into the marker via
     // stepLiteral until the marker fires. Mirrors insertForward in
     // aqleng/go/engine.go.
-    if (this.shouldDeferDispatch(result.args, result.forwardCount)) {
+    if (this.shouldDeferDispatch(result.args, result.forwardCount, result.sig)) {
       this.beginForward(name, result, fn)
       return
     }
@@ -198,25 +202,27 @@ export class Engine {
 
   /**
    * Decide whether the match needs deferred forward collection. We
-   * defer if any optimistically-matched forward arg is still a Word
-   * that the engine might want to dispatch (e.g. a TAny slot grabbed
+   * defer when an optimistically-matched forward arg is still a Word
+   * that the engine will want to dispatch (e.g. a TAny slot grabbed
    * a function-name Word). When the matcher accepted Word-as-data
    * for a TWord/TAtom slot, we keep the immediate dispatch — those
-   * slots intentionally capture names without executing them.
+   * slots intentionally capture names without executing them. Same
+   * for /q-style slots (not yet ported); they'd be checked here too.
    */
-  private shouldDeferDispatch(args: Value[], forwardCount: number): boolean {
+  private shouldDeferDispatch(
+    args: Value[],
+    forwardCount: number,
+    sig: Signature,
+  ): boolean {
     for (let i = 0; i < forwardCount; i++) {
       const a = args[i]!
       if (!a.isWord()) continue
+      const expected = sig.args[i]!
+      // TWord/TAtom slots: the matcher kept the Word as data on
+      // purpose; never defer here even if the name happens to match
+      // a registered function (e.g. `quote dup`).
+      if (expected.equal(TWord) || expected.equal(TAtom)) continue
       const w = a.asWord() as WordInfo
-      // /q-style and TWord-explicit slots: matcher already decided
-      // we keep the Word as data — don't defer.
-      // Otherwise: this Word might be a function call. Defer.
-      // (We check by asking the matcher: does the raw token type-
-      // satisfy this slot exactly, vs being accepted only via
-      // TAny?). For the spec subset, simply check whether the name
-      // is a registered function — that's the case where deferring
-      // changes behaviour.
       if (this.registry.lookup(w.name)) return true
     }
     return false
@@ -495,12 +501,59 @@ export class Engine {
   }
 
   /**
+   * Handle the `end` keyword. If a forward marker is pending in the
+   * current paren scope, complete it with whatever's been collected
+   * so far (forward args + stack args from the original match) — the
+   * collection short-circuits before all expected slots arrive.
+   * Otherwise just remove the `end` token. Mirrors stepEnd in
+   * aqleng/go/engine.go.
+   */
+  private stepEnd(): void {
+    const fwdIdx = this.findPendingMarker()
+    if (fwdIdx < 0) {
+      // No pending forward — just drop the end token.
+      this.stack.splice(this.pointer, 1)
+      return
+    }
+    // Drop the end token first so the marker is no longer "pending"
+    // when completeForward runs.
+    this.stack.splice(this.pointer, 1)
+    this.completeForwardPartial(fwdIdx)
+  }
+
+  /**
+   * Variant of completeForward that fires a marker with fewer
+   * collected forward args than expected. Used by stepEnd. The args
+   * list is built from whatever's collected so far (any unfilled
+   * forward slots stay missing, which the handler must tolerate).
+   * For the spec subset this is rarely meaningful, but the path
+   * keeps shape parity with Go's stepEnd → implicitEnd flow.
+   */
+  private completeForwardPartial(fwdIdx: number): void {
+    const m = this.stack[fwdIdx]!.asForward()
+    const args = [...m.collected, ...m.stackArgs]
+    if (args.length < m.sig.args.length) {
+      throw new AqlError(
+        'signature_error',
+        `${m.funcName}: 'end' before all forward args collected (have ${args.length}, need ${m.sig.args.length})`,
+        m.funcName,
+      )
+    }
+    this.fireMarker(fwdIdx, m, args)
+  }
+
+  /**
    * Build the full args list (forward then stack, in sig order) and
    * dispatch the marker's sig. The marker is replaced by the result.
    */
   private completeForward(fwdIdx: number): void {
     const m = this.stack[fwdIdx]!.asForward()
     const args = [...m.collected, ...m.stackArgs]
+    this.fireMarker(fwdIdx, m, args)
+  }
+
+  /** Run the marker's handler with `args` and replace it with the result. */
+  private fireMarker(fwdIdx: number, m: ForwardMarker, args: Value[]): void {
     const handlerResult = m.sig.handler(args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new AqlError(
@@ -511,8 +564,6 @@ export class Engine {
     }
     const out = handlerResult as Value[]
     this.stack.splice(fwdIdx, 1, ...out)
-    // Position the pointer at the first result so the next iteration
-    // can flow it into any outer pending marker.
     this.pointer = fwdIdx
   }
 

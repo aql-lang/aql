@@ -29,6 +29,7 @@ import {
   Value,
   type FnParam,
   type WordInfo,
+  newAtom,
   newBoolean,
   newDecimal,
   newFnDef,
@@ -311,6 +312,33 @@ function registerSpecWords(r: Registry): void {
       },
     ],
   })
+
+  // quote: capture the next forward token as data.
+  //   sig [TWord]: convert Word→Atom (so `quote dup` yields atom(dup)
+  //                even when dup is a registered function — the TWord
+  //                slot tells shouldDeferDispatch to keep the Word
+  //                rather than dispatch it).
+  //   sig [TAny]:  catch-all passthrough (`quote 5` → 5,
+  //                `quote [1 2]` → [1 2]).
+  reg({
+    name: 'quote',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TWord],
+        handler: (args) => [newAtom(args[0]!.asWord().name)],
+      },
+      {
+        args: [TAny],
+        handler: (args) => [args[0]!],
+      },
+    ],
+  })
+
+  // end is a pure boundary keyword handled by Engine.run; registering
+  // it as a 0-arg fallback isn't required, but we also don't register
+  // it as a normal native — the engine intercepts the Word at the
+  // pointer and removes / fires accordingly (see Engine.stepEnd).
 
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
