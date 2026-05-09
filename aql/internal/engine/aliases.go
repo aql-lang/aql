@@ -180,6 +180,12 @@ var (
 	DependentLeafBaseType = aqleng.DependentLeafBaseType
 	DependentLeafFromType = aqleng.DependentLeafFromType
 	ExpandOptionalSigs = aqleng.ExpandOptionalSigs
+	parseFnParams      = aqleng.ParseFnParams
+	parseFnReturns     = aqleng.ParseFnReturns
+	resolveSigType     = aqleng.ResolveSigType
+	resolveTypeName    = aqleng.ResolveTypeName
+	lookupDefType      = aqleng.LookupDefType
+	resolveDefType     = aqleng.ResolveDefType
 	FindWordInSource = aqleng.FindWordInSource
 	FlattenDisjunctAlts = aqleng.FlattenDisjunctAlts
 	FnDefHasSig = aqleng.FnDefHasSig

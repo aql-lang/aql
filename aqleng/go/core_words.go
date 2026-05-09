@@ -1,10 +1,5 @@
 package aqleng
 
-import (
-	"fmt"
-	"strings"
-)
-
 // RegisterCoreWords installs the language-fundamental words into the
 // registry. These are part of the aqleng language proper — the
 // minimal native subset needed to express the AQL language design's
@@ -87,17 +82,22 @@ func registerCoreDef(r *Registry) {
 	})
 }
 
-// registerCoreFn installs `fn [params] [returns] [body]`. Each param
-// is a Word of the form `name:TypeName`; the bare aqleng tokenizer
-// is whitespace-only so a typed param arrives as a single Word and
-// the handler splits on `:` to recover the (name, type) pair.
+// registerCoreFn installs `fn [params] [returns] [body]`. The params
+// list and returns list are walked by the canonical parser in
+// fn_params.go (ParseFnParams + ParseFnReturns) — same code path the
+// production aql `def`/`fn` use. That parser handles:
 //
-// A standalone `?` Word in the params list marks the PRECEDING param
-// as optional (matches the production parser's convention — see
-// aql/internal/engine/native_definition_fn.go::parseFnParams). At
-// def-time the resulting FnSig is fed through ExpandOptionalSigs so
-// every present/omitted combination becomes its own callable
-// overload, with omitted params filled by their type's BaseValue.
+//   - `?` marker for optional params
+//   - `|` marker for the BarrierPos
+//   - `{name:Type}` implicit-pair maps (with optional `?` name suffix)
+//   - bare type-name Words and type literals
+//   - paren-expr type slots and disjuncts containing None
+//   - concrete-value patterns (Integer/Boolean/String literals)
+//
+// At def-time the FnSig is fed through ExpandOptionalSigs so every
+// present/omitted combination of optional params becomes its own
+// callable overload, with omitted params filled by their type's
+// BaseValue.
 func registerCoreFn(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
@@ -105,45 +105,23 @@ func registerCoreFn(r *Registry) {
 		Signatures: []NativeSig{{
 			Args:       []Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				paramsList := args[0].AsList()
-				returnsList := args[1].AsList()
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				params, barrierPos, err := ParseFnParams(reg, args[0])
+				if err != nil {
+					return nil, err
+				}
+				returns, err := ParseFnReturns(args[1])
+				if err != nil {
+					return nil, err
+				}
 				body := args[2].AsList()
-
-				var params []FnParam
-				for i := 0; i < paramsList.Len(); i++ {
-					elem := paramsList.Get(i)
-					// `?` marks the previous param as optional.
-					if elem.IsWord() {
-						w, _ := elem.AsWord()
-						if w.Name == "?" {
-							if len(params) == 0 {
-								return nil, fmt.Errorf("fn: '?' must follow a parameter")
-							}
-							params[len(params)-1].Optional = true
-							continue
-						}
-					}
-					p, err := parseCoreFnParam(elem)
-					if err != nil {
-						return nil, err
-					}
-					params = append(params, p)
-				}
-				returns := make([]Type, returnsList.Len())
-				for i := 0; i < returnsList.Len(); i++ {
-					t, err := parseCoreFnReturn(returnsList.Get(i))
-					if err != nil {
-						return nil, err
-					}
-					returns[i] = t
-				}
 
 				info := FnDefInfo{
 					Sigs: []FnSig{{
-						Params:  params,
-						Returns: returns,
-						Body:    body.Slice(),
+						Params:     params,
+						Returns:    returns,
+						BarrierPos: barrierPos,
+						Body:       body.Slice(),
 					}},
 				}
 				return []Value{NewFnDef(info)}, nil
@@ -402,40 +380,7 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 	})
 }
 
-// parseCoreFnParam splits a `name:TypeName` Word into an FnParam.
-func parseCoreFnParam(v Value) (FnParam, error) {
-	if !v.IsWord() {
-		return FnParam{}, fmt.Errorf("fn: expected param Word, got %s", v.String())
-	}
-	w, _ := v.AsWord()
-	idx := strings.Index(w.Name, ":")
-	if idx < 0 {
-		return FnParam{}, fmt.Errorf("fn: param %q missing ':TypeName' suffix", w.Name)
-	}
-	name := w.Name[:idx]
-	typeName := w.Name[idx+1:]
-	t, err := parseCoreTypeName(typeName)
-	if err != nil {
-		return FnParam{}, err
-	}
-	return FnParam{Name: name, Type: t}, nil
-}
-
-// parseCoreFnReturn parses a single Word as a return type name.
-func parseCoreFnReturn(v Value) (Type, error) {
-	if !v.IsWord() {
-		return Type{}, fmt.Errorf("fn: expected return-type Word, got %s", v.String())
-	}
-	w, _ := v.AsWord()
-	return parseCoreTypeName(w.Name)
-}
-
-// parseCoreTypeName resolves a type name (e.g. "Integer", "String")
-// to its Type. Returns an error for names not in TypeNameTable.
-func parseCoreTypeName(name string) (Type, error) {
-	tn, ok := TypeNameTable()[name]
-	if !ok {
-		return Type{}, fmt.Errorf("fn: unknown type %q", name)
-	}
-	return tn, nil
-}
+// (parseCoreFnParam, parseCoreFnReturn, parseCoreTypeName were
+// retired when the canonical fn-signature parser landed in
+// fn_params.go. Both core_words.go and aql/internal/engine now call
+// ParseFnParams / ParseFnReturns / ResolveTypeName directly.)
