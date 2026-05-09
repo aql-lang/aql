@@ -11,6 +11,15 @@ package aqleng
 //     quote  — explicit data capture (suppresses word evaluation)
 //     args   — per-fn-call positional argument frame
 //
+//   Boolean / logical connectives:
+//     not    — boolean negation                  ( a — !a )
+//     and    — short-circuit conjunction         ( a b — a∧b ); returns the first falsy or last truthy operand
+//     or     — short-circuit disjunction         ( a b — a∨b ); returns the first truthy or last falsy operand
+//
+//   Type-level connectives (run-time disjunct/intersect builders):
+//     tor    — type-level union (disjunct)       ( T U — T|U )
+//     tand   — type-level intersection           ( T U — T∩U )
+//
 //   Stack manipulation (Forth-style; all stack-only):
 //     dup        — duplicate top                  ( a — a a )
 //     swap       — exchange top two               ( a b — b a )
@@ -44,6 +53,29 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreQuote(r)
 	registerCoreArgs(r)
 	registerCoreStack(r)
+	registerCoreBoolean(r)
+	registerCoreTypeOps(r)
+}
+
+// RegisterCoreBoolean installs the boolean / logical-connective core
+// words: not, and, or. They are exported as a separate entry point
+// so consumers (e.g. the production aql package) can install just
+// these without taking the rest of RegisterCoreWords.
+//
+// The handlers route through CoerceBoolean (in core_helpers.go) for
+// non-boolean inputs; `and`/`or` short-circuit and return the
+// operand that decided the result rather than a pure boolean. So
+// `0 or 5` returns `5`, and `1 and 2` returns `2` — matching Lisp /
+// Python truthy-coalescing semantics.
+func RegisterCoreBoolean(r *Registry) {
+	registerCoreBoolean(r)
+}
+
+// RegisterCoreTypeOps installs the type-level connective core words:
+// tor (disjunct union) and tand (intersection). Exported as a
+// separate entry point so consumers can install just these.
+func RegisterCoreTypeOps(r *Registry) {
+	registerCoreTypeOps(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME must arrive as a

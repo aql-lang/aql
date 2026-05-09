@@ -1,37 +1,19 @@
 package engine
 
-// booleanNatives covers the boolean / logical-connective words.
+// booleanNatives covers the boolean / logical-connective words that
+// remain in the aql production layer. The canonical core trio —
+// `not`, `and`, `or` — has been moved into aqleng (see
+// aqleng/go/core_boolean.go) and is installed here via
+// aqleng.RegisterCoreBoolean from register.go.
 //
-// `or` and `and` short-circuit and return the "winning" operand
-// rather than a pure boolean. `otherwise` is None-coalescing
-// (distinct from `or` which short-circuits on falsy, so 0 or 5 = 5
-// but 0 otherwise 5 = 0). The classical connectives (xor, nand,
-// nor, xnor, iff) coerce non-booleans through CoerceBoolean.
+// What stays here:
+//   `otherwise` — None-coalescing (distinct from `or` which
+//                 short-circuits on falsy, so 0 or 5 = 5 but
+//                 0 otherwise 5 = 0).
+//   `xor`/`nand`/`nor`/`iff`/`xnor` — classical connectives that
+//                                     coerce non-booleans via
+//                                     CoerceBoolean.
 var booleanNatives = []NativeFunc{
-	{
-		Name:              "or",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []Type{TAny}},
-		},
-	},
-	{
-		Name:              "and",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, Handler: andHandler, Returns: []Type{TAny}},
-		},
-	},
-	{
-		Name:              "not",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TBoolean}, Handler: notHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny}, Handler: notHandler, Returns: []Type{TBoolean}},
-		},
-	},
 	{
 		Name:              "otherwise",
 		ForwardPrecedence: true,
@@ -64,24 +46,6 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 			{Args: []Type{TAny, TAny}, Handler: handler, Returns: []Type{TBoolean}},
 		},
 	}
-}
-
-func orHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if CoerceBoolean(args[1]) {
-		return []Value{args[1]}, nil
-	}
-	return []Value{args[0]}, nil
-}
-
-func andHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !CoerceBoolean(args[1]) {
-		return []Value{args[1]}, nil
-	}
-	return []Value{args[0]}, nil
-}
-
-func notHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewBoolean(!CoerceBoolean(args[0]))}, nil
 }
 
 func otherwiseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

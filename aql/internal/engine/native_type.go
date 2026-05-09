@@ -160,26 +160,8 @@ var typeNatives = []NativeFunc{
 			ReturnsFn: ReturnsIdentity(0),
 		}},
 	},
-	{
-		Name:              "tor",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    torHandler,
-			ReturnsFn:  torReturnsFn,
-		}},
-	},
-	{
-		Name:              "tand",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    tandHandler,
-			Returns:    []Type{TAny},
-		}},
-	},
+	// `tor` and `tand` moved to aqleng/go/core_boolean.go; installed
+	// via aqleng.RegisterCoreTypeOps from register.go.
 	{
 		Name:              "any",
 		ForwardPrecedence: true,
@@ -587,32 +569,8 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{result}, nil
 }
 
-// ---- tor ----
-
-func torHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	alts := append(FlattenDisjunctAlts(args[1]), FlattenDisjunctAlts(args[0])...)
-	simplified := SimplifyDisjunctAlts(alts)
-	if len(simplified) == 0 {
-		return []Value{NewTypeLiteral(TNever)}, nil
-	}
-	if len(simplified) == 1 {
-		return []Value{simplified[0]}, nil
-	}
-	return []Value{NewDisjunct(simplified)}, nil
-}
-
-func torReturnsFn(args []Value, _ *Registry) []Value {
-	if len(args) != 2 {
-		return []Value{NewCarrier(TAny)}
-	}
-	return []Value{JoinCarriers(args[1], args[0])}
-}
-
-// ---- tand ----
-
-func tandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{tandValues(args[1], args[0])}, nil
-}
+// torHandler, torReturnsFn, tandHandler: moved to aqleng/go/core_boolean.go.
+// tand's `tall` reduction (below) calls aqleng.TandValues directly.
 
 // ---- any / all / tany / tall ----
 
@@ -693,7 +651,7 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	}
 	acc := list.Get(0)
 	for i := 1; i < n; i++ {
-		acc = tandValues(acc, list.Get(i))
+		acc = TandValues(acc, list.Get(i))
 	}
 	return []Value{acc}, nil
 }

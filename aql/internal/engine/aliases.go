@@ -186,6 +186,7 @@ var (
 	resolveTypeName    = aqleng.ResolveTypeName
 	lookupDefType      = aqleng.LookupDefType
 	resolveDefType     = aqleng.ResolveDefType
+	TandValues         = aqleng.TandValues
 	FindWordInSource = aqleng.FindWordInSource
 	FlattenDisjunctAlts = aqleng.FlattenDisjunctAlts
 	FnDefHasSig = aqleng.FnDefHasSig

@@ -1,10 +1,22 @@
 package engine
 
+import "github.com/metsitaba/voxgig-exp/aqleng"
+
 // Register installs the engine's built-in word set on the given
 // registry. This is invoked from DefaultRegistry. Word definitions
 // themselves live in the various native_*.go and feature files
 // alongside their handlers.
+//
+// The boolean trio (not/and/or) and the type-level connectives
+// (tor/tand) are owned by aqleng — see aqleng/go/core_boolean.go.
+// They're installed here via aqleng.RegisterCoreBoolean and
+// aqleng.RegisterCoreTypeOps so the production registry ends up
+// with the canonical implementations rather than maintaining a
+// duplicate set.
 func Register(r *Registry) {
+	aqleng.RegisterCoreBoolean(r)
+	aqleng.RegisterCoreTypeOps(r)
+
 	// String
 	for _, n := range stringNatives {
 		r.RegisterNativeFunc(n)
