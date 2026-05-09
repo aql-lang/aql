@@ -231,9 +231,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 				// Literal value: direct type check.
 				if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
-					if tok.Data == nil && tok.VType.Equal(expectedType) &&
-						(expectedType.Equal(TMap) || expectedType.Equal(TList)) {
-						break // reject type literals for concrete Map/List
+					if rejectsTypeLiteral(tok, expectedType) {
+						break // reject type literal at concrete-payload sig
 					}
 					positions[fwd] = scanIdx
 					fwd++
@@ -341,7 +340,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				allMatch = false
 				break
 			}
-			if stackVal.Data == nil && (sig.Args[sigIdx].Equal(TMap) || sig.Args[sigIdx].Equal(TList)) {
+			if rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
 				allMatch = false
 				break
 			}

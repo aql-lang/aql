@@ -230,39 +230,61 @@ untype Foo	ERROR:type_error	no Foo on the type stack
 untype foo	ERROR:type_error	lowercase name rejected before the lookup
 
 # =====================================================================
-# 9. Dispatch — type literals at scalar leaf sigs (FOOTGUN)
+# 9. Dispatch — type literals are rejected at concrete-payload sigs
 # =====================================================================
-# match.go's Data==nil rejection ONLY fires for TMap and TList. For
-# scalar leaf types (Integer / Decimal / String / Boolean) a type
-# literal is silently accepted by a sig declaring that exact type, and
-# the handler reads the zero value from the AsX accessor.
+# A type literal (Data == nil) is rejected by every sig slot whose
+# expected type is a concrete payload type. This includes the scalar
+# leaves (Integer / Decimal / String / Boolean), TNumber, TList, TMap,
+# TAtom, etc. The matcher (aqleng/go/match.go via rejectsTypeLiteral
+# in signature.go) flags Data == nil as inadmissible there even if
+# the VType nominally matches.
+#
+# A type literal IS still legitimately accepted at:
+#
+#   - TAny slots — universal catch-all; the handler is expected to
+#     handle both concrete payloads and type literals.
+#   - Metatype slots (Type/*) — `make`, `is`, `typeof`, `convert`,
+#     etc. consume a type literal as the type itself.
+#   - The TNone slot, when the value is `null` — None has a single
+#     inhabitant and `null` IS that inhabitant.
+#
+# This eliminates the old footgun where `addq Integer 1` would
+# silently compute `addq 0 1`. Now the [TNumber, TNumber] sig of
+# addq rejects the type literal and the call falls through to no
+# matching sig → signature_error.
 
-# tagq has [Integer]→"specific" and [Any]→"any" overloads.
-tagq Integer	"specific"	Integer type literal is accepted by [Integer]; handler ignores the value
-tagq Number	"any"	Number is the parent of Integer; doesn't match [Integer]; falls to [Any]
+# tagq has [Integer]→"specific" and [Any]→"any" overloads. Because
+# the [Integer] sig is now off-limits to type literals, every type-
+# literal call falls through to [Any] uniformly.
+tagq Integer	"any"	Integer type literal rejected by [Integer]; falls to [Any]
+tagq Number	"any"	Number is the parent of Integer; doesn't match [Integer] anyway; falls to [Any]
 tagq Scalar	"any"	Scalar is broader than Integer; falls to [Any]
-tagq Decimal	"any"	no [Decimal] overload; falls to [Any]
+tagq Decimal	"any"	Decimal type literal rejected if a [Decimal] sig existed; falls to [Any]
 tagq String	"any"	no [String] overload; falls to [Any]
 tagq Boolean	"any"	no [Boolean] overload; falls to [Any]
 tagq Any	"any"	Any type literal hits the [Any] catch-all
-tagq null	"any"	None hits the [Any] catch-all
+tagq null	"any"	null at [Any] — None values pass through
 
-# Arithmetic words silently treat Integer / Decimal type literals as 0.
-addq Integer 1	1	Integer type literal + 1 → AsInteger(nil-Data)=0; 0+1=1
-addq Integer Integer	0	0+0 — both args are Integer type literals
-subq 5 Integer	-5	subq sig=[5,0]; handler returns b-a = 0-5 = -5
-addq Decimal 1.5	1.5	Decimal type literal + 1.5 → 0.0+1.5=1.5
+# Arithmetic words reject type literals — no silent zero-coercion.
+addq Integer 1	ERROR:signature	Integer type literal rejected by [TNumber, TNumber]; no Any fallback exists
+addq Integer Integer	ERROR:signature	both args type literals; both rejected
+subq 5 Integer	ERROR:signature	type-literal in either slot is rejected
+addq Decimal 1.5	ERROR:signature	Decimal type literal rejected at [TNumber, TNumber]
 
-# String type literals at [TString] sigs render as "".
-concatq "hi" String	"hi"	String type literal at sig[0] reads as "" via AsString
-concatq String "hi"	"hi"	String type literal at sig[1] also reads as ""
+# String / Boolean type literals at [TString] / [TBoolean] also reject.
+concatq "hi" String	ERROR:signature	String type literal rejected by [TString, TString]
+concatq String "hi"	ERROR:signature	either slot rejects
+not Boolean	true	`not` has a [TBoolean] sig (rejects Boolean literal) AND a [TAny] fallback; falls to [TAny] which returns !CoerceBoolean(typeLiteral) = !false = true
 
-# Boolean type literals at [TBoolean] sigs read as false.
-not Boolean	true	Boolean type literal at [Boolean] reads as false; not gives true
+# List / Map type literals rejected (unchanged from before).
+lengthq List	ERROR:signature	List type literal rejected by [TList]
+firstq List	ERROR:signature	same — List type literal rejected
+lengthq Map	ERROR:signature	no [TMap] overload exists; rejection propagates as no matching sig
 
-# But the rejection IS in force for List / Map type literals:
-lengthq List	ERROR:	List type literal (Data==nil) is rejected by the TList sig
-firstq List	ERROR:	same — List type literal rejected at [TList]
+# A type literal at a TAny sig still passes through — the handler can
+# inspect its VType to do meta operations.
+typeof Integer	atom(ScalarType)	typeof's sig is [TAny]; type literal matches; handler returns the metatype name
+typeof null	atom(Type)	null at [TAny] also matches
 
 # =====================================================================
 # 10. Type-name independence

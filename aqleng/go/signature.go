@@ -277,6 +277,49 @@ func sigTypeMatches(v Value, t Type) bool {
 	return false
 }
 
+// rejectsTypeLiteral reports whether a value with Data==nil should be
+// rejected at a concrete-payload sig slot — even if sigTypeMatches
+// said the VType matches.
+//
+// A type literal (e.g. `Integer` resolved from a bare type-name word)
+// has Data==nil, so handlers that read its payload via AsX() would
+// silently pull the zero value. That used to make programs like
+// `addq Integer 1` quietly compute `addq 0 1` instead of raising. Now
+// the matcher rejects type literals at every concrete-payload slot
+// and dispatch falls through to a TAny overload (or signature_error
+// if none exists).
+//
+// Type literals are still legitimately accepted at:
+//
+//   - TAny slots — universal catch-all; the handler is expected to
+//     handle both concrete payloads and type literals.
+//   - Metatype slots (Type/*) — `make`, `is`, `typeof`, `convert`,
+//     etc. consume a type literal as the type itself.
+//
+// Carriers (Data==nil but Carrier=true) are abstract VALUES, not types
+// — sigTypeMatches deliberately treats them as values, and this
+// rejection check follows suit. None type literals (`null`) are also
+// genuine values (None has a single inhabitant) and pass through to
+// any sig whose declared type they happen to match.
+func rejectsTypeLiteral(v Value, expectedType Type) bool {
+	if v.Data != nil {
+		return false
+	}
+	if v.Carrier {
+		return false
+	}
+	if expectedType.Equal(TAny) {
+		return false
+	}
+	if IsMetaType(expectedType) {
+		return false
+	}
+	if v.VType.Equal(TNone) {
+		return false
+	}
+	return true
+}
+
 // positionalMatch checks whether values match the signature's types in order.
 // Handles the /q modifier: a Word value at a QuoteArgs position is treated
 // as an Atom for type matching purposes.
