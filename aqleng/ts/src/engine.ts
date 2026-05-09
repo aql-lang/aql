@@ -12,6 +12,8 @@ import { AqlError } from './error.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
 import {
+  TAny,
+  TAtom,
   TBoolean,
   TInteger,
   TList,
@@ -21,7 +23,9 @@ import {
 } from './type.ts'
 import {
   type FnDefInfo,
+  type ForwardMarker,
   newBoolean,
+  newForwardMarker,
   newTypeLiteral,
   Value,
   type WordInfo,
@@ -61,9 +65,22 @@ export class Engine {
         if (w.name === ')') {
           throw new AqlError('syntax_error', `unmatched ')'`, ')')
         }
+        // If a pending forward marker is waiting for a Word-typed
+        // arg, capture this word as data instead of executing it.
+        // Mirrors aqleng/go/engine.go's hasPendingForwardExpectingWord
+        // check at the top of stepWord — without this the engine would
+        // dispatch the word and prematurely consume its forward args.
+        if (this.pendingExpectsWord()) {
+          this.stepLiteral()
+          continue
+        }
         this.stepWord(val)
-      } else {
+      } else if (val.isForward()) {
+        // Forward markers are passive — the pointer just walks past
+        // them. They consume incoming literals via stepLiteral.
         this.pointer++
+      } else {
+        this.stepLiteral()
       }
     }
 
@@ -135,7 +152,29 @@ export class Engine {
       )
     }
 
-    // Execute handler (always synchronous in this port).
+    // If the match has unresolved forward args (or any forward arg
+    // that is still a Word that might be a function call), defer the
+    // dispatch by replacing the function word with a ForwardMarker.
+    // The engine then steps the original forward args; their values
+    // (or, for sub-call results) flow back into the marker via
+    // stepLiteral until the marker fires. Mirrors insertForward in
+    // aqleng/go/engine.go.
+    if (this.shouldDeferDispatch(result.args, result.forwardCount)) {
+      this.beginForward(name, result, fn)
+      return
+    }
+
+    this.dispatch(result, name)
+  }
+
+  /**
+   * Run a fully-resolved match: execute the handler and splice the
+   * result over the consumed prefix + word + forward range.
+   */
+  private dispatch(
+    result: import('./match.ts').MatchResult,
+    name: string,
+  ): void {
     const handlerResult = result.sig.handler(result.args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new AqlError(
@@ -146,11 +185,75 @@ export class Engine {
     }
     const out = handlerResult as Value[]
 
-    // Splice: replace [prefix...word...forward] with handler output.
     const replaceFrom = this.pointer - result.prefixCount
     const replaceCount = result.prefixCount + 1 + result.forwardCount
     this.stack.splice(replaceFrom, replaceCount, ...out)
-    this.pointer = replaceFrom + out.length
+    // Position the pointer at the first result (or, for empty
+    // outputs, whatever the splice left at this index). The next
+    // iteration re-processes that slot — letting a pending outer
+    // forward marker collect a Value-typed result via stepLiteral,
+    // or just advancing past an immediate-dispatch result.
+    this.pointer = replaceFrom
+  }
+
+  /**
+   * Decide whether the match needs deferred forward collection. We
+   * defer if any optimistically-matched forward arg is still a Word
+   * that the engine might want to dispatch (e.g. a TAny slot grabbed
+   * a function-name Word). When the matcher accepted Word-as-data
+   * for a TWord/TAtom slot, we keep the immediate dispatch — those
+   * slots intentionally capture names without executing them.
+   */
+  private shouldDeferDispatch(args: Value[], forwardCount: number): boolean {
+    for (let i = 0; i < forwardCount; i++) {
+      const a = args[i]!
+      if (!a.isWord()) continue
+      const w = a.asWord() as WordInfo
+      // /q-style and TWord-explicit slots: matcher already decided
+      // we keep the Word as data — don't defer.
+      // Otherwise: this Word might be a function call. Defer.
+      // (We check by asking the matcher: does the raw token type-
+      // satisfy this slot exactly, vs being accepted only via
+      // TAny?). For the spec subset, simply check whether the name
+      // is a registered function — that's the case where deferring
+      // changes behaviour.
+      if (this.registry.lookup(w.name)) return true
+    }
+    return false
+  }
+
+  /**
+   * Insert a ForwardMarker in place of the function word and
+   * advance past it. The optimistically-matched forward args remain
+   * at their original positions on the stack; the engine will step
+   * them as usual, and their post-evaluation values flow back into
+   * the marker via stepLiteral.
+   */
+  private beginForward(
+    name: string,
+    result: import('./match.ts').MatchResult,
+    _fn: FunctionEntry,
+  ): void {
+    // Stack args (sig positions [forwardCount..N-1]) stay where they
+    // are below the pointer; we capture them in sig order for the
+    // final dispatch.
+    const stackArgs = result.args.slice(result.forwardCount)
+    const marker: ForwardMarker = {
+      funcName: name,
+      sig: result.sig,
+      expectedForward: result.forwardCount,
+      collected: [],
+      stackArgs,
+    }
+    // Replace the function word with the marker. Pointer stays —
+    // the main loop's "isForward" branch will advance past it.
+    this.stack[this.pointer] = newForwardMarker(marker)
+    // Stack args (resolved before the pointer) need to be removed
+    // here so they're not double-counted at completion time. Mirror
+    // Go's insertForward which records prefix args separately.
+    const replaceFrom = this.pointer - result.prefixCount
+    this.stack.splice(replaceFrom, result.prefixCount)
+    this.pointer = replaceFrom
   }
 
   /**
@@ -302,6 +405,115 @@ export class Engine {
     const replaceCount = result.prefixCount + 1 + result.forwardCount
     this.stack.splice(replaceFrom, replaceCount, ...bodyResult)
     this.pointer = replaceFrom + bodyResult.length
+  }
+
+  /**
+   * Return true iff the nearest preceding ForwardMarker (within the
+   * current paren scope) is waiting for a Word-typed arg at its
+   * next collection slot. Mirrors aqleng/go/engine.go's
+   * hasPendingForwardExpectingWord — the gate that lets `def NAME`
+   * capture NAME as data even when it would otherwise dispatch.
+   */
+  private pendingExpectsWord(): boolean {
+    const idx = this.findPendingMarker()
+    if (idx < 0) return false
+    const m = this.stack[idx]!.asForward()
+    const nextIdx = m.collected.length
+    if (nextIdx >= m.sig.args.length) return false
+    const expected = m.sig.args[nextIdx]!
+    // Only an EXPLICIT TWord/TAtom slot suppresses dispatch. TAny
+    // also accepts Word values, but at TAny slots we still want the
+    // engine to dispatch the word and feed its result back. Mirrors
+    // aqleng/go/engine.go's hasPendingForwardExpectingWord which
+    // checks `Equal(TWord)` and the /q flag, never TAny.matches(TWord).
+    return expected.equal(TWord) || expected.equal(TAtom)
+  }
+
+  /**
+   * Walk backward from the pointer, stopping at open-paren markers,
+   * and return the index of the nearest unfilled ForwardMarker. -1
+   * if none.
+   */
+  private findPendingMarker(): number {
+    for (let i = this.pointer - 1; i >= 0; i--) {
+      const v = this.stack[i]!
+      if (v.isWord() && (v.asWord() as WordInfo).name === '(') return -1
+      if (v.isForward()) {
+        const m = v.asForward()
+        if (m.collected.length < m.expectedForward) return i
+        return -1
+      }
+    }
+    return -1
+  }
+
+  /**
+   * Handle a literal (or word-treated-as-literal) at the pointer.
+   * If a pending marker can absorb it, collect; otherwise advance.
+   */
+  private stepLiteral(): void {
+    const fwdIdx = this.findPendingMarker()
+    if (fwdIdx < 0) {
+      this.pointer++
+      return
+    }
+    const m = this.stack[fwdIdx]!.asForward()
+    const nextIdx = m.collected.length
+    const expected = m.sig.args[nextIdx]!
+    const val = this.stack[this.pointer]!
+
+    // Type-check. Words at TWord/TAtom slots match directly; other
+    // values check via sigTypeMatches.
+    let matches: boolean
+    if (val.isWord()) {
+      // A Word can fill a TWord/TAtom slot, or a TAny slot (data).
+      // For other slot types it must resolve via def-sub first; that
+      // happens at stepWord, so reaching here with a Word means
+      // either we want it as data (TWord/TAtom/TAny) or it's a
+      // mismatch.
+      matches = expected.equal(TWord) || expected.equal(TAtom) || expected.equal(TAny)
+    } else {
+      matches = val.vType.matches(expected)
+    }
+    if (!matches) {
+      // Implicit end of forward collection — fail the dispatch.
+      throw new AqlError(
+        'signature_error',
+        `forward arg ${nextIdx} type mismatch for ${m.funcName}: expected ${expected.toString()}, got ${val.toString()}`,
+        m.funcName,
+      )
+    }
+
+    // Collect: remove value from current position, append to marker.
+    this.stack.splice(this.pointer, 1)
+    m.collected.push(val)
+    // pointer stays — it now points at what came after the value.
+
+    if (m.collected.length === m.expectedForward) {
+      this.completeForward(fwdIdx)
+    }
+  }
+
+  /**
+   * Build the full args list (forward then stack, in sig order) and
+   * dispatch the marker's sig. The marker is replaced by the result.
+   */
+  private completeForward(fwdIdx: number): void {
+    const m = this.stack[fwdIdx]!.asForward()
+    const args = [...m.collected, ...m.stackArgs]
+    const handlerResult = m.sig.handler(args, null, [], this.registry)
+    if (handlerResult instanceof Promise) {
+      throw new AqlError(
+        'unsupported',
+        `async handlers are not supported in the TS port`,
+        m.funcName,
+      )
+    }
+    const out = handlerResult as Value[]
+    this.stack.splice(fwdIdx, 1, ...out)
+    // Position the pointer at the first result so the next iteration
+    // can flow it into any outer pending marker.
+    this.pointer = fwdIdx
   }
 
   private describeStack(): string {

@@ -12,6 +12,7 @@ import {
   TAtom,
   TBoolean,
   TDecimal,
+  TForward,
   TFunction,
   TInteger,
   TList,
@@ -33,6 +34,31 @@ export interface WordInfo {
 export interface FnParam {
   name: string
   type: AqlType
+}
+
+/**
+ * A typed parameter on a function definition.
+ *
+ * Forward dispatch deferral:
+ *
+ * When a function's match has uncollected forward args at dispatch
+ * time, we replace the function word with a `ForwardMarker` Value.
+ * The engine continues stepping; intervening function calls produce
+ * literals that flow back to the marker via stepLiteral. Once
+ * `collected.length === expectedForward`, the marker fires the
+ * original handler and is itself replaced by the handler's result.
+ * Mirrors the (insertForward, stepLiteral, ForwardInfo) trio in
+ * aqleng/go/engine.go.
+ */
+export interface ForwardMarker {
+  funcName: string
+  sig: import('./signature.ts').Signature
+  expectedForward: number
+  /** Forward args in collection order (== sig order from sig[0]). */
+  collected: Value[]
+  /** Stack args resolved at match time. Combined with `collected` to
+   *  build the full sig-ordered arg list. Stored in sig order. */
+  stackArgs: Value[]
 }
 
 /**
@@ -141,6 +167,15 @@ export class Value {
     return this.vType.matches(TFunction) && this.data !== null
   }
 
+  isForward(): boolean {
+    return this.vType.equal(TForward)
+  }
+
+  asForward(): ForwardMarker {
+    if (this.data === null) throw new Error('AsForward: nil data')
+    return this.data as ForwardMarker
+  }
+
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
   toString(): string {
     if (this.data === null) {
@@ -245,4 +280,14 @@ export function newList(elems: Value[]): Value {
  */
 export function newFnDef(info: FnDefInfo): Value {
   return new Value(TFunction, info)
+}
+
+/**
+ * Construct a forward-dispatch marker. The engine inserts these in
+ * place of a function word whose match still needs forward args; as
+ * those args resolve they're collected into `marker.collected` and
+ * the marker fires once full.
+ */
+export function newForwardMarker(info: ForwardMarker): Value {
+  return new Value(TForward, info)
 }
