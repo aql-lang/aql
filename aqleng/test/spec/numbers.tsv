@@ -1,0 +1,248 @@
+# =====================================================================
+# Principle: Number arithmetic — Integer + Decimal + operator dispatch.
+# =====================================================================
+#
+# This file is the canonical numeric-operations spec. It covers:
+#
+#   - Integer and Decimal literal round-trip
+#   - The three operator-arity patterns:
+#       commutative binary    (addq)
+#       non-commutative binary (subq)
+#       unary                  (negq)
+#   - Decimal-contagion type promotion
+#   - The two equivalence classes for non-commutative arrangements
+#     (see mirror.tsv for the abstract rule)
+#   - Composition with parens
+#   - Composition with the `end` stop word
+#   - Composition with custom user-defined functions (defq + fnq)
+#   - Type-mismatch errors and IEEE-754 float artefacts
+#
+# The three test words exercised here are representative of every
+# numeric op pattern. mulq is registered for use in other spec files
+# but its behaviour is identical to addq's (commutative binary,
+# [TNumber, TNumber], decimal contagion). Other production words like
+# div, pow, abs are not in the spec runner's word set.
+#
+# Type lattice
+# ------------
+# AQL has two concrete numeric types under the same Number root:
+#
+#   Scalar/Number/Integer  — written as digits with optional leading minus
+#   Scalar/Number/Decimal  — written with a decimal point
+#
+# All three test words are sigged on [TNumber, TNumber] (or [TNumber|]
+# for unary — the `|` makes the arg forward-eligible with stack
+# fallback). Integer and Decimal both match Number. Each handler
+# dispatches on argument types at runtime:
+#
+#     - both args Integer  →  integer op,  result is Integer
+#     - any arg Decimal    →  float64 op,  result is Decimal  (contagion)
+#
+# Mirrors the production engine's `numericBinaryHandler` in
+# `aql/internal/engine/native_math.go`.
+#
+# Handler convention (from the production engine)
+# -----------------------------------------------
+# All non-commutative binary handlers compute `result = b OP a` where
+# `a = args[0]`, `b = args[1]`. Combined with the matching algorithm
+# (forward args fill sig[0..F-1] in source order, then stack args fill
+# sig[F..N-1] top-down), the natural infix reading just works:
+#
+#   10 subq 3   → forward [3], stack [10] → sig=[3, 10]
+#                → handler returns b - a = 10 - 3 = 7
+#
+# The same algorithm makes `subq 3 10` and `10 3 subq` produce the
+# same result (sig=[3, 10] in all three cases). The other three
+# arrangements (`subq 10 3`, `3 subq 10`, `3 10 subq`) form the second
+# equivalence class with sig=[10, 3] and return -7. There is NO "swap
+# form" — every arrangement is equally valid; the matching algorithm
+# just maps each one to a specific (args[0], args[1]) pair. See
+# mirror.tsv for the abstract enumeration.
+#
+# Why this matters
+# ----------------
+# Numeric dispatch is the foundational test of the type lattice and
+# the matching algorithm together. The Integer/Decimal split is the
+# language's first lattice decision; the contagion rule is its first
+# closure rule; the b-op-a handler convention is the production
+# engine's first surface contract. These rows pin all three.
+
+# tokens	expected	note
+
+# ---------- 1. Literal round-trip ----------
+# Integer (already covered in literals.tsv but repeated here for the
+# Number context).
+1	1	scalar integer
+-7	-7	negative integer
+0	0	zero (no sign bit)
+1 2 3	1 2 3	multiple integers on the stack
+
+# Decimal — formatDecimal always emits ".0" or an exponent so the
+# Decimal type tag is visually distinct from Integer.
+3.14	3.14	canonical decimal — fractional digits preserved
+-0.5	-0.5	negative decimal
+0.0	0.0	whole-valued decimal still renders as "0.0"
+2.0	2.0	whole-valued decimal still renders as "2.0"
+2.5 3.5	2.5 3.5	multiple decimals on the stack
+1 2.0	1 2.0	Integer + Decimal coexist; type tag visible per-value
+
+# ---------- 2. addq — commutative binary across all I/D combinations ----------
+# Three structural arrangements (prefix, infix, postfix) × four type
+# combinations (II, ID, DI, DD). addq is commutative so the value is
+# invariant under sig flip; we verify the type-promotion rule.
+addq 2 3	5	II prefix: fwd=[2, 3] → handler 3+2 = 5
+addq 2 3.0	5.0	ID contagion → Decimal
+addq 2.0 3	5.0	DI contagion → Decimal
+addq 2.0 3.0	5.0	DD → Decimal
+2 addq 3	5	II infix
+2 addq 3.0	5.0	ID infix
+2.0 addq 3	5.0	DI infix
+2.0 addq 3.0	5.0	DD infix
+2 3 addq	5	II postfix
+2 3.0 addq	5.0	stack=[2, 3.0]: top=3.0 → sig[0], deeper=2 → sig[1]; result is 5.0 (Decimal contagion)
+2.0 3.0 addq	5.0	DD postfix
+
+# Specific decimal values to surface arithmetic correctness:
+addq 1.5 2.5	4.0	non-integer fractions sum to a whole — but result still renders as Decimal "4.0"
+addq 0.5 0.5	1.0	1/2 + 1/2 = 1; result is "1.0", never "1"
+addq -1.5 4.5	3.0	negative + positive
+addq 0.0 0.0	0.0	zero plus zero stays Decimal
+
+# ---------- 3. subq — non-commutative binary, both equivalence classes ----------
+# Class A — the matching algorithm produces sig=[3, 10] (or sig=[X, Y]
+# for X=3, Y=10), so handler returns b - a = 10 - 3 = 7.
+10 subq 3	7	II infix: stk=[10], fwd=[3] → sig=[3, 10] → 10-3 = 7
+10 subq 3.0	7.0	ID infix
+10.0 subq 3	7.0	DI infix
+10.0 subq 3.0	7.0	DD infix
+10 3 subq	7	II postfix: stk=[10, 3] top=3 → sig=[3, 10] → 10-3 = 7
+10.0 3.0 subq	7.0	DD postfix
+subq 3 10	7	II prefix: fwd=[3, 10] → sig=[3, 10] → 10-3 = 7
+subq 3 10.0	7.0	mixed: fwd=[3, 10.0] → 10.0-3
+subq 3.0 10	7.0	mixed: fwd=[3.0, 10] → 10-3.0
+subq 3.0 10.0	7.0	DD prefix
+
+# Class B — sig=[10, 3] (or sig=[Y, X]), handler returns 3 - 10 = -7.
+subq 10 3	-7	II prefix: fwd=[10, 3] → sig=[10, 3] → 3-10 = -7
+subq 10 3.0	-7.0	ID prefix: contagion
+subq 10.0 3	-7.0	DI prefix
+subq 10.0 3.0	-7.0	DD prefix
+3 subq 10	-7	II infix: stk=[3], fwd=[10] → sig=[10, 3] → 3-10
+3.0 subq 10	-7.0	DI infix
+3 subq 10.0	-7.0	ID infix
+3.0 subq 10.0	-7.0	DD infix
+3 10 subq	-7	II postfix: stk=[3, 10] top=10 → sig=[10, 3] → 3-10
+3.0 10.0 subq	-7.0	DD postfix
+
+# A specific decimal-only subtraction surfaces a float artefact.
+subq 0.9 1.0	0.09999999999999998	IEEE 754 imprecision: 1.0 - 0.9 is NOT exactly 0.1
+1.0 subq 0.9	0.09999999999999998	infix form of the same — sig=[0.9, 1.0] → 1.0-0.9
+
+# ---------- 4. negq — unary negation ----------
+# Sig [Number|] — barrier at position 1 (= N for unary). The single
+# arg is forward-eligible with stack fallback, so both forms work:
+#   negq X   — forward dispatch
+#   X negq   — fwd-scan empty, stack supplies the arg
+# Type-preserving: Integer in, Integer out; Decimal in, Decimal out.
+negq 5	-5	I forward
+negq 5.0	-5.0	D forward — preserves Decimal type
+negq -5.5	5.5	negation of negative decimal
+negq 0	0	Integer zero stays zero (no sign bit)
+negq 0.0	-0.0	Decimal zero → -0.0 (IEEE sign flip; +0.0 and -0.0 are distinct bit patterns)
+5 negq	-5	stack-fallback form on Integer
+5.0 negq	-5.0	stack-fallback form on Decimal
+-3.5 negq	3.5	stack-fallback on negative decimal
+3 negq negq	3	double negation cancels (Integer)
+5.0 negq negq	5.0	double negation cancels (Decimal)
+
+# ---------- 5. The 0.1 + 0.2 float artefact ----------
+# IEEE 754 binary float cannot represent 0.1 or 0.2 exactly. Their
+# sum is 0.30000000000000004, never 0.3. aqleng preserves this
+# verbatim — no display rounding, no silent truncation. See
+# SPEC_REPORT.md §2 for the exact-decimal-port plan that would
+# change this row.
+addq 0.1 0.2	0.30000000000000004	canonical IEEE 754 artefact
+0.1 addq 0.2	0.30000000000000004	same value via infix form
+0.1 0.2 addq	0.30000000000000004	same value via postfix form
+addq 0.1 0.2 addq 0.3	0.6000000000000001	chained left-to-right: compounds the artefact
+
+# ---------- 6. Composition with parens ----------
+# Parens force the inner expression to evaluate before the outer's
+# slot is filled. This is also the workaround for nested forward
+# (see nested-forward.tsv: function words are structural boundaries
+# in matchSignature; bare nesting `addq 1 mulq 2 3` errors).
+addq 1 ( mulq 2 3 )	7	paren pre-evaluates to 6 → addq(1,6) = 7
+addq 1.5 ( addq 2 3 )	6.5	inner integer addq → 5; outer 1.5 + 5 → 6.5 (contagion)
+mulq 2.0 ( subq 1 5 )	8.0	inner subq class B: fwd=[1, 5] → sig=[1, 5] → 5-1 = 4; outer 2.0 * 4 → 8.0 (contagion)
+negq ( addq 2 3 )	-5	composes via paren: inner addq = 5; negq(5) = -5
+negq ( subq 10 3 )	7	inner subq is class B → 3-10 = -7; outer negq(-7) = 7
+negq ( addq 2.0 3.0 )	-5.0	composes with Decimal contagion
+addq 1 ( mulq 2 ( addq 3 4 ) )	15	deep nesting via parens: 3+4=7, 2*7=14, 1+14=15
+
+# Parens leaving multivalues — both flow into outer arg slots.
+addq ( 1 dupq )	2	paren produces [1, 1]; addq consumes both → 1+1 = 2
+mulq ( 2 dupq )	4	paren produces [2, 2]; mulq → 2*2 = 4
+
+# ---------- 7. Composition with `end` (stop word) ----------
+# `end` short-circuits forward collection for the nearest pending
+# word. After `end`, forward collection stops and the engine
+# resolves the call from whatever was already collected (plus stack
+# fallback per the unified §1.4 rule).
+addq 2 3 end	5	end after addq is fully resolved is harmless — addq(3,2) already fired
+addq 2 end 3	ERROR:signature	end forces close with fwd=[2] only; stack empty so sig[1] can't be filled
+addq 2 end 3 4	ERROR:signature	same shape — end forces close before 3,4 push; stack still empty at the close
+1 addq 2 end	3	addq(2, 1) = 3 (fully resolved before end); end is harmless
+1 2 addq end	3	all-prefix form fully resolved before end
+3 4 addq 2 end	3 6	stack=[3,4]; addq fwd-collects 2; end forces close with fwd=[2] and stack-top=4 → sig=[2,4] → 4+2=6; the deeper 3 stays as residue. Result: "3 6".
+end 1 addq 2 3	1 5	leading end has no pending fwd → no-op; then 1 pushes; addq fwd-collects 2 (sig[0]); 3 fails — wait, 3 IS Integer. Actually addq fwd-collects 2 and 3 → sig=[2,3] → 3+2=5; stack=[1] residue. Result: "1 5".
+
+# ---------- 8. Composition with custom user-defined functions ----------
+# defq + fnq build user functions. Bodies use the same numeric ops.
+defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5 inc	6	user fn computing n + 1 via addq inside the body
+defq doub ( fnq [ n:Integer ] [ Integer ] [ n n addq ] ) 5 doub	10	user fn computing n + n
+defq sqr ( fnq [ n:Integer ] [ Integer ] [ n n mulq ] ) 7 sqr	49	user fn computing n * n via mulq
+defq neg2 ( fnq [ n:Integer ] [ Integer ] [ n negq ] ) 5 neg2	-5	user fn wrapping negq
+
+# Decimal version — the body's args/return types still match Integer
+# in this fnq (the spec runner's fnq sig only accepts a single typed
+# param list); but the Number-typed addq still handles Integer args
+# normally. For Decimal args, the call would fail sig match at fnq's
+# [Integer] entry — pinned in the next row.
+defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5.0 inc	ERROR:signature	5.0 fails the fnq's [Integer] param sig
+
+# Composition: a user fn calling another user fn.
+defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) defq inc2 ( fnq [ n:Integer ] [ Integer ] [ n inc inc ] ) 5 inc2	7	inc2 chains two inc calls
+
+# Custom fn body using subq — exercises the b-a convention.
+defq diff ( fnq [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 diff 3	7	diff(10, 3) → param a=3 (fwd), b=10 (stk); body subq a b → subq 3 10 → sig=[3, 10] → 10-3 = 7
+
+# List-body splice — same machinery, no fnq wrap. Body splices
+# in-place at the use site (see code-splice.tsv).
+defq trip ( fnq [ n:Integer ] [ Integer ] [ n n addq n addq ] ) 4 trip	12	body computes n + n + n via two chained addq calls
+
+# ---------- 9. Type mismatches still error ----------
+addq "hello" 3.5	ERROR:signature	String at sig[0] fails Number match
+addq 3.5 "world"	ERROR:signature	String at sig[1] fails Number match
+addq true 3.5	ERROR:signature	Boolean at sig[0] fails Number match
+addq 3.5 [ 1 2 ]	ERROR:signature	List at sig[1] fails Number match
+subq null 1.0	ERROR:signature	None at sig[0] fails Number match
+subq 3.5 "x"	ERROR:signature	String at sig[1] fails Number match
+negq "x"	ERROR:signature	String fails Number for negq
+negq true	ERROR:signature	Boolean fails Number for negq
+negq null	ERROR:signature	None fails Number for negq
+"hi" negq	ERROR:signature	stack-fallback form: String on stack still fails Number
+
+# Insufficient-args errors.
+addq 1	ERROR:	insufficient args for forward-prec word; only one arg available
+subq	ERROR:	zero args
+negq	ERROR:	zero args for unary
+
+# ---------- 10. Specificity still works for Decimal vs Any ----------
+# `tagq` has overloads [Any] and [Integer] (no [Decimal]); a Decimal
+# arg falls through to [Any]. This is unchanged by the Number-typing
+# of addq/subq because tagq's sigs are not Number-rooted.
+tagq 3.14	"any"	Decimal hits [Any] catch-all (tagq has no [Decimal] overload)
+tagq -0.5	"any"	negative decimal also hits [Any]
+tagq 7	"specific"	control: Integer still hits the [Integer]-specific overload
+tagq 0	"specific"	zero is still Integer
+tagq 0.0	"any"	0.0 is Decimal, falls through to [Any]

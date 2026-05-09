@@ -6,27 +6,27 @@
 # remaining tokens evaluate, and collects their results back into
 # the marker via stepLiteral. Once full, the marker fires.
 #
-# This is what lets `def NAME fn [...]` work without paren-wrapping
-# the inner `fn` call: def matches optimistically, defers, the inner
-# fn dispatches, its FnDef result flows into def's second slot, def
+# This is what lets `defq NAME fnq [...]` work without paren-wrapping
+# the inner `fnq` call: defq matches optimistically, defers, the inner
+# fnq dispatches, its FnDef result flows into defq's second slot, defq
 # fires.
 
 # tokens	expected	note
 
-# Bare def + fn — no paren wrap on the body.
-def double fn [ a:Integer ] [ Integer ] [ a a add ] 5 double	10	def defers; fn dispatches first; def fires with [Word(double), FnDef]
+# Bare defq + fnq — no paren wrap on the body.
+defq double fnq [ a:Integer ] [ Integer ] [ a a addq ] 5 double	10	defq defers; fnq dispatches first; defq fires with [Word(double), FnDef]
 
-def inc fn [ n:Integer ] [ Integer ] [ n 1 add ] 7 inc	8	same shape, single-arg fn
+defq inc fnq [ n:Integer ] [ Integer ] [ n 1 addq ] 7 inc	8	same shape, single-arg fnq
 
-def addAB fn [ a:Integer b:Integer ] [ Integer ] [ a b add ] 3 addAB 4	7	two-arg fn dispatched after def deferral
+defq addAB fnq [ a:Integer b:Integer ] [ Integer ] [ a b addq ] 3 addAB 4	7	two-arg fnq dispatched after defq deferral
 
-# def followed by another def — second def's NAME slot also captured
+# defq followed by another defq — second defq's NAME slot also captured
 # without execution.
-def double fn [ a:Integer ] [ Integer ] [ a a add ] def quad fn [ x:Integer ] [ Integer ] [ x double double ] 4 quad	16	chained defs; quad calls double internally
+defq double fnq [ a:Integer ] [ Integer ] [ a a addq ] defq quad fnq [ x:Integer ] [ Integer ] [ x double double ] 4 quad	16	chained defs; quad calls double internally
 
 # Forward arg is itself a literal (no inner function call); marker
 # still works — it just collects immediately.
-def pi 3 pi add 1	4	scalar def via insertForward; pi resolves to 3, then 3 add 1 → 4
+defq pi 3 pi addq 1	4	scalar defq via insertForward; pi resolves to 3, then 3 addq 1 → 4
 
 # Mixing parens still works.
-def double fn [ a:Integer ] [ Integer ] [ a a add ] ( 3 double ) ( 5 double )	6 10	parens isolate calls so each binds its own a
+defq double fnq [ a:Integer ] [ Integer ] [ a a addq ] ( 3 double ) ( 5 double )	6 10	parens isolate calls so each binds its own a

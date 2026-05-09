@@ -1,26 +1,26 @@
 # =====================================================================
-# Principle: A list-bound def splices its body inline at the use site.
+# Principle: A list-bound defq splices its body inline at the use site.
 # =====================================================================
 #
-# When a name is bound via `def NAME [body]` (where body is an
-# Eval=true list — the parser/tokenizer flag for normal source-code
+# When a name is bound via `defq NAME [body]` (where body is an
+# Eval=true list — the parser/tokenizer flag for normal source-codeq
 # lists), every subsequent occurrence of `NAME` does NOT push a list
 # value. Instead the engine REMOVES the word from the token stream
 # and INSERTS the body's elements in its place — the body's tokens
 # then execute against the live stack.
 #
-# This is the foundational definition mechanism for reusable code
+# This is the foundational definition mechanism for reusable codeq
 # fragments in concatenative languages: a name is shorthand for "run
 # this sequence of tokens here". Forth's `:` definitions, Joy's
 # words, and Factor's combinator definitions all share this design.
-# AQL adopts it via def + list-body.
+# AQL adopts it via defq + list-body.
 #
 # Rules being asserted
 # --------------------
-# 1. `def NAME [body]` registers a binding under NAME pointing at the
+# 1. `defq NAME [body]` registers a binding under NAME pointing at the
 #    list. The list is unquoted (Eval=true, NOT Quoted=true).
 # 2. A subsequent `NAME` reference is REPLACED with the body's
-#    elements — the splice happens in stepWord's def-stack lookup
+#    elements — the splice happens in stepWord's defq-stack lookup
 #    branch (engine.go:754-760):
 #
 #        if top.VType.Equal(TList) && !top.IsTypedList() &&
@@ -33,8 +33,8 @@
 #        }
 #
 # 3. The body executes against the CURRENT stack — there is no
-#    sandbox. So a body like `[dup add]` requires a value on the
-#    stack at the use site; `def doub [dup add] doub 5` errors
+#    sandbox. So a body like `[dupq addq]` requires a value on the
+#    stack at the use site; `defq doub [dupq addq] doub 5` errors
 #    because the splice fires before `5` is pushed.
 # 4. The splice is at the USE SITE, not at definition time. The body
 #    is captured by reference: redefining a word later does NOT
@@ -42,60 +42,60 @@
 #    happened — they're literal tokens now).
 # 5. Composition works naturally: a body can reference other defs.
 #    On splice, those names spawn their own splice/dispatch paths.
-# 6. Quoted lists (`def x quote [body]`) bypass the splice entirely
+# 6. Quoted lists (`defq x quoteq [body]`) bypass the splice entirely
 #    — they're stored as data values. `x` then resolves to the list
 #    value, not its body.
 #
 # Why this matters
 # ----------------
 # This is the difference between a "data list" and a "code list".
-# Without the splice rule, `def doub [dup add]` would just push
-# `[dup add]` as a list value when `doub` is referenced — useless
-# as a function definition. The Eval=true / Quoted=true flag pair
+# Without the splice rule, `defq doub [dupq addq]` would just push
+# `[dupq addq]` as a list value when `doub` is referenced — useless
+# as a function definition. The Eval=true / Quoted=true flag pairq
 # is what discriminates the two intents.
 #
 # CLAUDE.md "Quotation System" describes the rule in prose; this
 # file pins the executable form.
 #
-# Companion files: fn.tsv covers typed-param fn-bodies (different
+# Companion files: fnq.tsv covers typed-param fnq-bodies (different
 # splice path via installSpecFnDef / dispatchFnDef); autoeval.tsv
 # covers the Eval=true vs Quoted=true distinction.
 
 # tokens	expected	note
 
 # Basic splice: body executes against stack containing the input.
-def doub [ dup add ] 5 doub	10	5 pushed; doub splices [dup add]; dup→[5,5]; add→[10]
-def square [ dup mul ] 7 square	49	7 squared
-def inc [ 1 add ] 5 inc	6	body adds 1 to top of stack — embedded literal in body
+defq doub [ dupq addq ] 5 doub	10	5 pushed; doub splices [dupq addq]; dupq→[5,5]; addq→[10]
+defq square [ dupq mulq ] 7 square	49	7 squared
+defq inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack — embedded literal in body
 
 # Body with embedded literals — curried form.
-def add5 [ add 5 ] 10 add5	15	body uses an embedded constant; 10 add 5 = 15
-def double_then_inc [ dup add 1 add ] 5 double_then_inc	11	chained body: 5+5=10, then 10+1=11
+defq add5 [ addq 5 ] 10 add5	15	body uses an embedded constant; 10 addq 5 = 15
+defq double_then_inc [ dupq addq 1 addq ] 5 double_then_inc	11	chained body: 5+5=10, then 10+1=11
 
-# The use-site contract: body executes against the live stack, not
+# The use-site contract: body executes against the live stack, notq
 # a sandbox. Insufficient stack at use site → error.
-def doub [ dup add ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dup needs 1 stack value, sees nothing
-def needs2 [ add ] needs2 1 2	3	body is just [add]; splice → add 1 2 → 3 (add forward-collects)
-def needs2 [ add ] 1 2 needs2	3	body splice still works with prefix args
-def needs2 [ add ] needs2	ERROR:	splice fires; add waits for forward args; nothing follows; insufficient args
+defq doub [ dupq addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dupq needs 1 stack value, sees nothing
+defq needs2 [ addq ] needs2 1 2	3	body is just [addq]; splice → addq 1 2 → 3 (addq forward-collects)
+defq needs2 [ addq ] 1 2 needs2	3	body splice still works with prefix argsq
+defq needs2 [ addq ] needs2	ERROR:	splice fires; addq waits for forward argsq; nothing follows; insufficient argsq
 
-# Composition: one def calling another.
-def doub [ dup add ] def quad [ doub doub ] 3 quad	12	3 doubled twice = 12
-def inc [ 1 add ] def add2 [ inc inc ] 5 add2	7	chained inc calls
+# Composition: one defq calling another.
+defq doub [ dupq addq ] defq quad [ doub doub ] 3 quad	12	3 doubled twice = 12
+defq inc [ 1 addq ] defq add2 [ inc inc ] 5 add2	7	chained inc calls
 
 # Splice happens at use, not definition. Note however that x in the
 # example below is unreachable: doub's body splices BEFORE x is
-# resolved, so the body's `dup` runs against an empty stack and errors.
+# resolved, so the body's `dupq` runs against an empty stack and errors.
 # This is a real footgun: list-body defs are eager about splicing.
-def x 5 def doub [ dup add ] doub x	ERROR:signature_error	doub splices [dup add] at point; dup needs 1 stack value, sees empty stack — x is never reached
+defq x 5 defq doub [ dupq addq ] doub x	ERROR:signature_error	doub splices [dupq addq] at point; dupq needs 1 stack value, sees empty stack — x is never reached
 
-# Parens isolate splice scopes — each splice runs in its sub-engine.
-def doub [ dup add ] ( 3 doub ) ( 5 doub )	6 10	without the parens the inner add would greedily grab the second invocation's argument
+# Parens isolate splice scopes — each splice runs in its subq-engine.
+defq doub [ dupq addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens the inner addq would greedily grab the second invocation's argument
 
-# Quoted-list def is data, not code.
-def lst quote [ 1 2 3 ] length lst	3	lst resolves to the quoted list; length sees a 3-element list, returns 3
-def lst quote [ 1 2 3 ] first lst	1	first element of the data-list
+# Quoted-list defq is data, not codeq.
+defq lst quoteq [ 1 2 3 ] lengthq lst	3	lst resolves to the quoted list; lengthq sees a 3-element list, returns 3
+defq lst quoteq [ 1 2 3 ] firstq lst	1	first element of the data-list
 
-# Empty-body def is a no-op when invoked.
-def noop [ ] 5 noop	5	splice removes the word and inserts nothing; 5 stays
-def noop [ ] noop		bare invocation produces an empty stack (renders as the empty string)
+# Empty-body defq is a no-op when invoked.
+defq noop [ ] 5 noop	5	splice removes the word and inserts nothing; 5 stays
+defq noop [ ] noop		bare invocation produces an empty stack (renders as the empty string)

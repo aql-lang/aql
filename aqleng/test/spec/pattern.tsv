@@ -11,18 +11,18 @@
 #   fact — two overloads on [Integer]:
 #            patterns:{0: 0}  → returns 1   (base case)
 #            no patterns      → returns the arg unchanged (catch-all)
-#   code — two overloads on [Integer]:
+#   codeq — two overloads on [Integer]:
 #            patterns:{0: 99} → returns "ninety-nine"
 #            no patterns      → returns "general"
-#   route — two overloads on [String]:
+#   routeq — two overloads on [String]:
 #            patterns:{0: "admin"} → returns "matched-admin"
 #            no patterns           → returns "other"
 
 # tokens	expected	note
-fact 0	1	pattern 0 matches → base-case overload
-fact 5	5	non-zero falls through to catch-all → echoes the arg
-fact 1	1	1 fails the {0:0} pattern, catch-all returns 1 unchanged
-code 99	"ninety-nine"	pattern 99 matches → specific string
-code 42	"general"	non-99 falls through to catch-all
-route "admin"	"matched-admin"	string-literal pattern matches on Data equality
-route "user"	"other"	non-admin string falls through
+factq 0	1	pattern 0 matches → base-case overload
+factq 5	5	non-zero falls through to catch-all → echoes the arg
+factq 1	1	1 fails the {0:0} pattern, catch-all returns 1 unchanged
+codeq 99	"ninety-nine"	pattern 99 matches → specific string
+codeq 42	"general"	non-99 falls through to catch-all
+routeq "admin"	"matched-admin"	string-literal pattern matches on Data equality
+routeq "user"	"other"	non-admin string falls through

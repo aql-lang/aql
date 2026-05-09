@@ -1,14 +1,14 @@
-# Stack manipulation via test-registered `dup`, `swap`, `drop`.
+# Stack manipulation via test-registered `dupq`, `swapq`, `dropq`.
 # These three are stack-only by default — they consume only from
-# the prefix and never collect forward args.
+# the prefix and never collect forward argsq.
 #
-# (Negation moved to decimals.tsv after the neg/negate consolidation
-# into a single forward-eligible `negate` word with sig [Number|]).
+# (Negation moved to decimals.tsv after the neg/negq consolidation
+# into a single forward-eligible `negq` word with sig [Number|]).
 
 # tokens	expected	note
-1 dup	1 1	dup duplicates the top
-1 2 dup	1 2 2	dup affects only the top
-1 2 swap	2 1	swap exchanges the top two
-1 2 3 swap	1 3 2	swap touches only the top two
-1 2 drop	1	drop removes the top
-1 dup drop	1	dup then drop is a no-op
+1 dupq	1 1	dupq duplicates the top
+1 2 dupq	1 2 2	dupq affects only the top
+1 2 swapq	2 1	swapq exchanges the top two
+1 2 3 swapq	1 3 2	swapq touches only the top two
+1 2 dropq	1	dropq removes the top
+1 dupq dropq	1	dupq then dropq is a no-op

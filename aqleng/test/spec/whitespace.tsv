@@ -4,7 +4,7 @@
 # =====================================================================
 #
 # AQL is a whitespace-delimited language at the lexical level. The
-# only role of whitespace is to separate tokens; runs of any length
+# only role of whitespace is to separate tokens; runs of any lengthq
 # are equivalent to a single delimiter. This file pins down that
 # rule across the spec runner's tokenizer.
 #
@@ -44,8 +44,8 @@
 
 1   2   3	1 2 3	multiple spaces between tokens reduce to single
 1 2 3	1 2 3	canonical single-space form (control)
-1     add     2	3	multiple-space-separated forward call still works
-add   2   3	5	multiple spaces between word and forward args
+1     addq     2	3	multiple-space-separated forward call still works
+addq   2   3	5	multiple spaces between word and forward argsq
 "hello world"	"hello world"	whitespace inside a string is preserved verbatim
 "   "	"   "	a string of three spaces is a 3-character string
 [ 1 2 3 ]	[1 2 3]	list element separation

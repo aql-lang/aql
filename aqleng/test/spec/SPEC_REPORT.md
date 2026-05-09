@@ -19,7 +19,7 @@ both inline (in the row's `note` column) and below.
 
 | File | Principle |
 |---|---|
-| `decimals.tsv` | Integer vs Decimal literal discrimination, no auto-coercion |
+| `numbers.tsv` | Integer + Decimal arithmetic, contagion, three op kinds (commutative/non-commutative/unary), parens, end, custom fns. Replaces the old separate `arithmetic.tsv` and `decimals.tsv`. |
 | `none.tsv` | `null` / None bottom-type round-trip and sig rejection |
 | `mirror.tsv` | The four-form mirror equivalence rule for 2-arg words |
 | `multivalue.tsv` | Multiple values residual on the stack are the result |
@@ -260,7 +260,7 @@ Phase-4 handler convention has every binary math handler compute
 **Observed**: This works as documented; the deviation is
 *social*, not engine-level. The four-form table is documented in
 prose in CLAUDE.md, but spec rows for it were spread across
-`arithmetic.tsv` and `strings.tsv` and easy to miss. `mirror.tsv`
+`numbers.tsv` and `strings.tsv` and easy to miss. `mirror.tsv`
 now collects the canonical four-row table for both `sub` (integer)
 and `concat` (string) so a regression in sig orientation is caught
 immediately.

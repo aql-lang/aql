@@ -13,17 +13,17 @@
 # --------------------
 # 1. `[]` round-trips and renders as `[]`.
 # 2. `""` round-trips and renders as `""`.
-# 3. `length [ ]` returns 0 — the handler treats the empty list
+# 3. `lengthq [ ]` returns 0 — the handler treats the empty list
 #    correctly without panicking (cf. CLAUDE.md "Panic Prevention").
-# 4. `first [ ]` returns `null` (the None type literal). The handler
+# 4. `firstq [ ]` returns `null` (the None type literal). The handler
 #    in spec_test.go::registerSpecWords explicitly emits
 #    `NewTypeLiteral(TNone)` for this case.
-# 5. `concat "" ""` returns `""` — empty + empty stays empty.
-# 6. `concat "" "x"` returns `"x"` — empty is the identity for
+# 5. `concatq "" ""` returns `""` — empty + empty stays empty.
+# 6. `concatq "" "x"` returns `"x"` — empty is the identity for
 #    string concatenation. (Same in the swap form.)
 # 7. Nested empties — a list containing an empty string `[ "" ]` has
-#    length 1 (the empty string is still a value); a list containing
-#    an empty list `[ [ ] ]` has length 1 (the empty list is one
+#    lengthq 1 (the empty string is still a value); a list containing
+#    an empty list `[ [ ] ]` has lengthq 1 (the empty list is one
 #    element).
 # 8. Empty literals satisfy concrete-typed sigs. Per match.go's
 #    sig-match step, `[]` (Data!=nil) DOES match a concrete TList
@@ -34,7 +34,7 @@
 # ----------------
 # A surprising fraction of engine bugs cluster around the empty/
 # bare-type-literal distinction. The classic footgun is a handler
-# that does `args[0].AsList().Len()` without checking Data — for a
+# that does `argsq[0].AsList().Len()` without checking Data — for a
 # concrete `[]` this returns 0 cleanly; for a bare `List` type
 # literal (Data==nil) it would panic. The signature-matching path
 # already separates these (see match.go:233-236):
@@ -62,23 +62,23 @@
 [ ] ""	[] ""	mixed: empty list + empty string
 
 # Words that introspect collections handle empty cleanly.
-length [ ]	0	empty list has length 0
-first [ ]	null	first of empty list returns the None sentinel
-length [ "" ]	1	empty string is still a list element
-length [ [ ] ]	1	empty list is still a list element
-first [ "" ]	""	first element when head is the empty string
-first [ [ ] ]	[]	first element when head is the empty list
+lengthq [ ]	0	empty list has lengthq 0
+firstq [ ]	null	first of empty list returns the None sentinel
+lengthq [ "" ]	1	empty string is still a list element
+lengthq [ [ ] ]	1	empty list is still a list element
+firstq [ "" ]	""	first element when head is the empty string
+firstq [ [ ] ]	[]	first element when head is the empty list
 
-# String concat with empties.
-concat "" ""	""	empty + empty = empty
-concat "" "x"	"x"	left-empty: forward sig = [a="", b="x"] → "" + "x" = "x"
-concat "x" ""	"x"	in mirror form: 1 prefix "" + 1 forward "x" → sig[0]="x", sig[1]="" → "x" + "" = "x". WAIT — this is the swap form. See arithmetic/strings: swap form reverses sig. So this concrete row tests the swap form on empties.
-"" concat "x"	"x"	mirror form (1 prefix + 1 forward): sig[0]="x", sig[1]="" → "x"
-"a" "" concat	"a"	all-prefix: top is "" → sig[0], deeper "a" → sig[1] → "" + "a" = "a"
+# String concatq with empties.
+concatq "" ""	""	empty + empty = empty
+concatq "" "x"	"x"	left-empty: forward sig = [a="", b="x"] → "" + "x" = "x"
+concatq "x" ""	"x"	in mirror form: 1 prefix "" + 1 forward "x" → sig[0]="x", sig[1]="" → "x" + "" = "x". WAIT — this is the swap form. See arithmetic/strings: swap form reverses sig. So this concrete row tests the swap form on empties.
+"" concatq "x"	"x"	mirror form (1 prefix + 1 forward): sig[0]="x", sig[1]="" → "x"
+"a" "" concatq	"a"	all-prefix: top is "" → sig[0], deeper "a" → sig[1] → "" + "a" = "a"
 
 # Stack manipulation on empties.
-[ ] dup	[] []	dup an empty list — two references to the same value
-"" dup	"" ""	dup an empty string
+[ ] dupq	[] []	dupq an empty list — two references to the same value
+"" dupq	"" ""	dupq an empty string
 
 # Auto-eval at end-of-Run does NOT change empty lists.
 [ ]	[]	empty Eval=true list at end of Run drains via autoEvalStack to itself

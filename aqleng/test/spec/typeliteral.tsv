@@ -10,7 +10,7 @@
 # aqleng/go/engine.go::typeNames (built from typeNameEntries).
 #
 # Type literals are how the language refers to types as values: you
-# can pass `Integer` as an argument, store it via `def`, compare
+# can pass `Integer` as an argument, store it via `defq`, compare
 # types, etc. The Data==nil discriminator is what tells handlers
 # "this is the type itself, not a payload".
 #
@@ -19,8 +19,8 @@
 # 1. Type-name words are recognised: Integer, String, Boolean,
 #    Decimal, Number, Scalar, Atom, Path, List, Map, Any, None, etc.
 #    None is recognised but renders as the bottom-type sentinel.
-# 2. Type literals can be `def`-bound and recalled.
-# 3. Type literals can be passed to `tag` (and similar [Any] sigs) —
+# 2. Type literals can be `defq`-bound and recalled.
+# 3. Type literals can be passed to `tagq` (and similar [Any] sigs) —
 #    they hit the catch-all overload.
 # 4. The rendering of type literals exposes a known QUIRK in the
 #    spec runner's renderValue: integer/decimal/string/boolean type
@@ -53,17 +53,17 @@
 #    Boolean) IS accepted by a sig declaring that exact concrete
 #    type — match.go's Data==nil rejection at line 233-236 ONLY
 #    rejects type literals for TMap and TList, not for scalar leaves.
-#    So `tag Integer` lands on the [Integer]-specific overload and
+#    So `tagq Integer` lands on the [Integer]-specific overload and
 #    the handler (which never reads the value) returns "specific".
-#    Likewise `add Integer 1` succeeds — the handler's AsInteger
+#    Likewise `addq Integer 1` succeeds — the handler's AsInteger
 #    silently returns 0 for Integer (the type literal), 1 for the
 #    concrete `1`, sum = 1.
 #
 #    This is the documented behaviour but is a genuine footgun: a
-#    typo `add Integer 1` is silently `add 0 1`. See "Deviations".
+#    typo `addq Integer 1` is silently `addq 0 1`. See "Deviations".
 #
 # 6. To capture a type-name word as DATA (an Atom of the same name)
-#    rather than as the type itself, use `quote`. The /q-style
+#    rather than as the type itself, use `quoteq`. The /q-style
 #    capture suppresses the type-name resolution.
 #
 # Why this matters
@@ -103,26 +103,26 @@ Number Scalar	Scalar/Number Scalar	two type-path-rendered literals
 # Type literal + concrete value.
 1 Integer	1 0	concrete 1, then Integer type literal (renders as 0)
 
-# def can bind a type literal.
-def t Integer t	0	t resolves to Integer type literal (renders as 0)
-def t Number t	Scalar/Number	t resolves to Number type literal
+# defq can bind a type literal.
+defq t Integer t	0	t resolves to Integer type literal (renders as 0)
+defq t Number t	Scalar/Number	t resolves to Number type literal
 
 # Dispatch surprise: Integer type literal satisfies an [Integer] sig.
-tag Integer	"specific"	the [Integer]-specific overload of tag fires; handler ignores the value
-tag Any	"any"	Any type literal hits the [Any] catch-all
-tag Number	"any"	Number is NOT [Integer] (it's the parent), so [Any] catch-all fires
-tag Scalar	"any"	Scalar is also broader than [Integer]; falls through to [Any]
-tag Decimal	"any"	Decimal type literal — no [Decimal] overload, falls to [Any]
-tag String	"any"	String type literal — no [String] overload, falls to [Any]
-tag Boolean	"any"	Boolean type literal — no [Boolean] overload, falls to [Any]
+tagq Integer	"specific"	the [Integer]-specific overload of tagq fires; handler ignores the value
+tagq Any	"any"	Any type literal hits the [Any] catch-all
+tagq Number	"any"	Number is NOT [Integer] (it's the parent), so [Any] catch-all fires
+tagq Scalar	"any"	Scalar is also broader than [Integer]; falls through to [Any]
+tagq Decimal	"any"	Decimal type literal — no [Decimal] overload, falls to [Any]
+tagq String	"any"	String type literal — no [String] overload, falls to [Any]
+tagq Boolean	"any"	Boolean type literal — no [Boolean] overload, falls to [Any]
 
 # Handler-level surprise: integer-arithmetic words accept Integer
 # type literals as if they were 0.
-add Integer 1	1	Integer type literal + 1 → handler reads Integer.AsInteger()=0 → 0+1=1
-add Integer Integer	0	0+0 — both args are type literals, both read as 0
-sub 5 Integer	-5	fwd=[5, Integer] → sig=[5, 0]; handler returns b-a = 0-5 = -5 (Integer type literal silently reads as 0)
+addq Integer 1	1	Integer type literal + 1 → handler reads Integer.AsInteger()=0 → 0+1=1
+addq Integer Integer	0	0+0 — both args are type literals, both read as 0
+subq 5 Integer	-5	fwd=[5, Integer] → sig=[5, 0]; handler returns b-a = 0-5 = -5 (Integer type literal silently reads as 0)
 
-# To get the Atom version of a type-name word, quote it.
-quote Integer	atom(Integer)	quote captures the upcoming Word as Atom; suppresses type-name resolution
-quote String	atom(String)	same; type-name resolution does not fire under /q-style capture
-def t quote Integer t	atom(Integer)	t bound to atom(Integer); resolution returns the atom
+# To get the Atom version of a type-name word, quoteq it.
+quoteq Integer	atom(Integer)	quoteq captures the upcoming Word as Atom; suppresses type-name resolution
+quoteq String	atom(String)	same; type-name resolution does not fire under /q-style capture
+defq t quoteq Integer t	atom(Integer)	t bound to atom(Integer); resolution returns the atom

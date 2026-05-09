@@ -11,6 +11,6 @@
 
 # tokens	expected	note
 end		no-op when there's no pending forward; empty stack
-1 add 2 end	3	end after a fully-resolved dispatch is harmless
-1 2 add end	3	end after an all-stack dispatch
-def x 5 end x	5	end after def's collection completes; subsequent x resolves
+1 addq 2 end	3	end after a fully-resolved dispatch is harmless
+1 2 addq end	3	end after an all-stack dispatch
+defq x 5 end x	5	end after defq's collection completes; subsequent x resolves

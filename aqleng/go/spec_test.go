@@ -3,7 +3,6 @@ package aqleng
 import (
 	"bufio"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,7 +10,7 @@ import (
 	"testing"
 )
 
-// Counter for unique mark IDs emitted by the `replay` test word.
+// Counter for unique mark IDs emitted by the `replayq` test word.
 var replayCounter int
 
 // Spec-driven tests. Each TSV file under ../test/spec/ describes a
@@ -19,12 +18,26 @@ var replayCounter int
 // converts into engine inputs and runs through a fresh registry
 // pre-populated with a fixed set of test words. No parser is involved;
 // the tokenizer in this file is intentionally minimal.
+//
+// NAMING — every test word in this file ends in `q` (addq, subq,
+// defq, quoteq, …) to make it unmistakable that they are SPEC-RUNNER
+// FIXTURES, not the production AQL words of the same root name. The
+// production engine has its own add/sub/mul/def/fn/quote/etc. with
+// richer semantics; the q-suffixed words here are intentionally
+// minimal, single-overload versions tailored for spec coverage of
+// the dispatch / value / type-lattice core.
+//
+// To add a new test word: pick the production word's root name and
+// append `q`. Reuse the production handler convention (mirror the
+// production engine's body verbatim where possible — see the math
+// block below for an example referencing native_math.go).
 
 // registerSpecWords installs the word set the spec files reference.
 // Keep this list small and stable — the specs are easier to read
-// when there's no surprise about what each word does.
+// when there's no surprise about what each word does. Every word
+// has a `q` suffix to disambiguate from production AQL words.
 func registerSpecWords(r *Registry) {
-	// add, sub, mul: numeric arithmetic via forward precedence.
+	// addq, subq, mulq: numeric arithmetic via forward precedence.
 	//
 	// Sig is [TNumber, TNumber] so Integer and Decimal both match
 	// (Integer/Decimal are subtypes of Number). The handler dispatches
@@ -40,16 +53,16 @@ func registerSpecWords(r *Registry) {
 	// native_math.go) — for non-commutative ops it makes the natural
 	// infix reading work:
 	//
-	//   10 sub 3   → matching algo: forward [3], stack [10]
+	//   10 subq 3  → matching algo: forward [3], stack [10]
 	//                → sig[0]=3 (fwd), sig[1]=10 (stk top)
 	//                → args = [3, 10]
 	//                → handler returns b - a = 10 - 3 = 7
 	//
-	// The same matching algorithm gives sig=[3, 10] for `sub 3 10`
-	// (forward in source order) and `10 3 sub` (stack top-down), so
+	// The same matching algorithm gives sig=[3, 10] for `subq 3 10`
+	// (forward in source order) and `10 3 subq` (stack top-down), so
 	// all three forms produce 7. The other three arrangements
-	// (`sub 10 3`, `3 sub 10`, `3 10 sub`) produce sig=[10, 3] and
-	// thus -7. There is no "swap form" — every form is an equally
+	// (`subq 10 3`, `3 subq 10`, `3 10 subq`) produce sig=[10, 3]
+	// and thus -7. There is no "swap form" — every form is an equally
 	// valid surface arrangement; the matching algorithm just maps
 	// each one to a specific (args[0], args[1]) pair.
 	toFloat := func(v Value) float64 {
@@ -71,7 +84,7 @@ func registerSpecWords(r *Registry) {
 		}
 	}
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "add",
+		Name:              "addq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
@@ -80,7 +93,7 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "sub",
+		Name:              "subq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
@@ -89,7 +102,7 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "mul",
+		Name:              "mulq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:    []Type{TNumber, TNumber},
@@ -98,60 +111,33 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// negate: forward-prec unary negation, sig [Number|] under the
+	// negq: forward-prec unary negation, sig [Number|] under the
 	// unified §1.4 dispatch model — BarrierPos = N (= 1 here) makes
 	// the single arg forward-eligible with stack fallback. Both
-	// `negate 5` (forward) and `5 negate` (stack-via-fallback) work.
-	//
-	// Consolidates the previous neg/negate split: there is now ONE
-	// negation word. Mirrors aql/internal/nativemod/math.go::negate.
-	// Decimal in, Decimal out — preserves the type tag.
-	negateHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if args[0].VType.Matches(TInteger) {
-			n, _ := args[0].AsInteger()
-			return []Value{NewInteger(-n)}, nil
-		}
-		f, _ := args[0].AsDecimal()
-		return []Value{NewDecimal(-f)}, nil
-	}
+	// `negq 5` (forward) and `5 negq` (stack-via-fallback) work.
+	// Mirrors aql/internal/nativemod/math.go::negate. Decimal in,
+	// Decimal out — preserves the type tag.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "negate",
+		Name:              "negq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TNumber},
 			BarrierPos: 1,
-			Handler:    negateHandler,
-			Returns:    []Type{TNumber},
-		}},
-	})
-
-	// abs: forward-precedence absolute value. Integer or Decimal in,
-	// matching type out. Mirrors aql/internal/nativemod/math.go::abs.
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "abs",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TNumber},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				if args[0].VType.Matches(TInteger) {
 					n, _ := args[0].AsInteger()
-					if n < 0 {
-						n = -n
-					}
-					return []Value{NewInteger(n)}, nil
+					return []Value{NewInteger(-n)}, nil
 				}
 				f, _ := args[0].AsDecimal()
-				// math.Abs handles IEEE 754 corner cases correctly:
-				// -0.0 → 0.0 (sign bit cleared), NaN → NaN, ±Inf → +Inf.
-				return []Value{NewDecimal(math.Abs(f))}, nil
+				return []Value{NewDecimal(-f)}, nil
 			},
 			Returns: []Type{TNumber},
 		}},
 	})
 
-	// dup, swap, drop: stack-only ops.
+	// dupq, swapq, dropq: stack-only ops.
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "dup",
+		Name: "dupq",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -160,7 +146,7 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "swap",
+		Name: "swapq",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			// Under the unified §1.4 dispatch rule, args[0] is the
@@ -175,7 +161,7 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "drop",
+		Name: "dropq",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -184,13 +170,13 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// concat: string concatenation, forward precedence.
+	// concatq: string concatenation, forward precedence.
 	// Handler convention: result = b + a (= args[1] + args[0]) so
-	// the natural infix reading `"hello" concat " world" → "hello world"`
-	// works. Same pattern as sub above. Mirrors the production engine's
+	// the natural infix reading `"hello" concatq " world" → "hello world"`
+	// works. Same pattern as subq above. Mirrors the production engine's
 	// addConcatHandler in aql/internal/engine/native_math.go.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "concat",
+		Name:              "concatq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args: []Type{TString, TString},
@@ -203,9 +189,9 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// not: boolean negation, forward precedence.
+	// notq: boolean negation, forward precedence.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "not",
+		Name:              "notq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args: []Type{TBoolean},
@@ -217,9 +203,9 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// describe: two type-specific overloads, used in the dispatch spec.
+	// describeq: two type-specific overloads, used in the dispatch spec.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "describe",
+		Name:              "describeq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -241,9 +227,9 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 
-	// tag: Any vs Integer overloads — exercises specificity scoring.
+	// tagq: Any vs Integer overloads — exercises specificity scoring.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "tag",
+		Name:              "tagq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -263,10 +249,10 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 
-	// fact, code, route: §1.1 literal-pattern dispatch via Patterns.
+	// factq, codeq, routeq: §1.1 literal-pattern dispatch via Patterns.
 	// Each declares a specific-value overload first plus a catch-all.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "fact",
+		Name:              "factq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -288,7 +274,7 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "code",
+		Name:              "codeq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -309,7 +295,7 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "route",
+		Name:              "routeq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -330,11 +316,11 @@ func registerSpecWords(r *Registry) {
 		},
 	})
 
-	// trip: 3-arg integer formatter. Default barrier = N so all
+	// tripq: 3-arg integer formatter. Default barrier = N so all
 	// position-mixing arrangements (all-forward through all-stack)
 	// bind sig[0..2] to the same source-order args.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "trip",
+		Name:              "tripq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args: []Type{TInteger, TInteger, TInteger},
@@ -348,11 +334,11 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// pair: mixed-barrier sig [Integer | Integer]. Forward fills
+	// pairq: mixed-barrier sig [Integer | Integer]. Forward fills
 	// sig[0]; sig[1] must come from the stack. The handler formats
 	// "args[0]:args[1]" so the binding is visible in the output.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "pair",
+		Name:              "pairq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TInteger, TInteger},
@@ -366,9 +352,9 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// length, first: list-aware test words for list.tsv.
+	// lengthq, firstq: list-aware test words for list.tsv.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "length",
+		Name:              "lengthq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
@@ -380,7 +366,7 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "first",
+		Name:              "firstq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args: []Type{TList},
@@ -395,13 +381,13 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// def: spec-subset code-body binding. Captures `def NAME body`
+	// defq: spec-subset code-body binding. Captures `defq NAME body`
 	// where NAME arrives as a Word token (no /q machinery in this
 	// runner's tokenizer) and body is any value — typically a List
 	// literal that becomes a callable code body. The handler pushes
 	// the body onto the def stack under NAME.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "def",
+		Name:              "defq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TWord, TAny},
@@ -426,13 +412,13 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// fn: builds a function definition value from
-	// `fn [ params ] [ returns ] [ body ]`. Each param is a single
+	// fnq: builds a function definition value from
+	// `fnq [ params ] [ returns ] [ body ]`. Each param is a single
 	// Word token of the form `name:TypeName` — the spec tokenizer is
 	// whitespace-only so a typed param arrives as one Word and the
 	// handler splits on `:` to recover the (name, type) pair.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "fn",
+		Name:              "fnq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TList, TList, TList},
@@ -472,12 +458,12 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// quote: capture the next forward token as data.
-	//   sig [TWord]: convert Word→Atom so `quote dup` yields
-	//                atom(dup) even when dup is registered.
+	// quoteq: capture the next forward token as data.
+	//   sig [TWord]: convert Word→Atom so `quoteq dupq` yields
+	//                atom(dupq) even when dupq is registered.
 	//   sig [TAny]:  catch-all passthrough.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "quote",
+		Name:              "quoteq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -492,7 +478,7 @@ func registerSpecWords(r *Registry) {
 				// NoEvalArgs keeps the list raw (not auto-evaluated)
 				// so we can flag it Quoted=true and have the def-sub
 				// path treat it as data instead of splicing it as a
-				// code body. Without this, `def y quote [1 add 2]`
+				// code body. Without this, `defq y quoteq [1 addq 2]`
 				// would bind y to a code list and `y` would inline-
 				// execute its tokens.
 				Args:       []Type{TAny},
@@ -512,11 +498,11 @@ func registerSpecWords(r *Registry) {
 	// `end` is a structural keyword the engine handles directly via
 	// stepEnd in aqleng/go/engine.go — no spec registration needed.
 
-	// args: 0-arg word that returns the current fn-call's argument
+	// argsq: 0-arg word that returns the current fn-call's argument
 	// frame as a list. dispatchFnDef pushes the matched args (in sig
 	// order) before running the body.
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "args",
+		Name: "argsq",
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -529,10 +515,10 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// replay: emit Mark + body + Move so the body executes once,
+	// replayq: emit Mark + body + Move so the body executes once,
 	// then the Move triggers a one-shot replay (body runs twice).
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "replay",
+		Name:              "replayq",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TList},
@@ -540,11 +526,11 @@ func registerSpecWords(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				body := args[0].AsList().Slice()
 				replayCounter++
-				id := fmt.Sprintf("__replay_%d", replayCounter)
+				id := fmt.Sprintf("__replayq_%d", replayCounter)
 				out := make([]Value, 0, len(body)+2)
 				out = append(out, NewMark(id, body...))
 				out = append(out, body...)
-				out = append(out, NewMove(id, "replay"))
+				out = append(out, NewMove(id, "replayq"))
 				return out, nil
 			},
 		}},

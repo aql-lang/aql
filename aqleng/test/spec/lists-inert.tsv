@@ -8,8 +8,8 @@
 #   "Square brackets create a list of *unevaluated* values. Words
 #    inside a list are stored literally — they are not executed."
 #
-# This is a property of the TOKENIZER / PARSER: `[ 1 add 2 ]` produces
-# a 3-element list `[Integer(1), Word(add), Integer(2)]` that is NOT
+# This is a property of the TOKENIZER / PARSER: `[ 1 addq 2 ]` produces
+# a 3-element list `[Integer(1), Word(addq), Integer(2)]` that is NOT
 # `[Integer(3)]`. Evaluation happens later via two engine passes:
 #
 #   (a) When the list is consumed as an argument to a word whose sig
@@ -20,36 +20,36 @@
 #
 # Both paths produce the SAME shape of output: a list whose contents
 # are the residual stack of running the original elements through a
-# fresh sub-engine.
+# fresh subq-engine.
 #
 # Rules being asserted
 # --------------------
-# 1. A bare list at end-of-Run auto-evaluates: `[1 add 2]` → `[3]`.
+# 1. A bare list at end-of-Run auto-evaluates: `[1 addq 2]` → `[3]`.
 # 2. A list consumed by a word with a `[List]` sig is auto-evaluated
-#    BEFORE the handler sees it. So `length [1 add 2]` → 1 (the
+#    BEFORE the handler sees it. So `lengthq [1 addq 2]` → 1 (the
 #    auto-eval reduces to a 1-element list).
-# 3. The `quote` word sets Quoted=true on a list, suppressing both
-#    auto-eval paths. `length quote [1 add 2]` would expose the raw
-#    3-element form — but in the spec subset `quote` paren-wrap is
+# 3. The `quoteq` word sets Quoted=true on a list, suppressing both
+#    auto-eval paths. `lengthq quoteq [1 addq 2]` would expose the raw
+#    3-element form — but in the spec subset `quoteq` paren-wrap is
 #    needed (see autoeval.tsv for the wrapped forms).
 # 4. SUPPRESSED auto-eval surface: at execMatch, autoEvalList errors
 #    are SILENTLY DISCARDED. The original (unevaluated) list is then
-#    handed to the handler. So `length [add]` returns 1 (the body
-#    sub-engine errors on bare `add`, autoEvalList swallows the
-#    error, length sees the original 1-element list).
-# 5. END-OF-RUN auto-eval errors PROPAGATE. So `[add]` alone errors
-#    with signature_error, even though `length [add]` does not.
+#    handed to the handler. So `lengthq [addq]` returns 1 (the body
+#    subq-engine errors on bare `addq`, autoEvalList swallows the
+#    error, lengthq sees the original 1-element list).
+# 5. END-OF-RUN auto-eval errors PROPAGATE. So `[addq]` alone errors
+#    with signature_error, even though `lengthq [addq]` does notq.
 # 6. Lists inside lists are auto-evaluated recursively at end-of-Run
 #    via the autoEvalStack drain (which calls autoEvalList per top-
-#    level Eval list — but a sub-list inside a list element is
-#    evaluated by the sub-engine running over the parent list's
-#    elements, since the sub-engine is a full Run).
+#    level Eval list — but a subq-list inside a list element is
+#    evaluated by the subq-engine running over the parent list's
+#    elements, since the subq-engine is a full Run).
 #
 # Why this matters
 # ----------------
-# Auto-eval is the bridge from "lists are data" to "lists are code".
+# Auto-eval is the bridge from "lists are data" to "lists are codeq".
 # It removes the need for an explicit `do` in the common case while
-# preserving the option to suppress (via `quote`).
+# preserving the option to suppress (via `quoteq`).
 #
 # The error-swallowing surface in execMatch (#4) is a real footgun:
 # a typo inside a list arg silently leaves the typo in the consumed
@@ -59,32 +59,32 @@
 # tokens	expected	note
 
 # 1. Bare list at end-of-Run auto-evaluates.
-[ 1 add 2 ]	[3]	auto-eval at end of Run reduces [1, add, 2] to [3]
+[ 1 addq 2 ]	[3]	auto-eval at end of Run reduces [1, addq, 2] to [3]
 [ 1 2 3 ]	[1 2 3]	pure literals — auto-eval is a no-op
-[ ( 1 add 2 ) ]	[3]	paren inside list — paren pre-evaluates to 3, list residue is [3]
-[ 1 add 2 1 add 3 ]	[1 6]	the body runs as ONE program: 1 add 2 → 3 leaves [1,3]; second add: forward 3 + stack top 3 → 6 (the 1 stays as residue). Result list is [1, 6]. Demonstrates that a "list body" is a single program, not isolated expressions.
+[ ( 1 addq 2 ) ]	[3]	paren inside list — paren pre-evaluates to 3, list residue is [3]
+[ 1 addq 2 1 addq 3 ]	[1 6]	the body runs as ONE program: 1 addq 2 → 3 leaves [1,3]; second addq: forward 3 + stack top 3 → 6 (the 1 stays as residue). Result list is [1, 6]. Demonstrates that a "list body" is a single program, not isolated expressions.
 [ ]	[]	empty list — autoEvalList short-circuits
 
 # 2. Consumed list auto-evaluates BEFORE the handler.
-length [ 1 add 2 ]	1	auto-eval [1 add 2] → [3]; length sees 1-element list
-first [ 1 add 2 ]	3	auto-eval reduces; first returns the single element
-length [ 1 2 3 ]	3	pure literals consume as-is
+lengthq [ 1 addq 2 ]	1	auto-eval [1 addq 2] → [3]; lengthq sees 1-element list
+firstq [ 1 addq 2 ]	3	auto-eval reduces; firstq returns the single element
+lengthq [ 1 2 3 ]	3	pure literals consume as-is
 
 # 4. Silent swallow of auto-eval errors at execMatch.
-length [ add ]	1	bare add in body errors; autoEvalList swallows; original 1-element list seen by length
-length [ undef_xyz ]	1	undefined word in body errors; same swallow → original list passed through. Footgun.
-length [ 1 add ]	2	add waits for forward args, none follow; sub-engine errors; original 2-element list passed through
+lengthq [ addq ]	1	bare addq in body errors; autoEvalList swallows; original 1-element list seen by lengthq
+lengthq [ undef_xyz ]	1	undefined word in body errors; same swallow → original list passed through. Footgun.
+lengthq [ 1 addq ]	2	addq waits for forward argsq, none follow; subq-engine errors; original 2-element list passed through
 
 # 5. Bare residual list errors propagate at end-of-Run.
-[ add ]	ERROR:signature	bare list residual; autoEvalStack runs sub-engine; bare add errors; PROPAGATES (unlike consumed-list path)
-[ 1 add ]	ERROR:	bare list with insufficient args for inner add — propagates
+[ addq ]	ERROR:signature	bare list residual; autoEvalStack runs subq-engine; bare addq errors; PROPAGATES (unlike consumed-list path)
+[ 1 addq ]	ERROR:	bare list with insufficient args for inner addq — propagates
 [ unknown_xyz ]	ERROR:undefined	undefined word in residual list propagates
 
-# 3. quote suppresses auto-eval. (Need paren wrap because quote is a
+# 3. quoteq suppresses auto-eval. (Need paren wrap because quoteq is a
 # function word — see autoeval.tsv for the rationale.)
-length ( quote [ 1 add 2 ] )	3	quoted list keeps the 3 raw tokens
-first ( quote [ 1 add 2 ] )	1	first element of the quoted list is the integer 1
+lengthq ( quoteq [ 1 addq 2 ] )	3	quoted list keeps the 3 raw tokens
+firstq ( quoteq [ 1 addq 2 ] )	1	first element of the quoted list is the integer 1
 
 # 6. Nested lists at end-of-Run.
-[ [ 1 add 2 ] ]	[[3]]	outer list residual evaluates; inner list also evaluates (via sub-engine running over outer's elements)
+[ [ 1 addq 2 ] ]	[[3]]	outer list residual evaluates; inner list also evaluates (via subq-engine running over outer's elements)
 [ [ 1 ] [ 2 ] ]	[[1] [2]]	pure-literal inner lists pass through

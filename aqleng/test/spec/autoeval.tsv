@@ -3,42 +3,42 @@
 # Lists built by the parser/tokenizer carry `eval=true`. They auto-
 # evaluate in two contexts:
 #
-#   1. When consumed as a word argument: a fresh sub-engine runs the
-#      list's elements and the residual sub-stack becomes the new
+#   1. When consumed as a word argument: a fresh subq-engine runs the
+#      list's elements and the residual subq-stack becomes the new
 #      list contents. Sigs that mark a slot via `noEvalArgs` (e.g.
-#      `def`'s body, `fn`'s param/return/body lists, `quote`'s data
+#      `defq`'s body, `fnq`'s param/return/body lists, `quoteq`'s data
 #      arg) keep the list raw.
 #   2. When still on the stack at end of Run: an "autoEvalStack"
 #      drain replaces each residual eval-list with its evaluated
 #      form.
 #
-# `quote` flags the list as `quoted=true`, suppressing both forms
-# of auto-eval and also making def-sub treat it as data instead of
+# `quoteq` flags the list as `quoted=true`, suppressing both forms
+# of auto-eval and also making defq-subq treat it as data instead of
 # splicing it as a code body.
 
 # tokens	expected	note
 
 # Auto-eval at consume.
-length [ 1 add 2 ]	1	[1 add 2] auto-evaluates to [3] before length sees it
-first [ 1 add 2 ]	3	first sees the evaluated single-element list, returns 3
-length [ 1 2 3 ]	3	pure literals — auto-eval is a no-op
-length [ ( 1 add 2 ) ( 3 mul 4 ) ]	2	parens already pre-evaluate; auto-eval just normalises
+lengthq [ 1 addq 2 ]	1	[1 addq 2] auto-evaluates to [3] before lengthq sees it
+firstq [ 1 addq 2 ]	3	firstq sees the evaluated single-element list, returns 3
+lengthq [ 1 2 3 ]	3	pure literals — auto-eval is a no-op
+lengthq [ ( 1 addq 2 ) ( 3 mulq 4 ) ]	2	parens already pre-evaluate; auto-eval just normalises
 
 # Auto-eval at end of run.
-[ 1 add 2 ]	[3]	residual eval-list runs through autoEvalStack
+[ 1 addq 2 ]	[3]	residual eval-list runs through autoEvalStack
 [ 1 2 3 ]	[1 2 3]	literals untouched
-[ ( 1 add 2 ) ( 4 mul 2 ) ]	[3 8]	multi-element body — paren-grouped sub-expressions evaluate, residual stack becomes new contents
+[ ( 1 addq 2 ) ( 4 mulq 2 ) ]	[3 8]	multi-element body — paren-grouped subq-expressions evaluate, residual stack becomes new contents
 
-# `quote` suppresses auto-eval. Paren-wrap is required here because
+# `quoteq` suppresses auto-eval. Paren-wrap is required here because
 # the bare engine doesn't optimistically accept the function-named
-# Word `quote` at length/first's TList slot — it needs the resolved
+# Word `quoteq` at lengthq/firstq's TList slot — it needs the resolved
 # quoted-list value before the matcher fires.
-length ( quote [ 1 add 2 ] )	3	quoted list keeps all 3 raw tokens — including word(add)
-first ( quote [ 1 add 2 ] )	1	quoted; first element is the integer 1
+lengthq ( quoteq [ 1 addq 2 ] )	3	quoted list keeps all 3 raw tokens — including word(addq)
+firstq ( quoteq [ 1 addq 2 ] )	1	quoted; first element is the integer 1
 
-# def's body slot is NoEvalArgs; the unquoted list flows in raw and
+# defq's body slot is NoEvalArgs; the unquoted list flows in raw and
 # becomes a callable code body.
-def x [ 1 add 2 ] x	3	def stores the raw list; x splices and executes it
+defq x [ 1 addq 2 ] x	3	defq stores the raw list; x splices and executes it
 
-# def + quote: quoted list bound to x stays as data.
-def y quote [ 1 add 2 ] length y	3	y resolves to the quoted list (3 elements) — no splicing
+# defq + quoteq: quoted list bound to x stays as data.
+defq y quoteq [ 1 addq 2 ] lengthq y	3	y resolves to the quoted list (3 elements) — no splicing

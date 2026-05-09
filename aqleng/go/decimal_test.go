@@ -39,8 +39,8 @@ func TestDecimalFormat(t *testing.T) {
 // has an exact representation, and their sum lands at 0.30000000000000004,
 // not 0.3.
 //
-// The test runs through the spec runner's standard `add` word — the
-// same word every other spec file uses. `add` accepts [TNumber, TNumber]
+// The test runs through the spec runner's standard `addq` word — the
+// same word every other spec file uses. `addq` accepts [TNumber, TNumber]
 // and dispatches Integer-vs-Decimal at the handler level, so a Decimal
 // result here demonstrates both the contagion rule and the float64
 // underlying behaviour in one assertion.
@@ -62,9 +62,9 @@ func TestDecimalArithmeticIsFloat64(t *testing.T) {
 	registerSpecWords(r)
 	r.InitRootContext()
 
-	// `add 0.1 0.2` — expect the float64 sum, not 0.3.
+	// `addq 0.1 0.2` — expect the float64 sum, not 0.3.
 	out, err := NewTop(r).Run([]Value{
-		NewWord("add"), NewDecimal(0.1), NewDecimal(0.2),
+		NewWord("addq"), NewDecimal(0.1), NewDecimal(0.2),
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)

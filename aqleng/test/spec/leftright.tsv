@@ -11,21 +11,21 @@
 # This is distinct from "nested forward" (which would let an inner
 # function fire inside an outer's arg slot — see nested-forward.tsv:
 # that case ERRORS in aqleng without explicit parens). Left-to-right
-# is what powers the "infix-looking" reader: `2 add 3 mul 4` reads
-# as `(2 + 3) * 4 = 20` because `add` fires first, leaving 5 on the
-# stack, then `mul` collects 4 forward and finds 5 on the stack.
+# is what powers the "infix-looking" reader: `2 addq 3 mulq 4` reads
+# as `(2 + 3) * 4 = 20` because `addq` fires first, leaving 5 on the
+# stack, then `mulq` collects 4 forward and finds 5 on the stack.
 #
 # Rules being asserted
 # --------------------
 # 1. `a OP1 b OP2 c` evaluates as `(a OP1 b) OP2 c` when both OPs are
-#    2-arg forward-prec words. The first OP's result lives on the
+#    2-arg forward-prec words. The firstq OP's result lives on the
 #    stack and becomes the second OP's stack-side arg.
-# 2. The chain is unbounded: `1 add 2 add 3 add 4` etc.
+# 2. The chain is unbounded: `1 addq 2 addq 3 addq 4` etc.
 # 3. Mixing operators with different precedence is irrelevant — there
 #    are no precedence levels in aqleng. Strictly left-to-right.
-# 4. Parens DO override the default left-to-right reading. `2 add (3
-#    mul 4)` runs the mul first, producing 12, then add(2, 12) = 14.
-# 5. Forward-eligible-with-stack-fallback words (e.g. `negate`)
+# 4. Parens DO override the default left-to-right reading. `2 addq (3
+#    mulq 4)` runs the mulq first, producing 12, then addq(2, 12) = 14.
+# 5. Forward-eligible-with-stack-fallback words (e.g. `negq`)
 #    interleave fine — they fire when the engine reaches them, taking
 #    their arg from forward if available, otherwise from the stack.
 # 6. Using a forward-prec word in a position where the next thing is
@@ -46,38 +46,38 @@
 # tokens	expected	note
 
 # Two-op chains.
-2 add 3 mul 4	20	(2+3)*4 = 20 — add fires, mul reads stack
-2 mul 3 add 4	10	(2*3)+4 = 10 — mul fires, add reads stack
-1 add 2 add 3	6	(1+2)+3 = 6 — chained add
-10 sub 3 sub 2	5	first sub: stk=[10], fwd=[3] → sig=[3,10] → 10-3=7 on stack; second sub: stk=[7], fwd=[2] → sig=[2,7] → 7-2=5
+2 addq 3 mulq 4	20	(2+3)*4 = 20 — addq fires, mulq reads stack
+2 mulq 3 addq 4	10	(2*3)+4 = 10 — mulq fires, addq reads stack
+1 addq 2 addq 3	6	(1+2)+3 = 6 — chained addq
+10 subq 3 subq 2	5	first subq: stk=[10], fwd=[3] → sig=[3,10] → 10-3=7 on stack; second subq: stk=[7], fwd=[2] → sig=[2,7] → 7-2=5
 
 # Three- and four-op chains.
-1 add 2 mul 3 add 4	13	((1+2)*3)+4 = 13
-1 add 2 add 3 add 4	10	1+2+3+4 = 10 — all add chained
-2 mul 3 mul 4	24	2*3*4 = 24
-1 add 2 mul 3 mul 4	36	((1+2)*3)*4 = 36
+1 addq 2 mulq 3 addq 4	13	((1+2)*3)+4 = 13
+1 addq 2 addq 3 addq 4	10	1+2+3+4 = 10 — all addq chained
+2 mulq 3 mulq 4	24	2*3*4 = 24
+1 addq 2 mulq 3 mulq 4	36	((1+2)*3)*4 = 36
 
 # Parens override the default order.
-2 add ( 3 mul 4 )	14	mul runs first (paren); add(2, 12)=14
-( 2 add 3 ) mul 4	20	add runs first (paren); 5 mul 4 = 20 — same as bare chain
-1 add ( 2 mul ( 3 add 4 ) )	15	deep paren tree: 3+4=7, 2*7=14, 1+14=15
-( 1 add 2 ) mul ( 3 add 4 )	21	both branches parenthesised; mul(3, 7)=21
+2 addq ( 3 mulq 4 )	14	mulq runs firstq (paren); addq(2, 12)=14
+( 2 addq 3 ) mulq 4	20	addq runs firstq (paren); 5 mulq 4 = 20 — same as bare chain
+1 addq ( 2 mulq ( 3 addq 4 ) )	15	deep paren tree: 3+4=7, 2*7=14, 1+14=15
+( 1 addq 2 ) mulq ( 3 addq 4 )	21	both branches parenthesised; mulq(3, 7)=21
 
-# Unary numeric word in the chain. negate is forward-eligible with
-# stack fallback, so `5 negate` consumes the stack value when there's
+# Unary numeric word in the chain. negq is forward-eligible with
+# stack fallback, so `5 negq` consumes the stack value when there's
 # nothing after to fwd-collect.
-5 negate add 1	-4	5 negate=-5 (fwd empty, stack supplies); add fwd 1 with stack -5; sig=[1,-5] → 1+-5=-4
-1 add 5 negate	-6	add fwd-scans 5, hits negate as function-word boundary; add(5,1)=6 (sig[0]=5 fwd, sig[1]=1 stack); negate then consumes 6 → -6
-3 negate negate	3	double negation cancels — first negate consumes 3 from stack (boundary on second negate), second negate consumes -3
+5 negq addq 1	-4	5 negq=-5 (fwd empty, stack supplies); addq fwd 1 with stack -5; sig=[1,-5] → 1+-5=-4
+1 addq 5 negq	-6	addq fwd-scans 5, hits negq as function-word boundary; addq(5,1)=6 (sig[0]=5 fwd, sig[1]=1 stack); negq then consumes 6 → -6
+3 negq negq	3	double negation cancels — first negq consumes 3 from stack (boundary on second negq), second negq consumes -3
 
-# Mixing with simple-value def substitution. pi=3, tau=6 are pre-bound.
-pi add tau mul 2	18	pi (3) add tau (6)=9; mul 2=18
-pi mul tau	18	3*6 = 18 — both args from def (mirror form: mul 6 3 = 18, but commutative so same)
+# Mixing with simple-value defq substitution. pi=3, tau=6 are pre-bound.
+pi addq tau mulq 2	18	pi (3) addq tau (6)=9; mulq 2=18
+pi mulq tau	18	3*6 = 18 — both args from defq (mirror form: mulq 6 3 = 18, but commutative so same)
 
 # Mixed prefix-then-mid-forward: a forward-prec word can pull one
 # arg from a future token AND one from the stack — but the stack
 # value used is the TOP, not the deepest. A pre-existing residue
 # below the top is preserved unchanged.
-1 2 add 3 mul	5	add: fwd=3, stk top=2 → sig[0]=3, sig[1]=2, add(3,2)=5; mul then runs with stack=[1,5], top=5, deeper=1; sig[0]=5, sig[1]=1, mul=5*1=5. The 1 from the original prefix is consumed by mul, not preserved.
-1 2 add 4 mul	6	identical to above with different forward arg; final mul=6*1=6
-0 1 2 add	0 3	the 0 below 1 stays as residue; add consumes 1 and 2 only
+1 2 addq 3 mulq	5	addq: fwd=3, stk top=2 → sig[0]=3, sig[1]=2, addq(3,2)=5; mulq then runs with stack=[1,5], top=5, deeper=1; sig[0]=5, sig[1]=1, mulq=5*1=5. The 1 from the original prefix is consumed by mulq, not preserved.
+1 2 addq 4 mulq	6	identical to above with different forward arg; final mulq=6*1=6
+0 1 2 addq	0 3	the 0 below 1 stays as residue; addq consumes 1 and 2 only

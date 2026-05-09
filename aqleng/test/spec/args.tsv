@@ -1,26 +1,26 @@
-# Per-fn-call args frame.
+# Per-fnq-call args frame.
 #
-# When dispatchFnDef runs an fn body it pushes the matched args (in
-# sig order) onto the registry's argsStack. The 0-arg `args` word
-# returns that frame as a List, so a body can read positional args
+# When dispatchFnDef runs an fnq body it pushes the matched args (in
+# sig order) onto the registry's argsStack. The 0-arg `argsq` word
+# returns that frame as a List, so a body can read positional argsq
 # by index without naming each param.
 #
 # The frame pops automatically when the body returns (via the
-# try/finally in dispatchFnDef), and `args` outside any fn call
+# try/finally in dispatchFnDef), and `argsq` outside any fnq call
 # returns an empty list.
 
 # tokens	expected	note
 
-# Outside any fn call.
-args	[]	empty frame at top level
+# Outside any fnq call.
+argsq	[]	empty frame at top level
 
-# Single-arg fn — body uses args length / first.
-def f1 ( fn [ a:Integer ] [ Integer ] [ args length ] ) 5 f1	1	body sees a 1-element args frame
-def f2 ( fn [ a:Integer ] [ Integer ] [ args first ] ) 7 f2	7	first arg flows through positionally
+# Single-arg fnq — body uses args lengthq / first.
+defq f1 ( fnq [ a:Integer ] [ Integer ] [ argsq lengthq ] ) 5 f1	1	body sees a 1-element args frame
+defq f2 ( fnq [ a:Integer ] [ Integer ] [ argsq firstq ] ) 7 f2	7	first arg flows through positionally
 
-# Two-arg fn — args list reflects sig order.
-def f3 ( fn [ a:Integer b:Integer ] [ Integer ] [ args length ] ) 3 f3 4	2	args has 2 entries
-def f4 ( fn [ a:Integer b:Integer ] [ Integer ] [ args first ] ) 3 f4 4	4	sig[0] = forward arg (4) — same as a
+# Two-arg fnq — args list reflects sig order.
+defq f3 ( fnq [ a:Integer b:Integer ] [ Integer ] [ argsq lengthq ] ) 3 f3 4	2	args has 2 entries
+defq f4 ( fnq [ a:Integer b:Integer ] [ Integer ] [ argsq firstq ] ) 3 f4 4	4	sig[0] = forward arg (4) — same as a
 
-# Three-arg fn, args inside body.
-def f5 ( fn [ a:Integer b:Integer c:Integer ] [ Integer ] [ args length ] ) 1 2 3 f5	3	all-stack call form; args still has 3 entries
+# Three-arg fnq, args inside body.
+defq f5 ( fnq [ a:Integer b:Integer c:Integer ] [ Integer ] [ argsq lengthq ] ) 1 2 3 f5	3	all-stack call form; args still has 3 entries
