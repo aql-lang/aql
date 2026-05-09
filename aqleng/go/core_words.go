@@ -69,8 +69,14 @@ func registerCoreDef(r *Registry) {
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				w, _ := args[0].AsWord()
-				if info, ok := args[1].Data.(FnDefInfo); ok && len(info.Sigs) == 1 {
-					installCoreFnDef(reg, w.Name, info.Sigs[0])
+				if info, ok := args[1].Data.(FnDefInfo); ok {
+					// Expand optional-param combinations into a flat
+					// list of sigs. Each reduced sig's body calls back
+					// into <name> with omitted params filled by their
+					// type's BaseValue, so the full sig handles the
+					// real work after defaults are plugged in.
+					sigs := ExpandOptionalSigs(w.Name, info.Sigs)
+					installCoreFnDef(reg, w.Name, sigs...)
 					return []Value{}, nil
 				}
 				reg.PushDef(w.Name, args[1])
@@ -85,6 +91,13 @@ func registerCoreDef(r *Registry) {
 // is a Word of the form `name:TypeName`; the bare aqleng tokenizer
 // is whitespace-only so a typed param arrives as a single Word and
 // the handler splits on `:` to recover the (name, type) pair.
+//
+// A standalone `?` Word in the params list marks the PRECEDING param
+// as optional (matches the production parser's convention — see
+// aql/internal/engine/native_definition_fn.go::parseFnParams). At
+// def-time the resulting FnSig is fed through ExpandOptionalSigs so
+// every present/omitted combination becomes its own callable
+// overload, with omitted params filled by their type's BaseValue.
 func registerCoreFn(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
@@ -97,13 +110,25 @@ func registerCoreFn(r *Registry) {
 				returnsList := args[1].AsList()
 				body := args[2].AsList()
 
-				params := make([]FnParam, paramsList.Len())
+				var params []FnParam
 				for i := 0; i < paramsList.Len(); i++ {
-					p, err := parseCoreFnParam(paramsList.Get(i))
+					elem := paramsList.Get(i)
+					// `?` marks the previous param as optional.
+					if elem.IsWord() {
+						w, _ := elem.AsWord()
+						if w.Name == "?" {
+							if len(params) == 0 {
+								return nil, fmt.Errorf("fn: '?' must follow a parameter")
+							}
+							params[len(params)-1].Optional = true
+							continue
+						}
+					}
+					p, err := parseCoreFnParam(elem)
 					if err != nil {
 						return nil, err
 					}
-					params[i] = p
+					params = append(params, p)
 				}
 				returns := make([]Type, returnsList.Len())
 				for i := 0; i < returnsList.Len(); i++ {
@@ -324,26 +349,33 @@ func registerCoreStack(r *Registry) {
 	})
 }
 
-// installCoreFnDef wires a single FnSig into the registry as a
-// synthesised native: when invoked, it binds each named param onto
-// the def stack, pushes the matched args onto the args stack so the
-// body can read them via the `args` word, runs the body in a fresh
-// sub-engine, and pops both stacks on return.
+// installCoreFnDef wires one or more FnSigs into the registry as a
+// single native with multiple overloads. Each sig's handler binds
+// the named params onto the def stack, pushes the matched args onto
+// the args stack so the body can read them via the `args` word, runs
+// the body in a fresh sub-engine, and pops both stacks on return.
+//
+// When called with the post-ExpandOptionalSigs result, the full sig
+// + every reduced sig (one per non-empty subset of optional params)
+// land here as separate overloads. The matcher then dispatches each
+// call site to the sig matching its arity; reduced-sig bodies call
+// back into `name` with defaults plugged in, which re-dispatches to
+// the full sig.
 //
 // Mirrors the param-binding portion of the production engine's
 // InstallFnDef in aql/internal/engine/core_helpers.go without pulling
 // in the production engine's `__pa` / paren-marker machinery (which
 // belongs to the full parser, not the bare aqleng core).
-func installCoreFnDef(r *Registry, name string, sig FnSig) {
-	argTypes := make([]Type, len(sig.Params))
-	for i, p := range sig.Params {
-		argTypes[i] = p.Type
-	}
-	bodyCopy := append([]Value{}, sig.Body...)
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
+func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
+	nativeSigs := make([]NativeSig, 0, len(sigs))
+	for _, sigOrig := range sigs {
+		sig := sigOrig // capture per-iteration
+		argTypes := make([]Type, len(sig.Params))
+		for i, p := range sig.Params {
+			argTypes[i] = p.Type
+		}
+		bodyCopy := append([]Value{}, sig.Body...)
+		nativeSigs = append(nativeSigs, NativeSig{
 			Args: argTypes,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				for i, p := range sig.Params {
@@ -361,7 +393,12 @@ func installCoreFnDef(r *Registry, name string, sig FnSig) {
 				input := append([]Value{}, bodyCopy...)
 				return sub.Run(input)
 			},
-		}},
+		})
+	}
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              name,
+		ForwardPrecedence: true,
+		Signatures:        nativeSigs,
 	})
 }
 
