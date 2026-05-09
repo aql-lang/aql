@@ -40,7 +40,6 @@
 #   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
 #   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
 #   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
-#   notq     — [Boolean] forward-prec — !args[0]
 #   firstq   — [List] forward-prec — first element or None for empty list
 #   lengthq  — [List] forward-prec — list length as Integer
 #   tagq     — two overloads [Integer]→"specific" / [Any]→"any" — specificity scoring
@@ -68,25 +67,25 @@ List	Node/List	list type literal — rendered via default branch
 Map	Node/Map	map type literal — rendered via default branch
 Type	Type	the metatype root
 
-# Type names whose VType matches a renderer scalar branch — RENDERING
-# QUIRK: the renderer's scalar branches fire on VType and use the
-# zero-Data accessors, so type-literal Integer / Decimal / String /
-# Boolean render as if they were the scalar zero value:
-Integer	0	type literal Integer renders as "0" (TInteger branch + AsInteger nil-Data → 0)
-Decimal	0.0	type literal Decimal renders as "0.0" (formatDecimal always emits a decimal point)
-String	""	type literal String renders as "" (AsString nil-Data → "")
-Boolean	false	type literal Boolean renders as "false" (AsBoolean nil-Data → false)
+# Scalar leaf type literals also render via the type-path branch:
+# renderValue gates the scalar branches on Data != nil, so a type
+# literal (Data == nil) falls through to the default branch and
+# renders as Type.String() — the slash-separated full type path.
+Integer	Scalar/Number/Integer	type literal Integer renders as its full path
+Decimal	Scalar/Number/Decimal	Decimal type literal full path
+String	Scalar/String	String type literal full path
+Boolean	Scalar/Boolean	Boolean type literal full path
 None	null	None has a dedicated renderer branch — renders as "null"
 
 # Multiple type literals on the stack.
-Integer Integer	0 0	two Integer type literals — quirk visible twice
+Integer Integer	Scalar/Number/Integer Scalar/Number/Integer	two Integer type literals
 Number Scalar	Scalar/Number Scalar	two type-path-rendered literals
 
 # Type literal next to a concrete value.
-1 Integer	1 0	concrete 1, then Integer type literal (renders as 0)
+1 Integer	1 Scalar/Number/Integer	concrete 1, then Integer type literal — both render distinctly
 
 # def can bind a type literal as a value (NOT via `type`).
-def t Integer t	0	t resolves to Integer type literal
+def t Integer t	Scalar/Number/Integer	t resolves to Integer type literal
 def t Number t	Scalar/Number	t resolves to Number type literal
 
 # To get the Atom version of a type-name word, quote it.
@@ -110,7 +109,7 @@ tagq null	"any"	None lands at the [Any] catch-all overload
 addq null 1	ERROR:signature	addq wants Number Number; None fails
 addq 1 null	ERROR:signature	null in second slot also fails
 concatq "a" null	ERROR:signature	concatq wants String String; None fails
-notq null	ERROR:signature	notq wants Boolean; None fails
+not null	true	`not` has a [TAny] fallback; None coerces to false → not false = true
 lengthq null	ERROR:signature	lengthq wants List; None fails
 
 # firstq on an empty list returns the None sentinel.
@@ -171,16 +170,16 @@ def s "hi" typeof s	atom(String)	def-bound String
 # references to NAME resolve to the most-recent binding.
 
 # Basic install + use.
-type Foo Integer Foo	0	Foo resolves to the Integer type literal (renders via the scalar quirk as 0)
-type Bar String Bar	""	Bar binds to String
-type Pi Number Pi	Scalar/Number	Number type literal renders via the type-path branch
+type Foo Integer Foo	Scalar/Number/Integer	Foo resolves to the Integer type literal
+type Bar String Bar	Scalar/String	Bar binds to String
+type Pi Number Pi	Scalar/Number	Pi binds to Number
 
 # typeof resolves the Word to its bound type literal first.
 type Foo Integer typeof Foo	atom(ScalarType)	Foo resolves to Integer type literal; typeof returns its metatype's parts[1]
 type Lst List typeof Lst	atom(NodeType)	List type literal → NodeType
 
 # Multiple type bindings live independently.
-type Foo Integer type Bar String Foo Bar	0 ""	two distinct bindings; each renders via its own quirk
+type Foo Integer type Bar String Foo Bar	Scalar/Number/Integer Scalar/String	two distinct bindings; each renders its full path
 
 # =====================================================================
 # 5. type — name validation
@@ -214,11 +213,11 @@ def foo 5 type Foo Integer		foo (def) and Foo (type) coexist
 # previous binding when the top is popped.
 
 # Shadow: second `type Foo` masks the first.
-type Foo Integer type Foo String Foo	""	the String binding shadows the Integer one
+type Foo Integer type Foo String Foo	Scalar/String	the String binding shadows the Integer one
 type Foo Integer type Foo String typeof Foo	atom(ScalarType)	typeof on the shadow still reports ScalarType (both metatypes agree)
 
 # Pop reveals the previous binding.
-type Foo Integer type Foo String untype Foo Foo	0	the String binding is popped; Foo resolves to the Integer (shadowed) one
+type Foo Integer type Foo String untype Foo Foo	Scalar/Number/Integer	the String binding is popped; Foo resolves to the Integer (shadowed) one
 type Foo Integer untype Foo		untype on the only binding empties the stack; both ops succeed silently
 
 # After full untype, the name is no longer recognised.
@@ -259,7 +258,7 @@ concatq "hi" String	"hi"	String type literal at sig[0] reads as "" via AsString
 concatq String "hi"	"hi"	String type literal at sig[1] also reads as ""
 
 # Boolean type literals at [TBoolean] sigs read as false.
-notq Boolean	true	Boolean type literal at [Boolean] reads as false; not gives true
+not Boolean	true	Boolean type literal at [Boolean] reads as false; not gives true
 
 # But the rejection IS in force for List / Map type literals:
 lengthq List	ERROR:	List type literal (Data==nil) is rejected by the TList sig

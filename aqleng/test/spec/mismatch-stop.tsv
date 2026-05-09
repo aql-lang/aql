@@ -40,7 +40,7 @@
 # ----------------
 # Type-directed termination is what allows mixed-type sequences to
 # coexist on the stack without forcing the user to insert `end`
-# everywhere. For example `not true 42` is a valid program — `notq`
+# everywhere. For example `not true 42` is a valid program — `not`
 # takes a Boolean, gets one, fires, and the `42` Integer stays as
 # residue. If termination weren't type-directed, the user would
 # have to write `not true end 42`.
@@ -57,14 +57,13 @@
 #   firstq   — [List] forward-prec — first element or None for empty list
 #   lengthq  — [List] forward-prec — list length as Integer
 #   negq     — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag
-#   notq     — [Boolean] forward-prec — !args[0]
 # === end fixtures ===
 
 # tokens	expected	note
 
 # 1. 1-arg forward word + matching arg + extra residue.
-notq true 42	false 42	not consumes the Boolean true → false; 42 stays on the stack
-notq false "hello"	true "hello"	same shape with string residue
+not true 42	false 42	not consumes the Boolean true → false; 42 stays on the stack
+not false "hello"	true "hello"	same shape with string residue
 negq 5 "extra"	-5 "extra"	negq consumes 5 (fwd-scan sees Number, fwd=1, then "extra" String fails Number — break); "extra" stays
 lengthq [ 1 2 ] 99	2 99	lengthq consumes the list; 99 is the residue
 firstq [ 7 ] "post"	7 "post"	first consumes the list; "post" stays
@@ -86,8 +85,8 @@ addq 1 true 2	ERROR:signature	same shape with boolean mismatch; trailing 2 not p
 # 5. Pre-existing prefix saves the chain.
 2 addq 1 "stop"	3 "stop"	stack=[2]; addq forward 1 then mismatch on "stop". fwd=1 (matches sig[0]=Integer). break. remaining=1. Top=2 → sig[1]. addq(1,2)=3. "stop" stays.
 
-# `notq` accepting Boolean, residue is type literal None.
-notq true null	false null	null (None type literal) is NOT a Boolean, stays on stack as residue
+# `not` accepting Boolean, residue is type literal None.
+not true null	false null	null (None type literal) is NOT a Boolean, stays on stack as residue
 
 # Forward arg of correct type immediately after a satisfied word.
-notq true notq false	false true	first not consumes true → false; second not consumes false → true. Two booleans on the stack.
+not true not false	false true	first not consumes true → false; second not consumes false → true. Two booleans on the stack.

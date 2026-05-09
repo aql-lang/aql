@@ -20,7 +20,7 @@ var replayCounter int
 // the tokenizer in this file is intentionally minimal.
 //
 // NAMING — most test words in this file end in `q` (addq, subq,
-// notq, …) to make it unmistakable that they are SPEC-RUNNER
+// mulq, …) to make it unmistakable that they are SPEC-RUNNER
 // FIXTURES, not the production AQL words of the same root name. The
 // production engine has its own add/sub/mul/etc. with richer
 // semantics; the q-suffixed words here are intentionally minimal,
@@ -183,19 +183,8 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// notq: boolean negation, forward precedence.
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "notq",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{TBoolean},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				b, _ := args[0].AsBoolean()
-				return []Value{NewBoolean(!b)}, nil
-			},
-			Returns: []Type{TBoolean},
-		}},
-	})
+	// `not` — installed as a core word via RegisterCoreWords above.
+	// See aqleng/go/core_boolean.go::registerCoreNot.
 
 	// describeq: two type-specific overloads, used in the dispatch spec.
 	r.RegisterNativeFunc(NativeFunc{
@@ -532,6 +521,12 @@ func renderValue(v Value) string {
 	switch {
 	case v.Data == nil && v.VType.Equal(TNone):
 		return "null"
+	case v.Data == nil:
+		// Type literal — render the full type path (e.g. Integer →
+		// "Scalar/Number/Integer"). The scalar branches below are
+		// deliberately gated on Data != nil so a type-literal Integer
+		// is not rendered as "0" via the AsInteger nil-Data fallback.
+		return v.VType.String()
 	case v.VType.Matches(TInteger):
 		n, _ := v.AsInteger()
 		return strconv.FormatInt(n, 10)

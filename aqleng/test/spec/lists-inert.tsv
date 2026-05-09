@@ -38,7 +38,7 @@
 #    sub-engine errors on bare `addq`, autoEvalList swallows the
 #    error, lengthq sees the original 1-element list).
 # 5. END-OF-RUN auto-eval errors PROPAGATE. So `[addq]` alone errors
-#    with signature_error, even though `lengthq [addq]` does notq.
+#    with signature_error, even though `lengthq [addq]` does not.
 # 6. Lists inside lists are auto-evaluated recursively at end-of-Run
 #    via the autoEvalStack drain (which calls autoEvalList per top-
 #    level Eval list — but a subq-list inside a list element is
