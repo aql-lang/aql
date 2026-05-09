@@ -1,6 +1,6 @@
 # String dispatch via test-registered `concatq` and `notq` words.
 # concatq is non-commutative; handler convention is `result = b + a`
-# where a = argsq[0], b = argsq[1] (matches the production engine's
+# where a = args[0], b = args[1] (matches the production engine's
 # addConcatHandler in aql/internal/engine/native_math.go and the
 # numericBinary convention used by subq/addq/mulq). The natural infix
 # reading therefore works:  `"hello" concatq " world" → "hello world"`.

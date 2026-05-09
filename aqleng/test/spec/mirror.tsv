@@ -9,7 +9,7 @@
 #   f X Y      f Y X      X f Y      Y f X      X Y f      Y X f
 #
 # The unified §1.4 matching algorithm assigns each arrangement to one
-# of two equivalence classes based on what (argsq[0], argsq[1]) the
+# of two equivalence classes based on what (args[0], args[1]) the
 # handler ultimately receives:
 #
 #   - forward-collected args fill sig[0..F-1] in source order, then
@@ -25,8 +25,8 @@
 #                   3 10 subq   (stk=[3, 10] top=10, deeper=3)
 #                   subq 10 3   (fwd=[10, 3])
 #
-# The handler convention is `result = b op a` where `a = argsq[0]`
-# and `b = argsq[1]` (mirrors the production engine's
+# The handler convention is `result = b op a` where `a = args[0]`
+# and `b = args[1]` (mirrors the production engine's
 # numericBinaryHandler in `aql/internal/engine/native_math.go`, where
 # every non-commutative binary handler computes `b - a`, `b + a`, etc).
 #
@@ -36,7 +36,7 @@
 #
 # There is NO "swap form". Every arrangement is an equally valid
 # surface syntax; the matching algorithm just maps each one to a
-# specific (argsq[0], argsq[1]) pair.
+# specific (args[0], args[1]) pair.
 #
 # Why this matters
 # ----------------
@@ -57,7 +57,7 @@ subq 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3
 
 # Class B (sig=[10, 3] for X=10, Y=3): result = 3 - 10 = -7.
 # These three arrangements are also equivalent — they just map to
-# the other (argsq[0], argsq[1]) ordering.
+# the other (args[0], args[1]) ordering.
 subq 10 3	-7	prefix: fwd=[10, 3] → sig=[10, 3] → handler returns 3-10
 3 subq 10	-7	infix: stk=[3], fwd=[10] → sig[0]=10 (fwd), sig[1]=3 (stk) → 3-10
 3 10 subq	-7	postfix: stk=[3, 10] with 10 on top → sig[0]=10, sig[1]=3 → 3-10

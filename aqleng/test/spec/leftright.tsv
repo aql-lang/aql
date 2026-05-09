@@ -18,7 +18,7 @@
 # Rules being asserted
 # --------------------
 # 1. `a OP1 b OP2 c` evaluates as `(a OP1 b) OP2 c` when both OPs are
-#    2-arg forward-prec words. The firstq OP's result lives on the
+#    2-arg forward-prec words. The first OP's result lives on the
 #    stack and becomes the second OP's stack-side arg.
 # 2. The chain is unbounded: `1 addq 2 addq 3 addq 4` etc.
 # 3. Mixing operators with different precedence is irrelevant — there
@@ -58,8 +58,8 @@
 1 addq 2 mulq 3 mulq 4	36	((1+2)*3)*4 = 36
 
 # Parens override the default order.
-2 addq ( 3 mulq 4 )	14	mulq runs firstq (paren); addq(2, 12)=14
-( 2 addq 3 ) mulq 4	20	addq runs firstq (paren); 5 mulq 4 = 20 — same as bare chain
+2 addq ( 3 mulq 4 )	14	mulq runs first (paren); addq(2, 12)=14
+( 2 addq 3 ) mulq 4	20	addq runs first (paren); 5 mulq 4 = 20 — same as bare chain
 1 addq ( 2 mulq ( 3 addq 4 ) )	15	deep paren tree: 3+4=7, 2*7=14, 1+14=15
 ( 1 addq 2 ) mulq ( 3 addq 4 )	21	both branches parenthesised; mulq(3, 7)=21
 
@@ -70,9 +70,9 @@
 1 addq 5 negq	-6	addq fwd-scans 5, hits negq as function-word boundary; addq(5,1)=6 (sig[0]=5 fwd, sig[1]=1 stack); negq then consumes 6 → -6
 3 negq negq	3	double negation cancels — first negq consumes 3 from stack (boundary on second negq), second negq consumes -3
 
-# Mixing with simple-value defq substitution. pi=3, tau=6 are pre-bound.
+# Mixing with simple-value def substitution. pi=3, tau=6 are pre-bound.
 pi addq tau mulq 2	18	pi (3) addq tau (6)=9; mulq 2=18
-pi mulq tau	18	3*6 = 18 — both args from defq (mirror form: mulq 6 3 = 18, but commutative so same)
+pi mulq tau	18	3*6 = 18 — both args from def (mirror form: mulq 6 3 = 18, but commutative so same)
 
 # Mixed prefix-then-mid-forward: a forward-prec word can pull one
 # arg from a future token AND one from the stack — but the stack

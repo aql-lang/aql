@@ -6,7 +6,7 @@
 #
 # Test words:
 #   lengthq — sig [List]. Returns the element count as Integer.
-#   firstq  — sig [List]. Returns the first element, or None on empty.
+#   first  — sig [List]. Returns the first element, or None on empty.
 
 # tokens	expected	note
 [ 1 2 3 ]	[1 2 3]	bare list literal renders as space-separated elements
@@ -14,8 +14,8 @@
 lengthq [ 1 2 3 ]	3	lengthq consumes the list, returns its size
 lengthq [ ]	0	empty list has lengthq 0
 lengthq [ "a" "b" ]	2	mixed element types — only count is checked
-firstq [ 7 8 9 ]	7	firstq returns the head element
-firstq [ "hello" ]	"hello"	firstq on a single-element list
+firstq [ 7 8 9 ]	7	first returns the head element
+firstq [ "hello" ]	"hello"	first on a single-element list
 [ 1 2 ] lengthq	2	all-stack form
 [ [ 1 2 ] [ 3 4 5 ] ]	[[1 2] [3 4 5]]	nested list literals
 lengthq [ [ 1 ] [ 2 ] [ 3 ] [ 4 ] ]	4	length of a list of lists

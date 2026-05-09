@@ -3,7 +3,7 @@
 # are call-site overrides — here the boundary is intrinsic to the sig.
 #
 # Test word `pairq` has a single sig:
-#   argsq:    [Integer, Integer]
+#   args:    [Integer, Integer]
 #   barrierPos: 1
 #   handler: (a, b) => formats `a:b` as a string
 #

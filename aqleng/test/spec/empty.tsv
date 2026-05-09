@@ -15,7 +15,7 @@
 # 2. `""` round-trips and renders as `""`.
 # 3. `lengthq [ ]` returns 0 — the handler treats the empty list
 #    correctly without panicking (cf. CLAUDE.md "Panic Prevention").
-# 4. `firstq [ ]` returns `null` (the None type literal). The handler
+# 4. `first [ ]` returns `null` (the None type literal). The handler
 #    in spec_test.go::registerSpecWords explicitly emits
 #    `NewTypeLiteral(TNone)` for this case.
 # 5. `concatq "" ""` returns `""` — empty + empty stays empty.
@@ -34,7 +34,7 @@
 # ----------------
 # A surprising fraction of engine bugs cluster around the empty/
 # bare-type-literal distinction. The classic footgun is a handler
-# that does `argsq[0].AsList().Len()` without checking Data — for a
+# that does `args[0].AsList().Len()` without checking Data — for a
 # concrete `[]` this returns 0 cleanly; for a bare `List` type
 # literal (Data==nil) it would panic. The signature-matching path
 # already separates these (see match.go:233-236):

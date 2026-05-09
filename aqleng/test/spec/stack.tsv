@@ -1,6 +1,6 @@
 # Stack manipulation via test-registered `dupq`, `swapq`, `dropq`.
 # These three are stack-only by default — they consume only from
-# the prefix and never collect forward argsq.
+# the prefix and never collect forward args.
 #
 # (Negation moved to decimals.tsv after the neg/negq consolidation
 # into a single forward-eligible `negq` word with sig [Number|]).

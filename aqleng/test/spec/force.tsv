@@ -12,8 +12,8 @@
 #
 # `dupq` is the canonical stack-only witness now that neg/negq have
 # been consolidated into a single forward-eligible `negq`. `dupq`'s
-# return is two copies of argsq[0], so the row outputs make the
-# forward-vs-stack source of argsq[0] visible.
+# return is two copies of args[0], so the row outputs make the
+# forward-vs-stack source of args[0] visible.
 
 # tokens	expected	note
 

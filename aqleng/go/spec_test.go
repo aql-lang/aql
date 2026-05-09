@@ -19,23 +19,40 @@ var replayCounter int
 // pre-populated with a fixed set of test words. No parser is involved;
 // the tokenizer in this file is intentionally minimal.
 //
-// NAMING — every test word in this file ends in `q` (addq, subq,
-// defq, quoteq, …) to make it unmistakable that they are SPEC-RUNNER
+// NAMING — most test words in this file end in `q` (addq, subq,
+// notq, …) to make it unmistakable that they are SPEC-RUNNER
 // FIXTURES, not the production AQL words of the same root name. The
-// production engine has its own add/sub/mul/def/fn/quote/etc. with
-// richer semantics; the q-suffixed words here are intentionally
-// minimal, single-overload versions tailored for spec coverage of
-// the dispatch / value / type-lattice core.
+// production engine has its own add/sub/mul/etc. with richer
+// semantics; the q-suffixed words here are intentionally minimal,
+// single-overload versions tailored for spec coverage of the
+// dispatch / value / type-lattice core.
 //
-// To add a new test word: pick the production word's root name and
-// append `q`. Reuse the production handler convention (mirror the
-// production engine's body verbatim where possible — see the math
-// block below for an example referencing native_math.go).
+// EXCEPTIONS — language-fundamental keywords keep their bare name
+// because they ARE the construct being tested, not a fixture for it:
+//
+//   def, fn       — name binding, function literal
+//   end           — structural keyword (handled by stepEnd, not
+//                   registered)
+//   quote, args   — first-class quotation and per-fn argument frame
+//   if, for, type — control flow / type definition (not yet registered
+//                   in the spec runner; reserved for future ports)
+//
+// These are core to the language design (LANGREF.10.md), so the spec
+// runner's versions of `def` and `fn` MUST be named `def` and `fn` —
+// any other name would be misleading because what we're actually
+// testing is the binding / function-literal mechanism itself.
+//
+// To add a new test word: if it's a fundamental keyword, use the bare
+// name and document it here. Otherwise pick the production word's
+// root name and append `q`. Reuse the production handler convention
+// (mirror the production engine's body verbatim where possible —
+// see the math block below for an example referencing native_math.go).
 
 // registerSpecWords installs the word set the spec files reference.
 // Keep this list small and stable — the specs are easier to read
-// when there's no surprise about what each word does. Every word
-// has a `q` suffix to disambiguate from production AQL words.
+// when there's no surprise about what each word does. Test fixtures
+// have a `q` suffix; language fundamentals (def, fn, quote, args)
+// keep their bare name. See the file header for the rationale.
 func registerSpecWords(r *Registry) {
 	// addq, subq, mulq: numeric arithmetic via forward precedence.
 	//
@@ -387,7 +404,7 @@ func registerSpecWords(r *Registry) {
 	// literal that becomes a callable code body. The handler pushes
 	// the body onto the def stack under NAME.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "defq",
+		Name:              "def",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TWord, TAny},
@@ -418,7 +435,7 @@ func registerSpecWords(r *Registry) {
 	// whitespace-only so a typed param arrives as one Word and the
 	// handler splits on `:` to recover the (name, type) pair.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "fnq",
+		Name:              "fn",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
 			Args:       []Type{TList, TList, TList},
@@ -463,7 +480,7 @@ func registerSpecWords(r *Registry) {
 	//                atom(dupq) even when dupq is registered.
 	//   sig [TAny]:  catch-all passthrough.
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "quoteq",
+		Name:              "quote",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
 			{
@@ -502,7 +519,7 @@ func registerSpecWords(r *Registry) {
 	// frame as a list. dispatchFnDef pushes the matched args (in sig
 	// order) before running the body.
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "argsq",
+		Name: "args",
 		Signatures: []NativeSig{{
 			Args: []Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {

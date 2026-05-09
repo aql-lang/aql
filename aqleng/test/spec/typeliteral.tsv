@@ -10,7 +10,7 @@
 # aqleng/go/engine.go::typeNames (built from typeNameEntries).
 #
 # Type literals are how the language refers to types as values: you
-# can pass `Integer` as an argument, store it via `defq`, compare
+# can pass `Integer` as an argument, store it via `def`, compare
 # types, etc. The Data==nil discriminator is what tells handlers
 # "this is the type itself, not a payload".
 #
@@ -19,7 +19,7 @@
 # 1. Type-name words are recognised: Integer, String, Boolean,
 #    Decimal, Number, Scalar, Atom, Path, List, Map, Any, None, etc.
 #    None is recognised but renders as the bottom-type sentinel.
-# 2. Type literals can be `defq`-bound and recalled.
+# 2. Type literals can be `def`-bound and recalled.
 # 3. Type literals can be passed to `tagq` (and similar [Any] sigs) —
 #    they hit the catch-all overload.
 # 4. The rendering of type literals exposes a known QUIRK in the
@@ -63,7 +63,7 @@
 #    typo `addq Integer 1` is silently `addq 0 1`. See "Deviations".
 #
 # 6. To capture a type-name word as DATA (an Atom of the same name)
-#    rather than as the type itself, use `quoteq`. The /q-style
+#    rather than as the type itself, use `quote`. The /q-style
 #    capture suppresses the type-name resolution.
 #
 # Why this matters
@@ -103,9 +103,9 @@ Number Scalar	Scalar/Number Scalar	two type-path-rendered literals
 # Type literal + concrete value.
 1 Integer	1 0	concrete 1, then Integer type literal (renders as 0)
 
-# defq can bind a type literal.
-defq t Integer t	0	t resolves to Integer type literal (renders as 0)
-defq t Number t	Scalar/Number	t resolves to Number type literal
+# def can bind a type literal.
+def t Integer t	0	t resolves to Integer type literal (renders as 0)
+def t Number t	Scalar/Number	t resolves to Number type literal
 
 # Dispatch surprise: Integer type literal satisfies an [Integer] sig.
 tagq Integer	"specific"	the [Integer]-specific overload of tagq fires; handler ignores the value
@@ -122,7 +122,7 @@ addq Integer 1	1	Integer type literal + 1 → handler reads Integer.AsInteger()=
 addq Integer Integer	0	0+0 — both args are type literals, both read as 0
 subq 5 Integer	-5	fwd=[5, Integer] → sig=[5, 0]; handler returns b-a = 0-5 = -5 (Integer type literal silently reads as 0)
 
-# To get the Atom version of a type-name word, quoteq it.
-quoteq Integer	atom(Integer)	quoteq captures the upcoming Word as Atom; suppresses type-name resolution
-quoteq String	atom(String)	same; type-name resolution does not fire under /q-style capture
-defq t quoteq Integer t	atom(Integer)	t bound to atom(Integer); resolution returns the atom
+# To get the Atom version of a type-name word, quote it.
+quote Integer	atom(Integer)	quote captures the upcoming Word as Atom; suppresses type-name resolution
+quote String	atom(String)	same; type-name resolution does not fire under /q-style capture
+def t quote Integer t	atom(Integer)	t bound to atom(Integer); resolution returns the atom

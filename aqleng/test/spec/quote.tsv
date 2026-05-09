@@ -1,18 +1,18 @@
-# `quoteq` — capture the next forward token as data.
+# `quote` — capture the next forward token as data.
 #
-# - `quoteq WORD` returns Atom(WORD), even when WORD is a registered
+# - `quote WORD` returns Atom(WORD), even when WORD is a registered
 #   function (the TWord slot keeps the matcher from dispatching it).
-# - `quoteq LITERAL` returns the value unchanged.
-# - `quoteq LIST` returns the list as-is.
+# - `quote LITERAL` returns the value unchanged.
+# - `quote LIST` returns the list as-is.
 
 # tokens	expected	note
-quoteq a	atom(a)	bare undefined word becomes atom
-quoteq dupq	atom(dupq)	even though dupq is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
-quoteq 5	5	scalar passes through
-quoteq "hi"	"hi"	string passes through
-quoteq true	true	boolean passes through
-quoteq [ 1 2 3 ]	[1 2 3]	list passes through
+quote a	atom(a)	bare undefined word becomes atom
+quote dupq	atom(dupq)	even though dupq is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
+quote 5	5	scalar passes through
+quote "hi"	"hi"	string passes through
+quote true	true	boolean passes through
+quote [ 1 2 3 ]	[1 2 3]	list passes through
 
-# Round-trip through defq: x bound to atom(NAME), then resolved.
-defq x quoteq a x	atom(a)	define x as atom(a), then resolve x → atom(a)
-defq x quoteq dupq x	atom(dupq)	define x as atom(dupq); resolving x yields the atom (dupq is never dispatched)
+# Round-trip through def: x bound to atom(NAME), then resolved.
+def x quote a x	atom(a)	define x as atom(a), then resolve x → atom(a)
+def x quote dupq x	atom(dupq)	define x as atom(dupq); resolving x yields the atom (dupq is never dispatched)

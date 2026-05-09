@@ -28,7 +28,7 @@
 # Why this matters
 # ----------------
 # None is the universal "no result" / "absent" sentinel: it lets
-# functions like `firstq []` return *something* without raising and
+# functions like `first []` return *something* without raising and
 # without conflating "empty list returned nothing" with "list has a
 # zero element". Sigs that accept None explicitly (or fall back to
 # Any) must continue to handle it; sigs that do not must reject it
@@ -45,6 +45,6 @@ addq 1 null	ERROR:signature	null in second forward slot also fails
 concatq "a" null	ERROR:signature	concatq wants String String; None fails
 notq null	ERROR:signature	not wants Boolean; None fails
 lengthq null	ERROR:signature	lengthq wants List; None fails
-firstq [ ]	null	empty list → firstq returns the None sentinel
+firstq [ ]	null	empty list → first returns the None sentinel
 lengthq [ null ]	1	a list containing null is still a 1-element list
 firstq [ null 1 ]	null	first element of a list whose head is null

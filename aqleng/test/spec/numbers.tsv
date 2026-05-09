@@ -14,7 +14,7 @@
 #     (see mirror.tsv for the abstract rule)
 #   - Composition with parens
 #   - Composition with the `end` stop word
-#   - Composition with custom user-defined functions (defq + fnq)
+#   - Composition with custom user-defined functions (def + fn)
 #   - Type-mismatch errors and IEEE-754 float artefacts
 #
 # The three test words exercised here are representative of every
@@ -197,28 +197,28 @@ addq 2 end 3 4	ERROR:signature	same shape — end forces close before 3,4 push; 
 end 1 addq 2 3	1 5	leading end has no pending fwd → no-op; then 1 pushes; addq fwd-collects 2 (sig[0]); 3 fails — wait, 3 IS Integer. Actually addq fwd-collects 2 and 3 → sig=[2,3] → 3+2=5; stack=[1] residue. Result: "1 5".
 
 # ---------- 8. Composition with custom user-defined functions ----------
-# defq + fnq build user functions. Bodies use the same numeric ops.
-defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5 inc	6	user fn computing n + 1 via addq inside the body
-defq doub ( fnq [ n:Integer ] [ Integer ] [ n n addq ] ) 5 doub	10	user fn computing n + n
-defq sqr ( fnq [ n:Integer ] [ Integer ] [ n n mulq ] ) 7 sqr	49	user fn computing n * n via mulq
-defq neg2 ( fnq [ n:Integer ] [ Integer ] [ n negq ] ) 5 neg2	-5	user fn wrapping negq
+# def + fn build user functions. Bodies use the same numeric ops.
+def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5 inc	6	user fn computing n + 1 via addq inside the body
+def doub ( fn [ n:Integer ] [ Integer ] [ n n addq ] ) 5 doub	10	user fn computing n + n
+def sqr ( fn [ n:Integer ] [ Integer ] [ n n mulq ] ) 7 sqr	49	user fn computing n * n via mulq
+def neg2 ( fn [ n:Integer ] [ Integer ] [ n negq ] ) 5 neg2	-5	user fn wrapping negq
 
 # Decimal version — the body's args/return types still match Integer
-# in this fnq (the spec runner's fnq sig only accepts a single typed
+# in this fn (the spec runner's fn sig only accepts a single typed
 # param list); but the Number-typed addq still handles Integer args
-# normally. For Decimal args, the call would fail sig match at fnq's
+# normally. For Decimal args, the call would fail sig match at fn's
 # [Integer] entry — pinned in the next row.
-defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5.0 inc	ERROR:signature	5.0 fails the fnq's [Integer] param sig
+def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5.0 inc	ERROR:signature	5.0 fails the fn's [Integer] param sig
 
 # Composition: a user fn calling another user fn.
-defq inc ( fnq [ n:Integer ] [ Integer ] [ n 1 addq ] ) defq inc2 ( fnq [ n:Integer ] [ Integer ] [ n inc inc ] ) 5 inc2	7	inc2 chains two inc calls
+def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) def inc2 ( fn [ n:Integer ] [ Integer ] [ n inc inc ] ) 5 inc2	7	inc2 chains two inc calls
 
 # Custom fn body using subq — exercises the b-a convention.
-defq diff ( fnq [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 diff 3	7	diff(10, 3) → param a=3 (fwd), b=10 (stk); body subq a b → subq 3 10 → sig=[3, 10] → 10-3 = 7
+def diff ( fn [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 diff 3	7	diff(10, 3) → param a=3 (fwd), b=10 (stk); body subq a b → subq 3 10 → sig=[3, 10] → 10-3 = 7
 
-# List-body splice — same machinery, no fnq wrap. Body splices
+# List-body splice — same machinery, no fn wrap. Body splices
 # in-place at the use site (see code-splice.tsv).
-defq trip ( fnq [ n:Integer ] [ Integer ] [ n n addq n addq ] ) 4 trip	12	body computes n + n + n via two chained addq calls
+def trip ( fn [ n:Integer ] [ Integer ] [ n n addq n addq ] ) 4 trip	12	body computes n + n + n via two chained addq calls
 
 # ---------- 9. Type mismatches still error ----------
 addq "hello" 3.5	ERROR:signature	String at sig[0] fails Number match

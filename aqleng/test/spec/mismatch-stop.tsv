@@ -58,7 +58,7 @@ notq true 42	false 42	not consumes the Boolean true → false; 42 stays on the s
 notq false "hello"	true "hello"	same shape with string residue
 negq 5 "extra"	-5 "extra"	negq consumes 5 (fwd-scan sees Number, fwd=1, then "extra" String fails Number — break); "extra" stays
 lengthq [ 1 2 ] 99	2 99	lengthq consumes the list; 99 is the residue
-firstq [ 7 ] "post"	7 "post"	firstq consumes the list; "post" stays
+firstq [ 7 ] "post"	7 "post"	first consumes the list; "post" stays
 
 # 2. 2-arg word: one forward arg, mismatch, stack fills the rest.
 1 addq 2 "stop"	3 "stop"	addq: fwd=1 (matches Integer "2"), then "stop" fails Integer match — break. Stack=[1]. remaining=1, sig[1]=1 (top). addq(2,1)=3. "stop" stays.
