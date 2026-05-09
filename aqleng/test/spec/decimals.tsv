@@ -45,10 +45,10 @@
 # tokens	expected	note
 3.14	3.14	decimal round-trips
 -0.5	-0.5	negative decimal round-trips
-0.0	0	0.0 renders without trailing zero (Go's strconv 'g' rule); still typed Decimal
-2.0	2	2.0 renders as `2` because FormatFloat with 'g' suppresses trailing zeroes
+0.0	0.0	formatDecimal preserves the decimal point — renders as "0.0", not "0", to keep Decimal visually distinct from Integer
+2.0	2.0	whole-valued decimal renders as "2.0" (formatDecimal appends ".0" when there's no fractional part or exponent)
 2.5 3.5	2.5 3.5	multiple decimals on the stack
-1 2.0	1 2	integer and decimal coexist on the stack — render rule masks the type tag here
+1 2.0	1 2.0	integer and decimal coexist; the type tag is now visible in the rendered form
 add 2.5 3.5	ERROR:signature	add expects two integers; decimals fail the sig
 add 2 3.5	ERROR:signature	mixed integer + decimal still rejects (no coercion)
 sub 5.0 1.0	ERROR:signature	sub is integer-only too

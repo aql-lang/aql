@@ -563,6 +563,21 @@ func NewDecimal(f float64) Value {
 	return NewValueRaw(TDecimal, f)
 }
 
+// formatDecimal renders a float64 with a guaranteed decimal point so the
+// type stays visually distinct from Integer. Uses 'f' format with -1
+// precision (shortest round-trip), then appends ".0" when the result
+// has neither a fractional part nor an exponent. Float artefacts like
+// 0.1 + 0.2 = 0.30000000000000004 are preserved verbatim — see the
+// note in spec/SPEC_REPORT.md §2 on the apd-port plan if exact
+// decimal arithmetic is required.
+func formatDecimal(f float64) string {
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
+}
+
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
@@ -1531,7 +1546,7 @@ func (v Value) String() string {
 		return s
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
-		return strconv.FormatFloat(_as4, 'f', -1, 64)
+		return formatDecimal(_as4)
 	case v.VType.Matches(TInteger):
 		return fmt.Sprintf("%d", v.Data)
 	case v.VType.Matches(TBoolean):

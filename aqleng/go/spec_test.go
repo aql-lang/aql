@@ -689,7 +689,7 @@ func renderValue(v Value) string {
 		return strconv.FormatInt(n, 10)
 	case v.VType.Matches(TDecimal):
 		f, _ := v.AsDecimal()
-		return strconv.FormatFloat(f, 'g', -1, 64)
+		return formatDecimal(f)
 	case v.VType.Matches(TString):
 		s, _ := v.AsString()
 		return "\"" + s + "\""

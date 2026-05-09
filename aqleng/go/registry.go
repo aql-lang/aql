@@ -558,7 +558,7 @@ func ValToString(v Value) string {
 		return _as9
 	case v.VType.Matches(TDecimal):
 		_as10, _ := v.AsDecimal()
-		return strconv.FormatFloat(_as10, 'f', -1, 64)
+		return formatDecimal(_as10)
 	case v.VType.Matches(TInteger):
 		_as11, _ := v.AsInteger()
 		return strconv.FormatInt(_as11, 10)

@@ -224,7 +224,7 @@ func describeStackTypes(stack []Value, pointer int) string {
 			label = strconv.FormatInt(n, 10)
 		} else if v.VType.Matches(TDecimal) {
 			f, _ := v.AsDecimal()
-			label = strconv.FormatFloat(f, 'f', -1, 64)
+			label = formatDecimal(f)
 		}
 		if i == pointer {
 			label = ">>>" + label + "<<<"

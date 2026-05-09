@@ -91,7 +91,7 @@ Type	Type	the metatype root
 # Type names whose VType matches a renderer scalar branch.
 # (See the renderer asymmetry note in the file header.)
 Integer	0	type literal is rendered through the TInteger branch as "0"
-Decimal	0	type literal Decimal rendered as "0"
+Decimal	0.0	type literal Decimal renders as "0.0" — formatDecimal always emits a decimal point so the type is visually distinct
 String	""	type literal String rendered as ""
 Boolean	false	type literal Boolean rendered as "false"
 None	null	None has a dedicated renderer branch — renders as "null"
