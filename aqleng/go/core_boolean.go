@@ -36,6 +36,13 @@ package aqleng
 
 // registerCoreBoolean installs `not`, `and`, `or` on r.
 func registerCoreBoolean(r *Registry) {
+	registerCoreOr(r)
+	registerCoreAnd(r)
+	registerCoreNot(r)
+}
+
+// registerCoreOr — `or` with TBoolean and TAny overloads.
+func registerCoreOr(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "or",
 		ForwardPrecedence: true,
@@ -44,6 +51,10 @@ func registerCoreBoolean(r *Registry) {
 			{Args: []Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []Type{TAny}},
 		},
 	})
+}
+
+// registerCoreAnd — `and` with TBoolean and TAny overloads.
+func registerCoreAnd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "and",
 		ForwardPrecedence: true,
@@ -52,6 +63,10 @@ func registerCoreBoolean(r *Registry) {
 			{Args: []Type{TAny, TAny}, Handler: andHandler, Returns: []Type{TAny}},
 		},
 	})
+}
+
+// registerCoreNot — `not` with TBoolean and TAny overloads.
+func registerCoreNot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "not",
 		ForwardPrecedence: true,
@@ -64,6 +79,12 @@ func registerCoreBoolean(r *Registry) {
 
 // registerCoreTypeOps installs `tor`, `tand`.
 func registerCoreTypeOps(r *Registry) {
+	registerCoreTor(r)
+	registerCoreTand(r)
+}
+
+// registerCoreTor — `tor` (type-level disjunct union).
+func registerCoreTor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "tor",
 		ForwardPrecedence: true,
@@ -74,6 +95,10 @@ func registerCoreTypeOps(r *Registry) {
 			ReturnsFn:  torReturnsFn,
 		}},
 	})
+}
+
+// registerCoreTand — `tand` (type-level intersection).
+func registerCoreTand(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "tand",
 		ForwardPrecedence: true,

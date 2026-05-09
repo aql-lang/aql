@@ -233,8 +233,26 @@ func registerCoreArgs(r *Registry) {
 // omitted: they need FullStack signatures and the spec runner's
 // dispatch path doesn't yet wire that up. They can be added later
 // without breaking this surface.
+//
+// Each op has its own per-name installer (registerCoreDup, etc.) so
+// engine_options.go's Words whitelist can pick out individual stack
+// ops. registerCoreStack just chains them.
 func registerCoreStack(r *Registry) {
-	// dup ( a — a a )
+	registerCoreDup(r)
+	registerCoreSwap(r)
+	registerCoreDrop(r)
+	registerCoreOver(r)
+	registerCoreRot(r)
+	registerCoreNip(r)
+	registerCoreTuck(r)
+	registerCore2Dup(r)
+	registerCore2Swap(r)
+	registerCore2Drop(r)
+	registerCore2Over(r)
+}
+
+// registerCoreDup — `dup ( a — a a )`.
+func registerCoreDup(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dup",
 		Signatures: []NativeSig{{
@@ -244,11 +262,14 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// swap ( a b — b a ).
-	// Under the unified §1.4 rule args[0] is the top and args[1] is
-	// next-deeper. Returning [args[0], args[1]] in source order puts
-	// the old top at the deeper position and the old second-from-top
-	// at the top — i.e. they swap.
+}
+
+// registerCoreSwap — `swap ( a b — b a )`.
+// Under the unified §1.4 rule args[0] is the top and args[1] is
+// next-deeper. Returning [args[0], args[1]] in source order puts
+// the old top at the deeper position and the old second-from-top
+// at the top — i.e. they swap.
+func registerCoreSwap(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "swap",
 		Signatures: []NativeSig{{
@@ -258,7 +279,10 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// drop ( a — )
+}
+
+// registerCoreDrop — `drop ( a — )`.
+func registerCoreDrop(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "drop",
 		Signatures: []NativeSig{{
@@ -268,9 +292,12 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// over ( a b — a b a ).
-	// args[0]=top=b, args[1]=deeper=a. Output sequence puts a at the
-	// deepest restore position, then b, then a again on top.
+}
+
+// registerCoreOver — `over ( a b — a b a )`.
+// args[0]=top=b, args[1]=deeper=a. Output sequence puts a at the
+// deepest restore position, then b, then a again on top.
+func registerCoreOver(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "over",
 		Signatures: []NativeSig{{
@@ -280,8 +307,11 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// rot ( a b c — b c a ).
-	// args[0]=top=c, args[1]=b, args[2]=deepest=a.
+}
+
+// registerCoreRot — `rot ( a b c — b c a )`.
+// args[0]=top=c, args[1]=b, args[2]=deepest=a.
+func registerCoreRot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "rot",
 		Signatures: []NativeSig{{
@@ -291,8 +321,11 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// nip ( a b — b ).
-	// args[0]=top=b is kept; args[1]=a is discarded.
+}
+
+// registerCoreNip — `nip ( a b — b )`.
+// args[0]=top=b is kept; args[1]=a is discarded.
+func registerCoreNip(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "nip",
 		Signatures: []NativeSig{{
@@ -302,9 +335,12 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// tuck ( a b — b a b ).
-	// args[0]=top=b, args[1]=a. Output: b at deepest, a in middle,
-	// b at top — copies the top under the second.
+}
+
+// registerCoreTuck — `tuck ( a b — b a b )`.
+// args[0]=top=b, args[1]=a. Output: b at deepest, a in middle,
+// b at top — copies the top under the second.
+func registerCoreTuck(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "tuck",
 		Signatures: []NativeSig{{
@@ -314,8 +350,11 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// 2dup ( a b — a b a b ).
-	// args[0]=top=b, args[1]=a.
+}
+
+// registerCore2Dup — `2dup ( a b — a b a b )`.
+// args[0]=top=b, args[1]=a.
+func registerCore2Dup(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "2dup",
 		Signatures: []NativeSig{{
@@ -325,8 +364,11 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// 2swap ( a b c d — c d a b ).
-	// args[0]=top=d, args[1]=c, args[2]=b, args[3]=deepest=a.
+}
+
+// registerCore2Swap — `2swap ( a b c d — c d a b )`.
+// args[0]=top=d, args[1]=c, args[2]=b, args[3]=deepest=a.
+func registerCore2Swap(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "2swap",
 		Signatures: []NativeSig{{
@@ -336,7 +378,10 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// 2drop ( a b — )
+}
+
+// registerCore2Drop — `2drop ( a b — )`.
+func registerCore2Drop(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "2drop",
 		Signatures: []NativeSig{{
@@ -346,8 +391,11 @@ func registerCoreStack(r *Registry) {
 			},
 		}},
 	})
-	// 2over ( a b c d — a b c d a b ).
-	// Copies the second pair (a b) on top of the first pair (c d).
+}
+
+// registerCore2Over — `2over ( a b c d — a b c d a b )`.
+// Copies the second pair (a b) on top of the first pair (c d).
+func registerCore2Over(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "2over",
 		Signatures: []NativeSig{{
