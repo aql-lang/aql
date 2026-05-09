@@ -1,0 +1,128 @@
+# =====================================================================
+# Principle: Type-name words push type-literal values.
+# =====================================================================
+#
+# A bare unquoted word that matches a well-known type name (Integer,
+# String, Boolean, Number, Scalar, Atom, List, Map, Any, None, …)
+# is NOT an undefined word and is NOT a function — it pushes a
+# "type literal" Value: a Value whose VType is the named Type and
+# whose Data is nil. The recognised set is in
+# aqleng/go/engine.go::typeNames (built from typeNameEntries).
+#
+# Type literals are how the language refers to types as values: you
+# can pass `Integer` as an argument, store it via `def`, compare
+# types, etc. The Data==nil discriminator is what tells handlers
+# "this is the type itself, not a payload".
+#
+# Rules being asserted
+# --------------------
+# 1. Type-name words are recognised: Integer, String, Boolean,
+#    Decimal, Number, Scalar, Atom, Path, List, Map, Any, None, etc.
+#    None is recognised but renders as the bottom-type sentinel.
+# 2. Type literals can be `def`-bound and recalled.
+# 3. Type literals can be passed to `tag` (and similar [Any] sigs) —
+#    they hit the catch-all overload.
+# 4. The rendering of type literals exposes a known QUIRK in the
+#    spec runner's renderValue: integer/decimal/string/boolean type
+#    literals render the same as their zero-Data accessors:
+#
+#      Integer  → "0"        (renderValue's TInteger branch fires
+#                            and AsInteger returns 0 for nil Data)
+#      Decimal  → "0"        (same; FormatFloat 'g' suppresses .0)
+#      String   → ""         (AsString returns "")
+#      Boolean  → "false"    (AsBoolean returns false)
+#
+#    Other type literals fall through to the default branch which
+#    prints the type path:
+#
+#      Number   → "Scalar/Number"
+#      Scalar   → "Scalar"
+#      Atom     → "Scalar/Atom"
+#      Path     → "Scalar/Path"
+#      Record   → "Object/Record"
+#      Type     → "Type"
+#      Any      → "Any"
+#      None     → "null"     (special branch in renderValue)
+#      List     → "Node/List"
+#      Map      → "Node/Map"
+#
+#    The asymmetry is a known deviation: see the "Deviations" section
+#    of the report for the suggested fix.
+#
+# 5. SURPRISE: A scalar type literal (Integer / Decimal / String /
+#    Boolean) IS accepted by a sig declaring that exact concrete
+#    type — match.go's Data==nil rejection at line 233-236 ONLY
+#    rejects type literals for TMap and TList, not for scalar leaves.
+#    So `tag Integer` lands on the [Integer]-specific overload and
+#    the handler (which never reads the value) returns "specific".
+#    Likewise `add Integer 1` succeeds — the handler's AsInteger
+#    silently returns 0 for Integer (the type literal), 1 for the
+#    concrete `1`, sum = 1.
+#
+#    This is the documented behaviour but is a genuine footgun: a
+#    typo `add Integer 1` is silently `add 0 1`. See "Deviations".
+#
+# 6. To capture a type-name word as DATA (an Atom of the same name)
+#    rather than as the type itself, use `quote`. The /q-style
+#    capture suppresses the type-name resolution.
+#
+# Why this matters
+# ----------------
+# Type literals are first-class values — they're how the language
+# spells "the type Integer" or "the type List" in source. Every
+# reflective / generic operation (predicates, type-equality, type
+# unions) builds on them. Pinning down BOTH their dispatch behaviour
+# AND their stringly-rendered surprise lets a future renderer or
+# match-rule revision flag any drift.
+
+# tokens	expected	note
+
+# Type names that fall through the default rendering branch.
+Number	Scalar/Number	bare type name → type literal; renders as type path
+Scalar	Scalar	root scalar type name
+Atom	Scalar/Atom	atom type literal
+Path	Scalar/Path	path type literal
+Record	Object/Record	record metatype name
+Any	Any	universal top type
+List	Node/List	list type literal — rendered via default branch
+Map	Node/Map	map type literal — rendered via default branch
+Type	Type	the metatype root
+
+# Type names whose VType matches a renderer scalar branch.
+# (See the renderer asymmetry note in the file header.)
+Integer	0	type literal is rendered through the TInteger branch as "0"
+Decimal	0	type literal Decimal rendered as "0"
+String	""	type literal String rendered as ""
+Boolean	false	type literal Boolean rendered as "false"
+None	null	None has a dedicated renderer branch — renders as "null"
+
+# Multiple type literals on the stack.
+Integer Integer	0 0	two Integer type literals — rendering quirk visible
+Number Scalar	Scalar/Number Scalar	two type-path-rendered literals
+
+# Type literal + concrete value.
+1 Integer	1 0	concrete 1, then Integer type literal (renders as 0)
+
+# def can bind a type literal.
+def t Integer t	0	t resolves to Integer type literal (renders as 0)
+def t Number t	Scalar/Number	t resolves to Number type literal
+
+# Dispatch surprise: Integer type literal satisfies an [Integer] sig.
+tag Integer	"specific"	the [Integer]-specific overload of tag fires; handler ignores the value
+tag Any	"any"	Any type literal hits the [Any] catch-all
+tag Number	"any"	Number is NOT [Integer] (it's the parent), so [Any] catch-all fires
+tag Scalar	"any"	Scalar is also broader than [Integer]; falls through to [Any]
+tag Decimal	"any"	Decimal type literal — no [Decimal] overload, falls to [Any]
+tag String	"any"	String type literal — no [String] overload, falls to [Any]
+tag Boolean	"any"	Boolean type literal — no [Boolean] overload, falls to [Any]
+
+# Handler-level surprise: integer-arithmetic words accept Integer
+# type literals as if they were 0.
+add Integer 1	1	Integer type literal + 1 → handler reads Integer.AsInteger()=0 → 0+1=1
+add Integer Integer	0	0+0 — both args are type literals, both read as 0
+sub 5 Integer	5	5 - 0 = 5 (Integer type literal as second arg)
+
+# To get the Atom version of a type-name word, quote it.
+quote Integer	atom(Integer)	quote captures the upcoming Word as Atom; suppresses type-name resolution
+quote String	atom(String)	same; type-name resolution does not fire under /q-style capture
+def t quote Integer t	atom(Integer)	t bound to atom(Integer); resolution returns the atom

@@ -1,0 +1,92 @@
+# =====================================================================
+# Principle: Nested forward calls require parens; bare function words
+# in arg position are structural boundaries.
+# =====================================================================
+#
+# A natural-looking form like `add 1 mul 2 3` (read as
+# `add(1, mul(2, 3))`) does NOT work in aqleng. The matchSignature
+# loop (aqleng/go/match.go) explicitly treats a registered function
+# word inside the forward scan as a structural BOUNDARY:
+#
+#     // 1.4: function word — boundary, stop.
+#     if e.registry.Lookup(ww.Name) != nil {
+#         break
+#     }
+#
+# So when `add` is collecting forward args and meets `mul`, the
+# scan stops with only one slot filled. Since the stack is empty,
+# no overload satisfies → signature_error.
+#
+# To nest, the inner call must be PRE-EVALUATED via parens. The
+# engine's preEvalParens pass runs over the forward window before
+# matchSignature so the matcher sees the paren's residual as a
+# concrete value (or values) on the future stack.
+#
+# Rules being asserted
+# --------------------
+# 1. Bare `outer inner …` chains where `inner` is a registered word
+#    in the outer's arg slot ALWAYS error with signature_error.
+#    (Both sides forward-prec, both 2-arg, regardless of order.)
+# 2. Wrapping the inner in parens fixes the chain — paren bodies
+#    pre-evaluate to a concrete value that fills the outer slot.
+# 3. Left-to-right intermediate-on-stack works WITHOUT parens — the
+#    inner fires first because its tokens come left of the outer.
+# 4. A def whose body is a list (`def NAME [body]`) splices its body
+#    AT THE PUSH SITE — there is no "wait for forward args" mode for
+#    list-body defs. So `def doub [dup add] doub 5` fails: the body
+#    is spliced immediately and `dup` runs on an empty stack.
+#    `5 doub` works because 5 is pushed first, then `doub` splices
+#    its body which finds 5.
+# 5. A def whose body is an `fn`-built FnDefInfo IS forward-collecting
+#    via the synthesised native handler, so `double 5` works after
+#    `def double (fn [...])`.
+# 6. Even forward-collecting fn-defs cannot serve as inner words in
+#    another forward-collecting outer — the outer's matchSignature
+#    still hits the registered-word boundary.
+#
+# Why this matters
+# ----------------
+# The boundary rule trades expressive power for unambiguity: a reader
+# can scan left-to-right and know that each forward-collecting word
+# absorbs ONLY non-word literals (and pre-evaluated paren groups).
+# Without it, `add 1 mul 2 3` would be ambiguous between
+# `add(1, mul(2, 3))` and "the 5-token program that left a residue".
+# The engine picks the unambiguous reading: parens are explicit, the
+# rest is a flat scan.
+#
+# This file is the regression test for the boundary rule. Each
+# "should error" row pins the rule down; each "with parens" row
+# shows the workaround the language design intends.
+
+# tokens	expected	note
+
+# 1. Bare function-in-arg-slot ALWAYS errors.
+add 1 mul 2 3	ERROR:signature_error	add scans forward, hits mul (registered), breaks at fwd=1; stack empty; no match
+add mul 2 3 1	ERROR:signature_error	mul is at sig[0]; boundary at first scan step
+mul add 1 2 3	ERROR:signature_error	mul scans forward, hits add boundary; no match
+sub mul 2 3 1	ERROR:signature_error	sub also boundaries on mul
+1 add mul 2 3	ERROR:signature_error	prefix 1 + bare-inner-forward still errors
+
+# 2. Wrapping the inner in parens fixes the chain.
+add 1 ( mul 2 3 )	7	paren pre-evaluates to 6 → add(1,6) = 7
+add ( mul 2 3 ) 1	7	paren in sig[0]; sig[1] forward = 1 → add(6,1) = 7
+mul ( add 1 2 ) 3	9	paren=3 fills mul sig[0]; sig[1]=3 → mul(3,3)=9
+sub ( mul 2 3 ) 1	5	paren=6 fills sub sig[0]; sig[1]=1 → sub(6,1)=5
+mul ( sub 10 3 ) 2	14	paren=7 fills mul sig[0]; sig[1]=2 → 7*2=14
+add 1 ( mul 2 ( add 3 4 ) )	15	deep nesting via parens: add 3 4 = 7; mul 2 7 = 14; add 1 14 = 15
+
+# 3. Left-to-right intermediate-on-stack works without parens.
+add 2 3 mul 4	20	add fires first → stack=[5]; mul collects forward 4 with stack 5 → 5*4=20
+2 3 add mul 4 5	5 20	add fires producing 5 on stack; mul collects 4,5 ALL FORWARD; mul=20; the 5 from add stays as residue. Note the surprise: mul does NOT consume the stack-resident 5 because its forward scan succeeds first.
+
+# 4. List-body defs splice immediately — no forward-collection.
+def doub [ dup add ] doub 5	ERROR:signature_error	doub splices [dup add] at pointer; dup needs 1 stack value, sees empty stack
+def doub [ dup add ] 5 doub	10	5 pushed first, then doub splices; dup→[5,5], add→[10]
+
+# 5. fn-built defs DO forward-collect (synthesised native handler).
+def double ( fn [ a:Integer ] [ Integer ] [ a a add ] ) double 5	10	fn-def is a forward-prec native; collects 5 from forward
+def double ( fn [ a:Integer ] [ Integer ] [ a a add ] ) 5 double	10	prefix form also works
+
+# 6. Even fn-built defs can't serve as inner forward in a bare chain.
+def double ( fn [ a:Integer ] [ Integer ] [ a a add ] ) add 1 double 5	ERROR:signature_error	add still boundaries on the registered double word
+def double ( fn [ a:Integer ] [ Integer ] [ a a add ] ) add 1 ( double 5 )	11	paren pre-evaluates double(5)=10 into add's sig[1] slot; add(1,10)=11

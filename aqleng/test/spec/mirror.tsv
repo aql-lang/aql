@@ -1,0 +1,57 @@
+# =====================================================================
+# Principle: The four-form mirror equivalence rule for 2-arg words.
+# =====================================================================
+#
+# Per CLAUDE.md (Argument Ordering, post-§1.4): every Signature has
+# a BarrierPos. For a 2-arg signature with the default barrier (= N),
+# all four physical arrangements of word + args produce the SAME sig
+# binding, EXCEPT one — the so-called "swap form".
+#
+# Given a non-commutative 2-arg word `f` with handler that computes
+# `args[1] - args[0]`, the canonical four forms are:
+#
+#   f a b    — all-forward                : sig=[a,b]
+#   b f a    — 1 prefix + 1 forward (post)  : sig=[a,b]    (mirror of all-forward)
+#   b a f    — all-prefix                  : sig=[a,b]    (mirror)
+#   a f b    — 1 prefix + 1 forward (pre)   : sig=[b,a]    (SWAP — the only odd one)
+#
+# Three of the four forms are equivalent; the fourth — the swap form
+# — is the only arrangement where the prefix value lands at sig[1]
+# instead of sig[0]. This is intentional: it lets the source `10
+# sub 3` read left-to-right as "10 minus 3", matching how a human
+# parser scans the line.
+#
+# This file uses the spec runner's `sub` word (registered with handler
+# `args[0] - args[1]`) so the four expected outcomes are -7, -7, -7, +7
+# for the four forms applied to (10, 3). A clean four-row table.
+#
+# Why this matters
+# ----------------
+# The mirror rule is the cleanest user-visible knob in the dispatch
+# system. If it ever broke (e.g. a refactor of matchSignature changed
+# the stack-walk direction or rearrangeForForward shifted a slot),
+# every infix-style call site in the language would silently swap.
+# This is precisely the kind of regression a test row should catch
+# at PR time, not after a release. CLAUDE.md describes the rule in
+# prose — these rows lock the prose into executable form.
+#
+# Algebraic note: the rule is sometimes phrased as "left-to-right
+# nearest-first": forward-collected args fill sig from index 0
+# upward in source order; remaining sig slots fill from the stack
+# top downward. The four forms above just enumerate the (forward,
+# prefix) splits for arity 2. See multiarg.tsv for the arity-3
+# extension.
+
+# tokens	expected	note
+sub 10 3	7	form: f a b      → forward=[a=10,b=3], sig=[10,3], 10-3 = 7
+3 sub 10	7	form: b f a      → forward=[a=10],     stk top=b=3,    sig=[10,3], 10-3 = 7
+3 10 sub	7	form: b a f      → forward=[],         stk top=a=10 deeper=b=3, sig=[10,3], 10-3 = 7
+10 sub 3	-7	form: a f b      → SWAP: forward=[b=3], stk top=a=10, sig=[3,10], 3-10 = -7
+
+# Cross-check with `concat` (also forward-prec, also non-commutative).
+# Handler is plain string concatenation (args[0] + args[1]); inputs
+# chosen so source-order vs swapped is visually obvious.
+concat "ab" "cd"	"abcd"	mirror: forward=[a="ab",b="cd"], sig[0]=ab sig[1]=cd → "abcd"
+"cd" concat "ab"	"abcd"	mirror: 1 prefix + 1 forward (b f a)
+"cd" "ab" concat	"abcd"	mirror: all-prefix; stack top=ab, deeper=cd, sig=[ab,cd]
+"ab" concat "cd"	"cdab"	SWAP: forward=[b="cd"], stk top=a="ab", sig=[cd,ab] → "cdab"

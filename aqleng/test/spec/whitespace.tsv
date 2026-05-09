@@ -1,0 +1,58 @@
+# =====================================================================
+# Principle: Whitespace insignificance — runs of spaces/tabs separate
+# tokens but never produce empty tokens.
+# =====================================================================
+#
+# AQL is a whitespace-delimited language at the lexical level. The
+# only role of whitespace is to separate tokens; runs of any length
+# are equivalent to a single delimiter. This file pins down that
+# rule across the spec runner's tokenizer.
+#
+# Rules being asserted
+# --------------------
+# 1. A single space and a tab between tokens are equivalent.
+# 2. Multiple spaces / tabs between tokens are equivalent to one.
+# 3. Leading and trailing whitespace is ignored.
+# 4. Empty input (or input that is all whitespace) produces an empty
+#    result stack — NOT an error.
+# 5. Whitespace inside string quotes is preserved verbatim.
+# 6. Whitespace inside list literal brackets [` ... `] is just token
+#    separation between elements.
+#
+# Why this matters
+# ----------------
+# A pretty-printer / formatter relies on the rule that re-spacing
+# a program never changes its semantics. Pin the rule explicitly so
+# any future tokenizer change (e.g. a "significant indentation"
+# experiment) shows up as a regression here.
+#
+# Spec runner notes
+# -----------------
+# `tokenizeSpec` (aqleng/go/spec_test.go) handles whitespace via:
+#
+#     for i < len(s) && (s[i] == ' ' || s[i] == '\t') { i++ }
+#
+# at the start of each token. So leading whitespace is consumed
+# before each token, and there is no "empty token" production —
+# the loop simply moves on to the next non-whitespace.
+
+# tokens	expected	note
+
+# (Note: TSV cells separate columns by TAB; the input column itself
+# uses spaces / tabs as token separators. Row 1 below uses a row of
+# extra spaces that the tokenizer should treat as single separators.)
+
+1   2   3	1 2 3	multiple spaces between tokens reduce to single
+1 2 3	1 2 3	canonical single-space form (control)
+1     add     2	3	multiple-space-separated forward call still works
+add   2   3	5	multiple spaces between word and forward args
+"hello world"	"hello world"	whitespace inside a string is preserved verbatim
+"   "	"   "	a string of three spaces is a 3-character string
+[ 1 2 3 ]	[1 2 3]	list element separation
+[   1   2   3   ]	[1 2 3]	multiple spaces inside brackets reduce to single
+[ 1   "a   b"   3 ]	[1 "a   b" 3]	whitespace inside a list-element string preserved
+
+# Empty / all-whitespace input.
+# (TSV row encodings here use literal empty input cells.)
+		empty input → empty stack (no error)
+   		all-whitespace input → empty stack

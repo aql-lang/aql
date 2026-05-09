@@ -1,0 +1,50 @@
+# =====================================================================
+# Principle: `null` and the None bottom type.
+# =====================================================================
+#
+# AQL's type lattice has an explicit None type at one of the two top-
+# level "bottoms": None (the unit type — exactly one inhabitant) and
+# Never (the uninhabited type). The spec tokenizer maps the bare
+# token `null` to a None type-literal value, so `null` is the
+# user-facing way to spell that single inhabitant.
+#
+# Rules being asserted
+# --------------------
+# 1. The bare token `null` parses to a None-typed Value with Data=nil
+#    (a "type literal" — the type *is* the value).
+# 2. The renderer prints any None-typed nil-Data value as `null`.
+# 3. None matches no concrete-typed sig: feeding `null` to a sig that
+#    expects Integer / String / Boolean / List raises signature_error.
+# 4. None DOES match a sig declared with Any. The `tag` test word's
+#    [Any] catch-all is the canonical witness; passing `null` lands
+#    there and returns "any".
+# 5. None survives stack residency unchanged: a `null` left on the
+#    stack at end-of-Run renders as `null`.
+# 6. `first` on an empty list returns `null` — the conventional
+#    "no value" sentinel for missing-element queries. (Confirms the
+#    handler in spec_test.go::registerSpecWords actually emits a
+#    None type literal here.)
+#
+# Why this matters
+# ----------------
+# None is the universal "no result" / "absent" sentinel: it lets
+# functions like `first []` return *something* without raising and
+# without conflating "empty list returned nothing" with "list has a
+# zero element". Sigs that accept None explicitly (or fall back to
+# Any) must continue to handle it; sigs that do not must reject it
+# cleanly with signature_error rather than panicking on a nil Data
+# payload — the panic-prevention rule from CLAUDE.md.
+
+# tokens	expected	note
+null	null	bare null round-trips as a None type literal
+null null	null null	multiple nulls coexist on the stack
+1 null 2	1 null 2	null between integers — none of them interact
+tag null	"any"	None-typed value lands at [Any] catch-all overload
+add null 1	ERROR:signature	add wants Integer Integer; None fails sig
+add 1 null	ERROR:signature	null in second forward slot also fails
+concat "a" null	ERROR:signature	concat wants String String; None fails
+not null	ERROR:signature	not wants Boolean; None fails
+length null	ERROR:signature	length wants List; None fails
+first [ ]	null	empty list → first returns the None sentinel
+length [ null ]	1	a list containing null is still a 1-element list
+first [ null 1 ]	null	first element of a list whose head is null
