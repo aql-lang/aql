@@ -117,23 +117,22 @@ func registerCoreDef(r *Registry) {
 	})
 }
 
-// registerCoreFn installs `fn`. Two overloads:
+// registerCoreFn installs `fn [triples-list]`. The single list arg
+// contains `[input-sig, output-sig, body]` repeated as many times as
+// there are overloads — same shape the production aql `fn` accepts.
+// A single-sig def therefore wraps the three lists in an outer list:
 //
-//   fn [triples-list]       — multi-sig form. The single list arg
-//                             contains [input-sig, output-sig, body]
-//                             repeated as many times as there are
-//                             overloads. This is the production aql
-//                             form, and is required for multi-sig.
+//   def double fn [ [a:Integer] [Integer] [a a addq] ]
 //
-//   fn [input] [output] [body]
-//                           — single-sig sugar. Equivalent to wrapping
-//                             the three lists in an outer list and
-//                             passing to the multi-sig form. Kept for
-//                             ergonomics; existing single-sig spec
-//                             rows don't need the outer-bracket pair.
+// Multi-sig is the same shape with N triples flat in the outer list:
 //
-// Both forms route through ParseFnDef in fn_def.go — same code path
-// the production aql `def`/`fn` use. The shared parser handles:
+//   def f fn [
+//     [n:Integer]            [Integer] [n addq n]
+//     [n:Integer m:Integer]  [Integer] [n m mulq]
+//   ]
+//
+// Routes through ParseFnDef in fn_def.go — same code path the
+// production aql `def`/`fn` use. The shared parser handles:
 //
 //   - signature triples [input-sig output-sig body], repeated
 //   - `?` marker for optional params, `|` for BarrierPos
@@ -152,49 +151,28 @@ func registerCoreDef(r *Registry) {
 // which picks the best (highest-arity, most-specific) match per call
 // site.
 func registerCoreFn(r *Registry) {
-	multiHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-		// args[0] is a list of triples — pass its elements to ParseFnDef.
-		if args[0].Data == nil {
-			return nil, &AqlError{
-				Code:   "fn_invalid_spec",
-				Detail: "fn: multi-sig form requires a concrete list of triples",
-			}
-		}
-		spec := args[0].AsList().Slice()
-		info, err := ParseFnDef(reg, spec)
-		if err != nil {
-			return nil, err
-		}
-		return []Value{NewFnDef(info)}, nil
-	}
-	sugarHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-		// Three-arg sugar: assemble [args[0], args[1], args[2]] and
-		// route through ParseFnDef. Equivalent in every way to the
-		// multi-sig form's single-triple case.
-		spec := []Value{args[0], args[1], args[2]}
-		info, err := ParseFnDef(reg, spec)
-		if err != nil {
-			return nil, err
-		}
-		return []Value{NewFnDef(info)}, nil
-	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args:       []Type{TList, TList, TList},
-				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-				Handler:    sugarHandler,
-				Returns:    []Type{TFunction},
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				if args[0].Data == nil {
+					return nil, &AqlError{
+						Code:   "fn_invalid_spec",
+						Detail: "fn: argument must be a concrete list of triples",
+					}
+				}
+				spec := args[0].AsList().Slice()
+				info, err := ParseFnDef(reg, spec)
+				if err != nil {
+					return nil, err
+				}
+				return []Value{NewFnDef(info)}, nil
 			},
-			{
-				Args:       []Type{TList},
-				NoEvalArgs: map[int]bool{0: true},
-				Handler:    multiHandler,
-				Returns:    []Type{TFunction},
-			},
-		},
+			Returns: []Type{TFunction},
+		}},
 	})
 }
 

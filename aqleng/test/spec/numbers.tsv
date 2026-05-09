@@ -295,27 +295,27 @@ end 1 addq 2 3	1 5	leading end has no pending fwd → no-op; then 1 pushes; addq
 
 # ---------- 8. Composition with custom user-defined functions ----------
 # def + fn build user functions. Bodies use the same numeric ops.
-def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5 inc	6	user fn computing n + 1 via addq inside the body
-def doub ( fn [ n:Integer ] [ Integer ] [ n n addq ] ) 5 doub	10	user fn computing n + n
-def sqr ( fn [ n:Integer ] [ Integer ] [ n n mulq ] ) 7 sqr	49	user fn computing n * n via mulq
-def neg2 ( fn [ n:Integer ] [ Integer ] [ n negq ] ) 5 neg2	-5	user fn wrapping negq
+def inc fn [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 5 inc	6	user fn computing n + 1 via addq inside the body
+def doub fn [ [ n:Integer ] [ Integer ] [ n n addq ] ] 5 doub	10	user fn computing n + n
+def sqr fn [ [ n:Integer ] [ Integer ] [ n n mulq ] ] 7 sqr	49	user fn computing n * n via mulq
+def neg2 fn [ [ n:Integer ] [ Integer ] [ n negq ] ] 5 neg2	-5	user fn wrapping negq
 
 # Decimal version — the body's args/return types still match Integer
 # in this fn (the spec runner's fn sig only accepts a single typed
 # param list); but the Number-typed addq still handles Integer args
 # normally. For Decimal args, the call would fail sig match at fn's
 # [Integer] entry — pinned in the next row.
-def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) 5.0 inc	ERROR:signature	5.0 fails the fn's [Integer] param sig
+def inc fn [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 5.0 inc	ERROR:signature	5.0 fails the fn's [Integer] param sig
 
 # Composition: a user fn calling another user fn.
-def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) def inc2 ( fn [ n:Integer ] [ Integer ] [ n inc inc ] ) 5 inc2	7	inc2 chains two inc calls
+def inc fn [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] def inc2 fn [ [ n:Integer ] [ Integer ] [ n inc inc ] ] 5 inc2	7	inc2 chains two inc calls
 
 # Custom fn body using subq — exercises the b-a convention.
-def diff ( fn [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 diff 3	7	diff(10, 3) → param a=3 (fwd), b=10 (stk); body subq a b → subq 3 10 → sig=[3, 10] → 10-3 = 7
+def diff fn [ [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ] 10 diff 3	7	diff(10, 3) → param a=3 (fwd), b=10 (stk); body subq a b → subq 3 10 → sig=[3, 10] → 10-3 = 7
 
 # List-body splice — same machinery, no fn wrap. Body splices
 # in-place at the use site (see code-splice.tsv).
-def trip ( fn [ n:Integer ] [ Integer ] [ n n addq n addq ] ) 4 trip	12	body computes n + n + n via two chained addq calls
+def trip fn [ [ n:Integer ] [ Integer ] [ n n addq n addq ] ] 4 trip	12	body computes n + n + n via two chained addq calls
 
 # ---------- 8b. Optional fn parameters (`?`) ----------
 # A standalone `?` Word in the param list marks the PRECEDING param
@@ -339,40 +339,40 @@ def trip ( fn [ n:Integer ] [ Integer ] [ n n addq n addq ] ) 4 trip	12	body com
 
 # One-arg fn with the param optional. Both call forms work — providing
 # the arg or omitting it.
-def inc ( fn [ n:Integer ? ] [ Integer ] [ n 1 addq ] ) inc 5	6	param provided: n=5, body computes n+1=6
-def inc ( fn [ n:Integer ? ] [ Integer ] [ n 1 addq ] ) inc	1	param omitted: n defaulted to BaseValue(Integer)=0, body 0+1=1
-def inc ( fn [ n:Integer ? ] [ Integer ] [ n 1 addq ] ) 5 inc	6	stack-form: same as forward; arg comes from the stack via the unified §1.4 fallback
+def inc fn [ [ n:Integer ? ] [ Integer ] [ n 1 addq ] ] inc 5	6	param provided: n=5, body computes n+1=6
+def inc fn [ [ n:Integer ? ] [ Integer ] [ n 1 addq ] ] inc	1	param omitted: n defaulted to BaseValue(Integer)=0, body 0+1=1
+def inc fn [ [ n:Integer ? ] [ Integer ] [ n 1 addq ] ] 5 inc	6	stack-form: same as forward; arg comes from the stack via the unified §1.4 fallback
 
 # Two-arg fn, only the second optional.
-def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) add-ab 5 3	8	both args provided: a=5, b=3 → addq(5,3)=8
-def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) add-ab 5	5	b omitted: defaulted to 0 → 5+0=5
-def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) 5 3 add-ab	8	stack form, both args provided
+def add-ab fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] add-ab 5 3	8	both args provided: a=5, b=3 → addq(5,3)=8
+def add-ab fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] add-ab 5	5	b omitted: defaulted to 0 → 5+0=5
+def add-ab fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] 5 3 add-ab	8	stack form, both args provided
 
 # Two-arg fn, both optional. ExpandOptionalSigs generates 4 sigs:
 # full [a, b], reduced [a only], reduced [b only], reduced [].
-def both ( fn [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ) both 1 2	3	both provided
-def both ( fn [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ) both 1	1	one provided — matches the 1-arg reduced sig (here: a=1, b defaulted to 0); 1+0=1
-def both ( fn [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ) both	0	none provided — matches the 0-arg reduced sig; both defaulted to 0 → 0+0=0
+def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both 1 2	3	both provided
+def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both 1	1	one provided — matches the 1-arg reduced sig (here: a=1, b defaulted to 0); 1+0=1
+def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both	0	none provided — matches the 0-arg reduced sig; both defaulted to 0 → 0+0=0
 
 # Decimal optional — defaults to 0.0.
-def dub ( fn [ a:Decimal ? ] [ Decimal ] [ a a addq ] ) dub 5.0	10.0	a=5.0, body 5.0+5.0=10.0
-def dub ( fn [ a:Decimal ? ] [ Decimal ] [ a a addq ] ) dub	0.0	a defaulted to BaseValue(Decimal)=0.0, body 0.0+0.0=0.0
+def dub fn [ [ a:Decimal ? ] [ Decimal ] [ a a addq ] ] dub 5.0	10.0	a=5.0, body 5.0+5.0=10.0
+def dub fn [ [ a:Decimal ? ] [ Decimal ] [ a a addq ] ] dub	0.0	a defaulted to BaseValue(Decimal)=0.0, body 0.0+0.0=0.0
 
 # Number optional — BaseValue picks Integer (0) for the Number root.
 # Calls with Decimal still flow through the Number-typed sig and stay
 # as Decimal via the contagion rule.
-def m ( fn [ a:Number ? ] [ Number ] [ a a addq ] ) m 5	10	a=5 (Integer), body 5+5=10
-def m ( fn [ a:Number ? ] [ Number ] [ a a addq ] ) m 5.0	10.0	a=5.0 (Decimal), contagion → 10.0
-def m ( fn [ a:Number ? ] [ Number ] [ a a addq ] ) m	0	a defaulted to BaseValue(Number)=Integer 0; 0+0=0
+def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m 5	10	a=5 (Integer), body 5+5=10
+def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m 5.0	10.0	a=5.0 (Decimal), contagion → 10.0
+def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m	0	a defaulted to BaseValue(Number)=Integer 0; 0+0=0
 
 # Mixed required/optional params — required must always be present,
 # optionals can be present or omitted.
-def f ( fn [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ) f 1 2 3	6	all three: 1+(2+3)=6 via chained addq
-def f ( fn [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ) f 1 2	3	c omitted (=0): 1+(2+0)=3
-def f ( fn [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ) f 1	1	b and c omitted (both =0): 1+(0+0)=1
+def f fn [ [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ] f 1 2 3	6	all three: 1+(2+3)=6 via chained addq
+def f fn [ [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ] f 1 2	3	c omitted (=0): 1+(2+0)=3
+def f fn [ [ a:Integer b:Integer ? c:Integer ? ] [ Integer ] [ a b c addq addq ] ] f 1	1	b and c omitted (both =0): 1+(0+0)=1
 
 # Required arg still required — too few args fails.
-def f ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) f	ERROR:signature	a is required; no 0-arg sig generated since a is not optional
+def f fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] f	ERROR:signature	a is required; no 0-arg sig generated since a is not optional
 
 # ---------- 9. Type mismatches still error ----------
 addq "hello" 3.5	ERROR:signature	String at sig[0] fails Number match

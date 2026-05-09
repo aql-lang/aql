@@ -84,9 +84,9 @@ def doub [ dup addq ] doub 5	ERROR:signature_error	doub splices [dup addq] at po
 def doub [ dup addq ] 5 doub	10	5 pushed first, then doub splices; dup→[5,5], addq→[10]
 
 # 5. fn-built defs DO forward-collect (synthesised native handler).
-def double ( fn [ a:Integer ] [ Integer ] [ a a addq ] ) double 5	10	fn-def is a forward-prec native; collects 5 from forward
-def double ( fn [ a:Integer ] [ Integer ] [ a a addq ] ) 5 double	10	prefix form also works
+def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] double 5	10	fn-def is a forward-prec native; collects 5 from forward
+def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] 5 double	10	prefix form also works
 
 # 6. Even fn-built defs can't serve as inner forward in a bare chain.
-def double ( fn [ a:Integer ] [ Integer ] [ a a addq ] ) addq 1 double 5	ERROR:signature_error	addq still boundaries on the registered double word
-def double ( fn [ a:Integer ] [ Integer ] [ a a addq ] ) addq 1 ( double 5 )	11	paren pre-evaluates double(5)=10 into addq's sig[1] slot; addq(1,10)=11
+def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] addq 1 double 5	ERROR:signature_error	addq still boundaries on the registered double word
+def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] addq 1 ( double 5 )	11	paren pre-evaluates double(5)=10 into addq's sig[1] slot; addq(1,10)=11
