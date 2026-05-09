@@ -52,6 +52,13 @@
 # conditionals which aqleng's spec runner doesn't yet register.
 # They land once `if`/`for` core words land. See section 9.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   mulq  — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
+#   negq  — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag
+#   subq  — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # ---------- 1. Increment / decrement / scale ----------

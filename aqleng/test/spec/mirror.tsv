@@ -47,6 +47,11 @@
 # class assignment for any single arrangement surfaces here at PR
 # time.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
+#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # Class A (sig=[3, 10] for X=10, Y=3): result = 10 - 3 = 7.

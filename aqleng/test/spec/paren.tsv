@@ -5,6 +5,11 @@
 #
 # Spec tokenizer: `(` and `)` are bare tokens — surround with spaces.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   mulq  — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # Simple inline group, no surrounding word

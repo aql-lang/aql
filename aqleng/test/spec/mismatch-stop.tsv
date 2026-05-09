@@ -51,6 +51,15 @@
 # permissive composition over loud error detection here. Pin the
 # rule down so the trade-off is visible to spec readers.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
+#   firstq   — [List] forward-prec — first element or None for empty list
+#   lengthq  — [List] forward-prec — list length as Integer
+#   negq     — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag
+#   notq     — [Boolean] forward-prec — !args[0]
+# === end fixtures ===
+
 # tokens	expected	note
 
 # 1. 1-arg forward word + matching arg + extra residue.

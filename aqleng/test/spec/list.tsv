@@ -8,6 +8,11 @@
 #   lengthq — sig [List]. Returns the element count as Integer.
 #   first  — sig [List]. Returns the first element, or None on empty.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   firstq   — [List] forward-prec — first element or None for empty list
+#   lengthq  — [List] forward-prec — list length as Integer
+# === end fixtures ===
+
 # tokens	expected	note
 [ 1 2 3 ]	[1 2 3]	bare list literal renders as space-separated elements
 [ ]	[]	empty list

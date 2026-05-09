@@ -16,6 +16,14 @@
 # of auto-eval and also making def-subq treat it as data instead of
 # splicing it as a code body.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   firstq   — [List] forward-prec — first element or None for empty list
+#   lengthq  — [List] forward-prec — list length as Integer
+#   mulq     — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
+#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # Auto-eval at consume.

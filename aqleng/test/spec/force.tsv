@@ -15,6 +15,10 @@
 # return is two copies of args[0], so the row outputs make the
 # forward-vs-stack source of args[0] visible.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # /s on a forward-precedence word: forward window closed, args must come from prefix.

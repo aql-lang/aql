@@ -18,6 +18,12 @@
 #            patterns:{0: "admin"} → returns "matched-admin"
 #            no patterns           → returns "other"
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   codeq   — [Integer] Patterns{0:99}→"ninety-nine" / fallback →"general" — literal-pattern dispatch
+#   factq   — [Integer] Patterns{0:0}→1 / fallback [Integer]→n — §1.1 literal-pattern dispatch
+#   routeq  — [String] Patterns{0:"admin"}→"matched-admin" / fallback →"other" — literal-pattern dispatch
+# === end fixtures ===
+
 # tokens	expected	note
 factq 0	1	pattern 0 matches → base-case overload
 factq 5	5	non-zero falls through to catch-all → echoes the arg

@@ -58,6 +58,12 @@
 # "should error" row pins the rule down; each "with parens" row
 # shows the workaround the language design intends.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   mulq  — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
+#   subq  — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # 1. Bare function-in-arg-slot ALWAYS errors.

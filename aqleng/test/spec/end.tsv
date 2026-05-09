@@ -9,6 +9,10 @@
 #   raise signature_error (forward dispatch must have all sig
 #   slots filled). Mirrors aqleng/go/engine.go's stepEnd.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens	expected	note
 end		no-op when there's no pending forward; empty stack
 1 addq 2 end	3	end after a fully-resolved dispatch is harmless

@@ -67,6 +67,15 @@
 # closure rule; the b-op-a handler convention is the production
 # engine's first surface contract. These rows pin all three.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq   — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   mulq   — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
+#   negq   — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag
+#   subq   — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+#   tagq   — two overloads [Integer]→"specific" / [Any]→"any" — specificity scoring
+#   tripq  — [Integer Integer Integer] forward-prec — "a,b,c" (3-arg position mixing)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # ---------- 1. Literal round-trip ----------

@@ -9,6 +9,10 @@
 #
 # So forward fills sig[0] (one token), sig[1] must come from the stack.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   pairq  — [Integer | Integer] BarrierPos=1 — "a:b" (mixed forward/stack)
+# === end fixtures ===
+
 # tokens	expected	note
 2 pairq 5	"5:2"	stack=[2], forward=[5]: sig[0]=5 (fwd), sig[1]=2 (stk) → "5:2"
 2 5 pairq	"5:2"	all-stack: sig[0]=top=5, sig[1]=2 (forward limit unused, stack supplies both)

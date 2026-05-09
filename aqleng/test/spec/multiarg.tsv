@@ -9,6 +9,10 @@
 #
 # Forward-precedence (default barrier = 3 = N).
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   tripq  — [Integer Integer Integer] forward-prec — "a,b,c" (3-arg position mixing)
+# === end fixtures ===
+
 # tokens	expected	note
 tripq 1 2 3	"1,2,3"	all-forward: sig[0]=1, sig[1]=2, sig[2]=3
 3 tripq 1 2	"1,2,3"	1 prefix + 2 forward: sig[0]=1 (fwd), sig[1]=2 (fwd), sig[2]=3 (top of stack)

@@ -1,5 +1,10 @@
 # =====================================================================
 # Principle: Whitespace insignificance — runs of spaces/tabs separate
+
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+# === end fixtures ===
+
 # tokens but never produce empty tokens.
 # =====================================================================
 #

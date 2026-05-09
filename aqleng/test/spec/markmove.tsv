@@ -14,6 +14,11 @@
 # on top of richer Move/Cont state; we port only the one-shot
 # splice variant here.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   replayq  — [List] NoEvalArgs — emits Mark+body+Move (one-shot replay; body runs twice)
+# === end fixtures ===
+
 # tokens	expected	note
 
 # Self-contained body: just pushes a literal. The original tokens

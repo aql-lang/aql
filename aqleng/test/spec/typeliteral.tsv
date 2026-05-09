@@ -75,6 +75,12 @@
 # AND their stringly-rendered surprise lets a future renderer or
 # match-rule revision flag any drift.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   subq  — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+#   tagq  — two overloads [Integer]→"specific" / [Any]→"any" — specificity scoring
+# === end fixtures ===
+
 # tokens	expected	note
 
 # Type names that fall through the default rendering branch.

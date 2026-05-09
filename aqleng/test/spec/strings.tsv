@@ -7,6 +7,11 @@
 #
 # Equivalence-class enumeration is in mirror.tsv.
 
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
+#   notq     — [Boolean] forward-prec — !args[0]
+# === end fixtures ===
+
 # tokens	expected	note
 "hello"	"hello"	string literal
 "hello" concatq " world"	"hello world"	infix natural reading: stk=["hello"], fwd=[" world"] → sig=[" world", "hello"] → handler returns "hello"+" world"
