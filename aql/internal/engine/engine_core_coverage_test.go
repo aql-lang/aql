@@ -176,23 +176,23 @@ func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 		NewList([]Value{NewWord("x")}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myOverload"),
+		NewWord("def"), NewWord("my-overload"),
 		NewWord("fn"), fnBody,
 		NewWord("end"),
 	})
 
 	// Integer overload
-	result := runAQL(t, r, []Value{NewInteger(5), NewWord("myOverload")})
+	result := runAQL(t, r, []Value{NewInteger(5), NewWord("my-overload")})
 	_as10, _ := result[0].AsNumber()
 	if len(result) != 1 || _as10 != 15 {
-		t.Errorf("5 myOverload = %v, want 15", result)
+		t.Errorf("5 my-overload = %v, want 15", result)
 	}
 
 	// String overload
-	result = runAQL(t, r, []Value{NewString("hello"), NewWord("myOverload")})
+	result = runAQL(t, r, []Value{NewString("hello"), NewWord("my-overload")})
 	_as11, _ := result[0].AsString()
 	if len(result) != 1 || _as11 != "hello" {
-		t.Errorf("'hello' myOverload = %v, want 'hello'", result)
+		t.Errorf("'hello' my-overload = %v, want 'hello'", result)
 	}
 }
 
@@ -314,25 +314,25 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("tgtUndef"),
+		NewWord("def"), NewWord("tgt-undef"),
 		NewWord("fn"), fnBody,
 		NewWord("end"),
 	})
 
 	// Verify it works
-	result := runAQL(t, r, []Value{NewInteger(10), NewWord("tgtUndef")})
+	result := runAQL(t, r, []Value{NewInteger(10), NewWord("tgt-undef")})
 	_as16, _ := result[0].AsNumber()
 	if len(result) != 1 || _as16 != 11 {
-		t.Fatalf("10 tgtUndef = %v, want 11", result)
+		t.Fatalf("10 tgt-undef = %v, want 11", result)
 	}
 
-	// Targeted undef with fn spec: undef tgtUndef fn [[Number] [Number]]
+	// Targeted undef with fn spec: undef tgt-undef fn [[Number] [Number]]
 	undefSpec := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("undef"), NewWord("tgtUndef"),
+		NewWord("undef"), NewWord("tgt-undef"),
 		NewWord("fn"), undefSpec,
 	})
 }

@@ -165,7 +165,7 @@ func TestIntegUndefWithString(t *testing.T) {
 
 func TestIntegUndefFnTargeted(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def myFn fn [[x:Number] [Number] [x add 1]] end
+	// def my-fn fn [[x:Number] [Number] [x add 1]] end
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	fnBody := NewList([]Value{
@@ -174,27 +174,27 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myFn"),
+		NewWord("def"), NewWord("my-fn"),
 		NewWord("fn"), fnBody,
 		NewWord("end"),
 	})
 
-	// Verify myFn works: 5 myFn => 6
-	result := runAQL(t, r, []Value{NewInteger(5), NewWord("myFn")})
+	// Verify my-fn works: 5 my-fn => 6
+	result := runAQL(t, r, []Value{NewInteger(5), NewWord("my-fn")})
 	_as5, _ := result[0].AsNumber()
 	if len(result) != 1 || _as5 != 6 {
-		t.Fatalf("5 myFn = %v, want 6", result)
+		t.Fatalf("5 my-fn = %v, want 6", result)
 	}
 
-	// undef myFn (complete removal)
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("myFn")})
+	// undef my-fn (complete removal)
+	runAQL(t, r, []Value{NewWord("undef"), NewWord("my-fn")})
 }
 
 // === 3. fn word ===
 
 func TestIntegFnMultipleParams(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def addTwo fn [[x:Number y:Number] [Number] [x add y]] end
+	// def add-two fn [[x:Number y:Number] [Number] [x add y]] end
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
@@ -205,16 +205,16 @@ func TestIntegFnMultipleParams(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("y")}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("addTwo"),
+		NewWord("def"), NewWord("add-two"),
 		NewWord("fn"), fnBody,
 		NewWord("end"),
 	})
 
-	// 3 5 addTwo => 8
-	result := runAQL(t, r, []Value{NewInteger(3), NewInteger(5), NewWord("addTwo")})
+	// 3 5 add-two => 8
+	result := runAQL(t, r, []Value{NewInteger(3), NewInteger(5), NewWord("add-two")})
 	_as6, _ := result[0].AsNumber()
 	if len(result) != 1 || _as6 != 8 {
-		t.Errorf("3 5 addTwo = %v, want 8", result)
+		t.Errorf("3 5 add-two = %v, want 8", result)
 	}
 }
 

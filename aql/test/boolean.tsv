@@ -589,12 +589,13 @@ String tor Number tor Boolean tor None	Scalar/String|Scalar/Number|Scalar/Boolea
 # 25. any/all — scalar edge cases (numeric)
 # =====================================================================
 
-# Decimals (note: 0.0 prints as 0 in Value.String()).
+# Decimals — 0.0 renders with the `.0` suffix to stay visually
+# distinct from Integer 0 (formatDecimal in aqleng/go/print.go).
 [1.5 0.0 2.5] any	1.5
-[0.0 0.0 0.0] any	0
+[0.0 0.0 0.0] any	0.0
 [0.0 1.5] any	1.5
 [1.5 2.5 3.5] all	3.5
-[1.5 0.0 3.5] all	0
+[1.5 0.0 3.5] all	0.0
 
 # Negative numbers are truthy (only literal zero is falsy).
 [-1 0] any	-1
