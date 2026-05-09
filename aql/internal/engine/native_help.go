@@ -270,13 +270,13 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Any"}
 	case "tuck":
 		return []string{"Any", "Any", "Any"}
-	case "2dup":
+	case "dup2":
 		return []string{"Any", "Any", "Any", "Any"}
-	case "2swap":
+	case "swap2":
 		return []string{"Any", "Any", "Any", "Any"}
-	case "2drop":
+	case "drop2":
 		return nil
-	case "2over":
+	case "over2":
 		return []string{"Any", "Any", "Any", "Any", "Any", "Any"}
 	case "pick", "roll":
 		return []string{"Any"}

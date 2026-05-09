@@ -29,8 +29,8 @@ def inc ( fn [ n:Integer ] [ Integer ] [ n 1 addq ] ) 7 inc	8	body adds 1 to bou
 def square ( fn [ x:Integer ] [ Integer ] [ x x mulq ] ) 6 square	36	x=6; body 6 6 mulq → 36
 
 # Two Integer params (forward + stack split).
-def addAB ( fn [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ) 3 addAB 4	7	a=4 (fwd), b=3 (stk); body 4 3 addq → 7
-def subAB ( fn [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 subAB 3	7	a=3 (fwd), b=10 (stk); body `subq a b` → `subq 3 10` → sig=[3,10] → handler returns 10-3 = 7
+def add-ab ( fn [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ) 3 add-ab 4	7	a=4 (fwd), b=3 (stk); body 4 3 addq → 7
+def sub-ab ( fn [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ) 10 sub-ab 3	7	a=3 (fwd), b=10 (stk); body `subq a b` → `subq 3 10` → sig=[3,10] → handler returns 10-3 = 7
 
 # Three Integer params, all-stack call form.
 def trip3 ( fn [ a:Integer b:Integer c:Integer ] [ Integer ] [ a b addq c addq ] ) 1 2 3 trip3	6	a=top=3, b=2, c=1; body computes (3+2)+1 = 6

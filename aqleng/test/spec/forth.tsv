@@ -7,8 +7,8 @@
 #
 #     : square dup * ;
 #     : cube  dup dup * * ;
-#     : 1+    1 + ;
-#     : -rot  rot rot ;
+#     : incr    1 + ;
+#     : anti-rot  rot rot ;
 #
 # In aqleng the equivalent is `def NAME [body]` — a list-bound def
 # whose body is spliced in-place at every use site (NOT an `fn` call
@@ -38,10 +38,10 @@
 # `/s` suffix:
 #
 #     def square [ dup mulq/s ]    ← like Forth's `: square dup * ;`
-#     def 1+     [ 1 addq/s ]      ← like Forth's `: 1+ 1 + ;`
+#     def incr     [ 1 addq/s ]      ← like Forth's `: incr 1 + ;`
 #     def fneg   [ 0 swap subq/s ] ← like Forth's `: negate 0 swap - ;`
 #
-# Stack-only ops (dup, swap, drop, over, rot, nip, tuck, 2dup, …)
+# Stack-only ops (dup, swap, drop, over, rot, nip, tuck, dup2, …)
 # don't need /s — they already only see the stack. Only forward-prec
 # ops get the suffix.
 #
@@ -55,22 +55,22 @@
 # tokens	expected	note
 
 # ---------- 1. Increment / decrement / scale ----------
-def 1+ [ 1 addq/s ] 5 1+	6	classic Forth `: 1+ 1 + ;` — addq/s body op consumes from stack only
-def 1+ [ 1 addq/s ] 0 1+	1	1+ on zero
-def 1+ [ 1 addq/s ] -3 1+	-2	1+ on a negative
-def 1+ [ 1 addq/s ] 5 1+ 1+	7	chained: 5 → 6 → 7
+def incr [ 1 addq/s ] 5 incr	6	classic Forth `: incr 1 + ;` — addq/s body op consumes from stack only
+def incr [ 1 addq/s ] 0 incr	1	incr on zero
+def incr [ 1 addq/s ] -3 incr	-2	incr on a negative
+def incr [ 1 addq/s ] 5 incr incr	7	chained: 5 → 6 → 7
 
-def 1- [ 1 subq/s ] 5 1-	4	classic `: 1- 1 - ;` — subq/s sig=[1,5] → 5-1=4
-def 1- [ 1 subq/s ] 1 1-	0	1- on one
-def 1- [ 1 subq/s ] 0 1-	-1	1- on zero (rolls negative)
+def decr [ 1 subq/s ] 5 decr	4	classic `: decr 1 - ;` — subq/s sig=[1,5] → 5-1=4
+def decr [ 1 subq/s ] 1 decr	0	decr on one
+def decr [ 1 subq/s ] 0 decr	-1	decr on zero (rolls negative)
 
-def 2+ [ 2 addq/s ] 5 2+	7	`: 2+ 2 + ;` — add 2
-def 2- [ 2 subq/s ] 5 2-	3	`: 2- 2 - ;` — subtract 2
-def 2x [ 2 mulq/s ] 5 2x	10	`: 2* 2 * ;` — Forth's classic `2*` (renamed 2x because the spec tokenizer treats `2*` poorly)
-def 2x [ 2 mulq/s ] -3 2x	-6	2x on a negative
+def add-two [ 2 addq/s ] 5 add-two	7	`: add-two 2 + ;` — add 2
+def sub-two [ 2 subq/s ] 5 sub-two	3	`: sub-two 2 - ;` — subtract 2
+def times-two [ 2 mulq/s ] 5 times-two	10	`: 2* 2 * ;` — Forth's classic `2*` (renamed times-two because the spec tokenizer treats `2*` poorly)
+def times-two [ 2 mulq/s ] -3 times-two	-6	times-two on a negative
 
 # Mid-stream chaining: with /s the body doesn't grab the next literal.
-def 1+ [ 1 addq/s ] 1 1+ 2 1+	2 3	1 1+ → 2 (consumes only the 1); 2 1+ → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 1+ → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes "2 2 1+"; second 1+ splices → "2 2 1 addq/s" → addq/s stack=[2,2,1] sig=[1,2] → 3; final: "2 3"
+def incr [ 1 addq/s ] 1 incr 2 incr	2 3	1 incr → 2 (consumes only the 1); 2 incr → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 incr → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes "2 2 incr"; second incr splices → "2 2 1 addq/s" → addq/s stack=[2,2,1] sig=[1,2] → 3; final: "2 3"
 
 def double [ dup addq/s ] 5 double	10	`: double dup + ;` — addq/s pulls both from stack
 def double [ dup addq/s ] 7 double	14
@@ -107,11 +107,11 @@ def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
 # bodies use forward-prec ops, so no /s suffix is needed — dup, swap,
 # drop, over are already stack-only.
 
-# `: 2dup over over ;` — duplicate top pair via two `over` calls.
+# `: dup2 over over ;` — duplicate top pair via two `over` calls.
 # Trace [a, b]: over → [a, b, a]; over → [a, b, a, b].
-def 2dup-alt [ over over ] 1 2 2dup-alt	1 2 1 2	classic `: 2dup over over ;` — pure stack ops, no /s needed
-def 2dup-alt [ over over ] "x" "y" 2dup-alt	"x" "y" "x" "y"	any-typed
-def 2dup-alt [ over over ] 1 2 2dup-alt 2dup	1 2 1 2 1 2	chained: alt then core 2dup
+def dup2-alt [ over over ] 1 2 dup2-alt	1 2 1 2	classic `: dup2 over over ;` — pure stack ops, no /s needed
+def dup2-alt [ over over ] "x" "y" dup2-alt	"x" "y" "x" "y"	any-typed
+def dup2-alt [ over over ] 1 2 dup2-alt dup2	1 2 1 2 1 2	chained: alt then core dup2
 
 # `: nip swap drop ;` — drop second-from-top, keeping the top.
 # Trace [a, b]: swap → [b, a]; drop → [b]. Matches core `nip`.
@@ -123,11 +123,11 @@ def nip-alt [ swap drop ] 1 2 3 nip-alt	1 3	deeper untouched
 def tuck-alt [ swap over ] 1 2 tuck-alt	2 1 2	classic `: tuck swap over ;`
 
 # ---------- 5. Anti-rotate (-rot) ----------
-# Classic Forth: `: -rot rot rot ;` — pure stack, no /s.
+# Classic Forth: `: anti-rot rot rot ;` — pure stack, no /s.
 # Trace [a, b, c]: rot → [b, c, a]; rot → [c, a, b].
-def -rot [ rot rot ] 1 2 3 -rot	3 1 2	`: -rot rot rot ;` — anti-rotate
-def -rot [ rot rot ] "a" "b" "c" -rot	"c" "a" "b"	any-typed
-def -rot [ rot rot ] 0 1 2 3 -rot	0 3 1 2	deeper element (0) untouched
+def anti-rot [ rot rot ] 1 2 3 anti-rot	3 1 2	`: anti-rot rot rot ;` — anti-rotate
+def anti-rot [ rot rot ] "a" "b" "c" anti-rot	"c" "a" "b"	any-typed
+def anti-rot [ rot rot ] 0 1 2 3 anti-rot	0 3 1 2	deeper element (0) untouched
 
 # ---------- 6. Negation via `0 swap subq` ----------
 # Classic Forth: `: negate 0 swap - ;`. The body's subq/s consumes
@@ -166,9 +166,9 @@ def square [ dup mulq/s ] def quart [ square square ] 3 quart	81	3⁴ = 81 via s
 def square [ dup mulq/s ] def quart [ square square ] 2 quart	16	2⁴ = 16
 def square [ dup mulq/s ] def quart [ square square ] -2 quart	16	(-2)⁴ = 16
 
-# Increment-twice composing a defined `1+`.
-def 1+ [ 1 addq/s ] def 2incr [ 1+ 1+ ] 5 2incr	7	double-applying 1+ via composition
-def 1+ [ 1 addq/s ] def 4incr [ 1+ 1+ 1+ 1+ ] 5 4incr	9	four-fold increment chain
+# Increment-twice composing a defined `incr`.
+def incr [ 1 addq/s ] def incr-twice [ incr incr ] 5 incr-twice	7	double-applying incr via composition
+def incr [ 1 addq/s ] def incr-four-times [ incr incr incr incr ] 5 incr-four-times	9	four-fold increment chain
 
 # Square-then-double — pipeline through two defined words.
 def square [ dup mulq/s ] def double [ dup addq/s ] 5 square double	50	5² = 25; double = 50
@@ -181,12 +181,12 @@ def square [ dup mulq/s ] 3 square 4 square addq	25	square 3 → 9; square 4 →
 # expressible. Documented below as a punch list:
 #
 #   : abs    dup 0 < if negate then ;       — needs if/then
-#   : max    2dup < if swap then drop ;     — needs if/then
-#   : min    2dup > if swap then drop ;     — needs if/then
+#   : max    dup2 < if swap then drop ;     — needs if/then
+#   : min    dup2 > if swap then drop ;     — needs if/then
 #   : sign   dup 0 < if drop -1 else
 #                       0 = if 0 else 1 then then ;  — needs if/else
 #   : factorial dup 1 = if drop 1
-#                          else dup 1- recurse * then ;  — needs recurse/if
+#                          else dup decr recurse * then ;  — needs recurse/if
 #
 # Once the engine grows `if`/`then`/`for`, these classic idioms can
 # land — and will live in this file alongside the conditional-free

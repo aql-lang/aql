@@ -344,9 +344,9 @@ def inc ( fn [ n:Integer ? ] [ Integer ] [ n 1 addq ] ) inc	1	param omitted: n d
 def inc ( fn [ n:Integer ? ] [ Integer ] [ n 1 addq ] ) 5 inc	6	stack-form: same as forward; arg comes from the stack via the unified §1.4 fallback
 
 # Two-arg fn, only the second optional.
-def addAB ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) addAB 5 3	8	both args provided: a=5, b=3 → addq(5,3)=8
-def addAB ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) addAB 5	5	b omitted: defaulted to 0 → 5+0=5
-def addAB ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) 5 3 addAB	8	stack form, both args provided
+def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) add-ab 5 3	8	both args provided: a=5, b=3 → addq(5,3)=8
+def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) add-ab 5	5	b omitted: defaulted to 0 → 5+0=5
+def add-ab ( fn [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ) 5 3 add-ab	8	stack form, both args provided
 
 # Two-arg fn, both optional. ExpandOptionalSigs generates 4 sigs:
 # full [a, b], reduced [a only], reduced [b only], reduced [].

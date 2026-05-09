@@ -70,7 +70,7 @@ def inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack — embedded literal in b
 
 # Body with embedded literals — curried form.
 def add5 [ addq 5 ] 10 add5	15	body uses an embedded constant; 10 addq 5 = 15
-def double_then_inc [ dup addq 1 addq ] 5 double_then_inc	11	chained body: 5+5=10, then 10+1=11
+def double-then-inc [ dup addq 1 addq ] 5 double-then-inc	11	chained body: 5+5=10, then 10+1=11
 
 # The use-site contract: body executes against the live stack, notq
 # a sandbox. Insufficient stack at use site → error.

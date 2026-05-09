@@ -18,7 +18,7 @@ def double fn [ a:Integer ] [ Integer ] [ a a addq ] 5 double	10	def defers; fn 
 
 def inc fn [ n:Integer ] [ Integer ] [ n 1 addq ] 7 inc	8	same shape, single-arg fn
 
-def addAB fn [ a:Integer b:Integer ] [ Integer ] [ a b addq ] 3 addAB 4	7	two-arg fn dispatched after def deferral
+def add-ab fn [ a:Integer b:Integer ] [ Integer ] [ a b addq ] 3 add-ab 4	7	two-arg fn dispatched after def deferral
 
 # def followed by another def — second def's NAME slot also captured
 # without execution.

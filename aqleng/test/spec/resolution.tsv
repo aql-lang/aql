@@ -121,6 +121,11 @@ nope	ERROR:undefined	bare undefined name errors at stepWord
 # native is shadowed — the def takes priority everywhere.
 def addq 99 addq addq	99 99	two adds, both resolve to def value
 
-# Another mixed: a def name can shadow a TYPE name too. If we def
-# `Integer` to a value, `Integer` resolves to that value.
-def Integer 42 Integer	42	def shadows the type-literal fallback path
+# A def name CANNOT be uppercase: the language-fundamental word-name
+# rule (ValidateWordName in aqleng/go/word_name.go) requires every
+# user-defined word to begin with [a-z]. Type names are uppercase by
+# convention, so this also implicitly bans def names that collide
+# with type-name fallbacks. Pre-rename, `def Integer 42 Integer`
+# would have shadowed the type-literal path; under the rule it now
+# errors at the def site.
+def Integer 42 Integer	ERROR:invalid_word_name	uppercase def names are rejected by the word-name rule

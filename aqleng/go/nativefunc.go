@@ -57,7 +57,17 @@ type NativeSig struct {
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
 // NativeSig to Signature, and registers with the appropriate precedence.
+//
+// The function name is validated against the language-fundamental
+// word-name rule (ValidateWordName in word_name.go): must begin with
+// [a-z] and contain only [a-z0-9-]. Engine-internal markers (`__`-
+// prefixed) are exempt. A bad name accumulates into r.errs — callers
+// can check r.Err() before relying on the registration.
 func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
+	if err := ValidateWordName(fn.Name); err != nil {
+		r.errs = append(r.errs, err)
+		return
+	}
 	for _, sig := range fn.Signatures {
 		s := Signature{
 			Args:             sig.Args,

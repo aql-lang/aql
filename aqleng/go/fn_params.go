@@ -131,6 +131,9 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				if err != nil {
 					return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
 				}
+				if err := ValidateWordName(name); err != nil {
+					return nil, 0, fmt.Errorf("function spec: %w", err)
+				}
 				params = append(params, FnParam{Name: name, Type: paramType, Pattern: pattern, Optional: optional})
 			} else {
 				paramType, pattern, err := ResolveSigType(r, elem)
@@ -161,6 +164,9 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				paramType, err := ResolveTypeName(typeName)
 				if err != nil {
 					return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
+				}
+				if err := ValidateWordName(paramName); err != nil {
+					return nil, 0, fmt.Errorf("function spec: %w", err)
 				}
 				params = append(params, FnParam{Name: paramName, Type: paramType, Optional: optional})
 				continue

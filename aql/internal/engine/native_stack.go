@@ -74,38 +74,38 @@ var stackNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:              "2dup",
+		Name:              "dup2",
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Args:      []Type{TAny, TAny},
-			Handler:   twoDupHandler,
+			Handler:   dup2Handler,
 			ReturnsFn: ReturnsIdentity(1, 0, 1, 0),
 		}},
 	},
 	{
-		Name:              "2swap",
+		Name:              "swap2",
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Args:      []Type{TAny, TAny, TAny, TAny},
-			Handler:   twoSwapHandler,
+			Handler:   swap2Handler,
 			ReturnsFn: ReturnsIdentity(1, 0, 3, 2),
 		}},
 	},
 	{
-		Name:              "2drop",
+		Name:              "drop2",
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Args:    []Type{TAny, TAny},
-			Handler: twoDropHandler,
+			Handler: drop2Handler,
 			Returns: []Type{},
 		}},
 	},
 	{
-		Name:              "2over",
+		Name:              "over2",
 		ForwardPrecedence: false,
 		Signatures: []NativeSig{{
 			Args:      []Type{TAny, TAny, TAny, TAny},
-			Handler:   twoOverHandler,
+			Handler:   over2Handler,
 			ReturnsFn: ReturnsIdentity(3, 2, 1, 0, 3, 2),
 		}},
 	},
@@ -168,19 +168,19 @@ func tuckHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{args[0], args[1], args[0]}, nil
 }
 
-func twoDupHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func dup2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{args[1], args[0], args[1], args[0]}, nil
 }
 
-func twoSwapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func swap2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{args[1], args[0], args[3], args[2]}, nil
 }
 
-func twoDropHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func drop2Handler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return nil, nil
 }
 
-func twoOverHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func over2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{args[3], args[2], args[1], args[0], args[3], args[2]}, nil
 }
 

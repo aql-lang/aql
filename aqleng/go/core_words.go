@@ -28,10 +28,10 @@ package aqleng
 //     rot        — rotate top three               ( a b c — b c a )
 //     nip        — drop second-from-top           ( a b — b )
 //     tuck       — copy top under second          ( a b — b a b )
-//     2dup       — duplicate top pair             ( a b — a b a b )
-//     2swap      — swap top two pairs             ( a b c d — c d a b )
-//     2drop      — remove top two                 ( a b — )
-//     2over      — copy second pair to top        ( a b c d — a b c d a b )
+//     dup2       — duplicate top pair             ( a b — a b a b )
+//     swap2      — swap top two pairs             ( a b c d — c d a b )
+//     drop2      — remove top two                 ( a b — )
+//     over2      — copy second pair to top        ( a b c d — a b c d a b )
 //
 // `end` is NOT registered here — it's a structural keyword handled
 // directly by the engine's stepEnd path in engine.go.
@@ -96,6 +96,9 @@ func registerCoreDef(r *Registry) {
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				w, _ := args[0].AsWord()
+				if err := ValidateWordName(w.Name); err != nil {
+					return nil, err
+				}
 				if info, ok := args[1].Data.(FnDefInfo); ok {
 					// Expand optional-param combinations into a flat
 					// list of sigs. Each reduced sig's body calls back
@@ -245,10 +248,10 @@ func registerCoreStack(r *Registry) {
 	registerCoreRot(r)
 	registerCoreNip(r)
 	registerCoreTuck(r)
-	registerCore2Dup(r)
-	registerCore2Swap(r)
-	registerCore2Drop(r)
-	registerCore2Over(r)
+	registerCoreDup2(r)
+	registerCoreSwap2(r)
+	registerCoreDrop2(r)
+	registerCoreOver2(r)
 }
 
 // registerCoreDup — `dup ( a — a a )`.
@@ -352,11 +355,11 @@ func registerCoreTuck(r *Registry) {
 	})
 }
 
-// registerCore2Dup — `2dup ( a b — a b a b )`.
+// registerCoreDup2 — `dup2 ( a b — a b a b )`.
 // args[0]=top=b, args[1]=a.
-func registerCore2Dup(r *Registry) {
+func registerCoreDup2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "2dup",
+		Name: "dup2",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -366,11 +369,11 @@ func registerCore2Dup(r *Registry) {
 	})
 }
 
-// registerCore2Swap — `2swap ( a b c d — c d a b )`.
+// registerCoreSwap2 — `swap2 ( a b c d — c d a b )`.
 // args[0]=top=d, args[1]=c, args[2]=b, args[3]=deepest=a.
-func registerCore2Swap(r *Registry) {
+func registerCoreSwap2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "2swap",
+		Name: "swap2",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny, TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -380,10 +383,10 @@ func registerCore2Swap(r *Registry) {
 	})
 }
 
-// registerCore2Drop — `2drop ( a b — )`.
-func registerCore2Drop(r *Registry) {
+// registerCoreDrop2 — `drop2 ( a b — )`.
+func registerCoreDrop2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "2drop",
+		Name: "drop2",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -393,11 +396,11 @@ func registerCore2Drop(r *Registry) {
 	})
 }
 
-// registerCore2Over — `2over ( a b c d — a b c d a b )`.
+// registerCoreOver2 — `over2 ( a b c d — a b c d a b )`.
 // Copies the second pair (a b) on top of the first pair (c d).
-func registerCore2Over(r *Registry) {
+func registerCoreOver2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "2over",
+		Name: "over2",
 		Signatures: []NativeSig{{
 			Args: []Type{TAny, TAny, TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

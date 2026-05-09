@@ -1,6 +1,6 @@
 # Stack manipulation via the core Forth-style words: `dup`, `swap`,
-# `drop`, `over`, `rot`, `nip`, `tuck`, `2dup`, `2swap`, `2drop`,
-# `2over`. All are stack-only (BarrierPos=0) and live in
+# `drop`, `over`, `rot`, `nip`, `tuck`, `dup2`, `swap2`, `drop2`,
+# `over2`. All are stack-only (BarrierPos=0) and live in
 # aqleng/go/core_words.go::registerCoreStack — they're part of the
 # language proper, not test fixtures.
 #
@@ -44,20 +44,20 @@
 1 2 tuck	2 1 2	copies the top under the second
 "a" "b" tuck	"b" "a" "b"	any-typed
 
-# 2dup ( a b — a b a b )
-1 2 2dup	1 2 1 2	duplicates the top pair
-3 4 5 2dup	3 4 5 4 5	deeper untouched
+# dup2 ( a b — a b a b )
+1 2 dup2	1 2 1 2	duplicates the top pair
+3 4 5 dup2	3 4 5 4 5	deeper untouched
 
-# 2swap ( a b c d — c d a b )
-1 2 3 4 2swap	3 4 1 2	swaps two pairs
-1 2 3 4 5 6 2swap	1 2 5 6 3 4	deeper untouched
+# swap2 ( a b c d — c d a b )
+1 2 3 4 swap2	3 4 1 2	swaps two pairs
+1 2 3 4 5 6 swap2	1 2 5 6 3 4	deeper untouched
 
-# 2drop ( a b — )
-1 2 2drop		removes the top two; empty stack
-1 2 3 4 2drop	1 2	deeper untouched
+# drop2 ( a b — )
+1 2 drop2		removes the top two; empty stack
+1 2 3 4 drop2	1 2	deeper untouched
 
-# 2over ( a b c d — a b c d a b )
-1 2 3 4 2over	1 2 3 4 1 2	copies the second pair onto the top
+# over2 ( a b c d — a b c d a b )
+1 2 3 4 over2	1 2 3 4 1 2	copies the second pair onto the top
 
 # Compositions
 1 2 swap drop	2	swap → stack=[2,1] (1 on top); drop removes 1 → stack=[2]

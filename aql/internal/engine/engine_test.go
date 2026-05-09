@@ -419,7 +419,7 @@ func Test2Dup(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2dup")})
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("dup2")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -438,7 +438,7 @@ func Test2Swap(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2swap")})
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("swap2")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -457,7 +457,7 @@ func Test2Drop(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("2drop")})
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("drop2")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -472,7 +472,7 @@ func Test2Over(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("2over")})
+	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("over2")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
