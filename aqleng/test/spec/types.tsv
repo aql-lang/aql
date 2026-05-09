@@ -1,0 +1,275 @@
+# =====================================================================
+# Principle: Types are first-class. Type literals push as values; the
+# `type`/`untype`/`typeof` words install, retract, and inspect type
+# bindings. None is the explicit unit type, spelled `null`.
+# =====================================================================
+#
+# This spec consolidates everything about types in aqleng:
+#
+#   1. Type-name words push type-literal values (Integer, String, …).
+#   2. `null` parses as a None type literal.
+#   3. `type NAME body` installs a type binding (NAME starts [A-Z]).
+#   4. `untype NAME` pops the most-recent binding.
+#   5. `typeof v` returns an Atom naming v's type (or its metatype if
+#      v is a type literal).
+#   6. Type literals dispatch through normal sigs with one quirk: the
+#      Data==nil rejection in match.go ONLY rejects type literals for
+#      TMap and TList — scalar leaf types (Integer / Decimal / String /
+#      Boolean) are silently accepted by sigs declaring them. The
+#      handler then reads the zero value from AsX(), which is a real
+#      footgun (`addq Integer 1` is silently `addq 0 1`).
+#   7. None matches no concrete-typed sig; only Any-typed sigs accept it.
+#
+# Why this matters
+# ----------------
+# Type literals are the language's value-level handle on its types —
+# they're how you spell "the type Integer" or "the type List". Every
+# reflective / generic operation (predicates, type equality, type
+# unions, dispatch) builds on them. The shadow / pop semantics of the
+# type stack mirror the def stack so a single mental model covers both.
+#
+# What's NOT covered
+# ------------------
+# This is the aqleng (engine-kernel) subset. The richer type words
+# (record, table, object, make, is, guard, inspect, base, convert, …)
+# are layered on top in production aql; their semantics depend on
+# parser / native-mod features that are intentionally out of aqleng
+# scope.
+
+# === Test fixtures (defined in aqleng/go/spec_test.go::registerSpecWords) ===
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
+#   notq     — [Boolean] forward-prec — !args[0]
+#   firstq   — [List] forward-prec — first element or None for empty list
+#   lengthq  — [List] forward-prec — list length as Integer
+#   tagq     — two overloads [Integer]→"specific" / [Any]→"any" — specificity scoring
+# === end fixtures ===
+
+# tokens	expected	note
+
+# =====================================================================
+# 1. Type literals push as values
+# =====================================================================
+# A bare unquoted word that matches a type name is recognised by the
+# engine (typeNames table in aqleng/go/engine.go) and resolves to a
+# type-literal Value: VType = the named Type, Data = nil. The Data==nil
+# discriminator is what tells handlers "this is the type itself, not a
+# payload".
+
+# Type names that fall through the default rendering branch.
+Number	Scalar/Number	bare type name → type literal; renders as type path
+Scalar	Scalar	root scalar type name
+Atom	Scalar/Atom	atom type literal
+Path	Scalar/Path	path type literal
+Record	Object/Record	record metatype name
+Any	Any	universal top type
+List	Node/List	list type literal — rendered via default branch
+Map	Node/Map	map type literal — rendered via default branch
+Type	Type	the metatype root
+
+# Type names whose VType matches a renderer scalar branch — RENDERING
+# QUIRK: the renderer's scalar branches fire on VType and use the
+# zero-Data accessors, so type-literal Integer / Decimal / String /
+# Boolean render as if they were the scalar zero value:
+Integer	0	type literal Integer renders as "0" (TInteger branch + AsInteger nil-Data → 0)
+Decimal	0.0	type literal Decimal renders as "0.0" (formatDecimal always emits a decimal point)
+String	""	type literal String renders as "" (AsString nil-Data → "")
+Boolean	false	type literal Boolean renders as "false" (AsBoolean nil-Data → false)
+None	null	None has a dedicated renderer branch — renders as "null"
+
+# Multiple type literals on the stack.
+Integer Integer	0 0	two Integer type literals — quirk visible twice
+Number Scalar	Scalar/Number Scalar	two type-path-rendered literals
+
+# Type literal next to a concrete value.
+1 Integer	1 0	concrete 1, then Integer type literal (renders as 0)
+
+# def can bind a type literal as a value (NOT via `type`).
+def t Integer t	0	t resolves to Integer type literal
+def t Number t	Scalar/Number	t resolves to Number type literal
+
+# To get the Atom version of a type-name word, quote it.
+quote Integer	atom(Integer)	quote captures the upcoming Word as Atom
+quote String	atom(String)	type-name resolution does not fire under /q-style capture
+def t quote Integer t	atom(Integer)	t bound to atom(Integer)
+
+# =====================================================================
+# 2. None / null
+# =====================================================================
+# Bare token `null` parses to a None-typed Value with Data=nil. Renders
+# back as `null`. None matches no concrete-typed sig; only Any.
+
+null	null	bare null round-trips as a None type literal
+null null	null null	multiple nulls coexist
+1 null 2	1 null 2	null between integers — none interact
+typeof null	atom(Type)	None has 1 part; MetatypeFor → TType (1 part); typeof returns parts[0]
+
+# Dispatch — None at a typed sig fails, at Any matches.
+tagq null	"any"	None lands at the [Any] catch-all overload
+addq null 1	ERROR:signature	addq wants Number Number; None fails
+addq 1 null	ERROR:signature	null in second slot also fails
+concatq "a" null	ERROR:signature	concatq wants String String; None fails
+notq null	ERROR:signature	notq wants Boolean; None fails
+lengthq null	ERROR:signature	lengthq wants List; None fails
+
+# firstq on an empty list returns the None sentinel.
+firstq [ ]	null	empty list → first returns None
+lengthq [ null ]	1	a list containing null is still a 1-element list
+firstq [ null 1 ]	null	first element of a list whose head is null
+
+# =====================================================================
+# 3. typeof — naming the type of a value
+# =====================================================================
+# Returns an Atom carrying the "leaf-or-second-part" of v's VType. For
+# concrete values: parts[1] (or parts[0] if 1-part). For type literals:
+# parts[1] (or parts[0]) of MetatypeFor(v.VType). Mirrors the
+# production aql `typeof`.
+#
+# Concrete values — scalar leaves report "Number" because their type
+# path is Scalar/Number/Integer or Scalar/Number/Decimal (parts[1] is
+# Number, the user-friendly mid-level name).
+typeof 5	atom(Number)	Integer 5: parts=[Scalar Number Integer]; parts[1]=Number
+typeof -7	atom(Number)	negative integer also reports Number
+typeof 0	atom(Number)	zero integer
+typeof 5.0	atom(Number)	Decimal 5.0: parts[1]=Number — same as Integer
+typeof 0.0	atom(Number)	zero decimal
+typeof "x"	atom(String)	parts=[Scalar String]; parts[1]=String
+typeof ""	atom(String)	empty string
+typeof true	atom(Boolean)	parts=[Scalar Boolean]; parts[1]=Boolean
+typeof false	atom(Boolean)	false too
+
+# Concrete container values.
+typeof [ ]	atom(List)	parts=[Node List]; parts[1]=List
+typeof [ 1 2 3 ]	atom(List)	non-empty list
+typeof [ "a" "b" ]	atom(List)	any element type — list still reports List
+
+# Type literals — parts come from MetatypeFor(VType), so the answer
+# names the *metatype* family rather than the type itself.
+typeof Integer	atom(ScalarType)	MetatypeFor(TInteger)=TScalarType; parts=[Type ScalarType]; parts[1]=ScalarType
+typeof Decimal	atom(ScalarType)	all Scalar/* → ScalarType
+typeof String	atom(ScalarType)
+typeof Boolean	atom(ScalarType)
+typeof Number	atom(ScalarType)	even though Number itself is a parent — still ScalarType
+typeof Scalar	atom(Type)	bare Scalar has only 1 part; MetatypeFor returns TType (also 1 part); typeof returns parts[0]
+typeof List	atom(NodeType)	MetatypeFor(TList)=TNodeType; parts=[Type NodeType]; parts[1]=NodeType
+typeof Map	atom(NodeType)
+typeof Any	atom(Type)	Any has 1 part; MetatypeFor → TType (1 part)
+typeof Type	atom(Type)	the metatype root itself
+
+# typeof composes with simple-value defs — the value is resolved before
+# typeof sees it.
+def n 5 typeof n	atom(Number)	n resolves to Integer 5; typeof reports Number
+def s "hi" typeof s	atom(String)	def-bound String
+
+# =====================================================================
+# 4. type — install a type binding
+# =====================================================================
+# `type NAME body` validates and pushes (NAME, body) onto the type
+# stack. NAME must start [A-Z] (capitalised); body must satisfy
+# IsTypeBody (a type literal, disjunct, typed list/map, …). Subsequent
+# references to NAME resolve to the most-recent binding.
+
+# Basic install + use.
+type Foo Integer Foo	0	Foo resolves to the Integer type literal (renders via the scalar quirk as 0)
+type Bar String Bar	""	Bar binds to String
+type Pi Number Pi	Scalar/Number	Number type literal renders via the type-path branch
+
+# typeof resolves the Word to its bound type literal first.
+type Foo Integer typeof Foo	atom(ScalarType)	Foo resolves to Integer type literal; typeof returns its metatype's parts[1]
+type Lst List typeof Lst	atom(NodeType)	List type literal → NodeType
+
+# Multiple type bindings live independently.
+type Foo Integer type Bar String Foo Bar	0 ""	two distinct bindings; each renders via its own quirk
+
+# =====================================================================
+# 5. type — name validation
+# =====================================================================
+# NAME must start with a capital letter; otherwise type_error.
+# Body must satisfy IsTypeBody (rejects concrete payloads).
+type foo Integer	ERROR:type_error	lowercase first char rejected
+type 1Foo Integer	ERROR:type_error	digit first char also fails the capital-letter check
+type Foo 42	ERROR:type_error	body Integer(42) is a concrete value, not a type body
+type Foo "string"	ERROR:type_error	body String literal rejected
+type Foo true	ERROR:type_error	body Boolean rejected
+
+# =====================================================================
+# 6. type — name-clash detection
+# =====================================================================
+# Type names live in their own namespace from def names because the
+# capitalisation rule keeps them apart: defs can't start with [A-Z],
+# types must. So typical name pairs like x/X or foo/Foo coexist
+# without conflict.
+def x 5 type X Integer		x and X are different names; both succeed; combined effect leaves an empty stack
+def foo 5 type Foo Integer		foo (def) and Foo (type) coexist
+# Both type and def succeed because their namespaces are kept distinct
+# by the capitalisation rule. type's name-clash check fires only when
+# the EXACT same name appears as both kinds — which is otherwise
+# impossible under the current rules.
+
+# =====================================================================
+# 7. type stack — shadow + pop
+# =====================================================================
+# `type` pushes; `untype` pops the most-recent. Shadowing reveals the
+# previous binding when the top is popped.
+
+# Shadow: second `type Foo` masks the first.
+type Foo Integer type Foo String Foo	""	the String binding shadows the Integer one
+type Foo Integer type Foo String typeof Foo	atom(ScalarType)	typeof on the shadow still reports ScalarType (both metatypes agree)
+
+# Pop reveals the previous binding.
+type Foo Integer type Foo String untype Foo Foo	0	the String binding is popped; Foo resolves to the Integer (shadowed) one
+type Foo Integer untype Foo		untype on the only binding empties the stack; both ops succeed silently
+
+# After full untype, the name is no longer recognised.
+type Foo Integer untype Foo Foo	ERROR:undefined_word	Foo is no longer a registered type
+
+# =====================================================================
+# 8. untype — error paths
+# =====================================================================
+untype Foo	ERROR:type_error	no Foo on the type stack
+untype foo	ERROR:type_error	lowercase name rejected before the lookup
+
+# =====================================================================
+# 9. Dispatch — type literals at scalar leaf sigs (FOOTGUN)
+# =====================================================================
+# match.go's Data==nil rejection ONLY fires for TMap and TList. For
+# scalar leaf types (Integer / Decimal / String / Boolean) a type
+# literal is silently accepted by a sig declaring that exact type, and
+# the handler reads the zero value from the AsX accessor.
+
+# tagq has [Integer]→"specific" and [Any]→"any" overloads.
+tagq Integer	"specific"	Integer type literal is accepted by [Integer]; handler ignores the value
+tagq Number	"any"	Number is the parent of Integer; doesn't match [Integer]; falls to [Any]
+tagq Scalar	"any"	Scalar is broader than Integer; falls to [Any]
+tagq Decimal	"any"	no [Decimal] overload; falls to [Any]
+tagq String	"any"	no [String] overload; falls to [Any]
+tagq Boolean	"any"	no [Boolean] overload; falls to [Any]
+tagq Any	"any"	Any type literal hits the [Any] catch-all
+tagq null	"any"	None hits the [Any] catch-all
+
+# Arithmetic words silently treat Integer / Decimal type literals as 0.
+addq Integer 1	1	Integer type literal + 1 → AsInteger(nil-Data)=0; 0+1=1
+addq Integer Integer	0	0+0 — both args are Integer type literals
+subq 5 Integer	-5	subq sig=[5,0]; handler returns b-a = 0-5 = -5
+addq Decimal 1.5	1.5	Decimal type literal + 1.5 → 0.0+1.5=1.5
+
+# String type literals at [TString] sigs render as "".
+concatq "hi" String	"hi"	String type literal at sig[0] reads as "" via AsString
+concatq String "hi"	"hi"	String type literal at sig[1] also reads as ""
+
+# Boolean type literals at [TBoolean] sigs read as false.
+notq Boolean	true	Boolean type literal at [Boolean] reads as false; not gives true
+
+# But the rejection IS in force for List / Map type literals:
+lengthq List	ERROR:	List type literal (Data==nil) is rejected by the TList sig
+firstq List	ERROR:	same — List type literal rejected at [TList]
+
+# =====================================================================
+# 10. Type-name independence
+# =====================================================================
+# def names and type names live in distinct namespaces (def: starts
+# lowercase / underscore; type: starts uppercase). Both can coexist;
+# the capitalisation rule keeps them apart with no overlap possible.
+def f 5 type F Integer		distinct names f vs F; both succeed; empty result stack
+type T Integer def t 5		reverse order also succeeds
