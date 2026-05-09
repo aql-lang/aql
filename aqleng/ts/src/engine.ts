@@ -24,6 +24,7 @@ import {
 import {
   type FnDefInfo,
   type ForwardMarker,
+  type MoveInfo,
   newBoolean,
   newForwardMarker,
   newTypeLiteral,
@@ -39,6 +40,13 @@ export class Engine {
   readonly registry: Registry
   private stack: Value[] = []
   private pointer = 0
+  /**
+   * Set of currently-active mark IDs. A Move only fires its replay
+   * if its target ID is here — orphaned Moves (whose Mark was
+   * removed by some controller) are silently dropped. Mirrors the
+   * `marks map[string]bool` field on aqleng/go/engine.go's Engine.
+   */
+  private markIds: Set<string> = new Set()
 
   constructor(registry: Registry) {
     this.registry = registry
@@ -83,6 +91,13 @@ export class Engine {
         // Forward markers are passive — the pointer just walks past
         // them. They consume incoming literals via stepLiteral.
         this.pointer++
+      } else if (val.isMark()) {
+        // Marks are passive too — record the id (so a subsequent
+        // matching Move can find the body), advance.
+        this.markIds.add(val.asMark().id)
+        this.pointer++
+      } else if (val.isMove()) {
+        this.stepMove(val)
       } else {
         this.stepLiteral()
       }
@@ -332,6 +347,9 @@ export class Engine {
     while (resolved < maxFwd && scanIdx < this.stack.length && guard < 2222) {
       guard++
       const tok = this.stack[scanIdx]!
+      // Internal control markers stop the forward scan — they're
+      // boundaries, not data.
+      if (tok.isForward() || tok.isMark() || tok.isMove()) break
       if (!tok.isWord()) {
         resolved++
         scanIdx++
@@ -581,6 +599,46 @@ export class Engine {
     const out = handlerResult as Value[]
     this.stack.splice(fwdIdx, 1, ...out)
     this.pointer = fwdIdx
+  }
+
+  /**
+   * Handle a Move at the pointer. Walk back to find the matching
+   * Mark; replace [Mark .. body .. Move] with the saved body so the
+   * body re-runs from the start. If no matching Mark is on the
+   * stack, drop the orphaned Move silently. Mirrors aqleng/go/engine.go's
+   * stepMove (one-shot replay variant — Cont/IfCont continuations
+   * aren't ported here).
+   */
+  private stepMove(val: Value): void {
+    const info: MoveInfo = val.asMove()
+    const moveIdx = this.pointer
+
+    if (!this.markIds.has(info.to)) {
+      // Mark was removed (or never seen). Drop the orphan.
+      this.stack.splice(moveIdx, 1)
+      return
+    }
+
+    let markIdx = -1
+    for (let i = 0; i < this.stack.length; i++) {
+      const v = this.stack[i]!
+      if (v.isMark() && v.asMark().id === info.to) {
+        markIdx = i
+        break
+      }
+    }
+    if (markIdx < 0) {
+      this.markIds.delete(info.to)
+      this.stack.splice(moveIdx, 1)
+      return
+    }
+
+    const markInfo = this.stack[markIdx]!.asMark()
+    this.markIds.delete(info.to)
+    const body = [...markInfo.body]
+    // Replace [Mark .. body .. Move] with the body copy.
+    this.stack.splice(markIdx, moveIdx - markIdx + 1, ...body)
+    this.pointer = markIdx
   }
 
   /**

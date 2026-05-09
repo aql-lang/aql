@@ -187,11 +187,11 @@ export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType):
 }
 
 function isStructuralBoundary(v: Value): boolean {
-  // ForwardMarker values share the Word lattice (TForward = Word/__FW)
-  // but are internal control values, not data. Forward scan must
-  // not collect one as a Word/TAny arg, and stack phase must not
-  // pick one up either.
-  if (v.isForward()) return true
+  // Internal control values (forward markers, marks, moves) all
+  // share the Word lattice (Word/__FW, Word/__MK, Word/__MV) but are
+  // not data — they must not be picked up as args by either phase
+  // of the matcher.
+  if (v.isForward() || v.isMark() || v.isMove()) return true
   if (!v.vType.matches(TWord)) return false
   const name = (v.data as { name?: string } | null)?.name
   return name === '(' || name === ')' || name === 'end'

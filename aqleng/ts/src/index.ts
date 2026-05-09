@@ -56,9 +56,11 @@ export {
   newForwardMarker,
   newInteger,
   newList,
+  newMark,
+  newMove,
   newString,
   newTypeLiteral,
   newWord,
   withQuoted,
 } from './value.ts'
-export type { FnDefInfo, FnParam, ForwardMarker, WordInfo } from './value.ts'
+export type { FnDefInfo, FnParam, ForwardMarker, MarkInfo, MoveInfo, WordInfo } from './value.ts'

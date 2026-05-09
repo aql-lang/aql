@@ -10,6 +10,9 @@ import (
 	"testing"
 )
 
+// Counter for unique mark IDs emitted by the `replay` test word.
+var replayCounter int
+
 // Spec-driven tests. Each TSV file under ../test/spec/ describes a
 // table of (input tokens, expected stack) cases that the runner
 // converts into engine inputs and runs through a fresh registry
@@ -447,6 +450,27 @@ func registerSpecWords(r *Registry) {
 				return []Value{NewList(nil)}, nil
 			},
 			Returns: []Type{TList},
+		}},
+	})
+
+	// replay: emit Mark + body + Move so the body executes once,
+	// then the Move triggers a one-shot replay (body runs twice).
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "replay",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				body := args[0].AsList().Slice()
+				replayCounter++
+				id := fmt.Sprintf("__replay_%d", replayCounter)
+				out := make([]Value, 0, len(body)+2)
+				out = append(out, NewMark(id, body...))
+				out = append(out, body...)
+				out = append(out, NewMove(id, "replay"))
+				return out, nil
+			},
 		}},
 	})
 

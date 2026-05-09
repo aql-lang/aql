@@ -16,6 +16,8 @@ import {
   TFunction,
   TInteger,
   TList,
+  TMark,
+  TMove,
   TNone,
   TString,
   TWord,
@@ -189,6 +191,24 @@ export class Value {
     return this.data as ForwardMarker
   }
 
+  isMark(): boolean {
+    return this.vType.equal(TMark)
+  }
+
+  asMark(): MarkInfo {
+    if (this.data === null) throw new Error('AsMark: nil data')
+    return this.data as MarkInfo
+  }
+
+  isMove(): boolean {
+    return this.vType.equal(TMove)
+  }
+
+  asMove(): MoveInfo {
+    if (this.data === null) throw new Error('AsMove: nil data')
+    return this.data as MoveInfo
+  }
+
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
   toString(): string {
     if (this.data === null) {
@@ -310,4 +330,29 @@ export function newFnDef(info: FnDefInfo): Value {
  */
 export function newForwardMarker(info: ForwardMarker): Value {
   return new Value(TForward, info)
+}
+
+/**
+ * MarkInfo / MoveInfo: control-flow primitives. A handler emits a
+ * Mark followed by a body sequence followed by a Move; when the
+ * engine reaches the Move it walks back to the matching Mark,
+ * splices the original body in place of [Mark .. body .. Move], and
+ * sets the pointer to the start so the body re-runs. One-shot
+ * replay only — the body is removed when the move fires.
+ */
+export interface MarkInfo {
+  id: string
+  body: Value[]
+}
+
+export interface MoveInfo {
+  to: string
+}
+
+export function newMark(id: string, body: Value[]): Value {
+  return new Value(TMark, { id, body } satisfies MarkInfo)
+}
+
+export function newMove(to: string): Value {
+  return new Value(TMove, { to } satisfies MoveInfo)
 }
