@@ -88,7 +88,7 @@ func TestFlattenDepthHandler(t *testing.T) {
 	data := newList(engine.NewInteger(1), mid)
 
 	// depth=1 should only flatten one level
-	result, err := flattenDepthHandler([]engine.Value{data, engine.NewInteger(1)}, nil, nil, nil)
+	result, err := flattenDepthHandler([]engine.Value{engine.NewInteger(1), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestFlattenDepthHandler(t *testing.T) {
 func TestGetpathHandler(t *testing.T) {
 	inner := newMap("b", engine.NewInteger(42))
 	data := newMap("a", inner)
-	result, err := getpathHandler([]engine.Value{data, engine.NewString("a.b")}, nil, nil, nil)
+	result, err := getpathHandler([]engine.Value{engine.NewString("a.b"), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestGetpathHandler(t *testing.T) {
 
 func TestGetpathHandlerTopLevel(t *testing.T) {
 	data := newMap("x", engine.NewString("hello"))
-	result, err := getpathHandler([]engine.Value{data, engine.NewString("x")}, nil, nil, nil)
+	result, err := getpathHandler([]engine.Value{engine.NewString("x"), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestSetpathHandlerNewKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify the new key was set by reading it back with getpath
-	check, err := getpathHandler([]engine.Value{result[0], engine.NewString("c")}, nil, nil, nil)
+	check, err := getpathHandler([]engine.Value{engine.NewString("c"), result[0]}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestJoinDefaultHandler(t *testing.T) {
 
 func TestJoinSepHandler(t *testing.T) {
 	data := newList(engine.NewString("a"), engine.NewString("b"))
-	result, err := joinSepHandler([]engine.Value{data, engine.NewString("-")}, nil, nil, nil)
+	result, err := joinSepHandler([]engine.Value{engine.NewString("-"), data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestPadDefaultHandler(t *testing.T) {
 }
 
 func TestPadWidthHandler(t *testing.T) {
-	result, err := padWidthHandler([]engine.Value{engine.NewString("hi"), engine.NewInteger(10)}, nil, nil, nil)
+	result, err := padWidthHandler([]engine.Value{engine.NewInteger(10), engine.NewString("hi")}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,43 +460,26 @@ func TestWalkHandlerEmpty(t *testing.T) {
 // --- Register functions ---
 
 func TestRegisterFunctions(t *testing.T) {
-	tests := []struct {
-		name string
-		fn   func(*engine.Registry)
-	}{
-		{"clone", RegisterClone},
-		{"create", RegisterCreate},
-		{"filter", RegisterFilter},
-		{"flatten", RegisterFlatten},
-		{"getpath", RegisterGetpath},
-		{"inject", RegisterInject},
-		{"items", RegisterItems},
-		{"join", RegisterJoin},
-		{"jsonify", RegisterJsonify},
-		{"list", RegisterList},
-		{"load", RegisterLoad},
-		{"merge", RegisterMerge},
-		{"pad", RegisterPad},
-		{"remove", RegisterRemove},
-		{"selector", RegisterSelector},
-		{"setpath", RegisterSetpath},
-		{"size", RegisterSize},
-		{"slice", RegisterSlice},
-		{"transform", RegisterTransform},
-		{"update", RegisterUpdate},
-		{"validate", RegisterValidate},
-		{"walk", RegisterWalk},
+	// After consolidation, registration is driven by a single Natives slice
+	// installed via the public Register entry point. Verify each formerly
+	// per-word name still resolves to a registered function with at least
+	// one signature whose handler is non-nil.
+	names := []string{
+		"clone", "create", "filter", "flatten", "getpath", "inject",
+		"items", "join", "jsonify", "list", "load", "merge", "pad",
+		"remove", "selector", "setpath", "size", "slice", "transform",
+		"update", "validate", "walk",
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
 			r, err := engine.NewRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			tt.fn(r)
-			fn := r.Lookup(tt.name)
+			Register(r)
+			fn := r.Lookup(name)
 			if fn == nil {
-				t.Fatalf("expected word %q to be registered", tt.name)
+				t.Fatalf("expected word %q to be registered", name)
 			}
 			if len(fn.Signatures) == 0 {
 				t.Error("expected at least one signature")
@@ -625,7 +608,7 @@ func TestFilterHandler(t *testing.T) {
 	r := defaultRegistry(t)
 	data := newMap("a", engine.NewInteger(1), "b", engine.NewInteger(2))
 	fn := makeTrueFilterFn()
-	result, err := filterHandler([]engine.Value{data, fn}, nil, nil, r)
+	result, err := filterHandler([]engine.Value{fn, data}, nil, nil, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,8 +643,8 @@ func makeWalkValueFn() engine.Value {
 				},
 				Body: []engine.Value{
 					engine.NewWord("getpath"),
-					engine.NewWord("node"),
 					engine.NewString("value"),
+					engine.NewWord("node"),
 				},
 			},
 		},
@@ -673,7 +656,7 @@ func TestWalkBeforeHandler(t *testing.T) {
 	Register(r)
 	data := newMap("a", engine.NewInteger(1))
 	fn := makeWalkValueFn()
-	result, err := walkBeforeHandler([]engine.Value{data, fn}, nil, nil, r)
+	result, err := walkBeforeHandler([]engine.Value{fn, data}, nil, nil, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -689,7 +672,7 @@ func TestWalkBeforeAfterHandler(t *testing.T) {
 	Register(r)
 	data := newMap("x", engine.NewString("hello"))
 	fn := makeWalkValueFn()
-	result, err := walkBeforeAfterHandler([]engine.Value{data, fn, fn}, nil, nil, r)
+	result, err := walkBeforeAfterHandler([]engine.Value{fn, fn, data}, nil, nil, r)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,7 +22,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 	native.Register(reg)
 	nativemod.InstallMathExports(reg)
 
@@ -84,11 +84,11 @@ func TestDefListFilterPrefix(t *testing.T) {
 	}
 }
 
-// list (read "data.csv") {age:"30" city:"London"} — parens force evaluation
+// (read "data.csv") list {age:"30" city:"London"} — parens force evaluation
 func TestDefListFilterParens(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`list (read "data.csv") {age:"30" city:"London"}`,
+		`(read "data.csv") list {age:"30" city:"London"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -110,12 +110,12 @@ func TestDefListFilterParens(t *testing.T) {
 	}
 }
 
-// def foo [read "data.csv"]  list (foo) {age:"30" city:"London"} — parens around def'd word
+// def foo [read "data.csv"]  (foo) list {age:"30" city:"London"} — parens around def'd word
 func TestDefListFilterParensDef(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo [read "data.csv"]`,
-		`list (foo) {age:"30" city:"London"}`,
+		`(foo) list {age:"30" city:"London"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -126,12 +126,12 @@ func TestDefListFilterParensDef(t *testing.T) {
 	}
 }
 
-// def foo (read "data.csv")  list foo {age:"30" city:"London"} — parens in def evaluate eagerly
+// def foo (read "data.csv")  foo list {age:"30" city:"London"} — parens in def evaluate eagerly
 func TestDefParensListFilter(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`list foo {age:"30" city:"London"}`,
+		`foo list {age:"30" city:"London"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -169,12 +169,12 @@ func TestDefParensListAll(t *testing.T) {
 	}
 }
 
-// def foo (read "data.csv")  create foo {id:"4" name:"Dave" city:"Berlin"}
+// def foo (read "data.csv")  foo create {id:"4" name:"Dave" city:"Berlin"}
 func TestDefParensCreate(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`create foo {id:"4" name:"Dave" city:"Berlin"}`,
+		`foo create {id:"4" name:"Dave" city:"Berlin"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -191,12 +191,12 @@ func TestDefParensCreate(t *testing.T) {
 	}
 }
 
-// def foo (read "data.csv")  load foo {id:"2"}
+// def foo (read "data.csv")  foo load {id:"2"}
 func TestDefParensLoad(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`load foo {id:"2"}`,
+		`foo load {id:"2"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -212,12 +212,12 @@ func TestDefParensLoad(t *testing.T) {
 	}
 }
 
-// def foo (read "data.csv")  update foo {id:"1" city:"Berlin"}
+// def foo (read "data.csv")  foo update {id:"1" city:"Berlin"}
 func TestDefParensUpdate(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`update foo {id:"1" city:"Berlin"}`,
+		`foo update {id:"1" city:"Berlin"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -239,12 +239,12 @@ func TestDefParensUpdate(t *testing.T) {
 	}
 }
 
-// def foo (read "data.csv")  remove foo {id:"2"}
+// def foo (read "data.csv")  foo remove {id:"2"}
 func TestDefParensRemove(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`remove foo {id:"2"}`,
+		`foo remove {id:"2"}`,
 	})
 	if err != nil {
 		t.Fatal(err)

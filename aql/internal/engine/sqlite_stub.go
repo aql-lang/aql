@@ -238,7 +238,7 @@ func aqlValueToJSParam(v Value, colType Type) any {
 			}
 			return 0
 		}
-		return valToString(v)
+		return ValToString(v)
 	case colType.Matches(TNumber):
 		if v.VType.Matches(TDecimal) {
 			_as3, _ := v.AsDecimal()
@@ -254,7 +254,7 @@ func aqlValueToJSParam(v Value, colType Type) any {
 				return f
 			}
 		}
-		return valToString(v)
+		return ValToString(v)
 	case colType.Matches(TBoolean):
 		if v.VType.Matches(TBoolean) {
 			_as6, _ := v.AsBoolean()
@@ -270,20 +270,20 @@ func aqlValueToJSParam(v Value, colType Type) any {
 			}
 			return 0
 		}
-		return valToString(v)
+		return ValToString(v)
 	default:
 		if v.VType.Matches(TString) {
 			_as8, _ := v.AsString()
 			return _as8
 		}
-		return valToString(v)
+		return ValToString(v)
 	}
 }
 
 // jsValueToAQL converts a sql.js result value to an AQL Value.
 func jsValueToAQL(v js.Value, colType Type) Value {
 	if v.IsNull() || v.IsUndefined() {
-		return newValue(TNone, nil)
+		return NewValueRaw(TNone, nil)
 	}
 	switch {
 	case colType.Matches(TInteger):

@@ -37,9 +37,12 @@ func TestTypeMatches(t *testing.T) {
 // --- Value constructor tests ---
 
 func TestNewString(t *testing.T) {
+	// Post §1.1 fix: all strings carry VType=Scalar/String. The
+	// String/Empty vs String/Proper subtypes were a value-tagged
+	// dispatch trick that's been replaced with Signature.Patterns.
 	v := NewString("hello")
-	if !v.VType.Equal(TStringProper) {
-		t.Errorf("type = %s, want string/proper", v.VType)
+	if !v.VType.Equal(TString) {
+		t.Errorf("type = %s, want Scalar/String", v.VType)
 	}
 	_as0, _ := v.AsString()
 	if _as0 != "hello" {
@@ -48,8 +51,8 @@ func TestNewString(t *testing.T) {
 	}
 
 	empty := NewString("")
-	if !empty.VType.Equal(TStringEmpty) {
-		t.Errorf("empty type = %s, want string/empty", empty.VType)
+	if !empty.VType.Equal(TString) {
+		t.Errorf("empty type = %s, want Scalar/String", empty.VType)
 	}
 }
 
@@ -276,7 +279,14 @@ func TestDupForward(t *testing.T) {
 }
 
 func TestSwapForward(t *testing.T) {
-	// swap/f 1 2 → [2, 1]
+	// Post §1.4 (unified dispatch): under /f the matcher fills sig
+	// args from forward in source order, so `swap/f 1 2` binds
+	// sig[0]=1 (first forward), sig[1]=2. The handler emits its
+	// output in splice (left-to-right) order. With the unified-rule
+	// handler `[args[0], args[1]]`, the result is [1, 2] — i.e.
+	// /f no longer "swaps" the two values, because the forced-forward
+	// reading lays them out in their source order. Stack-mode
+	// swap (`1 2 swap`) still produces [2, 1] (see TestSwap).
 	reg, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -294,8 +304,8 @@ func TestSwapForward(t *testing.T) {
 	}
 	_as19, _ := result[0].AsInteger()
 	_as18, _ := result[1].AsInteger()
-	if _as19 != 2 || _as18 != 1 {
-		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
+	if _as19 != 1 || _as18 != 2 {
+		t.Errorf("got [%v, %v], want [1, 2]", result[0], result[1])
 	}
 }
 
@@ -4308,142 +4318,6 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	_as250, _ := result[0].AsInteger()
 	if len(result) != 1 || _as250 != 42 {
 		t.Errorf("got %v, want [42]", result)
-	}
-}
-
-// --- Stack helper method tests ---
-
-func TestStackInsert(t *testing.T) {
-	tests := []struct {
-		name  string
-		start []int
-		idx   int
-		val   int
-		want  []int
-	}{
-		{"insert at start", []int{2, 3}, 0, 1, []int{1, 2, 3}},
-		{"insert at middle", []int{1, 3}, 1, 2, []int{1, 2, 3}},
-		{"insert at end", []int{1, 2}, 2, 3, []int{1, 2, 3}},
-		{"insert into empty", []int{}, 0, 1, []int{1}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := &Engine{}
-			e.stack = make([]Value, len(tt.start))
-			for i, v := range tt.start {
-				e.stack[i] = NewInteger(int64(v))
-			}
-			e.stackInsert(tt.idx, NewInteger(int64(tt.val)))
-			if len(e.stack) != len(tt.want) {
-				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
-			}
-			for i, w := range tt.want {
-				_as251, _ := e.stack[i].AsInteger()
-				if _as251 != int64(w) {
-					_as252, _ := e.stack[i].AsInteger()
-					t.Errorf("stack[%d] = %d, want %d", i, _as252, w)
-				}
-			}
-		})
-	}
-}
-
-func TestStackRemove(t *testing.T) {
-	tests := []struct {
-		name  string
-		start []int
-		idx   int
-		want  []int
-	}{
-		{"remove first", []int{1, 2, 3}, 0, []int{2, 3}},
-		{"remove middle", []int{1, 2, 3}, 1, []int{1, 3}},
-		{"remove last", []int{1, 2, 3}, 2, []int{1, 2}},
-		{"remove only", []int{1}, 0, []int{}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := &Engine{}
-			e.stack = make([]Value, len(tt.start))
-			for i, v := range tt.start {
-				e.stack[i] = NewInteger(int64(v))
-			}
-			e.stackRemove(tt.idx)
-			if len(e.stack) != len(tt.want) {
-				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
-			}
-			for i, w := range tt.want {
-				_as253, _ := e.stack[i].AsInteger()
-				if _as253 != int64(w) {
-					_as254, _ := e.stack[i].AsInteger()
-					t.Errorf("stack[%d] = %d, want %d", i, _as254, w)
-				}
-			}
-		})
-	}
-}
-
-func TestStackSplice(t *testing.T) {
-	tests := []struct {
-		name         string
-		start        []int
-		idx, count   int
-		replacements []int
-		want         []int
-	}{
-		{"replace 1 with 1", []int{1, 2, 3}, 1, 1, []int{9}, []int{1, 9, 3}},
-		{"shrink", []int{1, 2, 3, 4}, 1, 2, []int{9}, []int{1, 9, 4}},
-		{"grow", []int{1, 4}, 1, 1, []int{2, 3}, []int{1, 2, 3}},
-		{"remove all", []int{1, 2, 3}, 0, 3, []int{}, []int{}},
-		{"insert at start", []int{2, 3}, 0, 0, []int{1}, []int{1, 2, 3}},
-		{"insert at end", []int{1, 2}, 2, 0, []int{3}, []int{1, 2, 3}},
-		{"replace many with many", []int{1, 2, 3, 4, 5}, 1, 3, []int{8, 9}, []int{1, 8, 9, 5}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := &Engine{}
-			e.stack = make([]Value, len(tt.start))
-			for i, v := range tt.start {
-				e.stack[i] = NewInteger(int64(v))
-			}
-			reps := make([]Value, len(tt.replacements))
-			for i, v := range tt.replacements {
-				reps[i] = NewInteger(int64(v))
-			}
-			e.stackSplice(tt.idx, tt.count, reps...)
-			if len(e.stack) != len(tt.want) {
-				t.Fatalf("len = %d, want %d", len(e.stack), len(tt.want))
-			}
-			for i, w := range tt.want {
-				_as255, _ := e.stack[i].AsInteger()
-				if _as255 != int64(w) {
-					_as256, _ := e.stack[i].AsInteger()
-					t.Errorf("stack[%d] = %d, want %d", i, _as256, w)
-				}
-			}
-		})
-	}
-}
-
-func TestStackInsertWithHeadroom(t *testing.T) {
-	e := &Engine{}
-	e.stack = make([]Value, 3, 10)
-	for i := range e.stack {
-		e.stack[i] = NewInteger(int64(i + 1))
-	}
-	e.stackInsert(1, NewInteger(99))
-	if len(e.stack) != 4 {
-		t.Fatalf("len = %d, want 4", len(e.stack))
-	}
-	if cap(e.stack) != 10 {
-		t.Fatalf("cap = %d, want 10 (should not have reallocated)", cap(e.stack))
-	}
-	want := []int64{1, 99, 2, 3}
-	for i, w := range want {
-		_as257, _ := e.stack[i].AsInteger()
-		if _as257 != w {
-			_as258, _ := e.stack[i].AsInteger()
-			t.Errorf("stack[%d] = %d, want %d", i, _as258, w)
-		}
 	}
 }
 

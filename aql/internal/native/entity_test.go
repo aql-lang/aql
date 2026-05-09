@@ -24,7 +24,7 @@ func TestCreateHandler(t *testing.T) {
 	rec.Set("name", engine.NewString("Bob"))
 	rec.Set("city", engine.NewString("Paris"))
 
-	result, err := createHandler([]engine.Value{table, engine.NewMap(rec)}, nil, nil, nil)
+	result, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCreateHandlerDuplicateId(t *testing.T) {
 	rec.Set("id", engine.NewString("1"))
 	rec.Set("name", engine.NewString("Bob"))
 
-	_, err := createHandler([]engine.Value{table, engine.NewMap(rec)}, nil, nil, nil)
+	_, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for duplicate id")
 	}
@@ -61,7 +61,7 @@ func TestCreateHandlerNoId(t *testing.T) {
 	rec := engine.NewOrderedMap()
 	rec.Set("name", engine.NewString("Bob"))
 
-	_, err := createHandler([]engine.Value{table, engine.NewMap(rec)}, nil, nil, nil)
+	_, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
@@ -76,7 +76,7 @@ func TestLoadHandler(t *testing.T) {
 	filter := engine.NewOrderedMap()
 	filter.Set("id", engine.NewString("2"))
 
-	result, err := loadHandler([]engine.Value{table, engine.NewMap(filter)}, nil, nil, nil)
+	result, err := loadHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestLoadHandlerNotFound(t *testing.T) {
 	filter := engine.NewOrderedMap()
 	filter.Set("id", engine.NewString("99"))
 
-	_, err := loadHandler([]engine.Value{table, engine.NewMap(filter)}, nil, nil, nil)
+	_, err := loadHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -115,7 +115,7 @@ func TestUpdateHandler(t *testing.T) {
 	patch.Set("id", engine.NewString("1"))
 	patch.Set("city", engine.NewString("Berlin"))
 
-	result, err := updateHandler([]engine.Value{table, engine.NewMap(patch)}, nil, nil, nil)
+	result, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestUpdateHandlerNotFound(t *testing.T) {
 	patch.Set("id", engine.NewString("99"))
 	patch.Set("city", engine.NewString("Berlin"))
 
-	_, err := updateHandler([]engine.Value{table, engine.NewMap(patch)}, nil, nil, nil)
+	_, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -166,7 +166,7 @@ func TestUpdateHandlerNoId(t *testing.T) {
 	patch := engine.NewOrderedMap()
 	patch.Set("city", engine.NewString("Berlin"))
 
-	_, err := updateHandler([]engine.Value{table, engine.NewMap(patch)}, nil, nil, nil)
+	_, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
@@ -182,7 +182,7 @@ func TestRemoveHandler(t *testing.T) {
 	filter := engine.NewOrderedMap()
 	filter.Set("id", engine.NewString("2"))
 
-	result, err := removeHandler([]engine.Value{table, engine.NewMap(filter)}, nil, nil, nil)
+	result, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestRemoveHandlerNotFound(t *testing.T) {
 	filter := engine.NewOrderedMap()
 	filter.Set("id", engine.NewString("99"))
 
-	_, err := removeHandler([]engine.Value{table, engine.NewMap(filter)}, nil, nil, nil)
+	_, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -221,7 +221,7 @@ func TestRemoveHandlerNoId(t *testing.T) {
 	filter := engine.NewOrderedMap()
 	filter.Set("name", engine.NewString("Alice"))
 
-	_, err := removeHandler([]engine.Value{table, engine.NewMap(filter)}, nil, nil, nil)
+	_, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}

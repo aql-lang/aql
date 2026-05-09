@@ -411,7 +411,7 @@ func TestUnifyDisjunctMapOpen(t *testing.T) {
 func TestValuesEqualLists(t *testing.T) {
 	a := NewList([]Value{NewInteger(1), NewInteger(2)})
 	b := NewList([]Value{NewInteger(1), NewInteger(2)})
-	if !valuesEqual(a, b) {
+	if !ValuesEqual(a, b) {
 		t.Error("expected equal lists")
 	}
 }
@@ -419,7 +419,7 @@ func TestValuesEqualLists(t *testing.T) {
 func TestValuesEqualListsDiff(t *testing.T) {
 	a := NewList([]Value{NewInteger(1), NewInteger(2)})
 	b := NewList([]Value{NewInteger(1), NewInteger(3)})
-	if valuesEqual(a, b) {
+	if ValuesEqual(a, b) {
 		t.Error("expected unequal lists")
 	}
 }
@@ -429,7 +429,7 @@ func TestValuesEqualMaps(t *testing.T) {
 	m1.Set("a", NewInteger(1))
 	m2 := NewOrderedMap()
 	m2.Set("a", NewInteger(1))
-	if !valuesEqual(NewMap(m1), NewMap(m2)) {
+	if !ValuesEqual(NewMap(m1), NewMap(m2)) {
 		t.Error("expected equal maps")
 	}
 }
@@ -439,7 +439,7 @@ func TestValuesEqualMapsDiffKeys(t *testing.T) {
 	m1.Set("a", NewInteger(1))
 	m2 := NewOrderedMap()
 	m2.Set("b", NewInteger(1))
-	if valuesEqual(NewMap(m1), NewMap(m2)) {
+	if ValuesEqual(NewMap(m1), NewMap(m2)) {
 		t.Error("expected unequal maps")
 	}
 }
@@ -452,7 +452,7 @@ func TestValuesEqualTableTypes(t *testing.T) {
 
 	tt1 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f1}}}
 	tt2 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f2}}}
-	if !valuesEqual(tt1, tt2) {
+	if !ValuesEqual(tt1, tt2) {
 		t.Error("expected equal table types")
 	}
 }
@@ -460,7 +460,7 @@ func TestValuesEqualTableTypes(t *testing.T) {
 func TestValuesEqualTypedLists(t *testing.T) {
 	tl1 := NewTypedList(NewTypeLiteral(TString))
 	tl2 := NewTypedList(NewTypeLiteral(TString))
-	if !valuesEqual(tl1, tl2) {
+	if !ValuesEqual(tl1, tl2) {
 		t.Error("expected equal typed lists")
 	}
 }
@@ -468,7 +468,7 @@ func TestValuesEqualTypedLists(t *testing.T) {
 func TestValuesEqualTypedListsDiff(t *testing.T) {
 	tl1 := NewTypedList(NewTypeLiteral(TString))
 	tl2 := NewTypedList(NewTypeLiteral(TNumber))
-	if valuesEqual(tl1, tl2) {
+	if ValuesEqual(tl1, tl2) {
 		t.Error("expected unequal typed lists")
 	}
 }
@@ -480,7 +480,7 @@ func TestValuesEqualRecordTypes(t *testing.T) {
 	f2.Set("x", NewTypeLiteral(TNumber))
 	rt1 := NewRecordType(f1)
 	rt2 := NewRecordType(f2)
-	if !valuesEqual(rt1, rt2) {
+	if !ValuesEqual(rt1, rt2) {
 		t.Error("expected equal record types")
 	}
 }
@@ -488,7 +488,7 @@ func TestValuesEqualRecordTypes(t *testing.T) {
 func TestValuesEqualTypedMaps(t *testing.T) {
 	tm1 := NewTypedMap(NewTypeLiteral(TString))
 	tm2 := NewTypedMap(NewTypeLiteral(TString))
-	if !valuesEqual(tm1, tm2) {
+	if !ValuesEqual(tm1, tm2) {
 		t.Error("expected equal typed maps")
 	}
 }
@@ -496,7 +496,7 @@ func TestValuesEqualTypedMaps(t *testing.T) {
 func TestValuesEqualTypedMapsDiff(t *testing.T) {
 	tm1 := NewTypedMap(NewTypeLiteral(TString))
 	tm2 := NewTypedMap(NewTypeLiteral(TNumber))
-	if valuesEqual(tm1, tm2) {
+	if ValuesEqual(tm1, tm2) {
 		t.Error("expected unequal typed maps")
 	}
 }
@@ -504,7 +504,7 @@ func TestValuesEqualTypedMapsDiff(t *testing.T) {
 func TestValuesEqualOneNilData(t *testing.T) {
 	a := NewTypeLiteral(TString)
 	b := NewString("hello")
-	if valuesEqual(a, b) {
+	if ValuesEqual(a, b) {
 		t.Error("expected unequal (type literal vs concrete)")
 	}
 }
@@ -515,7 +515,7 @@ func TestOpenUnifyMap(t *testing.T) {
 	candidate := NewOrderedMap()
 	candidate.Set("x", NewInteger(5))
 	candidate.Set("y", NewString("extra"))
-	if !openUnifyMap(NewMap(pattern), NewMap(candidate)) {
+	if !OpenUnifyMap(NewMap(pattern), NewMap(candidate)) {
 		t.Error("expected open unify to succeed")
 	}
 }
@@ -525,7 +525,7 @@ func TestOpenUnifyMapMissingKey(t *testing.T) {
 	pattern.Set("z", NewTypeLiteral(TNumber))
 	candidate := NewOrderedMap()
 	candidate.Set("x", NewInteger(5))
-	if openUnifyMap(NewMap(pattern), NewMap(candidate)) {
+	if OpenUnifyMap(NewMap(pattern), NewMap(candidate)) {
 		t.Error("expected open unify to fail")
 	}
 }
@@ -1302,21 +1302,21 @@ func TestVarWithDefault(t *testing.T) {
 // ========================
 
 func TestFormatForPrintString(t *testing.T) {
-	out := formatForPrint(NewString("hello"))
+	out := FormatForPrint(NewString("hello"))
 	if out != "hello" {
 		t.Errorf("expected 'hello', got %q", out)
 	}
 }
 
 func TestFormatForPrintInteger(t *testing.T) {
-	out := formatForPrint(NewInteger(42))
+	out := FormatForPrint(NewInteger(42))
 	if out != "42" {
 		t.Errorf("expected '42', got %q", out)
 	}
 }
 
 func TestFormatForPrintBoolean(t *testing.T) {
-	out := formatForPrint(NewBoolean(true))
+	out := FormatForPrint(NewBoolean(true))
 	if out != "true" {
 		t.Errorf("expected 'true', got %q", out)
 	}
@@ -1325,7 +1325,7 @@ func TestFormatForPrintBoolean(t *testing.T) {
 func TestFormatForPrintMap(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	out := formatForPrint(NewMap(m))
+	out := FormatForPrint(NewMap(m))
 	if !strings.Contains(out, "\"x\"") || !strings.Contains(out, "1") {
 		t.Errorf("expected JSON-like map, got %q", out)
 	}
@@ -1333,7 +1333,7 @@ func TestFormatForPrintMap(t *testing.T) {
 
 func TestFormatForPrintList(t *testing.T) {
 	list := NewList([]Value{NewInteger(1), NewString("a")})
-	out := formatForPrint(list)
+	out := FormatForPrint(list)
 	if !strings.Contains(out, "1") || !strings.Contains(out, "\"a\"") {
 		t.Errorf("expected JSON-like list, got %q", out)
 	}
@@ -1346,7 +1346,7 @@ func TestFormatForPrintTable(t *testing.T) {
 	row := NewOrderedMap()
 	row.Set("name", NewString("alice"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
-	out := formatForPrint(Value{VType: TList, Data: td})
+	out := FormatForPrint(Value{VType: TList, Data: td})
 	if !strings.Contains(out, "name") || !strings.Contains(out, "alice") {
 		t.Errorf("expected table with 'name' and 'alice', got %q", out)
 	}
@@ -1355,21 +1355,21 @@ func TestFormatForPrintTable(t *testing.T) {
 func TestFormatForPrintEmptyTable(t *testing.T) {
 	rec := RecordTypeInfo{Fields: NewOrderedMap()}
 	td := TableData{Record: rec, Rows: nil}
-	out := formatForPrint(Value{VType: TList, Data: td})
+	out := FormatForPrint(Value{VType: TList, Data: td})
 	if out != "(empty table)" {
 		t.Errorf("expected '(empty table)', got %q", out)
 	}
 }
 
 func TestFormatValueJSONNone(t *testing.T) {
-	out := formatValueJSON(NewTypeLiteral(TNone))
+	out := FormatValueJSON(NewTypeLiteral(TNone))
 	if out != "null" {
 		t.Errorf("expected 'null', got %q", out)
 	}
 }
 
 func TestFormatValueJSONBoolFalse(t *testing.T) {
-	out := formatValueJSON(NewBoolean(false))
+	out := FormatValueJSON(NewBoolean(false))
 	if out != "false" {
 		t.Errorf("expected 'false', got %q", out)
 	}
@@ -1380,17 +1380,17 @@ func TestFormatValueJSONNestedMap(t *testing.T) {
 	inner.Set("a", NewInteger(1))
 	outer := NewOrderedMap()
 	outer.Set("m", NewMap(inner))
-	out := formatValueJSON(NewMap(outer))
+	out := FormatValueJSON(NewMap(outer))
 	if !strings.Contains(out, "\"m\"") || !strings.Contains(out, "\"a\"") {
 		t.Errorf("expected nested map, got %q", out)
 	}
 }
 
 func TestPadRight(t *testing.T) {
-	if padRight("hi", 5) != "hi   " {
+	if PadRight("hi", 5) != "hi   " {
 		t.Error("expected padding")
 	}
-	if padRight("hello", 3) != "hello" {
+	if PadRight("hello", 3) != "hello" {
 		t.Error("expected no truncation")
 	}
 }
@@ -1416,11 +1416,11 @@ func TestTraceColorize(t *testing.T) {
 		{NewList([]Value{NewInteger(1)}), "1"},
 	}
 	for _, tc := range cases {
-		got := traceColorize(tc.val)
+		got := TraceColorize(tc.val)
 		// Strip ANSI codes
 		visible := stripANSI(got)
 		if !strings.Contains(visible, tc.want) {
-			t.Errorf("traceColorize(%s) visible = %q, want contains %q", tc.val, visible, tc.want)
+			t.Errorf("TraceColorize(%s) visible = %q, want contains %q", tc.val, visible, tc.want)
 		}
 	}
 }
@@ -1447,7 +1447,7 @@ func stripANSI(s string) string {
 func TestTraceColorizeMap(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	got := traceColorize(NewMap(m))
+	got := TraceColorize(NewMap(m))
 	visible := stripANSI(got)
 	if !strings.Contains(visible, "x") || !strings.Contains(visible, "1") {
 		t.Errorf("expected map colorize to contain 'x' and '1', got %q", visible)
@@ -1456,7 +1456,7 @@ func TestTraceColorizeMap(t *testing.T) {
 
 func TestTraceColorizeForward(t *testing.T) {
 	fwd := NewForward(ForwardInfo{FuncName: "add", CollectedArgs: 1, ExpectedArgs: 2})
-	got := traceColorize(fwd)
+	got := TraceColorize(fwd)
 	visible := stripANSI(got)
 	if !strings.Contains(visible, "add") || !strings.Contains(visible, "1/2") {
 		t.Errorf("expected forward colorize, got %q", visible)
@@ -1464,7 +1464,7 @@ func TestTraceColorizeForward(t *testing.T) {
 }
 
 func TestTraceColorizeOpenParen(t *testing.T) {
-	got := traceColorize(NewWord("("))
+	got := TraceColorize(NewWord("("))
 	visible := stripANSI(got)
 	if !strings.Contains(visible, "(") {
 		t.Errorf("expected '(', got %q", visible)
@@ -1472,10 +1472,10 @@ func TestTraceColorizeOpenParen(t *testing.T) {
 }
 
 func TestTraceVisibleLen(t *testing.T) {
-	if traceVisibleLen("hello") != 5 {
+	if TraceVisibleLen("hello") != 5 {
 		t.Error("plain string length wrong")
 	}
-	if traceVisibleLen("\033[31mhello\033[0m") != 5 {
+	if TraceVisibleLen("\033[31mhello\033[0m") != 5 {
 		t.Error("ANSI-wrapped length wrong")
 	}
 }
@@ -1488,9 +1488,9 @@ func TestRunTrace(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(1), NewWord("add"), NewInteger(2)}
-	result, err := runTrace(r, tokens, &buf)
+	result, err := RunTrace(r, tokens, &buf)
 	if err != nil {
-		t.Fatalf("runTrace error: %v", err)
+		t.Fatalf("RunTrace error: %v", err)
 	}
 	_as31, _ := result[0].AsInteger()
 	if len(result) != 1 || _as31 != 3 {
@@ -1517,14 +1517,14 @@ func TestRunTraceLong(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		tokens = append(tokens, NewInteger(int64(i)))
 	}
-	_, err = runTrace(r, tokens, &buf)
+	_, err = RunTrace(r, tokens, &buf)
 	if err != nil {
-		t.Fatalf("runTrace error: %v", err)
+		t.Fatalf("RunTrace error: %v", err)
 	}
 }
 
 func TestTraceWrapEmpty(t *testing.T) {
-	lines := traceWrap(nil, 0, 80)
+	lines := TraceWrap(nil, 0, 80)
 	if len(lines) != 1 || !strings.Contains(stripANSI(lines[0]), "[ ]") {
 		t.Errorf("expected [ ] for empty, got %v", lines)
 	}
@@ -1590,11 +1590,11 @@ func TestUnmatchedCloseParen(t *testing.T) {
 }
 
 // ========================
-// resolveWordValue tests
+// ResolveWordValue tests
 // ========================
 
 func TestResolveWordValueTrue(t *testing.T) {
-	v := resolveWordValue(NewWord("true"))
+	v := ResolveWordValue(NewWord("true"))
 	_as35, _ := v.AsBoolean()
 	if !v.VType.Matches(TBoolean) || !_as35 {
 		t.Errorf("expected boolean true, got %s", v)
@@ -1602,7 +1602,7 @@ func TestResolveWordValueTrue(t *testing.T) {
 }
 
 func TestResolveWordValueFalse(t *testing.T) {
-	v := resolveWordValue(NewWord("false"))
+	v := ResolveWordValue(NewWord("false"))
 	_as36, _ := v.AsBoolean()
 	if !v.VType.Matches(TBoolean) || _as36 {
 		t.Errorf("expected boolean false, got %s", v)
@@ -1610,21 +1610,21 @@ func TestResolveWordValueFalse(t *testing.T) {
 }
 
 func TestResolveWordValueNone(t *testing.T) {
-	v := resolveWordValue(NewWord("None"))
+	v := ResolveWordValue(NewWord("None"))
 	if !v.VType.Equal(TNone) {
 		t.Errorf("expected none, got %s", v)
 	}
 }
 
 func TestResolveWordValueOther(t *testing.T) {
-	v := resolveWordValue(NewWord("foo"))
+	v := ResolveWordValue(NewWord("foo"))
 	if !v.VType.Equal(TAtom) {
 		t.Errorf("expected atom, got %s", v)
 	}
 }
 
 func TestResolveWordValueNonWord(t *testing.T) {
-	v := resolveWordValue(NewInteger(42))
+	v := ResolveWordValue(NewInteger(42))
 	if !v.VType.Matches(TInteger) {
 		t.Errorf("expected integer passthrough, got %s", v)
 	}
@@ -1734,18 +1734,18 @@ func TestResolveTypeNameUnknown(t *testing.T) {
 }
 
 // ========================
-// isTypeBody tests
+// IsTypeBody tests
 // ========================
 
 func TestIsTypeValueTypeLiteral(t *testing.T) {
-	if !isTypeBody(NewTypeLiteral(TNumber)) {
+	if !IsTypeBody(NewTypeLiteral(TNumber)) {
 		t.Error("type literal should be a type value")
 	}
 }
 
 func TestIsTypeValueDisjunct(t *testing.T) {
 	disj := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
-	if !isTypeBody(disj) {
+	if !IsTypeBody(disj) {
 		t.Error("disjunct of types should be a type value")
 	}
 }
@@ -1754,27 +1754,27 @@ func TestIsTypeValueRecordType(t *testing.T) {
 	f := NewOrderedMap()
 	f.Set("x", NewTypeLiteral(TNumber))
 	rt := NewRecordType(f)
-	if !isTypeBody(rt) {
+	if !IsTypeBody(rt) {
 		t.Error("record type should be a type value")
 	}
 }
 
 func TestIsTypeValueNotType(t *testing.T) {
-	if isTypeBody(NewInteger(42)) {
+	if IsTypeBody(NewInteger(42)) {
 		t.Error("integer should not be a type value")
 	}
 }
 
 func TestIsTypeValueTypedList(t *testing.T) {
 	tl := NewTypedList(NewTypeLiteral(TString))
-	if !isTypeBody(tl) {
+	if !IsTypeBody(tl) {
 		t.Error("typed list should be a type value")
 	}
 }
 
 func TestIsTypeValueTypedMap(t *testing.T) {
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
-	if !isTypeBody(tm) {
+	if !IsTypeBody(tm) {
 		t.Error("typed map should be a type value")
 	}
 }
@@ -2357,7 +2357,7 @@ func TestRunTraceError(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(10), NewWord("div"), NewInteger(0)}
-	_, err = runTrace(r, tokens, &buf)
+	_, err = RunTrace(r, tokens, &buf)
 	if err == nil {
 		t.Fatal("expected error for div by zero")
 	}
@@ -2371,9 +2371,9 @@ func TestTraceWrapMultiLine(t *testing.T) {
 	// Create enough parts to force wrapping
 	var parts []string
 	for i := 0; i < 20; i++ {
-		parts = append(parts, traceColorize(NewInteger(int64(i*1000000))))
+		parts = append(parts, TraceColorize(NewInteger(int64(i*1000000))))
 	}
-	lines := traceWrap(parts, 5, 40)
+	lines := TraceWrap(parts, 5, 40)
 	if len(lines) < 2 {
 		t.Errorf("expected multiple lines for wrapping, got %d", len(lines))
 	}
@@ -2510,18 +2510,18 @@ func TestMakeFieldValueConstraintUnify(t *testing.T) {
 }
 
 // ========================
-// valToString coverage
+// ValToString coverage
 // ========================
 
 func TestValToStringAtom(t *testing.T) {
-	s := valToString(NewAtom("hello"))
+	s := ValToString(NewAtom("hello"))
 	if s != "hello" {
 		t.Errorf("expected 'hello', got %q", s)
 	}
 }
 
 func TestValToStringNone(t *testing.T) {
-	s := valToString(NewTypeLiteral(TNone))
+	s := ValToString(NewTypeLiteral(TNone))
 	if s != "None" {
 		t.Errorf("expected 'None', got %q", s)
 	}
@@ -2595,13 +2595,13 @@ func TestStepEndTerminatesDef(t *testing.T) {
 // ========================
 
 func TestNewRegistryHasStore(t *testing.T) {
-	r, err := NewRegistry()
+	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Store field removed; context store is initialized by InitRootContext.
-	if r.Formats == nil {
-		t.Error("expected Formats to be initialized")
+	if HostFormats(r) == nil {
+		t.Error("expected Formats capability to be installed")
 	}
 }
 
@@ -3824,7 +3824,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 // ========================
 
 func TestBaseValueForConstraintCoverage(t *testing.T) {
-	// Exercise baseValueForConstraint by testing type-related operations
+	// Exercise BaseValueForConstraint by testing type-related operations
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -4246,7 +4246,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 
 	// ResolveFieldType should resolve "MyNum" string to the type value
 	result := ResolveFieldType(r, NewString("MyNum"))
-	if !isTypeBody(result) {
+	if !IsTypeBody(result) {
 		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
 	}
 }
@@ -4350,19 +4350,24 @@ func TestResolveSigTypeList(t *testing.T) {
 	}
 }
 
-func TestResolveSigTypeDecimalDefault(t *testing.T) {
-	// Decimal is not integer or boolean, and has Data != nil, so falls through
-	// to the map/list checks and then to TAny.
+func TestResolveSigTypeDecimalLiteral(t *testing.T) {
+	// Post §1.1 fix: scalar literals (Integer, Decimal, Boolean,
+	// String, Atom) are routed through Signature.Patterns. The type
+	// is normalised to the kind, and the literal value lands in the
+	// pattern slot.
 	v := NewDecimal(3.14)
 	tp, pattern, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Equal(TAny) {
-		t.Errorf("expected Any for decimal, got %s", tp)
+	if !tp.Equal(TDecimal) {
+		t.Errorf("expected TDecimal kind for decimal literal, got %s", tp)
 	}
-	if pattern != nil {
-		t.Errorf("expected nil pattern for decimal, got %v", pattern)
+	if pattern == nil {
+		t.Fatal("expected pattern to carry the literal value, got nil")
+	}
+	if got, _ := pattern.AsDecimal(); got != 3.14 {
+		t.Errorf("pattern value = %v, want 3.14", got)
 	}
 }
 
@@ -4603,14 +4608,14 @@ func TestParseFnReturnsListError(t *testing.T) {
 }
 
 // ========================
-// flexibleMatch coverage
+// FlexibleMatch coverage
 // ========================
 
 func TestFlexibleMatchTooFewValues(t *testing.T) {
 	// Fewer values than types should return nil, false.
 	values := []Value{NewInteger(1)}
 	types := []Type{TInteger, TString}
-	result, ok := flexibleMatch(values, &Signature{Args: types})
+	result, ok := FlexibleMatch(values, &Signature{Args: types})
 	if ok || result != nil {
 		t.Errorf("expected no match with fewer values than types")
 	}

@@ -7,23 +7,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// cloneFunc returns the "clone" native function definition.
-// clone is stack-only and has one signature:
-//   - [any] — deep-clones the value
-func RegisterClone(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "clone",
-		ForwardPrecedence: false,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny},
-				Handler: cloneHandler,
-			},
-		},
-	})
-}
-
 // cloneHandler calls voxgigstruct.Clone to produce a deep copy.
+// The "clone" word is registered via the consolidated Natives slice in
+// natives.go.
 func cloneHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
 

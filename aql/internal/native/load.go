@@ -6,51 +6,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// loadFunc returns the "load" native function definition.
-// load has forward precedence and three signatures:
-//   - [map(kind:"api")] — loads a single entity via the SDK
-//   - [table, map]      — finds a single record by matching the map's key-value pairs (typically {id:"..."})
-//   - [map, map]        — record type + filter: returns empty map
-func RegisterLoad(r *engine.Registry) {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "load",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: loadEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: loadEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  loadAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  loadAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: loadHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: loadRecordHandler,
-			},
-		},
-	})
-}
-
+// The "load" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // loadEntityHandler handles load with an Entity object instance.
 func loadEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])
@@ -58,15 +16,17 @@ func loadEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 }
 
 // loadEntityOptsHandler handles load with an Entity object instance and an options map.
+// Sig is opts-first: args[0]=opts, args[1]=entity.
 func loadEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
 	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // loadAPIOptsHandler handles load with {kind:"api",...} and an extra options map.
 // The options map is merged into the query field of the API map.
+// Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func loadAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
 	return loadAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -102,8 +62,8 @@ func loadRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // loadHandler finds and returns a single record matching the filter.
 // Returns an error if no matching record is found.
 func loadHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	filter := args[1].AsMap()
+	filter := args[0].AsMap()
+	rows := args[1].AsList().Slice()
 
 	for _, row := range rows {
 		if !row.VType.Matches(engine.TMap) {

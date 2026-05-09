@@ -222,7 +222,7 @@ func TestShift(t *testing.T) {
 
 func TestGetpathSimple(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`getpath {a:{b:42}} "a.b"`,
+		`getpath "a.b" {a:{b:42}}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestGetpathSimple(t *testing.T) {
 
 func TestGetpathTopLevel(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`getpath {name:"Alice"} "name"`,
+		`getpath "name" {name:"Alice"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +346,7 @@ func TestInjectPaths(t *testing.T) {
 
 func TestValidateReturnsSpec(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`validate {name:"Alice" age:30} {name:"$STRING" age:"$NUMBER"}`,
+		`validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`,
 	})
 	if err != nil {
 		t.Fatal(err)

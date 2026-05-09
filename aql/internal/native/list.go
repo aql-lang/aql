@@ -6,61 +6,11 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// listFunc returns the "list" native function definition.
-// list has forward precedence and four signatures:
-//   - [table, map]  — returns records whose fields match the map's key-value pairs
-//   - [table]       — returns all records from the table
-//   - [map, map]    — record type + filter: returns empty table
-//   - [map]         — record type: returns empty table
-func RegisterList(r *engine.Registry) {
-	// Pattern for {kind:"api", ...} — matches maps where kind is literal "api".
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "list",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: listEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: listEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  listAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  listAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: listFilterHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: listAllHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: listRecordFilterHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap},
-				Handler: listRecordAllHandler,
-			},
-		},
-	})
-}
-
+// The "list" word is registered via the consolidated Natives slice in
+// natives.go. This file keeps the SDK/table/record-type handlers along
+// with shared helpers (recordMatches, valuesEqual) used by load/update/
+// remove.
+//
 // listEntityHandler handles list with an Entity object instance.
 func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])
@@ -68,15 +18,17 @@ func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 }
 
 // listEntityOptsHandler handles list with an Entity object instance and an options map.
+// Sig is opts-first per the data-last principle: args[0]=opts, args[1]=entity.
 func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // listAPIOptsHandler handles list with {kind:"api",...} and an extra options map.
 // The options map is merged into the query field of the API map.
+// Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "query")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -116,10 +68,11 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listFilterHandler returns records from a table that match the given map.
 // A record matches when every key-value pair in the filter map has an equal
-// value in the corresponding record field.
+// value in the corresponding record field. Sig is opts-first: args[0]=filter,
+// args[1]=list.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	filter := args[1].AsMap()
+	rows := args[1].AsList().Slice()
+	filter := args[0].AsMap()
 
 	var matched []engine.Value
 	for _, row := range rows {

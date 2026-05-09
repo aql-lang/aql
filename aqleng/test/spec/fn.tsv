@@ -1,0 +1,25 @@
+# Function-style def: bind a name to a code body, then invoke.
+#
+# `def NAME [body]` registers NAME → list-body in the def stack.
+# Subsequent occurrences of NAME splice the body's elements at the
+# pointer so they execute inline against the current stack.
+#
+# Spec subset semantics: lists bound via `def` are always treated as
+# code bodies — there's no Quoted/Eval distinction here. The full
+# Go engine uses an Eval flag and a `quote` word to discriminate
+# data lists from code bodies; both are listed in the engine.ts
+# PARITY GAP and would need separate ports to support `def x [data]`
+# as data.
+#
+# Test word:
+#   def — sig [Word, Any]. Captures the name from a Word token,
+#         binds it to the value in the def stack. Returns [].
+
+# tokens	expected	note
+def double [ dup add ] 5 double	10	body executes against stack=[5]: dup→[5,5], add→[10]
+def square [ dup mul ] 7 square	49	dup, mul: 7*7=49
+def inc [ 1 add ] 5 inc	6	body adds 1 to top of stack
+def add5 [ add 5 ] 10 add5	15	curried form — body uses an embedded constant
+def double [ dup add ] ( 3 double ) ( 5 double )	6 10	parens isolate each invocation; without them the inner add would greedily grab the second arg
+def double [ dup add ] def quad [ double double ] 3 quad	12	def can compose other defs
+def pi 3 pi add 1	4	bare scalar def still substitutes (existing simple-value path)

@@ -145,10 +145,10 @@ func (qb *QueryBuilder) ensureSource() (string, bool, error) {
 		return qb.Source.TableName, false, nil
 	}
 	r := qb.Registry
-	if r.SQLite == nil {
+	if HostSQLite(r) == nil {
 		return "", false, fmt.Errorf("SQLite store not initialized")
 	}
-	tmpName, err := r.SQLite.StoreTempTable(qb.Source)
+	tmpName, err := HostSQLite(r).StoreTempTable(qb.Source)
 	if err != nil {
 		return "", false, err
 	}
@@ -161,11 +161,11 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 	var tmpNames []string
 	for i := range qb.Joins {
 		j := &qb.Joins[i]
-		if qb.Registry.SQLite.HasTable(j.Table) {
+		if HostSQLite(qb.Registry).HasTable(j.Table) {
 			continue
 		}
 		// Look up the table in the context store and load it.
-		val, ok := contextStoreLookup(qb.Registry, j.Table)
+		val, ok := ContextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			return tmpNames, fmt.Errorf("join: unknown table %q", j.Table)
 		}
@@ -176,7 +176,7 @@ func (qb *QueryBuilder) ensureJoinSources() ([]string, error) {
 		if td.SQLite {
 			j.Table = td.TableName
 		} else {
-			tmpName, err := qb.Registry.SQLite.StoreTempTable(td)
+			tmpName, err := HostSQLite(qb.Registry).StoreTempTable(td)
 			if err != nil {
 				return tmpNames, err
 			}
@@ -197,7 +197,7 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	}
 	// Add joined table fields.
 	for _, j := range qb.Joins {
-		val, ok := contextStoreLookup(qb.Registry, j.Table)
+		val, ok := ContextStoreLookup(qb.Registry, j.Table)
 		if !ok {
 			// Try the original name if it was remapped to a temp table.
 			continue
@@ -223,7 +223,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer qb.Registry.SQLite.DropTable(tableName)
+		defer HostSQLite(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -231,7 +231,7 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	// Ensure set-op right-hand sources are in SQLite.
@@ -240,12 +240,12 @@ func (qb *QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	schema := qb.mergedSchema()
 	query := qb.buildSQL(tableName, "*")
-	result, err := qb.Registry.SQLite.Query(query, &schema)
+	result, err := HostSQLite(qb.Registry).Query(query, &schema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -259,7 +259,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	if ownsTmp {
-		defer qb.Registry.SQLite.DropTable(tableName)
+		defer HostSQLite(qb.Registry).DropTable(tableName)
 	}
 
 	joinTmps, err := qb.ensureJoinSources()
@@ -267,7 +267,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range joinTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	setOpTmps, err := qb.ensureSetOpSources()
@@ -275,7 +275,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	for _, t := range setOpTmps {
-		defer qb.Registry.SQLite.DropTable(t)
+		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
 	var colSQL string
@@ -325,7 +325,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 	}
 
 	query := qb.buildSQL(tableName, colSQL)
-	result, err := qb.Registry.SQLite.Query(query, resultSchema)
+	result, err := HostSQLite(qb.Registry).Query(query, resultSchema)
 	if err != nil {
 		return TableData{}, err
 	}
@@ -340,7 +340,7 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 		if so.Right.Source.SQLite {
 			continue
 		}
-		tmpName, err := qb.Registry.SQLite.StoreTempTable(so.Right.Source)
+		tmpName, err := HostSQLite(qb.Registry).StoreTempTable(so.Right.Source)
 		if err != nil {
 			return tmpNames, err
 		}
@@ -351,513 +351,13 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 	return tmpNames, nil
 }
 
-// RegisterQuery registers the select, from, star, where, order, by, limit,
-// offset, distinct, groupby, having, join, on, using, union, intersect,
-// except, cast, and aggregate words.
-func RegisterQuery(r *Registry) {
-	// star: [] -> [atom("*")]
-	r.RegisterStackOnly("star", Signature{
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			return []Value{NewAtom("*")}, nil
-		},
-		Returns: []Type{TAtom},
-	})
-
-	// from: [atom] -> [query-builder]
-	fromHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name, _ := args[0].AsConcreteAtom()
-		val, ok := contextStoreLookup(r, name)
-		if !ok {
-			return nil, fmt.Errorf("from: unknown table %q", name)
-		}
-		if !val.IsTableType() {
-			return nil, fmt.Errorf("from: %q is not a table", name)
-		}
-
-		td, ok := val.Data.(TableData)
-		if !ok {
-			return nil, fmt.Errorf("from: %q has no table data", name)
-		}
-
-		qb := NewQueryBuilder(r, td)
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("from",
-		Signature{
-			Args:    []Type{TAtom},
-			Handler: fromHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// as: [table/query(prefix), atom(forward)] -> [query-builder with alias]
-	// Usage: from people as p
-	asHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		alias, _ := args[1].AsConcreteAtom()
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("as: %w", err)
-		}
-		qb.Alias = alias
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("as",
-		Signature{
-			Args:    []Type{TList, TAtom},
-			Handler: asHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// select: [list, atom] -> [table]  (select * from ...)
-	// select: [list, list] -> [table]  (select [a, b] from ...)
-	// Infix star handler: "from products select star" → args=[table, star]
-	selectStarInfixHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		colSpec := args[1]
-
-		_as0, _ := colSpec.AsAtom()
-		if _as0 != "*" {
-			_as1, _ := colSpec.AsAtom()
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as1)
-		}
-
-		return doSelect(r, nil, table)
-	}
-
-	// Suffix star handler: "select star from products" → args=[star, table]
-	selectStarForwardHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		colSpec := args[0]
-		table := args[1]
-
-		_as2, _ := colSpec.AsAtom()
-		if _as2 != "*" {
-			_as3, _ := colSpec.AsAtom()
-			return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as3)
-		}
-
-		return doSelect(r, nil, table)
-	}
-
-	selectColsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		colList := args[0]
-		table := args[1]
-
-		// Resolve any parenthesized sub-expressions (e.g. scalar subqueries).
-		colList, err := resolveSelectSubExprs(r, colList)
-		if err != nil {
-			return nil, fmt.Errorf("select: %w", err)
-		}
-
-		cols, err := parseColumnSpec(colList)
-		if err != nil {
-			return nil, err
-		}
-
-		return doSelect(r, cols, table)
-	}
-
-	r.Register("select",
-		// Suffix: "select star from ..." → [TAtom, TList]
-		Signature{
-			Args:    []Type{TAtom, TList},
-			Handler: selectStarForwardHandler,
-			Returns: []Type{TList},
-		},
-		// Infix: "from ... select star" → [TList, TAtom]
-		Signature{
-			Args:    []Type{TList, TAtom},
-			Handler: selectStarInfixHandler,
-			Returns: []Type{TList},
-		},
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: selectColsHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// where: [condition(forward), table/query(prefix)] -> [query-builder]
-	whereHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		condList := args[1]
-
-		// Resolve any parenthesized sub-expressions (e.g. subqueries in IN).
-		condList, err := resolveWhereSubExprs(r, condList)
-		if err != nil {
-			return nil, fmt.Errorf("where: %w", err)
-		}
-
-		clause, err := buildWhereClause(condList)
-		if err != nil {
-			return nil, fmt.Errorf("where: %w", err)
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("where: %w", err)
-		}
-		qb.Where = clause
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("where",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: whereHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// order: [columns(forward), table/query(prefix)] -> [query-builder]
-	orderListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		colList := args[1]
-
-		clause, err := buildOrderClause(colList)
-		if err != nil {
-			return nil, fmt.Errorf("order: %w", err)
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("order: %w", err)
-		}
-		qb.OrderBy = clause
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	orderAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		col := args[1]
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("order: %w", err)
-		}
-		_as4, _ := col.AsAtom()
-		qb.OrderBy = quoteIdent(_as4)
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("order",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: orderListHandler,
-			Returns: []Type{TList},
-		},
-		Signature{
-			Args:    []Type{TList, TAtom},
-			Handler: orderAtomHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// by: [atom] -> [list], [list] -> [list]
-	r.Register("by",
-		Signature{
-			Args: []Type{TAtom},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewList(args)}, nil
-			},
-			Returns: []Type{TList},
-		},
-		Signature{
-			Args: []Type{TList},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return args, nil
-			},
-			Returns: []Type{TList},
-		},
-	)
-
-	// limit: [table/query(prefix), integer(forward)] -> [query-builder]
-	limitHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		n, _ := args[1].AsConcreteInteger()
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("limit: %w", err)
-		}
-		qb.Limit = int(n)
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("limit",
-		Signature{
-			Args:    []Type{TList, TInteger},
-			Handler: limitHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// offset: [table/query(prefix), integer(forward)] -> [query-builder]
-	offsetHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		n, _ := args[1].AsConcreteInteger()
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("offset: %w", err)
-		}
-		qb.Offset = int(n)
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("offset",
-		Signature{
-			Args:    []Type{TList, TInteger},
-			Handler: offsetHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// distinct: [table/query(prefix)] -> [query-builder]
-	distinctHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("distinct: %w", err)
-		}
-		qb.Distinct = true
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("distinct",
-		Signature{
-			Args:    []Type{TList},
-			Handler: distinctHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// group: [columns(forward), table/query(prefix)] -> [query-builder]
-	// Usage: from sales group by [region]
-	//        from sales group by [region product]
-	//        from sales group [region]
-	groupListHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		colList := args[1]
-
-		clause, err := buildGroupByClause(colList)
-		if err != nil {
-			return nil, fmt.Errorf("group: %w", err)
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("group: %w", err)
-		}
-		qb.GroupBy = clause
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	groupAtomHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		col := args[1]
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("group: %w", err)
-		}
-		_as5, _ := col.AsAtom()
-		qb.GroupBy = quoteIdent(_as5)
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("group",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: groupListHandler,
-			Returns: []Type{TList},
-		},
-		Signature{
-			Args:    []Type{TList, TAtom},
-			Handler: groupAtomHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// having: [condition(forward), table/query(prefix)] -> [query-builder]
-	// Usage: from sales groupby [region] having [count gt 5]
-	havingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		condList := args[1]
-
-		condList, err := resolveWhereSubExprs(r, condList)
-		if err != nil {
-			return nil, fmt.Errorf("having: %w", err)
-		}
-
-		clause, err := buildWhereClause(condList)
-		if err != nil {
-			return nil, fmt.Errorf("having: %w", err)
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("having: %w", err)
-		}
-		qb.Having = clause
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("having",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: havingHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// join: [atom(forward), table/query(prefix)] -> [query-builder]
-	// Usage: from orders join products on [...]
-	RegisterJoinWord(r, "join", "JOIN")
-	RegisterJoinWord(r, "innerjoin", "JOIN")
-	RegisterJoinWord(r, "leftjoin", "LEFT JOIN")
-	RegisterJoinWord(r, "crossjoin", "CROSS JOIN")
-
-	// on: [condition(forward), table/query(prefix)] -> [query-builder]
-	// Sets the ON condition for the most recent join.
-	// Usage: from orders join products on [orders.product_id eq products.id]
-	onHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		condList := args[1]
-
-		clause, err := buildJoinCondition(condList)
-		if err != nil {
-			return nil, fmt.Errorf("on: %w", err)
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("on: %w", err)
-		}
-		if len(qb.Joins) == 0 {
-			return nil, fmt.Errorf("on: no preceding join")
-		}
-		qb.Joins[len(qb.Joins)-1].On = clause
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("on",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: onHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// using: [columns(forward), table/query(prefix)] -> [query-builder]
-	// Usage: from orders join products using [id]
-	usingHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		colList := args[1]
-
-		elems := colList.AsList().Slice()
-		cols := make([]string, 0, len(elems))
-		for _, e := range elems {
-			name := valueToColName(e)
-			if name == "" {
-				return nil, fmt.Errorf("using: expected column name, got %s", e.VType)
-			}
-			cols = append(cols, quoteIdent(name))
-		}
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("using: %w", err)
-		}
-		if len(qb.Joins) == 0 {
-			return nil, fmt.Errorf("using: no preceding join")
-		}
-		qb.Joins[len(qb.Joins)-1].UsingCols = strings.Join(cols, ", ")
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register("using",
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: usingHandler,
-			Returns: []Type{TList},
-		},
-	)
-
-	// Set operations: union, unionall, intersect, except
-	RegisterSetOpWord(r, "union", "UNION")
-	RegisterSetOpWord(r, "unionall", "UNION ALL")
-	RegisterSetOpWord(r, "intersect", "INTERSECT")
-	RegisterSetOpWord(r, "except", "EXCEPT")
-
-	// Aggregate functions (count, sum, avg, min, max) and CAST are handled
-	// directly in parseColumnSpec when they appear as the first element of a
-	// sub-list in the column spec, e.g.:
-	//   select [[count name cnt]] from people
-	//   select [[cast age integer]] from people
-}
-
-// RegisterJoinWord registers a join word (join, innerjoin, leftjoin, crossjoin).
-func RegisterJoinWord(r *Registry, name string, joinType string) {
-	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		table := args[0]
-		tableName, _ := args[1].AsConcreteAtom()
-
-		qb, err := toQueryBuilder(r, table)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", name, err)
-		}
-		qb.Joins = append(qb.Joins, JoinClause{
-			Type:  joinType,
-			Table: tableName,
-		})
-		return []Value{newValue(TList, qb)}, nil
-	}
-
-	r.Register(name,
-		Signature{
-			Args:    []Type{TList, TAtom},
-			Handler: handler,
-			Returns: []Type{TList},
-		},
-	)
-}
-
-// RegisterSetOpWord registers a set operation word (union, unionall, intersect, except).
-func RegisterSetOpWord(r *Registry, name string, op string) {
-	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		left := args[0]
-		right := args[1]
-
-		leftQB, err := toQueryBuilder(r, left)
-		if err != nil {
-			return nil, fmt.Errorf("%s: left operand: %w", name, err)
-		}
-		rightQB, err := toQueryBuilder(r, right)
-		if err != nil {
-			return nil, fmt.Errorf("%s: right operand: %w", name, err)
-		}
-
-		leftQB.SetOps = append(leftQB.SetOps, SetOp{
-			Op:    op,
-			Right: rightQB,
-		})
-		return []Value{newValue(TList, leftQB)}, nil
-	}
-
-	r.Register(name,
-		Signature{
-			Args:    []Type{TList, TList},
-			Handler: handler,
-			Returns: []Type{TList},
-		},
-	)
-}
+// The query DSL words live in queryNatives (native_query.go);
+// supporting parser/exec helpers stay in this file. Aggregate
+// functions (count, sum, avg, min, max) and CAST are handled
+// directly in parseColumnSpec when they appear as the first element
+// of a sub-list in the column spec, e.g.:
+//   select [[count name cnt]] from people
+//   select [[cast age integer]] from people
 
 // aggregateFuncs is the set of recognized aggregate function names.
 var aggregateFuncs = map[string]bool{
@@ -1117,7 +617,7 @@ func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
 		return nil, fmt.Errorf("select: %w", err)
 	}
 
-	return []Value{newValue(TList, result)}, nil
+	return []Value{NewValueRaw(TList, result)}, nil
 }
 
 // comparisonOps maps AQL comparison word names to SQL operators.

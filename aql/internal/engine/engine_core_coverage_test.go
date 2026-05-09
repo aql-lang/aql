@@ -821,9 +821,9 @@ func TestEngineCoreBaseAtom(t *testing.T) {
 // =============================================================================
 
 func TestEngineCoreBaseValueForConstraintTypeLiteral(t *testing.T) {
-	v, err := baseValueForConstraint(NewTypeLiteral(TString))
+	v, err := BaseValueForConstraint(NewTypeLiteral(TString))
 	if err != nil {
-		t.Fatalf("baseValueForConstraint(String): %v", err)
+		t.Fatalf("BaseValueForConstraint(String): %v", err)
 	}
 	_as37, _ := v.AsString()
 	if _as37 != "" {
@@ -833,9 +833,9 @@ func TestEngineCoreBaseValueForConstraintTypeLiteral(t *testing.T) {
 
 func TestEngineCoreBaseValueForConstraintDisjunct(t *testing.T) {
 	d := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
-	v, err := baseValueForConstraint(d)
+	v, err := BaseValueForConstraint(d)
 	if err != nil {
-		t.Fatalf("baseValueForConstraint(String|None): %v", err)
+		t.Fatalf("BaseValueForConstraint(String|None): %v", err)
 	}
 	_as38, _ := v.AsString()
 	if _as38 != "" {
@@ -845,9 +845,9 @@ func TestEngineCoreBaseValueForConstraintDisjunct(t *testing.T) {
 
 func TestEngineCoreBaseValueForConstraintAllNone(t *testing.T) {
 	d := NewDisjunct([]Value{NewTypeLiteral(TNone)})
-	v, err := baseValueForConstraint(d)
+	v, err := BaseValueForConstraint(d)
 	if err != nil {
-		t.Fatalf("baseValueForConstraint(None): %v", err)
+		t.Fatalf("BaseValueForConstraint(None): %v", err)
 	}
 	if !v.VType.Equal(TNone) {
 		t.Errorf("base all-None disjunct = %v, want None", v)
@@ -855,7 +855,7 @@ func TestEngineCoreBaseValueForConstraintAllNone(t *testing.T) {
 }
 
 func TestEngineCoreBaseValueForConstraintConcreteError(t *testing.T) {
-	_, err := baseValueForConstraint(NewInteger(42))
+	_, err := BaseValueForConstraint(NewInteger(42))
 	if err == nil {
 		t.Error("expected error for concrete constraint")
 	}
@@ -987,7 +987,7 @@ func TestEngineCoreFnSigMatchesSpecBasic(t *testing.T) {
 		Params:  []FnParam{{Type: TNumber}},
 		Returns: []Type{TNumber},
 	}
-	if !fnSigMatchesSpec(sig, spec) {
+	if !FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should match spec (types match, ignoring names)")
 	}
 }
@@ -999,7 +999,7 @@ func TestEngineCoreFnSigMatchesSpecDiffParamCount(t *testing.T) {
 	spec := FnSigSpec{
 		Params: []FnParam{{Type: TNumber}, {Type: TString}},
 	}
-	if fnSigMatchesSpec(sig, spec) {
+	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different param count")
 	}
 }
@@ -1013,7 +1013,7 @@ func TestEngineCoreFnSigMatchesSpecDiffReturnCount(t *testing.T) {
 		Params:  []FnParam{{Type: TNumber}},
 		Returns: []Type{TNumber, TString},
 	}
-	if fnSigMatchesSpec(sig, spec) {
+	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different return count")
 	}
 }
@@ -1027,7 +1027,7 @@ func TestEngineCoreFnSigMatchesSpecDiffReturnType(t *testing.T) {
 		Params:  []FnParam{{Type: TNumber}},
 		Returns: []Type{TString},
 	}
-	if fnSigMatchesSpec(sig, spec) {
+	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different return type")
 	}
 }
@@ -1039,7 +1039,7 @@ func TestEngineCoreFnSigMatchesSpecDiffParamType(t *testing.T) {
 	spec := FnSigSpec{
 		Params: []FnParam{{Type: TString}},
 	}
-	if fnSigMatchesSpec(sig, spec) {
+	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different param type")
 	}
 }
@@ -1363,12 +1363,12 @@ func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Define a type, then ResolveFieldType should find it
-	installDef(r, "MyType", NewTypeLiteral(TString))
+	InstallDef(r, "MyType", NewTypeLiteral(TString))
 	v := ResolveFieldType(r, NewString("MyType"))
 	if !v.VType.Equal(TString) {
 		t.Errorf("ResolveFieldType string ref = %v, want String type literal", v)
 	}
-	uninstallDef(r, "MyType")
+	UninstallDef(r, "MyType")
 }
 
 func TestEngineCoreResolveFieldTypeStringNoRef(t *testing.T) {
@@ -1641,28 +1641,28 @@ func TestEngineCoreMakeTableNonList(t *testing.T) {
 // =============================================================================
 
 func TestEngineCoreResolveWordValue(t *testing.T) {
-	v := resolveWordValue(NewWord("true"))
+	v := ResolveWordValue(NewWord("true"))
 	_as58, _ := v.AsBoolean()
 	if !_as58 {
-		t.Error("resolveWordValue(true) should be boolean true")
+		t.Error("ResolveWordValue(true) should be boolean true")
 	}
-	v = resolveWordValue(NewWord("false"))
+	v = ResolveWordValue(NewWord("false"))
 	_as59, _ := v.AsBoolean()
 	if _as59 {
-		t.Error("resolveWordValue(false) should be boolean false")
+		t.Error("ResolveWordValue(false) should be boolean false")
 	}
-	v = resolveWordValue(NewWord("None"))
+	v = ResolveWordValue(NewWord("None"))
 	if !v.VType.Equal(TNone) {
-		t.Errorf("resolveWordValue(None) = %v, want None", v)
+		t.Errorf("ResolveWordValue(None) = %v, want None", v)
 	}
-	v = resolveWordValue(NewWord("other"))
+	v = ResolveWordValue(NewWord("other"))
 	if !v.VType.Equal(TAtom) {
-		t.Errorf("resolveWordValue(other) = %v, want atom", v)
+		t.Errorf("ResolveWordValue(other) = %v, want atom", v)
 	}
 	// Non-word passthrough
-	v = resolveWordValue(NewInteger(42))
+	v = ResolveWordValue(NewInteger(42))
 	_as60, _ := v.AsInteger()
 	if _as60 != 42 {
-		t.Errorf("resolveWordValue(42) = %v, want 42", v)
+		t.Errorf("ResolveWordValue(42) = %v, want 42", v)
 	}
 }

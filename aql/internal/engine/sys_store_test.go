@@ -70,7 +70,7 @@ func TestSysStoreStructure(t *testing.T) {
 
 func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
 	r, _ := engine.DefaultRegistry(native.Register)
-	ops := r.EffectiveFileOps()
+	ops := engine.EffectiveFileOps(r)
 	if _, ok := ops.(*fileops.OSFileOps); !ok {
 		t.Fatalf("default EffectiveFileOps is %T, want *OSFileOps", ops)
 	}
@@ -92,7 +92,7 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	ops := r.EffectiveFileOps()
+	ops := engine.EffectiveFileOps(r)
 	if _, ok := ops.(*fileops.MemFileOps); !ok {
 		t.Fatalf("EffectiveFileOps with mem=true is %T, want *MemFileOps", ops)
 	}
@@ -113,7 +113,7 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 	}
 
 	// Write a file via the in-memory ops
-	memOps := r.EffectiveFileOps()
+	memOps := engine.EffectiveFileOps(r)
 	mem, ok := memOps.(*fileops.MemFileOps)
 	if !ok {
 		t.Fatal("expected MemFileOps")
@@ -121,7 +121,7 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 	mem.Files["test.txt"] = []byte("hello")
 
 	// Read it back through engine file ops
-	data, err := r.EffectiveFileOps().ReadFile("test.txt")
+	data, err := engine.EffectiveFileOps(r).ReadFile("test.txt")
 	if err != nil {
 		t.Fatalf("ReadFile error: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
 	}
 
 	// EffectiveFileOps should return the same MemFileOps instance
-	ops1 := r.EffectiveFileOps()
-	ops2 := r.EffectiveFileOps()
+	ops1 := engine.EffectiveFileOps(r)
+	ops2 := engine.EffectiveFileOps(r)
 	if ops1 != ops2 {
 		t.Fatal("MemFileOps instance should be reused across calls")
 	}

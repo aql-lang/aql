@@ -7,255 +7,11 @@ import (
 	"strings"
 )
 
-// RegisterModule registers the "module", "export", and "import" words.
-//
-// module works like do but with a completely fresh, isolated sub-engine
-// (new registry, new bus). Inside a module the "export" word is available
-// to declare exports. The return value is a module descriptor (ModuleDesc)
-// which can be the subject of def.
-//
-// export: [atom_or_string map] registers an export name and map within
-// the module. The export map's values are evaluated in the module context.
-//
-// import: injects exported names from a module descriptor into the current
-// engine as defs.
-//   - [module-desc]                    — use export names as-is
-//   - [[atom atom] module-desc]        — rename single export (from to)
-//   - [[:pairs...] module-desc]        — rename multiple exports
-//   - [atom module-desc]               — rename single export to new name
-//
-// Bare module names (strings without /, ./, ../ prefix) are resolved by
-// searching for .aql/<name>/index.aql starting from the working directory
-// and walking up parent directories (CommonJS-style resolution).
-func RegisterModule(r *Registry) {
-	// module: [list] -> [module-desc]
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "module",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				if !IsConcrete(args[0]) {
-					return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
-				}
-				desc, err := RunModuleBody(r, args[0].AsList().Slice())
-				if err != nil {
-					return nil, fmt.Errorf("module: %w", err)
-				}
-				return []Value{NewModule(desc)}, nil
-			},
-			Returns: []Type{TModule},
-			// Run in check mode so the module body is analysed in
-			// a sub-registry and its exports are wired up; without
-			// this the downstream `import` would see a data-nil
-			// carrier and do nothing.
-			RunInCheckMode: true,
-		}},
-	})
-
-	// import: [module-desc] -> [] — import all exports as defs
-	importAllHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		desc, _ := args[0].AsModule()
-		installExports(r, desc, nil)
-		return nil, nil
-	}
-
-	// import: [list module-desc] -> [] — rename imports via list
-	importRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		desc, _ := args[1].AsModule()
-		if !IsConcrete(args[0]) {
-			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
-		}
-		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
-	}
-
-	// import: [word/atom module-desc] -> [] — rename single export
-	importSingleRenameHandler := func(newName string, args []Value) ([]Value, error) {
-		desc, _ := args[1].AsModule()
-		return nil, installSingleRename(r, desc, newName)
-	}
-
-	// import: [string] -> [] or [value] — import from a file path, bare module name,
-	// or native module (aql:<name>).
-	// Native modules: strings starting with "aql:" resolve via NativeModResolver.
-	// File paths start with "/", "./" or "../".
-	// Bare names (e.g. "foo") resolve via .aql/foo/index.aql walking up directories.
-	// For .json/.jsonic/.csv/.tsv files, parses the file and pushes the data value.
-	// For other files, reads, parses as AQL, and executes in an isolated module engine.
-	importFileHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path, _ := args[0].AsConcreteString()
-		if isNativeModImport(path) {
-			return nil, resolveNativeMod(r, path)
-		}
-		if !isFilePath(path) {
-			resolved, err := resolveBareModule(r, path)
-			if err != nil {
-				return nil, err
-			}
-			desc, err := loadFileModule(r, resolved)
-			if err != nil {
-				return nil, err
-			}
-			installExports(r, desc, nil)
-			return nil, nil
-		}
-		if isDataFile(path) {
-			return loadDataFile(r, path)
-		}
-		desc, err := loadFileModule(r, path)
-		if err != nil {
-			return nil, err
-		}
-		installExports(r, desc, nil)
-		return nil, nil
-	}
-
-	// import: [list string] -> [] — import from file or bare module with renaming.
-	importFileRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path, _ := args[1].AsConcreteString()
-		if !isFilePath(path) {
-			resolved, err := resolveBareModule(r, path)
-			if err != nil {
-				return nil, err
-			}
-			desc, err := loadFileModule(r, resolved)
-			if err != nil {
-				return nil, err
-			}
-			return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
-		}
-		if isDataFile(path) {
-			return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
-		}
-		desc, err := loadFileModule(r, path)
-		if err != nil {
-			return nil, err
-		}
-		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
-	}
-
-	// import: [atom/q list] -> [] — inline module: import module [body]
-	// The /q captures "module" as a quoted word; the handler runs the body
-	// to produce a module descriptor, then imports all exports.
-	importInlineHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := defName(args[0])
-		if name != "module" {
-			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
-		}
-		if !IsConcrete(args[1]) {
-			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
-		}
-		desc, err := RunModuleBody(r, args[1].AsList().Slice())
-		if err != nil {
-			return nil, fmt.Errorf("import module: %w", err)
-		}
-		installExports(r, desc, nil)
-		return nil, nil
-	}
-
-	// import: [list atom/q list] -> [] — inline module with renames
-	importInlineRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		name := defName(args[1])
-		if name != "module" {
-			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
-		}
-		if !IsConcrete(args[0]) {
-			return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
-		}
-		if !IsConcrete(args[2]) {
-			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
-		}
-		desc, err := RunModuleBody(r, args[2].AsList().Slice())
-		if err != nil {
-			return nil, fmt.Errorf("import module: %w", err)
-		}
-		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
-	}
-
-	// import: [atom atom/q list] -> [] — inline module with single rename
-	importInlineSingleRenameHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		modName := defName(args[1])
-		if modName != "module" {
-			return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", modName)
-		}
-		if !IsConcrete(args[2]) {
-			return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
-		}
-		desc, err := RunModuleBody(r, args[2].AsList().Slice())
-		if err != nil {
-			return nil, fmt.Errorf("import module: %w", err)
-		}
-		return nil, installSingleRename(r, desc, defName(args[0]))
-	}
-
-	// Standard signatures and inline module forms combined.
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "import",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []Type{TModule},
-				Handler:        importAllHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []Type{TList, TModule},
-				Handler:        importRenameHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args: []Type{TAtom, TModule},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					_as0, _ := args[0].AsConcreteAtom()
-					return importSingleRenameHandler(_as0, args)
-				},
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []Type{TString},
-				Handler:        importFileHandler,
-				Returns:        []Type{TModule},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []Type{TList, TString},
-				Handler:        importFileRenameHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			// Inline module forms: use /q to capture "module" as a quoted word
-			// instead of executing it as a function.
-			{
-				Args:           []Type{TAtom, TList},
-				QuoteArgs:      map[int]bool{0: true},
-				NoEvalArgs:     map[int]bool{1: true},
-				Handler:        importInlineHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []Type{TList, TAtom, TList},
-				QuoteArgs:      map[int]bool{1: true},
-				NoEvalArgs:     map[int]bool{2: true},
-				Handler:        importInlineRenameHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []Type{TAtom, TAtom, TList},
-				QuoteArgs:      map[int]bool{1: true},
-				NoEvalArgs:     map[int]bool{2: true},
-				Handler:        importInlineSingleRenameHandler,
-				Returns:        []Type{},
-				RunInCheckMode: true,
-			},
-		},
-	})
-}
+// The "module", "import", and "export" words. The "module" and
+// "import" words live in miscNatives (native_misc.go); "export" is
+// registered dynamically inside RunModuleBody on the per-module
+// sub-registry. The big bag of helpers (loadFileModule,
+// installExports, resolveBareModule, etc.) lives below.
 
 // RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
@@ -267,8 +23,15 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
-	modReg.FileOps = parent.FileOps
-	modReg.MemOps = parent.MemOps
+	// Inherit host-installed capabilities so the module body can read
+	// files, encode/decode formats, and query the SQLite store using
+	// the same backends as the parent registry.
+	if ops := HostFileOps(parent); ops != nil {
+		SetHostFileOps(modReg, ops)
+	}
+	if mem, ok := parent.Capability(CapMemFileOps); ok {
+		modReg.SetCapability(CapMemFileOps, mem)
+	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	// CheckMode is deliberately NOT propagated to the module sub-
@@ -384,7 +147,7 @@ func isDataFile(path string) bool {
 // returns the main file specified there. If the file doesn't exist or has
 // no main property, returns "index.aql".
 func resolveModuleMain(r *Registry, dir string) string {
-	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(dir, ".aql", "aql.json"))
 	if err != nil {
 		return "index.aql"
 	}
@@ -427,7 +190,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		startDir = r.BaseDir
 	} else {
 		var err error
-		startDir, err = r.EffectiveFileOps().ResolvePath(".")
+		startDir, err = EffectiveFileOps(r).ResolvePath(".")
 		if err != nil {
 			return "", fmt.Errorf("import: cannot resolve working directory: %w", err)
 		}
@@ -438,7 +201,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		modDir := filepath.Join(dir, ".aql", name)
 		main := resolveModuleMain(r, modDir)
 		candidate := filepath.Join(modDir, main)
-		if _, err := r.EffectiveFileOps().ReadFile(candidate); err == nil {
+		if _, err := EffectiveFileOps(r).ReadFile(candidate); err == nil {
 			return candidate, nil
 		}
 		parent := filepath.Dir(dir)
@@ -476,7 +239,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 
 	resolved := resolveImportPath(parent, path)
 
-	data, err := parent.EffectiveFileOps().ReadFile(resolved)
+	data, err := EffectiveFileOps(parent).ReadFile(resolved)
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %w", err)
 	}
@@ -510,7 +273,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 // property (map of key→filename). For each entry it loads the data file
 // from the module directory and adds a "resource" export to the descriptor.
 func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
-	data, err := r.EffectiveFileOps().ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
 	if err != nil {
 		return nil // no aql.json — nothing to do
 	}
@@ -552,13 +315,13 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 func installExports(r *Registry, desc ModuleDesc, names []string) {
 	if names == nil {
 		for name, exportMap := range desc.Exports {
-			installDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewMap(exportMap))
 		}
 		return
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
-			installDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewMap(exportMap))
 		}
 	}
 }
@@ -582,7 +345,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			installDef(r, toName, NewMap(exportMap))
+			InstallDef(r, toName, NewMap(exportMap))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -595,7 +358,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		installDef(r, toName, NewMap(exportMap))
+		InstallDef(r, toName, NewMap(exportMap))
 	}
 	return nil
 }
@@ -610,7 +373,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
 	for _, exportMap := range desc.Exports {
-		installDef(r, newName, NewMap(exportMap))
+		InstallDef(r, newName, NewMap(exportMap))
 	}
 	return nil
 }

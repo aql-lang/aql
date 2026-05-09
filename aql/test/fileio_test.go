@@ -23,7 +23,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -52,7 +52,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.Me
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -276,7 +276,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 
 	// Write with all forward args to be explicit
 	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
@@ -323,7 +323,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(fileops.NewMem())
+	engine.SetHostFileOps(reg, fileops.NewMem())
 
 	var outBuf, errBuf bytes.Buffer
 	reg.Output = &outBuf
@@ -350,7 +350,7 @@ func TestStdinWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(fileops.NewMem())
+	engine.SetHostFileOps(reg, fileops.NewMem())
 	var buf bytes.Buffer
 	reg.Output = &buf
 

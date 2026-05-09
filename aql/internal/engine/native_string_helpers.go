@@ -83,45 +83,45 @@ func parseStrOpts(v Value) strOpts {
 				o.normForm = "NFC"
 			}
 		} else if val.VType.Matches(TString) || val.IsAtom() {
-			o.normForm = strings.ToUpper(valToString(val))
+			o.normForm = strings.ToUpper(ValToString(val))
 		}
 	}
 	if val, ok := m.Get("cs"); ok {
-		o.cs = valToString(val)
+		o.cs = ValToString(val)
 	}
 	if val, ok := m.Get("mode"); ok {
-		o.mode = valToString(val)
+		o.mode = ValToString(val)
 	}
 	if val, ok := m.Get("side"); ok {
-		o.side = valToString(val)
+		o.side = ValToString(val)
 	}
 	if val, ok := m.Get("sep"); ok {
-		o.sep = valToString(val)
+		o.sep = ValToString(val)
 		o.hasSep = true
 	}
 	if val, ok := m.Get("fill"); ok {
-		o.fill = valToString(val)
+		o.fill = ValToString(val)
 	}
 	if val, ok := m.Get("style"); ok {
-		o.style = valToString(val)
+		o.style = ValToString(val)
 	}
 	if val, ok := m.Get("loc"); ok {
-		o.loc = valToString(val)
+		o.loc = ValToString(val)
 	}
 	if val, ok := m.Get("unit"); ok {
-		o.unit = valToString(val)
+		o.unit = ValToString(val)
 	}
 	if val, ok := m.Get("tgt"); ok {
-		o.tgt = valToString(val)
+		o.tgt = ValToString(val)
 	}
 	if val, ok := m.Get("quote"); ok {
-		o.quote = valToString(val)
+		o.quote = ValToString(val)
 	}
 	if val, ok := m.Get("scope"); ok {
-		o.scope = valToString(val)
+		o.scope = ValToString(val)
 	}
 	if val, ok := m.Get("occ"); ok {
-		o.occ = valToString(val)
+		o.occ = ValToString(val)
 	}
 	if n, ok := MapFieldInteger(m, "from"); ok {
 		o.from = n
@@ -159,7 +159,7 @@ func parseStrOpts(v Value) strOpts {
 				o.anchored = "both"
 			}
 		} else {
-			o.anchored = valToString(val)
+			o.anchored = ValToString(val)
 		}
 	}
 	if b, ok := MapFieldBoolean(m, "fromEnd"); ok {
@@ -180,10 +180,10 @@ func parseStrOpts(v Value) strOpts {
 		o.collapseWs = b
 	}
 	if val, ok := m.Get("eol"); ok {
-		o.eol = valToString(val)
+		o.eol = ValToString(val)
 	}
 	if val, ok := m.Get("form"); ok {
-		o.form = strings.ToUpper(valToString(val))
+		o.form = strings.ToUpper(ValToString(val))
 	}
 
 	// groups for match
@@ -192,13 +192,13 @@ func parseStrOpts(v Value) strOpts {
 			_as16, _ := val.AsBoolean()
 			o.groupBool = _as16
 		} else {
-			o.groups = valToString(val)
+			o.groups = ValToString(val)
 		}
 	}
 
 	// chars for trim
 	if val, ok := m.Get("chars"); ok {
-		o.fill = valToString(val) // reuse fill field for trim chars
+		o.fill = ValToString(val) // reuse fill field for trim chars
 	}
 
 	return o

@@ -22,7 +22,7 @@ func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]en
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 
 	eng := engine.New(reg)
@@ -583,7 +583,7 @@ func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, st
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.SetFileOps(mem)
+	engine.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 
 	eng := engine.New(reg)

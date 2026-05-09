@@ -5,22 +5,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// sizeFunc returns the "size" native function definition.
-// size has forward precedence and one signature:
-//   - [any] — returns the size/length of the value
-func RegisterSize(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "size",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny},
-				Handler: sizeHandler,
-			},
-		},
-	})
-}
-
+// The "size" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // sizeHandler calls voxgigstruct.Size to get the size of a value.
 func sizeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])

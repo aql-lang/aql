@@ -1,0 +1,16 @@
+# `end` — boundary keyword.
+#
+# - With no pending forward marker: just removed from the token
+#   stream (a no-op). Lets curry-style sequences include `end` as
+#   a defensive terminator without breaking the surrounding flow.
+# - With a pending marker: short-circuits forward collection. The
+#   marker fires with whatever has been collected so far; if the
+#   collected count is short of the sig's forward-arg count, we
+#   raise signature_error (forward dispatch must have all sig
+#   slots filled). Mirrors aqleng/go/engine.go's stepEnd.
+
+# tokens	expected	note
+end		no-op when there's no pending forward; empty stack
+1 add 2 end	3	end after a fully-resolved dispatch is harmless
+1 2 add end	3	end after an all-stack dispatch
+def x 5 end x	5	end after def's collection completes; subsequent x resolves

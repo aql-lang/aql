@@ -6,24 +6,13 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// pushFunc returns the "push" native function definition.
+// The list-mutation words (push/pop/unshift/shift) are registered via the
+// consolidated Natives slice in natives.go.
+//
 // push appends a single element to the end of a list, returning a new list.
 //
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
-func RegisterPush(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "push",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TList},
-				Handler: pushHandler,
-			},
-		},
-	})
-}
-
 func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	newElem := args[0]
 	list := args[1].AsList().Slice()
@@ -38,25 +27,11 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 	return []engine.Value{engine.NewList(result)}, nil
 }
 
-// popFunc returns the "pop" native function definition.
 // pop removes the last element from a list, returning the new list
 // and the removed element.
 //
 //	pop [a,b,c] → [a,b] c
 //	[a,b,c] pop → [a,b] c
-func RegisterPop(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "pop",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: popHandler,
-			},
-		},
-	})
-}
-
 func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	list := args[0].AsList().Slice()
 	if list == nil || len(list) == 0 {
@@ -70,24 +45,10 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 	return []engine.Value{engine.NewList(newList), popped}, nil
 }
 
-// unshiftFunc returns the "unshift" native function definition.
 // unshift prepends a single element to the beginning of a list, returning a new list.
 //
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
-func RegisterUnshift(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "unshift",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TList},
-				Handler: unshiftHandler,
-			},
-		},
-	})
-}
-
 func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	newElem := args[0]
 	list := args[1].AsList().Slice()
@@ -102,25 +63,11 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	return []engine.Value{engine.NewList(result)}, nil
 }
 
-// shiftFunc returns the "shift" native function definition.
 // shift removes the first element from a list, returning the new list
 // and the removed element.
 //
 //	shift [a,b,c] → [b,c] a
 //	[a,b,c] shift → [b,c] a
-func RegisterShift(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "shift",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TList},
-				Handler: shiftHandler,
-			},
-		},
-	})
-}
-
 func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	list := args[0].AsList().Slice()
 	if list == nil || len(list) == 0 {

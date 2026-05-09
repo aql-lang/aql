@@ -5,27 +5,9 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// padFunc returns the "pad" native function definition.
-// pad has forward precedence and two signatures:
-//   - [any, integer] — pads the string representation to the given width
-//   - [any]          — pads the string representation to the default width
-func RegisterPad(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:              "pad",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TInteger},
-				Handler: padWidthHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TAny},
-				Handler: padDefaultHandler,
-			},
-		},
-	})
-}
-
+// The "pad" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // padDefaultHandler calls voxgigstruct.Pad with default width.
 func padDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	data := valueToAny(args[0])
@@ -35,11 +17,11 @@ func padDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 
 // padWidthHandler calls voxgigstruct.Pad with a specified width.
 func padWidthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	width, err := args[1].AsConcreteInteger()
+	width, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, err
 	}
+	data := valueToAny(args[1])
 	result := voxgigstruct.Pad(data, int(width))
 	return []engine.Value{engine.NewString(result)}, nil
 }

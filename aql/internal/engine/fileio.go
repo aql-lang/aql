@@ -207,159 +207,6 @@ func valueToJsonic(v Value) string {
 	}
 }
 
-// RegisterFileIO registers the read and write words.
-func RegisterFileIO(r *Registry) {
-	// extractPath returns the path string from a String or Path value.
-	extractPath := func(v Value) string {
-		if v.IsPath() {
-			_as5, _ := v.AsPath()
-			return _as5.String()
-		}
-		_as6, _ := v.AsString()
-		return _as6
-	}
-
-	// returnPath wraps the result path: if input was a Path, return Path; else String.
-	returnPath := func(v Value, pathStr string) Value {
-		if v.IsPath() {
-			return v
-		}
-		return NewString(pathStr)
-	}
-
-	// read: [path/string] -> [string|list|map]
-	readHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := extractPath(args[0])
-		format := formatFromExt(path)
-		if format == "" {
-			format = "text"
-		}
-		return doRead(r, path, "utf8", format, "lf")
-	}
-
-	// read: [path/string, map] -> [string|list|map]
-	readOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := extractPath(args[0])
-		enc, format, _, nl, fmtExplicit := parseFileOpts(args[1])
-		if !fmtExplicit {
-			if extFmt := formatFromExt(path); extFmt != "" {
-				format = extFmt
-			}
-		}
-		return doRead(r, path, enc, format, nl)
-	}
-
-	// write: [path/string, string] -> [path/string]
-	writeHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := extractPath(args[0])
-		content, _ := args[1].AsConcreteString()
-		result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
-		if err != nil {
-			return result, err
-		}
-		return []Value{returnPath(args[0], path)}, nil
-	}
-
-	// write: [path/string, string, map] -> [path/string]
-	writeOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := extractPath(args[0])
-		content, _ := args[1].AsConcreteString()
-		enc, format, mode, nl, _ := parseFileOpts(args[2])
-		result, err := doWrite(r, path, content, enc, format, mode, nl)
-		if err != nil {
-			return result, err
-		}
-		return []Value{returnPath(args[0], path)}, nil
-	}
-
-	// write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
-	writeAnyOptsHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		path := extractPath(args[0])
-		_, format, mode, nl, _ := parseFileOpts(args[2])
-		if format == "text" {
-			format = "jsonic"
-		}
-		content := valueToJsonic(args[1])
-		result, err := doWrite(r, path, content, "utf8", format, mode, nl)
-		if err != nil {
-			return result, err
-		}
-		return []Value{returnPath(args[0], path)}, nil
-	}
-
-	// Reversed handler for stack-first usage: "path" {opts} read
-	// In nearest-first stack matching, opts (top) maps to sig[0], path to sig[1].
-	readOptsRevHandler := func(args []Value, ctx map[string]Value, stack []Value, reg *Registry) ([]Value, error) {
-		return readOptsHandler([]Value{args[1], args[0]}, ctx, stack, reg)
-	}
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "read",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			// Path signatures
-			{Args: []Type{TPath, TMap}, Handler: readOptsHandler, Returns: []Type{TAny}},
-			{Args: []Type{TPath}, Handler: readHandler, Returns: []Type{TAny}},
-			// String signatures (backward compatible)
-			{Args: []Type{TString, TMap}, Handler: readOptsHandler, Returns: []Type{TAny}},
-			{Args: []Type{TString}, Handler: readHandler, Returns: []Type{TAny}},
-			// Reversed signatures for stack-first: "path" {opts} read
-			{Args: []Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []Type{TAny}},
-			{Args: []Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []Type{TAny}},
-		},
-	})
-
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "write",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			// Path signatures
-			{Args: []Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []Type{}},
-			{Args: []Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []Type{}},
-			{Args: []Type{TPath, TString}, Handler: writeHandler, Returns: []Type{}},
-			// String signatures (backward compatible)
-			{Args: []Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []Type{}},
-			{Args: []Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []Type{}},
-			{Args: []Type{TString, TString}, Handler: writeHandler, Returns: []Type{}},
-		},
-	})
-
-	// stdin, stdout, stderr push special path strings for use with read/write.
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "stdin",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewString(pathStdin)}, nil
-			},
-			Returns: []Type{TString},
-		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "stdout",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewString(pathStdout)}, nil
-			},
-			Returns: []Type{TString},
-		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
-		Name:              "stderr",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args: []Type{},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewString(pathStderr)}, nil
-			},
-			Returns: []Type{TString},
-		}},
-	})
-}
-
 func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 	var data []byte
 	var err error
@@ -370,7 +217,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 			return nil, fmt.Errorf("read: stdin: %w", err)
 		}
 	} else {
-		data, err = r.EffectiveFileOps().ReadFile(path)
+		data, err = EffectiveFileOps(r).ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read: %w", err)
 		}
@@ -378,7 +225,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 
 	content := applyNL(string(data), nl)
 
-	f, ok := r.Formats[format]
+	f, ok := HostFormats(r)[format]
 	if !ok {
 		return nil, fmt.Errorf("read: unknown format: %s", format)
 	}
@@ -389,7 +236,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 	}
 
 	// Store table data in SQLite for formats that produce tables.
-	if r.SQLite != nil && len(result) == 1 {
+	if HostSQLite(r) != nil && len(result) == 1 {
 		if td, ok := result[0].Data.(TableData); ok {
 			// Derive table name from file path (basename without extension).
 			baseName := path
@@ -403,12 +250,12 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 				baseName = baseName[:idx]
 			}
 
-			if err := r.SQLite.StoreTable(baseName, td); err != nil {
+			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
 				return nil, fmt.Errorf("read: sqlite store: %w", err)
 			}
 			td.SQLite = true
 			td.TableName = baseName
-			result[0] = newValue(TList, td)
+			result[0] = NewValueRaw(TList, td)
 		}
 	}
 
@@ -435,13 +282,13 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 	data := []byte(content)
 
 	if mode == "append" {
-		existing, err := r.EffectiveFileOps().ReadFile(path)
+		existing, err := EffectiveFileOps(r).ReadFile(path)
 		if err == nil {
 			data = append(existing, data...)
 		}
 	}
 
-	if err := r.EffectiveFileOps().WriteFile(path, data, 0644); err != nil {
+	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
 

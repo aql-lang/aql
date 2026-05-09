@@ -1,0 +1,10 @@
+# Error reporting. ERROR:substring asserts the error message contains
+# the substring. The engine must NEVER panic on these inputs (cf.
+# CLAUDE.md "Panic Prevention").
+
+# tokens	expected	note
+nope	ERROR:undefined	bare undefined word
+add nope 3	ERROR:signature	non-Integer in forward slot fails sig before `nope` evaluates
+add "hello" 3	ERROR:signature	type mismatch: add expects two integers
+neg "hi"	ERROR:signature	stack-only word with wrong arg type
+add 1	ERROR:	insufficient args for forward-precedence word

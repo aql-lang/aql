@@ -6,27 +6,10 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// prepareFunc returns the "prepare" native function definition.
-// prepare has forward precedence and one signature:
-//   - [map(kind:"api")] — prepares a fetch definition via the SDK
-func RegisterPrepare(r *engine.Registry) {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "prepare",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  prepareAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-		},
-	})
-}
-
+// The "prepare" word is registered via the consolidated Natives slice in
+// natives.go. This file keeps both the prepare handler and the shared
+// buildFetchArgs helper used by direct.go.
+//
 // prepareAPIHandler handles prepare with {kind:"api", spec:String, path:String, method:String, ...}.
 // It calls SDK.Prepare() and returns the fetch definition as a map.
 func prepareAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {

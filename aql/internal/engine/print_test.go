@@ -276,9 +276,9 @@ func TestFormatValueJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatValueJSON(tt.val)
+			got := FormatValueJSON(tt.val)
 			if got != tt.want {
-				t.Errorf("formatValueJSON = %q, want %q", got, tt.want)
+				t.Errorf("FormatValueJSON = %q, want %q", got, tt.want)
 			}
 		})
 	}

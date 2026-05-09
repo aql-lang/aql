@@ -100,84 +100,96 @@ Key conversion functions in `parse.go`:
 
 ## Argument Ordering (CRITICAL)
 
-AQL is a concatenative language where argument order is a **symmetric
-mirror around the function word**. The args on each side of the word
-are read inward toward it: forward args left-to-right, stack args
-nearest-first (top-of-stack). Forward args always fill the lowest sig
-indices, then stack args fill the remainder. To move an arg from the
-forward side to the stack side while preserving its sig position, it
-must go to the **far** (deepest) stack position — creating the mirror.
+Post §1.4 unification, dispatch is governed by **one** rule applied
+to every signature, regardless of whether the word was historically
+"forward-precedence" or "stack-only":
 
-### The mirror pattern
+> Each `Signature` declares a boundary `BarrierPos` (the position of
+> the `|` marker). Args at sig positions `[0..BarrierPos-1]` may be
+> collected from forward tokens (in source order) or fall back to
+> the stack. Args at sig positions `[BarrierPos..N-1]` always come
+> from the stack. Stack consumption is always **top-down**: sig[i]
+> reads the top of the stack, sig[i+1] reads the next-deeper, etc.
 
-For a word `f` with N args, the equivalent forms are obtained by
-moving the **last** forward arg to the **far left** of the stack,
-one at a time. The args on the left of `f` are always the reverse of
-the args they replace on the right:
+`BarrierPos == 0` means "all stack" (legacy stack-only).
+`BarrierPos == N` means "all forward-eligible" (legacy forward-prec).
+`0 < B < N` mixes the two: forward fills the leading B positions then
+stack fills the rest.
 
-**1 arg:**
-```
-f a             →  sig[0]=a       (forward)
-a f             →  sig[0]=a       (prefix)
-```
+### The unified algorithm
 
-**2 args** (verified with non-commutative `sub`: 10 sub 3 = 7, 3 sub 10 = -7):
-```
-f a b           →  sig[0]=a  sig[1]=b     (all forward)
-b f a           →  sig[0]=a  sig[1]=b     (1 prefix, 1 forward)
-b a f           →  sig[0]=a  sig[1]=b     (all prefix)
-```
-Note: `a f b` gives sig[0]=b, sig[1]=a — **NOT** equivalent to `f a b`.
+For each candidate `sig`:
 
-**3 args:**
-```
-f a b c         →  sig[0]=a  sig[1]=b  sig[2]=c   (all forward)
-c f a b         →  sig[0]=a  sig[1]=b  sig[2]=c   (1 prefix, 2 forward)
-c b f a         →  sig[0]=a  sig[1]=b  sig[2]=c   (2 prefix, 1 forward)
-c b a f         →  sig[0]=a  sig[1]=b  sig[2]=c   (all prefix)
-```
+1. **Forward phase** — walk sig[0..forwardLimit-1] in order. At each
+   step, take the next future token and check it against the next
+   sig type. Stop on a structural boundary (open paren, end, function
+   word) or on type mismatch — the remaining sig positions then come
+   from the stack.
 
-**4 args:**
-```
-f a b c d       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (all forward)
-d f a b c       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (1 prefix, 3 forward)
-d c f a b       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (2 prefix, 2 forward)
-d c b f a       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (3 prefix, 1 forward)
-d c b a f       →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  (all prefix)
-```
+2. **Stack phase** — walk the remaining sig positions in order, top
+   of stack first. sig[fwd] = stack top, sig[fwd+1] = next-deeper, etc.
 
-**5 args:**
+The handler always sees args in sig order: `args[0]` is whatever
+matched sig[0], regardless of whether it came from a future token or
+the top of the stack.
+
+### Examples
+
+For `def f fn [[A B C] Any [...]]` (no boundary, all forward-eligible),
+all of these forms call `Fimpl(a, b, c)`:
+
 ```
-f a b c d e     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
-e f a b c d     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
-e d f a b c     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
-e d c f a b     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
-e d c b f a     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
-e d c b a f     →  sig[0]=a  sig[1]=b  sig[2]=c  sig[3]=d  sig[4]=e
+f a b c     → forward [a,b,c]                        → sig=[a,b,c]
+c f a b     → forward [a,b], stack top=c             → sig=[a,b,c]
+c b f a     → forward [a],   stack top=b, deeper=c   → sig=[a,b,c]
+c b a f     → forward [],    stack top=a, …, c       → sig=[a,b,c]
 ```
 
-### The rule
+For `def g fn [[A B | C] Any [...]]` (boundary at position 2), only
+forms that put `c` on the stack are valid:
 
-Reading from the all-forward form `f a b c d e`:
-- The forward args `a b c d e` read left-to-right → sig[0..4]
-- The all-prefix form reverses them: `e d c b a f` reads top-of-stack
-  first → sig[0]=a (top), sig[4]=e (deepest)
-- Every mixed form is a split: forward args on the right of `f` keep
-  their left-to-right order, stack args on the left are the remaining
-  args in reverse
+```
+c g a b     → forward [a,b], stack top=c   → sig=[a,b,c]
+c b g a     → forward [a],   stack top=b…c → sig=[a,b,c]
+c b a g     → forward [],    stack top=a…c → sig=[a,b,c]
+```
 
-Do NOT assume left-to-right source order maps to sig order — only the
-mirror equivalences above are valid. `a f b` is NOT equivalent to
-`f a b` (it swaps sig[0] and sig[1]).
+For `def h fn [[| A B C] Any [...]]` (boundary at 0, legacy stack-only),
+only the all-prefix form matches:
+
+```
+c b a h     → forward [], stack top=a, deeper=b, deepest=c → sig=[a,b,c]
+```
+
+### Non-commutative two-arg sanity check
+
+With `sub` declared as a 2-arg forward-eligible word — handler computes
+`args[1] - args[0]` (post-§1.4 phase 4: every binary math handler
+computes `b op a` so the swap form reads naturally):
+
+```
+sub 10 3    → forward [10,3]                  → sig=[10,3] → 3-10 = -7
+3 sub 10    → forward [10], stack top=3       → sig=[10,3] → 3-10 = -7
+3 10 sub    → forward [],   stack top=10…3    → sig=[10,3] → 3-10 = -7
+10 sub 3    → forward [3],  stack top=10      → sig=[3,10] → 10-3 =  7  (swap form)
+```
+
+`a f b` is the **swap form**: it binds sig[0] from the forward side
+(b) and sig[1] from the prefix (a). The mirror equivalence
+`f a b ≡ b f a ≡ b a f` holds; `a f b` is the only non-equivalent
+two-arg arrangement. The phase-4 handler convention picks the swap
+form as the canonical surface syntax: `10 sub 3 = 7` matches how
+a reader scans left-to-right.
 
 ### Implementation
 
-`rearrangeForForward()` in `engine.go` reorders collected values so
-forward args occupy the deepest positions and stack args (reversed)
-follow, then `matchSignature` with `ForceStack` and deepest-first
-matching reads them in signature order. For the all-prefix case,
-`matchSignature` uses `nearestFirst` mode (`match.go:282`) which maps
-top-of-stack → sig[0].
+The matcher in `aqleng/go/match.go::matchSignature` runs a single
+loop over sig positions. Forward limit comes from `sig.BarrierPos`,
+overridable per call site by `/s` (force stack: limit=0) or `/f`
+(force forward: limit=N). When forward args have to be collected
+across paren / nested-forward boundaries, `rearrangeForForward` lays
+the collected values out so the post-collection retry sees them
+top-down in sig order.
 
 ## Quotation System
 

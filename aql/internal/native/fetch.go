@@ -13,33 +13,9 @@ import (
 
 const defaultFetchTimeout = 30 * time.Second
 
-// fetchFunc returns the "fetch" native function definition.
-// fetch is synchronous and blocks until a response (or failure).
-// It mirrors the browser fetch API with three signatures:
-//   - [string, map] — URL string plus options map (method, headers, body, timeout)
-//   - [map]         — full request map containing at least a "url" field
-//   - [string]      — simple GET by URL string
-func RegisterFetch(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "fetch",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TString, engine.TMap},
-				Handler: fetchStringMapHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap},
-				Handler: fetchMapHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TString},
-				Handler: fetchStringHandler,
-			},
-		},
-	})
-}
-
+// The "fetch" word is registered via the consolidated Natives slice in
+// natives.go. Handlers cover [string], [map], and [string, map] forms.
+//
 // fetchStringHandler handles fetch with a single URL string argument.
 // Performs a GET request to the given URL.
 func fetchStringHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {

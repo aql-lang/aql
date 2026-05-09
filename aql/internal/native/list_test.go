@@ -67,7 +67,7 @@ func TestListFilterHandler(t *testing.T) {
 	filter.Set("city", engine.NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{table, engine.NewMap(filter)},
+		[]engine.Value{engine.NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestListFilterMultipleKeys(t *testing.T) {
 	filter.Set("city", engine.NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{table, engine.NewMap(filter)},
+		[]engine.Value{engine.NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestListFilterNoMatch(t *testing.T) {
 	filter.Set("name", engine.NewString("nobody"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{table, engine.NewMap(filter)},
+		[]engine.Value{engine.NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestListFilterMissingField(t *testing.T) {
 	filter.Set("city", engine.NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{table, engine.NewMap(filter)},
+		[]engine.Value{engine.NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {

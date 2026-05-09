@@ -7,28 +7,15 @@ import (
 	voxgigstruct "github.com/voxgig/struct"
 )
 
-// filterFunc returns the "filter" native function definition.
-// filter has forward precedence and one signature:
-//   - [any, function] — filters the value using the callback as predicate
-func RegisterFilter(r *engine.Registry) {
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "filter",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			{
-				Args:    []engine.Type{engine.TAny, engine.TFunction},
-				Handler: filterHandler,
-			},
-		},
-	})
-}
-
+// The "filter" word is registered via the consolidated Natives slice in
+// natives.go.
+//
 // filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
 func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	cb := args[1]
+	cb := args[0]
+	data := valueToAny(args[1])
 
 	var callErr error
 	result := voxgigstruct.Filter(data, func(pair [2]any) bool {

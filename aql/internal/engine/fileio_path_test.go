@@ -10,7 +10,7 @@ import (
 func setupMemFSForIO(t *testing.T, r *engine.Registry) *fileops.MemFileOps {
 	t.Helper()
 	mem := fileops.NewMem()
-	r.MemOps = mem
+	r.SetCapability(engine.CapMemFileOps, fileops.FileOps(mem))
 	e := engine.New(r)
 	_, err := e.Run([]engine.Value{
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),

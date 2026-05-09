@@ -1,0 +1,30 @@
+{
+  "name": "@voxgig/aqleng",
+  "version": "0.1.0",
+  "description": "TypeScript port of the AQL execution engine. Pure engine — no parser, no built-in word library.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
+    "test:spec": "node --test --experimental-strip-types --no-warnings src/spec.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "@types/node": "^24.7.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}

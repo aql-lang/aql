@@ -28,7 +28,7 @@ func TestApplyComplementNarrowing(t *testing.T) {
 		NewTypeLiteral(TInteger),
 	})
 
-	restore := applyComplementNarrowing(r, cond)
+	restore := ApplyComplementNarrowing(r, cond)
 	defer restore()
 
 	if d := r.DefStackDepth("x"); d < 2 {
@@ -59,7 +59,7 @@ func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 		NewTypeLiteral(TString),
 	})
 
-	restore := applyComplementNarrowing(r, cond)
+	restore := ApplyComplementNarrowing(r, cond)
 	defer restore()
 
 	if d := r.DefStackDepth("x"); d != 1 {

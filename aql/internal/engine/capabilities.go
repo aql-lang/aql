@@ -1,0 +1,107 @@
+package engine
+
+import (
+	aqleng "github.com/metsitaba/voxgig-exp/aqleng"
+
+	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
+)
+
+// Host-side capability keys. The host installs implementations under
+// these names on aqleng.Registry; word handlers retrieve them through
+// the typed accessors in this file. aqleng itself never sees them.
+const (
+	CapFileOps    = "engine.fileops"     // active fileops.FileOps
+	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory fileops
+	CapFormats    = "engine.formats"     // map[string]Format read/write registry
+	CapSQLite     = "engine.sqlite"      // *SQLiteStore
+)
+
+// HostFileOps returns the FileOps installed on r, or nil if none.
+// Word handlers that need filesystem access call EffectiveFileOps
+// instead — it honours the __sys.fs.mem switch.
+func HostFileOps(r *Registry) fileops.FileOps {
+	ops, _ := aqleng.Cap[fileops.FileOps](r, CapFileOps)
+	return ops
+}
+
+// SetHostFileOps installs the active fileops capability and re-wires
+// any registered jsonic-format multisource resolver to use it.
+func SetHostFileOps(r *Registry, ops fileops.FileOps) {
+	r.SetCapability(CapFileOps, ops)
+	if formats := HostFormats(r); formats != nil {
+		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
+			jf.Resolver = MakeFileOpsResolver(ops)
+		}
+	}
+}
+
+// HostFormats returns the format registry installed on r, or nil if
+// none. The map is owned by the host and may be mutated in place to
+// register or replace individual formats.
+func HostFormats(r *Registry) map[string]Format {
+	formats, _ := aqleng.Cap[map[string]Format](r, CapFormats)
+	return formats
+}
+
+// SetHostFormats installs the format registry as a single capability.
+func SetHostFormats(r *Registry, formats map[string]Format) {
+	r.SetCapability(CapFormats, formats)
+}
+
+// HostSQLite returns the SQLite store installed on r, or nil if none.
+func HostSQLite(r *Registry) *SQLiteStore {
+	store, _ := aqleng.Cap[*SQLiteStore](r, CapSQLite)
+	return store
+}
+
+// SetHostSQLite installs the SQLite store as a capability.
+func SetHostSQLite(r *Registry, store *SQLiteStore) {
+	r.SetCapability(CapSQLite, store)
+}
+
+// EffectiveFileOps returns the fileops to use for the current
+// invocation. When __sys.fs.mem is set on the active context store the
+// in-memory variant is returned (and cached as a capability on first
+// use); otherwise the regular host fileops is returned.
+//
+// This logic used to live on aqleng.Registry; it now lives here
+// because aqleng has no fileops concept.
+func EffectiveFileOps(r *Registry) fileops.FileOps {
+	if r == nil {
+		return nil
+	}
+	store := r.ContextStore()
+	if store == nil {
+		return HostFileOps(r)
+	}
+	sysVal, ok := store.Get("__sys")
+	if !ok {
+		return HostFileOps(r)
+	}
+	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return HostFileOps(r)
+	}
+	fsVal, ok := sysStore.Get("fs")
+	if !ok {
+		return HostFileOps(r)
+	}
+	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return HostFileOps(r)
+	}
+	memVal, ok := fsStore.Get("mem")
+	if !ok {
+		return HostFileOps(r)
+	}
+	asBool, _ := memVal.AsBoolean()
+	if memVal.VType.Matches(TBoolean) && asBool {
+		if mem, _ := aqleng.Cap[fileops.FileOps](r, CapMemFileOps); mem != nil {
+			return mem
+		}
+		mem := fileops.NewMem()
+		r.SetCapability(CapMemFileOps, mem)
+		return mem
+	}
+	return HostFileOps(r)
+}

@@ -6,51 +6,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
 )
 
-// createFunc returns the "create" native function definition.
-// create has forward precedence and three signatures:
-//   - [map(kind:"api")] — creates an entity via the SDK
-//   - [table, map]      — appends the map as a new record to the table; the map must contain an "id" field
-//   - [map, map]        — record type + record: returns empty table
-func RegisterCreate(r *engine.Registry) {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	apiPatternVal := engine.NewMap(apiPattern)
-
-	r.RegisterNativeFunc(engine.NativeFunc{
-		Name:             "create",
-		ForwardPrecedence: true,
-		Signatures: []engine.NativeSig{
-			// Entity object signatures (highest priority).
-			{
-				Args:    []engine.Type{engine.TResourceEntity, engine.TMap},
-				Handler: createEntityOptsHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TResourceEntity},
-				Handler: createEntityHandler,
-			},
-			{
-				Args:     []engine.Type{engine.TMap, engine.TMap},
-				Handler:  createAPIOptsHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:     []engine.Type{engine.TMap},
-				Handler:  createAPIHandler,
-				Patterns: map[int]engine.Value{0: apiPatternVal},
-			},
-			{
-				Args:    []engine.Type{engine.TList, engine.TMap},
-				Handler: createHandler,
-			},
-			{
-				Args:    []engine.Type{engine.TMap, engine.TMap},
-				Handler: createRecordHandler,
-			},
-		},
-	})
-}
-
+// The "create" word is registered via the consolidated Natives slice in
+// natives.go. Handlers below cover the SDK/table/record overloads.
+//
 // createEntityHandler handles create with an Entity object instance.
 func createEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	apiMap := entityToAPIMap(args[0])
@@ -58,15 +16,17 @@ func createEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack
 }
 
 // createEntityOptsHandler handles create with an Entity object instance and a data map.
+// Sig is opts-first: args[0]=data, args[1]=entity.
 func createEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[0], args[1].AsMap(), "data")
+	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "data")
 	return createAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // createAPIOptsHandler handles create with {kind:"api",...} and an extra data map.
 // The options map is merged into the data field of the API map.
+// Sig is opts-first: args[0]=data, args[1]=apiMap (pattern-matched).
 func createAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[0].AsMap(), args[1].AsMap(), "data")
+	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "data")
 	return createAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -103,8 +63,8 @@ func createRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // The map must contain an "id" field. If a record with the same id already
 // exists, an error is returned.
 func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
-	rec := args[1].AsMap()
+	rec := args[0].AsMap()
+	rows := args[1].AsList().Slice()
 
 	idVal, ok := rec.Get("id")
 	if !ok {
@@ -131,6 +91,6 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 
 	result := make([]engine.Value, len(rows)+1)
 	copy(result, rows)
-	result[len(rows)] = args[1]
+	result[len(rows)] = args[0]
 	return []engine.Value{engine.NewList(result)}, nil
 }

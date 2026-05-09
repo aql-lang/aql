@@ -12,7 +12,10 @@ import (
 	"github.com/metsitaba/voxgig-exp/aql/internal/fileops"
 )
 
-// Format handles encoding and decoding file content for a specific format.
+// Format encodes and decodes file content for a named representation
+// (text, json, csv, …). The host package owns this interface — aqleng
+// has no knowledge of file formats. Word handlers look formats up via
+// HostFormats(r) (see capabilities.go).
 type Format interface {
 	Decode(content string) ([]Value, error)
 	Encode(v Value) (string, error)
@@ -253,19 +256,13 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	}
 
 	// Return a table value: list with TableData holding both schema and rows.
-	return []Value{newValue(TList, TableData{
+	return []Value{NewValueRaw(TList, TableData{
 		Record: recType,
 		Rows:   rows,
 	})}, nil
 }
 
-// TableData holds a concrete table: its record schema plus the row data.
-type TableData struct {
-	Record    RecordTypeInfo
-	Rows      []Value
-	SQLite    bool   // true if data is backed by an in-memory SQLite table
-	TableName string // name of the table in the SQLite store
-}
+// TableData is re-exported by aliases.go (defined in aqleng).
 
 // encodeDelimited converts a table value to CSV/TSV text.
 func encodeDelimited(v Value, sep string) (string, error) {

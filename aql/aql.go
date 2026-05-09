@@ -192,7 +192,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
-	a.registry.SetFileOps(ops)
+	engine.SetHostFileOps(a.registry, ops)
 }
 
 // SetOutput replaces the writer used by print, help, and other output words.
@@ -203,7 +203,12 @@ func (a *AQL) SetOutput(w io.Writer) {
 // RegisterFormat adds or replaces a format in the format registry.
 // Formats are used by read/write words via the {fmt:"name"} option.
 func (a *AQL) RegisterFormat(name string, f Format) {
-	a.registry.Formats[name] = f
+	formats := engine.HostFormats(a.registry)
+	if formats == nil {
+		formats = make(map[string]engine.Format)
+		engine.SetHostFormats(a.registry, formats)
+	}
+	formats[name] = f
 }
 
 // Register adds a named word with one or more signatures.

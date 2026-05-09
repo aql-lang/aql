@@ -97,7 +97,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "getpath",
-			def:  `def f fn [[m:Map] [Any] [getpath m "a"]]`,
+			def:  `def f fn [[m:Map] [Any] [getpath "a" m]]`,
 			call: `{a:42} f`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
@@ -196,7 +196,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		},
 		{
 			name: "join",
-			expr: `(join ["a","b"] "-")`,
+			expr: `(join "-" ["a","b"])`,
 			check: func(t *testing.T, result []engine.Value) {
 				t.Helper()
 				assertResult(t, result, "'a-b'")
