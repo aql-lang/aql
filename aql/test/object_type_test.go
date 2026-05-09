@@ -1440,7 +1440,7 @@ func TestMakeObjectDeep7AutoPrototypeStringFormat(t *testing.T) {
 }
 
 // TestMakeObjectPrototypeDotAccess verifies the full prototype example:
-// define Foo, create foo1, define Bar extending Foo, create barA with foo1
+// define Foo, create foo1, define Bar extending Foo, create bar-a with foo1
 // as prototype, then access fields via dot notation.
 func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	// foo1.x => 1
@@ -1458,13 +1458,13 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 		t.Errorf("expected foo1.x=1, got %d", _v85)
 	}
 
-	// barA.y => 'A'
+	// bar-a.y => 'A'
 	result, err = runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`type Bar object {y:String} Foo`,
-		`def barA make Bar {y:"A"} foo1`,
-		`barA get y`,
+		`def bar-a make Bar {y:"A"} foo1`,
+		`bar-a get y`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1472,16 +1472,16 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	_v86, _ := result[0].AsString()
 	if _v86 != "A" {
 		_v87, _ := result[0].AsString()
-		t.Errorf("expected barA.y='A', got %s", _v87)
+		t.Errorf("expected bar-a.y='A', got %s", _v87)
 	}
 
-	// barA.x => 1 (from prototype foo1)
+	// bar-a.x => 1 (from prototype foo1)
 	result, err = runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`type Bar object {y:String} Foo`,
-		`def barA make Bar {y:"A"} foo1`,
-		`barA get x`,
+		`def bar-a make Bar {y:"A"} foo1`,
+		`bar-a get x`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1489,32 +1489,32 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	_v88, _ := result[0].AsInteger()
 	if _v88 != 1 {
 		_v89, _ := result[0].AsInteger()
-		t.Errorf("expected barA.x=1 (from prototype foo1), got %d", _v89)
+		t.Errorf("expected bar-a.x=1 (from prototype foo1), got %d", _v89)
 	}
 }
 
 // TestMakeObjectPrototypeDotAccessEndToEnd runs the full prototype example
 // as a single program: define Foo, create foo1, define Bar extending Foo,
-// create barA with foo1 as prototype, then print each dot-access result.
+// create bar-a with foo1 as prototype, then print each dot-access result.
 func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`foo1.x`,
 		`type Bar object {y:String} Foo`,
-		`def barA make Bar {y:"A"} foo1`,
-		`barA.y`,
-		`barA.x`,
+		`def bar-a make Bar {y:"A"} foo1`,
+		`bar-a.y`,
+		`bar-a.x`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// barA.x is the last step, so result comes from that.
+	// bar-a.x is the last step, so result comes from that.
 	_v90, _ := result[0].AsInteger()
 	if _v90 != 1 {
 		_v91, _ := result[0].AsInteger()
-		t.Errorf("expected barA.x=1 (inherited from prototype foo1), got %d", _v91)
+		t.Errorf("expected bar-a.x=1 (inherited from prototype foo1), got %d", _v91)
 	}
 
 	// Also verify each step individually in a single shared engine.
@@ -1538,26 +1538,26 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	}
 	results = append(results, result[0].String())
 
-	// barA.y => A
+	// bar-a.y => A
 	result, err = runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`type Bar object {y:String} Foo`,
-		`def barA make Bar {y:"A"} foo1`,
-		`barA.y`,
+		`def bar-a make Bar {y:"A"} foo1`,
+		`bar-a.y`,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	results = append(results, result[0].String())
 
-	// barA.x => 1
+	// bar-a.x => 1
 	result, err = runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 		`type Bar object {y:String} Foo`,
-		`def barA make Bar {y:"A"} foo1`,
-		`barA.x`,
+		`def bar-a make Bar {y:"A"} foo1`,
+		`bar-a.x`,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -4704,7 +4704,7 @@ func TestModuleIsolation(t *testing.T) {
 
 func TestModuleDefSubject(t *testing.T) {
 	// Modules can be subjects of def.
-	// def myMod module [export M {x:1}]
+	// def my-mod module [export M {x:1}]
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -4713,20 +4713,20 @@ func TestModuleDefSubject(t *testing.T) {
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myMod"), NewWord("module"), body,
+		NewWord("def"), NewWord("my-mod"), NewWord("module"), body,
 	})
 
-	// myMod should resolve to a module descriptor.
-	result := runAQL(t, r, []Value{NewWord("myMod")})
+	// my-mod should resolve to a module descriptor.
+	result := runAQL(t, r, []Value{NewWord("my-mod")})
 	if len(result) != 1 || !result[0].IsModule() {
-		t.Fatalf("def myMod: expected module descriptor, got %v", result)
+		t.Fatalf("def my-mod: expected module descriptor, got %v", result)
 	}
 
-	// import myMod should work.
-	runAQL(t, r, []Value{NewWord("import"), NewWord("myMod")})
+	// import my-mod should work.
+	runAQL(t, r, []Value{NewWord("import"), NewWord("my-mod")})
 	result2 := runAQL(t, r, []Value{NewWord("M")})
 	if len(result2) != 1 || !result2[0].VType.Equal(TMap) {
-		t.Errorf("import myMod: M = %v, want map", result2)
+		t.Errorf("import my-mod: M = %v, want map", result2)
 	}
 }
 

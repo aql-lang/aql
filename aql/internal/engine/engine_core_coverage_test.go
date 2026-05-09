@@ -207,11 +207,11 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 		NewList([]Value{NewWord("x")}),            // but returns Number
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("badReturn"),
+		NewWord("def"), NewWord("bad-return"),
 		NewWord("fn"), fnBody,
 		NewWord("end"),
 	})
-	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("badReturn")})
+	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("bad-return")})
 	if err == nil {
 		t.Error("expected return type check error")
 	}
@@ -245,61 +245,61 @@ func TestEngineCoreFnNonListBody(t *testing.T) {
 
 func TestEngineCoreUndefBasic(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def myVal 100 end myVal => 100
+	// def my-val 100 end my-val => 100
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myValUndef"), NewInteger(100), NewWord("end"),
+		NewWord("def"), NewWord("my-val-undef"), NewInteger(100), NewWord("end"),
 	})
-	result := runAQL(t, r, []Value{NewWord("myValUndef")})
+	result := runAQL(t, r, []Value{NewWord("my-val-undef")})
 	_as13, _ := result[0].AsNumber()
 	if len(result) != 1 || _as13 != 100 {
-		t.Fatalf("myValUndef = %v, want 100", result)
+		t.Fatalf("my-val-undef = %v, want 100", result)
 	}
 
-	// undef myVal
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("myValUndef")})
+	// undef my-val
+	runAQL(t, r, []Value{NewWord("undef"), NewWord("my-val-undef")})
 
 	// After undef, the word should error (undefined)
 	e := New(r)
-	_, runErr := e.Run([]Value{NewWord("myValUndef")})
+	_, runErr := e.Run([]Value{NewWord("my-val-undef")})
 	if runErr == nil {
-		t.Errorf("after undef, myValUndef should error, got nil")
+		t.Errorf("after undef, my-val-undef should error, got nil")
 	}
 }
 
 func TestEngineCoreUndefShadowing(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def "xShadow" 1 end def "xShadow" 2 end xShadow => 2
+	// def "x-shadow" 1 end def "x-shadow" 2 end x-shadow => 2
 	runAQL(t, r, []Value{
-		NewWord("def"), NewString("xShadow"), NewInteger(1), NewWord("end"),
+		NewWord("def"), NewString("x-shadow"), NewInteger(1), NewWord("end"),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewString("xShadow"), NewInteger(2), NewWord("end"),
+		NewWord("def"), NewString("x-shadow"), NewInteger(2), NewWord("end"),
 	})
-	result := runAQL(t, r, []Value{NewWord("xShadow")})
+	result := runAQL(t, r, []Value{NewWord("x-shadow")})
 	_as14, _ := result[0].AsNumber()
 	if len(result) != 1 || _as14 != 2 {
-		t.Fatalf("xShadow = %v, want 2", result)
+		t.Fatalf("x-shadow = %v, want 2", result)
 	}
 
 	// undef x => reveals 1
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("xShadow")})
-	result = runAQL(t, r, []Value{NewWord("xShadow")})
+	runAQL(t, r, []Value{NewWord("undef"), NewWord("x-shadow")})
+	result = runAQL(t, r, []Value{NewWord("x-shadow")})
 	_as15, _ := result[0].AsNumber()
 	if len(result) != 1 || _as15 != 1 {
-		t.Errorf("after first undef, xShadow = %v, want 1", result)
+		t.Errorf("after first undef, x-shadow = %v, want 1", result)
 	}
 }
 
 func TestEngineCoreUndefWithStringName(t *testing.T) {
 	r, _ := DefaultRegistry()
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("strUndef"), NewInteger(77), NewWord("end"),
+		NewWord("def"), NewWord("str-undef"), NewInteger(77), NewWord("end"),
 	})
-	runAQL(t, r, []Value{NewWord("undef"), NewString("strUndef")})
+	runAQL(t, r, []Value{NewWord("undef"), NewString("str-undef")})
 	e := New(r)
-	_, err := e.Run([]Value{NewWord("strUndef")})
+	_, err := e.Run([]Value{NewWord("str-undef")})
 	if err == nil {
-		t.Errorf("after undef by string, strUndef should error, got nil")
+		t.Errorf("after undef by string, str-undef should error, got nil")
 	}
 }
 
@@ -870,36 +870,36 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 	// "true" as forward should resolve to boolean
 	// Test indirectly: def myval true end myval => true
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("trueVal"), NewWord("true"), NewWord("end"),
-		NewWord("trueVal"),
+		NewWord("def"), NewWord("true-val"), NewWord("true"), NewWord("end"),
+		NewWord("true-val"),
 	})
 	_as39, _ := result[0].AsBoolean()
 	if len(result) != 1 || !_as39 {
-		t.Errorf("def trueVal true = %v, want true", result)
+		t.Errorf("def true-val true = %v, want true", result)
 	}
 }
 
 func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("falseVal"), NewWord("false"), NewWord("end"),
-		NewWord("falseVal"),
+		NewWord("def"), NewWord("false-val"), NewWord("false"), NewWord("end"),
+		NewWord("false-val"),
 	})
 	_as40, _ := result[0].AsBoolean()
 	if len(result) != 1 || _as40 {
-		t.Errorf("def falseVal false = %v, want false", result)
+		t.Errorf("def false-val false = %v, want false", result)
 	}
 }
 
 func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// An explicit Atom value can be the body of a def (def atomVal 'myatom).
+	// An explicit Atom value can be the body of a def (def atom-val 'myatom).
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("atomVal"), NewAtom("myatom"), NewWord("end"),
-		NewWord("atomVal"),
+		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewWord("end"),
+		NewWord("atom-val"),
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
-		t.Errorf("def atomVal 'myatom = %v, want atom", result)
+		t.Errorf("def atom-val 'myatom = %v, want atom", result)
 	}
 }
 

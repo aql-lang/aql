@@ -141,6 +141,9 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if IsCapitalisedName(name) {
 		return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
 	}
+	if err := ValidateWordName(name); err != nil {
+		return nil, fmt.Errorf("def %s: %w", name, err)
+	}
 	if r.HasType(name) {
 		return nil, fmt.Errorf("def %s: name clash — already a type", name)
 	}
@@ -160,6 +163,9 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	name := nameMap.Keys()[0]
 	if IsCapitalisedName(name) {
 		return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
+	}
+	if err := ValidateWordName(name); err != nil {
+		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
 	if r.HasType(name) {
 		return nil, fmt.Errorf("def %s: name clash — already a type", name)

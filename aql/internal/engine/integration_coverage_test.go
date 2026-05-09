@@ -130,33 +130,33 @@ func TestIntegVarDeclListTooShort(t *testing.T) {
 
 func TestIntegUndefRemovesDef(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def myVal 99 end myVal undef myVal end
-	// After undef, myVal should not be found (error or just word)
+	// def my-val 99 end my-val undef my-val end
+	// After undef, my-val should not be found (error or just word)
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myVal"), NewInteger(99), NewWord("end"),
-		NewWord("myVal"),
+		NewWord("def"), NewWord("my-val"), NewInteger(99), NewWord("end"),
+		NewWord("my-val"),
 	})
 	_as4, _ := result[0].AsInteger()
 	if len(result) != 1 || _as4 != 99 {
-		t.Fatalf("def myVal 99 end myVal = %v, want 99", result)
+		t.Fatalf("def my-val 99 end my-val = %v, want 99", result)
 	}
 
 	// Now undef it and verify it's gone
 	result = runAQL(t, r, []Value{
-		NewWord("undef"), NewWord("myVal"),
+		NewWord("undef"), NewWord("my-val"),
 	})
 	// Should return nothing (undef returns nil)
 	if len(result) != 0 {
-		t.Errorf("undef myVal should return nothing, got %v", result)
+		t.Errorf("undef my-val should return nothing, got %v", result)
 	}
 }
 
 func TestIntegUndefWithString(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// def myVal 42 end undef "myVal"
+	// def my-val 42 end undef "my-val"
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myVal"), NewInteger(42), NewWord("end"),
-		NewWord("undef"), NewString("myVal"),
+		NewWord("def"), NewWord("my-val"), NewInteger(42), NewWord("end"),
+		NewWord("undef"), NewString("my-val"),
 	})
 	if len(result) != 0 {
 		t.Errorf("undef by string should return nothing, got %v", result)
