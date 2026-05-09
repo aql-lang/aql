@@ -77,8 +77,8 @@ concatq "x" ""	"x"	in mirror form: 1 prefix "" + 1 forward "x" → sig[0]="x", s
 "a" "" concatq	"a"	all-prefix: top is "" → sig[0], deeper "a" → sig[1] → "" + "a" = "a"
 
 # Stack manipulation on empties.
-[ ] dupq	[] []	dupq an empty list — two references to the same value
-"" dupq	"" ""	dupq an empty string
+[ ] dup	[] []	dup an empty list — two references to the same value
+"" dup	"" ""	dup an empty string
 
 # Auto-eval at end-of-Run does NOT change empty lists.
 [ ]	[]	empty Eval=true list at end of Run drains via autoEvalStack to itself

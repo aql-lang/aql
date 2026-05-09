@@ -16,10 +16,10 @@
 #         binds it to the value in the def stack. Returns [].
 
 # tokens	expected	note
-def double [ dupq addq ] 5 double	10	body executes against stack=[5]: dupq→[5,5], addq→[10]
-def square [ dupq mulq ] 7 square	49	dupq, mulq: 7*7=49
+def double [ dup addq ] 5 double	10	body executes against stack=[5]: dup→[5,5], addq→[10]
+def square [ dup mulq ] 7 square	49	dup, mulq: 7*7=49
 def inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack
 def add5 [ addq 5 ] 10 add5	15	curried form — body uses an embedded constant
-def double [ dupq addq ] ( 3 double ) ( 5 double )	6 10	parens isolate each invocation; without them the inner addq would greedily grab the second arg
-def double [ dupq addq ] def quad [ double double ] 3 quad	12	def can compose other defs
+def double [ dup addq ] ( 3 double ) ( 5 double )	6 10	parens isolate each invocation; without them the inner addq would greedily grab the second arg
+def double [ dup addq ] def quad [ double double ] 3 quad	12	def can compose other defs
 def pi 3 pi addq 1	4	bare scalar def still substitutes (existing simple-value path)

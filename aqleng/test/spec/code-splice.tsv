@@ -33,8 +33,8 @@
 #        }
 #
 # 3. The body executes against the CURRENT stack — there is no
-#    sandbox. So a body like `[dupq addq]` requires a value on the
-#    stack at the use site; `def doub [dupq addq] doub 5` errors
+#    sandbox. So a body like `[dup addq]` requires a value on the
+#    stack at the use site; `def doub [dup addq] doub 5` errors
 #    because the splice fires before `5` is pushed.
 # 4. The splice is at the USE SITE, not at definition time. The body
 #    is captured by reference: redefining a word later does NOT
@@ -49,8 +49,8 @@
 # Why this matters
 # ----------------
 # This is the difference between a "data list" and a "code list".
-# Without the splice rule, `def doub [dupq addq]` would just push
-# `[dupq addq]` as a list value when `doub` is referenced — useless
+# Without the splice rule, `def doub [dup addq]` would just push
+# `[dup addq]` as a list value when `doub` is referenced — useless
 # as a function definition. The Eval=true / Quoted=true flag pair
 # is what discriminates the two intents.
 #
@@ -64,33 +64,33 @@
 # tokens	expected	note
 
 # Basic splice: body executes against stack containing the input.
-def doub [ dupq addq ] 5 doub	10	5 pushed; doub splices [dupq addq]; dupq→[5,5]; addq→[10]
-def square [ dupq mulq ] 7 square	49	7 squared
+def doub [ dup addq ] 5 doub	10	5 pushed; doub splices [dup addq]; dup→[5,5]; addq→[10]
+def square [ dup mulq ] 7 square	49	7 squared
 def inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack — embedded literal in body
 
 # Body with embedded literals — curried form.
 def add5 [ addq 5 ] 10 add5	15	body uses an embedded constant; 10 addq 5 = 15
-def double_then_inc [ dupq addq 1 addq ] 5 double_then_inc	11	chained body: 5+5=10, then 10+1=11
+def double_then_inc [ dup addq 1 addq ] 5 double_then_inc	11	chained body: 5+5=10, then 10+1=11
 
 # The use-site contract: body executes against the live stack, notq
 # a sandbox. Insufficient stack at use site → error.
-def doub [ dupq addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dupq needs 1 stack value, sees nothing
+def doub [ dup addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dup needs 1 stack value, sees nothing
 def needs2 [ addq ] needs2 1 2	3	body is just [addq]; splice → addq 1 2 → 3 (addq forward-collects)
 def needs2 [ addq ] 1 2 needs2	3	body splice still works with prefix args
 def needs2 [ addq ] needs2	ERROR:	splice fires; addq waits for forward args; nothing follows; insufficient args
 
 # Composition: one def calling another.
-def doub [ dupq addq ] def quad [ doub doub ] 3 quad	12	3 doubled twice = 12
+def doub [ dup addq ] def quad [ doub doub ] 3 quad	12	3 doubled twice = 12
 def inc [ 1 addq ] def add2 [ inc inc ] 5 add2	7	chained inc calls
 
 # Splice happens at use, not definition. Note however that x in the
 # example below is unreachable: doub's body splices BEFORE x is
-# resolved, so the body's `dupq` runs against an empty stack and errors.
+# resolved, so the body's `dup` runs against an empty stack and errors.
 # This is a real footgun: list-body defs are eager about splicing.
-def x 5 def doub [ dupq addq ] doub x	ERROR:signature_error	doub splices [dupq addq] at point; dupq needs 1 stack value, sees empty stack — x is never reached
+def x 5 def doub [ dup addq ] doub x	ERROR:signature_error	doub splices [dup addq] at point; dup needs 1 stack value, sees empty stack — x is never reached
 
 # Parens isolate splice scopes — each splice runs in its sub-engine.
-def doub [ dupq addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens the inner addq would greedily grab the second invocation's argument
+def doub [ dup addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens the inner addq would greedily grab the second invocation's argument
 
 # Quoted-list def is data, not code.
 def lst quote [ 1 2 3 ] lengthq lst	3	lst resolves to the quoted list; lengthq sees a 3-element list, returns 3

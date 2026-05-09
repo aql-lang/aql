@@ -12,7 +12,7 @@
 #   "hello"       string literal
 #   true, false   boolean literal
 #   null          None type literal
-#   addq, dupq, …   bare word (looks up a registered word handler)
+#   addq, dup, …   bare word (looks up a registered word handler)
 
 # tokens	expected	note
 1	1	scalar integer round-trips

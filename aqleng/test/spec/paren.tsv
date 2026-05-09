@@ -23,5 +23,5 @@ mulq ( 1 addq 2 ) ( 2 addq 1 )	9	both forward args are paren groups
 ( 1 addq 2 ) ( 2 mulq 2 ) mulq	12	all-stack: stack=[3,4], top=4→sig[0], next=3→sig[1], 4*3=12
 
 # Paren leaves multiple values
-( 1 dupq )	1 1	dupq leaves two values; both end up on the outer stack
-( 1 dupq ) addq	2	outer addq sees the two values produced by the paren
+( 1 dup )	1 1	dup leaves two values; both end up on the outer stack
+( 1 dup ) addq	2	outer addq sees the two values produced by the paren

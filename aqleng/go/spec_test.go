@@ -160,40 +160,9 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// dupq, swapq, dropq: stack-only ops.
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "dupq",
-		Signatures: []NativeSig{{
-			Args: []Type{TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{args[0], args[0]}, nil
-			},
-		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "swapq",
-		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
-			// Under the unified §1.4 dispatch rule, args[0] is the
-			// top of the stack and args[1] is the next-deeper. The
-			// splice writes the handler's return slice in source
-			// order, so emitting [args[0], args[1]] places the old
-			// top at the deeper position and the old next-deeper at
-			// the top — i.e. the two values are swapped on the stack.
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{args[0], args[1]}, nil
-			},
-		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "dropq",
-		Signatures: []NativeSig{{
-			Args: []Type{TAny},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return nil, nil
-			},
-		}},
-	})
+	// `dup`, `swap`, `drop`, `over`, `rot`, `nip`, `tuck`, `2dup`,
+	// `2swap`, `2drop`, `2over` — installed via RegisterCoreWords
+	// above. See aqleng/go/core_words.go::registerCoreStack.
 
 	// concatq: string concatenation, forward precedence.
 	// Handler convention: result = b + a (= args[1] + args[0]) so

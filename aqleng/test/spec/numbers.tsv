@@ -180,8 +180,8 @@ negq ( addq 2.0 3.0 )	-5.0	composes with Decimal contagion
 addq 1 ( mulq 2 ( addq 3 4 ) )	15	deep nesting via parens: 3+4=7, 2*7=14, 1+14=15
 
 # Parens leaving multivalues — both flow into outer arg slots.
-addq ( 1 dupq )	2	paren produces [1, 1]; addq consumes both → 1+1 = 2
-mulq ( 2 dupq )	4	paren produces [2, 2]; mulq → 2*2 = 4
+addq ( 1 dup )	2	paren produces [1, 1]; addq consumes both → 1+1 = 2
+mulq ( 2 dup )	4	paren produces [2, 2]; mulq → 2*2 = 4
 
 # ---------- 7. Composition with `end` (stop word) ----------
 # `end` short-circuits forward collection for the nearest pending

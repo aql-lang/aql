@@ -10,16 +10,31 @@ import (
 // minimal native subset needed to express the AQL language design's
 // core constructs:
 //
-//   def    — name binding (simple values, list bodies, fn definitions)
-//   fn     — function literal builder (typed params, return types, body)
-//   quote  — explicit data capture (suppresses word evaluation)
-//   args   — per-fn-call positional argument frame
+//   Binding / quotation:
+//     def    — name binding (simple values, list bodies, fn definitions)
+//     fn     — function literal builder (typed params, return types, body)
+//     quote  — explicit data capture (suppresses word evaluation)
+//     args   — per-fn-call positional argument frame
+//
+//   Stack manipulation (Forth-style; all stack-only):
+//     dup        — duplicate top                  ( a — a a )
+//     swap       — exchange top two               ( a b — b a )
+//     drop       — remove top                     ( a — )
+//     over       — copy second-from-top to top    ( a b — a b a )
+//     rot        — rotate top three               ( a b c — b c a )
+//     nip        — drop second-from-top           ( a b — b )
+//     tuck       — copy top under second          ( a b — b a b )
+//     2dup       — duplicate top pair             ( a b — a b a b )
+//     2swap      — swap top two pairs             ( a b c d — c d a b )
+//     2drop      — remove top two                 ( a b — )
+//     2over      — copy second pair to top        ( a b c d — a b c d a b )
 //
 // `end` is NOT registered here — it's a structural keyword handled
 // directly by the engine's stepEnd path in engine.go.
 //
-// `if`, `for`, and `type*` are reserved for future addition once
-// their semantics are pinned down by the language design.
+// `if`, `for`, `type*`, `do`, `each`, `fold`, the higher-arity stack
+// ops (`depth`, `pick`, `roll` which need FullStack), and the rest
+// of the production word set are reserved for future addition.
 //
 // These implementations are deliberately minimal: they cover the
 // dispatch / value / type-lattice core that every consumer of
@@ -33,6 +48,7 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreFn(r)
 	registerCoreQuote(r)
 	registerCoreArgs(r)
+	registerCoreStack(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME must arrive as a
@@ -163,6 +179,147 @@ func registerCoreArgs(r *Registry) {
 				return []Value{NewList(nil)}, nil
 			},
 			Returns: []Type{TList},
+		}},
+	})
+}
+
+// registerCoreStack installs the Forth-style stack manipulation
+// primitives. All are stack-only (BarrierPos = 0 by default; no
+// ForwardPrecedence flag). Argument convention is the unified §1.4
+// rule: args[0] is the top of stack, args[1] is the next-deeper,
+// etc. Splice ordering: the returned []Value is laid back onto the
+// stack in source order, so an N-arg word that returns the same N
+// values produces the inputs unchanged (see swap for the worked
+// example).
+//
+// Mirrors the canonical-Forth subset of the production engine's
+// aql/internal/engine/native_stack.go — handlers are byte-identical.
+// The full-stack-aware ops (depth, pick, roll) are deliberately
+// omitted: they need FullStack signatures and the spec runner's
+// dispatch path doesn't yet wire that up. They can be added later
+// without breaking this surface.
+func registerCoreStack(r *Registry) {
+	// dup ( a — a a )
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "dup",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[0], args[0]}, nil
+			},
+		}},
+	})
+	// swap ( a b — b a ).
+	// Under the unified §1.4 rule args[0] is the top and args[1] is
+	// next-deeper. Returning [args[0], args[1]] in source order puts
+	// the old top at the deeper position and the old second-from-top
+	// at the top — i.e. they swap.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "swap",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[0], args[1]}, nil
+			},
+		}},
+	})
+	// drop ( a — )
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "drop",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny},
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return nil, nil
+			},
+		}},
+	})
+	// over ( a b — a b a ).
+	// args[0]=top=b, args[1]=deeper=a. Output sequence puts a at the
+	// deepest restore position, then b, then a again on top.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "over",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[1], args[0], args[1]}, nil
+			},
+		}},
+	})
+	// rot ( a b c — b c a ).
+	// args[0]=top=c, args[1]=b, args[2]=deepest=a.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "rot",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[1], args[0], args[2]}, nil
+			},
+		}},
+	})
+	// nip ( a b — b ).
+	// args[0]=top=b is kept; args[1]=a is discarded.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "nip",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[0]}, nil
+			},
+		}},
+	})
+	// tuck ( a b — b a b ).
+	// args[0]=top=b, args[1]=a. Output: b at deepest, a in middle,
+	// b at top — copies the top under the second.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "tuck",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[0], args[1], args[0]}, nil
+			},
+		}},
+	})
+	// 2dup ( a b — a b a b ).
+	// args[0]=top=b, args[1]=a.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "2dup",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[1], args[0], args[1], args[0]}, nil
+			},
+		}},
+	})
+	// 2swap ( a b c d — c d a b ).
+	// args[0]=top=d, args[1]=c, args[2]=b, args[3]=deepest=a.
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "2swap",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny, TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[1], args[0], args[3], args[2]}, nil
+			},
+		}},
+	})
+	// 2drop ( a b — )
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "2drop",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny},
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return nil, nil
+			},
+		}},
+	})
+	// 2over ( a b c d — a b c d a b ).
+	// Copies the second pair (a b) on top of the first pair (c d).
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "2over",
+		Signatures: []NativeSig{{
+			Args: []Type{TAny, TAny, TAny, TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{args[3], args[2], args[1], args[0], args[3], args[2]}, nil
+			},
 		}},
 	})
 }
