@@ -751,7 +751,10 @@ func (e *Engine) stepWord(val Value) error {
 			e.registry.recordCheckUse(w.Name)
 			// For list bodies, expand onto the stack like the fallback handler does.
 			// Quoted lists are treated as data values (not expanded).
-			if top.VType.Equal(TList) && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
+			// Type literals (Data == nil) are values, not bodies — they
+			// fall through to stepLiteral so the type itself is pushed
+			// onto the stack rather than splicing nothing.
+			if top.VType.Equal(TList) && top.Data != nil && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
 				elems := top.AsList()
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())

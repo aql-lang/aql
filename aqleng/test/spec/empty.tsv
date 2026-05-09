@@ -69,7 +69,7 @@
 
 # Words that introspect collections handle empty cleanly.
 lengthq [ ]	0	empty list has length 0
-firstq [ ]	null	first of empty list returns the None sentinel
+firstq [ ]	none	first of empty list returns the None sentinel
 lengthq [ "" ]	1	empty string is still a list element
 lengthq [ [ ] ]	1	empty list is still a list element
 firstq [ "" ]	""	first element when head is the empty string

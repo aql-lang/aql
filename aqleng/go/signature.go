@@ -296,11 +296,13 @@ func sigTypeMatches(v Value, t Type) bool {
 //   - Metatype slots (Type/*) — `make`, `is`, `typeof`, `convert`,
 //     etc. consume a type literal as the type itself.
 //
-// Carriers (Data==nil but Carrier=true) are abstract VALUES, not types
-// — sigTypeMatches deliberately treats them as values, and this
-// rejection check follows suit. None type literals (`null`) are also
-// genuine values (None has a single inhabitant) and pass through to
-// any sig whose declared type they happen to match.
+// Carriers (Data==nil but Carrier=true) are abstract VALUES, not
+// types — sigTypeMatches deliberately treats them as values, and
+// this rejection check follows suit. The value `none` (the unique
+// inhabitant of None) is also legitimate at a TNone slot — None
+// has a single inhabitant and that's it. This covers both the spec
+// runner's NewNone() (Data != nil sentinel) and production aql's
+// `NewTypeLiteral(TNone)` (Data == nil, used as the "null" value).
 func rejectsTypeLiteral(v Value, expectedType Type) bool {
 	if v.Data != nil {
 		return false

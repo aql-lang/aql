@@ -624,6 +624,18 @@ func NewImplicitMap(entries *OrderedMap) Value {
 	return NewValueRaw(TMap, entries)
 }
 
+// IsImplicitMap reports whether v is a Map value whose backing
+// OrderedMap was constructed from implicit-pair syntax (e.g.
+// `{x:Integer}` or `[x:Integer]` inside an fn sig). Used to
+// discriminate record-shape patterns from concrete maps.
+func (v Value) IsImplicitMap() bool {
+	if !v.VType.Equal(TMap) || v.Data == nil {
+		return false
+	}
+	m, ok := v.Data.(*OrderedMap)
+	return ok && m != nil && m.Implicit
+}
+
 // NewTypedMap creates a typed map value with a child type constraint.
 // For example, NewTypedMap(NewTypeLiteral(TString)) represents {:string}.
 func NewTypedMap(child Value) Value {
@@ -666,6 +678,29 @@ func NewPath(parts []string, abs bool) Value {
 // The Data is nil since type literals have no specific literal value.
 func NewTypeLiteral(t Type) Value {
 	return NewValueRaw(t, nil)
+}
+
+// noneSentinel is the non-nil Data payload that distinguishes the
+// VALUE `none` (the unique inhabitant of None) from the TYPE LITERAL
+// `None` (which has Data == nil like every other type literal).
+// Renderers and the matcher use the Data!=nil discriminator to print
+// the value as "none" and the type literal as "None".
+type noneSentinel struct{}
+
+// NewNone creates the value `none` — the unique inhabitant of the
+// None type. Distinct from NewTypeLiteral(TNone) (the type itself).
+func NewNone() Value {
+	return NewValueRaw(TNone, noneSentinel{})
+}
+
+// IsNone reports whether v is the value `none` (not the None type
+// literal). The check distinguishes the inhabitant from the type.
+func (v Value) IsNone() bool {
+	if !v.VType.Equal(TNone) {
+		return false
+	}
+	_, ok := v.Data.(noneSentinel)
+	return ok
 }
 
 // NewWord creates a word value (function reference) with no modifiers.

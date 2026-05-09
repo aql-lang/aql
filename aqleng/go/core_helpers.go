@@ -608,7 +608,14 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 // IsTypeBody reports whether a value is a valid type definition body.
 func IsTypeBody(v Value) bool {
 	// Type literal (Data==nil): number, string, boolean, any, etc.
+	// Excludes the value `none` (Data != nil sentinel).
 	if v.Data == nil {
+		return true
+	}
+	// Implicit-map record shape (`{x:Integer}`): a Map whose backing
+	// OrderedMap is flagged Implicit. Used as a structural Node-type
+	// declaration body.
+	if v.IsImplicitMap() {
 		return true
 	}
 	// Record type

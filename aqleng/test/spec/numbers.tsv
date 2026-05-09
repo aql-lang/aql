@@ -388,11 +388,11 @@ addq "hello" 3.5	ERROR:signature	String at sig[0] fails Number match
 addq 3.5 "world"	ERROR:signature	String at sig[1] fails Number match
 addq true 3.5	ERROR:signature	Boolean at sig[0] fails Number match
 addq 3.5 [ 1 2 ]	ERROR:signature	List at sig[1] fails Number match
-subq null 1.0	ERROR:signature	None at sig[0] fails Number match
+subq none 1.0	ERROR:signature	None at sig[0] fails Number match
 subq 3.5 "x"	ERROR:signature	String at sig[1] fails Number match
 negq "x"	ERROR:signature	String fails Number for negq
 negq true	ERROR:signature	Boolean fails Number for negq
-negq null	ERROR:signature	None fails Number for negq
+negq none	ERROR:signature	None fails Number for negq
 "hi" negq	ERROR:signature	stack-fallback form: String on stack still fails Number
 
 # Insufficient-args errors.

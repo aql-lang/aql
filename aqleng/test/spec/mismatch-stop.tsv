@@ -86,7 +86,7 @@ addq 1 true 2	ERROR:signature	same shape with boolean mismatch; trailing 2 not p
 2 addq 1 "stop"	3 "stop"	stack=[2]; addq forward 1 then mismatch on "stop". fwd=1 (matches sig[0]=Integer). break. remaining=1. Top=2 → sig[1]. addq(1,2)=3. "stop" stays.
 
 # `not` accepting Boolean, residue is type literal None.
-not true null	false null	null (None type literal) is NOT a Boolean, stays on stack as residue
+not true none	false none	null (None type literal) is NOT a Boolean, stays on stack as residue
 
 # Forward arg of correct type immediately after a satisfied word.
 not true not false	false true	first not consumes true → false; second not consumes false → true. Two booleans on the stack.

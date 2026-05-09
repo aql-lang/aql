@@ -356,7 +356,7 @@ func registerSpecWords(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				lst := args[0].AsList()
 				if lst.Len() == 0 {
-					return []Value{NewTypeLiteral(TNone)}, nil
+					return []Value{NewNone()}, nil
 				}
 				return []Value{lst.Get(0)}, nil
 			},
@@ -398,15 +398,27 @@ func registerSpecWords(r *Registry) {
 
 // tokenizeSpec converts a single space-separated input string from a
 // TSV row into a slice of engine values. It is intentionally minimal:
-// integers, decimals, "quoted" strings, true/false/null, list
-// literals via `[` ... `]`, and bare identifiers (treated as words).
+// integers, decimals, "quoted" strings, true/false/none/null, list
+// literals via `[` ... `]`, implicit-map literals via `{` ... `}` with
+// `key:value` pair tokens, and bare identifiers (treated as words).
 // `(` and `)` are not collected here — they remain as Word values so
 // the engine's paren pre-evaluation handles them at runtime.
+//
+// Keyword conventions:
+//
+//   - `none` parses to a None type literal — None is the unit type;
+//     `none` is its single inhabitant.
+//   - `null` parses to an Atom("null") — represents JSON null at the
+//     value level, distinct from the None type's inhabitant.
+//   - `{ x:Integer y:String }` parses to an Implicit Map with the
+//     declared keys; values are recursively tokenized so types
+//     (`Integer`, `List`), scalars, and quoted strings all work.
 func tokenizeSpec(s string) ([]Value, error) {
 	// stack[0] is the top-level token stream; deeper entries are list
-	// literals being collected. `[` opens a new frame, `]` closes the
-	// current one and pushes the assembled List into the parent.
+	// or map literals being collected. We track frame kind in parallel
+	// so `]` and `}` close the right kind.
 	stack := [][]Value{nil}
+	kinds := []string{"top"}
 	i := 0
 	for i < len(s) {
 		// Skip whitespace.
@@ -445,10 +457,11 @@ func tokenizeSpec(s string) ([]Value, error) {
 		// List literal open / close.
 		if tok == "[" {
 			stack = append(stack, nil)
+			kinds = append(kinds, "list")
 			continue
 		}
 		if tok == "]" {
-			if top == 0 {
+			if top == 0 || kinds[top] != "list" {
 				return nil, fmt.Errorf("tokenize: unmatched ']' at %d", i-1)
 			}
 			collected := stack[top]
@@ -456,12 +469,35 @@ func tokenizeSpec(s string) ([]Value, error) {
 				collected = []Value{}
 			}
 			stack = stack[:top]
+			kinds = kinds[:top]
 			parent := len(stack) - 1
-			// Tokenizer-built lists carry Eval=true so the engine's
-			// auto-evaluation paths (execMatch and end-of-Run drain)
-			// fire on them, mirroring the parser's NewEvalList output
-			// in the production aql package.
 			stack[parent] = append(stack[parent], NewEvalList(collected))
+			continue
+		}
+
+		// Map literal open / close.
+		if tok == "{" {
+			stack = append(stack, nil)
+			kinds = append(kinds, "map")
+			continue
+		}
+		if tok == "}" {
+			if top == 0 || kinds[top] != "map" {
+				return nil, fmt.Errorf("tokenize: unmatched '}' at %d", i-1)
+			}
+			pairs := stack[top]
+			stack = stack[:top]
+			kinds = kinds[:top]
+			parent := len(stack) - 1
+			m := NewOrderedMap()
+			for _, p := range pairs {
+				name, val, err := parsePairToken(p)
+				if err != nil {
+					return nil, err
+				}
+				m.Set(name, val)
+			}
+			stack[parent] = append(stack[parent], NewImplicitMap(m))
 			continue
 		}
 
@@ -470,8 +506,10 @@ func tokenizeSpec(s string) ([]Value, error) {
 			stack[top] = append(stack[top], NewBoolean(true))
 		case "false":
 			stack[top] = append(stack[top], NewBoolean(false))
+		case "none":
+			stack[top] = append(stack[top], NewNone())
 		case "null":
-			stack[top] = append(stack[top], NewTypeLiteral(TNone))
+			stack[top] = append(stack[top], NewAtom("null"))
 		default:
 			if n, err := strconv.ParseInt(tok, 10, 64); err == nil {
 				stack[top] = append(stack[top], NewInteger(n))
@@ -501,9 +539,59 @@ func tokenizeSpec(s string) ([]Value, error) {
 		}
 	}
 	if len(stack) > 1 {
-		return nil, fmt.Errorf("tokenize: unterminated list literal '['")
+		switch kinds[len(kinds)-1] {
+		case "map":
+			return nil, fmt.Errorf("tokenize: unterminated map literal '{'")
+		default:
+			return nil, fmt.Errorf("tokenize: unterminated list literal '['")
+		}
 	}
 	return stack[0], nil
+}
+
+// parsePairToken splits a `name:value` token into the entry pieces of
+// an implicit map. The value side is parsed as a Value: known type
+// names become type literals, integers/decimals parse as scalars,
+// quoted strings as strings, and any remaining word is captured as a
+// bare Word.
+func parsePairToken(v Value) (string, Value, error) {
+	if !v.IsWord() {
+		return "", Value{}, fmt.Errorf("map: pair token must be a Word, got %s", v.VType.String())
+	}
+	w, _ := v.AsWord()
+	idx := strings.Index(w.Name, ":")
+	if idx <= 0 {
+		return "", Value{}, fmt.Errorf("map: expected `name:value`, got %q", w.Name)
+	}
+	name := w.Name[:idx]
+	rest := w.Name[idx+1:]
+	if rest == "" {
+		return "", Value{}, fmt.Errorf("map: empty value side in %q", w.Name)
+	}
+	// Type-name word? Look up in typeNames.
+	if t, ok := typeNames[rest]; ok {
+		return name, NewTypeLiteral(t), nil
+	}
+	// Integer / Decimal literal?
+	if n, err := strconv.ParseInt(rest, 10, 64); err == nil {
+		return name, NewInteger(n), nil
+	}
+	if f, err := strconv.ParseFloat(rest, 64); err == nil {
+		return name, NewDecimal(f), nil
+	}
+	// Boolean / none / null literal?
+	switch rest {
+	case "true":
+		return name, NewBoolean(true), nil
+	case "false":
+		return name, NewBoolean(false), nil
+	case "none":
+		return name, NewNone(), nil
+	case "null":
+		return name, NewAtom("null"), nil
+	}
+	// Fallback: bare Word.
+	return name, NewWord(rest), nil
 }
 
 // renderStack renders a result stack back into the same syntax used
@@ -519,14 +607,14 @@ func renderStack(stack []Value) string {
 
 func renderValue(v Value) string {
 	switch {
-	case v.Data == nil && v.VType.Equal(TNone):
-		return "null"
+	case v.IsNone():
+		// The VALUE `none` — unique inhabitant of None.
+		return "none"
 	case v.Data == nil:
-		// Type literal — render the full type path (e.g. Integer →
-		// "Scalar/Number/Integer"). The scalar branches below are
-		// deliberately gated on Data != nil so a type-literal Integer
-		// is not rendered as "0" via the AsInteger nil-Data fallback.
-		return v.VType.String()
+		// Type literal — render the LEAF of its type path (e.g. Integer
+		// → "Integer", List → "List", None → "None"). Type names are
+		// globally unique, so the leaf alone is unambiguous.
+		return v.VType.Leaf()
 	case v.VType.Matches(TInteger):
 		n, _ := v.AsInteger()
 		return strconv.FormatInt(n, 10)
@@ -558,6 +646,21 @@ func renderValue(v Value) string {
 			parts[i] = renderValue(lst.Get(i))
 		}
 		return "[" + strings.Join(parts, " ") + "]"
+	case v.VType.Equal(TMap) && v.Data != nil:
+		// Recursive map rendering. Use `key:value` pairs inside `{ … }`
+		// matching the implicit-map and value-map source syntax. Values
+		// are rendered recursively so nested type literals render via
+		// the leaf branch.
+		m := v.AsMap()
+		if m == nil {
+			return v.String()
+		}
+		parts := make([]string, m.Len())
+		for i, k := range m.Keys() {
+			val, _ := m.Get(k)
+			parts[i] = k + ":" + renderValue(val)
+		}
+		return "{" + strings.Join(parts, " ") + "}"
 	default:
 		return v.String()
 	}

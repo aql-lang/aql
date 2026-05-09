@@ -115,7 +115,7 @@ false	false	bare false resolves to Boolean(false)
 true false	true false	multiple booleans coexist
 
 # 7. Type-name fall-through (subset of typeliteral.tsv).
-Number	Scalar/Number	type-name word → type literal; renderer prints the path
+Number	Number	type-name word → type literal; renderer prints the path
 Any	Any	universal top type via fall-through
 
 # 9. Undefined name → error (re-pinned here in resolution context).
