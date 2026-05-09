@@ -84,11 +84,14 @@ func registerSpecWords(r *Registry) {
 		}},
 	})
 
-	// neg: stack-only unary numeric negation. Same Integer/Decimal
-	// dispatch as the binary ops — Integer in, Integer out;
-	// Decimal in, Decimal out. Kept as the stack-only witness
-	// (used by stack.tsv and force.tsv); the forward-prec sister
-	// `negate` lives below and mirrors aql/internal/nativemod/math.go.
+	// negate: forward-prec unary negation, sig [Number|] under the
+	// unified §1.4 dispatch model — BarrierPos = N (= 1 here) makes
+	// the single arg forward-eligible with stack fallback. Both
+	// `negate 5` (forward) and `5 negate` (stack-via-fallback) work.
+	//
+	// Consolidates the previous neg/negate split: there is now ONE
+	// negation word. Mirrors aql/internal/nativemod/math.go::negate.
+	// Decimal in, Decimal out — preserves the type tag.
 	negateHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if args[0].VType.Matches(TInteger) {
 			n, _ := args[0].AsInteger()
@@ -98,25 +101,13 @@ func registerSpecWords(r *Registry) {
 		return []Value{NewDecimal(-f)}, nil
 	}
 	r.RegisterNativeFunc(NativeFunc{
-		Name: "neg",
-		Signatures: []NativeSig{{
-			Args:    []Type{TNumber},
-			Handler: negateHandler,
-			Returns: []Type{TNumber},
-		}},
-	})
-
-	// negate: forward-precedence unary negation. Mirror of `neg`'s
-	// semantics but with default forward dispatch (matches the
-	// production aql:math module's `negate` word). Decimal in,
-	// Decimal out — preserves the type tag.
-	r.RegisterNativeFunc(NativeFunc{
 		Name:              "negate",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TNumber},
-			Handler: negateHandler,
-			Returns: []Type{TNumber},
+			Args:       []Type{TNumber},
+			BarrierPos: 1,
+			Handler:    negateHandler,
+			Returns:    []Type{TNumber},
 		}},
 	})
 

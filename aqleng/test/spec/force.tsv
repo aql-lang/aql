@@ -7,8 +7,13 @@
 # if the forward scan can't fill every slot, the sig is rejected.
 #
 # Test words:
-#   add — forwardPrecedence:true,  sig [Integer Integer]. Default barrier = 2.
-#   neg — forwardPrecedence:false, sig [Integer].         Default barrier = 0.
+#   add  — forwardPrecedence:true,  sig [Number Number]. Default barrier = 2.
+#   dup  — forwardPrecedence:false, sig [Any].          Default barrier = 0.
+#
+# `dup` is the canonical stack-only witness now that neg/negate have
+# been consolidated into a single forward-eligible `negate`. `dup`'s
+# return is two copies of args[0], so the row outputs make the
+# forward-vs-stack source of args[0] visible.
 
 # tokens	expected	note
 
@@ -18,12 +23,12 @@ add/s 1 2	ERROR:signature_error	no stack values, /s forbids forward fill
 1 add/s 2	ERROR:signature_error	one stack value, /s still needs sig[1] from stack
 
 # /f on a stack-only word: forward window opened to N.
-neg/f 5	-5	forces forward dispatch on default-stack-only word
-5 neg/f	ERROR:signature_error	/f forbids stack fall-back; sig[0] must come from forward
+dup/f 5	5 5	forces forward dispatch on default-stack-only word; arg comes from forward, dup emits twice
+5 dup/f	ERROR:signature_error	/f forbids stack fall-back; sig[0] must come from forward
 
 # /s on a stack-only word: redundant, identical to default.
-5 neg/s	-5	matches default stack-only behaviour
-neg/s 5	ERROR:signature_error	default stack-only with /s and no prefix
+5 dup/s	5 5	matches default stack-only behaviour
+dup/s 5	ERROR:signature_error	default stack-only with /s and no prefix
 
 # /f on a forward-precedence word: also redundant since the default barrier
 # already lets forward fill every slot. The interesting bit is that /f

@@ -1,6 +1,9 @@
-# Stack manipulation via test-registered `dup`, `swap`, `drop`, `neg`.
-# `neg` is registered without forward precedence (stack-only) so it
-# must consume the prefix value.
+# Stack manipulation via test-registered `dup`, `swap`, `drop`.
+# These three are stack-only by default — they consume only from
+# the prefix and never collect forward args.
+#
+# (Negation moved to decimals.tsv after the neg/negate consolidation
+# into a single forward-eligible `negate` word with sig [Number|]).
 
 # tokens	expected	note
 1 dup	1 1	dup duplicates the top
@@ -9,6 +12,3 @@
 1 2 3 swap	1 3 2	swap touches only the top two
 1 2 drop	1	drop removes the top
 1 dup drop	1	dup then drop is a no-op
-5 neg	-5	stack-only word consumes prefix
-3 neg neg	3	double negation
-1 2 neg	1 -2	neg only touches its arg

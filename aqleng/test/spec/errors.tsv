@@ -6,5 +6,5 @@
 nope	ERROR:undefined	bare undefined word
 add nope 3	ERROR:signature	non-Integer in forward slot fails sig before `nope` evaluates
 add "hello" 3	ERROR:signature	type mismatch: add expects two integers
-neg "hi"	ERROR:signature	stack-only word with wrong arg type
+negate "hi"	ERROR:signature	unary numeric word with wrong arg type
 add 1	ERROR:	insufficient args for forward-precedence word

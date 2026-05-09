@@ -56,7 +56,7 @@
 # 1. 1-arg forward word + matching arg + extra residue.
 not true 42	false 42	not consumes the Boolean true → false; 42 stays on the stack
 not false "hello"	true "hello"	same shape with string residue
-neg/f 5 "extra"	-5 "extra"	stack-only word forced forward; consumes 5; "extra" stays
+negate 5 "extra"	-5 "extra"	negate consumes 5 (fwd-scan sees Number, fwd=1, then "extra" String fails Number — break); "extra" stays
 length [ 1 2 ] 99	2 99	length consumes the list; 99 is the residue
 first [ 7 ] "post"	7 "post"	first consumes the list; "post" stays
 

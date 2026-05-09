@@ -7,9 +7,10 @@
 #   Scalar/Number/Integer  — written as digits with optional leading minus
 #   Scalar/Number/Decimal  — written with a decimal point
 #
-# The math primitives (add, sub, mul, neg) are sigged on
-# [TNumber, TNumber] (or [TNumber] for unary), so Integer and Decimal
-# both match. Each handler dispatches on argument types at runtime:
+# The math primitives (add, sub, mul, negate, abs) are sigged on
+# [TNumber, TNumber] (or [TNumber|] for unary — the `|` makes the arg
+# forward-eligible with stack fallback). Integer and Decimal both
+# match Number. Each handler dispatches on argument types at runtime:
 #
 #     - both args Integer  →  integer op,  result is Integer
 #     - any arg Decimal    →  float64 op,  result is Decimal  (contagion)
@@ -30,7 +31,9 @@
 # 4. Mirror equivalence (mirror.tsv) and swap form behave the same way
 #    across mixed-type calls — the type promotion does not interact
 #    with the argument-binding rule.
-# 5. neg is a unary [TNumber] op with the same dispatch.
+# 5. negate is a unary [TNumber|] op (sig "[Number|]" — barrier at
+#    position 1, the single arg is forward-eligible with stack fallback).
+#    Same Integer/Decimal dispatch as the binary ops.
 # 6. Float64 imprecision is preserved verbatim. `0.1 add 0.2` produces
 #    `0.30000000000000004`, not `0.3`. The spec runner does not
 #    silently round; see SPEC_REPORT.md §2 for the apd-port plan
@@ -58,8 +61,8 @@
 # combination, since sub is the engine's canonical non-commutative
 # witness.
 #
-# For neg we cover both Integer and Decimal inputs in the stack-form
-# (canonical) and forward-form (`/f` override).
+# For negate we cover both Integer and Decimal inputs in both
+# forms — `negate X` (forward) and `X negate` (via stack fallback).
 #
 # Spec runner notes
 # -----------------
@@ -135,31 +138,24 @@ mul 0.5 0.5	0.25	fractional product
 mul 0 5.0	0.0	zero × decimal → zero, but Decimal-typed via contagion
 mul 0.0 5	0.0	likewise reversed
 
-# ---------- 5. neg / negate — unary negation ----------
-# Two negation words exist:
-#   neg     — stack-only [TNumber] (matches stack.tsv / force.tsv)
-#   negate  — forward-prec [TNumber] (matches aql/internal/nativemod
-#             /math.go's `negate` in the aql:math native module)
-# Both share the same handler — Integer in, Integer out;
-# Decimal in, Decimal out — preserving the type tag.
-5 neg	-5	neg II: Integer in, Integer out
-5.0 neg	-5.0	neg D: Decimal in, Decimal out
--3.5 neg	3.5	negative decimal flips to positive
-0 neg	0	Integer zero stays zero (no sign bit)
-0.0 neg	-0.0	IEEE 754 has +0.0 and -0.0 as distinct bit patterns; -(0.0) = -0.0
-3 neg neg	3	double negation cancels (Integer)
-5.0 neg neg	5.0	double negation cancels (Decimal)
-neg/f 5.5	-5.5	/f override forces forward dispatch on the stack-only word
-5.5 neg "residue"	-5.5 "residue"	stack-form leaves residue intact
-
-# negate — forward-prec sister of neg.
-negate 5	-5	negate I: forward dispatch on Integer
-negate 5.0	-5.0	negate D: forward dispatch on Decimal — preserves Decimal type
+# ---------- 5. negate — unary negation ----------
+# Sig [Number|] — barrier at position 1 (= N for unary). The single
+# arg is forward-eligible with stack fallback, so both forms work:
+#   negate X   — forward dispatch
+#   X negate   — fwd-scan empty, stack supplies the arg
+# Mirrors aql/internal/nativemod/math.go::negate. Type-preserving:
+# Integer in, Integer out; Decimal in, Decimal out.
+negate 5	-5	I forward: forward dispatch on Integer
+negate 5.0	-5.0	D forward: forward dispatch on Decimal — preserves Decimal type
 negate -5.5	5.5	negate of negative decimal
-negate 0	0	negate Integer zero
-negate 0.0	-0.0	negate Decimal zero → -0.0 (IEEE sign flip)
-5 negate	-5	mirror form: stack value satisfies the [TNumber] slot
-5.0 negate	-5.0	mirror form on Decimal
+negate 0	0	negate Integer zero (no sign bit)
+negate 0.0	-0.0	negate Decimal zero → -0.0 (IEEE sign flip; +0.0 and -0.0 are distinct bit patterns)
+5 negate	-5	stack-fallback form on Integer
+5.0 negate	-5.0	stack-fallback form on Decimal
+-3.5 negate	3.5	stack-fallback on negative decimal
+3 negate negate	3	double negation cancels (Integer)
+5.0 negate negate	5.0	double negation cancels (Decimal)
+5.5 negate "residue"	-5.5 "residue"	negate fwd-scans "residue" (String), fails Number — break at fwd=1; consumes the 5.5 it already collected; "residue" stays
 negate ( add 2 3 )	-5	composes via paren: inner add = 5; negate(5) = -5
 negate ( add 2.0 3.0 )	-5.0	composes with Decimal contagion
 negate add 2 3	ERROR:signature	bare nested forward — function-word boundary, see nested-forward.tsv
@@ -210,15 +206,14 @@ add true 3.5	ERROR:signature	Boolean at sig[0]; fails Number match
 add 3.5 [ 1 2 ]	ERROR:signature	List at sig[1]; fails Number match
 sub null 1.0	ERROR:signature	None at sig[0]; fails Number match
 mul 3.5 "x"	ERROR:signature	String at sig[1]; fails Number match
-"hi" neg	ERROR:signature	String fails Number for neg
-true neg	ERROR:signature	Boolean fails Number for neg
-neg [ 1.0 ]	ERROR:signature	List fails Number for neg
 negate "x"	ERROR:signature	String fails Number for negate
 negate true	ERROR:signature	Boolean fails Number for negate
 negate null	ERROR:signature	None fails Number for negate
+"hi" negate	ERROR:signature	stack-fallback form: String on stack still fails Number
 abs "x"	ERROR:signature	String fails Number for abs
 abs [ 1 ]	ERROR:signature	List fails Number for abs
 abs true	ERROR:signature	Boolean fails Number for abs
+abs null	ERROR:signature	None fails Number for abs
 
 # ---------- 8. Specificity still works for Decimal vs Any ----------
 # `tag` has overloads [Any] and [Integer] (no [Decimal]); a Decimal

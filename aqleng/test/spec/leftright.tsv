@@ -25,8 +25,9 @@
 #    are no precedence levels in aqleng. Strictly left-to-right.
 # 4. Parens DO override the default left-to-right reading. `2 add (3
 #    mul 4)` runs the mul first, producing 12, then add(2, 12) = 14.
-# 5. Stack-only words (e.g. `neg`) interleave fine — they fire when
-#    the engine reaches them, consuming their stack arg.
+# 5. Forward-eligible-with-stack-fallback words (e.g. `negate`)
+#    interleave fine — they fire when the engine reaches them, taking
+#    their arg from forward if available, otherwise from the stack.
 # 6. Using a forward-prec word in a position where the next thing is
 #    another forward-prec word is OK as long as the second word
 #    DOESN'T need the first as an arg — the second's prefix slot is
@@ -62,10 +63,12 @@
 1 add ( 2 mul ( 3 add 4 ) )	15	deep paren tree: 3+4=7, 2*7=14, 1+14=15
 ( 1 add 2 ) mul ( 3 add 4 )	21	both branches parenthesised; mul(3, 7)=21
 
-# Stack-only word in the chain.
-5 neg add 1	-4	5 neg=-5 on stack; then add forward 1 with stack -5; sig=[1,-5] → 1+-5=-4
-1 add 5 neg	-6	add hits neg as boundary; add(5,1)=6 first (sig[0]=5 fwd, sig[1]=1 stack); then neg consumes 6 → -6
-3 neg neg	3	double negation cancels
+# Unary numeric word in the chain. negate is forward-eligible with
+# stack fallback, so `5 negate` consumes the stack value when there's
+# nothing after to fwd-collect.
+5 negate add 1	-4	5 negate=-5 (fwd empty, stack supplies); add fwd 1 with stack -5; sig=[1,-5] → 1+-5=-4
+1 add 5 negate	-6	add fwd-scans 5, hits negate as function-word boundary; add(5,1)=6 (sig[0]=5 fwd, sig[1]=1 stack); negate then consumes 6 → -6
+3 negate negate	3	double negation cancels — first negate consumes 3 from stack (boundary on second negate), second negate consumes -3
 
 # Mixing with simple-value def substitution. pi=3, tau=6 are pre-bound.
 pi add tau mul 2	18	pi (3) add tau (6)=9; mul 2=18
