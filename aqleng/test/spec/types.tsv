@@ -465,6 +465,67 @@ type One 1 typeof 1	Integer	type binding doesn't change typeof on the underlying
 type One 1 typeof One	Integer	typeof on the type-stack value resolves to its exact type
 
 # =====================================================================
+# 11h. Typed list `[:T]` and typed map `{:T}` (Node child forms)
+# =====================================================================
+# `[:T]` is a homogeneous list type — every element must satisfy T.
+# `{:T}` is a homogeneous map type — every value must satisfy T.
+# Both are constructed by the spec tokenizer's `[:` / `{:` openers
+# (and `name:[:` / `name:{:` for nested-binding inside parent maps).
+# `is` recurses on T element-by-element / value-by-value.
+
+# Typed list with scalar leaf type.
+type IntList [: Integer ] [ 1 2 3 ] is IntList	true
+type IntList [: Integer ] [ 1 "x" 3 ] is IntList	false	one element wrong type
+type IntList [: Integer ] [ ] is IntList	true	empty list trivially satisfies
+
+# Typed list of strings.
+type Names [: String ] [ "a" "b" "c" ] is Names	true
+type Names [: String ] [ "a" 1 ] is Names	false
+
+# Typed map with scalar leaf type — every VALUE must satisfy T (keys
+# are unconstrained).
+type IntMap {: Integer } { a:1 b:2 c:3 } is IntMap	true
+type IntMap {: Integer } { a:1 b:"x" } is IntMap	false	value b is wrong type
+type IntMap {: Integer } { } is IntMap	true	empty map trivially satisfies
+
+# Typed-list-of-typed-list — list of lists of integers.
+type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 4 ] ] is Grid	true
+type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 "x" ] ] is Grid	false	nested element wrong type
+type Grid [: [: Integer ] ] [ [ ] [ 1 ] ] is Grid	true	inner empties OK
+
+# Typed-list-of-record-shape — list whose elements are records.
+type People [: { name:String age:Integer } ] [ { name:"a" age:1 } { name:"b" age:2 } ] is People	true
+type People [: { name:String age:Integer } ] [ { name:"a" age:"x" } ] is People	false	field type mismatch
+type People [: { name:String age:Integer } ] [ { name:"a" } ] is People	false	missing field
+
+# Typed-map-of-typed-list — values are lists of integers.
+type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 3 ] } is Index	true
+type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ "x" ] } is Index	false	inner element wrong type
+
+# Typed-map-of-record-shape — values are records.
+type Lookup {: { id:Integer name:String } } { p:{ id:1 name:"a" } q:{ id:2 name:"b" } } is Lookup	true
+type Lookup {: { id:Integer name:String } } { p:{ id:1 name:"a" } q:{ id:2 name:99 } } is Lookup	false
+
+# Mixed — typed-list of typed-maps.
+type MapList [: {: Integer } ] [ { a:1 b:2 } { c:3 } ] is MapList	true
+type MapList [: {: Integer } ] [ { a:1 } { b:"x" } ] is MapList	false	value in second map wrong type
+
+# Typed-map of typed-maps (3 levels deep).
+type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 2 ] row2:[ 3 ] } plane2:{ row1:[ ] } } is Cube	true
+type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 "x" ] } } is Cube	false	deep element wrong type
+
+# Typed list/map at top level (no `type` binding) — `is` directly
+# against an inline typed shape.
+[ 1 2 3 ] is [: Integer ]	true
+[ 1 "x" ] is [: Integer ]	false
+{ a:1 b:2 } is {: Integer }	true
+{ a:1 b:"x" } is {: Integer }	false
+
+# typeof on a typed list/map type literal reports its metatype.
+typeof [: Integer ]	NodeType	[: Integer ] has VType=List; metatype = NodeType
+typeof {: Integer }	NodeType
+
+# =====================================================================
 # 12. Dispatch — type literals are rejected at concrete-payload sigs
 # =====================================================================
 # Every concrete-payload sig slot rejects type literals (Data == nil).

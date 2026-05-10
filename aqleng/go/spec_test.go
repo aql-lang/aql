@@ -480,10 +480,22 @@ func tokenizeSpec(s string) ([]Value, error) {
 			openFrame("list", name)
 			continue
 		}
+		// Typed-list opener `[:` (and nested `name:[:`). Captures
+		// exactly one child-type element and emits NewTypedList on
+		// close. Matches production aql syntax `[:Integer]`.
+		if tok == "[:" {
+			openFrame("typed_list", "")
+			continue
+		}
+		if name, ok := stripSuffix(tok, ":[:"); ok {
+			openFrame("typed_list", name)
+			continue
+		}
 		if tok == "]" {
-			if top == 0 || kinds[top] != "list" {
+			if top == 0 || (kinds[top] != "list" && kinds[top] != "typed_list") {
 				return nil, fmt.Errorf("tokenize: unmatched ']' at %d", i-1)
 			}
+			isTyped := kinds[top] == "typed_list"
 			collected := stack[top]
 			if collected == nil {
 				collected = []Value{}
@@ -493,7 +505,15 @@ func tokenizeSpec(s string) ([]Value, error) {
 			kinds = kinds[:top]
 			pendingKeys = pendingKeys[:top]
 			parent := len(stack) - 1
-			closed := NewEvalList(collected)
+			var closed Value
+			if isTyped {
+				if len(collected) != 1 {
+					return nil, fmt.Errorf("tokenize: typed list `[:T]` must have exactly one child-type element, got %d", len(collected))
+				}
+				closed = NewTypedList(collected[0])
+			} else {
+				closed = NewEvalList(collected)
+			}
 			if key != "" {
 				stack[parent] = append(stack[parent], NewValueRaw(TInternal, pairBinding{key: key, val: closed}))
 			} else {
@@ -511,29 +531,49 @@ func tokenizeSpec(s string) ([]Value, error) {
 			openFrame("map", name)
 			continue
 		}
+		// Typed-map opener `{:` (and nested `name:{:`). Captures
+		// exactly one child-type element and emits NewTypedMap on
+		// close. Matches production aql syntax `{:Integer}`.
+		if tok == "{:" {
+			openFrame("typed_map", "")
+			continue
+		}
+		if name, ok := stripSuffix(tok, ":{:"); ok {
+			openFrame("typed_map", name)
+			continue
+		}
 		if tok == "}" {
-			if top == 0 || kinds[top] != "map" {
+			if top == 0 || (kinds[top] != "map" && kinds[top] != "typed_map") {
 				return nil, fmt.Errorf("tokenize: unmatched '}' at %d", i-1)
 			}
+			isTyped := kinds[top] == "typed_map"
 			pairs := stack[top]
 			key := pendingKeys[top]
 			stack = stack[:top]
 			kinds = kinds[:top]
 			pendingKeys = pendingKeys[:top]
 			parent := len(stack) - 1
-			m := NewOrderedMap()
-			for _, p := range pairs {
-				if pb, ok := p.Data.(pairBinding); ok {
-					m.Set(pb.key, pb.val)
-					continue
+			var closed Value
+			if isTyped {
+				if len(pairs) != 1 {
+					return nil, fmt.Errorf("tokenize: typed map `{:T}` must have exactly one child-type element, got %d", len(pairs))
 				}
-				name, val, err := parsePairToken(p)
-				if err != nil {
-					return nil, err
+				closed = NewTypedMap(pairs[0])
+			} else {
+				m := NewOrderedMap()
+				for _, p := range pairs {
+					if pb, ok := p.Data.(pairBinding); ok {
+						m.Set(pb.key, pb.val)
+						continue
+					}
+					name, val, err := parsePairToken(p)
+					if err != nil {
+						return nil, err
+					}
+					m.Set(name, val)
 				}
-				m.Set(name, val)
+				closed = NewImplicitMap(m)
 			}
-			closed := NewImplicitMap(m)
 			if key != "" {
 				stack[parent] = append(stack[parent], NewValueRaw(TInternal, pairBinding{key: key, val: closed}))
 			} else {
@@ -581,7 +621,7 @@ func tokenizeSpec(s string) ([]Value, error) {
 	}
 	if len(stack) > 1 {
 		switch kinds[len(kinds)-1] {
-		case "map":
+		case "map", "typed_map":
 			return nil, fmt.Errorf("tokenize: unterminated map literal '{'")
 		default:
 			return nil, fmt.Errorf("tokenize: unterminated list literal '['")

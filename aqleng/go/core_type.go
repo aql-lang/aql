@@ -138,6 +138,12 @@ func TypeOf(v Value) Value {
 	if v.Data == nil {
 		return NewTypeLiteral(MetatypeFor(v.VType))
 	}
+	// Typed list `[:T]` or typed map `{:T}` — Node-family TYPE
+	// declarations carrying a child-type constraint, not concrete
+	// containers. Report the metatype.
+	if v.IsTypedList() || v.IsTypedMap() {
+		return NewTypeLiteral(MetatypeFor(v.VType))
+	}
 	// An implicit-map record shape (every entry's value is itself a
 	// type body — type literal or nested shape) is a Node-family TYPE,
 	// not a concrete map. Report its metatype (NodeType) so user code
@@ -210,6 +216,10 @@ func registerCoreIs(r *Registry) {
 // word's handler.
 //
 // Rules:
+//   - T is a typed list `[:T]`: v must be a concrete list and every
+//     element must satisfy T (recursive IsValueOfType).
+//   - T is a typed map `{:T}`: v must be a concrete map and every
+//     value must satisfy T.
 //   - T is a record-shape implicit map (`{x:Integer y:String}`):
 //     every declared key must be present in v with a matching field
 //     type. v must be a concrete map; extra keys in v are ignored.
@@ -217,6 +227,39 @@ func registerCoreIs(r *Registry) {
 //     via the type lattice. Covers scalar / metatype / None cases.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
+	if t.IsTypedList() {
+		if !v.VType.Equal(TList) || v.Data == nil {
+			return false
+		}
+		ci, _ := t.AsChildType()
+		lst := v.AsList()
+		if lst.IsNil() {
+			return false
+		}
+		for i := 0; i < lst.Len(); i++ {
+			if !IsValueOfType(lst.Get(i), ci.Child) {
+				return false
+			}
+		}
+		return true
+	}
+	if t.IsTypedMap() {
+		if !v.VType.Equal(TMap) || v.Data == nil {
+			return false
+		}
+		ci, _ := t.AsChildType()
+		vMap := v.AsMap()
+		if vMap == nil {
+			return false
+		}
+		for _, k := range vMap.Keys() {
+			vv, _ := vMap.Get(k)
+			if !IsValueOfType(vv, ci.Child) {
+				return false
+			}
+		}
+		return true
+	}
 	if t.IsImplicitMap() {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
