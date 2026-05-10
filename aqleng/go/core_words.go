@@ -79,42 +79,84 @@ func RegisterCoreTypeOps(r *Registry) {
 	registerCoreTypeOps(r)
 }
 
-// registerCoreDef installs `def NAME body`. NAME must arrive as a
-// Word (the tokenizer's `/q` machinery in the production parser does
-// this for `def`'s first slot — the bare aqleng tokenizer just leaves
-// the name as a Word, which is what the [TWord] sig matches).
+// registerCoreDef installs `def NAME body`. NAME may arrive as either
+// a Word (`def x 1`) or as a typed-name implicit map (`def x:Integer
+// 1`, which the parser builds as `{x:Integer}`). The typed form
+// validates the body against the declared type before installing.
 //
-// If body is a single-sig FnDefInfo (i.e. produced by `fn […] […] […]`),
-// def installs a synthesised native that binds the params and runs
-// the body. Otherwise body is pushed as a simple value onto the def
+// If body is a single-sig FnDefInfo (i.e. produced by `fn […]`), def
+// installs a synthesised native that binds the params and runs the
+// body. Otherwise body is pushed as a simple value onto the def
 // stack under NAME.
 func registerCoreDef(r *Registry) {
+	plainHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		w, _ := args[0].AsWord()
+		if err := ValidateWordName(w.Name); err != nil {
+			return nil, err
+		}
+		if info, ok := args[1].Data.(FnDefInfo); ok {
+			sigs := ExpandOptionalSigs(w.Name, info.Sigs)
+			installCoreFnDef(reg, w.Name, sigs...)
+			return []Value{}, nil
+		}
+		reg.PushDef(w.Name, args[1])
+		return []Value{}, nil
+	}
+	typedHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		nameMap := args[0].AsMap()
+		if nameMap == nil || nameMap.Len() == 0 {
+			return nil, &AqlError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
+		}
+		if nameMap.Len() != 1 {
+			return nil, &AqlError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
+		}
+		name := nameMap.Keys()[0]
+		if err := ValidateWordName(name); err != nil {
+			return nil, err
+		}
+		if reg.HasType(name) {
+			return nil, &AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
+		}
+		constraint, _ := nameMap.Get(name)
+		body := args[1]
+		if !IsValueOfType(body, constraint) {
+			return nil, &AqlError{
+				Code:   "type_error",
+				Detail: "def " + name + ": value " + body.String() + " does not satisfy declared type " + constraint.String(),
+			}
+		}
+		// Installation path mirrors the plain def: FnDefInfo bodies
+		// register typed signatures, everything else pushes onto the
+		// def stack as a simple value.
+		if info, ok := body.Data.(FnDefInfo); ok {
+			sigs := ExpandOptionalSigs(name, info.Sigs)
+			installCoreFnDef(reg, name, sigs...)
+			return []Value{}, nil
+		}
+		reg.PushDef(name, body)
+		return []Value{}, nil
+	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "def",
 		ForwardPrecedence: true,
-		Signatures: []NativeSig{{
-			Args:       []Type{TWord, TAny},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				w, _ := args[0].AsWord()
-				if err := ValidateWordName(w.Name); err != nil {
-					return nil, err
-				}
-				if info, ok := args[1].Data.(FnDefInfo); ok {
-					// Expand optional-param combinations into a flat
-					// list of sigs. Each reduced sig's body calls back
-					// into <name> with omitted params filled by their
-					// type's BaseValue, so the full sig handles the
-					// real work after defaults are plugged in.
-					sigs := ExpandOptionalSigs(w.Name, info.Sigs)
-					installCoreFnDef(reg, w.Name, sigs...)
-					return []Value{}, nil
-				}
-				reg.PushDef(w.Name, args[1])
-				return []Value{}, nil
+		Signatures: []NativeSig{
+			{
+				// Typed-name binding: def name:Type body. Sorts first
+				// because TMap is more specific than TWord at the same
+				// depth (higher inherent score).
+				Args:          []Type{TMap, TAny},
+				NoEvalArgs:    map[int]bool{1: true},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Handler:       typedHandler,
+				Returns:       []Type{},
 			},
-			Returns: []Type{},
-		}},
+			{
+				Args:       []Type{TWord, TAny},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    plainHandler,
+				Returns:    []Type{},
+			},
+		},
 	})
 }
 
@@ -170,7 +212,10 @@ func registerCoreFn(r *Registry) {
 				if err != nil {
 					return nil, err
 				}
-				return []Value{NewFnDef(info)}, nil
+				// Return a TFunction value (user-facing first-class
+				// function), not TFnDef (the type-stack storage form).
+				// Mirrors aql/internal/engine/native_definition.go.
+				return []Value{NewFunction(info)}, nil
 			},
 			Returns: []Type{TFunction},
 		}},

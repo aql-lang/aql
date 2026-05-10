@@ -548,6 +548,84 @@ typeof {: Integer }	NodeType
 [1 2 3] is [: Integer]	true	regular concrete list directly satisfies the typed list type
 
 # =====================================================================
+# 11j. Typed simple-value def — `def name:Type body`
+# =====================================================================
+# `def x:Integer 1` validates the body against the declared type
+# before installing. The typed-name `x:Integer` parses as the
+# implicit map `{x:Integer}`; def's [TMap, TAny] sig dispatches to
+# the typed-def handler. Mirrors the production aql defTypedHandler
+# in aql/internal/engine/native_definition.go.
+
+# Type matches → installation succeeds, name resolves to the value.
+def x:Integer 1 x	1
+def x:Integer -7 x	-7
+def s:String "hi" s	"hi"
+def b:Boolean true b	true
+
+# Subtype satisfies parent declared types.
+def n:Number 5 n	5	Integer is a subtype of Number
+def n:Number 5.0 n	5.0	Decimal is also a subtype of Number
+
+# Type mismatch → type_error at def time, no binding installed.
+def x:Integer "wrong"	ERROR:type_error	String value does not satisfy Integer
+def x:Integer 5.0	ERROR:type_error	Decimal does not satisfy Integer (sibling under Number)
+def s:String 42	ERROR:type_error	Integer does not satisfy String
+
+# Singleton typing — `1` is the type whose only inhabitant is 1.
+def x:1 1 x	1
+def x:1 2	ERROR:type_error	2 is not the singleton 1
+
+# Record-shape typing — `def x:{a:Integer} {a:5}` accepts only matching shapes.
+def p:{ x:Integer y:Integer } { x:1 y:2 } p	{x:1 y:2}
+def p:{ x:Integer y:Integer } { x:1 }	ERROR:type_error	missing field y
+def p:{ x:Integer y:Integer } { x:1 y:"two" }	ERROR:type_error	y is wrong type
+
+# Typed-list typing — `def xs:[: T]` accepts homogeneous lists. The
+# list is stored as a code-body, so referencing xs splices its
+# elements (canonical AQL list-def semantics, see code-splice in
+# function.tsv §2). `quote` would store as data instead.
+def xs:[: Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
+def xs:[: Integer ] [ 1 "x" ]	ERROR:type_error	"x" doesn't satisfy Integer at def-time validation
+def xs:[: Integer ] quote [ 1 2 3 ] xs	[1 2 3]	quote stores the list as data; xs resolves to the list value
+
+# =====================================================================
+# 11k. enum — fixed enumeration of values
+# =====================================================================
+# `enum [a b c]` builds a Disjunct from the listed values. Words in
+# the list become Atoms (so users don't need `quote` on each member).
+# The enum is typically named via `type Color enum [...]` and queried
+# with `is`.
+#
+# A child-typed list `enum [: T v0 v1 ...]` validates each value
+# against T at construction; a non-matching value triggers a type
+# error before the disjunct is built.
+
+# Atom-valued enum.
+type Color enum [ red green blue ] quote red is Color	true
+type Color enum [ red green blue ] quote green is Color	true
+type Color enum [ red green blue ] quote pink is Color	false
+
+# Integer-valued enum with child-type validation.
+type Codes enum [: Integer 200 404 500 ] 200 is Codes	true
+type Codes enum [: Integer 200 404 500 ] 500 is Codes	true
+type Codes enum [: Integer 200 404 500 ] 201 is Codes	false
+
+# Child-type rejects mismatched literals at enum-construction time.
+type Codes enum [: Integer 200 "bad" 500 ]	ERROR:type_error	"bad" is not an Integer
+type Codes enum [: String "ok" 1 ]	ERROR:type_error	1 is not a String
+
+# String-valued enum.
+type Mode enum [: String "off" "on" "auto" ] "on" is Mode	true
+type Mode enum [: String "off" "on" "auto" ] "ok" is Mode	false
+
+# A bare enum (no `type`) returns a disjunct value usable directly.
+quote red is enum [ red green blue ]	true	the enum value behaves as a type at the right of `is`
+quote pink is enum [ red green blue ]	false
+
+# Empty enum — uninhabited.
+quote red is enum [ ]	false	no alternatives means nothing satisfies
+
+# =====================================================================
 # 12. Dispatch — type literals are rejected at concrete-payload sigs
 # =====================================================================
 # Every concrete-payload sig slot rejects type literals (Data == nil).

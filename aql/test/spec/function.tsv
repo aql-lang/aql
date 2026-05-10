@@ -176,6 +176,28 @@ def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:I
 def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:Integer ] [ Integer ] [ n m addq ] ] h 5 3	8	2-arg sig
 
 # ====================================================================
+# 6. fn outside def — first-class function values
+# ====================================================================
+# `fn [...]` produces a Function value. It can be left on the stack,
+# passed around, named via `def NAME ( fn ... )`, or asked about its
+# type. Without a wrapping def, the fn value just sits on the stack
+# (it does not auto-call against trailing args at the top level).
+
+# A bare fn produces a Function value. With ≥1-arg sigs the value sits
+# on the stack until consumed; a 0-arg fn auto-calls when it lands at
+# the engine's pointer (the FnDef-literal auto-call rule), so 0-arg
+# bare-fn tests aren't observable as "Function" values directly.
+typeof fn [ [ a:Integer ] [ Integer ] [ a a addq ] ]	Function	the value is of type Function
+fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] is Function	true	is-test confirms the type
+
+# A bare fn with multi-sig is also a Function (one value carries every overload).
+typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ]	Function
+
+# Round-trip: produce a fn, def it, call it.
+def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] double 5	10	def captures the fn-produced Function and registers the dispatcher
+def square fn [ [ x:Integer ] [ Integer ] [ x x mulq ] ] square 7	49
+
+# ====================================================================
 # 7. args frame
 # ====================================================================
 # Inside a fn body, `args` returns a list of the matched args in sig

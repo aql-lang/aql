@@ -33,6 +33,72 @@ func registerCoreType(r *Registry) {
 	registerCoreUntypeWord(r)
 	registerCoreTypeof(r)
 	registerCoreIs(r)
+	registerCoreEnum(r)
+}
+
+// registerCoreEnum installs `enum [a b c]` — fixed-enumeration type
+// builder. Returns a Disjunct whose alternatives are the list's
+// elements (Words become Atoms so `enum [red green blue]` defines an
+// enum of three named values without requiring `quote`).
+//
+// When the list carries a child-type constraint (`[: T a b c]`), each
+// element is validated against T before being added to the disjunct.
+//
+// Used in the same shape as `fn`:
+//
+//   def Color enum [red green blue]
+//   red is Color    → true
+//   pink is Color   → false
+//
+// And with child types:
+//
+//   def Codes enum [: Integer 200 404 500]
+//   200 is Codes  → true
+//   201 is Codes  → false
+func registerCoreEnum(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "enum",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				list := args[0]
+				if list.Data == nil {
+					return nil, &AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
+				}
+				var childType Value
+				hasChild := false
+				if list.IsTypedList() {
+					ci, _ := list.AsChildType()
+					childType = ci.Child
+					hasChild = childType.VType.Parts != nil
+				}
+				elems := list.AsList()
+				alts := make([]Value, 0, elems.Len())
+				for i := 0; i < elems.Len(); i++ {
+					e := elems.Get(i)
+					// Word → Atom conversion: enum members are
+					// typically named, and in word context the parser
+					// produces Words. Convert here so users don't need
+					// to wrap each element in `quote`.
+					if e.IsWord() {
+						w, _ := e.AsWord()
+						e = NewAtom(w.Name)
+					}
+					if hasChild && !IsValueOfType(e, childType) {
+						return nil, &AqlError{
+							Code:   "type_error",
+							Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
+						}
+					}
+					alts = append(alts, e)
+				}
+				return []Value{NewDisjunct(alts)}, nil
+			},
+			Returns: []Type{TDisjunct},
+		}},
+	})
 }
 
 // registerCoreTypeWord installs `type NAME body`. NAME arrives as a

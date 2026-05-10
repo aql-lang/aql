@@ -40,6 +40,7 @@ var typeNameEntries = []struct {
 	{"ObjectType", TObjectType},
 	{"Timeout", TTimeout},
 	{"Interval", TInterval},
+	{"Function", TFunction},
 }
 
 // typeNames maps well-known type names to their Type, so bare words like
