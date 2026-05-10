@@ -1,0 +1,906 @@
+# boolean.tsv — extensive tests for Boolean coercion, short-circuiting,
+# algebraic type Operators (tor / tand), the `otherwise` word, and
+# their interactions with the rest of the language.
+#
+# Format: <expr>\t<expected-output>[\t<error-code>]
+# Lines starting with # and empty lines are ignored.
+
+# =====================================================================
+# 1. Boolean coercion baseline (`convert boolean` rules)
+# =====================================================================
+
+# Booleans pass through.
+true convert Boolean	true
+false convert Boolean	false
+
+# Numbers: non-zero is true, zero is false.
+1 convert Boolean	true
+0 convert Boolean	false
+-5 convert Boolean	true
+1.5 convert Boolean	true
+0.0 convert Boolean	false
+
+# Strings: "true"/"false" parse literally; otherwise non-empty is true.
+"true" convert Boolean	true
+"false" convert Boolean	false
+"" convert Boolean	false
+"hello" convert Boolean	true
+" " convert Boolean	true
+
+# =====================================================================
+# 2. or — short-circuit, returns winning operand
+# =====================================================================
+
+# Boolean operands → boolean result.
+true or true	true
+true or false	true
+false or true	true
+false or false	false
+
+# Numbers: returns the actual operand value.
+1 or 0	1
+0 or 5	5
+0 or 0	0
+1 or 2	1
+-1 or 0	-1
+0 or -3	-3
+
+# Strings.
+"x" or ""	'x'
+"" or "y"	'y'
+"" or ""	''
+"a" or "b"	'a'
+
+# Mixed types.
+0 or "fallback"	'fallback'
+"" or 42	42
+false or "yes"	'yes'
+"" or false	false
+
+# Chained or — first truthy wins.
+0 or 0 or 7	7
+0 or 5 or 9	5
+"" or "" or "z"	'z'
+0 or "" or false	false
+
+# =====================================================================
+# 3. and — short-circuit, returns winning operand
+# =====================================================================
+
+# Boolean operands.
+true and true	true
+true and false	false
+false and true	false
+false and false	false
+
+# Numbers: first falsy wins; otherwise last truthy.
+1 and 2	2
+0 and 5	0
+1 and 0	0
+0 and 0	0
+(3 and 4) and 5	5
+3 and (4 and 5)	5
+(3 and 0) and 5	0
+
+# Strings.
+"a" and "b"	'b'
+"" and "x"	''
+"x" and ""	''
+
+# Mixed.
+1 and "ok"	'ok'
+"" and 99	''
+true and "passed"	'passed'
+
+# =====================================================================
+# 4. not — coerces, returns boolean
+# =====================================================================
+
+true not	false
+false not	true
+not true	false
+not false	true
+
+# Coercion.
+1 not	false
+0 not	true
+"" not	true
+"x" not	false
+0.0 not	true
+1.5 not	false
+
+# Double negation via parens (chained `not not` is not how AQL parses).
+not (1 not)	true
+not (0 not)	false
+not ("x" not)	true
+
+# =====================================================================
+# 5. xor / nand / nor / iff / xnor — coerce, return boolean
+# =====================================================================
+
+# xor (exclusive OR).
+true xor false	true
+false xor true	true
+true xor true	false
+false xor false	false
+1 xor 0	true
+1 xor 1	false
+"" xor 1	true
+
+# nand.
+true nand true	false
+true nand false	true
+false nand false	true
+1 nand 1	false
+0 nand 0	true
+
+# nor.
+true nor true	false
+true nor false	false
+false nor false	true
+1 nor 0	false
+0 nor 0	true
+"" nor ""	true
+
+# iff (biconditional).
+true iff true	true
+true iff false	false
+false iff false	true
+1 iff 1	true
+1 iff 0	false
+"x" iff true	true
+"" iff false	true
+0 iff 0	true
+
+# xnor (synonym for iff).
+true xnor true	true
+true xnor false	false
+false xnor false	true
+1 xnor 1	true
+1 xnor 0	false
+"x" xnor true	true
+"" xnor false	true
+0 xnor 0	true
+
+# =====================================================================
+# 6. implies — coerces, returns boolean
+# =====================================================================
+
+true implies true	true
+true implies false	false
+false implies true	true
+false implies false	true
+1 implies 0	false
+0 implies 1	true
+"" implies "x"	true
+"x" implies ""	false
+
+# =====================================================================
+# 7. otherwise — null-coalescing on `None`
+# =====================================================================
+
+None otherwise 5	5
+5 otherwise None	5
+None otherwise None	None
+None otherwise "fallback"	'fallback'
+None otherwise 0	0
+None otherwise false	false
+
+# Non-None passes through unchanged (distinct from `or`).
+0 otherwise 5	0
+"" otherwise "x"	''
+false otherwise true	false
+
+# Chained.
+None otherwise None otherwise 7	7
+None otherwise 1 otherwise 2	1
+0 otherwise None otherwise 9	0
+
+# =====================================================================
+# 8. or vs otherwise — semantic distinction
+# =====================================================================
+
+# 0 is falsy but not None.
+0 or 5	5
+0 otherwise 5	0
+
+# "" is falsy but not None.
+"" or "x"	'x'
+"" otherwise "x"	''
+
+# false is falsy but not None.
+false or true	true
+false otherwise true	false
+
+# None: behaves the same way in or vs otherwise (both return the right).
+None or 5	5
+None otherwise 5	5
+
+# =====================================================================
+# 9. tor — type-or (disjunction / union)
+# =====================================================================
+
+# Two type Literals.
+String tor None	String|None
+Number tor String	Number|String
+Boolean tor None	Boolean|None
+
+# Three or more (flattened).
+String tor Number tor Boolean	String|Number|Boolean
+Integer tor Decimal tor String tor None	Integer|Decimal|String|None
+
+# Concrete values produce a disjunct of values.
+1 tor 2	1|2
+"a" tor "b" tor "c"	'a'|'b'|'c'
+
+# Mixed concrete and type Literals.
+String tor 42	String|42
+
+# Disjunct alternatives are simplified at construction:
+# - Identical alternatives dedupe (idempotence).
+# - Strict subtype is subsumed by its supertype.
+# These leave a single alternative, so the disjunct collapses to a
+# bare type literal.
+Number tor Integer	Number
+String tor String	String
+
+# Disjunct unifies with one of its alternatives.
+(String tor None) unify "hi"	'hi' true
+(String tor None) unify None	None true
+(String tor None) unify 42	'~unify-fail' false
+
+# =====================================================================
+# 10. tand — type-and (conjunction / record merge)
+# =====================================================================
+
+# Disjoint keys: combine.
+{x:1} tand {y:Integer}	{x:1,y:Integer}
+{a:"A"} tand {b:"B"}	{a:'A',b:'B'}
+
+# Overlapping keys: unify.
+{x:1} tand {x:Integer}	{x:1}
+{x:Number} tand {x:1}	{x:1}
+
+# Multi-key with one overlap.
+{x:1 y:2} tand {y:Integer z:3}	{x:1,y:2,z:3}
+
+# Three-way merge.
+{a:1} tand {b:2} tand {c:3}	{a:1,b:2,c:3}
+
+# Non-map: falls back to Unify.
+1 tand Integer	1
+1 tand Number	1
+"hi" tand String	'hi'
+
+# Type literals: tand falls back to Unify; the narrower type Wins.
+Integer tand Number	Integer
+Number tand Integer	Integer
+
+# Same value twice.
+{x:1} tand {x:1}	{x:1}
+
+# =====================================================================
+# 11. tor and tand interactions
+# =====================================================================
+
+# Disjunct of merged maps.
+({x:1} tand {y:2}) tor {z:3}	{x:1,y:2}|{z:3}
+
+# Merge of disjuncts: each merge picks an alternative — tested via unify.
+({x:Integer} tor {x:String}) unify {x:1}	{x:1} true
+({x:Integer} tor {x:String}) unify {x:"a"}	{x:'a'} true
+({x:Integer} tor {x:String}) unify {x:true}	'~unify-fail' false
+
+# tor inside an optional record field.
+record [name:String age:[Integer tor None]]	record{name:String,age:Integer|None}
+
+# tand at type-level then unify.
+({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1,y:'a'} true
+
+# =====================================================================
+# 12. Coercion combined with logical ops
+# =====================================================================
+
+# Use parens to force evaluation order — `or`/`and` have BarrierPos
+# scoring that interacts with chaining; explicit grouping is clearer.
+(1 and 2) or 0	2
+0 or (1 and 2)	2
+(0 and 5) or 7	7
+("" or "x") and "y"	'y'
+("a" and "") or "z"	'z'
+
+# Negation of mixed operands.
+(1 not) or 1	1
+(0 not) and 1	1
+("" not) or 0	true
+
+# nand/iff composed.
+(true nand true) iff false	true
+(1 nor 0) iff false	true
+
+# =====================================================================
+# 13. Interactions with `if`
+# =====================================================================
+
+# `if` uses CoerceBoolean for scalar conditions.
+if 1 [42] [99]	42
+if 0 [42] [99]	99
+if "" [42] [99]	99
+if "x" [42] [99]	42
+if None [42] [99]	99
+if {} [42] [99]	99
+if {x:1} [42] [99]	42
+
+# 2-arg if with falsy condition returns nothing.
+if 0 [42]
+if 1 [42]	42
+if "" ["yes"]
+if "x" ["yes"]	'yes'
+
+# Combine logic in conditions.
+if (1 and 2) [42] [99]	42
+if (0 or 0) [42] [99]	99
+if (1 or 0) ["t"] ["f"]	't'
+if (1 not) ["t"] ["f"]	'f'
+
+# `otherwise` for default values inside if branches.
+if 1 [None otherwise "default"] []	'default'
+if 0 [] ["zero" otherwise "fallback"]	'zero'
+
+# =====================================================================
+# 14. Interactions with arithmetic and comparison
+# =====================================================================
+
+# Comparison feeds into logic.
+(1 lt 2) and (2 lt 3)	true
+(1 gt 2) or (2 lt 3)	true
+(1 eq 1) iff (2 eq 2)	true
+(1 eq 2) implies (1 lt 2)	true
+
+# Arithmetic on the winning value of `or`/`and`.
+(0 or 5) add 1	6
+(1 and 2) mul 10	20
+(None otherwise 3) add 4	7
+
+# =====================================================================
+# 15. Interactions with strings and atoms
+# =====================================================================
+
+# String concatenation after `or`.
+("" or "hello") add " world"	'hello world'
+("" or "x") upper	'X'
+
+# `otherwise` only swaps in the fallback when the first arg is `None`;
+# the empty string passes through (distinct from `or`).
+"foo" otherwise "bar"	'foo'
+"" otherwise "bar"	''
+None otherwise "bar"	'bar'
+
+# =====================================================================
+# 16. Interactions with lists and maps
+# =====================================================================
+
+# Empty list is falsy.
+[] or [1 2]	[1,2]
+[] and [1 2]	[]
+[] otherwise [1 2]	[]
+
+# Non-empty list is truthy.
+[1] or [2 3]	[1]
+[1] and [2 3]	[2,3]
+
+# Empty map is falsy.
+{} or {x:1}	{x:1}
+{} and {x:1}	{}
+
+# Non-empty map is truthy.
+{x:1} or {y:2}	{x:1}
+{x:1} and {y:2}	{y:2}
+
+# =====================================================================
+# 17. otherwise with optional record fields (None defaults)
+# =====================================================================
+
+# A field that resolves to None gets a fallback via `otherwise`.
+type Item record [name:String desc:[String tor None]] (make Item ["a" None]) get desc	None
+((make (record [name:String desc:[String tor None]]) ["a" None]) get desc) otherwise "no description"	'no description'
+((make (record [name:String desc:[String tor None]]) ["a" "set"]) get desc) otherwise "no description"	'set'
+
+# =====================================================================
+# 18. Edge cases
+# =====================================================================
+
+# not on a coerced disjunct (the disjunct itself is truthy).
+(String tor None) not	false
+
+# tor with a single arg via chaining.
+None tor String	None|String
+
+# otherwise with both None.
+None otherwise None	None
+
+# Boolean Coercion through type Coercion.
+(1 convert Boolean) and (2 convert Boolean)	true
+(0 convert Boolean) or (false)	false
+
+# =====================================================================
+# 19. any — list-or, short-circuit, returns winning element
+# =====================================================================
+
+# Boolean lists.
+[true false true] any	true
+[false false false] any	false
+[true] any	true
+[false] any	false
+
+# Numeric lists — first truthy wins.
+[1 0 2] any	1
+[0 0 2] any	2
+[0 0 0] any	0
+[0 0 -3] any	-3
+
+# String lists.
+["" "" "x"] any	'x'
+["" "x" "y"] any	'x'
+["" "" ""] any	''
+
+# Mixed types.
+[0 "" "found"] any	'found'
+[None 0 false] any	false
+[None "x"] any	'x'
+
+# Empty list returns identity (false for OR).
+[] any	false
+
+# Coerced via convert-boolean rules: empty list inside list is falsy.
+[[] [1]] any	[1]
+[[] []] any	[]
+
+# =====================================================================
+# 20. all — list-and, short-circuit, returns winning element
+# =====================================================================
+
+# Boolean lists.
+[true true true] all	true
+[true false true] all	false
+[true] all	true
+[false] all	false
+
+# Numeric lists — first falsy wins, else last.
+[1 2 3] all	3
+[1 0 3] all	0
+[0 1 2] all	0
+[5] all	5
+
+# String lists.
+["a" "b" "c"] all	'c'
+["a" "" "c"] all	''
+
+# Mixed types.
+[1 "ok" true] all	true
+[1 "" 5] all	''
+
+# Empty list returns identity (true for AND).
+[] all	true
+
+# Empty inner list is falsy for `all`.
+[[1] []] all	[]
+[[1] [2]] all	[2]
+
+# =====================================================================
+# 21. any/all interactions with other words
+# =====================================================================
+
+# any/all over computed lists.
+[(1 add 1) 0] any	2
+[(1 sub 1) 0] any	0
+
+# Use any/all as a condition (wrap the quantifier in parens so its
+# result feeds into `if`, not the raw list).
+if ([0 0 1] any) [42] [99]	42
+if ([1 0 1] all) [42] [99]	99
+
+# Combine with otherwise — `any` returns 0 (last falsy), then otherwise
+# replaces only on None, not on falsy.
+[0 0 0] any otherwise 99	0
+[None None None] any otherwise 99	99
+
+# any over a list built from comparisons.
+[(1 lt 2) (2 lt 1) (3 eq 3)] any	true
+[(1 gt 2) (2 lt 1)] any	false
+
+# all over a list built from comparisons.
+[(1 lt 2) (2 lt 3) (3 lt 4)] all	true
+[(1 lt 2) (2 gt 3)] all	false
+
+# =====================================================================
+# 22. tany — list-tor, builds flattened disjunct
+# =====================================================================
+
+# Type literals.
+[String None] tany	String|None
+[Number String Boolean] tany	Number|String|Boolean
+
+# Single-element list returns the element unchanged.
+[String] tany	String
+
+# Concrete values.
+[1 2 3] tany	1|2|3
+["a" "b"] tany	'a'|'b'
+
+# Existing disjuncts are flattened.
+[(String tor None) Number] tany	String|None|Number
+
+# Equivalent to chained tor.
+[String Number Boolean None] tany	String|Number|Boolean|None
+String tor Number tor Boolean tor None	String|Number|Boolean|None
+
+# Use a tany result with unify.
+([String None] tany) unify "hi"	'hi' true
+([String None] tany) unify None	None true
+([String None] tany) unify 42	'~unify-fail' false
+
+# =====================================================================
+# 23. tall — list-tand, merges/unifies all elements
+# =====================================================================
+
+# Map merges with disjoint keys.
+[{x:1} {y:2}] tall	{x:1,y:2}
+[{a:1} {b:2} {c:3}] tall	{a:1,b:2,c:3}
+
+# Map merges with overlapping keys (unify).
+[{x:1} {x:Integer}] tall	{x:1}
+[{x:Number y:2} {x:1 z:3}] tall	{x:1,y:2,z:3}
+
+# Single-element list returns the element unchanged.
+[{x:1}] tall	{x:1}
+[42] tall	42
+
+# Non-map values fall back to Unify.
+[1 Integer Number] tall	1
+["hi" String] tall	'hi'
+
+# Type literal narrowing across the list.
+[Number Integer] tall	Integer
+[Integer Number] tall	Integer
+
+# Equivalent to chained tand.
+[{x:1} {y:2} {z:3}] tall	{x:1,y:2,z:3}
+{x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
+
+# tall result used in unify.
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+
+# =====================================================================
+# 24. tany/tall interactions
+# =====================================================================
+
+# tany a list with computed disjuncts.
+[({x:1} tand {y:2}) {z:3}] tany	{x:1,y:2}|{z:3}
+
+# Use tall to fold a list of map schemas, then unify.
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+
+# tany an empty disjunct via single-element collapses.
+[String] tany unify "x"	'x' true
+[None] tany unify None	None true
+
+# =====================================================================
+# 25. any/all — scalar edge cases (numeric)
+# =====================================================================
+
+# Decimals — 0.0 renders with the `.0` suffix to stay visually
+# distinct from Integer 0 (formatDecimal in eng/go/print.go).
+[1.5 0.0 2.5] any	1.5
+[0.0 0.0 0.0] any	0.0
+[0.0 1.5] any	1.5
+[1.5 2.5 3.5] all	3.5
+[1.5 0.0 3.5] all	0.0
+
+# Negative numbers are truthy (only literal zero is falsy).
+[-1 0] any	-1
+[-1 -2 -3] all	-3
+[0 -5] any	-5
+
+# Single-element lists.
+[0] any	0
+[1] any	1
+[true] any	true
+[false] any	false
+[None] any	None
+[None] all	None
+[""] any	''
+[""] all	''
+["x"] all	'x'
+
+# =====================================================================
+# 26. any/all — scalar edge cases (strings, atoms, none)
+# =====================================================================
+
+# String literal "true"/"false" coerce to actual booleans.
+["false" "false"] any	'false'
+["false" "true"] any	'true'
+["true" "false"] all	'false'
+["true" "x"] all	'x'
+
+# Strings that look like numbers don't coerce numerically — non-empty
+# strings are truthy except literal "true"/"false".
+["0" "1"] any	'0'
+["" "0"] any	'0'
+[""] any	''
+
+# None scattered through.
+[None 0 5 None] any	5
+[None None None] any	None
+[None 1 None] all	None
+
+# =====================================================================
+# 27. any/all — list / map element truthiness
+# =====================================================================
+
+# Empty list inside list is falsy.
+[[] [1 2]] any	[1,2]
+[[] []] any	[]
+[[1] [2]] any	[1]
+[[] [3 4]] all	[]
+[[1] [2 3]] all	[2,3]
+
+# Map truthiness (empty map is falsy).
+[{} {}] any	{}
+[{} {x:1}] any	{x:1}
+[{x:1} {}] all	{}
+[{x:1} {y:2}] all	{y:2}
+
+# Mixed list / map elements.
+[{} [] 0 ""] any	''
+[{} [] "found"] any	'found'
+[{x:1} [1] "ok"] all	'ok'
+
+# =====================================================================
+# 28. any/all — coerce + arithmetic + comparison interactions
+# =====================================================================
+
+# Computed values inside the list.
+[(1 add 1) 0 (5 mul 2)] any	2
+[(1 sub 1) (2 sub 2) (3 sub 3)] any	0
+[(0 add 1) (1 mul 1) (1 add 1)] all	2
+
+# Comparison results gathered.
+[(1 lt 2) (3 lt 4) (5 lt 6)] all	true
+[(1 gt 2) (3 lt 4)] any	true
+[(1 eq 2) (3 eq 4)] any	false
+[(1 lt 2) (3 gt 1) (4 lt 0)] all	false
+
+# Use any/all result in arithmetic.
+([0 0 5] any) add 10	15
+([1 2 3] all) mul 2	6
+([0 0 0] any) add 1	1
+
+# =====================================================================
+# 29. any/all — interactions with not, otherwise, if
+# =====================================================================
+
+# `not [list] any` → "all elements are falsy" — but `not` operates on
+# the `any` result, which is a value (not a boolean). It coerces.
+[0 0 0] any not	true
+[1 0 0] any not	false
+[0 0 5] any not	false
+
+# DeMorgan: `not all` ↔ "any is falsy".
+[1 1 1] all not	false
+[1 0 1] all not	true
+
+# any with otherwise — `any` returns the falsy operand (e.g. 0); since
+# 0 is not None, otherwise keeps it.
+[0 0 0] any otherwise 99	0
+[None None None] any otherwise 99	99
+
+# all with otherwise — same idea.
+[1 None 5] all otherwise "fallback"	'fallback'
+[1 0 5] all otherwise "fallback"	0
+
+# Use as `if` condition (parens force the quantifier to evaluate
+# before `if` collects forward args).
+if ([1 2 3] all) ["t"] ["f"]	't'
+if ([1 0 3] all) ["t"] ["f"]	'f'
+if ([0 0 0] any) ["t"] ["f"]	'f'
+if ([0 0 1] any) ["t"] ["f"]	't'
+
+# =====================================================================
+# 30. any/all — quoted vs auto-evaluated lists
+# =====================================================================
+
+# A def-bound list auto-evaluates when referenced, splicing onto the
+# stack — so to use any/all on a stored list, build the list inline
+# or use `quote`.
+quote [1 0 5] any	1
+quote [0 0 0] any	0
+quote [true false true] all	false
+
+# any/all over a parens-grouped expression that produces a list.
+([1 add 1] any)	2
+([0 sub 0] any)	0
+
+# =====================================================================
+# 31. any/all — composition with each (per-list quantifier)
+# =====================================================================
+
+# Per-row "any non-zero" check.
+[[1 2] [0 0] [3]] each [any]	[1,0,3]
+[[1 2] [0 0] [3]] each [all]	[2,0,3]
+
+# Are all rows non-empty (truthy)?
+[[1] [0]] each [all]	[1,0]
+([[1] [0]] each [all]) any	1
+([[1] [0]] each [all]) all	0
+
+# Are any rows entirely truthy?
+([[1 1] [0 1] [1 1]] each [all]) any	1
+
+# =====================================================================
+# 32. any/all — boundary semantics
+# =====================================================================
+
+# any short-circuits — a "side-effecting" element after the truthy
+# winner is irrelevant since values are already evaluated. Confirm
+# the result is the first truthy element regardless of order.
+[1 2 3] any	1
+[true 2 false] any	true
+[false true 99] any	true
+
+# all short-circuits to the first falsy.
+[1 0 99] all	0
+[true false true] all	false
+[1 2 false] all	false
+
+# Repeated falsy values collapse to the last-seen.
+[0 0 0] any	0
+[None None None] any	None
+[false false false] any	false
+
+# =====================================================================
+# 33. tany/tall — single-element and identity
+# =====================================================================
+
+# Single-element list returns the element unchanged for tany/tall.
+[String] tany	String
+[None] tany	None
+[42] tany	42
+[{x:1}] tall	{x:1}
+[Integer] tall	Integer
+
+# Repeated elements dedupe (idempotence: T tor T = T).
+[String String] tany	String
+[None None] tany	None
+[1 1 1] tany	1
+
+# =====================================================================
+# 34. tany — disjunct flattening
+# =====================================================================
+
+# Existing disjunct alternatives are inlined.
+[(String tor None) Number] tany	String|None|Number
+[(String tor None) (Number tor Boolean)] tany	String|None|Number|Boolean
+
+# Single-element with an existing disjunct returns it unchanged.
+[(String tor None)] tany	String|None
+
+# tany of values around a disjunct preserves order.
+[1 (String tor None) 2] tany	1|String|None|2
+
+# =====================================================================
+# 35. tany — used inside type-related constructs
+# =====================================================================
+
+# tany result as a record field type.
+record [name:String age:([Integer None] tany)]	record{name:String,age:Integer|None}
+
+# tany result used in `is`.
+42 is ([Integer String None] tany)	true
+true is ([Integer String None] tany)	false
+None is ([Integer String None] tany)	true
+
+# tany unify with a value matching the disjunct.
+([Integer String] tany) unify 42	42 true
+([Integer String] tany) unify "hi"	'hi' true
+([Integer String] tany) unify true	'~unify-fail' false
+
+# =====================================================================
+# 36. tall — overlapping keys success cases
+# =====================================================================
+
+# Type narrows down through the chain.
+[{x:Number} {x:Integer}] tall	{x:Integer}
+[{x:Integer} {x:1}] tall	{x:1}
+
+# Multiple overlapping keys.
+[{x:Number y:String} {x:Integer y:"hi"}] tall	{x:Integer,y:'hi'}
+
+# Three-way merge with one shared key.
+[{x:Number} {x:Integer y:String} {y:"v" z:true}] tall	{x:Integer,y:'v',z:true}
+
+# Order: earlier keys appear first in result order.
+[{a:1} {b:2}] tall	{a:1,b:2}
+[{b:2} {a:1}] tall	{b:2,a:1}
+
+# =====================================================================
+# 37. tall — disjoint cases reduce to Never
+# =====================================================================
+
+# Two different concrete values for the same key are disjoint, so the
+# whole intersection collapses to Never (the bottom type / empty
+# intersection). tall is total: it never errors on disjoint input.
+[{x:1} {x:2}] tall	Never
+[{x:Integer} {x:String}] tall	Never
+[{x:1 y:2} {x:1 y:3}] tall	Never
+
+# Non-map values that don't unify also reduce to Never.
+[1 2] tall	Never
+[1 String] tall	Never
+[Integer Boolean] tall	Never
+
+# =====================================================================
+# 38. tall — type-literal narrowing
+# =====================================================================
+
+# Subtype wins: narrower type Is kept.
+[Number Integer] tall	Integer
+[Integer Number] tall	Integer
+[Scalar Integer] tall	Integer
+
+# Same type Collapses.
+[String String] tall	String
+[None None] tall	None
+
+# =====================================================================
+# 39. tany/tall — combined with each / arithmetic
+# =====================================================================
+
+# tany result fed into is/unify chains.
+([{x:Integer} {x:String}] tany) unify {x:1}	{x:1} true
+([{x:Integer} {x:String}] tany) unify {x:"hi"}	{x:'hi'} true
+([{x:Integer} {x:String}] tany) unify {x:true}	'~unify-fail' false
+
+# tall produces a plain merged map (not a record type), so unify is
+# the right way to check it satisfies a target shape.
+([{x:Integer} {y:String}] tall) unify {x:1 y:"hi"}	{x:1,y:'hi'} true
+([{x:Integer} {y:String} {z:Boolean}] tall) unify {x:1 y:"a" z:true}	{x:1,y:'a',z:true} true
+([{x:Integer} {y:String}] tall) unify {x:1}	'~unify-fail' false
+
+# tany schema as an `Options` field type (note: Options prints lowercase).
+make Options {x:([Integer None] tany)}	options{x:Integer|None}
+
+# =====================================================================
+# 40. tany/tall — interactions with each other
+# =====================================================================
+
+# Build a disjunct of merged maps.
+[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Integer,y:String}|{a:Boolean,b:None}
+
+# Use tany inside tall (combined into a single field).
+[{kind:([String Number] tany)}] tall	{kind:String|Number}
+[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Integer|None,y:Boolean}
+
+# tall then tany then tall — composable.
+[([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Integer}|{y:String}
+
+# =====================================================================
+# 41. tany/tall — `type` definitions
+# =====================================================================
+
+# Define a named disjunct via tany.
+type Maybe tany [String None] Maybe	String|None
+type ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
+
+# Use the named disjunct as a record field constraint.
+type Maybe tany [String None] type Person record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice',nick:None}
+type Maybe tany [String None] type Person record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob',nick:'Bobby'}
+
+# =====================================================================
+# 42. all-quantifier / type-quantifier crosswise interactions
+# =====================================================================
+
+# Boolean reduction over a list of computed `is` checks.
+[(1 is Integer) (true is Boolean) ("a" is String)] all	true
+[(1 is Integer) (true is Integer)] all	false
+[(1 is Integer) (true is Boolean) ("a" is None)] any	true

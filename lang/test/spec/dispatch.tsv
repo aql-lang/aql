@@ -1,0 +1,17 @@
+# Multi-overload dispatch and signature specificity. The test
+# `describeq` word has two overloads — Integer-specific and String-
+# specific — and `tagq` has Any vs Integer to verify specificity wins.
+
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
+#   describeq  — two overloads [Integer]→"int:N" / [String]→"str:S" — type-overload dispatch
+#   tagq       — two overloads [Integer]→"specific" / [Any]→"any" — specificity scoring
+# === end fixtures ===
+
+# tokens	expected	note
+describeq 5	"int:5"	integer overload
+describeq 0	"int:0"	integer overload (zero)
+describeq -3	"int:-3"	integer overload (negative)
+describeq "abc"	"str:abc"	string overload
+tagq 7	"specific"	Integer overload wins over Any
+tagq "x"	"any"	String falls through to Any overload
+tagq true	"any"	Boolean falls through to Any overload

@@ -1,0 +1,135 @@
+# =====================================================================
+# Principle: Word resolution priority (engine.go::stepWord).
+# =====================================================================
+#
+# When the engine encounters a Word value at the pointer, it picks
+# the BINDING for that word's name in a strict priority order. The
+# order is enforced by the if-cascade in stepWord (engine.go:681-).
+# Earlier checks always win against later ones — there is no
+# tiebreaking, no scoring at this level.
+#
+# Resolution order (post §1.4 unified dispatch)
+# ---------------------------------------------
+# 0. Structural keywords: `end`, `(`, `)` — handled directly.
+# 1. Pending forward expecting TWord: capture as Word literal
+#    (e.g. `def NAME` — NAME is a Word slot, not a function call).
+# 2. Pending forward expecting TFunction: resolve to Function value
+#    (FnDefInfo lookup) — the word is a function reference, not a call.
+# 3. Type stack (r.Types): named user-defined types win over def
+#    bindings. (Not exercised here — no type word in the spec runner.)
+# 4. Def stack (simple values): `def x 5` then `x` resolves to 5;
+#    list bodies splice in place; FnDefInfo / ObjectTypeInfo fall
+#    through to dispatch.
+# 5. Function lookup (Lookup): registered native words and fn-built
+#    user functions dispatch via matchSignature.
+# 6. Boolean literals: `true` / `false` push Boolean values.
+# 7. Type-name words: typeNames table (Integer, String, …) push
+#    type literals.
+# 8. Slash-separated type paths (ResolveTypePath): not commonly hit
+#    via the spec runner because tokenizeSpec doesn't try to keep
+#    `Foo/Bar` as a single token — but the path is still in stepWord.
+# 9. Else — undefined_word error.
+#
+# Rules being asserted
+# --------------------
+# - Simple-value def shadows builtin functions: if `def addq 99` is
+#   issued, then a bare `addq` resolves to 99 (not a function call).
+#   This holds because the def-stack lookup runs BEFORE the
+#   Lookup-the-function call.
+# - But the def-substituted value flows through stepLiteral, which
+#   re-invokes pending-forward collection. So `addq 1 2` after
+#   `def addq 99` would push 99 onto the stack THREE times (three
+#   tokens, three substitutions); 1 and 2 are literals; final stack:
+#   `99 1 2`. The *registered* `addq` is unreachable while the def
+#   is on the stack.
+# - Multiple defs of the same name SHADOW: each push is a stack
+#   layer; the most-recent push wins until popped (no `undef` in
+#   the spec runner, so we test push-only shadowing).
+# - Booleans (`true` / `false`) are checked AFTER def-stack and
+#   function-lookup. If `def true 99` were possible (it's not — `true`
+#   is reserved by tokenizeSpec which converts it to NewBoolean), the
+#   def would win. The spec tokenizer pre-converts so we can't
+#   actually test this layer here.
+# - Type names are checked after function-lookup. So if `Integer`
+#   were registered as a native, the native would win. We don't
+#   register `Integer` so the type-literal path always fires.
+# - Undefined names error (already tested in errors.tsv) — pinned
+#   here in context as the FALL-THROUGH outcome.
+#
+# Why this matters
+# ----------------
+# Resolution priority is the most important runtime contract for
+# anyone authoring a library or shadowing a builtin. The current
+# order means:
+#   - User-defined names ALWAYS win over builtins (def shadows).
+#   - User-defined types ALWAYS win over def bindings (separate
+#     stack for type names).
+#   - Booleans / type-name fallbacks only fire when nothing else
+#     does — a typo for a registered word never silently becomes a
+#     type literal.
+#
+# Spec runner notes
+# -----------------
+# - The pre-bound def stack at run time: `pi=3`, `tau=6`,
+#   `greeting="hello"`. These are the canonical witnesses for
+#   simple-value def resolution.
+# - There is no `untype` / `undef` in the spec runner, so we cannot
+#   test pop-then-resolve transitions here.
+
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
+#
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting="hello" (String).
+# === end fixtures ===
+
+# tokens	expected	note
+
+# 4. Simple-value def resolution.
+pi	3	pre-bound def: pi → Integer(3)
+tau	6	pre-bound def: tau → Integer(6)
+greeting	"hello"	pre-bound def: greeting → "hello"
+pi pi	3 3	repeated reference produces two copies on the stack
+pi tau	3 6	multiple defs interleave with literals fine
+
+# Def-substituted value flows through forward collection.
+pi addq 1	4	pi resolves to 3 first; then 3 addq 1 = 4 (the swap form on integers — see mirror.tsv)
+1 addq pi	4	1 addq 3 = 4 (mirror form)
+
+# 4-vs-5: def shadows function. `def addq` would override the
+# registered native addq — but the spec runner ALSO has addq as a
+# def via fn-installSpecFnDef? No — it's a registered native.
+# After `def addq 99`, the def overrides; `addq` resolves to 99.
+def addq 99 addq	99	bare addq references the def, NOT the function
+def addq 99 1 addq	1 99	1 pushes; addq resolves via def-substitution to 99 — the registered native addq is shadowed and never fires
+def addq 99 addq 1 2	99 1 2	def-substitution: addq → 99 first (no pending forward); then 1 and 2 push as literals; final: 99 1 2
+
+# Shadowing: same name pushed twice yields a stack of bindings.
+def x 5 def x 10 x	10	most-recent push wins
+def x 5 x	5	first push visible
+def x 5 def x 10 x x	10 10	resolved twice — both reads see the top
+def x 5 x def x 10 x	5 10	first read returns 5, second read returns 10 — pinning the order
+
+# 6. Boolean fall-through.
+true	true	bare true resolves via the tokenizeSpec pre-conversion path; final value is Boolean(true)
+false	false	bare false resolves to Boolean(false)
+true false	true false	multiple booleans coexist
+
+# 7. Type-name fall-through (subset of typeliteral.tsv).
+Number	Number	type-name word → type literal; renderer prints the path
+Any	Any	universal top type via fall-through
+
+# 9. Undefined name → error (re-pinned here in resolution context).
+nope	ERROR:undefined	bare undefined name errors at stepWord
+
+# Mixed: def takes priority over function-lookup; if def is removed,
+# function-lookup wins. The spec runner doesn't have `undef`, so we
+# can only test the with-def form. After `def addq 99`, the registered
+# native is shadowed — the def takes priority everywhere.
+def addq 99 addq addq	99 99	two adds, both resolve to def value
+
+# A def name CANNOT be uppercase: the production parser resolves the
+# upcoming Integer as a type literal at parse time (it's a known
+# type-name word), so def's [TWord, TAny] sig fails to match — the
+# type literal isn't a Word. The end-result is still a hard reject
+# of `def Integer …`, just routed through a different validation.
+def Integer 42 Integer	ERROR:signature_error	type names parse as type literals; def's [TWord, …] sig rejects them

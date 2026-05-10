@@ -1,0 +1,23 @@
+# Mixed BarrierPos: 0 < B < N. Forward fills sig[0..B-1]; sig[B..N-1]
+# must come from the stack. Distinct from /s (B=0) and /f (B=N) which
+# are call-site overrides — here the boundary is intrinsic to the sig.
+#
+# Test word `pairq` has a single sig:
+#   args:    [Integer, Integer]
+#   barrierPos: 1
+#   handler: (a, b) => formats `a:b` as a string
+#
+# So forward fills sig[0] (one token), sig[1] must come from the stack.
+
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
+#   pairq  — [Integer | Integer] BarrierPos=1 — "a:b" (mixed forward/stack)
+# === end fixtures ===
+
+# tokens	expected	note
+2 pairq 5	"5:2"	stack=[2], forward=[5]: sig[0]=5 (fwd), sig[1]=2 (stk) → "5:2"
+2 5 pairq	"5:2"	all-stack: sig[0]=top=5, sig[1]=2 (forward limit unused, stack supplies both)
+pairq 5 2	ERROR:signature_error	all-forward: forward limit=1 fills sig[0]=5, sig[1] needs stack but stack empty
+3 7 pairq 5	3 "5:7"	stack=[3,7], forward=[5]: sig[0]=5 (fwd), sig[1]=top=7 (stk); 3 left dangling
+pairq/f 5 2	"5:2"	/f overrides barrier to N, both args from forward
+2 pairq/s 5	ERROR:signature_error	/s overrides barrier to 0, only one stack value but two needed
+2 5 pairq/s	"5:2"	/s overrides barrier to 0, both args from stack
