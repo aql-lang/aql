@@ -784,6 +784,14 @@ func (e *Engine) stepWord(val Value) error {
 			e.stack[e.pointer] = NewBoolean(false)
 			return nil
 		}
+		if w.Name == "none" {
+			e.stack[e.pointer] = NewNone()
+			return nil
+		}
+		if w.Name == "null" {
+			e.stack[e.pointer] = NewAtom("null")
+			return nil
+		}
 		if t, ok := typeNames[w.Name]; ok {
 			e.stack[e.pointer] = NewTypeLiteral(t)
 			return nil

@@ -155,13 +155,21 @@ func TypeOf(v Value) Value {
 	return NewTypeLiteral(v.VType)
 }
 
-// IsRecordShape reports whether v is a non-empty implicit-map type
-// body — `{x:Integer y:String}` and friends. Every entry's value
-// must itself be a type body (a type literal or a nested record
-// shape). The empty implicit map `{}` is treated as a concrete map,
-// not a shape, so `typeof { } → Map`.
+// IsRecordShape reports whether v is a non-empty map all of whose
+// field values are themselves type bodies (type literals or nested
+// record shapes). Independent of how the map was constructed
+// (production aql `{x:Integer}` produces an explicit OrderedMap;
+// the implicit-pair syntax inside fn signatures produces an Implicit
+// map; both are treated as record shapes here when their values are
+// type-shape values).
+//
+// The empty map `{}` is treated as a concrete value, not a shape,
+// so `typeof { } → Map`. A mixed-content map like `{x:1 y:String}`
+// has a concrete x payload and so is also NOT a record shape (typeof
+// returns Map). Singleton-typed shapes still go via `is`'s structural
+// unification path.
 func IsRecordShape(v Value) bool {
-	if !v.IsImplicitMap() {
+	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
 	m := v.AsMap()
@@ -260,7 +268,13 @@ func IsValueOfType(v, t Value) bool {
 		}
 		return true
 	}
-	if t.IsImplicitMap() {
+	// Map-as-type — record-shape conformance. Fires for both
+	// Implicit (fn-sig pair-syntax) and explicit (`{x:Integer}`)
+	// maps. The recursive IsValueOfType handles concrete-as-singleton
+	// fields via the Unify fallback when t's field is a literal.
+	// Subtypes like RecordTypeInfo / OptionsTypeInfo (whose AsMap
+	// returns nil) fall through to Unify below.
+	if t.VType.Equal(TMap) && t.Data != nil && t.AsMap() != nil {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}

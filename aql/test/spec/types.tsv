@@ -116,9 +116,9 @@ def t Number t	Number
 def t List t	List
 
 # To get the Atom version of a type-name word, quote it.
-quote Integer	atom(Integer)	quote captures the Word as an Atom; type-name resolution doesn't fire
-quote String	atom(String)
-def t quote Integer t	atom(Integer)
+quote Integer	Integer	type-name words parse as type literals before quote sees them; quote of a type literal returns it unchanged
+quote String	String
+def t quote Integer t	Integer
 
 # =====================================================================
 # 2. None and null
@@ -524,6 +524,28 @@ type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 "x" ] } } is Cube	false	dee
 # typeof on a typed list/map type literal reports its metatype.
 typeof [: Integer ]	NodeType	[: Integer ] has VType=List; metatype = NodeType
 typeof {: Integer }	NodeType
+
+# =====================================================================
+# 11i. Typed list / map carrying both elements AND a child constraint
+# =====================================================================
+# `[{x:1} :{x:Integer} {x:2}]` parses to a typed-list value whose
+# ChildTypeInfo retains both the literal elements and the child
+# constraint. `{a:{x:1} :{x:Integer} b:{x:2}}` is the map analogue.
+#
+# `is` against a child-typed type validates each retained element /
+# entry-value against the child constraint. The element retention is
+# what makes `[v0 :T v1]` more useful than the bare `[:T]` form: the
+# value carries the elements forward so list / map / first / length
+# operations see them.
+
+[{x:1} :{x:Integer} {x:2}] is [: {x:Integer}]	true	all elements satisfy the child type
+[{x:"X"} :{x:Integer} {x:2}] is [: {x:Integer}]	false	first element's x is String, not Integer
+{a:{x:1} :{x:Integer} b:{x:2}} is {: {x:Integer}}	true	every entry value satisfies the child type
+{a:{x:"X"} :{x:Integer} b:{x:2}} is {: {x:Integer}}	false	entry a's value fails the child type
+
+# Mixed scalar/literal child types.
+[1 :Integer 2 3] is [: Integer]	false	parser only retains values when child is a complex map shape; bare scalar gives plain typed-list semantics — pinned for documentation
+[1 2 3] is [: Integer]	true	regular concrete list directly satisfies the typed list type
 
 # =====================================================================
 # 12. Dispatch — type literals are rejected at concrete-payload sigs

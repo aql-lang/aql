@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -413,12 +414,28 @@ func convertDataValue(v any) (engine.Value, error) {
 
 // convertTypedList converts a ListRef with a Child into a typed list value.
 // The child value is converted in data context (type names resolve to type literals).
+//
+// When lr.Val carries concrete elements alongside the child constraint
+// (`[v0 :T v1]`), each element is converted in data context and
+// retained on the resulting Value's ChildTypeInfo.Elements; the
+// runtime `is` validates them against Child on demand.
 func convertTypedList(lr jsonic.ListRef) (engine.Value, error) {
 	childVal, err := convertDataValue(lr.Child)
 	if err != nil {
 		return engine.Value{}, err
 	}
-	return engine.NewTypedList(childVal), nil
+	if len(lr.Val) == 0 {
+		return engine.NewTypedList(childVal), nil
+	}
+	elems := make([]engine.Value, 0, len(lr.Val))
+	for _, item := range lr.Val {
+		ev, err := convertDataValue(item)
+		if err != nil {
+			return engine.Value{}, err
+		}
+		elems = append(elems, ev)
+	}
+	return engine.NewTypedListWithElements(childVal, elems), nil
 }
 
 // hasMapChild reports whether a jsonic map contains the "child$" key
@@ -428,14 +445,40 @@ func hasMapChild(m map[string]any) bool {
 	return ok
 }
 
-// convertTypedMap converts a map with a "child$" key into a typed map value.
-// The child value is converted in data context (type names resolve to type literals).
+// convertTypedMap converts a map with a "child$" key into a typed
+// map value. The child value is converted in data context (type
+// names resolve to type literals).
+//
+// When the source carries concrete entries alongside the child
+// constraint (`{k:v :T}`), each entry is converted in data context
+// and retained on the resulting Value's ChildTypeInfo.Entries; the
+// runtime `is` validates each entry's value against Child on demand.
 func convertTypedMap(m map[string]any) (engine.Value, error) {
 	childVal, err := convertDataValue(m["child$"])
 	if err != nil {
 		return engine.Value{}, err
 	}
-	return engine.NewTypedMap(childVal), nil
+	// Collect non-`child$` entries as concrete values.
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		if k == "child$" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		return engine.NewTypedMap(childVal), nil
+	}
+	sort.Strings(keys)
+	entries := make([]engine.ChildEntry, 0, len(keys))
+	for _, k := range keys {
+		ev, err := convertDataValue(m[k])
+		if err != nil {
+			return engine.Value{}, err
+		}
+		entries = append(entries, engine.ChildEntry{Key: k, Value: ev})
+	}
+	return engine.NewTypedMapWithEntries(childVal, entries), nil
 }
 
 // convertDataList converts a list in data context (inside maps).

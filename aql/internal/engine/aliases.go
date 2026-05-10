@@ -23,6 +23,7 @@ type (
 	CheckSeverity = aqleng.CheckSeverity
 	CheckState = aqleng.CheckState
 	ChildTypeInfo = aqleng.ChildTypeInfo
+	ChildEntry = aqleng.ChildEntry
 	DefCleanupInfo = aqleng.DefCleanupInfo
 	DepBound = aqleng.DepBound
 	DepKind = aqleng.DepKind
@@ -194,6 +195,9 @@ var (
 	ValidateWordName           = aqleng.ValidateWordName
 	TypeOf                     = aqleng.TypeOf
 	NewNone                    = aqleng.NewNone
+	FormatDecimal              = aqleng.FormatDecimal
+	NewTypedListWithElements   = aqleng.NewTypedListWithElements
+	NewTypedMapWithEntries     = aqleng.NewTypedMapWithEntries
 	FindWordInSource = aqleng.FindWordInSource
 	FlattenDisjunctAlts = aqleng.FlattenDisjunctAlts
 	FnDefHasSig = aqleng.FnDefHasSig

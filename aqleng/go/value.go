@@ -145,11 +145,26 @@ func (p PathInfo) String() string {
 	return joined
 }
 
-// ChildTypeInfo holds the child type constraint for a typed list or typed map.
-// For example, [:string] constrains all list elements to be strings,
-// and {:string} constrains all map values to be strings.
+// ChildTypeInfo holds the child-type constraint for a typed list or
+// typed map.
+//
+// For example, [:String] constrains all list elements to be strings,
+// and {:String} constrains all map values to be strings. Elements is
+// non-nil when the source carried both literal elements AND a child
+// constraint (e.g. `[{x:1} :{x:Integer} {x:2}]`); each element is
+// validated against Child by `is` and similar predicates.
 type ChildTypeInfo struct {
-	Child Value
+	Child    Value
+	Elements []Value // optional: concrete elements alongside the child constraint
+	Entries  []ChildEntry
+}
+
+// ChildEntry is a (key, value) pair retained for typed maps that
+// carry concrete entries alongside their child constraint
+// (`{a:1 :{x:Integer} b:2}`).
+type ChildEntry struct {
+	Key   string
+	Value Value
 }
 
 // RecordTypeInfo holds the field schema for a record type.
@@ -570,20 +585,24 @@ func NewDecimal(f float64) Value {
 	return NewValueRaw(TDecimal, f)
 }
 
-// formatDecimal renders a float64 with a guaranteed decimal point so the
+// FormatDecimal renders a float64 with a guaranteed decimal point so the
 // type stays visually distinct from Integer. Uses 'f' format with -1
 // precision (shortest round-trip), then appends ".0" when the result
 // has neither a fractional part nor an exponent. Float artefacts like
 // 0.1 + 0.2 = 0.30000000000000004 are preserved verbatim — see the
 // note in spec/SPEC_REPORT.md §2 on the apd-port plan if exact
 // decimal arithmetic is required.
-func formatDecimal(f float64) string {
+func FormatDecimal(f float64) string {
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"
 	}
 	return s
 }
+
+// formatDecimal is the lowercase alias retained for in-package call
+// sites that pre-date the exported form.
+func formatDecimal(f float64) string { return FormatDecimal(f) }
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
@@ -621,6 +640,21 @@ func NewEvalMap(entries *OrderedMap) Value {
 	v := NewValueRaw(TMap, entries)
 	v.Eval = true
 	return v
+}
+
+// NewTypedListWithElements creates a typed list value carrying both
+// concrete elements and a child-type constraint. Used by the parser
+// for `[v0 :T v1]` syntax. Each element is validated against the
+// child constraint by `is` and similar predicates.
+func NewTypedListWithElements(child Value, elems []Value) Value {
+	return NewValueRaw(TList, ChildTypeInfo{Child: child, Elements: elems})
+}
+
+// NewTypedMapWithEntries creates a typed map value carrying both
+// concrete (key, value) entries and a child-type constraint. Used by
+// the parser for `{k:v :T}` syntax.
+func NewTypedMapWithEntries(child Value, entries []ChildEntry) Value {
+	return NewValueRaw(TMap, ChildTypeInfo{Child: child, Entries: entries})
 }
 
 // NewImplicitMap creates a map value marked as implicit (from pair syntax).
@@ -1495,11 +1529,16 @@ func (v Value) AsList() ReadList {
 		}
 		return ReadList{elems: td.Rows}
 	}
-	elems, ok := v.Data.([]Value)
-	if !ok {
-		return ReadList{}
+	if elems, ok := v.Data.([]Value); ok {
+		return ReadList{elems: elems}
 	}
-	return ReadList{elems: elems}
+	// Typed list carrying both a child constraint and concrete
+	// elements (`[v0 :T v1]`). Surface the elements so list-aware
+	// operations (lengthq, firstq, is) see them.
+	if ci, ok := v.Data.(ChildTypeInfo); ok && len(ci.Elements) > 0 {
+		return ReadList{elems: ci.Elements}
+	}
+	return ReadList{}
 }
 
 // AsMutableList returns the underlying []Value slice for mutation.
@@ -1522,11 +1561,20 @@ func (v Value) AsMap() ReadMap {
 	if v.Data == nil {
 		return nil
 	}
-	om, ok := v.Data.(*OrderedMap)
-	if !ok {
-		return nil
+	if om, ok := v.Data.(*OrderedMap); ok {
+		return om
 	}
-	return om
+	// Typed map carrying both a child constraint and concrete entries
+	// (`{k:v :T}`). Surface the entries as an OrderedMap so map-aware
+	// operations see them.
+	if ci, ok := v.Data.(ChildTypeInfo); ok && len(ci.Entries) > 0 {
+		om := NewOrderedMap()
+		for _, e := range ci.Entries {
+			om.Set(e.Key, e.Value)
+		}
+		return om
+	}
+	return nil
 }
 
 // AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
