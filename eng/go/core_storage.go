@@ -4,39 +4,28 @@ import "fmt"
 
 // registerCoreStorage installs the `get` and `set` words — the
 // universal container-access pair. Both are forward-precedence with
-// a fan of signatures so the same word can drive Stores
-// (copy-on-write), Object instances (in-place mutation), Arrays
-// (indexed by integer), and plain Map/List/Options nodes (read-only
-// for `get`).
+// a fan of signatures for the value-side container kinds:
 //
-// `set` and `get` carry ReturnsFn closures that thread the static
-// type tracker (r.RecordContextSet / r.LookupContextType) so
-// check-mode can recover a typed carrier from a previous set on the
-// same key.
+//   - Node (Map / List / Options / record-shape) — read via `get`.
+//     Maps and Lists are immutable in the kernel, so `set` is NOT
+//     installed for them; in-place mutation is reserved for Object
+//     instances and Arrays.
+//   - Object instances — read and in-place write.
+//   - Array — read and indexed-write.
+//   - None — `get key None` short-circuits to None (chained-read
+//     propagation).
 //
-// Mirrors the production lang storageNatives in
-// lang/internal/engine/native_storage.go, ported verbatim to eng so
-// the kernel can express container access without depending on the
-// lang layer.
+// Context-Store access (copy-on-write `set` and check-mode-tracking
+// `get`) is intentionally NOT in the kernel: those depend on the
+// per-engine context stack and live in the production lang layer
+// (see lang/internal/engine/native_storage.go). Lang's
+// storageNatives append the Store sigs to the eng-installed
+// dispatch.
 func registerCoreStorage(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "set",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			// Store (copy-on-write)
-			{
-				Args:      []Type{TString, TAny, TStore},
-				Handler:   setStoreHandler,
-				Returns:   []Type{},
-				ReturnsFn: setStoreReturnsFn,
-			},
-			{
-				Args:      []Type{TAtom, TAny, TStore},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   setStoreHandler,
-				Returns:   []Type{},
-				ReturnsFn: setStoreReturnsFn,
-			},
 			// Array (indexed by integer)
 			{
 				Args:    []Type{TInteger, TAny, TArray},
@@ -62,15 +51,7 @@ func registerCoreStorage(r *Registry) {
 		Name:              "get",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{
-			{
-				Args: []Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
-				ReturnsFn: getStoreReturnsFn,
-			},
-			{
-				Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
-				ReturnsFn: getStoreReturnsFn,
-			},
-			// [Key | Node] — covers Map, List, Options
+			// [Key | Node] — covers Map, List, Options, record-shape
 			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
 			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
 			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
@@ -80,28 +61,13 @@ func registerCoreStorage(r *Registry) {
 			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
 			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
 			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
-			// [Key | None]
+			// [Key | None] — chained-read propagation.
 			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []Type{TNone}},
 		},
 	})
 }
 
 // ---- set handlers ----
-
-func setStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	store := args[2].AsStore()
-	if store == nil {
-		return nil, fmt.Errorf("set: expected a Store, got %s", args[2].VType.String())
-	}
-	key := StoreKey(args[0])
-	CowSet(store, key, args[1], reg)
-	return nil, nil
-}
-
-func setStoreReturnsFn(args []Value, r *Registry) []Value {
-	r.RecordContextSet(StoreKey(args[0]), args[1])
-	return nil
-}
 
 func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	container := args[2]
@@ -134,8 +100,9 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 
 // GetKey extracts the key string from any key-typed value (Word,
 // String, Atom, or any other value via Sprintf fallback). Exported
-// so lang's accessor handlers (.dotted notation, getr, etc.) reuse
-// the same key-coercion rules as the kernel's `get`.
+// so lang's accessor handlers (.dotted notation, getr, etc.) and
+// the production Store-side set/get reuse the same key-coercion
+// rules as the kernel's `get`.
 func GetKey(v Value) string {
 	if v.IsWord() {
 		_as0, _ := v.AsWord()
@@ -202,24 +169,6 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 	return []Value{val}, nil
-}
-
-func getStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	store := args[1].AsStore()
-	if store == nil {
-		return nil, fmt.Errorf("get: expected a Store, got %s", args[1].VType.String())
-	}
-	key := GetKey(args[0])
-	val, ok := store.Get(key)
-	if !ok {
-		return nil, fmt.Errorf("unknown key: %s", key)
-	}
-	return []Value{val}, nil
-}
-
-func getStoreReturnsFn(args []Value, r *Registry) []Value {
-	v, _ := r.LookupContextType(StoreKey(args[0]))
-	return []Value{v}
 }
 
 func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
