@@ -52,19 +52,9 @@ var typeNatives = []NativeFunc{
 			},
 		},
 	},
-	{
-		Name:              "make",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TArray, TList}, Handler: makeArrayHandler, Returns: []Type{TArray}},
-			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TObject, TAny, TObject}, Handler: makeWithPrototype, Returns: []Type{TObject}},
-			{Args: []Type{TAny, TAny, TMap}, Handler: makeWithOpts, Returns: []Type{TAny}},
-			{Args: []Type{TAny, TAny}, Handler: makeHandler, Returns: []Type{TAny}},
-		},
-	},
+	// `make` is now installed by aqleng (eng.RegisterCoreMake, wired
+	// from RegisterCoreWords). This entry is intentionally omitted to
+	// avoid double-registration.
 	{
 		Name:              "type",
 		ForwardPrecedence: true,

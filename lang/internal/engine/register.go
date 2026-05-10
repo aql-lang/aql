@@ -17,6 +17,7 @@ func Register(r *Registry) {
 	eng.RegisterCoreBoolean(r)
 	eng.RegisterCoreTypeOps(r)
 	eng.RegisterCoreFnSig(r)
+	eng.RegisterCoreMake(r)
 
 	// String
 	for _, n := range stringNatives {

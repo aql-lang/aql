@@ -348,4 +348,8 @@ var (
 	ValidateTypeNameParts = eng.ValidateTypeNameParts
 	ValuesEqual = eng.ValuesEqual
 	WithPos = eng.WithPos
+	// `make` helpers, ported alongside the make word in eng/go/core_make.go.
+	makeConvert = eng.MakeConvert
+	makeFieldValue = eng.MakeFieldValue
+	ResolveFieldType = eng.ResolveFieldType
 )

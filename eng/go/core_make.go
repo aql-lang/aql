@@ -1,4 +1,4 @@
-package engine
+package eng
 
 import (
 	"fmt"
@@ -6,12 +6,41 @@ import (
 	"strings"
 )
 
-// This file contains the helper functions and handlers used by the
-// `make` word. The handler dispatch table itself lives in the
-// typeNatives slice in native_type.go.
+// registerCoreMake installs `make TARGET data` — the universal
+// constructor for typed values. Multiple overloads cover the major
+// type-construction shapes:
+//
+//	make ScalarType data            cast / parse a scalar
+//	make ScalarType {opts} data     scalar with options (Path abs flag)
+//	make ObjectType data            instantiate a named object
+//	make Object data Object         instantiate with prototype
+//	make Array [list]               build an Array
+//	make Type Type {opts}           three-arg shape with arbitrary options
+//	make Type Any                   two-arg fallback
+//
+// Mirrors the production lang `make` (formerly in
+// lang/internal/engine/native_type_make_helpers.go); the handlers are
+// ported verbatim. Lang re-exports the helpers via aliases so any
+// callers that reach into the package-private surface keep working.
+func registerCoreMake(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "make",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []Type{TArray, TList}, Handler: makeArrayHandler, Returns: []Type{TArray}},
+			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []Type{TObject, TAny, TObject}, Handler: makeWithPrototype, Returns: []Type{TObject}},
+			{Args: []Type{TAny, TAny, TMap}, Handler: makeWithOpts, Returns: []Type{TAny}},
+			{Args: []Type{TAny, TAny}, Handler: makeHandler, Returns: []Type{TAny}},
+		},
+	})
+}
 
-// isTypeLike returns true if a value looks like a type target for make
-// (type literal with nil Data, record type, options type, table type, or object type).
+// isTypeLike returns true if v looks like a type target for make
+// (type literal with nil Data, record type, options type, table
+// type, or object type).
 func isTypeLike(v Value) bool {
 	if v.Data == nil {
 		return true
@@ -19,7 +48,9 @@ func isTypeLike(v Value) bool {
 	return v.IsRecordType() || v.IsOptionsType() || v.IsTableType() || v.IsObjectType()
 }
 
-// makeRecord creates a record instance from a source value and options.
+// makeRecord creates a record instance from a source value and
+// options. Used by both 2-arg and 3-arg make sigs targeting
+// RecordTypeInfo.
 func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
 	fieldKeys := recType.Fields.Keys()
 	result := NewOrderedMap()
@@ -49,7 +80,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 				}
 				return fmt.Errorf("make: missing field %q", key)
 			}
-			converted, err := makeFieldValue(val, constraint)
+			converted, err := MakeFieldValue(val, constraint)
 			if err != nil {
 				return fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -109,7 +140,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 		}
 		for i, key := range fieldKeys {
 			constraint, _ := recType.Fields.Get(key)
-			converted, err := makeFieldValue(elems.Get(i), constraint)
+			converted, err := MakeFieldValue(elems.Get(i), constraint)
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -138,9 +169,9 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 	return useBase, nil
 }
 
-// buildBasePrototype creates a prototype instance with base values for
-// a type that has no explicit prototype. If the type has a parent, it
-// recursively builds prototypes up the chain.
+// buildBasePrototype creates a prototype instance with base values
+// for a type that has no explicit prototype. If the type has a
+// parent, it recursively builds prototypes up the chain.
 func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
 	var proto *ObjectInstanceInfo
 	if objType.Parent != nil {
@@ -172,8 +203,8 @@ func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
 	}, nil
 }
 
-// makeObject creates an object instance from an ObjectTypeInfo, a map
-// source, and an optional prototype instance.
+// makeObject creates an object instance from an ObjectTypeInfo, a
+// map source, and an optional prototype instance.
 func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
 	if !srcVal.VType.Equal(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
@@ -227,7 +258,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 			if val.VType.Matches(constraint.VType) {
 				result.Set(key, val)
 			} else {
-				converted, err := makeConvert(val, constraint.VType)
+				converted, err := MakeConvert(val, constraint.VType)
 				if err != nil {
 					return nil, fmt.Errorf("make: field %q: %w", key, err)
 				}
@@ -239,7 +270,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 		if val.VType.Matches(constraint.VType) {
 			result.Set(key, val)
 		} else {
-			converted, err := makeConvert(val, constraint.VType)
+			converted, err := MakeConvert(val, constraint.VType)
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -376,7 +407,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 						return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
 					}
 					constraint, _ := recType.Fields.Get(key)
-					converted, err := makeFieldValue(val, constraint)
+					converted, err := MakeFieldValue(val, constraint)
 					if err != nil {
 						return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 					}
@@ -394,7 +425,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 				}
 				for i, key := range fieldKeys {
 					constraint, _ := recType.Fields.Get(key)
-					converted, err := makeFieldValue(rowElems.Get(i), constraint)
+					converted, err := MakeFieldValue(rowElems.Get(i), constraint)
 					if err != nil {
 						return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 					}
@@ -417,7 +448,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return []Value{srcVal}, nil
 	}
 
-	result, err := makeConvert(srcVal, targetType)
+	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +546,7 @@ func makeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	if srcVal.VType.Matches(targetType) {
 		return []Value{srcVal}, nil
 	}
-	result, err := makeConvert(srcVal, targetType)
+	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {
 		return nil, err
 	}
@@ -557,8 +588,10 @@ func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 	return makeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
 }
 
-// makeConvert converts a source value to a target scalar type.
-func makeConvert(src Value, targetType Type) (Value, error) {
+// MakeConvert converts a source value to a target scalar type.
+// Exported so production lang and downstream tooling can reuse the
+// same scalar-coercion logic that backs `make`.
+func MakeConvert(src Value, targetType Type) (Value, error) {
 	switch {
 	case targetType.Matches(TString):
 		return NewString(ValToString(src)), nil
@@ -610,9 +643,11 @@ func makeConvert(src Value, targetType Type) (Value, error) {
 	}
 }
 
-// makeFieldValue converts a value to match a record field's type
-// constraint.
-func makeFieldValue(val Value, constraint Value) (Value, error) {
+// MakeFieldValue converts a value to match a record field's type
+// constraint. Exported for the same reason as MakeConvert — keeps
+// the production lang's record-make path on the engine's canonical
+// implementation.
+func MakeFieldValue(val Value, constraint Value) (Value, error) {
 	val = ResolveWordValue(val)
 
 	if constraint.Data == nil {
@@ -620,7 +655,7 @@ func makeFieldValue(val Value, constraint Value) (Value, error) {
 		if val.VType.Matches(constraintType) {
 			return val, nil
 		}
-		return makeConvert(val, constraintType)
+		return MakeConvert(val, constraintType)
 	}
 
 	unified, ok := Unify(constraint, val)
