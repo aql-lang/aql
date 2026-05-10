@@ -59,6 +59,7 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreType(r)
 	registerCoreDo(r)
 	registerCoreMake(r)
+	registerCoreStorage(r)
 }
 
 // RegisterCoreBoolean installs the boolean / logical-connective core
@@ -97,6 +98,14 @@ func RegisterCoreFnSig(r *Registry) {
 // RegisterCoreWords.
 func RegisterCoreMake(r *Registry) {
 	registerCoreMake(r)
+}
+
+// RegisterCoreStorage installs the `get` and `set` core words — the
+// universal container-access pair. Exported as a separate entry
+// point so the production lang package can install just these
+// without taking the rest of RegisterCoreWords.
+func RegisterCoreStorage(r *Registry) {
+	registerCoreStorage(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either

@@ -352,4 +352,6 @@ var (
 	makeConvert = eng.MakeConvert
 	makeFieldValue = eng.MakeFieldValue
 	ResolveFieldType = eng.ResolveFieldType
+	// `get`/`set` helper, ported with those words to eng/go/core_storage.go.
+	getKey = eng.GetKey
 )
