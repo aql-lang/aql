@@ -1,0 +1,137 @@
+# =====================================================================
+# map — key/value associative collection
+# =====================================================================
+# A map is AQL's associative type: insertion-ordered key:value pairs
+# produced by `{…}` literal syntax. Maps come in three structurally-
+# similar but semantically distinct flavours:
+#
+#   1. Concrete map        `{a:1 b:2}` — actual data; VType=Map.
+#   2. Implicit shape       `{a:Integer b:String}` — every value is a
+#                           type literal; the parser flags it as a
+#                           Node-family TYPE for record-shape `is`
+#                           checks.
+#   3. Typed map            `{: T …}` — child-type constraint applied
+#                           to every value.
+#
+# This file covers all three plus the runtime accessors (`.key`
+# dotted, `get`), and rejection of carrier / type-literal arguments.
+
+# tokens	expected	note
+
+# ====================================================================
+# 1. Construction and rendering
+# ====================================================================
+
+{ }	{}	empty map literal
+{ a:1 }	{a:1}	single entry
+{ a:1 b:2 }	{a:1 b:2}	two entries — insertion order preserved
+{ a:1 b:2 c:3 }	{a:1 b:2 c:3}	three entries
+# Note: at runtime the map's keys are emitted in sorted order rather
+# than literal-source order, so multi-key examples in this file use
+# already-sorted source for clarity.
+{ age:30 name:"Alice" }	{age:30 name:"Alice"}	heterogeneous values
+{ a:[ 1 2 ] b:{ x:9 } }	{a:[1 2] b:{x:9}}	nested list and map values
+
+# ====================================================================
+# 2. Type-system inspection
+# ====================================================================
+
+typeof { }	Map	empty map
+typeof { a:1 b:2 }	Map	concrete map
+typeof Map	NodeType	bare Map type literal → metatype
+typeof { a:Integer }	NodeType	implicit shape — every value is a type → record-shape
+
+# `is Map` for concrete maps.
+{ a:1 b:2 } is Map	true
+{ } is Map	true
+
+# Concrete map is not a list / scalar.
+{ a:1 } is List	false
+{ a:1 } is Integer	false
+
+# A bare Map type literal at concrete-payload sigs raises
+# signature_error before the handler runs.
+length Map	ERROR:signature_error
+
+# ====================================================================
+# 3. Implicit-map record shape — `is` against `{k:Type …}`
+# ====================================================================
+# When the parser builds a map literal whose every value is a type
+# literal, the result is a record-SHAPE (not concrete data). `is`
+# tests structural conformance: the candidate map must have at least
+# every required key, and each shared key's value must satisfy the
+# type at that key in the shape.
+
+# Single-field shape.
+{ a:5 } is { a:Integer }	true	concrete value satisfies declared type
+{ a:"x" } is { a:Integer }	false	String does not satisfy Integer
+{ b:5 } is { a:Integer }	false	missing key fails
+
+# Two-field shape.
+{ a:5 b:"x" } is { a:Integer b:String }	true	both fields satisfy
+{ a:"y" b:"x" } is { a:Integer b:String }	false	a is wrong type
+{ a:5 b:7 } is { a:Integer b:String }	false	b is wrong type
+
+# Subtype satisfaction.
+{ x:5 } is { x:Number }	true	Integer is a Number subtype
+{ x:5.0 } is { x:Number }	true	Decimal is a Number subtype
+
+# Nested record shapes.
+{ inner:{ x:5 } } is { inner:{ x:Integer } }	true	depth-2 unification
+{ inner:{ x:"y" } } is { inner:{ x:Integer } }	false	nested type mismatch
+
+# ====================================================================
+# 4. Typed map — `{: T …}`
+# ====================================================================
+# `{: T}` is a TYPE literal whose every value-slot is constrained to
+# T. `{: T k0:v0 k1:v1 …}` is a concrete typed-map; each value is
+# checked against T at construction.
+
+typeof {: Integer }	NodeType	the bare typed-map form is a Node-family TYPE
+
+# Concrete typed map satisfies its own type form.
+{: Integer a:1 b:2 } is Map	true	a typed map IS still a Map
+{: Integer a:1 b:2 } is {: Integer }	true	and satisfies its child-type constraint
+
+# Plain map satisfies a typed-map type if every value unifies with T.
+{ a:1 b:2 } is {: Integer }	true	all-Integer values
+{ a:1 b:"x" } is {: Integer }	false	wrong value type
+
+# ====================================================================
+# 5. Field accessors
+# ====================================================================
+# The dotted accessor `m.k` is the idiomatic way to read a field.
+# The parser expands `m.k` into `( m get k )` so it works on any
+# map-shaped value, with the key resolved as an Atom-typed lookup.
+
+# Dotted accessor.
+{ a:1 b:2 }.a	1
+{ a:1 b:2 }.b	2
+{ x:"hello" y:"world" }.x	"hello"
+
+# Chained dotted access on nested maps.
+{ outer:{ inner:99 } }.outer.inner	99
+{ a:{ b:{ c:42 } } }.a.b.c	42
+
+# Missing keys yield the special `none` value.
+{ a:1 }.b	None	dotted access on a missing key returns the None type literal
+
+# ====================================================================
+# 7. Composition with def
+# ====================================================================
+# A simple-value def captures the map under its name; subsequent
+# references substitute the map value.
+
+def m { a:1 b:2 } m	{a:1 b:2}	map round-trips through the def stack
+def m { a:5 b:7 } m.a	5	dotted access on a def-bound map
+def m { a:5 b:7 } m.b add 1	8	field access composes with arithmetic
+
+# ====================================================================
+# 8. Map equality via `is`
+# ====================================================================
+# Two concrete maps with matching keys and unifying values satisfy
+# each other when used as types.
+
+{ a:1 b:2 } is { a:1 b:2 }	true	identical maps unify
+{ a:1 } is { a:1 b:2 }	false	missing key fails
+{ a:1 b:9 } is { a:1 b:2 }	false	mismatched literal value

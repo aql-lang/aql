@@ -28,6 +28,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/aql/internal/engine"
+	"github.com/metsitaba/voxgig-exp/aql/internal/native"
 	"github.com/metsitaba/voxgig-exp/aql/internal/parser"
 	"github.com/metsitaba/voxgig-exp/aqleng"
 )
@@ -349,7 +351,41 @@ func sanitiseSpecName(s string) string {
 	return s
 }
 
+// specRegistryBuilder constructs a fresh registry + ready-to-run
+// engine for one spec row. Different runners use different builders:
+// the aqleng-only spec uses registerSpecWords; the production spec
+// uses engine.DefaultRegistry+native.Register.
+type specRegistryBuilder func(t *testing.T) (engine.Value, func(values []engine.Value) ([]engine.Value, error))
+
+func aqlengSpecBuilder(t *testing.T) (engine.Value, func(values []engine.Value) ([]engine.Value, error)) {
+	t.Helper()
+	r, err := aqleng.NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	registerSpecWords(r)
+	r.InitRootContext()
+	return engine.Value{}, func(values []engine.Value) ([]engine.Value, error) {
+		return aqleng.NewTop(r).Run(values)
+	}
+}
+
+func prodSpecBuilder(t *testing.T) (engine.Value, func(values []engine.Value) ([]engine.Value, error)) {
+	t.Helper()
+	reg, err := engine.DefaultRegistry(native.Register)
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	return engine.Value{}, func(values []engine.Value) ([]engine.Value, error) {
+		return engine.NewTop(reg).Run(values)
+	}
+}
+
 func runSpecFile(t *testing.T, path string) {
+	runSpecFileWith(t, path, aqlengSpecBuilder)
+}
+
+func runSpecFileWith(t *testing.T, path string, build specRegistryBuilder) {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -382,14 +418,8 @@ func runSpecFile(t *testing.T, path string) {
 				t.Fatalf("parse: %v", err)
 			}
 
-			r, err := aqleng.NewRegistry()
-			if err != nil {
-				t.Fatalf("NewRegistry: %v", err)
-			}
-			registerSpecWords(r)
-			r.InitRootContext()
-
-			out, runErr := aqleng.NewTop(r).Run(values)
+			_, run := build(t)
+			out, runErr := run(values)
 
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := expected[len("ERROR:"):]
@@ -434,5 +464,30 @@ func TestSpec(t *testing.T) {
 	}
 	if ran == 0 {
 		t.Errorf("no .tsv specs found under %s", specDir)
+	}
+}
+
+// TestSpecProd runs spec/.tsv files under spec/prod/ against a
+// production-aql registry (engine.DefaultRegistry + native.Register),
+// rather than the aqleng-only kernel that TestSpec uses. These specs
+// can exercise any registered word — record / object / make / get /
+// length / etc. — and the builtin Resource / Entity types installed
+// by installResourceTypes.
+func TestSpecProd(t *testing.T) {
+	specDir := filepath.Join("spec", "prod")
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		t.Fatalf("read %s: %v", specDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		t.Run(strings.TrimSuffix(e.Name(), ".tsv"), func(t *testing.T) {
+			runSpecFileWith(t, filepath.Join(specDir, e.Name()), prodSpecBuilder)
+		})
 	}
 }
