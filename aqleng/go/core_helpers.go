@@ -605,7 +605,18 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	r.UpdateCtxStoreChain(origRoot, current)
 }
 
-// IsTypeBody reports whether a value is a valid type definition body.
+// IsTypeBody reports whether a value is a valid type definition body
+// in the strict, structural sense: it carries explicit type-shape
+// information (a type literal, disjunct, record / table / object /
+// options type, typed list/map, dependent scalar, fn-shape, or
+// predicate function).
+//
+// AQL also lets every concrete value act as a type — `type Foo 1`
+// defines Foo as the singleton type containing only 1 — but that
+// "literals as types" admission is checked separately via
+// IsLiteralTypeBody at the `type` install site, so paths that need
+// to discriminate code-bodies / fn-bodies / data-defs from explicit
+// type shapes (e.g. `inspect`) keep using IsTypeBody and stay sharp.
 func IsTypeBody(v Value) bool {
 	// Type literal (Data==nil): number, string, boolean, any, etc.
 	// Excludes the value `none` (Data != nil sentinel).
@@ -651,20 +662,41 @@ func IsTypeBody(v Value) bool {
 		return true
 	}
 	// Function-signature type: a FnUndef carrying input + output sig
-	// patterns and no body. Produced by `fn [[input] [output]]`. Used
-	// as a structural function shape — `def n:Mapper f` requires f to
-	// be a function whose signatures match the FnUndef pattern.
+	// patterns and no body.
 	if v.VType.Equal(TFnUndef) {
 		return true
 	}
 	// Predicate type: a FnDef / Function whose body returns a Boolean.
-	// Produced by `fn [x:Any Any [body]]`. Used as a *dependent* type
-	// — `def n:Bbd value` calls the predicate against `value` and
-	// installs the def iff the predicate returns true. The fn's
-	// signature must take exactly one argument and return a Boolean
-	// (or a value that converts to Boolean); enforcement happens in
-	// the typed-def handler when it actually calls the predicate.
 	if v.VType.Equal(TFnDef) || v.VType.Equal(TFunction) {
+		return true
+	}
+	return false
+}
+
+// IsLiteralTypeBody reports whether v can be installed as a "value-
+// is-a-type" type body — the singleton-type interpretation. Scalar
+// literals (Integer / Decimal / String / Boolean / Atom / Path / the
+// `none` value), and concrete lists / maps qualify. Used by
+// installType to relax the strict IsTypeBody check in a way that
+// doesn't pollute the inspect / fn-shape paths.
+func IsLiteralTypeBody(v Value) bool {
+	if v.IsNone() {
+		return true
+	}
+	switch {
+	case v.VType.Matches(TInteger),
+		v.VType.Matches(TDecimal),
+		v.VType.Matches(TNumber),
+		v.VType.Matches(TString),
+		v.VType.Matches(TBoolean),
+		v.VType.Equal(TAtom),
+		v.VType.Equal(TPath):
+		return v.Data != nil
+	}
+	if v.VType.Equal(TList) && v.Data != nil {
+		return true
+	}
+	if v.VType.Equal(TMap) && v.Data != nil {
 		return true
 	}
 	return false

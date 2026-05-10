@@ -247,13 +247,13 @@ type Nested { kind:String n:Number } typeof Nested	NodeType
 # =====================================================================
 # 6. type — name validation
 # =====================================================================
-# NAME must start with a capital letter; otherwise type_error. Body
-# must satisfy IsTypeBody (rejects concrete payloads).
+# NAME must start with a capital letter; otherwise type_error. Bodies
+# are accepted broadly: every value is a valid type body, since AQL
+# treats scalars and collections as types in their own right (the
+# singleton type whose only inhabitant equals that value). Validation
+# focuses on the name.
 type foo Integer	ERROR:type_error	lowercase first char rejected
 type 1Foo Integer	ERROR:type_error	digit first char also fails the capital-letter check
-type Foo 42	ERROR:type_error	body Integer(42) is a concrete value, not a type body
-type Foo "string"	ERROR:type_error	body String literal rejected
-type Foo true	ERROR:type_error	body Boolean rejected
 
 # =====================================================================
 # 7. type / def namespace independence
@@ -342,6 +342,127 @@ type Point { x:Integer y:Integer } { x:1 } is Point	false	missing key y
 type Point { x:Integer y:Integer } { x:1 y:"two" } is Point	false	y is wrong type
 type Point { x:Integer y:Integer } { x:1 y:2 z:3 } is Point	true	extra keys are OK
 type Point { x:Integer y:Integer } [ 1 2 ] is Point	false	v is a List, not a Map
+
+# =====================================================================
+# 11b. Literals as types
+# =====================================================================
+# Every value is a valid type body. A scalar literal `1` is the
+# singleton type whose only inhabitant equals 1. `is` unifies, so
+# value-equality and lattice-membership cases share one mechanism.
+
+# Scalar literals as types — only the same scalar matches.
+1 is 1	true	a value is its own (singleton) type
+1 is 2	false
+1 is Integer	true	1 also matches the broader Integer type
+"hi" is "hi"	true
+"hi" is "bye"	false
+"hi" is String	true	"hi" is also a String
+true is true	true
+true is false	false
+true is Boolean	true
+
+# Naming a singleton via `type`.
+type One 1 1 is One	true
+type One 1 2 is One	false
+type Hello "hello" "hello" is Hello	true
+type Hello "hello" "world" is Hello	false
+
+# A type-stack binding to a scalar narrows the type-of relation.
+type One 1 1 is Integer	true	1 still satisfies the broader Integer type
+type One 1 typeof One	Integer	the binding's metatype is the value's exact type
+
+# =====================================================================
+# 11c. Lists as types — element-wise unification
+# =====================================================================
+# `is` against a list type unifies element-by-element. The list's
+# elements can themselves be type literals, scalar literals, or
+# nested shapes — all in one unified mechanism.
+
+# Scalar-only list types.
+[ 1 2 3 ] is [ 1 2 3 ]	true	exact value match
+[ 1 2 3 ] is [ 1 2 4 ]	false	element 2 differs
+[ 1 2 ] is [ 1 2 3 ]	false	length mismatch
+
+# Type-literal element sigs.
+[ 1 2 3 ] is [ Integer Integer Integer ]	true	each element unifies with Integer
+[ 1 "x" ] is [ Integer String ]	true	mixed element types
+[ 1 "x" ] is [ Integer Integer ]	false	"x" doesn't match Integer
+
+# Mixed literal + type.
+[ 1 "x" ] is [ 1 String ]	true	first element is the literal 1, second is a String
+[ 2 "x" ] is [ 1 String ]	false	first element doesn't equal 1
+
+# A named list type.
+type Pair [ Integer Integer ] [ 1 2 ] is Pair	true
+type Pair [ Integer Integer ] [ 1 "x" ] is Pair	false	wrong element type
+type Pair [ Integer Integer ] [ 1 ] is Pair	false	wrong length
+
+# =====================================================================
+# 11d. Records with literal field values
+# =====================================================================
+# A record-shape field can be a literal (singleton type) or a type
+# literal. `is` checks each declared field is present in v with a
+# unifying field value.
+
+# Literal x:1 — only maps with x exactly 1 satisfy.
+type One { x:1 } { x:1 } is One	true
+type One { x:1 } { x:2 } is One	false
+type One { x:1 } { x:1 y:99 } is One	true	extra fields are OK
+type One { x:1 } { y:1 } is One	false	missing key x
+
+# Mixed literal + type-literal fields.
+type Tag { kind:"warn" msg:String } { kind:"warn" msg:"oops" } is Tag	true
+type Tag { kind:"warn" msg:String } { kind:"info" msg:"oops" } is Tag	false	kind doesn't equal "warn"
+type Tag { kind:"warn" msg:String } { kind:"warn" msg:42 } is Tag	false	msg is not a String
+
+# Boolean literal as a field type.
+type Flag { ok:true } { ok:true } is Flag	true
+type Flag { ok:true } { ok:false } is Flag	false
+
+# =====================================================================
+# 11e. Nested records (deeper depths)
+# =====================================================================
+# Record fields can themselves be record shapes — `name:{...}` syntax.
+# `is` recurses field-by-field.
+
+type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 y:5 } } is Box	true
+type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 } } is Box	false	br missing key y
+type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 y:"end" } } is Box	false	br.y is not an Integer
+
+# Three-level nesting.
+type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ c:42 } } } is Deep	true
+type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ c:"x" } } } is Deep	false	c is not an Integer
+type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ } } } is Deep	false	c missing at the deepest level
+
+# =====================================================================
+# 11f. Records with list fields (records-of-lists, lists-in-records)
+# =====================================================================
+
+# Record with a List-typed field.
+type Tagged { tags:List } { tags:[ "a" "b" ] } is Tagged	true
+type Tagged { tags:List } { tags:42 } is Tagged	false	tags must be a List
+
+# Record with a typed-list field — element types pinned.
+type Pair2 { tags:[ String String ] } { tags:[ "a" "b" ] } is Pair2	true
+type Pair2 { tags:[ String String ] } { tags:[ "a" 1 ] } is Pair2	false	second element wrong type
+
+# List of records.
+[ { x:1 } { x:2 } ] is [ { x:Integer } { x:Integer } ]	true	list of two records
+[ { x:1 } { x:"oops" } ] is [ { x:Integer } { x:Integer } ]	false	one element fails record check
+
+# List of nested records.
+[ { p:{ x:1 y:2 } } { p:{ x:3 y:4 } } ] is [ { p:{ x:Integer y:Integer } } { p:{ x:Integer y:Integer } } ]	true
+
+# =====================================================================
+# 11g. typeof on literal values reports the exact value's type
+# =====================================================================
+# typeof returns a Type literal of the value's exact VType. For
+# values of named-singleton types this still reports the underlying
+# scalar type — the binding name is an alias, not a tag.
+
+typeof 1	Integer
+type One 1 typeof 1	Integer	type binding doesn't change typeof on the underlying value
+type One 1 typeof One	Integer	typeof on the type-stack value resolves to its exact type
 
 # =====================================================================
 # 12. Dispatch — type literals are rejected at concrete-payload sigs

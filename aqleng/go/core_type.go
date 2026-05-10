@@ -249,11 +249,18 @@ func IsValueOfType(v, t Value) bool {
 // the type stack. Mirrors production aql validateAndInstallType minus
 // the ObjectType naming (ObjectType bodies are constructed by the
 // production-only `object` word, which isn't in aqleng's core).
+//
+// Body acceptance is broad: a structural type body (IsTypeBody — type
+// literal, disjunct, implicit map, typed list/map, …) OR a concrete
+// scalar / list / map literal (IsLiteralTypeBody — `type Foo 1`, the
+// singleton type whose only inhabitant is 1). The split keeps the
+// inspect / fn-shape paths aligned with structural typing while
+// letting users name singletons and value-shape types.
 func installType(r *Registry, name string, body Value) error {
-	if !IsTypeBody(body) {
+	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
 		return &AqlError{
 			Code:   "type_error",
-			Detail: "type: body must be a type value, got " + body.String(),
+			Detail: "type: body must be a type value or literal, got " + body.String(),
 		}
 	}
 	if !IsCapitalisedName(name) {

@@ -413,12 +413,18 @@ func registerSpecWords(r *Registry) {
 //   - `{ x:Integer y:String }` parses to an Implicit Map with the
 //     declared keys; values are recursively tokenized so types
 //     (`Integer`, `List`), scalars, and quoted strings all work.
+//   - Nesting: a token shaped `name:{` or `name:[` opens a nested
+//     map / list frame whose closed value will be assigned to `name`
+//     in the parent map. Same for closing `}` / `]`.
 func tokenizeSpec(s string) ([]Value, error) {
 	// stack[0] is the top-level token stream; deeper entries are list
 	// or map literals being collected. We track frame kind in parallel
-	// so `]` and `}` close the right kind.
+	// so `]` and `}` close the right kind. pendingKey carries the key
+	// name when the parent is a map and the current frame's closed
+	// value should be stored under that key.
 	stack := [][]Value{nil}
 	kinds := []string{"top"}
+	pendingKeys := []string{""}
 	i := 0
 	for i < len(s) {
 		// Skip whitespace.
@@ -454,10 +460,24 @@ func tokenizeSpec(s string) ([]Value, error) {
 
 		top := len(stack) - 1
 
-		// List literal open / close.
-		if tok == "[" {
+		// Open a frame, recording an optional pendingKey on the new
+		// frame. When the frame later closes, if pendingKey is set
+		// the closed value is stored under that key in the parent
+		// map (instead of being appended). This is what enables
+		// nested-record syntax like `{ tl:{x:0 y:0} br:{x:5 y:5} }`.
+		openFrame := func(kind, key string) {
 			stack = append(stack, nil)
-			kinds = append(kinds, "list")
+			kinds = append(kinds, kind)
+			pendingKeys = append(pendingKeys, key)
+		}
+
+		// List literal open / close (with optional `name:[` form).
+		if tok == "[" {
+			openFrame("list", "")
+			continue
+		}
+		if name, ok := stripSuffix(tok, ":["); ok {
+			openFrame("list", name)
 			continue
 		}
 		if tok == "]" {
@@ -468,17 +488,27 @@ func tokenizeSpec(s string) ([]Value, error) {
 			if collected == nil {
 				collected = []Value{}
 			}
+			key := pendingKeys[top]
 			stack = stack[:top]
 			kinds = kinds[:top]
+			pendingKeys = pendingKeys[:top]
 			parent := len(stack) - 1
-			stack[parent] = append(stack[parent], NewEvalList(collected))
+			closed := NewEvalList(collected)
+			if key != "" {
+				stack[parent] = append(stack[parent], NewValueRaw(TInternal, pairBinding{key: key, val: closed}))
+			} else {
+				stack[parent] = append(stack[parent], closed)
+			}
 			continue
 		}
 
-		// Map literal open / close.
+		// Map literal open / close (with optional `name:{` form).
 		if tok == "{" {
-			stack = append(stack, nil)
-			kinds = append(kinds, "map")
+			openFrame("map", "")
+			continue
+		}
+		if name, ok := stripSuffix(tok, ":{"); ok {
+			openFrame("map", name)
 			continue
 		}
 		if tok == "}" {
@@ -486,18 +516,29 @@ func tokenizeSpec(s string) ([]Value, error) {
 				return nil, fmt.Errorf("tokenize: unmatched '}' at %d", i-1)
 			}
 			pairs := stack[top]
+			key := pendingKeys[top]
 			stack = stack[:top]
 			kinds = kinds[:top]
+			pendingKeys = pendingKeys[:top]
 			parent := len(stack) - 1
 			m := NewOrderedMap()
 			for _, p := range pairs {
+				if pb, ok := p.Data.(pairBinding); ok {
+					m.Set(pb.key, pb.val)
+					continue
+				}
 				name, val, err := parsePairToken(p)
 				if err != nil {
 					return nil, err
 				}
 				m.Set(name, val)
 			}
-			stack[parent] = append(stack[parent], NewImplicitMap(m))
+			closed := NewImplicitMap(m)
+			if key != "" {
+				stack[parent] = append(stack[parent], NewValueRaw(TInternal, pairBinding{key: key, val: closed}))
+			} else {
+				stack[parent] = append(stack[parent], closed)
+			}
 			continue
 		}
 
@@ -549,6 +590,30 @@ func tokenizeSpec(s string) ([]Value, error) {
 	return stack[0], nil
 }
 
+// pairBinding is the intermediate representation of a `name:nested`
+// pair when the value side is a nested map or list literal. The
+// tokenizer emits a Value carrying a pairBinding into the parent
+// frame's collected slice; when the parent closes, parsePairToken
+// recognises the pairBinding and stores name → val directly without
+// trying to split a `name:value` Word.
+type pairBinding struct {
+	key string
+	val Value
+}
+
+// stripSuffix returns the prefix of s with `suf` removed and true if
+// s ends with `suf` and the prefix is non-empty.
+func stripSuffix(s, suf string) (string, bool) {
+	if !strings.HasSuffix(s, suf) {
+		return "", false
+	}
+	pre := s[:len(s)-len(suf)]
+	if pre == "" {
+		return "", false
+	}
+	return pre, true
+}
+
 // parsePairToken splits a `name:value` token into the entry pieces of
 // an implicit map. The value side is parsed as a Value: known type
 // names become type literals, integers/decimals parse as scalars,
@@ -571,6 +636,10 @@ func parsePairToken(v Value) (string, Value, error) {
 	// Type-name word? Look up in typeNames.
 	if t, ok := typeNames[rest]; ok {
 		return name, NewTypeLiteral(t), nil
+	}
+	// Quoted string literal: `"value"`.
+	if len(rest) >= 2 && rest[0] == '"' && rest[len(rest)-1] == '"' {
+		return name, NewString(rest[1 : len(rest)-1]), nil
 	}
 	// Integer / Decimal literal?
 	if n, err := strconv.ParseInt(rest, 10, 64); err == nil {
