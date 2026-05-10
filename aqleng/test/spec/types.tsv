@@ -71,22 +71,34 @@
 # globally unique.
 
 # Leaf rendering — every type literal renders as its leaf.
-Number	Number	bare type name → type literal; renders as leaf
-Scalar	Scalar	root scalar type name
+# Family roots (Scalar / Node / Object) and the metatype root (Type)
+# are themselves type-name words that resolve to type literals.
+Scalar	Scalar	scalar-family root
+Number	Number	scalar mid-level
 Integer	Integer	scalar leaf
 Decimal	Decimal
 String	String
 Boolean	Boolean
 Atom	Atom
 Path	Path
-Record	Record	object-family root
-Any	Any	universal top type
-List	List	node-family
+Node	Node	node-family root
+List	List
 Map	Map
+Object	Object	object-family root
+Record	Record	object-family member
+Resource	Resource
+Entity	Entity
+Table	Table
+Array	Array
+Options	Options
+Any	Any	universal top type
+Never	Never	uninhabited bottom type
 Type	Type	metatype root
 ScalarType	ScalarType	metatype subkinds
 NodeType	NodeType
 ObjectType	ObjectType
+Timeout	Timeout	temporal types
+Interval	Interval
 
 # Multiple type literals on the stack — each renders independently.
 Integer Integer	Integer Integer
