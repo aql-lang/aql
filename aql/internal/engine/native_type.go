@@ -432,25 +432,12 @@ func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // ---- typeof / fulltypeof ----
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	v := args[0]
-	parts := v.VType.Parts
-	if v.Data == nil && !v.VType.Matches(TWord) {
-		parts = MetatypeFor(v.VType).Parts
-	}
-	if len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if len(last) > 0 && last[0] >= '0' && last[0] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-		if len(last) > 1 && last[0] == '-' && last[1] >= '0' && last[1] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-	}
-	result := parts[0]
-	if len(parts) > 1 {
-		result = parts[1]
-	}
-	return []Value{NewAtom(result)}, nil
+	// Delegate to the canonical aqleng implementation, which returns
+	// a Type literal (not an Atom): concrete value → exact VType;
+	// type literal → its metatype (ScalarType / NodeType / Type);
+	// implicit-map record shape → its metatype; the value `none`
+	// (unique inhabitant of None) → None.
+	return []Value{TypeOf(args[0])}, nil
 }
 
 func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

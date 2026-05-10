@@ -28,8 +28,8 @@ inspect Mapper`)
 		`name:'Mapper'`,
 		`kind:function_shape`,
 		`signatures:`,
-		`params:['Scalar/Number/Integer']`,
-		`returns:['Scalar/Number/Integer']`,
+		`params:['Integer']`,
+		`returns:['Integer']`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("inspect output missing %q\nfull: %s", want, s)

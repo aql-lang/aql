@@ -221,28 +221,28 @@ None otherwise 5	5
 # =====================================================================
 
 # Two type Literals.
-String tor None	Scalar/String|None
-Number tor String	Scalar/Number|Scalar/String
-Boolean tor None	Scalar/Boolean|None
+String tor None	String|None
+Number tor String	Number|String
+Boolean tor None	Boolean|None
 
 # Three or more (flattened).
-String tor Number tor Boolean	Scalar/String|Scalar/Number|Scalar/Boolean
-Integer tor Decimal tor String tor None	Scalar/Number/Integer|Scalar/Number/Decimal|Scalar/String|None
+String tor Number tor Boolean	String|Number|Boolean
+Integer tor Decimal tor String tor None	Integer|Decimal|String|None
 
 # Concrete values produce a disjunct of values.
 1 tor 2	1|2
 "a" tor "b" tor "c"	'a'|'b'|'c'
 
 # Mixed concrete and type Literals.
-String tor 42	Scalar/String|42
+String tor 42	String|42
 
 # Disjunct alternatives are simplified at construction:
 # - Identical alternatives dedupe (idempotence).
 # - Strict subtype is subsumed by its supertype.
 # These leave a single alternative, so the disjunct collapses to a
 # bare type literal.
-Number tor Integer	Scalar/Number
-String tor String	Scalar/String
+Number tor Integer	Number
+String tor String	String
 
 # Disjunct unifies with one of its alternatives.
 (String tor None) unify "hi"	'hi' true
@@ -254,7 +254,7 @@ String tor String	Scalar/String
 # =====================================================================
 
 # Disjoint keys: combine.
-{x:1} tand {y:Integer}	{x:1,y:Scalar/Number/Integer}
+{x:1} tand {y:Integer}	{x:1,y:Integer}
 {a:"A"} tand {b:"B"}	{a:'A',b:'B'}
 
 # Overlapping keys: unify.
@@ -273,8 +273,8 @@ String tor String	Scalar/String
 "hi" tand String	'hi'
 
 # Type literals: tand falls back to Unify; the narrower type Wins.
-Integer tand Number	Scalar/Number/Integer
-Number tand Integer	Scalar/Number/Integer
+Integer tand Number	Integer
+Number tand Integer	Integer
 
 # Same value twice.
 {x:1} tand {x:1}	{x:1}
@@ -292,7 +292,7 @@ Number tand Integer	Scalar/Number/Integer
 ({x:Integer} tor {x:String}) unify {x:true}	'~unify-fail' false
 
 # tor inside an optional record field.
-record [name:String age:[Integer tor None]]	record{name:Scalar/String,age:Scalar/Number/Integer|None}
+record [name:String age:[Integer tor None]]	record{name:String,age:Integer|None}
 
 # tand at type-level then unify.
 ({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1,y:'a'} true
@@ -414,7 +414,7 @@ type Item record [name:String desc:[String tor None]] (make Item ["a" None]) get
 (String tor None) not	false
 
 # tor with a single arg via chaining.
-None tor String	None|Scalar/String
+None tor String	None|String
 
 # otherwise with both None.
 None otherwise None	None
@@ -518,22 +518,22 @@ if ([1 0 1] all) [42] [99]	99
 # =====================================================================
 
 # Type literals.
-[String None] tany	Scalar/String|None
-[Number String Boolean] tany	Scalar/Number|Scalar/String|Scalar/Boolean
+[String None] tany	String|None
+[Number String Boolean] tany	Number|String|Boolean
 
 # Single-element list returns the element unchanged.
-[String] tany	Scalar/String
+[String] tany	String
 
 # Concrete values.
 [1 2 3] tany	1|2|3
 ["a" "b"] tany	'a'|'b'
 
 # Existing disjuncts are flattened.
-[(String tor None) Number] tany	Scalar/String|None|Scalar/Number
+[(String tor None) Number] tany	String|None|Number
 
 # Equivalent to chained tor.
-[String Number Boolean None] tany	Scalar/String|Scalar/Number|Scalar/Boolean|None
-String tor Number tor Boolean tor None	Scalar/String|Scalar/Number|Scalar/Boolean|None
+[String Number Boolean None] tany	String|Number|Boolean|None
+String tor Number tor Boolean tor None	String|Number|Boolean|None
 
 # Use a tany result with unify.
 ([String None] tany) unify "hi"	'hi' true
@@ -561,8 +561,8 @@ String tor Number tor Boolean tor None	Scalar/String|Scalar/Number|Scalar/Boolea
 ["hi" String] tall	'hi'
 
 # Type literal narrowing across the list.
-[Number Integer] tall	Scalar/Number/Integer
-[Integer Number] tall	Scalar/Number/Integer
+[Number Integer] tall	Integer
+[Integer Number] tall	Integer
 
 # Equivalent to chained tand.
 [{x:1} {y:2} {z:3}] tall	{x:1,y:2,z:3}
@@ -763,14 +763,14 @@ quote [true false true] all	false
 # =====================================================================
 
 # Single-element list returns the element unchanged for tany/tall.
-[String] tany	Scalar/String
+[String] tany	String
 [None] tany	None
 [42] tany	42
 [{x:1}] tall	{x:1}
-[Integer] tall	Scalar/Number/Integer
+[Integer] tall	Integer
 
 # Repeated elements dedupe (idempotence: T tor T = T).
-[String String] tany	Scalar/String
+[String String] tany	String
 [None None] tany	None
 [1 1 1] tany	1
 
@@ -779,21 +779,21 @@ quote [true false true] all	false
 # =====================================================================
 
 # Existing disjunct alternatives are inlined.
-[(String tor None) Number] tany	Scalar/String|None|Scalar/Number
-[(String tor None) (Number tor Boolean)] tany	Scalar/String|None|Scalar/Number|Scalar/Boolean
+[(String tor None) Number] tany	String|None|Number
+[(String tor None) (Number tor Boolean)] tany	String|None|Number|Boolean
 
 # Single-element with an existing disjunct returns it unchanged.
-[(String tor None)] tany	Scalar/String|None
+[(String tor None)] tany	String|None
 
 # tany of values around a disjunct preserves order.
-[1 (String tor None) 2] tany	1|Scalar/String|None|2
+[1 (String tor None) 2] tany	1|String|None|2
 
 # =====================================================================
 # 35. tany — used inside type-related constructs
 # =====================================================================
 
 # tany result as a record field type.
-record [name:String age:([Integer None] tany)]	record{name:Scalar/String,age:Scalar/Number/Integer|None}
+record [name:String age:([Integer None] tany)]	record{name:String,age:Integer|None}
 
 # tany result used in `is`.
 42 is ([Integer String None] tany)	true
@@ -810,14 +810,14 @@ None is ([Integer String None] tany)	true
 # =====================================================================
 
 # Type narrows down through the chain.
-[{x:Number} {x:Integer}] tall	{x:Scalar/Number/Integer}
+[{x:Number} {x:Integer}] tall	{x:Integer}
 [{x:Integer} {x:1}] tall	{x:1}
 
 # Multiple overlapping keys.
-[{x:Number y:String} {x:Integer y:"hi"}] tall	{x:Scalar/Number/Integer,y:'hi'}
+[{x:Number y:String} {x:Integer y:"hi"}] tall	{x:Integer,y:'hi'}
 
 # Three-way merge with one shared key.
-[{x:Number} {x:Integer y:String} {y:"v" z:true}] tall	{x:Scalar/Number/Integer,y:'v',z:true}
+[{x:Number} {x:Integer y:String} {y:"v" z:true}] tall	{x:Integer,y:'v',z:true}
 
 # Order: earlier keys appear first in result order.
 [{a:1} {b:2}] tall	{a:1,b:2}
@@ -844,12 +844,12 @@ None is ([Integer String None] tany)	true
 # =====================================================================
 
 # Subtype wins: narrower type Is kept.
-[Number Integer] tall	Scalar/Number/Integer
-[Integer Number] tall	Scalar/Number/Integer
-[Scalar Integer] tall	Scalar/Number/Integer
+[Number Integer] tall	Integer
+[Integer Number] tall	Integer
+[Scalar Integer] tall	Integer
 
 # Same type Collapses.
-[String String] tall	Scalar/String
+[String String] tall	String
 [None None] tall	None
 
 # =====================================================================
@@ -868,29 +868,29 @@ None is ([Integer String None] tany)	true
 ([{x:Integer} {y:String}] tall) unify {x:1}	'~unify-fail' false
 
 # tany schema as an `Options` field type (note: Options prints lowercase).
-make Options {x:([Integer None] tany)}	options{x:Scalar/Number/Integer|None}
+make Options {x:([Integer None] tany)}	options{x:Integer|None}
 
 # =====================================================================
 # 40. tany/tall — interactions with each other
 # =====================================================================
 
 # Build a disjunct of merged maps.
-[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Scalar/Number/Integer,y:Scalar/String}|{a:Scalar/Boolean,b:None}
+[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Integer,y:String}|{a:Boolean,b:None}
 
 # Use tany inside tall (combined into a single field).
-[{kind:([String Number] tany)}] tall	{kind:Scalar/String|Scalar/Number}
-[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Scalar/Number/Integer|None,y:Scalar/Boolean}
+[{kind:([String Number] tany)}] tall	{kind:String|Number}
+[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Integer|None,y:Boolean}
 
 # tall then tany then tall — composable.
-[([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Scalar/Number/Integer}|{y:Scalar/String}
+[([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Integer}|{y:String}
 
 # =====================================================================
 # 41. tany/tall — `type` definitions
 # =====================================================================
 
 # Define a named disjunct via tany.
-type Maybe tany [String None] Maybe	Scalar/String|None
-type ScalarOrList tany [Scalar List] ScalarOrList	Scalar|Node/List
+type Maybe tany [String None] Maybe	String|None
+type ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
 
 # Use the named disjunct as a record field constraint.
 type Maybe tany [String None] type Person record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice',nick:None}

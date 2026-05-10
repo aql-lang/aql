@@ -49,12 +49,16 @@ func printstrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 // FormatForPrint returns the print representation of a value.
 func FormatForPrint(v Value) string {
-	// Type literals (Data==nil) — print the type name; None prints "null".
+	// The value `none` (the unique inhabitant of None, Data != nil
+	// sentinel) prints as "none".
+	if v.IsNone() {
+		return "none"
+	}
+	// Type literals (Data==nil) — print as the leaf of the type path
+	// (e.g. Integer → "Integer", List → "List"). Type names are
+	// globally unique. The None type literal prints as "None".
 	if v.Data == nil {
-		if v.VType.Equal(TNone) {
-			return "null"
-		}
-		return v.VType.String()
+		return v.VType.Leaf()
 	}
 
 	// Table: formatted with headers and aligned columns.
@@ -135,11 +139,14 @@ func formatListJSON(v Value) string {
 
 // FormatValueJSON formats any value for JSON-like output.
 func FormatValueJSON(v Value) string {
+	// The value `none` and the None type literal both render as JSON
+	// null — that's how JSON encodes the unit type / absent value.
+	if v.IsNone() || (v.Data == nil && v.VType.Equal(TNone)) {
+		return "null"
+	}
 	if v.Data == nil {
-		if v.VType.Equal(TNone) {
-			return "null"
-		}
-		return v.VType.String()
+		// Type literal — render the leaf, quoted as a JSON string.
+		return fmt.Sprintf("%q", v.VType.Leaf())
 	}
 	// DepScalar pre-empts the Matches(TString)/... dispatch so its
 	// constraint payload renders via the DepScalar formatter rather

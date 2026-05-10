@@ -1566,8 +1566,10 @@ func (v Value) String() string {
 		_as3, _ := v.AsError()
 		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
-		// Type literal with no specific value (e.g. "number", "string").
-		return v.VType.String()
+		// Type literal with no specific value (e.g. "Integer", "List").
+		// Render as the LEAF — type names are globally unique so the
+		// leaf alone is unambiguous.
+		return v.VType.Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TDecimal matches: the
 		// lattice override makes DepString.Matches(TString) (and the

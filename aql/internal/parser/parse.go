@@ -271,7 +271,10 @@ func convertTopLevelValue(v any) (engine.Value, error) {
 		return engine.NewBoolean(val), nil
 
 	case nil:
-		return engine.NewTypeLiteral(engine.TNone), nil
+		// JSON null → Atom("null"). The unique inhabitant of None is
+		// spelled `none` (a separate keyword); `null` is the JSON-null
+		// atom at the value level.
+		return engine.NewAtom("null"), nil
 
 	default:
 		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
@@ -398,7 +401,10 @@ func convertDataValue(v any) (engine.Value, error) {
 		return engine.NewBoolean(val), nil
 
 	case nil:
-		return engine.NewTypeLiteral(engine.TNone), nil
+		// JSON null → Atom("null"). The unique inhabitant of None is
+		// spelled `none` (a separate keyword); `null` is the JSON-null
+		// atom at the value level.
+		return engine.NewAtom("null"), nil
 
 	default:
 		return engine.Value{}, fmt.Errorf("unsupported value type %T", v)
@@ -534,6 +540,14 @@ func parseWord(text string) (engine.Value, error) {
 
 	if forceStack || forceForward || argCount >= 0 {
 		return engine.NewWordModified(name, argCount, forceStack, forceForward), nil
+	}
+
+	// `none` is the unique inhabitant of None — a value, not a type.
+	// `null` is the JSON-null atom (handled in data context via `case
+	// nil:`; here in word context bare `null` falls through as a Word
+	// for engine-side resolution).
+	if name == "none" {
+		return engine.NewNone(), nil
 	}
 
 	// Type names resolve to type literals even in word context, so that

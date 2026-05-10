@@ -1487,11 +1487,11 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 
 func TestIntegerLiteralType(t *testing.T) {
 	// Post §1.1 fix: NewInteger no longer encodes the value in the
-	// type path. All integers share VType=Scalar/Number/Integer;
+	// type path. All integers share VType=Integer;
 	// specific-value dispatch goes through Signature.Patterns.
 	v := NewInteger(5)
 	if !v.VType.Equal(TInteger) {
-		t.Errorf("NewInteger(5).VType = %s, want Scalar/Number/Integer", v.VType)
+		t.Errorf("NewInteger(5).VType = %s, want Integer", v.VType)
 	}
 	if !v.VType.Matches(TNumber) {
 		t.Errorf("NewInteger(5).VType = %s, want matches number", v.VType)
@@ -1501,7 +1501,7 @@ func TestIntegerLiteralType(t *testing.T) {
 	v0 := NewInteger(0)
 	v1 := NewInteger(1)
 	if !v0.VType.Equal(v1.VType) {
-		t.Errorf("NewInteger(0) and NewInteger(1) should share VType=Scalar/Number/Integer; got %s vs %s", v0.VType, v1.VType)
+		t.Errorf("NewInteger(0) and NewInteger(1) should share VType=Integer; got %s vs %s", v0.VType, v1.VType)
 	}
 	// And both still match Integer / Number / Scalar.
 	if !v0.VType.Matches(TInteger) || !v1.VType.Matches(TInteger) {
@@ -2362,8 +2362,8 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	}
 	typ, _ := m.Get("type")
 	_as110, _ := typ.AsString()
-	if _as110 != "Scalar/Number" {
-		t.Errorf("type = %v, want 'Scalar/Number'", typ)
+	if _as110 != "Number" {
+		t.Errorf("type = %v, want 'Number'", typ)
 	}
 }
 
@@ -2402,13 +2402,13 @@ func TestEngineInspectRecordType(t *testing.T) {
 	fm := flds.AsMap()
 	xType, _ := fm.Get("x")
 	_as113, _ := xType.AsString()
-	if _as113 != "Scalar/Number" {
-		t.Errorf("fields.x = %v, want 'Scalar/Number'", xType)
+	if _as113 != "Number" {
+		t.Errorf("fields.x = %v, want 'Number'", xType)
 	}
 	yType, _ := fm.Get("y")
 	_as114, _ := yType.AsString()
-	if _as114 != "Scalar/Number" {
-		t.Errorf("fields.y = %v, want 'Scalar/Number'", yType)
+	if _as114 != "Number" {
+		t.Errorf("fields.y = %v, want 'Number'", yType)
 	}
 }
 
@@ -3009,7 +3009,9 @@ func TestTypeofMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			got, _ := result[0].AsString()
+			// typeof now returns a Type literal, not an Atom — compare
+			// via String() which renders the leaf.
+			got := result[0].String()
 			if got != tt.wantType {
 				t.Errorf("typeof %s = %q, want %q", tt.name, got, tt.wantType)
 			}
@@ -3026,18 +3028,17 @@ func TestTypeofMetatypes(t *testing.T) {
 		})
 	}
 
-	// Concrete values unchanged.
+	// Concrete values: typeof returns a Type literal of the value's
+	// exact VType. Render via String() (leaf).
 	t.Run("typeof-concrete-integer", func(t *testing.T) {
 		result := runAQL(t, r, []Value{NewInteger(42), NewWord("typeof")})
-		_as135, _ := result[0].AsString()
-		if len(result) != 1 || _as135 != "Number" {
-			t.Errorf("typeof 42 = %v, want Number", result)
+		if len(result) != 1 || result[0].String() != "Integer" {
+			t.Errorf("typeof 42 = %v, want Integer", result)
 		}
 	})
 	t.Run("typeof-concrete-boolean", func(t *testing.T) {
 		result := runAQL(t, r, []Value{NewBoolean(true), NewWord("typeof")})
-		_as136, _ := result[0].AsString()
-		if len(result) != 1 || _as136 != "Boolean" {
+		if len(result) != 1 || result[0].String() != "Boolean" {
 			t.Errorf("typeof true = %v, want Boolean", result)
 		}
 	})
@@ -3076,7 +3077,7 @@ func TestIsMetatypes(t *testing.T) {
 		{"Object is ScalarType", NewTypeLiteral(TObject), NewTypeLiteral(TScalarType), false},
 		{"Object is NodeType", NewTypeLiteral(TObject), NewTypeLiteral(TNodeType), false},
 
-		// Scalar/Node roots have metatype Type, not ScalarType/NodeType
+		// Scalar/Node roots have metatype Type, not ScalarNodeType
 		{"Scalar is ScalarType", NewTypeLiteral(TScalar), NewTypeLiteral(TScalarType), false},
 		{"Node is NodeType", NewTypeLiteral(TNode), NewTypeLiteral(TNodeType), false},
 		{"Scalar is Type", NewTypeLiteral(TScalar), NewTypeLiteral(TType), true},

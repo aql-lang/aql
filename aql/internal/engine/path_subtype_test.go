@@ -15,7 +15,7 @@ func TestPathSubtype_Identity(t *testing.T) {
 }
 
 func TestPathSubtype_StrictChild(t *testing.T) {
-	// Integer is at Scalar/Number/Integer; Number is at Scalar/Number.
+	// Integer is at Integer; Number is at Number.
 	// Integer's parts strictly extend Number's, so it's a path
 	// subtype.
 	if !TInteger.PathSubtype(TNumber) {
@@ -51,7 +51,7 @@ func TestPathSubtype_AnyIsNotMagical(t *testing.T) {
 // PathSubtype does NOT bolt the Dep<Leaf>→base relation onto the
 // lattice — that's what the override in Matches is for. A DepInteger
 // is at Type/Dependent/DepInteger, which doesn't share any prefix
-// with Scalar/Number/Integer.
+// with Integer.
 func TestPathSubtype_DepIntegerIsNotInteger(t *testing.T) {
 	dep := NewDepScalar(DepGT, NewInteger(10))
 	if dep.VType.PathSubtype(TInteger) {

@@ -192,6 +192,8 @@ var (
 	isSigTypeValue             = aqleng.IsSigTypeValue
 	outputSigValues            = aqleng.OutputSigValues
 	ValidateWordName           = aqleng.ValidateWordName
+	TypeOf                     = aqleng.TypeOf
+	NewNone                    = aqleng.NewNone
 	FindWordInSource = aqleng.FindWordInSource
 	FlattenDisjunctAlts = aqleng.FlattenDisjunctAlts
 	FnDefHasSig = aqleng.FnDefHasSig

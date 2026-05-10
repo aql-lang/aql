@@ -37,12 +37,12 @@ func TestTypeMatches(t *testing.T) {
 // --- Value constructor tests ---
 
 func TestNewString(t *testing.T) {
-	// Post §1.1 fix: all strings carry VType=Scalar/String. The
+	// Post §1.1 fix: all strings carry VType=String. The
 	// String/Empty vs String/Proper subtypes were a value-tagged
 	// dispatch trick that's been replaced with Signature.Patterns.
 	v := NewString("hello")
 	if !v.VType.Equal(TString) {
-		t.Errorf("type = %s, want Scalar/String", v.VType)
+		t.Errorf("type = %s, want String", v.VType)
 	}
 	_as0, _ := v.AsString()
 	if _as0 != "hello" {
@@ -52,7 +52,7 @@ func TestNewString(t *testing.T) {
 
 	empty := NewString("")
 	if !empty.VType.Equal(TString) {
-		t.Errorf("empty type = %s, want Scalar/String", empty.VType)
+		t.Errorf("empty type = %s, want String", empty.VType)
 	}
 }
 
@@ -4347,8 +4347,8 @@ func TestRecordTypeCreation(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Scalar/Number,y:Scalar/Number}" {
-		t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/Number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
@@ -4381,8 +4381,8 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if !result[0].IsRecordType() {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Scalar/Number,y:Scalar/Number}" {
-		t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/Number}", result[0].String())
+	if result[0].String() != "record{x:Number,y:Number}" {
+		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
 	}
 }
 
@@ -4412,8 +4412,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("x", NewTypeLiteral(TNumber))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:Scalar/Number} true" {
-			t.Errorf("got %s, want record{x:Scalar/Number} true", got)
+		if got != "record{x:Number} true" {
+			t.Errorf("got %s, want record{x:Number} true", got)
 		}
 	})
 
@@ -4450,8 +4450,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2.Set("x", NewTypeLiteral(TNumber))
 		f2.Set("y", NewTypeLiteral(TString))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:Scalar/Number,y:Scalar/String} true" {
-			t.Errorf("got %s, want record{x:Scalar/Number,y:Scalar/String} true", got)
+		if got != "record{x:Number,y:String} true" {
+			t.Errorf("got %s, want record{x:Number,y:String} true", got)
 		}
 	})
 
@@ -4465,8 +4465,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2 := NewOrderedMap()
 		f2.Set("a", NewRecordType(inner2))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{a:record{z:Scalar/String}} true" {
-			t.Errorf("got %s, want record{a:record{z:Scalar/String}} true", got)
+		if got != "record{a:record{z:String}} true" {
+			t.Errorf("got %s, want record{a:record{z:String}} true", got)
 		}
 	})
 

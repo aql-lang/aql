@@ -148,7 +148,7 @@ true or false	true
 false or true	true
 
 # tor creates disjunct from any two values
-String tor None	Scalar/String|None
+String tor None	String|None
 
 # --- Suffix with all args from future (no prefix args) ---
 

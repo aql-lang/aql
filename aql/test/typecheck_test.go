@@ -13,7 +13,7 @@ import (
 // TestCheckAddIntegerPrecision validates intra-signature value-
 // dependent return propagation: `1 add 2` matches [Number,Number] but
 // because both carriers are Integer the result should refine to
-// Scalar/Number/Integer (not the widened Scalar/Number).
+// Integer (not the widened Number).
 func TestCheckAddIntegerPrecision(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
@@ -28,7 +28,7 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier on stack, got %d: %v", len(res.Stack), res.Stack)
 	}
-	if got, want := res.Stack[0], "Scalar/Number/Integer"; got != want {
+	if got, want := res.Stack[0], "Integer"; got != want {
 		t.Fatalf("expected residual carrier %q, got %q", want, got)
 	}
 	if len(res.Diagnostics) != 0 {
@@ -37,7 +37,7 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 }
 
 // TestCheckAddDecimalWiden validates that mixing integer and decimal
-// carriers widens the result to Scalar/Number/Decimal — this is the
+// carriers widens the result to Decimal — this is the
 // "else" branch of ReturnsNumericBinary.
 func TestCheckAddDecimalWiden(t *testing.T) {
 	a, err := aql.New()
@@ -53,7 +53,7 @@ func TestCheckAddDecimalWiden(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier, got %v", res.Stack)
 	}
-	if got, want := res.Stack[0], "Scalar/Number/Decimal"; got != want {
+	if got, want := res.Stack[0], "Decimal"; got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
@@ -75,7 +75,7 @@ func TestCheckStackOpIdentity(t *testing.T) {
 		t.Fatalf("expected 2 carriers after dup, got %v", res.Stack)
 	}
 	for i, got := range res.Stack {
-		if got != "Scalar/Number/Integer/1" && got != "Scalar/Number/Integer" {
+		if got != "Integer/1" && got != "Integer" {
 			t.Fatalf("stack[%d]: unexpected type %q", i, got)
 		}
 	}
@@ -108,7 +108,7 @@ func TestCheckSwapPreservesTypes(t *testing.T) {
 }
 
 // TestCheckComparisonReturnsBoolean walks through comparison words
-// ensuring all return Scalar/Boolean.
+// ensuring all return Boolean.
 func TestCheckComparisonReturnsBoolean(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
@@ -130,8 +130,8 @@ func TestCheckComparisonReturnsBoolean(t *testing.T) {
 		if len(res.Stack) != 1 {
 			t.Fatalf("%q: expected 1 carrier, got %v", expr, res.Stack)
 		}
-		if res.Stack[0] != "Scalar/Boolean" {
-			t.Fatalf("%q: expected Scalar/Boolean, got %q", expr, res.Stack[0])
+		if res.Stack[0] != "Boolean" {
+			t.Fatalf("%q: expected Boolean, got %q", expr, res.Stack[0])
 		}
 	}
 }
@@ -166,7 +166,7 @@ func TestCheckRunParity(t *testing.T) {
 }
 
 // TestCheckUpperReturnsString verifies string transformers annotated
-// via registerUnaryStringWord produce Scalar/String carriers.
+// via registerUnaryStringWord produce String carriers.
 func TestCheckUpperReturnsString(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
@@ -189,7 +189,7 @@ func TestCheckUpperReturnsString(t *testing.T) {
 // TestCheckIfJoinsBranches verifies the branch-aware `if` checker:
 // both branches are analysed in a sub-engine and their top-of-stack
 // carriers are joined. Two integer literals (42, 99) collapse to
-// Scalar/Number/Integer via CommonAncestorType.
+// Integer via CommonAncestorType.
 func TestCheckIfJoinsBranches(t *testing.T) {
 	a, err := aql.New()
 	if err != nil {
@@ -204,8 +204,8 @@ func TestCheckIfJoinsBranches(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier, got %v", res.Stack)
 	}
-	if res.Stack[0] != "Scalar/Number/Integer" {
-		t.Fatalf("expected Scalar/Number/Integer, got %q", res.Stack[0])
+	if res.Stack[0] != "Integer" {
+		t.Fatalf("expected Integer, got %q", res.Stack[0])
 	}
 }
 
@@ -232,7 +232,7 @@ func TestCheckIfMixedBranchesWidenToScalar(t *testing.T) {
 
 // TestCheckNoSignatureDiagnosis verifies error-tolerant continuation:
 // calling `upper` with an integer carrier (instead of a string) emits
-// a `no_signature` diagnostic and still produces a Scalar/String
+// a `no_signature` diagnostic and still produces a String
 // carrier from the assumed first-candidate signature.
 func TestCheckNoSignatureDiagnosis(t *testing.T) {
 	a, err := aql.New()
@@ -243,8 +243,8 @@ func TestCheckNoSignatureDiagnosis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/String" {
-		t.Fatalf("expected single Scalar/String carrier, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "String" {
+		t.Fatalf("expected single String carrier, got %v", res.Stack)
 	}
 	found := false
 	for _, d := range res.Diagnostics {
@@ -293,8 +293,8 @@ func TestCheckDoLiteralBody(t *testing.T) {
 		src    string
 		expect string
 	}{
-		{"do [1 add 2]", "Scalar/Number/Integer"},
-		{`do [upper "hi"]`, "Scalar/String"},
+		{"do [1 add 2]", "Integer"},
+		{`do [upper "hi"]`, "String"},
 	}
 	for _, c := range cases {
 		a, err := aql.New()
@@ -319,9 +319,9 @@ func TestCheckHigherOrderBody(t *testing.T) {
 		src    string
 		expect string
 	}{
-		{"each [dup add] [1 2 3]", "Node/List"},
-		{"0 fold [add] [1 2 3]", "Scalar/Number/Integer"},
-		{"scan [add] [1 2 3]", "Node/List"},
+		{"each [dup add] [1 2 3]", "List"},
+		{"0 fold [add] [1 2 3]", "Integer"},
+		{"scan [add] [1 2 3]", "List"},
 	}
 	for _, c := range cases {
 		a, err := aql.New()
@@ -380,8 +380,8 @@ func TestCheckUserFnInference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
-		t.Fatalf("expected Scalar/Number/Integer, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "Integer" {
+		t.Fatalf("expected Integer, got %v", res.Stack)
 	}
 }
 
@@ -398,8 +398,8 @@ func TestCheckUserFnRecursion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
-		t.Fatalf("expected Scalar/Number/Integer, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "Integer" {
+		t.Fatalf("expected Integer, got %v", res.Stack)
 	}
 }
 
@@ -456,7 +456,11 @@ func TestCheckDisjunctWidthCap(t *testing.T) {
 	if strings.Count(got, "|") >= 8 {
 		t.Fatalf("disjunction should have been width-capped, got %q", got)
 	}
-	if got != "Scalar" && !strings.HasPrefix(got, "Scalar/") {
+	scalars := map[string]bool{
+		"Scalar": true, "Number": true, "Integer": true, "Decimal": true,
+		"String": true, "Boolean": true, "Atom": true, "Path": true,
+	}
+	if !scalars[got] {
 		t.Fatalf("expected Scalar-family ancestor, got %q", got)
 	}
 }
@@ -620,8 +624,8 @@ func TestCheckConditionalDefSameBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Scalar/Number/Integer" {
-		t.Errorf("expected Scalar/Number/Integer, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "Integer" {
+		t.Errorf("expected Integer, got %v", res.Stack)
 	}
 }
 
@@ -669,8 +673,8 @@ func TestCheckForLoopAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Node/List" {
-		t.Fatalf("expected Node/List, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "List" {
+		t.Fatalf("expected List, got %v", res.Stack)
 	}
 	for _, d := range res.Diagnostics {
 		if d.Code == "no_signature" {
@@ -800,8 +804,8 @@ func TestCheckFullStackDepth(t *testing.T) {
 	if len(res.Stack) != 4 {
 		t.Fatalf("expected 4 residual carriers, got %v", res.Stack)
 	}
-	if res.Stack[3] != "Scalar/Number/Integer" {
-		t.Errorf("expected last carrier to be Scalar/Number/Integer, got %q", res.Stack[3])
+	if res.Stack[3] != "Integer" {
+		t.Errorf("expected last carrier to be Integer, got %q", res.Stack[3])
 	}
 }
 
@@ -851,8 +855,8 @@ func TestCheckNestedTypedList(t *testing.T) {
 			t.Errorf("unexpected no_signature on nested-list chain: %+v", d)
 		}
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Node/List" {
-		t.Errorf("expected Node/List, got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "List" {
+		t.Errorf("expected List, got %v", res.Stack)
 	}
 }
 
@@ -1218,15 +1222,15 @@ func TestCheckBuiltinsAnnotated(t *testing.T) {
 		expr   string
 		expect string
 	}{
-		{"1 add 2", "Scalar/Number/Integer"},
-		{"1 sub 2", "Scalar/Number/Integer"},
-		{"1 mul 2", "Scalar/Number/Integer"},
-		{"1 add 2.5", "Scalar/Number/Decimal"},
-		{"true and false", "Scalar/Boolean"},
-		{"not true", "Scalar/Boolean"},
-		{"1 eq 1", "Scalar/Boolean"},
-		{`upper "hi"`, "Scalar/String"},
-		{"iota 5", "Node/List"},
+		{"1 add 2", "Integer"},
+		{"1 sub 2", "Integer"},
+		{"1 mul 2", "Integer"},
+		{"1 add 2.5", "Decimal"},
+		{"true and false", "Boolean"},
+		{"not true", "Boolean"},
+		{"1 eq 1", "Boolean"},
+		{`upper "hi"`, "String"},
+		{"iota 5", "List"},
 		{"5 dup", ""}, // two carriers on stack
 	}
 	for _, c := range cases {
@@ -1431,7 +1435,7 @@ func TestCheckUndefinedWordContinuesAnalysis(t *testing.T) {
 	// The post-typo expression should still produce a carrier.
 	foundInteger := false
 	for _, c := range res.Stack {
-		if c == "Scalar/Number/Integer" {
+		if c == "Integer" {
 			foundInteger = true
 			break
 		}
@@ -1517,7 +1521,7 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 	}
 	foundString := false
 	for _, c := range res.Stack {
-		if c == "Scalar/String" {
+		if c == "String" {
 			foundString = true
 			break
 		}

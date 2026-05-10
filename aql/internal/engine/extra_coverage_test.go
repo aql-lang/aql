@@ -143,8 +143,8 @@ func TestExtraStringOpenParen(t *testing.T) {
 func TestExtraStringTypeLiteral(t *testing.T) {
 	v := NewTypeLiteral(TNumber)
 	s := v.String()
-	if s != "Scalar/Number" {
-		t.Errorf("type literal String() = %q, want 'Scalar/Number'", s)
+	if s != "Number" {
+		t.Errorf("type literal String() = %q, want 'Number'", s)
 	}
 }
 

@@ -165,7 +165,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 	stack := make([]string, len(result))
 	for i, v := range result {
-		stack[i] = v.VType.String()
+		stack[i] = v.VType.Leaf()
 	}
 
 	// Fill in missing Row/Col on diagnostics by locating the Word

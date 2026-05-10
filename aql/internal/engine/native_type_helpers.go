@@ -40,7 +40,7 @@ func buildInspection(r *Registry, name string) Value {
 
 		var argVals []Value
 		for _, argType := range sig.Args {
-			argVals = append(argVals, NewString(argType.String()))
+			argVals = append(argVals, NewString(argType.Leaf()))
 		}
 		if argVals == nil {
 			argVals = []Value{}
@@ -65,7 +65,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("name", NewString(name))
 	}
 
-	result.Set("type", NewString(tv.VType.String()))
+	result.Set("type", NewString(tv.VType.Leaf()))
 
 	switch {
 	case tv.IsRecordType():
@@ -74,7 +74,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
-			fields.Set(k, NewString(v.VType.String()))
+			fields.Set(k, NewString(v.VType.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -84,7 +84,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
-			fields.Set(k, NewString(v.VType.String()))
+			fields.Set(k, NewString(v.VType.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -117,12 +117,12 @@ func buildTypeInspection(name string, tv Value) Value {
 			sig := NewOrderedMap()
 			params := make([]Value, len(spec.Params))
 			for i, p := range spec.Params {
-				params[i] = NewString(p.Type.String())
+				params[i] = NewString(p.Type.Leaf())
 			}
 			sig.Set("params", NewList(params))
 			rets := make([]Value, len(spec.Returns))
 			for i, r := range spec.Returns {
-				rets[i] = NewString(r.String())
+				rets[i] = NewString(r.Leaf())
 			}
 			sig.Set("returns", NewList(rets))
 			sigs = append(sigs, NewMap(sig))

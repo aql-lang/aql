@@ -753,7 +753,7 @@ func TestColorExportedTypeUsableDirectly(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	if got != "record{r:Scalar/Number/Integer,g:Scalar/Number/Integer,b:Scalar/Number/Integer}" {
+	if got != "record{r:Integer,g:Integer,b:Integer}" {
 		t.Errorf("Color type = %s", got)
 	}
 }
@@ -769,7 +769,7 @@ func TestColorExportedColorHexType(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	if got != "record{hex:Scalar/String,r:Scalar/Number/Integer,g:Scalar/Number/Integer,b:Scalar/Number/Integer}" {
+	if got != "record{hex:String,r:Integer,g:Integer,b:Integer}" {
 		t.Errorf("ColorHex type = %s", got)
 	}
 }

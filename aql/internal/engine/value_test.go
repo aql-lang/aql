@@ -16,8 +16,8 @@ func TestValueStringTypes(t *testing.T) {
 		{"bool_false", engine.NewBoolean(false), "false"},
 		{"atom", engine.NewAtom("foo"), "foo"},
 		{"none_literal", engine.NewTypeLiteral(engine.TNone), "None"},
-		{"number_literal", engine.NewTypeLiteral(engine.TNumber), "Scalar/Number"},
-		{"string_literal", engine.NewTypeLiteral(engine.TString), "Scalar/String"},
+		{"number_literal", engine.NewTypeLiteral(engine.TNumber), "Number"},
+		{"string_literal", engine.NewTypeLiteral(engine.TString), "String"},
 		{"word", engine.NewWord("upper"), "word(upper)"},
 		{"open_paren", engine.NewOpenParen(), "("},
 	}
@@ -53,16 +53,16 @@ func TestValueStringMapOrig(t *testing.T) {
 func TestValueStringTypedListOrig(t *testing.T) {
 	v := engine.NewTypedList(engine.NewTypeLiteral(engine.TString))
 	got := v.String()
-	if got != "[:Scalar/String]" {
-		t.Errorf("got %q, want %q", got, "[:Scalar/String]")
+	if got != "[:String]" {
+		t.Errorf("got %q, want %q", got, "[:String]")
 	}
 }
 
 func TestValueStringTypedMapOrig(t *testing.T) {
 	v := engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber))
 	got := v.String()
-	if got != "{:Scalar/Number}" {
-		t.Errorf("got %q, want %q", got, "{:Scalar/Number}")
+	if got != "{:Number}" {
+		t.Errorf("got %q, want %q", got, "{:Number}")
 	}
 }
 
@@ -72,8 +72,8 @@ func TestValueStringRecordTypeOrig(t *testing.T) {
 	fields.Set("y", engine.NewTypeLiteral(engine.TString))
 	v := engine.NewRecordType(fields)
 	got := v.String()
-	if got != "record{x:Scalar/Number,y:Scalar/String}" {
-		t.Errorf("got %q, want %q", got, "record{x:Scalar/Number,y:Scalar/String}")
+	if got != "record{x:Number,y:String}" {
+		t.Errorf("got %q, want %q", got, "record{x:Number,y:String}")
 	}
 }
 
@@ -82,16 +82,16 @@ func TestValueStringTableTypeOrig(t *testing.T) {
 	fields.Set("a", engine.NewTypeLiteral(engine.TNumber))
 	v := engine.NewTableType(engine.RecordTypeInfo{Fields: fields})
 	got := v.String()
-	if got != "table{a:Scalar/Number}" {
-		t.Errorf("got %q, want %q", got, "table{a:Scalar/Number}")
+	if got != "table{a:Number}" {
+		t.Errorf("got %q, want %q", got, "table{a:Number}")
 	}
 }
 
 func TestValueStringDisjunctOrig(t *testing.T) {
 	v := engine.NewDisjunct([]engine.Value{engine.NewTypeLiteral(engine.TString), engine.NewTypeLiteral(engine.TNone)})
 	got := v.String()
-	if got != "Scalar/String|None" {
-		t.Errorf("got %q, want %q", got, "Scalar/String|None")
+	if got != "String|None" {
+		t.Errorf("got %q, want %q", got, "String|None")
 	}
 }
 

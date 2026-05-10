@@ -1501,8 +1501,12 @@ func TestConvertTopLevelValueNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(engine.TNone) {
-		t.Errorf("expected none type, got %s", v.VType)
+	if !v.IsAtom() {
+		t.Fatalf("expected atom for null, got %s", v.VType)
+	}
+	name, _ := v.AsAtom()
+	if name != "null" {
+		t.Errorf("expected atom('null'), got atom(%q)", name)
 	}
 }
 
@@ -1529,8 +1533,12 @@ func TestConvertDataValueNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(engine.TNone) {
-		t.Errorf("expected none type, got %s", v.VType)
+	if !v.IsAtom() {
+		t.Fatalf("expected atom for null, got %s", v.VType)
+	}
+	name, _ := v.AsAtom()
+	if name != "null" {
+		t.Errorf("expected atom('null'), got atom(%q)", name)
 	}
 }
 

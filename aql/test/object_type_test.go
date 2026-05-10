@@ -24,11 +24,11 @@ func TestObjectTypeDefine(t *testing.T) {
 	if !strings.Contains(s, "Object/Foo") {
 		t.Errorf("expected type name to contain 'Object/Foo', got %s", s)
 	}
-	if !strings.Contains(s, "a:Scalar/String") {
-		t.Errorf("expected field a:Scalar/String, got %s", s)
+	if !strings.Contains(s, "a:String") {
+		t.Errorf("expected field a:String, got %s", s)
 	}
-	if !strings.Contains(s, "b:Scalar/Boolean") {
-		t.Errorf("expected field b:Scalar/Boolean, got %s", s)
+	if !strings.Contains(s, "b:Boolean") {
+		t.Errorf("expected field b:Boolean, got %s", s)
 	}
 }
 
@@ -72,14 +72,14 @@ func TestObjectTypeInheritance(t *testing.T) {
 		t.Errorf("expected type name to contain 'Object/Foo/Bar', got %s", s)
 	}
 	// Should have inherited fields a,b from Foo plus own field d
-	if !strings.Contains(s, "a:Scalar/String") {
-		t.Errorf("expected inherited field a:Scalar/String, got %s", s)
+	if !strings.Contains(s, "a:String") {
+		t.Errorf("expected inherited field a:String, got %s", s)
 	}
-	if !strings.Contains(s, "b:Scalar/Boolean") {
-		t.Errorf("expected inherited field b:Scalar/Boolean, got %s", s)
+	if !strings.Contains(s, "b:Boolean") {
+		t.Errorf("expected inherited field b:Boolean, got %s", s)
 	}
-	if !strings.Contains(s, "d:Scalar/Number/Integer") {
-		t.Errorf("expected own field d:Scalar/Number/Integer, got %s", s)
+	if !strings.Contains(s, "d:Integer") {
+		t.Errorf("expected own field d:Integer, got %s", s)
 	}
 }
 
@@ -360,7 +360,7 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 	}
 
 	// Runtime-created types should NOT have fixed IDs
-	rt, _ := engine.NewType("Scalar/String/Custom")
+	rt, _ := engine.NewType("String/Custom")
 	if rt.ID != "" {
 		t.Errorf("runtime type should have empty ID, got %s", rt.ID)
 	}

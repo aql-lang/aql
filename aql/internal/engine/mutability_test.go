@@ -393,7 +393,7 @@ func TestArrayMutationSharedReference(t *testing.T) {
 }
 
 func TestArrayIsDistinctFromList(t *testing.T) {
-	// Array is Object/Array; List is Node/List — different types
+	// Array is Object/Array; List is List — different types
 	arr := NewArray([]Value{NewInteger(1)})
 	list := NewList([]Value{NewInteger(1)})
 

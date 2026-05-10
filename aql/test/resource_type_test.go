@@ -18,7 +18,7 @@ func TestResourceTypeDefine(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	s := result[0].String()
-	if s != "record{name:Scalar/String,kind:Scalar/String,meta:Node/Map}" {
+	if s != "record{name:String,kind:String,meta:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
 }
@@ -156,7 +156,7 @@ func TestEntityTypeDefine(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	s := result[0].String()
-	if s != "record{name:Scalar/String,kind:'entity',meta:Node/Map,entity:Node/Map,model:Node/Map}" {
+	if s != "record{name:String,kind:'entity',meta:Map,entity:Map,model:Map}" {
 		t.Errorf("unexpected type string: %s", s)
 	}
 }
@@ -453,7 +453,7 @@ func TestResourceTypeAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := result[0].String()
-	if s != "record{name:Scalar/String,kind:Scalar/String,meta:Node/Map}" {
+	if s != "record{name:String,kind:String,meta:Map}" {
 		t.Errorf("unexpected alias type string: %s", s)
 	}
 }
