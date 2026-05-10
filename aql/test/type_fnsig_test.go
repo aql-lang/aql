@@ -8,7 +8,7 @@ import (
 
 // --- Function signatures as types ---
 //
-// `type Mapper fn [[Integer] [Integer]]` installs `Mapper` as a
+// `type Mapper fnsig [[Integer] [Integer]]` installs `Mapper` as a
 // function-shape type — a FnUndef value carrying input + output sig
 // lists but no body. Mapper can then be used in the typed-def form
 // `def n:Mapper somefn` to constrain n to a function value whose
@@ -18,7 +18,7 @@ import (
 // The `(quote double)` form passes the function as a value rather than
 // invoking it — same idiom AQL already uses for higher-order calls.
 func TestTypeFnSig_DefBindMatchingFunction(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 def double fn [[Integer] [Integer] [1 add]]
 def m:Mapper (quote double)
 double 5`)
@@ -35,7 +35,7 @@ func TestTypeFnSig_DefBindRejectsNonFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fn [[Integer] [Integer]]
+	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
 def m:Mapper 42`)
 	if err == nil {
 		t.Fatal("expected unify error for `def m:Mapper 42` (42 is not a function), got nil")
@@ -48,7 +48,7 @@ func TestTypeFnSig_DefBindRejectsWrongInputType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fn [[Integer] [Integer]]
+	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
 def stringy fn [[String] [Integer] [length]]
 def m:Mapper (quote stringy)`)
 	if err == nil {
@@ -62,7 +62,7 @@ func TestTypeFnSig_DefBindRejectsWrongReturnType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fn [[Integer] [Integer]]
+	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
 def stringer fn [[Integer] [String] [convert String]]
 def m:Mapper (quote stringer)`)
 	if err == nil {
@@ -76,7 +76,7 @@ func TestTypeFnSig_DefBindRejectsWrongArity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fn [[Integer] [Integer]]
+	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
 def two-arg fn [[Integer Integer] [Integer] [add]]
 def m:Mapper (quote two-arg)`)
 	if err == nil {
@@ -87,8 +87,8 @@ def m:Mapper (quote two-arg)`)
 // Different bound names: a second function-shape type and a function
 // that satisfies it; ensures the constraint store is per-name.
 func TestTypeFnSig_DistinctNamedShapes(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
-type Predicate fn [[Integer] [Boolean]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+type Predicate fnsig [[Integer] [Boolean]]
 def double fn [[Integer] [Integer] [1 add]]
 def positive fn [[Integer] [Boolean] [n:Integer 0 gt]]
 def m:Mapper (quote double)

@@ -137,7 +137,7 @@ func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 // FnUndef↔FnDef structural matcher under the hood.
 
 func TestIsFnShape_True(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 def double fn [[Integer] [Integer] [1 add]]
 (quote double) is Mapper`)
 	if len(got) != 1 || got[0] != "true" {
@@ -146,7 +146,7 @@ def double fn [[Integer] [Integer] [1 add]]
 }
 
 func TestIsFnShape_FalseWrongInputType(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 def stringy fn [[String] [Integer] [length]]
 (quote stringy) is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
@@ -155,7 +155,7 @@ def stringy fn [[String] [Integer] [length]]
 }
 
 func TestIsFnShape_FalseWrongReturnType(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 def stringer fn [[Integer] [String] [convert String]]
 (quote stringer) is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
@@ -164,7 +164,7 @@ def stringer fn [[Integer] [String] [convert String]]
 }
 
 func TestIsFnShape_FalseNonFunction(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 42 is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
 		t.Errorf("42 is Mapper = %v, want [\"false\"]", got)

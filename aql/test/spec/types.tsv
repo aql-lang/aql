@@ -626,6 +626,84 @@ quote pink is enum [ red green blue ]	false
 quote red is enum [ ]	false	no alternatives means nothing satisfies
 
 # =====================================================================
+# 11l. fnsig — body-less function-shape type
+# =====================================================================
+# `fnsig [ [in] [out] … ]` produces an FnSig type literal: a structural
+# function-shape constraint with NO body. It is the type-only
+# counterpart to `fn` (which always carries a body and produces a
+# callable Function value — see function.tsv §6).
+#
+# An FnSig is not callable; its only role is as a type. The intended
+# instantiation pattern is `type NAME fnsig […]` to name the shape,
+# then `def f:NAME impl` to assert that `impl` satisfies the shape
+# before binding. (Direct value matching of FnSig vs Function uses
+# the typed-def path; the spec runner's local fixtures don't include
+# the unification machinery here, so this section sticks to what the
+# core words alone can demonstrate.)
+
+# Bare fnsig produces an FnSig type literal.
+typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less form yields an FnSig type literal
+fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
+
+# `type NAME fnsig […]` installs the shape under NAME; the named type
+# is itself an FnSig.
+type Mapper fnsig [ [ Integer ] [ Integer ] ] typeof Mapper	FnSig	named fnsig type round-trips through typeof
+
+# `fnsig` is strict about its outer-list grammar: each pair MUST be
+# `[in] [out]` (length is non-zero multiple of 2). Adding a body
+# triple is an error — that's `fn`'s territory.
+fnsig [ ]	ERROR:multiple of 2	empty list is rejected
+fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with body) is rejected; use fn for that
+
+# =====================================================================
+# 11m. Instantiated enum — `def x:Color quote red`
+# =====================================================================
+# Once an enum is registered as a type via `type Color enum […]`,
+# Color is an FnSig-style disjunct constraint. The typed-def form
+# `def x:Color body` validates the body against Color: only members
+# of the disjunct succeed, anything else triggers a type_error.
+#
+# This is AQL's analogue of "instantiating an enum value" in other
+# languages. Survey of the surrounding design space:
+#
+#   Rust          Color::Red          variant path on the enum type
+#   Swift         Color.red           case access on the enum type
+#   Java          Color.RED           static enum constant
+#   Python        Color.RED           Enum subclass attribute
+#   TypeScript    Color.Red           value of an enum type
+#   Haskell       Red                 data constructor of the sum type
+#   AQL           def x:Color quote red
+#                                     typed-def asserts `red ∈ Color` at
+#                                     bind time; x then resolves to
+#                                     Atom(red) and `x is Color` is true
+#
+# AQL's twist is that the "instantiated value" is just the underlying
+# Atom — no nominal wrapper distinguishes `Atom(red)` from
+# `Color::Red`. The Color membership check happens at def-time; once
+# bound, x is an Atom that *happens* to satisfy Color.
+
+# Atom-valued enum — typed binding admits members.
+type Color enum [ red green blue ] def x:Color quote red x	atom(red)	red is a Color member; bind succeeds
+type Color enum [ red green blue ] def x:Color quote green x	atom(green)
+type Color enum [ red green blue ] def x:Color quote blue x	atom(blue)
+
+# Non-member rejected.
+type Color enum [ red green blue ] def x:Color quote pink	ERROR:type_error	pink is not in Color's alternatives
+
+# Membership round-trip via `is`.
+type Color enum [ red green blue ] def x:Color quote red x is Color	true	the bound value still satisfies Color
+
+# Integer-valued enum — typed binding accepts matching literals.
+type Codes enum [: Integer 200 404 500 ] def s:Codes 200 s	200	200 is a Codes member
+type Codes enum [: Integer 200 404 500 ] def s:Codes 404 s	404
+type Codes enum [: Integer 200 404 500 ] def s:Codes 201	ERROR:type_error	201 is not in Codes
+
+# String-valued enum — same pattern, String members.
+type Mode enum [: String "off" "on" "auto" ] def m:Mode "on" m	"on"	"on" is a Mode member
+type Mode enum [: String "off" "on" "auto" ] def m:Mode "fast"	ERROR:type_error	"fast" is not in Mode
+
+# =====================================================================
 # 12. Dispatch — type literals are rejected at concrete-payload sigs
 # =====================================================================
 # Every concrete-payload sig slot rejects type literals (Data == nil).

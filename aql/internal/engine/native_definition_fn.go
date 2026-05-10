@@ -4,38 +4,8 @@ package engine
 // The fn handler itself lives in native_definition.go.
 
 // parseFnDef, outputSigIsConcreteReturns, isSigTypeValue,
-// outputSigValues: re-exported from aqleng via aliases.go (canonical
-// implementations live in aqleng/go/fn_def.go).
-
-// parseFnUndefSpec parses a list of signature pairs (input+output, no
-// body) into a FnUndefInfo for targeted undef.
-func parseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
-	var sigs []FnSigSpec
-	for i := 0; i < len(list); i += 2 {
-		inputSig := list[i]
-		outputSig := list[i+1]
-
-		if !inputSig.VType.Equal(TList) {
-			inputSig = NewList([]Value{inputSig})
-		}
-
-		params, _, err := parseFnParams(r, inputSig)
-		if err != nil {
-			return FnUndefInfo{}, err
-		}
-
-		returns, err := parseFnReturns(outputSig)
-		if err != nil {
-			return FnUndefInfo{}, err
-		}
-
-		sigs = append(sigs, FnSigSpec{
-			Params:  params,
-			Returns: returns,
-		})
-	}
-	return FnUndefInfo{Sigs: sigs}, nil
-}
+// outputSigValues, parseFnUndefSpec: re-exported from aqleng via
+// aliases.go (canonical implementations live in aqleng/go/fn_def.go).
 
 // parseFnReturns: re-exported from aqleng via aliases.go
 // (canonical implementation lives in aqleng/go/fn_params.go).

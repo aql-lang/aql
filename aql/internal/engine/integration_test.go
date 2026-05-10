@@ -2797,7 +2797,7 @@ func TestFnUndefTargeted(t *testing.T) {
 	_ = runAQL(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
@@ -2837,7 +2837,7 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	_ = runAQL(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2871,7 +2871,7 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 
 	_ = runAQL(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2906,7 +2906,7 @@ func TestFnUndefRemovesAll(t *testing.T) {
 	e := New(r)
 	_, err = e.Run([]Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
 		NewWord("foo"),
 	})
 	// foo should error (undefined after all sigs removed)

@@ -326,6 +326,11 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 // ---- fn ----
 
+// fnHandler always produces a Function value. The list must be a
+// non-zero multiple of 3 (input/output/body triples). For the
+// type-only / shape form (input/output pairs, no body) use the
+// separate `fnsig` word — registered via aqleng.RegisterCoreFnSig
+// from register.go.
 func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.VType.Equal(TList) {
@@ -335,24 +340,14 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
 	}
 	elems := list.AsList().Slice()
-	if len(elems) == 0 {
-		return nil, fmt.Errorf("fn: list must not be empty")
+	if len(elems) == 0 || len(elems)%3 != 0 {
+		return nil, fmt.Errorf("fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form")
 	}
-	if len(elems)%3 == 0 {
-		fnDef, err := parseFnDef(r, elems)
-		if err != nil {
-			return nil, err
-		}
-		return []Value{NewFunction(fnDef)}, nil
+	fnDef, err := parseFnDef(r, elems)
+	if err != nil {
+		return nil, err
 	}
-	if len(elems)%2 == 0 {
-		undefInfo, err := parseFnUndefSpec(r, elems)
-		if err != nil {
-			return nil, err
-		}
-		return []Value{NewFnUndef(undefInfo)}, nil
-	}
-	return nil, fmt.Errorf("fn: list length must be a multiple of 3 (def) or 2 (undef spec)")
+	return []Value{NewFunction(fnDef)}, nil
 }
 
 // ---- call ----

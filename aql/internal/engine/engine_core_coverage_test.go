@@ -326,14 +326,14 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 		t.Fatalf("10 tgt-undef = %v, want 11", result)
 	}
 
-	// Targeted undef with fn spec: undef tgt-undef fn [[Number] [Number]]
+	// Targeted undef with fnsig: undef tgt-undef fnsig [[Number] [Number]]
 	undefSpec := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
 	})
 	runAQL(t, r, []Value{
 		NewWord("undef"), NewWord("tgt-undef"),
-		NewWord("fn"), undefSpec,
+		NewWord("fnsig"), undefSpec,
 	})
 }
 

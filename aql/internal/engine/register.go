@@ -16,6 +16,7 @@ import "github.com/metsitaba/voxgig-exp/aqleng"
 func Register(r *Registry) {
 	aqleng.RegisterCoreBoolean(r)
 	aqleng.RegisterCoreTypeOps(r)
+	aqleng.RegisterCoreFnSig(r)
 
 	// String
 	for _, n := range stringNatives {

@@ -50,6 +50,7 @@ package aqleng
 func RegisterCoreWords(r *Registry) {
 	registerCoreDef(r)
 	registerCoreFn(r)
+	registerCoreFnSig(r)
 	registerCoreQuote(r)
 	registerCoreArgs(r)
 	registerCoreStack(r)
@@ -77,6 +78,14 @@ func RegisterCoreBoolean(r *Registry) {
 // separate entry point so consumers can install just these.
 func RegisterCoreTypeOps(r *Registry) {
 	registerCoreTypeOps(r)
+}
+
+// RegisterCoreFnSig installs the `fnsig` core word — the type-only
+// counterpart to `fn`. Exported as a separate entry point so the
+// production aql package (which has its own `fn` registration) can
+// install just this addition.
+func RegisterCoreFnSig(r *Registry) {
+	registerCoreFnSig(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either
@@ -118,6 +127,14 @@ func registerCoreDef(r *Registry) {
 			return nil, &AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
+		// A bare-Word constraint (e.g. `def x:Color …` where Color was
+		// installed by `type Color enum […]`) must be resolved through
+		// the type stack before validation. Mirrors the production
+		// aql defTypedHandler in
+		// aql/internal/engine/native_definition.go.
+		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType.ID != "" {
+			constraint = resolved
+		}
 		body := args[1]
 		if !IsValueOfType(body, constraint) {
 			return nil, &AqlError{
@@ -193,6 +210,12 @@ func registerCoreDef(r *Registry) {
 // Multi-sig dispatch then happens at call time via matchSignature,
 // which picks the best (highest-arity, most-specific) match per call
 // site.
+//
+// `fn` ALWAYS produces a Function value: the list is a series of
+// [input, output, body] triples (length must be a multiple of 3).
+// For the shape-only "function-type" form (input/output pairs, no
+// body), use the separate `fnsig` word — it produces an FnSig
+// value usable as a type constraint.
 func registerCoreFn(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "fn",
@@ -204,20 +227,68 @@ func registerCoreFn(r *Registry) {
 				if args[0].Data == nil {
 					return nil, &AqlError{
 						Code:   "fn_invalid_spec",
-						Detail: "fn: argument must be a concrete list of triples",
+						Detail: "fn: argument must be a concrete list",
 					}
 				}
 				spec := args[0].AsList().Slice()
+				if len(spec) == 0 || len(spec)%3 != 0 {
+					return nil, &AqlError{
+						Code:   "fn_invalid_spec",
+						Detail: "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form",
+					}
+				}
 				info, err := ParseFnDef(reg, spec)
 				if err != nil {
 					return nil, err
 				}
-				// Return a TFunction value (user-facing first-class
-				// function), not TFnDef (the type-stack storage form).
-				// Mirrors aql/internal/engine/native_definition.go.
 				return []Value{NewFunction(info)}, nil
 			},
 			Returns: []Type{TFunction},
+		}},
+	})
+}
+
+// registerCoreFnSig installs `fnsig [input output …]` — produces a
+// function-SHAPE type literal (FnSig) from input/output sig pairs.
+//
+// `fnsig` is the type-only counterpart to `fn`: same shape grammar,
+// no body. The list length must be a non-zero multiple of 2 (each
+// pair is one signature). The result is an FnSig value usable as a
+// type constraint, e.g. `def f:fnsig [[Integer] [String]] impl`
+// asserts that `impl` is a function whose signatures cover the
+// shape `Integer → String`.
+//
+// FnSig is structural: any function value whose registered
+// signatures satisfy every pair in the FnSig matches. See
+// aqleng/go/fnsig.go::FnUndefMatchesFnDef.
+func registerCoreFnSig(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "fnsig",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args:       []Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				if args[0].Data == nil {
+					return nil, &AqlError{
+						Code:   "fnsig_invalid_spec",
+						Detail: "fnsig: argument must be a concrete list",
+					}
+				}
+				spec := args[0].AsList().Slice()
+				if len(spec) == 0 || len(spec)%2 != 0 {
+					return nil, &AqlError{
+						Code:   "fnsig_invalid_spec",
+						Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
+					}
+				}
+				info, err := ParseFnUndefSpec(reg, spec)
+				if err != nil {
+					return nil, err
+				}
+				return []Value{NewFnUndef(info)}, nil
+			},
+			Returns: []Type{TFnUndef},
 		}},
 	})
 }

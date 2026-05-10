@@ -97,6 +97,46 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 	return FnDefInfo{Sigs: sigs}, nil
 }
 
+// ParseFnUndefSpec parses a list of [input output] sig pairs (no body
+// — even-length list) into a FnUndefInfo. Each pair becomes one
+// FnSigSpec; the resulting FnUndefInfo represents a function-shape
+// TYPE: every signature its inhabitants must satisfy.
+//
+// Used by the `fn` word when the input list has even length: outside
+// `def`, `fn [[in] [out]]` is a TYPE, not a function value. Bind it
+// via `def f:fn[[in][out]] some-impl` to assert that an existing
+// function satisfies the shape.
+//
+// Mirrors the production aql parseFnUndefSpec in
+// aql/internal/engine/native_definition_fn.go.
+func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
+	var sigs []FnSigSpec
+	for i := 0; i+1 < len(list); i += 2 {
+		inputSig := list[i]
+		outputSig := list[i+1]
+
+		if !inputSig.VType.Equal(TList) {
+			inputSig = NewList([]Value{inputSig})
+		}
+
+		params, _, err := ParseFnParams(r, inputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		returns, err := ParseFnReturns(outputSig)
+		if err != nil {
+			return FnUndefInfo{}, err
+		}
+
+		sigs = append(sigs, FnSigSpec{
+			Params:  params,
+			Returns: returns,
+		})
+	}
+	return FnUndefInfo{Sigs: sigs}, nil
+}
+
 // OutputSigIsConcreteReturns reports whether all values in the
 // output signature are concrete (non-type) values — i.e. the sig
 // is a return-by-value form (`[42 "ok"]`) rather than a return-by-

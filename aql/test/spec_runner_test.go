@@ -288,6 +288,9 @@ func renderSpecValue(v aqleng.Value) string {
 	case v.IsNone():
 		return "none"
 	case v.Data == nil:
+		if name := aqleng.TypeNameByID(v.VType.ID); name != "" {
+			return name
+		}
 		return v.VType.Leaf()
 	case v.VType.Matches(aqleng.TInteger):
 		n, _ := v.AsInteger()

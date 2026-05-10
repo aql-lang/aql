@@ -610,10 +610,10 @@ def sq fn [[x:Number] [Number] [x mul x]] 4 sq x		undefined_word
 def sq fn [[x:Number] [Number] [x mul x]] 4 sq undef sq sq		undefined_word
 
 # targeted undef: remove 2-arg sig, 1-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number,Number] [Number]]) 5 foo	25
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fnsig [[Number,Number] [Number]]) 5 foo	25
 
 # targeted undef: remove 1-arg sig, 2-arg remains
-def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fn [[Number] [Number]]) 3 5 foo	8
+def foo fn [[x:Number] [Number] [x mul x]] def foo fn [[x:Number,y:Number] [Number] [x add y]] undef foo (fnsig [[Number] [Number]]) 3 5 foo	8
 
 # Function def with infix call
 def sq fn [[x:Number] [Number] [x mul x]] sq 6	36

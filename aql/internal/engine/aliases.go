@@ -189,6 +189,7 @@ var (
 	resolveDefType     = aqleng.ResolveDefType
 	TandValues         = aqleng.TandValues
 	parseFnDef                 = aqleng.ParseFnDef
+	parseFnUndefSpec           = aqleng.ParseFnUndefSpec
 	outputSigIsConcreteReturns = aqleng.OutputSigIsConcreteReturns
 	isSigTypeValue             = aqleng.IsSigTypeValue
 	outputSigValues            = aqleng.OutputSigValues

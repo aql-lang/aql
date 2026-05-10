@@ -7,7 +7,7 @@ import (
 
 // --- inspect for fn-shape and DepScalar types ---
 //
-// `inspect Mapper` (Mapper = `type Mapper fn [[Integer] [Integer]]`)
+// `inspect Mapper` (Mapper = `type Mapper fnsig [[Integer] [Integer]]`)
 // previously returned an empty `signatures` slot — buildTypeInspection
 // had no case for the FnUndef shape. Same gap for DepScalar
 // constraints: users had no introspection of bounds.
@@ -18,7 +18,7 @@ import (
 // inspect on a fn-shape type renders one entry per spec, with
 // params/returns lists of the type paths.
 func TestInspect_FnUndefSingleSig(t *testing.T) {
-	got := runOne(t, `type Mapper fn [[Integer] [Integer]]
+	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
 inspect Mapper`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1", len(got))

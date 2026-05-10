@@ -244,17 +244,16 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 
 func TestIntegFnUndefSpecPairs(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// fn with 2 elements (pairs) => FnUndefInfo
-	// fn [[Number] [Number]]
+	// fnsig with 2 elements (one input/output pair) => FnUndefInfo
+	// fnsig [[Number] [Number]]
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
 	})
-	result := runAQL(t, r, []Value{NewWord("fn"), fnBody})
+	result := runAQL(t, r, []Value{NewWord("fnsig"), fnBody})
 	if len(result) != 1 {
-		t.Fatalf("fn undef spec should return 1 value, got %d", len(result))
+		t.Fatalf("fnsig should return 1 value, got %d", len(result))
 	}
-	// Should be a FnUndef type
 	if !result[0].VType.Equal(TFnUndef) {
 		t.Errorf("expected TFnUndef, got %s", result[0].VType)
 	}
@@ -270,15 +269,15 @@ func TestIntegFnEmptyListError(t *testing.T) {
 
 func TestIntegFnBadLengthError(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// fn with 5 elements (not divisible by 2 or 3)
+	// fn with 4 elements (not a multiple of 3) — fn now requires
+	// strict triples; the 2-pair form moved to `fnsig`.
 	err := runAQLError(t, r, []Value{
 		NewWord("fn"), NewList([]Value{
-			NewInteger(1), NewInteger(2), NewInteger(3),
-			NewInteger(4), NewInteger(5),
+			NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4),
 		}),
 	})
 	if err == nil {
-		t.Error("expected error for fn with 5 elements")
+		t.Error("expected error for fn with 4 elements")
 	}
 }
 

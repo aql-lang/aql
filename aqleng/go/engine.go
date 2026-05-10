@@ -41,6 +41,7 @@ var typeNameEntries = []struct {
 	{"Timeout", TTimeout},
 	{"Interval", TInterval},
 	{"Function", TFunction},
+	{"FnSig", TFnUndef},
 }
 
 // typeNames maps well-known type names to their Type, so bare words like
@@ -72,6 +73,15 @@ var typeNamesByTypeID = func() map[string]string {
 	}
 	return m
 }()
+
+// TypeNameByID returns the canonical user-facing name for a Type ID
+// (e.g. "Word/__UF" → "FnSig", "Word/Function" → "Function"). Returns
+// the empty string if no entry exists. Renderers should prefer this
+// over Type.Leaf() when displaying type literals to users, since some
+// type IDs use internal sentinels for their leaf segment.
+func TypeNameByID(id string) string {
+	return typeNamesByTypeID[id]
+}
 
 // ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
 // a richer definition installed under the same name (e.g. an ObjectTypeInfo

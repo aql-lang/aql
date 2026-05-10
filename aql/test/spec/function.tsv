@@ -182,6 +182,10 @@ def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:I
 # passed around, named via `def NAME ( fn ... )`, or asked about its
 # type. Without a wrapping def, the fn value just sits on the stack
 # (it does not auto-call against trailing args at the top level).
+#
+# `fn` is strict: the outer list MUST be a non-zero multiple of 3
+# (input output body triples). For the type-only "shape" form (no
+# body, just input/output pairs) use `fnsig` — see §6b.
 
 # A bare fn produces a Function value. With ≥1-arg sigs the value sits
 # on the stack until consumed; a 0-arg fn auto-calls when it lands at
@@ -196,6 +200,33 @@ typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ a:Integer b:Integer ] [ Integer ] 
 # Round-trip: produce a fn, def it, call it.
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] double 5	10	def captures the fn-produced Function and registers the dispatcher
 def square fn [ [ x:Integer ] [ Integer ] [ x x mulq ] ] square 7	49
+
+# Mod-3 strictness — fn rejects non-triple shapes. The error directs
+# the caller toward `fnsig` for the body-less type form.
+fn [ [ a:Integer ] [ Integer ] ]	ERROR:multiple of 3	mod-2 list (no body) is rejected; use fnsig instead
+fn [ ]	ERROR:multiple of 3	empty list is rejected — fn requires at least one triple
+
+# ====================================================================
+# 6b. fnsig — body-less function-shape type
+# ====================================================================
+# `fnsig [ [in] [out] … ]` produces an FnSig type literal — a
+# structural function-shape constraint. The outer list MUST be a
+# non-zero multiple of 2 (input output pairs, no body). Each pair
+# becomes one signature in the shape. FnSig values are not callable;
+# they are intended as type constraints (see types.tsv §11l for the
+# `def f:fnsig […] impl` instantiation pattern).
+
+# Single-sig shape — Integer → Integer.
+typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less type form yields FnSig
+fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
+
+# Multi-sig shape — overloaded shape with two pairs.
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
+
+# Mod-2 strictness — fnsig rejects non-pair shapes. The error directs
+# the caller toward `fn` for the with-body form.
+fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 list (with body) is rejected; use fn instead
+fnsig [ ]	ERROR:multiple of 2	empty list is rejected — fnsig requires at least one pair
 
 # ====================================================================
 # 7. args frame
