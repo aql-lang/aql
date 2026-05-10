@@ -19,6 +19,8 @@ var typeNameEntries = []struct {
 	{"Integer", TInteger},
 	{"Decimal", TDecimal},
 	{"String", TString},
+	{"ProperString", TStringProper},
+	{"EmptyString", TStringEmpty},
 	{"Boolean", TBoolean},
 	{"Path", TPath},
 	{"Atom", TAtom},

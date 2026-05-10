@@ -537,17 +537,24 @@ func NewValueRaw(t Type, data interface{}) Value {
 	}
 }
 
-// NewString creates a string value with VType = Scalar/String.
+// NewString creates a string value tagged with the appropriate
+// String subtype: EmptyString for "" (the unique inhabitant of the
+// EmptyString singleton type) and ProperString for any non-empty
+// payload. Both subtypes match Scalar/String via the type lattice
+// (TStringProper.Matches(TString) and TStringEmpty.Matches(TString)
+// are true), so signatures declared on TString continue to dispatch
+// transparently — the difference is observable only via typeof,
+// pattern dispatch, or explicit subtype-equality checks.
 //
-// Earlier versions of this engine returned String/Empty for "" and
-// String/Proper otherwise (a "value-tagged subtype" trick that fed
-// into signature dispatch). The trick made `v.VType.Equal(TString)`
-// return false for any concrete string and bloated the type lattice
-// per literal payload. Specific-value dispatch now goes through
-// Signature.Patterns (see match.go) so the type stays at the kind
-// level and `Equal(TString)` does what users expect.
+// Specific-value dispatch is still primarily routed through
+// Signature.Patterns; the empty/proper split provides a coarser
+// "value-shape at the type level" signal so user code can branch on
+// emptiness without resorting to a length comparison.
 func NewString(s string) Value {
-	return NewValueRaw(TString, s)
+	if s == "" {
+		return NewValueRaw(TStringEmpty, s)
+	}
+	return NewValueRaw(TStringProper, s)
 }
 
 // NewInteger creates a number/integer value with VType = Scalar/Number/Integer.

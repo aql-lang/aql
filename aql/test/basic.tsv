@@ -264,8 +264,8 @@ String tor None	String|None
 # concrete values, the leaf type (Integer, String, Boolean, …); for
 # type literals, the metatype (None has 1 part so it reports Type).
 typeof 42	Integer
-typeof "hello"	String
-typeof ""	String
+typeof "hello"	ProperString
+typeof ""	EmptyString
 typeof true	Boolean
 typeof false	Boolean
 typeof [1 2 3]	List
@@ -274,8 +274,8 @@ typeof None	Type
 
 # fulltypeof - returns the full type Path as an atom.
 fulltypeof 42	Scalar/Number/Integer
-fulltypeof "hello"	Scalar/String
-fulltypeof ""	Scalar/String
+fulltypeof "hello"	Scalar/String/ProperString
+fulltypeof ""	Scalar/String/EmptyString
 fulltypeof true	Scalar/Boolean
 fulltypeof false	Scalar/Boolean
 fulltypeof [1 2 3]	Node/List

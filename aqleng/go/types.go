@@ -7,9 +7,9 @@ import (
 	"unicode/utf8"
 )
 
-// Type represents a hierarchical AQL type such as "Scalar/String/Proper" or
+// Type represents a hierarchical AQL type such as "Scalar/String/ProperString" or
 // "Scalar/Number/Integer". A child type matches a parent pattern:
-// Scalar/String/Proper matches Scalar/String matches Scalar.
+// Scalar/String/ProperString matches Scalar/String matches Scalar.
 //
 // Builtin types carry a fixed ID that is stable across runs and independent
 // of creation order. The ID format is "<prefix>_" followed by 12 lowercase
@@ -86,8 +86,8 @@ var (
 	TNever          = mustType("Never")
 	TScalar         = mustType("Scalar")
 	TString         = mustType("Scalar/String")
-	TStringProper   = mustType("Scalar/String/Proper")
-	TStringEmpty    = mustType("Scalar/String/Empty")
+	TStringProper   = mustType("Scalar/String/ProperString")
+	TStringEmpty    = mustType("Scalar/String/EmptyString")
 	TNumber         = mustType("Scalar/Number")
 	TInteger        = mustType("Scalar/Number/Integer")
 	TDecimal        = mustType("Scalar/Number/Decimal")
@@ -154,8 +154,8 @@ var BuiltinTypeIDs = map[string]int{
 	"None":                             2,
 	"Scalar":                           3,
 	"Scalar/String":                    4,
-	"Scalar/String/Proper":             5,
-	"Scalar/String/Empty":              6,
+	"Scalar/String/ProperString":       5,
+	"Scalar/String/EmptyString":        6,
 	"Scalar/Number":                    7,
 	"Scalar/Number/Integer":            8,
 	"Scalar/Number/Decimal":            9,
@@ -258,9 +258,10 @@ func mustType(path string) Type {
 	return t
 }
 
-// NewType creates a Type from a slash-separated path, e.g. "String/Proper".
-// Short names are auto-expanded to their full hierarchy path: "String/Proper"
-// becomes "Scalar/String/Proper", "Map/Fetch/Request" becomes
+// NewType creates a Type from a slash-separated path, e.g.
+// "String/ProperString". Short names are auto-expanded to their full
+// hierarchy path: "String/ProperString" becomes
+// "Scalar/String/ProperString", "Map/Fetch/Request" becomes
 // "Object/Fetch/Request", etc.
 // Every alphabetic part must begin with an uppercase letter; lowercase is an error.
 // Non-letter parts (e.g. numeric literal suffixes like "Number/Integer/42") are allowed.
@@ -338,8 +339,8 @@ var builtinTypeList = []Type{
 
 // Matches reports whether this type satisfies the given pattern.
 //   - "Any" pattern matches everything.
-//   - A child matches a parent: Scalar/String/Proper matches Scalar/String.
-//   - A parent does NOT match a child: Scalar/String does not match Scalar/String/Proper.
+//   - A child matches a parent: Scalar/String/ProperString matches Scalar/String.
+//   - A parent does NOT match a child: Scalar/String does not match Scalar/String/ProperString.
 //   - A Type/Dependent/Dep<X> path is treated as a subtype of <X> and any
 //     of <X>'s lattice ancestors. The Dependent branch lives under its own
 //     root for clear separation, but dependent values must satisfy any slot
@@ -412,7 +413,7 @@ func (t Type) Leaf() string {
 }
 
 // IsSubtypeOf reports whether t is a strict subtype of parent.
-// For example: Scalar/String/Proper is a subtype of Scalar/String.
+// For example: Scalar/String/ProperString is a subtype of Scalar/String.
 // A type is NOT a subtype of itself.
 func (t Type) IsSubtypeOf(parent Type) bool {
 	if len(t.Parts) <= len(parent.Parts) {

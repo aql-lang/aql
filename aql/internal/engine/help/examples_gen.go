@@ -151,7 +151,7 @@ func init() {
 		"implies true false": "true",
 		"indexof 'a' 'b' {a:1,b:2}": "-1",
 		"indexof 'c' 'd'": "-1",
-		"inspect 'a'": "{type:'String',kind:literal}",
+		"inspect 'a'": "{type:'ProperString',kind:literal}",
 		"inspect (quote a)": "{name:'a',kind:unknown,signatures:[]}",
 		"lower 'a'": "'a'",
 		"lt 2 3": "false",

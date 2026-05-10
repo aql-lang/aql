@@ -37,22 +37,29 @@ func TestTypeMatches(t *testing.T) {
 // --- Value constructor tests ---
 
 func TestNewString(t *testing.T) {
-	// Post §1.1 fix: all strings carry VType=String. The
-	// String/Empty vs String/Proper subtypes were a value-tagged
-	// dispatch trick that's been replaced with Signature.Patterns.
+	// Strings carry the String subtype: ProperString for non-empty,
+	// EmptyString for "". Both still match TString via the type
+	// lattice, so Equal(TString) is false but Matches(TString) is
+	// true; specific-value dispatch still routes through
+	// Signature.Patterns where finer granularity is needed.
 	v := NewString("hello")
-	if !v.VType.Equal(TString) {
-		t.Errorf("type = %s, want String", v.VType)
+	if !v.VType.Equal(TStringProper) {
+		t.Errorf("type = %s, want ProperString", v.VType)
+	}
+	if !v.VType.Matches(TString) {
+		t.Errorf("ProperString should match TString")
 	}
 	_as0, _ := v.AsString()
 	if _as0 != "hello" {
-		_as1, _ := v.AsString()
-		t.Errorf("data = %q, want %q", _as1, "hello")
+		t.Errorf("data = %q, want %q", _as0, "hello")
 	}
 
 	empty := NewString("")
-	if !empty.VType.Equal(TString) {
-		t.Errorf("empty type = %s, want String", empty.VType)
+	if !empty.VType.Equal(TStringEmpty) {
+		t.Errorf("empty type = %s, want EmptyString", empty.VType)
+	}
+	if !empty.VType.Matches(TString) {
+		t.Errorf("EmptyString should match TString")
 	}
 }
 
