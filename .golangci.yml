@@ -15,6 +15,14 @@ linters:
     - bodyclose   # HTTP response bodies must be closed (cmd/go does http.Get)
     - misspell    # common misspellings in comments and strings
     - unconvert   # redundant type conversions
+    # Complexity / duplication ratchets — thresholds are set just above
+    # the worst current function so the gate is green today but a new
+    # catastrophically-complex/duplicated function would fail it. See
+    # STATIC_ANALYSIS_REPORT.md ("Complexity, size, duplication") for the
+    # full hotspot list and the recommendation to ratchet these down.
+    - gocyclo
+    - gocognit
+    - dupl
   settings:
     errcheck:
       # Calls where ignoring the error is the established convention.
@@ -35,6 +43,13 @@ linters:
         - -ST1021
         - -ST1022
         - -QF*
+    # gocyclo / gocognit / dupl thresholds (see comment near `enable`).
+    gocyclo:
+      min-complexity: 70    # current worst: matchSignature (87) — nolinted
+    gocognit:
+      min-complexity: 200   # current worst: matchSignature (211) — nolinted
+    dupl:
+      threshold: 400        # current 4 grandfathered groups are ≤ 350 tokens
   exclusions:
     generated: lax
     presets:

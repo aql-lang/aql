@@ -24,6 +24,8 @@ package eng
 // in signature order). Positions > pointer are forward args that need
 // deferred collection. Positions < pointer are stack args. Returns nil
 // sig if no signature matches.
+//
+//nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.md
 func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
 	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
 	// dichotomy at the word level. Each sig declares its own boundary
