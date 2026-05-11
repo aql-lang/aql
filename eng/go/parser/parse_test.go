@@ -3,11 +3,11 @@ package parser
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/eng"
 )
 
-// valuesEqual compares two engine.Value instances for equality.
-func valuesEqual(a, b engine.Value) bool {
+// valuesEqual compares two eng.Value instances for equality.
+func valuesEqual(a, b eng.Value) bool {
 	if !a.VType.Equal(b.VType) {
 		return false
 	}
@@ -21,11 +21,11 @@ func valuesEqual(a, b engine.Value) bool {
 			aw.ForceForward == bw.ForceForward
 	case a.IsOpenParen():
 		return true
-	case a.VType.Matches(engine.TString):
+	case a.VType.Matches(eng.TString):
 		as, _ := a.AsString()
 		bs, _ := b.AsString()
 		return as == bs
-	case a.VType.Matches(engine.TInteger):
+	case a.VType.Matches(eng.TInteger):
 		an, _ := a.AsInteger()
 		bn, _ := b.AsInteger()
 		return an == bn
@@ -34,7 +34,7 @@ func valuesEqual(a, b engine.Value) bool {
 	}
 }
 
-func assertParse(t *testing.T, input string, want []engine.Value) {
+func assertParse(t *testing.T, input string, want []eng.Value) {
 	t.Helper()
 	got, err := Parse(input)
 	if err != nil {
@@ -66,64 +66,64 @@ func TestParseEmpty(t *testing.T) {
 }
 
 func TestParseSingleInteger(t *testing.T) {
-	assertParse(t, "1", []engine.Value{engine.NewInteger(1)})
+	assertParse(t, "1", []eng.Value{eng.NewInteger(1)})
 }
 
 func TestParseZero(t *testing.T) {
-	assertParse(t, "0", []engine.Value{engine.NewInteger(0)})
+	assertParse(t, "0", []eng.Value{eng.NewInteger(0)})
 }
 
 func TestParseNegativeInteger(t *testing.T) {
-	assertParse(t, "-5", []engine.Value{engine.NewInteger(-5)})
+	assertParse(t, "-5", []eng.Value{eng.NewInteger(-5)})
 }
 
 func TestParseLargeInteger(t *testing.T) {
-	assertParse(t, "999", []engine.Value{engine.NewInteger(999)})
+	assertParse(t, "999", []eng.Value{eng.NewInteger(999)})
 }
 
 func TestParseMultipleIntegers(t *testing.T) {
-	assertParse(t, "1 2 3", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewInteger(2),
-		engine.NewInteger(3),
+	assertParse(t, "1 2 3", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewInteger(2),
+		eng.NewInteger(3),
 	})
 }
 
 func TestParseQuotedStringDouble(t *testing.T) {
-	assertParse(t, `"hello"`, []engine.Value{engine.NewString("hello")})
+	assertParse(t, `"hello"`, []eng.Value{eng.NewString("hello")})
 }
 
 func TestParseQuotedStringSingle(t *testing.T) {
-	assertParse(t, `'world'`, []engine.Value{engine.NewString("world")})
+	assertParse(t, `'world'`, []eng.Value{eng.NewString("world")})
 }
 
 func TestParseEmptyQuotedString(t *testing.T) {
-	assertParse(t, `""`, []engine.Value{engine.NewString("")})
+	assertParse(t, `""`, []eng.Value{eng.NewString("")})
 }
 
 func TestParseQuotedStringWithSpaces(t *testing.T) {
-	assertParse(t, `"hello world"`, []engine.Value{engine.NewString("hello world")})
+	assertParse(t, `"hello world"`, []eng.Value{eng.NewString("hello world")})
 }
 
 // --- Word tests ---
 
 func TestParseSingleWord(t *testing.T) {
-	assertParse(t, "upper", []engine.Value{engine.NewWord("upper")})
+	assertParse(t, "upper", []eng.Value{eng.NewWord("upper")})
 }
 
 func TestParseUnknownWord(t *testing.T) {
-	assertParse(t, "foo", []engine.Value{engine.NewWord("foo")})
+	assertParse(t, "foo", []eng.Value{eng.NewWord("foo")})
 }
 
 func TestParseEndKeyword(t *testing.T) {
-	assertParse(t, "end", []engine.Value{engine.NewWord("end")})
+	assertParse(t, "end", []eng.Value{eng.NewWord("end")})
 }
 
 func TestParseMultipleWords(t *testing.T) {
-	assertParse(t, "a b c", []engine.Value{
-		engine.NewWord("a"),
-		engine.NewWord("b"),
-		engine.NewWord("c"),
+	assertParse(t, "a b c", []eng.Value{
+		eng.NewWord("a"),
+		eng.NewWord("b"),
+		eng.NewWord("c"),
 	})
 }
 
@@ -131,74 +131,74 @@ func TestParseMultipleWords(t *testing.T) {
 
 func TestParsePrefixExpression(t *testing.T) {
 	// a upper → two words: the engine resolves unknown "a" to a string
-	assertParse(t, "a upper", []engine.Value{
-		engine.NewWord("a"),
-		engine.NewWord("upper"),
+	assertParse(t, "a upper", []eng.Value{
+		eng.NewWord("a"),
+		eng.NewWord("upper"),
 	})
 }
 
 func TestParseForwardExpression(t *testing.T) {
 	// lower B → two words
-	assertParse(t, "lower B", []engine.Value{
-		engine.NewWord("lower"),
-		engine.NewWord("B"),
+	assertParse(t, "lower B", []eng.Value{
+		eng.NewWord("lower"),
+		eng.NewWord("B"),
 	})
 }
 
 func TestParsePrefixArithmetic(t *testing.T) {
 	// 1 2 add → two integers then word
-	assertParse(t, "1 2 add", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewInteger(2),
-		engine.NewWord("add"),
+	assertParse(t, "1 2 add", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewInteger(2),
+		eng.NewWord("add"),
 	})
 }
 
 func TestParseInfixArithmetic(t *testing.T) {
 	// 1 add 2
-	assertParse(t, "1 add 2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, "1 add 2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseChainedArithmetic(t *testing.T) {
-	assertParse(t, "1 add 2 add 3", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
-		engine.NewWord("add"),
-		engine.NewInteger(3),
+	assertParse(t, "1 add 2 add 3", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
+		eng.NewWord("add"),
+		eng.NewInteger(3),
 	})
 }
 
 func TestParseMixedOperators(t *testing.T) {
 	// 2 add 3 mul 4
-	assertParse(t, "2 add 3 mul 4", []engine.Value{
-		engine.NewInteger(2),
-		engine.NewWord("add"),
-		engine.NewInteger(3),
-		engine.NewWord("mul"),
-		engine.NewInteger(4),
+	assertParse(t, "2 add 3 mul 4", []eng.Value{
+		eng.NewInteger(2),
+		eng.NewWord("add"),
+		eng.NewInteger(3),
+		eng.NewWord("mul"),
+		eng.NewInteger(4),
 	})
 }
 
 func TestParseStringThenWord(t *testing.T) {
 	// "hello" upper → string then word
-	assertParse(t, `"hello" upper`, []engine.Value{
-		engine.NewString("hello"),
-		engine.NewWord("upper"),
+	assertParse(t, `"hello" upper`, []eng.Value{
+		eng.NewString("hello"),
+		eng.NewWord("upper"),
 	})
 }
 
 func TestParseSetWithEnd(t *testing.T) {
 	// set foo 99 end
-	assertParse(t, "set foo 99 end", []engine.Value{
-		engine.NewWord("set"),
-		engine.NewWord("foo"),
-		engine.NewInteger(99),
-		engine.NewWord("end"),
+	assertParse(t, "set foo 99 end", []eng.Value{
+		eng.NewWord("set"),
+		eng.NewWord("foo"),
+		eng.NewInteger(99),
+		eng.NewWord("end"),
 	})
 }
 
@@ -206,48 +206,48 @@ func TestParseSetWithEnd(t *testing.T) {
 
 func TestParseSimpleParens(t *testing.T) {
 	// (1 add 2)
-	assertParse(t, "(1 add 2)", []engine.Value{
-		engine.NewWord("("),
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
-		engine.NewWord(")"),
+	assertParse(t, "(1 add 2)", []eng.Value{
+		eng.NewWord("("),
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
+		eng.NewWord(")"),
 	})
 }
 
 func TestParseNestedParens(t *testing.T) {
 	// (1 add (2 mul 3))
-	assertParse(t, "(1 add (2 mul 3))", []engine.Value{
-		engine.NewWord("("),
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewWord("("),
-		engine.NewInteger(2),
-		engine.NewWord("mul"),
-		engine.NewInteger(3),
-		engine.NewWord(")"),
-		engine.NewWord(")"),
+	assertParse(t, "(1 add (2 mul 3))", []eng.Value{
+		eng.NewWord("("),
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewWord("("),
+		eng.NewInteger(2),
+		eng.NewWord("mul"),
+		eng.NewInteger(3),
+		eng.NewWord(")"),
+		eng.NewWord(")"),
 	})
 }
 
 func TestParseAdjacentParens(t *testing.T) {
 	// (1)(2) — no space between groups
-	assertParse(t, "(1)(2)", []engine.Value{
-		engine.NewWord("("),
-		engine.NewInteger(1),
-		engine.NewWord(")"),
-		engine.NewWord("("),
-		engine.NewInteger(2),
-		engine.NewWord(")"),
+	assertParse(t, "(1)(2)", []eng.Value{
+		eng.NewWord("("),
+		eng.NewInteger(1),
+		eng.NewWord(")"),
+		eng.NewWord("("),
+		eng.NewInteger(2),
+		eng.NewWord(")"),
 	})
 }
 
 func TestParseParenAroundWord(t *testing.T) {
 	// (add)
-	assertParse(t, "(add)", []engine.Value{
-		engine.NewWord("("),
-		engine.NewWord("add"),
-		engine.NewWord(")"),
+	assertParse(t, "(add)", []eng.Value{
+		eng.NewWord("("),
+		eng.NewWord("add"),
+		eng.NewWord(")"),
 	})
 }
 
@@ -255,58 +255,58 @@ func TestParseParenAroundWord(t *testing.T) {
 
 func TestParseArgCountModifier(t *testing.T) {
 	// lower/1
-	assertParse(t, "lower/1", []engine.Value{
-		engine.NewWordModified("lower", 1, false, false),
+	assertParse(t, "lower/1", []eng.Value{
+		eng.NewWordModified("lower", 1, false, false),
 	})
 }
 
 func TestParseForceForwardModifier(t *testing.T) {
 	// lower/f
-	assertParse(t, "lower/f", []engine.Value{
-		engine.NewWordModified("lower", -1, false, true),
+	assertParse(t, "lower/f", []eng.Value{
+		eng.NewWordModified("lower", -1, false, true),
 	})
 }
 
 func TestParseForceStackModifier(t *testing.T) {
 	// lower/s
-	assertParse(t, "lower/s", []engine.Value{
-		engine.NewWordModified("lower", -1, true, false),
+	assertParse(t, "lower/s", []eng.Value{
+		eng.NewWordModified("lower", -1, true, false),
 	})
 }
 
 func TestParseArgCountAndForwardModifier(t *testing.T) {
 	// lower/1f
-	assertParse(t, "lower/1f", []engine.Value{
-		engine.NewWordModified("lower", 1, false, true),
+	assertParse(t, "lower/1f", []eng.Value{
+		eng.NewWordModified("lower", 1, false, true),
 	})
 }
 
 func TestParseArgCountAndStackModifier(t *testing.T) {
 	// lower/1s
-	assertParse(t, "lower/1s", []engine.Value{
-		engine.NewWordModified("lower", 1, true, false),
+	assertParse(t, "lower/1s", []eng.Value{
+		eng.NewWordModified("lower", 1, true, false),
 	})
 }
 
 func TestParseArgCountZero(t *testing.T) {
 	// dup/0
-	assertParse(t, "dup/0", []engine.Value{
-		engine.NewWordModified("dup", 0, false, false),
+	assertParse(t, "dup/0", []eng.Value{
+		eng.NewWordModified("dup", 0, false, false),
 	})
 }
 
 func TestParseArgCountTwo(t *testing.T) {
 	// set/2
-	assertParse(t, "set/2", []engine.Value{
-		engine.NewWordModified("set", 2, false, false),
+	assertParse(t, "set/2", []eng.Value{
+		eng.NewWordModified("set", 2, false, false),
 	})
 }
 
 func TestParseModifierInExpression(t *testing.T) {
 	// B lower/f → word then modified word
-	assertParse(t, "B lower/f", []engine.Value{
-		engine.NewWord("B"),
-		engine.NewWordModified("lower", -1, false, true),
+	assertParse(t, "B lower/f", []eng.Value{
+		eng.NewWord("B"),
+		eng.NewWordModified("lower", -1, false, true),
 	})
 }
 
@@ -314,39 +314,39 @@ func TestParseModifierInExpression(t *testing.T) {
 
 func TestParseQuotedFunctionName(t *testing.T) {
 	// "upper" → string, not a word; upper → word
-	assertParse(t, `"upper" upper`, []engine.Value{
-		engine.NewString("upper"),
-		engine.NewWord("upper"),
+	assertParse(t, `"upper" upper`, []eng.Value{
+		eng.NewString("upper"),
+		eng.NewWord("upper"),
 	})
 }
 
 func TestParseQuotedEnd(t *testing.T) {
 	// "end" → string (not the end keyword)
-	assertParse(t, `"end"`, []engine.Value{engine.NewString("end")})
+	assertParse(t, `"end"`, []eng.Value{eng.NewString("end")})
 }
 
 func TestParseQuotedNumber(t *testing.T) {
 	// "1" → string, not an integer
-	assertParse(t, `"1"`, []engine.Value{engine.NewString("1")})
+	assertParse(t, `"1"`, []eng.Value{eng.NewString("1")})
 }
 
 // --- Whitespace handling ---
 
 func TestParseExtraSpaces(t *testing.T) {
-	assertParse(t, "1  2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewInteger(2),
+	assertParse(t, "1  2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseLeadingTrailingSpaces(t *testing.T) {
-	assertParse(t, "  1  ", []engine.Value{engine.NewInteger(1)})
+	assertParse(t, "  1  ", []eng.Value{eng.NewInteger(1)})
 }
 
 func TestParseTabs(t *testing.T) {
-	assertParse(t, "1\t2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewInteger(2),
+	assertParse(t, "1\t2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewInteger(2),
 	})
 }
 
@@ -358,15 +358,15 @@ func TestParseWhitespaceOnly(t *testing.T) {
 
 func TestParseHashComment(t *testing.T) {
 	// 1 # this is a comment
-	assertParse(t, "1 # this is a comment", []engine.Value{
-		engine.NewInteger(1),
+	assertParse(t, "1 # this is a comment", []eng.Value{
+		eng.NewInteger(1),
 	})
 }
 
 func TestParseSlashComment(t *testing.T) {
 	// 1 // inline comment
-	assertParse(t, "1 // inline comment", []engine.Value{
-		engine.NewInteger(1),
+	assertParse(t, "1 // inline comment", []eng.Value{
+		eng.NewInteger(1),
 	})
 }
 
@@ -377,69 +377,69 @@ func TestParseCommentOnly(t *testing.T) {
 // --- Value keywords disabled (treated as words) ---
 
 func TestParseTrueAsWord(t *testing.T) {
-	assertParse(t, "true", []engine.Value{engine.NewWord("true")})
+	assertParse(t, "true", []eng.Value{eng.NewWord("true")})
 }
 
 func TestParseFalseAsWord(t *testing.T) {
-	assertParse(t, "false", []engine.Value{engine.NewWord("false")})
+	assertParse(t, "false", []eng.Value{eng.NewWord("false")})
 }
 
 func TestParseNullAsWord(t *testing.T) {
-	assertParse(t, "null", []engine.Value{engine.NewWord("null")})
+	assertParse(t, "null", []eng.Value{eng.NewWord("null")})
 }
 
 // --- Full expression tests ---
 
 func TestParseFullPrefixExpression(t *testing.T) {
 	// "hello" upper → string then word (engine would call upper on the string)
-	assertParse(t, `"hello" upper`, []engine.Value{
-		engine.NewString("hello"),
-		engine.NewWord("upper"),
+	assertParse(t, `"hello" upper`, []eng.Value{
+		eng.NewString("hello"),
+		eng.NewWord("upper"),
 	})
 }
 
 func TestParseFullInfixWithParens(t *testing.T) {
 	// 2 mul (3 add 4)
-	assertParse(t, "2 mul (3 add 4)", []engine.Value{
-		engine.NewInteger(2),
-		engine.NewWord("mul"),
-		engine.NewWord("("),
-		engine.NewInteger(3),
-		engine.NewWord("add"),
-		engine.NewInteger(4),
-		engine.NewWord(")"),
+	assertParse(t, "2 mul (3 add 4)", []eng.Value{
+		eng.NewInteger(2),
+		eng.NewWord("mul"),
+		eng.NewWord("("),
+		eng.NewInteger(3),
+		eng.NewWord("add"),
+		eng.NewInteger(4),
+		eng.NewWord(")"),
 	})
 }
 
 func TestParseForthPrimitives(t *testing.T) {
 	// 1 dup swap drop
-	assertParse(t, "1 dup swap drop", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("dup"),
-		engine.NewWord("swap"),
-		engine.NewWord("drop"),
+	assertParse(t, "1 dup swap drop", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("dup"),
+		eng.NewWord("swap"),
+		eng.NewWord("drop"),
 	})
 }
 
 func TestParseStorageSetGet(t *testing.T) {
 	// set x 10 end get x
-	assertParse(t, "set x 10 end get x", []engine.Value{
-		engine.NewWord("set"),
-		engine.NewWord("x"),
-		engine.NewInteger(10),
-		engine.NewWord("end"),
-		engine.NewWord("get"),
-		engine.NewWord("x"),
+	assertParse(t, "set x 10 end get x", []eng.Value{
+		eng.NewWord("set"),
+		eng.NewWord("x"),
+		eng.NewInteger(10),
+		eng.NewWord("end"),
+		eng.NewWord("get"),
+		eng.NewWord("x"),
 	})
 }
 
 func TestParseMixedLiteralsAndWords(t *testing.T) {
 	// 42 "hello" foo 7
-	assertParse(t, `42 "hello" foo 7`, []engine.Value{
-		engine.NewInteger(42),
-		engine.NewString("hello"),
-		engine.NewWord("foo"),
-		engine.NewInteger(7),
+	assertParse(t, `42 "hello" foo 7`, []eng.Value{
+		eng.NewInteger(42),
+		eng.NewString("hello"),
+		eng.NewWord("foo"),
+		eng.NewInteger(7),
 	})
 }
 
@@ -456,43 +456,43 @@ func TestParseUnterminatedSingleQuote(t *testing.T) {
 // --- Multiline tests ---
 
 func TestParseNewlines(t *testing.T) {
-	assertParse(t, "1\nadd\n2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, "1\nadd\n2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseCRLF(t *testing.T) {
-	assertParse(t, "1\r\nadd\r\n2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, "1\r\nadd\r\n2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseBlankLines(t *testing.T) {
-	assertParse(t, "1\n\n\nadd\n\n2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, "1\n\n\nadd\n\n2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseMultilineWithTabs(t *testing.T) {
-	assertParse(t, "\t1\n\tadd\n\t2", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, "\t1\n\tadd\n\t2", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
 func TestParseMultilineWithComments(t *testing.T) {
 	src := "1 # first value\nadd # operator\n2 # second value"
-	assertParse(t, src, []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
+	assertParse(t, src, []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
 	})
 }
 
@@ -504,20 +504,20 @@ func TestParseMultilineScript(t *testing.T) {
 		add
 		get y
 	`
-	assertParse(t, src, []engine.Value{
-		engine.NewWord("set"),
-		engine.NewWord("x"),
-		engine.NewInteger(10),
-		engine.NewWord("end"),
-		engine.NewWord("set"),
-		engine.NewWord("y"),
-		engine.NewInteger(20),
-		engine.NewWord("end"),
-		engine.NewWord("get"),
-		engine.NewWord("x"),
-		engine.NewWord("add"),
-		engine.NewWord("get"),
-		engine.NewWord("y"),
+	assertParse(t, src, []eng.Value{
+		eng.NewWord("set"),
+		eng.NewWord("x"),
+		eng.NewInteger(10),
+		eng.NewWord("end"),
+		eng.NewWord("set"),
+		eng.NewWord("y"),
+		eng.NewInteger(20),
+		eng.NewWord("end"),
+		eng.NewWord("get"),
+		eng.NewWord("x"),
+		eng.NewWord("add"),
+		eng.NewWord("get"),
+		eng.NewWord("y"),
 	})
 }
 
@@ -525,27 +525,27 @@ func TestParseMultilineScript(t *testing.T) {
 
 func TestParseTypedListString(t *testing.T) {
 	// [:String] → typed list with child type string
-	assertParse(t, "[:String]", []engine.Value{
-		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
+	assertParse(t, "[:String]", []eng.Value{
+		eng.NewTypedList(eng.NewTypeLiteral(eng.TString)),
 	})
 }
 
 func TestParseTypedListNumber(t *testing.T) {
 	// [:Number] → typed list with child type number
-	assertParse(t, "[:Number]", []engine.Value{
-		engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)),
+	assertParse(t, "[:Number]", []eng.Value{
+		eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber)),
 	})
 }
 
 func TestParseTypedListBoolean(t *testing.T) {
-	assertParse(t, "[:Boolean]", []engine.Value{
-		engine.NewTypedList(engine.NewTypeLiteral(engine.TBoolean)),
+	assertParse(t, "[:Boolean]", []eng.Value{
+		eng.NewTypedList(eng.NewTypeLiteral(eng.TBoolean)),
 	})
 }
 
 func TestParseTypedListAny(t *testing.T) {
-	assertParse(t, "[:Any]", []engine.Value{
-		engine.NewTypedList(engine.NewTypeLiteral(engine.TAny)),
+	assertParse(t, "[:Any]", []eng.Value{
+		eng.NewTypedList(eng.NewTypeLiteral(eng.TAny)),
 	})
 }
 
@@ -563,7 +563,7 @@ func TestParseTypedListMap(t *testing.T) {
 	}
 	ct0a, _ := got[0].AsChildType()
 	child := ct0a.Child
-	if !child.VType.Equal(engine.TMap) {
+	if !child.VType.Equal(eng.TMap) {
 		t.Errorf("expected child type map, got %s", child.VType)
 	}
 	m := child.AsMap()
@@ -571,30 +571,30 @@ func TestParseTypedListMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.VType.Equal(engine.TNumber) {
+	if !xVal.VType.Equal(eng.TNumber) {
 		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal.VType)
 	}
 }
 
 func TestParseTypedListNested(t *testing.T) {
 	// [:[:String]] → typed list of typed lists of strings
-	assertParse(t, "[:[:String]]", []engine.Value{
-		engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TString))),
+	assertParse(t, "[:[:String]]", []eng.Value{
+		eng.NewTypedList(eng.NewTypedList(eng.NewTypeLiteral(eng.TString))),
 	})
 }
 
 func TestParseTypedListDeepNested(t *testing.T) {
 	// [:[:[:Number]]] → three levels deep
-	assertParse(t, "[:[:[:Number]]]", []engine.Value{
-		engine.NewTypedList(engine.NewTypedList(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber)))),
+	assertParse(t, "[:[:[:Number]]]", []eng.Value{
+		eng.NewTypedList(eng.NewTypedList(eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber)))),
 	})
 }
 
 func TestParseTypedListInExpression(t *testing.T) {
 	// 1 [:String] → integer then typed list
-	assertParse(t, "1 [:String]", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewTypedList(engine.NewTypeLiteral(engine.TString)),
+	assertParse(t, "1 [:String]", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewTypedList(eng.NewTypeLiteral(eng.TString)),
 	})
 }
 
@@ -619,56 +619,56 @@ func TestParseTypedListMapChild(t *testing.T) {
 
 func TestParseTypedMapString(t *testing.T) {
 	// {:String} → typed map with child type string
-	assertParse(t, "{:String}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
+	assertParse(t, "{:String}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypeLiteral(eng.TString)),
 	})
 }
 
 func TestParseTypedMapNumber(t *testing.T) {
 	// {:Number} → typed map with child type number
-	assertParse(t, "{:Number}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)),
+	assertParse(t, "{:Number}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypeLiteral(eng.TNumber)),
 	})
 }
 
 func TestParseTypedMapBoolean(t *testing.T) {
-	assertParse(t, "{:Boolean}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypeLiteral(engine.TBoolean)),
+	assertParse(t, "{:Boolean}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypeLiteral(eng.TBoolean)),
 	})
 }
 
 func TestParseTypedMapAny(t *testing.T) {
-	assertParse(t, "{:Any}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypeLiteral(engine.TAny)),
+	assertParse(t, "{:Any}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypeLiteral(eng.TAny)),
 	})
 }
 
 func TestParseTypedMapList(t *testing.T) {
 	// {:[:Number]} → typed map with child type [:Number]
-	assertParse(t, "{:[:Number]}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypedList(engine.NewTypeLiteral(engine.TNumber))),
+	assertParse(t, "{:[:Number]}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber))),
 	})
 }
 
 func TestParseTypedMapNested(t *testing.T) {
 	// {:{:String}} → typed map of typed maps of strings
-	assertParse(t, "{:{:String}}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TString))),
+	assertParse(t, "{:{:String}}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypeLiteral(eng.TString))),
 	})
 }
 
 func TestParseTypedMapDeepNested(t *testing.T) {
 	// {:{:{:Number}}} → three levels deep
-	assertParse(t, "{:{:{:Number}}}", []engine.Value{
-		engine.NewTypedMap(engine.NewTypedMap(engine.NewTypedMap(engine.NewTypeLiteral(engine.TNumber)))),
+	assertParse(t, "{:{:{:Number}}}", []eng.Value{
+		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypedMap(eng.NewTypeLiteral(eng.TNumber)))),
 	})
 }
 
 func TestParseTypedMapInExpression(t *testing.T) {
 	// 1 {:String} → integer then typed map
-	assertParse(t, "1 {:String}", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewTypedMap(engine.NewTypeLiteral(engine.TString)),
+	assertParse(t, "1 {:String}", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewTypedMap(eng.NewTypeLiteral(eng.TString)),
 	})
 }
 
@@ -683,7 +683,7 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	}
 	ct0c, _ := got[0].AsChildType()
 	child0c := ct0c.Child
-	if !child0c.VType.Equal(engine.TMap) {
+	if !child0c.VType.Equal(eng.TMap) {
 		t.Errorf("expected child type map, got %s", child0c.VType)
 	}
 	m := child0c.AsMap()
@@ -691,7 +691,7 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.VType.Equal(engine.TNumber) {
+	if !xVal.VType.Equal(eng.TNumber) {
 		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal.VType)
 	}
 }
@@ -707,7 +707,7 @@ func TestParseExplicitList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(engine.TList) {
+	if !got[0].VType.Equal(eng.TList) {
 		t.Fatalf("expected list, got %s", got[0].VType)
 	}
 	elems := got[0].AsList().Slice()
@@ -742,7 +742,7 @@ func TestParseMapWithList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(engine.TMap) {
+	if !got[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map, got %s", got[0].VType)
 	}
 	m := got[0].AsMap()
@@ -750,7 +750,7 @@ func TestParseMapWithList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x'")
 	}
-	if !xVal.VType.Equal(engine.TList) {
+	if !xVal.VType.Equal(eng.TList) {
 		t.Errorf("expected list, got %s", xVal.VType)
 	}
 	elems := xVal.AsList().Slice()
@@ -808,7 +808,7 @@ func TestParseMapWithTypeName(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Equal(engine.TNumber) {
+	if !xVal.VType.Equal(eng.TNumber) {
 		t.Errorf("expected number type literal, got %s", xVal.VType)
 	}
 }
@@ -824,7 +824,7 @@ func TestParseMapWithNestedMap(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	aVal, _ := m.Get("a")
-	if !aVal.VType.Equal(engine.TMap) {
+	if !aVal.VType.Equal(eng.TMap) {
 		t.Errorf("expected nested map, got %s", aVal.VType)
 	}
 }
@@ -833,15 +833,15 @@ func TestParseMapWithNestedMap(t *testing.T) {
 
 func TestParseParensInString(t *testing.T) {
 	// "(hello)" → the parens are inside a string, not structural
-	assertParse(t, `"(hello)"`, []engine.Value{engine.NewString("(hello)")})
+	assertParse(t, `"(hello)"`, []eng.Value{eng.NewString("(hello)")})
 }
 
 func TestParseNoParens(t *testing.T) {
 	// No parens — preprocessParens should be a no-op
-	assertParse(t, "1 2 3", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewInteger(2),
-		engine.NewInteger(3),
+	assertParse(t, "1 2 3", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewInteger(2),
+		eng.NewInteger(3),
 	})
 }
 
@@ -862,27 +862,27 @@ func TestParseEscapeInParenString(t *testing.T) {
 
 func TestParseSemicolonAsEnd(t *testing.T) {
 	// ";" should parse as the word "end"
-	assertParse(t, "1 add 2; 99", []engine.Value{
-		engine.NewInteger(1),
-		engine.NewWord("add"),
-		engine.NewInteger(2),
-		engine.NewWord("end"),
-		engine.NewInteger(99),
+	assertParse(t, "1 add 2; 99", []eng.Value{
+		eng.NewInteger(1),
+		eng.NewWord("add"),
+		eng.NewInteger(2),
+		eng.NewWord("end"),
+		eng.NewInteger(99),
 	})
 }
 
 func TestParseSemicolonStandalone(t *testing.T) {
-	assertParse(t, ";", []engine.Value{
-		engine.NewWord("end"),
+	assertParse(t, ";", []eng.Value{
+		eng.NewWord("end"),
 	})
 }
 
 func TestParseSemicolonAdjacentToWord(t *testing.T) {
 	// "foo;bar" — semicolon is a fixed token, so it splits the text
-	assertParse(t, "foo;bar", []engine.Value{
-		engine.NewWord("foo"),
-		engine.NewWord("end"),
-		engine.NewWord("bar"),
+	assertParse(t, "foo;bar", []eng.Value{
+		eng.NewWord("foo"),
+		eng.NewWord("end"),
+		eng.NewWord("bar"),
 	})
 }
 
@@ -943,12 +943,12 @@ func TestParseDataMapWithNestedList(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Equal(engine.TMap) {
+	if !xVal.VType.Equal(eng.TMap) {
 		t.Fatalf("expected nested map, got %s", xVal.VType)
 	}
 	inner := xVal.AsMap()
 	yVal, _ := inner.Get("y")
-	if !yVal.VType.Equal(engine.TList) {
+	if !yVal.VType.Equal(eng.TList) {
 		t.Errorf("expected list, got %s", yVal.VType)
 	}
 }
@@ -1010,7 +1010,7 @@ func TestParseDecimalNumber(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Matches(engine.TDecimal) {
+	if !got[0].VType.Matches(eng.TDecimal) {
 		t.Errorf("expected decimal type, got %s", got[0].VType)
 	}
 }
@@ -1024,7 +1024,7 @@ func TestParseDecimalInExpression(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 values, got %d", len(got))
 	}
-	if !got[0].VType.Matches(engine.TDecimal) {
+	if !got[0].VType.Matches(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", got[0].VType)
 	}
 }
@@ -1040,7 +1040,7 @@ func TestParseMapWithDecimal(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Matches(engine.TDecimal) {
+	if !xVal.VType.Matches(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", xVal.VType)
 	}
 }
@@ -1060,7 +1060,7 @@ func TestParseListWithMap(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(engine.TMap) {
+	if !elems[0].VType.Equal(eng.TMap) {
 		t.Errorf("expected map element, got %s", elems[0].VType)
 	}
 }
@@ -1120,31 +1120,31 @@ func TestParseMapSingleKey(t *testing.T) {
 
 func TestParseUnrecognizedModifier(t *testing.T) {
 	// foo/x → unrecognized modifier, treated as plain word "foo/x"
-	assertParse(t, "foo/x", []engine.Value{engine.NewWord("foo/x")})
+	assertParse(t, "foo/x", []eng.Value{eng.NewWord("foo/x")})
 }
 
 func TestParseSlashOnly(t *testing.T) {
 	// foo/ → trailing slash with no modifier text (idx == len(name)-1),
 	// so it's not matched by the modifier parsing
-	assertParse(t, "foo/", []engine.Value{engine.NewWord("foo/")})
+	assertParse(t, "foo/", []eng.Value{eng.NewWord("foo/")})
 }
 
 func TestParseEmptyDigitsEmptyRest(t *testing.T) {
 	// This covers the case where modifier is just "/" at end of string
 	// which doesn't trigger the modifier parsing (idx >= len(name)-1 check)
-	assertParse(t, "x/", []engine.Value{engine.NewWord("x/")})
+	assertParse(t, "x/", []eng.Value{eng.NewWord("x/")})
 }
 
 // --- Parens within different quote types ---
 
 func TestParseSingleQuoteWithParens(t *testing.T) {
 	// '(test)' → parens inside single-quoted string
-	assertParse(t, "'(test)'", []engine.Value{engine.NewString("(test)")})
+	assertParse(t, "'(test)'", []eng.Value{eng.NewString("(test)")})
 }
 
 func TestParseBacktickWithParens(t *testing.T) {
 	// `(test)` → parens inside backtick-quoted string
-	assertParse(t, "`(test)`", []engine.Value{engine.NewString("(test)")})
+	assertParse(t, "`(test)`", []eng.Value{eng.NewString("(test)")})
 }
 
 // --- Data context: typed list inside data value ---
@@ -1209,7 +1209,7 @@ func TestParseTopLevelMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(engine.TMap) {
+	if !got[0].VType.Equal(eng.TMap) {
 		t.Errorf("expected map, got %s", got[0].VType)
 	}
 }
@@ -1253,7 +1253,7 @@ func TestParseMapWithStringValues(t *testing.T) {
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
 	xValS, _ := xVal.AsString()
-	if !xVal.VType.Matches(engine.TString) || xValS != "hello" {
+	if !xVal.VType.Matches(eng.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1301,7 +1301,7 @@ func TestParseListWithBoolean(t *testing.T) {
 
 func TestParseNullValue(t *testing.T) {
 	// null at top level → word "null" (with Lex=false)
-	assertParse(t, "null", []engine.Value{engine.NewWord("null")})
+	assertParse(t, "null", []eng.Value{eng.NewWord("null")})
 }
 
 // --- Data context: map with nil value via jsonic ---
@@ -1318,11 +1318,11 @@ func TestParseDataMapNilValue(t *testing.T) {
 	m := got[0].AsMap()
 	// Check type literal resolution in data context
 	eVal, _ := m.Get("e")
-	if !eVal.VType.Equal(engine.TNumber) {
+	if !eVal.VType.Equal(eng.TNumber) {
 		t.Errorf("expected Number type literal, got %s", eVal.VType)
 	}
 	fVal, _ := m.Get("f")
-	if !fVal.VType.Equal(engine.TAny) {
+	if !fVal.VType.Equal(eng.TAny) {
 		t.Errorf("expected Any type literal, got %s", fVal.VType)
 	}
 }
@@ -1422,7 +1422,7 @@ func TestParseSlashFModifier(t *testing.T) {
 func TestFloatToValueWholeNumber(t *testing.T) {
 	// Whole number float → integer
 	v := floatToValue(42.0)
-	if !v.VType.Matches(engine.TInteger) {
+	if !v.VType.Matches(eng.TInteger) {
 		t.Errorf("expected integer, got %s", v.VType)
 	}
 }
@@ -1430,7 +1430,7 @@ func TestFloatToValueWholeNumber(t *testing.T) {
 func TestFloatToValueFractional(t *testing.T) {
 	// Fractional float → decimal
 	v := floatToValue(3.14)
-	if !v.VType.Matches(engine.TDecimal) {
+	if !v.VType.Matches(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", v.VType)
 	}
 }
@@ -1459,13 +1459,13 @@ func TestSortedKeysMultiple(t *testing.T) {
 func TestResolveTextValueTypes(t *testing.T) {
 	tests := []struct {
 		input string
-		check func(engine.Value) bool
+		check func(eng.Value) bool
 	}{
-		{"true", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && b }},
-		{"false", func(v engine.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(engine.TBoolean) && !b }},
-		{"Number", func(v engine.Value) bool { return v.VType.Equal(engine.TNumber) }},
-		{"String", func(v engine.Value) bool { return v.VType.Equal(engine.TString) }},
-		{"hello", func(v engine.Value) bool { s, _ := v.AsString(); return v.VType.Matches(engine.TAtom) && s == "hello" }},
+		{"true", func(v eng.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(eng.TBoolean) && b }},
+		{"false", func(v eng.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(eng.TBoolean) && !b }},
+		{"Number", func(v eng.Value) bool { return v.VType.Equal(eng.TNumber) }},
+		{"String", func(v eng.Value) bool { return v.VType.Equal(eng.TString) }},
+		{"hello", func(v eng.Value) bool { s, _ := v.AsString(); return v.VType.Matches(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -1483,7 +1483,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b1, _ := v.AsBoolean()
-	if !v.VType.Matches(engine.TBoolean) || !b1 {
+	if !v.VType.Matches(eng.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false)
@@ -1491,7 +1491,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b2, _ := v.AsBoolean()
-	if !v.VType.Matches(engine.TBoolean) || b2 {
+	if !v.VType.Matches(eng.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -1523,7 +1523,7 @@ func TestConvertDataValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b3, _ := v.AsBoolean()
-	if !v.VType.Matches(engine.TBoolean) || !b3 {
+	if !v.VType.Matches(eng.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }
@@ -1555,7 +1555,7 @@ func TestConvertDataValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(engine.TMap) {
+	if !v.VType.Equal(eng.TMap) {
 		t.Errorf("expected map, got %s", v.VType)
 	}
 }
@@ -1576,7 +1576,7 @@ func TestConvertTopLevelValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(engine.TMap) {
+	if !v.VType.Equal(eng.TMap) {
 		t.Errorf("expected map, got %s", v.VType)
 	}
 }
@@ -1634,14 +1634,14 @@ func TestParseImplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	if !list.VType.Equal(engine.TList) {
+	if !list.VType.Equal(eng.TList) {
 		t.Fatalf("expected list, got %s", list.VType)
 	}
 	elems := list.AsList().Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(engine.TMap) {
+	if !elems[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
 	m := elems[0].AsMutableMap()
@@ -1668,7 +1668,7 @@ func TestParseExplicitMapInList(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(engine.TMap) {
+	if !elems[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
 	m := elems[0].AsMutableMap()
@@ -1686,7 +1686,7 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	if !vals[0].VType.Equal(engine.TMap) {
+	if !vals[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
 	m := vals[0].AsMutableMap()
@@ -1721,7 +1721,7 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if len(alts) != 2 {
 		t.Fatalf("expected 2 alternatives, got %d", len(alts))
 	}
-	if !alts[1].VType.Equal(engine.TNone) {
+	if !alts[1].VType.Equal(eng.TNone) {
 		t.Errorf("expected second alternative to be None, got %s", alts[1].VType)
 	}
 }
@@ -1813,7 +1813,7 @@ func TestParseComputedKeyMultiple(t *testing.T) {
 
 func TestParseBacktickNoInterpolation(t *testing.T) {
 	// Backtick string without ${} is just a plain string.
-	assertParse(t, "`hello`", []engine.Value{engine.NewString("hello")})
+	assertParse(t, "`hello`", []eng.Value{eng.NewString("hello")})
 }
 
 func TestParseBacktickSimpleInterpolation(t *testing.T) {
@@ -1898,6 +1898,6 @@ func TestParseBacktickUnclosedInterpolation(t *testing.T) {
 
 func TestParseBacktickOnlyLiteral(t *testing.T) {
 	// Backtick string with $ but no ${ is just a plain string.
-	assertParse(t, "`price: $100`", []engine.Value{engine.NewString("price: $100")})
+	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
 }
 

@@ -13,22 +13,19 @@ build:
 run: build
 	./$(BINARY)
 
-# Runs the lang test suite, the eng kernel unit tests, and the eng
-# kernel spec runner (eng/test, a separate module).
+# Runs the lang test suite plus the eng module's tests (which now
+# include the parser and the kernel spec runner — eng is standalone).
 test:
 	go test ./...
 	cd ../eng/go && go test ./...
-	cd ../eng/test && go test ./...
 
 vet:
 	go vet ./...
 	cd ../eng/go && go vet ./...
-	cd ../eng/test && go vet ./...
 
 fmt:
 	gofmt -w .
 	cd ../eng/go && gofmt -w .
-	cd ../eng/test && gofmt -w .
 
 # Fail if any non-test runtime handler uses a single-value .Data.(Type)
 # assertion (panics on mismatch). Two-value (v, ok := ...) is safe.

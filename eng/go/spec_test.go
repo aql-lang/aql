@@ -1,12 +1,11 @@
-// Package engtest hosts the eng kernel's spec-runner test.
-//
-// Each TSV row under spec/ is parsed with the production AQL parser
-// (lang.Parse — the public seam over lang/internal/parser) and run
-// against a fresh eng.Registry pre-populated with eng.RegisterCoreWords
-// plus a fixed set of spec-runner test fixtures (q-suffixed). The
-// runner tests the engine kernel only — no production native words
-// (add, upper, …) are installed; the q-fixtures cover the same
-// dispatch / value / type-lattice ground in spec-stable minimal forms.
+// Spec-runner test for files under eng/go/spec/. Each TSV row is
+// parsed with the AQL parser (eng/parser, in this same module) and
+// run against a fresh eng.Registry pre-populated with
+// eng.RegisterCoreWords plus a fixed set of spec-runner test fixtures
+// (q-suffixed). The runner tests the engine kernel only — no
+// production native words (add, upper, …) are installed; the
+// q-fixtures cover the same dispatch / value / type-lattice ground in
+// spec-stable minimal forms.
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
@@ -14,9 +13,9 @@
 // is, none, end, …) keep their bare names because what's being tested
 // IS the keyword itself, not a fixture for it.
 //
-// This module depends on lang solely for lang.Parse. The kernel under
-// test (eng) does not depend on lang.
-package engtest
+// Both the runner and the parser it uses live in the eng module — eng
+// is completely standalone (it does not depend on lang).
+package eng_test
 
 import (
 	"bufio"
@@ -28,7 +27,7 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/eng"
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 )
 
 // specReplayCounter is bumped per call to the `replayq` test fixture
@@ -376,7 +375,7 @@ func runSpecFile(t *testing.T, path string) {
 
 		name := fmt.Sprintf("L%d_%s", lineNum, sanitiseSpecName(input))
 		t.Run(name, func(t *testing.T) {
-			values, err := lang.Parse(input)
+			values, err := parser.Parse(input)
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
