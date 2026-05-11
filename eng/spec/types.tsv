@@ -27,7 +27,7 @@
 #   6. `typeof v` returns a Type literal — the type of v as a value.		
 #      For a concrete value, returns its exact VType (`typeof 5 →		
 #      Integer`). For a type literal, returns its metatype (`typeof		
-#      Integer → ScalarType`). For `none`, returns None itself.		
+#      Integer → Type`). For `none`, returns None itself.		
 #		
 #   7. `v is T` returns Boolean — does v satisfy type T?		
 #		
@@ -96,9 +96,9 @@ Options	Options
 Any	Any	universal top type
 Never	Never	uninhabited bottom type
 Type	Type	metatype root
-ScalarType	ScalarType	metatype subkinds
-NodeType	NodeType	
-ObjectType	ObjectType	
+Type	Type	metatype subkinds
+Type	Type	
+Type	Type	
 Timeout	Timeout	temporal types
 Interval	Interval	
 		
@@ -184,14 +184,14 @@ typeof { }	Map
 typeof { x:1 }	Map	
 		
 # Type literals — typeof reports the metatype.		
-typeof Integer	ScalarType	Scalar/* → ScalarType
-typeof Decimal	ScalarType	
-typeof String	ScalarType	
-typeof Boolean	ScalarType	
-typeof Number	ScalarType	all Scalar/* including Number
-typeof Atom	ScalarType	
-typeof List	NodeType	Node/* → NodeType
-typeof Map	NodeType	
+typeof Integer	Type	Scalar/* → Type
+typeof Decimal	Type	
+typeof String	Type	
+typeof Boolean	Type	
+typeof Number	Type	all Scalar/* including Number
+typeof Atom	Type	
+typeof List	Type	Node/* → Type
+typeof Map	Type	
 typeof Scalar	Type	Scalar has 1 part → MetatypeFor → Type
 typeof Any	Type	Any has 1 part
 typeof Type	Type	the metatype root itself
@@ -201,8 +201,8 @@ def n 5 typeof n	Integer
 def s 'hi' typeof s	ProperString	
 		
 # typeof's result IS a Type — round-trips:		
-typeof typeof 5	ScalarType	typeof Integer = ScalarType
-typeof typeof 'x'	ScalarType	
+typeof typeof 5	Type	typeof Integer = Type
+typeof typeof 'x'	Type	
 typeof typeof none	Type	typeof none → None type literal; typeof None → metatype = Type (None has 1 part)
 		
 # =====================================================================		
@@ -219,8 +219,8 @@ type Bar String Bar	String
 type Pi Number Pi	Number	
 		
 # typeof resolves the Word to its bound type literal first.		
-type Foo Integer typeof Foo	ScalarType	Foo → Integer; typeof Integer → ScalarType
-type Lst List typeof Lst	NodeType	
+type Foo Integer typeof Foo	Type	Foo → Integer; typeof Integer → Type
+type Lst List typeof Lst	Type	
 		
 # Multiple type bindings live independently.		
 type Foo Integer type Bar String Foo Bar	Integer String	
@@ -232,17 +232,17 @@ type Foo Integer type Bar String Foo Bar	Integer String
 # shape: a map whose keys carry expected types. type can install one		
 # directly. Then `is` checks shape conformance.		
 		
-type R { x:Integer y:String } typeof R	NodeType	an implicit map is a Map; metatype is NodeType
+type R { x:Integer y:String } typeof R	Type	an implicit map is a Map; metatype is Type
 type R { x:Integer } R	{x:Integer}	the bound type literal renders as the implicit-map syntax
 		
 # Single-field record.		
-type Point { x:Integer y:Integer } typeof Point	NodeType	
+type Point { x:Integer y:Integer } typeof Point	Type	
 		
 # Record with mixed field types.		
-type Person { name:String age:Integer } typeof Person	NodeType	
+type Person { name:String age:Integer } typeof Person	Type	
 		
 # Nested-bracket record syntax — values can themselves be type literals.		
-type Nested { kind:String n:Number } typeof Nested	NodeType	
+type Nested { kind:String n:Number } typeof Nested	Type	
 		
 # =====================================================================		
 # 6. type — name validation		
@@ -271,7 +271,7 @@ type T Integer def t 5		T (type) and t (def) coexist
 # previous binding when the top is popped.		
 		
 type Foo Integer type Foo String Foo	String	the String binding shadows the Integer one
-type Foo Integer type Foo String typeof Foo	ScalarType	typeof on the shadow still reports ScalarType
+type Foo Integer type Foo String typeof Foo	Type	typeof on the shadow still reports Type
 type Foo Integer type Foo String untype Foo Foo	Integer	pop reveals the previous binding
 type Foo Integer untype Foo		untype on the only binding empties the stack
 type Foo Integer untype Foo Foo	ERROR:undefined_word	Foo is no longer a registered type
@@ -522,8 +522,8 @@ type Cube { :{ :[ :Integer ] } } { plane1:{ row1:[ 1 'x' ] } } is Cube	false	dee
 { a:1 b:'x' } is { :Integer }	false	
 		
 # typeof on a typed list/map type literal reports its metatype.		
-typeof [ :Integer ]	NodeType	[ :Integer ] has VType=List; metatype = NodeType
-typeof { :Integer }	NodeType	
+typeof [ :Integer ]	Type	[ :Integer ] has VType=List; metatype = Type
+typeof { :Integer }	Type	
 		
 # =====================================================================		
 # 11i. Typed list / map carrying both elements AND a child constraint		
@@ -628,27 +628,27 @@ quote red is enum [ ]	false	no alternatives means nothing satisfies
 # =====================================================================		
 # 11l. fnsig — body-less function-shape type		
 # =====================================================================		
-# `fnsig [ [in] [out] … ]` produces an FnSig type literal: a structural		
+# `fnsig [ [in] [out] … ]` produces an FunctionSignature type literal: a structural		
 # function-shape constraint with NO body. It is the type-only		
 # counterpart to `fn` (which always carries a body and produces a		
 # callable Function value — see function.tsv §6).		
 #		
-# An FnSig is not callable; its only role is as a type. The intended		
+# An FunctionSignature is not callable; its only role is as a type. The intended		
 # instantiation pattern is `type NAME fnsig […]` to name the shape,		
 # then `def f:NAME impl` to assert that `impl` satisfies the shape		
-# before binding. (Direct value matching of FnSig vs Function uses		
+# before binding. (Direct value matching of FunctionSignature vs Function uses		
 # the typed-def path; the spec runner's local fixtures don't include		
 # the unification machinery here, so this section sticks to what the		
 # core words alone can demonstrate.)		
 		
-# Bare fnsig produces an FnSig type literal.		
-typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less form yields an FnSig type literal
-fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
-typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
+# Bare fnsig produces an FunctionSignature type literal.		
+typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	body-less form yields an FunctionSignature type literal
+fnsig [ [ Integer ] [ Integer ] ] is FunctionSignature	true	is-test confirms the type
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	multi-pair fnsig is still FunctionSignature
 		
 # `type NAME fnsig […]` installs the shape under NAME; the named type		
-# is itself an FnSig.		
-type Mapper fnsig [ [ Integer ] [ Integer ] ] typeof Mapper	FnSig	named fnsig type round-trips through typeof
+# is itself an FunctionSignature.		
+type Mapper fnsig [ [ Integer ] [ Integer ] ] typeof Mapper	FunctionSignature	named fnsig type round-trips through typeof
 		
 # `fnsig` is strict about its outer-list grammar: each pair MUST be		
 # `[in] [out]` (length is non-zero multiple of 2). Adding a body		
@@ -660,7 +660,7 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 # 11m. Instantiated enum — `def x:Color quote red`		
 # =====================================================================		
 # Once an enum is registered as a type via `type Color enum […]`,		
-# Color is an FnSig-style disjunct constraint. The typed-def form		
+# Color is an FunctionSignature-style disjunct constraint. The typed-def form		
 # `def x:Color body` validates the body against Color: only members		
 # of the disjunct succeed, anything else triggers a type_error.		
 #		
@@ -736,5 +736,5 @@ firstq List	ERROR:signature
 lengthq Map	ERROR:signature	
 		
 # Type literals at TAny continue to pass through.		
-typeof Integer	ScalarType	[TAny] sig; type literal accepted, handler returns metatype
+typeof Integer	Type	[TAny] sig; type literal accepted, handler returns metatype
 typeof none	None	None at [TAny]

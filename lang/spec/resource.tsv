@@ -37,8 +37,8 @@
 		
 Resource	Resource	the bare type literal renders as its name
 Entity	Entity	
-typeof Resource	ObjectType	Resource's metatype is ObjectType
-typeof Entity	ObjectType	
+typeof Resource	Type	Resource's metatype is Type
+typeof Entity	Type	
 		
 # ====================================================================		
 # 2. Inheritance — Entity is Resource		
@@ -69,7 +69,7 @@ make Entity { kind:'db' spec:'users' entity:'user' } typeof	Entity
 # 4. is checks for the made instance		
 # ====================================================================		
 # An Entity instance satisfies Entity AND its parent Resource —		
-# inheritance flows through `is` for ObjectType values produced by		
+# inheritance flows through `is` for Type values produced by		
 # `make`.		
 		
 make Entity { kind:'api' spec:'x' entity:'y' } is Entity	true	is-check matches own type

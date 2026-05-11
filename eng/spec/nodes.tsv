@@ -12,7 +12,7 @@
 #		
 # Both are subtypes of the abstract `Node` (and, like everything, of		
 # `Any`). `typeof` on a bare `List`/`Map` type literal reports the		
-# metatype `NodeType`; on the abstract `Node`, `Type`.		
+# metatype `Type`; on the abstract `Node`, `Type`.		
 #		
 # Lists carry an `eval=true` flag from the parser and auto-evaluate in		
 # two contexts (see §4–§5):		
@@ -63,8 +63,8 @@ typeof [ ]	List	concrete list reports List
 typeof [ 1 2 3 ]	List	
 typeof { }	Map	concrete map reports Map
 typeof { a:1 b:2 }	Map	
-typeof List	NodeType	bare List type literal → metatype NodeType
-typeof Map	NodeType	
+typeof List	Type	bare List type literal → metatype Type
+typeof Map	Type	
 typeof Node	Type	the abstract Node supertype → metatype Type
 		
 # `is` against the exact node type.		

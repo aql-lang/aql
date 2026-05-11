@@ -35,14 +35,12 @@ var typeNameEntries = []struct {
 	{"Entity", TResourceEntity},
 	{"Array", TArray},
 	{"Type", TType},
-	{"ScalarType", TScalarType},
-	{"NodeType", TNodeType},
-	{"ObjectType", TObjectType},
 	{"Timeout", TTimeout},
 	{"Interval", TInterval},
 	{"Function", TFunction},
-	{"FnSig", TFnUndef},
+	{"FunctionSignature", TFnUndef},
 	{"Disjunct", TDisjunct},
+	{"Enum", TEnum},
 }
 
 // typeNames maps well-known type names to their Type, so bare words like
@@ -76,10 +74,10 @@ var typeNamesByTypeID = func() map[string]string {
 }()
 
 // TypeNameByID returns the canonical user-facing name for a Type ID
-// (e.g. "Word/__UF" → "FnSig", "Word/Function" → "Function"). Returns
-// the empty string if no entry exists. Renderers should prefer this
-// over Type.Leaf() when displaying type literals to users, since some
-// type IDs use internal sentinels for their leaf segment.
+// (e.g. the ID for "Type/FunctionSignature" → "FunctionSignature").
+// Returns the empty string if no entry exists. Renderers may use this
+// to display a type literal's well-known name; for well-named builtin
+// types it equals Type.Leaf().
 func TypeNameByID(id string) string {
 	return typeNamesByTypeID[id]
 }

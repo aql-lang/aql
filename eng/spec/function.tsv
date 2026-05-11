@@ -159,7 +159,7 @@ def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] ( 3 double ) ( 5 double
 # 5. Multi-sig fn — N triples in the outer list		
 # ====================================================================		
 # A single outer list contains [in out body in out body …]. Each		
-# triple becomes one FnSig. Dispatch picks the matching sig at the		
+# triple becomes one FunctionSignature. Dispatch picks the matching sig at the		
 # call site by arity (arg count) and type (most-specific first).		
 		
 # Two arity overloads: 1-arg (double) and 2-arg (multiply).		
@@ -209,19 +209,19 @@ fn [ ]	ERROR:multiple of 3	empty list is rejected — fn requires at least one t
 # ====================================================================		
 # 6b. fnsig — body-less function-shape type		
 # ====================================================================		
-# `fnsig [ [in] [out] … ]` produces an FnSig type literal — a		
+# `fnsig [ [in] [out] … ]` produces an FunctionSignature type literal — a		
 # structural function-shape constraint. The outer list MUST be a		
 # non-zero multiple of 2 (input output pairs, no body). Each pair		
-# becomes one signature in the shape. FnSig values are not callable;		
+# becomes one signature in the shape. FunctionSignature values are not callable;		
 # they are intended as type constraints (see types.tsv §11l for the		
 # `def f:fnsig […] impl` instantiation pattern).		
 		
 # Single-sig shape — Integer → Integer.		
-typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less type form yields FnSig
-fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
+typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	body-less type form yields FunctionSignature
+fnsig [ [ Integer ] [ Integer ] ] is FunctionSignature	true	is-test confirms the type
 		
 # Multi-sig shape — overloaded shape with two pairs.		
-typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	multi-pair fnsig is still FunctionSignature
 		
 # Mod-2 strictness — fnsig rejects non-pair shapes. The error directs		
 # the caller toward `fn` for the with-body form.		

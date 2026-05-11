@@ -6,17 +6,18 @@
 # `typeof v` returns the type of `v` as a Type literal:		
 #   - a concrete value → its exact VType (Integer, ProperString, …);		
 #   - the unique `none` value → None;		
-#   - a type literal → its metatype: a Scalar.. subtype → ScalarType,		
-#     a Node.. subtype → NodeType, an Object.. subtype → ObjectType,		
-#     and the abstract roots (Any, Scalar, Node, Object) → Type;		
-#   - `typeof typeof v` therefore reports the metatype.		
+#   - ANY type literal → `Type`. Metatypes are collapsed: the		
+#     type-of-a-type-literal is uniformly `Type` — there is no		
+#     ScalarType / NodeType / ObjectType layer. So `typeof typeof v`		
+#     is always `Type`.		
 #		
-# `typepathof v` returns the ancestry path of `typeof v` as a List of		
-# Type literals, root first, leaf last — the last element always		
+# `typepathof v` returns the ancestry path of `typeof v` as a List		
+# of Type literals, root first, leaf last — the last element always		
 # equals `typeof v`:		
 #   typepathof 'a'  → [Scalar String ProperString]		
 #   typepathof 5    → [Scalar Number Integer]		
 #   typepathof none → [None]		
+#   typepathof Integer (a type literal) → [Type]		
 #		
 # === Test fixtures (eng/go/spec_test.go::registerSpecWords) ===		
 #   lengthq — [List] forward-prec — list length		
@@ -52,47 +53,66 @@ typeof [ 1 2 3 ]	List
 typeof { }	Map	
 typeof { a:1 b:2 }	Map	
 typeof [ [ 1 ] { a:2 } ]	List	a list of mixed nodes is still a List
+typeof { a:[ 1 ] b:{ c:2 } }	Map	a map with mixed node values is still a Map
 		
 # ====================================================================		
-# 3. typeof — type literals report their metatype		
+# 3. typeof — type literals: every one reports `Type`		
 # ====================================================================		
 		
-typeof Integer	ScalarType	
-typeof Number	ScalarType	
-typeof String	ScalarType	
-typeof Boolean	ScalarType	
-typeof Atom	ScalarType	
-typeof Path	ScalarType	
-typeof List	NodeType	
-typeof Map	NodeType	
-typeof Resource	ObjectType	an Object subtype → ObjectType
-typeof Entity	ObjectType	
-typeof Any	Type	the abstract top type → Type
-typeof Node	Type	the abstract Node root → Type (not NodeType)
-typeof Scalar	Type	the abstract Scalar root → Type (not ScalarType)
-typeof Object	Type	the abstract Object root → Type (not ObjectType)
+typeof Integer	Type	metatypes are collapsed — no ScalarType layer
+typeof Number	Type	
+typeof String	Type	
+typeof Boolean	Type	
+typeof Atom	Type	
+typeof Path	Type	
+typeof List	Type	no NodeType layer either
+typeof Map	Type	
+typeof Object	Type	
+typeof Resource	Type	no ObjectType layer either
+typeof Entity	Type	
+typeof Function	Type	the Function *type* literal
+typeof FunctionSignature	Type	
+typeof Disjunct	Type	
+typeof Enum	Type	
+typeof Any	Type	
+typeof Node	Type	
+typeof Scalar	Type	
+typeof Type	Type	the Type type literal is itself a Type
 		
 # ====================================================================		
-# 4. typeof — richer values		
+# 4. typeof — function / fnsig / enum / tor values		
 # ====================================================================		
 		
-typeof fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]	Function	a function value
-typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	a function-shape type value
-typeof enum [ red green blue ]	Disjunct	an enum builds a Disjunct type value
+typeof fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]	Function	a one-signature function value
+typeof fn [ Integer Integer [ addq 1 ] ]	Function	abbreviated form: bare input/output types, no param lists
+typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ s:String ] [ String ] [ s ] ]	Function	a multi-signature function (two triples) — still a Function
+typeof fn [ Integer Integer [ a ] String String [ s ] ]	Function	multi-signature in the abbreviated form
+typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	a one-signature function-shape type value
+typeof fnsig [ Integer Integer ]	FunctionSignature	abbreviated form: bare types, no body
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	a multi-signature shape — still a FunctionSignature
+typeof fnsig [ Integer Integer String String ]	FunctionSignature	multi-signature shape, abbreviated form
+typeof enum [ red green blue ]	Enum	an enum value is an Enum (subtype of Disjunct)
+typeof ( Integer tor Boolean )	Disjunct	a `tor` union is a plain Disjunct
 		
 # ====================================================================		
 # 5. typeof — round-trips		
 # ====================================================================		
 		
-5 is ( typeof 5 )	true	a value satisfies its own type
+5 is ( typeof 5 )	true	a CONCRETE value satisfies its own type
 'a' is ( typeof 'a' )	true	
 true is ( typeof true )	true	
 [ 1 2 ] is ( typeof [ 1 2 ] )	true	
 { a:1 } is ( typeof { a:1 } )	true	
-typeof typeof 5	ScalarType	the metatype of Integer
-typeof typeof 'a'	ScalarType	the metatype of ProperString
-typeof typeof [ 1 ]	NodeType	the metatype of List
-typeof typeof { a:1 }	NodeType	the metatype of Map
+( quote red ) is ( typeof ( quote red ) )	true	
+Integer is ( typeof Integer )	false	a TYPE literal does not satisfy its own typeof (`typeof Integer` is `Type`, and `Integer is Type` is false)
+typeof 5 is Type	false	`typeof 5` is the type literal `Integer`, whose own type is `Scalar/…`, not `Type`
+typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`
+typeof typeof 5	Type	typeof of any type literal is `Type`
+typeof typeof 'a'	Type	
+typeof typeof [ 1 ]	Type	
+typeof typeof { a:1 }	Type	
+typeof typeof Integer	Type	
+typeof typeof none	Type	`typeof none` is the type literal `None`, whose own `typeof` is `Type`
 		
 # ====================================================================		
 # 6. typepathof — the ancestry path		
@@ -108,14 +128,24 @@ typepathof ( quote red )	[Scalar Atom]
 typepathof none	[None]	None has no ancestors
 typepathof [ 1 2 3 ]	[Node List]	
 typepathof { a:1 }	[Node Map]	
-typepathof fn [ [ a:Integer ] [ Integer ] [ a ] ]	[Word Function]	
-typepathof fnsig [ [ Integer ] [ Integer ] ]	[Word FnSig]	
-typepathof enum [ a b c ]	[Word Disjunct]	
-typepathof Integer	[Type ScalarType]	a type literal → the path of its metatype
-typepathof List	[Type NodeType]	
-typepathof Any	[Type]	
+typepathof ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	[Type Function]	a function value: parent of Function is Type
+typepathof ( fnsig [ [ Integer ] [ Integer ] ] )	[Type FunctionSignature]	
+typepathof ( enum [ a b c ] )	[Type Disjunct Enum]	Enum is a subtype of Disjunct, whose parent is Type
+typepathof ( Integer tor Boolean )	[Type Disjunct]	
 typepathof pi	[Scalar Number Integer]	a def-bound reference resolves first
 typepathof greeting	[Scalar String ProperString]	
+		
+# Every type literal collapses to the single-element path [Type] —		
+# its `typeof` is `Type`, which has no ancestors.		
+typepathof Integer	[Type]	
+typepathof String	[Type]	
+typepathof List	[Type]	
+typepathof Map	[Type]	
+typepathof Resource	[Type]	
+typepathof Function	[Type]	the Function *type* literal — distinct from a function VALUE above
+typepathof Enum	[Type]	
+typepathof Any	[Type]	
+typepathof Type	[Type]	
 		
 # ====================================================================		
 # 7. typepathof — structure of the result		
@@ -127,12 +157,15 @@ lengthq ( typepathof 5 )	3	Scalar / Number / Integer
 lengthq ( typepathof true )	2	Scalar / Boolean
 lengthq ( typepathof none )	1	just None
 lengthq ( typepathof [ 1 2 ] )	2	Node / List
+lengthq ( typepathof Integer )	1	a type literal collapses to [Type]
 firstq ( typepathof 'a' )	Scalar	every scalar path is rooted at Scalar
 firstq ( typepathof 5 )	Scalar	
 firstq ( typepathof [ 1 2 ] )	Node	node paths are rooted at Node
+firstq ( typepathof ( enum [ a b ] ) )	Type	function / disjunct / enum paths are rooted at Type
 firstq ( typepathof 'a' ) is Scalar	true	the root element is the Scalar type literal
 firstq ( typepathof 'a' ) is Number	false	Scalar is not a Number — subtyping runs the other way
 ( typepathof 5 ) is [ Scalar Number Integer ]	true	the whole path matches a literal template of type literals
 ( typepathof 'a' ) is [ Scalar String ProperString ]	true	
 ( typepathof 5 ) is [ Scalar Number String ]	false	wrong leaf
 ( typepathof none ) is [ None ]	true	
+( typepathof ( enum [ a b ] ) ) is [ Type Disjunct Enum ]	true	

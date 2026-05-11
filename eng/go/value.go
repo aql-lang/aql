@@ -857,6 +857,15 @@ func NewDisjunct(alternatives []Value) Value {
 	return NewValueRaw(TDisjunct, DisjunctInfo{Alternatives: alternatives})
 }
 
+// NewEnum creates an Enum value (Type/Disjunct/Enum) — a fixed
+// enumeration of named values. Structurally identical to a Disjunct
+// (same DisjunctInfo payload) but tagged with the more specific Enum
+// type so `typeof` reports `Enum` and the value can be distinguished
+// from a general type-disjunct.
+func NewEnum(alternatives []Value) Value {
+	return NewValueRaw(TEnum, DisjunctInfo{Alternatives: alternatives})
+}
+
 // NewObjectType creates an object type value. The type path is derived from
 // the ObjectTypeInfo.Name field. If Name is empty, the ID is used as the
 // type path suffix under "Object/".
@@ -1230,10 +1239,12 @@ func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
 	return info, nil
 }
 
-// IsDisjunct reports whether this value is a disjunction type.
+// IsDisjunct reports whether this value is a disjunction type — a
+// plain Disjunct (Type/Disjunct) or any subtype such as an Enum
+// (Type/Disjunct/Enum).
 func (v Value) IsDisjunct() bool {
 	_, ok := v.Data.(DisjunctInfo)
-	return ok && v.VType.Equal(TDisjunct)
+	return ok && v.VType.Matches(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.

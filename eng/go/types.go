@@ -37,46 +37,47 @@ var typeRoots = map[string]bool{
 // typeAncestry maps short (legacy) first-part names to their full ancestry
 // prefix. NewType auto-expands paths whose first part appears here.
 var typeAncestry = map[string]string{
-	"String":      "Scalar/String",
-	"Number":      "Scalar/Number",
-	"Integer":     "Scalar/Number/Integer",
-	"Decimal":     "Scalar/Number/Decimal",
-	"Boolean":     "Scalar/Boolean",
-	"Path":        "Scalar/Path",
-	"Atom":        "Scalar/Atom",
-	"List":        "Node/List",
-	"Map":         "Node/Map",
-	"Table":       "Object/Table",
-	"Record":      "Object/Record",
-	"Store":       "Object/Store",
-	"Array":       "Object/Array",
-	"Mark":        "Word/__MK",
-	"Move":        "Word/__MV",
-	"Forward":     "Word/__FW",
-	"Paren":       "Word/__OP",
-	"Fndef":       "Word/__FN",
-	"Fnundef":     "Word/__UF",
-	"Function":    "Word/Function",
-	"Returncheck": "Word/__RC",
-	"Disjunct":    "Word/__DJ",
-	"Module":      "Word/__MD",
-	"Error":       "Object/Error",
-	"Resource":    "Object/Resource",
-	"Entity":      "Object/Resource/Entity",
-	"ScalarType":  "Type/ScalarType",
-	"NodeType":    "Type/NodeType",
-	"ObjectType":  "Type/ObjectType",
-	"Date":        "Scalar/Time/Date",
-	"DateTime":    "Scalar/Time/DateTime",
-	"Instant":     "Scalar/Time/Instant",
-	"TimeOfDay":   "Scalar/Time/TimeOfDay",
-	"CalDuration": "Scalar/Time/Duration/CalDuration",
-	"ClkDuration": "Scalar/Time/Duration/ClkDuration",
-	"Timezone":    "Scalar/Time/Timezone",
-	"Matrix":      "Scalar/Number/Matrix",
-	"Timeout":     "Object/Timeout",
-	"Interval":    "Object/Interval",
-	"DepInteger":  "Type/Dependent/DepInteger",
+	"String":            "Scalar/String",
+	"Number":            "Scalar/Number",
+	"Integer":           "Scalar/Number/Integer",
+	"Decimal":           "Scalar/Number/Decimal",
+	"Boolean":           "Scalar/Boolean",
+	"Path":              "Scalar/Path",
+	"Atom":              "Scalar/Atom",
+	"List":              "Node/List",
+	"Map":               "Node/Map",
+	"Table":             "Object/Table",
+	"Record":            "Object/Record",
+	"Store":             "Object/Store",
+	"Array":             "Object/Array",
+	"Mark":              "Word/__MK",
+	"Move":              "Word/__MV",
+	"Forward":           "Word/__FW",
+	"Paren":             "Word/__OP",
+	"Fndef":             "Word/__FN",
+	"FunctionSignature": "Type/FunctionSignature",
+	"Function":          "Type/Function",
+	"Returncheck":       "Word/__RC",
+	"Disjunct":          "Type/Disjunct",
+	"Enum":              "Type/Disjunct/Enum",
+	"Module":            "Word/__MD",
+	"Error":             "Object/Error",
+	"Resource":          "Object/Resource",
+	"Entity":            "Object/Resource/Entity",
+	"Date":              "Scalar/Time/Date",
+	"DateTime":          "Scalar/Time/DateTime",
+	"Instant":           "Scalar/Time/Instant",
+	"TimeOfDay":         "Scalar/Time/TimeOfDay",
+	"CalDuration":       "Scalar/Time/Duration/CalDuration",
+	"ClkDuration":       "Scalar/Time/Duration/ClkDuration",
+	"Timezone":          "Scalar/Time/Timezone",
+	"Matrix":            "Scalar/Number/Matrix",
+	"Timeout":           "Object/Timeout",
+	"Interval":          "Object/Interval",
+	"DepInteger":        "Type/Dependent/DepInteger",
+	"ScalarType":        "Type/ScalarType",
+	"NodeType":          "Type/NodeType",
+	"ObjectType":        "Type/ObjectType",
 }
 
 // Well-known types.
@@ -102,16 +103,17 @@ var (
 	TRecord         = mustType("Object/Record")
 	TAtom           = mustType("Scalar/Atom")
 	TWord           = mustType("Word")
-	TFunction       = mustType("Word/Function")
+	TFunction       = mustType("Type/Function")
 	TForward        = mustType("Word/__FW")
 	TOpenParen      = mustType("Word/__OP")
 	TParenExpr      = mustType("Word/__PE")
 	TInterpString   = mustType("Word/__IS")
 	TFnDef          = mustType("Word/__FN")
-	TFnUndef        = mustType("Word/__UF")
+	TFnUndef        = mustType("Type/FunctionSignature")
 	TReturnCheck    = mustType("Word/__RC")
 	TDefCleanup     = mustType("Word/__IN/__DC")
-	TDisjunct       = mustType("Word/__DJ")
+	TDisjunct       = mustType("Type/Disjunct")
+	TEnum           = mustType("Type/Disjunct/Enum")
 	TMark           = mustType("Word/__MK")
 	TMove           = mustType("Word/__MV")
 	TModule         = mustType("Word/__MD")
@@ -169,15 +171,16 @@ var BuiltinTypeIDs = map[string]int{
 	"Object/Record":                    16,
 	"Word":                             17,
 	"Scalar/Atom":                      18,
-	"Word/Function":                    19,
+	"Type/Function":                    19,
 	"Word/__IN":                        20,
 	"Word/__IN/__DC":                   20,
 	"Word/__FW":                        21,
 	"Word/__OP":                        22,
 	"Word/__FN":                        23,
-	"Word/__UF":                        24,
+	"Type/FunctionSignature":           24,
 	"Word/__RC":                        25,
-	"Word/__DJ":                        26,
+	"Type/Disjunct":                    26,
+	"Type/Disjunct/Enum":               62,
 	"Word/__MK":                        27,
 	"Word/__MV":                        28,
 	"Word/__MD":                        29,

@@ -17,7 +17,9 @@ import (
 //
 //	typeof v          — return the type of v as a type-literal Value
 //	                    (e.g. typeof 5 → Integer, typeof Integer →
-//	                    ScalarType, typeof none → None).
+//	                    Type, typeof none → None). The type-of any
+//	                    type literal is uniformly `Type` — there is no
+//	                    ScalarType / NodeType / ObjectType layer.
 //
 //	v is T            — Boolean: does v satisfy type T? Forward sig is
 //	                    [Any | Any], so `5 is Integer` reads naturally
@@ -38,12 +40,14 @@ func registerCoreType(r *Registry) {
 }
 
 // registerCoreEnum installs `enum [a b c]` — fixed-enumeration type
-// builder. Returns a Disjunct whose alternatives are the list's
-// elements (Words become Atoms so `enum [red green blue]` defines an
-// enum of three named values without requiring `quote`).
+// builder. Returns an Enum value (type Type/Disjunct/Enum — a
+// subtype of Disjunct) whose alternatives are the list's elements
+// (Words become Atoms so `enum [red green blue]` defines an enum of
+// three named values without requiring `quote`). `typeof` reports
+// `Enum`; structurally it behaves as a disjunct for `is` / unify.
 //
-// When the list carries a child-type constraint (`[: T a b c]`), each
-// element is validated against T before being added to the disjunct.
+// When the list carries a child-type constraint (`[ :T a b c]`), each
+// element is validated against T before being added to the enum.
 //
 // Used in the same shape as `fn`:
 //
@@ -95,9 +99,9 @@ func registerCoreEnum(r *Registry) {
 					}
 					alts = append(alts, e)
 				}
-				return []Value{NewDisjunct(alts)}, nil
+				return []Value{NewEnum(alts)}, nil
 			},
-			Returns: []Type{TDisjunct},
+			Returns: []Type{TEnum},
 		}},
 	})
 }
@@ -166,19 +170,20 @@ func registerCoreUntypeWord(r *Registry) {
 //	typeof none         → None           (None has a single inhabitant)
 //	typeof [ 1 2 ]      → List
 //	typeof { a:1 }      → Map
-//	typeof Integer      → ScalarType     (type literals → their metatype)
-//	typeof List         → NodeType
+//	typeof Integer      → Type            (ANY type literal → Type)
+//	typeof List         → Type
 //	typeof Any          → Type
 //
 // Rules:
 //   - For `none` (the unique inhabitant of None), return None itself.
-//   - For any other type literal (Data == nil), return its metatype
-//     (Type/* — ScalarType / NodeType / ObjectType / Type).
+//   - For any other type literal (Data == nil), return `Type`.
+//     Metatypes are collapsed — there is no ScalarType / NodeType /
+//     ObjectType layer; the type-of-a-type-literal is uniformly `Type`.
 //   - For a concrete value (Data != nil), return its full VType.
 //
 // typeof's result is itself a type literal so it round-trips: passing
-// the result to `is` or chaining `typeof typeof v` produces the
-// expected metatype-of-metatype answers.
+// the result to `is` or chaining `typeof typeof v` (always `Type`)
+// produces the expected answers.
 func registerCoreTypeof(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "typeof",
@@ -204,7 +209,7 @@ func registerCoreTypeof(r *Registry) {
 //	typepathof [ 1 2 ] → [Node List]
 //	typepathof { a:1 } → [Node Map]
 //	typepathof none    → [None]
-//	typepathof Integer → [Type ScalarType]   (type literal → metatype path)
+//	typepathof Integer → [Type]              (every type literal collapses to [Type])
 //
 // The last element always equals `typeof v`. Each element is a Type
 // literal naming a progressively-deeper type along the path, so they
@@ -247,23 +252,24 @@ func TypeOf(v Value) Value {
 	if v.IsNone() {
 		return NewTypeLiteral(TNone)
 	}
-	// A type literal (Data == nil, includes the None type literal) →
-	// metatype.
+	// A type literal (Data == nil) → `Type`. Metatypes are collapsed:
+	// the type-of-a-type-literal is uniformly `Type` (not ScalarType /
+	// NodeType / ObjectType).
 	if v.Data == nil {
-		return NewTypeLiteral(MetatypeFor(v.VType))
+		return NewTypeLiteral(TType)
 	}
 	// Typed list `[:T]` or typed map `{:T}` — Node-family TYPE
 	// declarations carrying a child-type constraint, not concrete
-	// containers. Report the metatype.
+	// containers. They are types → `Type`.
 	if v.IsTypedList() || v.IsTypedMap() {
-		return NewTypeLiteral(MetatypeFor(v.VType))
+		return NewTypeLiteral(TType)
 	}
 	// An implicit-map record shape (every entry's value is itself a
 	// type body — type literal or nested shape) is a Node-family TYPE,
-	// not a concrete map. Report its metatype (NodeType) so user code
-	// can branch on shape vs concrete map without inspecting the data.
+	// not a concrete map → `Type`, so user code can branch on shape
+	// vs concrete map without inspecting the data.
 	if IsRecordShape(v) {
-		return NewTypeLiteral(MetatypeFor(v.VType))
+		return NewTypeLiteral(TType)
 	}
 	// Concrete value — its exact VType.
 	return NewTypeLiteral(v.VType)

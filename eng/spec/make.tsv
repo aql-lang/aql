@@ -5,11 +5,11 @@
 # `make TARGET data` is AQL's general-purpose value constructor. The		
 # target dictates the construction strategy:		
 #		
-#   make ScalarType v          coerce v to ScalarType (parse / cast)		
-#   make ScalarType {opts} v   scalar with options (e.g. Path { abs:true })		
+#   make Type v          coerce v to Type (parse / cast)		
+#   make Type {opts} v   scalar with options (e.g. Path { abs:true })		
 #   make Path s | [parts]      build a Path from a string or list		
 #   make Options {map}         wrap a map as an Options instance		
-#   make ObjectType {data}     instantiate a named object — see object.tsv		
+#   make Type {data}     instantiate a named object — see object.tsv		
 #   make RecordType {data}     instantiate a named record — see record.tsv		
 #		
 # Dispatch is order-agnostic for the two-arg form: the matcher		

@@ -14,7 +14,7 @@
 # 1. The most recent `def` for a name wins until shadowed again or popped.		
 # 2. Shadowing is per-name; a `def x` does not affect a `def y`.		
 # 3. Shadowing applies to ALL def kinds: simple values, fn definitions,		
-#    list bodies, and (would apply to) ObjectType bindings.		
+#    list bodies, and (would apply to) Type bindings.		
 # 4. A def binding can shadow a registered builtin function. This is		
 #    tested in resolution.tsv with `def addq 99 addq → 99`. Re-pinned		
 #    here as part of the shadow story.		

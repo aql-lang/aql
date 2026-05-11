@@ -2976,31 +2976,34 @@ func TestTypeofMetatypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Metatypes are collapsed: typeof / fulltypeof of ANY type literal
+	// is uniformly "Type" — there is no ScalarType / NodeType /
+	// ObjectType layer at the surface.
 	tests := []struct {
 		name     string
 		typeLit  Value
 		wantType string // expected typeof result
 		wantFull string // expected fulltypeof result
 	}{
-		{"String", NewTypeLiteral(TString), "ScalarType", "Type/ScalarType"},
-		{"Number", NewTypeLiteral(TNumber), "ScalarType", "Type/ScalarType"},
-		{"Integer", NewTypeLiteral(TInteger), "ScalarType", "Type/ScalarType"},
-		{"Decimal", NewTypeLiteral(TDecimal), "ScalarType", "Type/ScalarType"},
-		{"Boolean", NewTypeLiteral(TBoolean), "ScalarType", "Type/ScalarType"},
-		{"List", NewTypeLiteral(TList), "NodeType", "Type/NodeType"},
-		{"Map", NewTypeLiteral(TMap), "NodeType", "Type/NodeType"},
+		{"String", NewTypeLiteral(TString), "Type", "Type"},
+		{"Number", NewTypeLiteral(TNumber), "Type", "Type"},
+		{"Integer", NewTypeLiteral(TInteger), "Type", "Type"},
+		{"Decimal", NewTypeLiteral(TDecimal), "Type", "Type"},
+		{"Boolean", NewTypeLiteral(TBoolean), "Type", "Type"},
+		{"List", NewTypeLiteral(TList), "Type", "Type"},
+		{"Map", NewTypeLiteral(TMap), "Type", "Type"},
 		{"Scalar", NewTypeLiteral(TScalar), "Type", "Type"},
 		{"Node", NewTypeLiteral(TNode), "Type", "Type"},
 		{"Any", NewTypeLiteral(TAny), "Type", "Type"},
 		{"None", NewTypeLiteral(TNone), "Type", "Type"},
 		{"Object", NewTypeLiteral(TObject), "Type", "Type"},
-		{"Table", NewTypeLiteral(TTable), "ObjectType", "Type/ObjectType"},
-		{"Record", NewTypeLiteral(TRecord), "ObjectType", "Type/ObjectType"},
-		{"Resource", NewTypeLiteral(TResource), "ObjectType", "Type/ObjectType"},
-		{"Atom", NewTypeLiteral(TAtom), "ScalarType", "Type/ScalarType"},
+		{"Table", NewTypeLiteral(TTable), "Type", "Type"},
+		{"Record", NewTypeLiteral(TRecord), "Type", "Type"},
+		{"Resource", NewTypeLiteral(TResource), "Type", "Type"},
+		{"Atom", NewTypeLiteral(TAtom), "Type", "Type"},
 		{"Type", NewTypeLiteral(TType), "Type", "Type"},
-		{"ScalarType", NewTypeLiteral(TScalarType), "Type", "Type"},
-		{"NodeType", NewTypeLiteral(TNodeType), "Type", "Type"},
+		{"Function", NewTypeLiteral(TFunction), "Type", "Type"},
+		{"Disjunct", NewTypeLiteral(TDisjunct), "Type", "Type"},
 	}
 
 	for _, tt := range tests {

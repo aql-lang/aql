@@ -6,12 +6,12 @@
 # mechanics of List/Map (construction, auto-eval, quoting) with mostly		
 # scalar contents, this file focuses on what happens when the *values*		
 # inside a structure are richer: type literals, record-shape maps,		
-# enums (disjuncts), Function values, FnSig type values, and atoms —		
+# enums (disjuncts), Function values, FunctionSignature type values, and atoms —		
 # and especially on `def` / `type` references to such values resolving		
 # arbitrarily deep inside nested Lists and Maps.		
 #		
 # Notes on a couple of rough edges:		
-#   - Function and FnSig *values* stringify verbosely (they carry		
+#   - Function and FunctionSignature *values* stringify verbosely (they carry		
 #     whole signature structs), so rows that embed them check the		
 #     containing Node's `typeof` / `is` rather than rendering the		
 #     value itself.		
@@ -20,7 +20,7 @@
 #     embedding the function value — so `def f fn[…] {x:f}` is an		
 #     error, not `{x:<fn>}`. To embed a function value, write the		
 #     `( fn … )` literal inline.		
-#   - Object / record *instances* (via `make ObjectType …` /		
+#   - Object / record *instances* (via `make Type …` /		
 #     `make RecordType …`) need the production constructor words		
 #     (`object`, `record`) which aren't in the kernel — those are		
 #     covered in lang/spec/object.tsv and lang/spec/record.tsv. A		
@@ -64,7 +64,7 @@ type IdType Integer [ IdType String ]	[Integer String]
 # as a value; nesting goes to any depth.		
 		
 { schema:{ id:Integer name:String } }	{schema:{id:Integer name:String}}	a record-shape as a map value
-{ schema:{ id:Integer name:String } } typeof	NodeType	the whole thing is itself a record-shape → metatype NodeType
+{ schema:{ id:Integer name:String } } typeof	Type	the whole thing is itself a record-shape → metatype Type
 { rows:[ { id:Integer } { id:Integer } ] }	{rows:[{id:Integer} {id:Integer}]}	a list of record-shapes as a value
 { outer:{ middle:{ inner:Integer } } }	{outer:{middle:{inner:Integer}}}	three-deep record-shape nesting
 { schema:[ Integer String ] }	{schema:[Integer String]}	a typed-tuple-ish list as a value
@@ -109,15 +109,15 @@ lengthq [ ( fn [ [ x:Integer ] [ Integer ] [ x ] ] ) ( fn [ [ y:Integer ] [ Inte
 def double fn [ [ a:Integer ] [ Integer ] [ a addq a ] ] { fn:double }	ERROR:signature_error	`double` auto-calls with no args inside the map literal
 		
 # ====================================================================		
-# 5. FnSig type values as structure values		
+# 5. FunctionSignature type values as structure values		
 # ====================================================================		
-# `fnsig [ … ]` builds an FnSig (function-shape) type value. Like a		
+# `fnsig [ … ]` builds an FunctionSignature (function-shape) type value. Like a		
 # function value it stringifies verbosely, so these rows check the		
 # containing Node.		
 		
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } typeof	Map	
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } is Map	true	
-type Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FnSig nested two levels deep; the outer value is still a Map
+type Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
 		
 # ====================================================================		
 # 6. Atoms (quoted words) as structure values		

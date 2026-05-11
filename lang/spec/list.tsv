@@ -104,7 +104,7 @@ each [ dup mul ] [ 1 2 3 4 ] length	4	each preserves arity then length sees 4 en
 		
 typeof [ ]	List	empty list metadata
 typeof [ 1 2 3 ]	List	non-empty too
-typeof List	NodeType	bare List is itself a Node-family TYPE → metatype NodeType
+typeof List	Type	bare List is itself a Node-family TYPE → metatype Type
 		
 # `is` — concrete list against List.		
 [ 1 2 3 ] is List	true	concrete list satisfies List
@@ -126,7 +126,7 @@ reverse List	ERROR:signature_error
 # a concrete typed list whose elements are validated against T.		
 		
 # Bare typed-list type literal.		
-typeof [ :Integer ]	NodeType	the type form is a Node-family TYPE
+typeof [ :Integer ]	Type	the type form is a Node-family TYPE
 		
 # Concrete typed list with conforming elements.		
 [ :Integer 1 2 3 ] is List	true	a typed list IS still a list

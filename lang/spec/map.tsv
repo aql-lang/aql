@@ -38,8 +38,8 @@
 		
 typeof { }	Map	empty map
 typeof { a:1 b:2 }	Map	concrete map
-typeof Map	NodeType	bare Map type literal → metatype
-typeof { a:Integer }	NodeType	implicit shape — every value is a type → record-shape
+typeof Map	Type	bare Map type literal → metatype
+typeof { a:Integer }	Type	implicit shape — every value is a type → record-shape
 		
 # `is Map` for concrete maps.		
 { a:1 b:2 } is Map	true	
@@ -87,7 +87,7 @@ length Map	ERROR:signature_error
 # T. `{: T k0:v0 k1:v1 …}` is a concrete typed-map; each value is		
 # checked against T at construction.		
 		
-typeof {: Integer }	NodeType	the bare typed-map form is a Node-family TYPE
+typeof {: Integer }	Type	the bare typed-map form is a Node-family TYPE
 		
 # Concrete typed map satisfies its own type form.		
 {: Integer a:1 b:2 } is Map	true	a typed map IS still a Map

@@ -328,7 +328,7 @@ def trip fn [ [ n:Integer ] [ Integer ] [ n n addq n addq ] ] 4 trip	12	body com
 		
 # ---------- 8b. Optional fn parameters (`?`) ----------		
 # A standalone `?` Word in the param list marks the PRECEDING param		
-# as optional. At def-time the FnSig is fed through ExpandOptionalSigs		
+# as optional. At def-time the FunctionSignature is fed through ExpandOptionalSigs		
 # (eng/go/core_helpers.go), which generates one additional sig per		
 # non-empty subset of optional params. Each reduced sig's body calls		
 # back into the original word with the omitted params filled by their		

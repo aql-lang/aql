@@ -12,10 +12,11 @@ package eng
 //     ⊆ spec`). Used by `type Foo fn [...]` constraint matching via
 //     `FnDefHasSig` / `FnUndefMatchesFnDef`.
 //
-// A FnUndef value (Type/Word/__UF) carries a list of FnSigSpec entries
-// — each one a (Params, Returns) pair without a body. It's produced
-// by `fn [[input] [output]]` and acts as a structural function-shape
-// constraint. Pattern (FnParam.Pattern) and Optional/BarrierPos
+// A FunctionSignature value (type Type/FunctionSignature) carries a
+// list of FnSigSpec entries — each one a (Params, Returns) pair
+// without a body. It's produced by `fnsig [[input] [output] …]` and
+// acts as a structural function-shape constraint. Pattern
+// (FnParam.Pattern) and Optional/BarrierPos
 // differences are not yet considered.
 
 // FnSigMatchesSpec returns true if a FnSig matches a FnSigSpec

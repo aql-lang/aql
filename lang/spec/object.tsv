@@ -2,11 +2,11 @@
 # =====================================================================		
 # object — nominal type with fields, inheritance, and instantiation		
 # =====================================================================		
-# `object {field:Type …}` builds an ObjectType: AQL's nominal,		
+# `object {field:Type …}` builds an Type: AQL's nominal,		
 # inheritance-aware type form. Object types can be:		
 #		
 #   - anonymous       — `object {a:String}` produces an unnamed		
-#                       ObjectType with an internal ID (Object/T_…).		
+#                       Type with an internal ID (Object/T_…).		
 #   - named           — `type Foo object {a:String}` installs Foo		
 #                       on the type stack.		
 #   - inheriting      — `type Bar object {b:Integer} Foo` extends		
@@ -31,12 +31,12 @@
 # ====================================================================		
 # 1. Anonymous object types		
 # ====================================================================		
-# `object {fields}` produces an ObjectType with a synthesized		
+# `object {fields}` produces an Type with a synthesized		
 # internal name (Object/T_…). The exact ID is non-deterministic, so		
 # this section relies on type-stable assertions (typeof, is) rather		
 # than literal string comparison.		
 		
-# An anonymous ObjectType reports its `typeof` as a synthesised name		
+# An anonymous Type reports its `typeof` as a synthesised name		
 # (Object/T_xxx) — the internal ID used to disambiguate anonymous		
 # instances. Tests can't pin the exact ID, so this section uses		
 # named types in subsequent rows. Bare construction succeeds:		
@@ -48,9 +48,9 @@ length [ object { } ]	1	empty-field is allowed
 # 2. Named object types via `type NAME object {…}`		
 # ====================================================================		
 # `type` pushes the named type onto the type stack. Once installed,		
-# the bare name resolves to the ObjectType value at that name.		
+# the bare name resolves to the Type value at that name.		
 		
-type Foo object { a:String } typeof Foo	Foo	named ObjectType reports its own name
+type Foo object { a:String } typeof Foo	Foo	named Type reports its own name
 type Foo object { a:String b:Boolean } typeof Foo	Foo	multi-field named type
 		
 # ====================================================================		

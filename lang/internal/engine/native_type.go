@@ -431,11 +431,10 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 }
 
 func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	v := args[0]
-	parts := v.VType.Parts
-	if v.Data == nil && !v.VType.Matches(TWord) {
-		parts = MetatypeFor(v.VType).Parts
-	}
+	// Delegate to the canonical typeof: a concrete value → its exact
+	// VType path; ANY type literal → "Type" (metatypes are collapsed —
+	// no ScalarType / NodeType / ObjectType layer); none → "None".
+	parts := TypeOf(args[0]).VType.Parts
 	if len(parts) > 0 {
 		last := parts[len(parts)-1]
 		if len(last) > 0 && last[0] >= '0' && last[0] <= '9' {

@@ -758,10 +758,11 @@ func (v Value) AsConcreteAtom() (string, error) {
 //
 // Inlines the type-assertion the IsDisjunct/AsDisjunct pair would
 // otherwise duplicate so there's no unreachable error branch.
-// Values whose VType is TDisjunct but whose payload isn't a real
-// DisjunctInfo fall back to the single-element slice.
+// Values whose VType is a Disjunct (Type/Disjunct or a subtype such
+// as Type/Disjunct/Enum) but whose payload isn't a real DisjunctInfo
+// fall back to the single-element slice.
 func FlattenDisjunctAlts(v Value) []Value {
-	if d, ok := v.Data.(DisjunctInfo); ok && v.VType.Equal(TDisjunct) {
+	if d, ok := v.Data.(DisjunctInfo); ok && v.VType.Matches(TDisjunct) {
 		return d.Alternatives
 	}
 	return []Value{v}
