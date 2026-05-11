@@ -288,32 +288,160 @@ untype foo	ERROR:type_error	lowercase name rejected before the lookup
 # `v is T` reads naturally: T is the upcoming forward word, v sits on		
 # the prefix stack. Returns Boolean.		
 		
-# Scalar concrete-value tests — true if v's VType matches T.		
-5 is Integer	true	
-5 is Number	true	Integer is a subtype of Number
-5 is Decimal	false	Integer is NOT a subtype of Decimal
-5 is String	false	
-5 is Any	true	everything is Any
-5.0 is Decimal	true	
-5.0 is Number	true	
-'hi' is String	true	
-'hi' is Integer	false	
-'hi' is ProperString	true	non-empty strings carry the ProperString subtype
-'hi' is EmptyString	false	
-'' is String	true	
-'' is EmptyString	true	the empty string is the unique inhabitant of EmptyString
-'' is ProperString	false	
-true is Boolean	true	
-true is Any	true	
-[ 1 2 ] is List	true	
-[ 1 2 ] is Map	false	
-{ x:1 } is Map	true	
+# --- `<value> is <type>`: every value kind against the type lattice (exhaustive) ---		
+# `v is T` is true iff v's exact type is T or a subtype of T — so it		
+# holds for every ancestor of `typeof v`, and for `Any`. Sibling		
+# types, narrower types, and unrelated lattice roots are false. A		
+# concrete *value* is never a *type*, so `v is Type` is false.		
 		
-# none is its own type — only matches None and Any.		
-none is None	true	
+# Integer values.		
+5 is Integer	true	exact type
+5 is Number	true	Integer's parent
+5 is Scalar	true	...and its grandparent
+5 is Any	true	everything is Any
+5 is Decimal	false	sibling under Number
+5 is Boolean	false	sibling under Scalar
+5 is String	false	
+5 is Atom	false	
+5 is List	false	a different lattice root
+5 is Map	false	
+5 is Object	false	
+5 is None	false	
+5 is Never	false	nothing is Never
+5 is Type	false	a value is not a type
+5 is 5	true	a value is its own singleton type
+5 is 6	false	a different singleton
+-7 is Integer	true	negatives are Integers
+-7 is Number	true	
+-7 is Scalar	true	
+		
+# Decimal values.		
+5.0 is Decimal	true	exact type
+5.0 is Number	true	Decimal's parent
+5.0 is Scalar	true	
+5.0 is Any	true	
+5.0 is Integer	false	sibling under Number
+5.0 is String	false	
+3.14 is Decimal	true	
+		
+# Boolean values.		
+true is Boolean	true	exact type
+true is Scalar	true	Boolean is DIRECTLY under Scalar
+true is Any	true	
+true is Number	false	a Boolean is not a Number
+true is Integer	false	
+true is String	false	
+true is true	true	singleton
+true is false	false	
+false is Boolean	true	
+		
+# String values — ProperString / EmptyString partition String.		
+'hello' is ProperString	true	non-empty strings carry the ProperString subtype
+'hello' is String	true	ProperString's parent
+'hello' is Scalar	true	
+'hello' is Any	true	
+'hello' is EmptyString	false	sibling under String
+'hello' is Integer	false	
+'hello' is Number	false	
+'hello' is 'hello'	true	singleton
+'hello' is 'bye'	false	
+' ' is ProperString	true	a single space is still non-empty
+'' is EmptyString	true	the empty string is the unique inhabitant of EmptyString
+'' is String	true	
+'' is Scalar	true	
+'' is Any	true	
+'' is ProperString	false	sibling under String
+'' is ''	true	
+'' is 'x'	false	
+		
+# Atom values.		
+( quote red ) is Atom	true	exact type
+( quote red ) is Scalar	true	Atom's parent
+( quote red ) is Any	true	
+( quote red ) is Path	false	sibling under Scalar
+( quote red ) is String	false	atoms are NOT strings
+( quote red ) is Number	false	
+		
+# none — the sole inhabitant of None; matches only None and Any.		
+none is None	true	exact type
 none is Any	true	
+none is Never	false	nothing is Never
+none is Scalar	false	None is its own lattice root
+none is Object	false	
 none is Integer	false	
 none is List	false	
+		
+# List values.		
+[ ] is List	true	the empty list is still a List
+[ ] is Node	true	List's parent
+[ ] is Any	true	
+[ 1 2 3 ] is List	true	exact type
+[ 1 2 3 ] is Node	true	
+[ 1 2 3 ] is Any	true	
+[ 1 2 3 ] is Map	false	sibling under Node
+[ 1 2 3 ] is Scalar	false	a different lattice root
+[ 1 2 3 ] is Integer	false	the list is not its elements' type
+[ 1 2 3 ] is Type	false	a value is not a type
+[ [ 1 ] { a:2 } ] is List	true	a list of mixed nodes is still a List
+		
+# Map values.		
+{ } is Map	true	the empty map is still a Map
+{ } is Node	true	Map's parent
+{ } is Any	true	
+{ a:1 } is Map	true	exact type
+{ a:1 } is Node	true	
+{ a:1 } is Any	true	
+{ a:1 } is List	false	sibling under Node
+{ a:1 } is Scalar	false	
+{ a:1 } is Type	false	
+{ a:[ 1 ] b:{ c:2 } } is Map	true	a map of mixed node values is still a Map
+		
+# Function / FunctionSignature / Disjunct / Enum *values* (their VType lives under Type/).		
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Function	true	exact type
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Type	true	Function's parent
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Any	true	
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is FunctionSignature	false	sibling under Type
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Disjunct	false	
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Scalar	false	
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Integer	false	
+( fnsig [ [ Integer ] [ Integer ] ] ) is FunctionSignature	true	exact type
+( fnsig [ [ Integer ] [ Integer ] ] ) is Type	true	
+( fnsig [ [ Integer ] [ Integer ] ] ) is Any	true	
+( fnsig [ [ Integer ] [ Integer ] ] ) is Function	false	sibling under Type
+( fnsig [ [ Integer ] [ Integer ] ] ) is Disjunct	false	
+( enum [ red green blue ] ) is Enum	true	exact type
+( enum [ red green blue ] ) is Disjunct	true	Enum's parent
+( enum [ red green blue ] ) is Type	true	...and its grandparent
+( enum [ red green blue ] ) is Any	true	
+( enum [ red green blue ] ) is Function	false	a different branch under Type
+( enum [ red green blue ] ) is FunctionSignature	false	
+( enum [ red green blue ] ) is Scalar	false	
+( Integer tor Boolean ) is Disjunct	true	exact type
+( Integer tor Boolean ) is Type	true	Disjunct's parent
+( Integer tor Boolean ) is Any	true	
+( Integer tor Boolean ) is Enum	false	Disjunct is NOT a subtype of Enum (it's the other way)
+( Integer tor Boolean ) is Function	false	
+( Integer tor Boolean ) is Integer	false	the disjunct VALUE is not an Integer (its members can be — see below)
+		
+# def-bound references resolve to their value before the test.		
+pi is Integer	true	pi = 3
+pi is Number	true	
+pi is Scalar	true	
+greeting is ProperString	true	greeting = 'hello'
+greeting is String	true	
+		
+# A value against a structural / disjunct type (see §11 / §11b for more).		
+{ x:1 y:2 } is { x:Integer y:Integer }	true	a map conforms to a record shape
+{ x:1 } is { x:Integer y:Integer }	false	missing key y
+[ 1 2 3 ] is [ :Integer ]	true	every element is an Integer
+[ 1 2 3 ] is [ :Number ]	true	Integers conform to a [:Number] shape
+[ 1 'x' 3 ] is [ :Integer ]	false	'x' is not an Integer
+5 is ( Integer tor Boolean )	true	5 is one of the disjunct alternatives
+true is ( Integer tor Boolean )	true	
+5.0 is ( Integer tor Boolean )	false	Decimal is neither alternative
+'x' is ( Integer tor Boolean )	false	
+( quote red ) is ( enum [ red green blue ] )	true	the atom red is an enum member
+( quote pink ) is ( enum [ red green blue ] )	false	pink is not in the enum
 		
 # Type-literal-on-type-literal: subtype lattice.		
 Integer is Number	true	Integer's type path Scalar/Number/Integer matches Scalar/Number
