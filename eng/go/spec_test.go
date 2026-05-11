@@ -1,11 +1,12 @@
-// Spec-runner test for files under eng/go/spec/. Each TSV row is
-// parsed with the AQL parser (eng/parser, in this same module) and
-// run against a fresh eng.Registry pre-populated with
-// eng.RegisterCoreWords plus a fixed set of spec-runner test fixtures
-// (q-suffixed). The runner tests the engine kernel only — no
-// production native words (add, upper, …) are installed; the
-// q-fixtures cover the same dispatch / value / type-lattice ground in
-// spec-stable minimal forms.
+// Spec-runner test for the shared engine spec suite at eng/spec/
+// (sibling of eng/go/ and eng/ts/, so the Go and TypeScript ports run
+// the same .tsv files). Each TSV row is parsed with the AQL parser
+// (eng/parser, in this same module) and run against a fresh
+// eng.Registry pre-populated with eng.RegisterCoreWords plus a fixed
+// set of spec-runner test fixtures (q-suffixed). The runner tests the
+// engine kernel only — no production native words (add, upper, …) are
+// installed; the q-fixtures cover the same dispatch / value /
+// type-lattice ground in spec-stable minimal forms.
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
@@ -415,7 +416,9 @@ func runSpecFile(t *testing.T, path string) {
 }
 
 func TestSpec(t *testing.T) {
-	specDir := "spec"
+	// Spec .tsv files live at eng/spec/ (sibling of eng/go/ and
+	// eng/ts/) so the Go and TypeScript ports share the same suite.
+	specDir := filepath.Join("..", "spec")
 	entries, err := os.ReadDir(specDir)
 	if err != nil {
 		t.Fatalf("read %s: %v", specDir, err)
