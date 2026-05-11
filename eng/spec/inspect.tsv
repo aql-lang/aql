@@ -201,10 +201,18 @@ type IdType Integer inspect IdType	{name:'IdType',type:'Type',struct:'Integer',k
 # ====================================================================		
 # 5. inspect — def'd values, unknown names, and inspect-of-inspect		
 # ====================================================================		
+# A plain `def`-bound value carries a `value:` field (the bound value		
+# itself, rendered via its own String() — so nested lists/maps come out		
+# comma-separated). A `def`-bound *function* does not (it's a registered		
+# word, and functions stringify verbosely).		
 		
-def f 99 inspect f	{name:'f',kind:defined,signatures:[]}	a def'd plain value — kind:defined, no signatures
-def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g',kind:native,signatures:[{args:['Integer']}]}	an fn-defined word — buildInspection sees only the compiled dispatch table, so kind:native
-inspect nonexistentword	{name:'nonexistentword',kind:unknown,signatures:[]}	not a type, def, or word
+def f 99 inspect f	{name:'f',kind:defined,value:99,signatures:[]}	the bound value appears as `value`
+def n -7 inspect n	{name:'n',kind:defined,value:-7,signatures:[]}	
+def s 'hi' inspect s	{name:'s',kind:defined,value:'hi',signatures:[]}	
+def lst [ 1 2 3 ] inspect lst	{name:'lst',kind:defined,value:[1,2,3],signatures:[]}	a list value — note the comma-separated render
+def m { a:1 b:2 } inspect m	{name:'m',kind:defined,value:{a:1,b:2},signatures:[]}	
+def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g',kind:native,signatures:[{args:['Integer']}]}	an fn-defined word — no `value`; buildInspection sees only the compiled dispatch table, so kind:native
+inspect nonexistentword	{name:'nonexistentword',kind:unknown,signatures:[]}	not a type, def, or word — no `value`
 		
 typeof ( inspect dup )	Inspect	an inspect result is an `Inspect` value
 ( inspect dup ) is Map	true	`Inspect` is a subtype of `Map`

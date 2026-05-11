@@ -16,7 +16,8 @@ package eng
 // The result is the machine-readable counterpart of `help`:
 //
 //	word inspection:  { name, kind:native|defined|unknown,
-//	                    signatures:[{args:[…]}…] }
+//	                    value?, signatures:[{args:[…]}…] }
+//	                    (`value` only for a plain `def`-bound value)
 //	type inspection:  { name?, type:"<leaf>", kind, …kind-specific }
 //	  • for a TYPE value (a type literal, record / object / disjunct /
 //	    enum / typed list / typed map / fn-shape / dependent scalar):
@@ -91,6 +92,11 @@ func buildInspection(r *Registry, name string) Value {
 	if fn == nil {
 		if r.HasDef(name) {
 			result.Set("kind", NewAtom("defined"))
+			// A plain `def`-bound value (not a registered word): include
+			// the value itself, e.g. `def f 99; inspect f` → {…value:99…}.
+			if v, ok := r.TopOfDefStack(name); ok {
+				result.Set("value", v)
+			}
 			result.Set("signatures", NewList(nil))
 			return NewValueRaw(TInspect, result)
 		}
