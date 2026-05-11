@@ -1,67 +1,67 @@
-# =====================================================================
-# Function definition: the full range of `def NAME …` forms.
-# =====================================================================
-#
-# This spec consolidates every shape `def` accepts:
-#
-#   1. Simple-value def      — `def NAME 3` — substitutes the value
-#                               at every use of NAME.
-#
-#   2. List-body splice      — `def NAME [body]` — splices the body's
-#                               tokens inline at every use of NAME.
-#                               No params, no sandbox.
-#
-#   3. Single-sig fn         — `def NAME fn [ [in] [out] [body] ]` —
-#                               builds a typed function with one
-#                               signature. The outer list is required;
-#                               `fn` takes exactly one arg, the list
-#                               of triples.
-#
-#   4. Multi-sig fn          — `def NAME fn [ [in] [out] [body]
-#                                             [in] [out] [body] ... ]`
-#                               Same shape as 3 with N triples flat in
-#                               the outer list. Each triple becomes an
-#                               overload; dispatch picks per call site.
-#
-#   5. args frame access     — inside a fn body, `args` returns the
-#                               positional arg list pushed by the call
-#                               site (in sig order).
-#
-#   6. Optional params       — `[a:Integer b:Integer ?]` — a standalone
-#                               `?` Word marks the preceding param
-#                               optional. Each present/omitted
-#                               combination becomes its own overload
-#                               with omitted slots filled by the type's
-#                               BaseValue.
-#
-#   7. Quoted-list def       — `def NAME quote [body]` — the body is
-#                               stored as a data list, NOT spliced.
-#                               Use lengthq / firstq to inspect it.
-#
-# Companion files:
-#   numbers.tsv              — arithmetic dispatch with Number contagion.
-#   forth.tsv                — defs that build the canonical Forth
-#                               combinators on top of dup/swap/over/etc.
-#   def-typed.tsv            — typed simple-value defs (`def n:Integer 5`).
-
-# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
-#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
-#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
-#   firstq   — [List] forward-prec — first element or None for empty list
-#   lengthq  — [List] forward-prec — list length as Integer
-#   mulq     — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
-#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
-#
-#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).
-# === end fixtures ===
-
 # tokens	expected	note
-
-# ====================================================================
-# 1. Simple-value def
-# ====================================================================
-# Pre-bound from spec_test.go: pi=3, tau=6, greeting='hello'.
-
+# =====================================================================		
+# Function definition: the full range of `def NAME …` forms.		
+# =====================================================================		
+#		
+# This spec consolidates every shape `def` accepts:		
+#		
+#   1. Simple-value def      — `def NAME 3` — substitutes the value		
+#                               at every use of NAME.		
+#		
+#   2. List-body splice      — `def NAME [body]` — splices the body's		
+#                               tokens inline at every use of NAME.		
+#                               No params, no sandbox.		
+#		
+#   3. Single-sig fn         — `def NAME fn [ [in] [out] [body] ]` —		
+#                               builds a typed function with one		
+#                               signature. The outer list is required;		
+#                               `fn` takes exactly one arg, the list		
+#                               of triples.		
+#		
+#   4. Multi-sig fn          — `def NAME fn [ [in] [out] [body]		
+#                                             [in] [out] [body] ... ]`		
+#                               Same shape as 3 with N triples flat in		
+#                               the outer list. Each triple becomes an		
+#                               overload; dispatch picks per call site.		
+#		
+#   5. args frame access     — inside a fn body, `args` returns the		
+#                               positional arg list pushed by the call		
+#                               site (in sig order).		
+#		
+#   6. Optional params       — `[a:Integer b:Integer ?]` — a standalone		
+#                               `?` Word marks the preceding param		
+#                               optional. Each present/omitted		
+#                               combination becomes its own overload		
+#                               with omitted slots filled by the type's		
+#                               BaseValue.		
+#		
+#   7. Quoted-list def       — `def NAME quote [body]` — the body is		
+#                               stored as a data list, NOT spliced.		
+#                               Use lengthq / firstq to inspect it.		
+#		
+# Companion files:		
+#   numbers.tsv              — arithmetic dispatch with Number contagion.		
+#   forth.tsv                — defs that build the canonical Forth		
+#                               combinators on top of dup/swap/over/etc.		
+#   def-typed.tsv            — typed simple-value defs (`def n:Integer 5`).		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)		
+#   firstq   — [List] forward-prec — first element or None for empty list		
+#   lengthq  — [List] forward-prec — list length as Integer		
+#   mulq     — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)		
+#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)		
+#		
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).		
+# === end fixtures ===		
+		
+		
+# ====================================================================		
+# 1. Simple-value def		
+# ====================================================================		
+# Pre-bound from spec_test.go: pi=3, tau=6, greeting='hello'.		
+		
 pi	3	bare def reference yields its bound value
 pi pi	3 3	repeated reference yields two copies on the stack
 pi addq 1	4	def value flows into a forward arg slot
@@ -73,200 +73,200 @@ pi mulq tau	18	mulq with both args from defs
 def small 7 small	7	user-defined Integer def
 def small 7 small addq small	14	user def used in both slots
 def msg 'hi' msg concatq msg	'hihi'	user-defined string def
-
-# ====================================================================
-# 2. List-body splice
-# ====================================================================
-# `def NAME [body]` registers a binding. Each occurrence of NAME
-# REMOVES the word from the token stream and INSERTS the body's
-# elements in its place. No new args frame, no sandbox — the body
-# runs against the live caller stack.
-
+		
+# ====================================================================		
+# 2. List-body splice		
+# ====================================================================		
+# `def NAME [body]` registers a binding. Each occurrence of NAME		
+# REMOVES the word from the token stream and INSERTS the body's		
+# elements in its place. No new args frame, no sandbox — the body		
+# runs against the live caller stack.		
+		
 def doub [ dup addq ] 5 doub	10	body executes against stack=[5]: dup→[5,5], addq→[10]
 def square [ dup mulq ] 7 square	49	dup, mulq: 7*7=49
 def inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack
 def add5 [ addq 5 ] 10 add5	15	curried form — body uses an embedded constant
 def double-then-inc [ dup addq 1 addq ] 5 double-then-inc	11	chained body: 5+5=10, then 10+1=11
-
-# Splice fires at the use site, NOT at definition time. Insufficient
-# stack at the use site is an error — the body sees whatever the
-# caller stack happens to be.
+		
+# Splice fires at the use site, NOT at definition time. Insufficient		
+# stack at the use site is an error — the body sees whatever the		
+# caller stack happens to be.		
 def doub [ dup addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dup needs 1 stack value, sees empty stack
 def doub [ dup addq ] doub	ERROR:	bare invocation; nothing on the stack for dup
-
-# Composition: a body can reference other defs. On splice each name
-# spawns its own splice (or, for fn-defs, dispatch).
+		
+# Composition: a body can reference other defs. On splice each name		
+# spawns its own splice (or, for fn-defs, dispatch).		
 def doub [ dup addq ] def quad [ doub doub ] 3 quad	12	3 doubled twice = 12
 def inc [ 1 addq ] def add2 [ inc inc ] 5 add2	7	chained inc calls
-
-# Empty-body splice is a no-op.
+		
+# Empty-body splice is a no-op.		
 def noop [ ] 5 noop	5	splice removes the word and inserts nothing; 5 stays
 def noop [ ] noop		bare invocation produces empty stack
-
-# Parens isolate each invocation so the body's forward-prec ops don't
-# greedily grab outside arguments.
+		
+# Parens isolate each invocation so the body's forward-prec ops don't		
+# greedily grab outside arguments.		
 def doub [ dup addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens addq inside doub would consume the outer 5
-
-# ====================================================================
-# 3. Quoted-list def — body stored as DATA, not spliced
-# ====================================================================
-# `quote` flips the list's Quoted flag. The def-stack lookup branch
-# in stepWord skips the splice for Quoted lists and treats them as
-# values.
-
+		
+# ====================================================================		
+# 3. Quoted-list def — body stored as DATA, not spliced		
+# ====================================================================		
+# `quote` flips the list's Quoted flag. The def-stack lookup branch		
+# in stepWord skips the splice for Quoted lists and treats them as		
+# values.		
+		
 def lst quote [ 1 2 3 ] lengthq lst	3	lst resolves to the quoted list value; lengthq returns its length
 def lst quote [ 1 2 3 ] firstq lst	1	first element of the data list
-
-# ====================================================================
-# 4. Single-sig fn
-# ====================================================================
-# `fn [ [in] [out] [body] ]` builds a typed FnDef from a single
-# triple. The outer list is required — `fn` takes exactly one arg,
-# the list of triples (multi-sig form below extends to N triples).
-# Param tokens `name:Type` are split by the fn-param parser; bodies
-# reference each name as a bare word that resolves to the matched
-# arg via the def stack.
-#
-# `def NAME fn [...]` works without paren-wrapping `fn` because
-# def's forward marker (insertForward) defers def's match until its
-# second slot is filled. fn dispatches first, produces the FnDef,
-# and def then fires with [Word(NAME), FnDef].
-
-# Single Integer param.
+		
+# ====================================================================		
+# 4. Single-sig fn		
+# ====================================================================		
+# `fn [ [in] [out] [body] ]` builds a typed FnDef from a single		
+# triple. The outer list is required — `fn` takes exactly one arg,		
+# the list of triples (multi-sig form below extends to N triples).		
+# Param tokens `name:Type` are split by the fn-param parser; bodies		
+# reference each name as a bare word that resolves to the matched		
+# arg via the def stack.		
+#		
+# `def NAME fn [...]` works without paren-wrapping `fn` because		
+# def's forward marker (insertForward) defers def's match until its		
+# second slot is filled. fn dispatches first, produces the FnDef,		
+# and def then fires with [Word(NAME), FnDef].		
+		
+# Single Integer param.		
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] 5 double	10	a=5; body 5 5 addq → 10
 def inc fn [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 7 inc	8	body adds 1 to bound n
 def square fn [ [ x:Integer ] [ Integer ] [ x x mulq ] ] 6 square	36	x=6; body 6 6 mulq → 36
-
-# Two Integer params, forward + stack split.
+		
+# Two Integer params, forward + stack split.		
 def add-ab fn [ [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ] 3 add-ab 4	7	a=4 (fwd), b=3 (stk); body 4 3 addq → 7
 def sub-ab fn [ [ a:Integer b:Integer ] [ Integer ] [ subq a b ] ] 10 sub-ab 3	7	a=3 (fwd), b=10 (stk); subq sig=[3,10] → 10-3=7
-
-# Three params, all-stack call form.
+		
+# Three params, all-stack call form.		
 def trip3 fn [ [ a:Integer b:Integer c:Integer ] [ Integer ] [ a b addq c addq ] ] 1 2 3 trip3	6	a=top=3, b=2, c=1; (3+2)+1 = 6
-
-# Zero-arg fn — the body runs with no params; result is the body's
-# residual stack.
+		
+# Zero-arg fn — the body runs with no params; result is the body's		
+# residual stack.		
 def zero fn [ [ ] [ Integer ] [ 0 ] ] zero	0	0-arg fn returns 0
 def fortytwo fn [ [ ] [ Integer ] [ 42 ] ] fortytwo	42	0-arg fn returns the body's literal
-
-# Composition: one fn calls another by name.
+		
+# Composition: one fn calls another by name.		
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] def quad fn [ [ x:Integer ] [ Integer ] [ x double double ] ] 4 quad	16	quad(4): double(4)=8, double(8)=16
-
-# Parens isolate calls — each invocation binds its own params.
+		
+# Parens isolate calls — each invocation binds its own params.		
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] ( 3 double ) ( 5 double )	6 10	without parens the inner addq would greedily consume the outer 5
-
-# ====================================================================
-# 5. Multi-sig fn — N triples in the outer list
-# ====================================================================
-# A single outer list contains [in out body in out body …]. Each
-# triple becomes one FnSig. Dispatch picks the matching sig at the
-# call site by arity (arg count) and type (most-specific first).
-
-# Two arity overloads: 1-arg (double) and 2-arg (multiply).
+		
+# ====================================================================		
+# 5. Multi-sig fn — N triples in the outer list		
+# ====================================================================		
+# A single outer list contains [in out body in out body …]. Each		
+# triple becomes one FnSig. Dispatch picks the matching sig at the		
+# call site by arity (arg count) and type (most-specific first).		
+		
+# Two arity overloads: 1-arg (double) and 2-arg (multiply).		
 def f fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ n:Integer m:Integer ] [ Integer ] [ n m mulq ] ] f 5	10	f 5 → 1-arg sig: 5 addq 5 = 10
 def f fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ n:Integer m:Integer ] [ Integer ] [ n m mulq ] ] f 5 3	15	f 5 3 → 2-arg sig: 5 mulq 3 = 15
-
-# Two type overloads — same arity, different types.
+		
+# Two type overloads — same arity, different types.		
 def g fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ s:String ] [ String ] [ s concatq s ] ] g 7	14	Integer sig matches: 7+7=14
 def g fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ s:String ] [ String ] [ s concatq s ] ] g 'hi'	'hihi'	String sig matches: 'hi'+'hi'
-
-# Three overloads: 0-arg, 1-arg, 2-arg.
+		
+# Three overloads: 0-arg, 1-arg, 2-arg.		
 def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:Integer ] [ Integer ] [ n m addq ] ] h	0	0-arg sig
 def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:Integer ] [ Integer ] [ n m addq ] ] h 5	5	1-arg sig (identity)
 def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:Integer ] [ Integer ] [ n m addq ] ] h 5 3	8	2-arg sig
-
-# ====================================================================
-# 6. fn outside def — first-class function values
-# ====================================================================
-# `fn [...]` produces a Function value. It can be left on the stack,
-# passed around, named via `def NAME ( fn ... )`, or asked about its
-# type. Without a wrapping def, the fn value just sits on the stack
-# (it does not auto-call against trailing args at the top level).
-#
-# `fn` is strict: the outer list MUST be a non-zero multiple of 3
-# (input output body triples). For the type-only 'shape' form (no
-# body, just input/output pairs) use `fnsig` — see §6b.
-
-# A bare fn produces a Function value. With ≥1-arg sigs the value sits
-# on the stack until consumed; a 0-arg fn auto-calls when it lands at
-# the engine's pointer (the FnDef-literal auto-call rule), so 0-arg
-# bare-fn tests aren't observable as 'Function' values directly.
+		
+# ====================================================================		
+# 6. fn outside def — first-class function values		
+# ====================================================================		
+# `fn [...]` produces a Function value. It can be left on the stack,		
+# passed around, named via `def NAME ( fn ... )`, or asked about its		
+# type. Without a wrapping def, the fn value just sits on the stack		
+# (it does not auto-call against trailing args at the top level).		
+#		
+# `fn` is strict: the outer list MUST be a non-zero multiple of 3		
+# (input output body triples). For the type-only 'shape' form (no		
+# body, just input/output pairs) use `fnsig` — see §6b.		
+		
+# A bare fn produces a Function value. With ≥1-arg sigs the value sits		
+# on the stack until consumed; a 0-arg fn auto-calls when it lands at		
+# the engine's pointer (the FnDef-literal auto-call rule), so 0-arg		
+# bare-fn tests aren't observable as 'Function' values directly.		
 typeof fn [ [ a:Integer ] [ Integer ] [ a a addq ] ]	Function	the value is of type Function
 fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] is Function	true	is-test confirms the type
-
-# A bare fn with multi-sig is also a Function (one value carries every overload).
-typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ]	Function
-
-# Round-trip: produce a fn, def it, call it.
+		
+# A bare fn with multi-sig is also a Function (one value carries every overload).		
+typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ a:Integer b:Integer ] [ Integer ] [ a b addq ] ]	Function	
+		
+# Round-trip: produce a fn, def it, call it.		
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] double 5	10	def captures the fn-produced Function and registers the dispatcher
-def square fn [ [ x:Integer ] [ Integer ] [ x x mulq ] ] square 7	49
-
-# Mod-3 strictness — fn rejects non-triple shapes. The error directs
-# the caller toward `fnsig` for the body-less type form.
+def square fn [ [ x:Integer ] [ Integer ] [ x x mulq ] ] square 7	49	
+		
+# Mod-3 strictness — fn rejects non-triple shapes. The error directs		
+# the caller toward `fnsig` for the body-less type form.		
 fn [ [ a:Integer ] [ Integer ] ]	ERROR:multiple of 3	mod-2 list (no body) is rejected; use fnsig instead
 fn [ ]	ERROR:multiple of 3	empty list is rejected — fn requires at least one triple
-
-# ====================================================================
-# 6b. fnsig — body-less function-shape type
-# ====================================================================
-# `fnsig [ [in] [out] … ]` produces an FnSig type literal — a
-# structural function-shape constraint. The outer list MUST be a
-# non-zero multiple of 2 (input output pairs, no body). Each pair
-# becomes one signature in the shape. FnSig values are not callable;
-# they are intended as type constraints (see types.tsv §11l for the
-# `def f:fnsig […] impl` instantiation pattern).
-
-# Single-sig shape — Integer → Integer.
+		
+# ====================================================================		
+# 6b. fnsig — body-less function-shape type		
+# ====================================================================		
+# `fnsig [ [in] [out] … ]` produces an FnSig type literal — a		
+# structural function-shape constraint. The outer list MUST be a		
+# non-zero multiple of 2 (input output pairs, no body). Each pair		
+# becomes one signature in the shape. FnSig values are not callable;		
+# they are intended as type constraints (see types.tsv §11l for the		
+# `def f:fnsig […] impl` instantiation pattern).		
+		
+# Single-sig shape — Integer → Integer.		
 typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less type form yields FnSig
 fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
-
-# Multi-sig shape — overloaded shape with two pairs.
+		
+# Multi-sig shape — overloaded shape with two pairs.		
 typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
-
-# Mod-2 strictness — fnsig rejects non-pair shapes. The error directs
-# the caller toward `fn` for the with-body form.
+		
+# Mod-2 strictness — fnsig rejects non-pair shapes. The error directs		
+# the caller toward `fn` for the with-body form.		
 fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 list (with body) is rejected; use fn instead
 fnsig [ ]	ERROR:multiple of 2	empty list is rejected — fnsig requires at least one pair
-
-# ====================================================================
-# 7. args frame
-# ====================================================================
-# Inside a fn body, `args` returns a list of the matched args in sig
-# order. The frame is pushed at call entry and popped when the body
-# returns. Outside any fn call, `args` returns the empty list.
-
+		
+# ====================================================================		
+# 7. args frame		
+# ====================================================================		
+# Inside a fn body, `args` returns a list of the matched args in sig		
+# order. The frame is pushed at call entry and popped when the body		
+# returns. Outside any fn call, `args` returns the empty list.		
+		
 args	[]	empty frame at top level
-
-# Single-arg body uses args lengthq / firstq.
+		
+# Single-arg body uses args lengthq / firstq.		
 def f1 fn [ [ a:Integer ] [ Integer ] [ args lengthq ] ] 5 f1	1	1-element args frame
 def f2 fn [ [ a:Integer ] [ Integer ] [ args firstq ] ] 7 f2	7	first arg via positional access
-
-# Two-arg body — args list reflects sig order (sig[0] = forward arg).
+		
+# Two-arg body — args list reflects sig order (sig[0] = forward arg).		
 def f3 fn [ [ a:Integer b:Integer ] [ Integer ] [ args lengthq ] ] 3 f3 4	2	frame has 2 entries
 def f4 fn [ [ a:Integer b:Integer ] [ Integer ] [ args firstq ] ] 3 f4 4	4	sig[0] = forward arg (4)
-
-# Three-arg body, all-stack call.
+		
+# Three-arg body, all-stack call.		
 def f5 fn [ [ a:Integer b:Integer c:Integer ] [ Integer ] [ args lengthq ] ] 1 2 3 f5	3	frame has 3 entries
-
-# ====================================================================
-# 8. Optional params
-# ====================================================================
-# A standalone `?` Word AFTER a param marks the preceding param as
-# optional. ExpandOptionalSigs generates one overload per non-empty
-# subset of optional params; omitted slots are filled by the type's
-# BaseValue (Integer→0, String→'', List→[], etc.). Required params
-# (without `?`) are always present. The numbers.tsv §8b block covers
-# the numeric BaseValue subset in more depth — these rows pin the
-# core mechanism in the function-definition context.
-
-# One required, one optional.
+		
+# ====================================================================		
+# 8. Optional params		
+# ====================================================================		
+# A standalone `?` Word AFTER a param marks the preceding param as		
+# optional. ExpandOptionalSigs generates one overload per non-empty		
+# subset of optional params; omitted slots are filled by the type's		
+# BaseValue (Integer→0, String→'', List→[], etc.). Required params		
+# (without `?`) are always present. The numbers.tsv §8b block covers		
+# the numeric BaseValue subset in more depth — these rows pin the		
+# core mechanism in the function-definition context.		
+		
+# One required, one optional.		
 def opt1 fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] opt1 5	5	b omitted → BaseValue Integer = 0; 5+0=5
 def opt1 fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] opt1 5 3	8	both present: a=5, b=3; 5+3=8
-
-# Two optionals — every present/omitted combination dispatches.
+		
+# Two optionals — every present/omitted combination dispatches.		
 def opt2 fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] opt2	0	both omitted → 0+0=0
 def opt2 fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] opt2 5	5	one present → 5+0=5 (a=5, b defaulted)
 def opt2 fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] opt2 7 3	10	both present → 7+3=10
-
-# Required arg is still required — calling with too few args errors.
+		
+# Required arg is still required — calling with too few args errors.		
 def req fn [ [ a:Integer b:Integer ? ] [ Integer ] [ a b addq ] ] req	ERROR:signature	a is required; no 0-arg overload

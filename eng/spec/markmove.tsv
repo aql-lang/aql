@@ -1,43 +1,43 @@
-# Mark / Move control-flow primitives.
-#
-# Mark (TMark = Word/__MK) and Move (TMove = Word/__MV) are internal
-# control values. A handler emits a Mark followed by a body and a
-# Move; when the engine reaches the Move it replaces
-# [Mark .. body .. Move] with the saved body so the body runs from
-# the start once more. This file exercises the plumbing through a
-# `replayq` test word that emits Mark + body + Move.
-#
-# Note: Marks are structural boundaries — words inside the body
-# cannot reach stack values BELOW the Mark, mirroring Go's
-# match.go. So bodies must be self-contained (no stack reach
-# beneath Mark). The full Go engine builds for-loop continuations
-# on top of richer Move/Cont state; we port only the one-shot
-# splice variant here.
-
-# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
-#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
-#   replayq  — [List] NoEvalArgs — emits Mark+body+Move (one-shot replay; body runs twice)
-# === end fixtures ===
-
 # tokens	expected	note
-
-# Self-contained body: just pushes a literal. The original tokens
-# are spliced out and replaced by the body copy, so net effect is
-# one push (the splice obliterates the first iteration's pushed
-# value but inserts an identical body that re-runs).
+# Mark / Move control-flow primitives.		
+#		
+# Mark (TMark = Word/__MK) and Move (TMove = Word/__MV) are internal		
+# control values. A handler emits a Mark followed by a body and a		
+# Move; when the engine reaches the Move it replaces		
+# [Mark .. body .. Move] with the saved body so the body runs from		
+# the start once more. This file exercises the plumbing through a		
+# `replayq` test word that emits Mark + body + Move.		
+#		
+# Note: Marks are structural boundaries — words inside the body		
+# cannot reach stack values BELOW the Mark, mirroring Go's		
+# match.go. So bodies must be self-contained (no stack reach		
+# beneath Mark). The full Go engine builds for-loop continuations		
+# on top of richer Move/Cont state; we port only the one-shot		
+# splice variant here.		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   replayq  — [List] NoEvalArgs — emits Mark+body+Move (one-shot replay; body runs twice)		
+# === end fixtures ===		
+		
+		
+# Self-contained body: just pushes a literal. The original tokens		
+# are spliced out and replaced by the body copy, so net effect is		
+# one push (the splice obliterates the first iteration's pushed		
+# value but inserts an identical body that re-runs).		
 replayq [ 5 ]	5	body's literal pushes 5 — the engine ends with one 5 on the stack
 replayq [ 7 8 ]	7 8	multi-element literal body
-
-# Body invoking a paren subq-expression (self-contained).
+		
+# Body invoking a paren subq-expression (self-contained).		
 replayq [ ( 1 addq 2 ) ]	3	paren evaluates inside the replayq scope; result lands on the stack
-
-# Nesting: replayq inside replayq.
+		
+# Nesting: replayq inside replayq.		
 replayq [ replayq [ 9 ] ]	9	outer replayq's body emits its own Mark/Move pair when the inner replayq handler fires
-
-# Empty body: clean no-op.
+		
+# Empty body: clean no-op.		
 replayq [ ]		empty body, empty stack
-
-# Move whose mark id is unknown is dropped silently. We don't have
-# a TSV-level way to construct one (handlers are the only Mark/Move
-# producers), so this case is verified by the engine's stepMove
-# guard rather than a TSV row.
+		
+# Move whose mark id is unknown is dropped silently. We don't have		
+# a TSV-level way to construct one (handlers are the only Mark/Move		
+# producers), so this case is verified by the engine's stepMove		
+# guard rather than a TSV row.		

@@ -1,18 +1,18 @@
-# String dispatch via the `concatq` test fixture and the core `not`
-# word.
-# concatq is non-commutative; handler convention is `result = b + a`
-# where a = args[0], b = args[1] (matches the production engine's
-# addConcatHandler in lang/internal/engine/native_math.go and the
-# numericBinary convention used by subq/addq/mulq). The natural infix
-# reading therefore works:  `'hello' concatq ' world' → 'hello world'`.
-#
-# Equivalence-class enumeration is in mirror.tsv.
-
-# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
-#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
-# === end fixtures ===
-
 # tokens	expected	note
+# String dispatch via the `concatq` test fixture and the core `not`		
+# word.		
+# concatq is non-commutative; handler convention is `result = b + a`		
+# where a = args[0], b = args[1] (matches the production engine's		
+# addConcatHandler in lang/internal/engine/native_math.go and the		
+# numericBinary convention used by subq/addq/mulq). The natural infix		
+# reading therefore works:  `'hello' concatq ' world' → 'hello world'`.		
+#		
+# Equivalence-class enumeration is in mirror.tsv.		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)		
+# === end fixtures ===		
+		
 'hello'	'hello'	string literal
 'hello' concatq ' world'	'hello world'	infix natural reading: stk=['hello'], fwd=[' world'] → sig=[' world', 'hello'] → handler returns 'hello'+' world'
 'hello' ' world' concatq	'hello world'	postfix: stk=['hello', ' world'] top=' world' → sig=[' world', 'hello'] → 'hello'+' world'

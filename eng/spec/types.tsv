@@ -1,740 +1,740 @@
-# =====================================================================
-# Principle: Types are first-class. Type literals push as values; the
-# `type`/`untype`/`typeof`/`is` words install, retract, inspect, and
-# test type bindings. None is the unit type, spelled `none`; its sole
-# inhabitant IS the value `none`. The atom `null` is reserved for JSON
-# null at the value level.
-# =====================================================================
-#
-# This spec consolidates everything about types in aqleng:
-#
-#   1. Type-name words push type-literal values (Integer, String, …).
-#      Type names are globally unique so the renderer prints just the
-#      leaf (e.g. Integer, not Scalar/Number/Integer).
-#
-#   2. `none` parses to a None type literal. Rendering: 'none'.
-#
-#   3. `null` parses to an Atom('null') — the JSON-null value, NOT a
-#      type literal.
-#
-#   4. `type NAME body` installs a type binding (NAME starts [A-Z]).
-#      Body can be a type literal, a record-shape map (`{x:Integer}`),
-#      or any value satisfying IsTypeBody.
-#
-#   5. `untype NAME` pops the most-recent binding.
-#
-#   6. `typeof v` returns a Type literal — the type of v as a value.
-#      For a concrete value, returns its exact VType (`typeof 5 →
-#      Integer`). For a type literal, returns its metatype (`typeof
-#      Integer → ScalarType`). For `none`, returns None itself.
-#
-#   7. `v is T` returns Boolean — does v satisfy type T?
-#
-#   8. Type literals are rejected at every concrete-payload sig slot
-#      (anything other than TAny / metatype / matching TNone).
-#
-# Why this matters
-# ----------------
-# Type literals are the language's value-level handle on its types —
-# they're how you spell 'the type Integer' or 'the type List'. Every
-# reflective / generic operation (predicates, type equality, type
-# unions, dispatch) builds on them. typeof + is together let user code
-# branch on type at run time without resorting to ad-hoc string
-# comparisons; the Type-typed return of typeof keeps the result
-# composable (typeof's output IS a value usable by `is`).
-#
-# What's NOT covered
-# ------------------
-# This is the aqleng (engine-kernel) subset. The richer type words
-# (record, table, object, make, guard, inspect, base, convert, …) are
-# layered on top in production aql; their semantics depend on parser /
-# native-mod features that are intentionally out of aqleng scope.
-
-# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
-#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
-#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
-#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)
-#   firstq   — [List] forward-prec — first element or None for empty list
-#   lengthq  — [List] forward-prec — list length as Integer
-#   tagq     — two overloads [Integer]→'specific' / [Any]→'any' — specificity scoring
-# === end fixtures ===
-
 # tokens	expected	note
-
-# =====================================================================
-# 1. Type literals push as values
-# =====================================================================
-# A bare unquoted word that matches a type name is recognised by the
-# engine (typeNames table in eng/go/engine.go) and resolves to a
-# type-literal Value: VType = the named Type, Data = nil. The renderer
-# prints just the leaf of the type path because type names are
-# globally unique.
-
-# Leaf rendering — every type literal renders as its leaf.
-# Family roots (Scalar / Node / Object) and the metatype root (Type)
-# are themselves type-name words that resolve to type literals.
+# =====================================================================		
+# Principle: Types are first-class. Type literals push as values; the		
+# `type`/`untype`/`typeof`/`is` words install, retract, inspect, and		
+# test type bindings. None is the unit type, spelled `none`; its sole		
+# inhabitant IS the value `none`. The atom `null` is reserved for JSON		
+# null at the value level.		
+# =====================================================================		
+#		
+# This spec consolidates everything about types in aqleng:		
+#		
+#   1. Type-name words push type-literal values (Integer, String, …).		
+#      Type names are globally unique so the renderer prints just the		
+#      leaf (e.g. Integer, not Scalar/Number/Integer).		
+#		
+#   2. `none` parses to a None type literal. Rendering: 'none'.		
+#		
+#   3. `null` parses to an Atom('null') — the JSON-null value, NOT a		
+#      type literal.		
+#		
+#   4. `type NAME body` installs a type binding (NAME starts [A-Z]).		
+#      Body can be a type literal, a record-shape map (`{x:Integer}`),		
+#      or any value satisfying IsTypeBody.		
+#		
+#   5. `untype NAME` pops the most-recent binding.		
+#		
+#   6. `typeof v` returns a Type literal — the type of v as a value.		
+#      For a concrete value, returns its exact VType (`typeof 5 →		
+#      Integer`). For a type literal, returns its metatype (`typeof		
+#      Integer → ScalarType`). For `none`, returns None itself.		
+#		
+#   7. `v is T` returns Boolean — does v satisfy type T?		
+#		
+#   8. Type literals are rejected at every concrete-payload sig slot		
+#      (anything other than TAny / metatype / matching TNone).		
+#		
+# Why this matters		
+# ----------------		
+# Type literals are the language's value-level handle on its types —		
+# they're how you spell 'the type Integer' or 'the type List'. Every		
+# reflective / generic operation (predicates, type equality, type		
+# unions, dispatch) builds on them. typeof + is together let user code		
+# branch on type at run time without resorting to ad-hoc string		
+# comparisons; the Type-typed return of typeof keeps the result		
+# composable (typeof's output IS a value usable by `is`).		
+#		
+# What's NOT covered		
+# ------------------		
+# This is the aqleng (engine-kernel) subset. The richer type words		
+# (record, table, object, make, guard, inspect, base, convert, …) are		
+# layered on top in production aql; their semantics depend on parser /		
+# native-mod features that are intentionally out of aqleng scope.		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)		
+#   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)		
+#   firstq   — [List] forward-prec — first element or None for empty list		
+#   lengthq  — [List] forward-prec — list length as Integer		
+#   tagq     — two overloads [Integer]→'specific' / [Any]→'any' — specificity scoring		
+# === end fixtures ===		
+		
+		
+# =====================================================================		
+# 1. Type literals push as values		
+# =====================================================================		
+# A bare unquoted word that matches a type name is recognised by the		
+# engine (typeNames table in eng/go/engine.go) and resolves to a		
+# type-literal Value: VType = the named Type, Data = nil. The renderer		
+# prints just the leaf of the type path because type names are		
+# globally unique.		
+		
+# Leaf rendering — every type literal renders as its leaf.		
+# Family roots (Scalar / Node / Object) and the metatype root (Type)		
+# are themselves type-name words that resolve to type literals.		
 Scalar	Scalar	scalar-family root
 Number	Number	scalar mid-level
 Integer	Integer	scalar leaf
-Decimal	Decimal
-String	String
+Decimal	Decimal	
+String	String	
 ProperString	ProperString	String subtype: type of every non-empty string
 EmptyString	EmptyString	String subtype: unique inhabitant is the empty string
-Boolean	Boolean
-Atom	Atom
-Path	Path
+Boolean	Boolean	
+Atom	Atom	
+Path	Path	
 Node	Node	node-family root
-List	List
-Map	Map
+List	List	
+Map	Map	
 Object	Object	object-family root
 Record	Record	object-family member
-Resource	Resource
-Entity	Entity
-Table	Table
-Array	Array
-Options	Options
+Resource	Resource	
+Entity	Entity	
+Table	Table	
+Array	Array	
+Options	Options	
 Any	Any	universal top type
 Never	Never	uninhabited bottom type
 Type	Type	metatype root
 ScalarType	ScalarType	metatype subkinds
-NodeType	NodeType
-ObjectType	ObjectType
+NodeType	NodeType	
+ObjectType	ObjectType	
 Timeout	Timeout	temporal types
-Interval	Interval
-
-# Multiple type literals on the stack — each renders independently.
-Integer Integer	Integer Integer
-Number Scalar Integer	Number Scalar Integer
-
-# Type literal next to a concrete value.
+Interval	Interval	
+		
+# Multiple type literals on the stack — each renders independently.		
+Integer Integer	Integer Integer	
+Number Scalar Integer	Number Scalar Integer	
+		
+# Type literal next to a concrete value.		
 1 Integer	1 Integer	concrete 1, then Integer type literal
-'x' String	'x' String
-
-# def can bind a type literal as a simple value (the def-stack route).
-def t Integer t	Integer
-def t Number t	Number
-def t List t	List
-
-# To get the Atom version of a type-name word, quote it.
+'x' String	'x' String	
+		
+# def can bind a type literal as a simple value (the def-stack route).		
+def t Integer t	Integer	
+def t Number t	Number	
+def t List t	List	
+		
+# To get the Atom version of a type-name word, quote it.		
 quote Integer	Integer	type-name words parse as type literals before quote sees them; quote of a type literal returns it unchanged
-quote String	String
-def t quote Integer t	Integer
-
-# =====================================================================
-# 2. None and null
-# =====================================================================
-# `none` is the single inhabitant of the None type. Its VType is
-# TNone, Data == nil. Renders back as 'none' via a dedicated branch in
-# renderValue. `null`, by contrast, is reserved for JSON-null at the
-# value level — the spec tokenizer parses it to Atom('null'), which
-# renders as 'atom(null)'.
-
+quote String	String	
+def t quote Integer t	Integer	
+		
+# =====================================================================		
+# 2. None and null		
+# =====================================================================		
+# `none` is the single inhabitant of the None type. Its VType is		
+# TNone, Data == nil. Renders back as 'none' via a dedicated branch in		
+# renderValue. `null`, by contrast, is reserved for JSON-null at the		
+# value level — the spec tokenizer parses it to Atom('null'), which		
+# renders as 'atom(null)'.		
+		
 none	none	bare none round-trips as the None type literal
 none none	none none	multiple nones coexist
 1 none 2	1 none 2	none between integers — non-interfering
 typeof none	None	None is its own 'type' (no metatype lookup); typeof returns None
-
-# null is an atom, not a type literal.
+		
+# null is an atom, not a type literal.		
 null	atom(null)	`null` tokenises to Atom('null')
 quote null	atom(null)	quoting an atom returns the atom unchanged
-
-# Dispatch — none at typed sigs fails (matcher rejects type literals);
-# only Any-typed sigs accept it via the catch-all rule.
+		
+# Dispatch — none at typed sigs fails (matcher rejects type literals);		
+# only Any-typed sigs accept it via the catch-all rule.		
 tagq none	'any'	None hits [TAny] catch-all
 addq none 1	ERROR:signature	addq wants [Number, Number]; None rejected at concrete slot
 addq 1 none	ERROR:signature	either slot
 concatq 'a' none	ERROR:signature	[String, String] rejects None
 not none	true	`not` has [TAny] fallback; CoerceBoolean(none) = false → !false = true
 lengthq none	ERROR:signature	[List] rejects None
-
-# firstq on an empty list returns the None sentinel.
+		
+# firstq on an empty list returns the None sentinel.		
 firstq [ ]	none	empty list → none
 lengthq [ none ]	1	none inside a list is a value
 firstq [ none 1 ]	none	first element of a list whose head is none
-
-# =====================================================================
-# 3. typeof — type of a value
-# =====================================================================
-# Returns a Type literal. Rules:
-#
-#   - none (the unique inhabitant of None) → None
-#   - any other type literal (Data == nil) → its metatype
-#   - concrete value → its exact VType
-#
-# typeof's result is a value that round-trips through `is`.
-
-# Concrete scalars — typeof returns the EXACT type, not parts[1].
-typeof 5	Integer
-typeof -7	Integer
-typeof 0	Integer
-typeof 5.0	Decimal
-typeof 0.0	Decimal
+		
+# =====================================================================		
+# 3. typeof — type of a value		
+# =====================================================================		
+# Returns a Type literal. Rules:		
+#		
+#   - none (the unique inhabitant of None) → None		
+#   - any other type literal (Data == nil) → its metatype		
+#   - concrete value → its exact VType		
+#		
+# typeof's result is a value that round-trips through `is`.		
+		
+# Concrete scalars — typeof returns the EXACT type, not parts[1].		
+typeof 5	Integer	
+typeof -7	Integer	
+typeof 0	Integer	
+typeof 5.0	Decimal	
+typeof 0.0	Decimal	
 typeof 'x'	ProperString	non-empty strings carry the ProperString subtype
 typeof ''	EmptyString	the empty string is the unique inhabitant of EmptyString
-typeof 'hello'	ProperString
-typeof 'a'	ProperString
-typeof true	Boolean
-typeof false	Boolean
-
-# Concrete containers.
-typeof [ ]	List
-typeof [ 1 2 3 ]	List
-typeof [ 'a' 'b' ]	List
-typeof { }	Map
-typeof { x:1 }	Map
-
-# Type literals — typeof reports the metatype.
+typeof 'hello'	ProperString	
+typeof 'a'	ProperString	
+typeof true	Boolean	
+typeof false	Boolean	
+		
+# Concrete containers.		
+typeof [ ]	List	
+typeof [ 1 2 3 ]	List	
+typeof [ 'a' 'b' ]	List	
+typeof { }	Map	
+typeof { x:1 }	Map	
+		
+# Type literals — typeof reports the metatype.		
 typeof Integer	ScalarType	Scalar/* → ScalarType
-typeof Decimal	ScalarType
-typeof String	ScalarType
-typeof Boolean	ScalarType
+typeof Decimal	ScalarType	
+typeof String	ScalarType	
+typeof Boolean	ScalarType	
 typeof Number	ScalarType	all Scalar/* including Number
-typeof Atom	ScalarType
+typeof Atom	ScalarType	
 typeof List	NodeType	Node/* → NodeType
-typeof Map	NodeType
+typeof Map	NodeType	
 typeof Scalar	Type	Scalar has 1 part → MetatypeFor → Type
 typeof Any	Type	Any has 1 part
 typeof Type	Type	the metatype root itself
-
-# typeof composes with simple-value defs.
-def n 5 typeof n	Integer
-def s 'hi' typeof s	ProperString
-
-# typeof's result IS a Type — round-trips:
+		
+# typeof composes with simple-value defs.		
+def n 5 typeof n	Integer	
+def s 'hi' typeof s	ProperString	
+		
+# typeof's result IS a Type — round-trips:		
 typeof typeof 5	ScalarType	typeof Integer = ScalarType
-typeof typeof 'x'	ScalarType
+typeof typeof 'x'	ScalarType	
 typeof typeof none	Type	typeof none → None type literal; typeof None → metatype = Type (None has 1 part)
-
-# =====================================================================
-# 4. type — install a type binding
-# =====================================================================
-# `type NAME body` validates and pushes (NAME, body) onto the type
-# stack. NAME must start [A-Z]; body must satisfy IsTypeBody (a type
-# literal, disjunct, implicit-map record shape, …). References to
-# NAME resolve to the most-recent binding.
-
-# Basic install + use.
+		
+# =====================================================================		
+# 4. type — install a type binding		
+# =====================================================================		
+# `type NAME body` validates and pushes (NAME, body) onto the type		
+# stack. NAME must start [A-Z]; body must satisfy IsTypeBody (a type		
+# literal, disjunct, implicit-map record shape, …). References to		
+# NAME resolve to the most-recent binding.		
+		
+# Basic install + use.		
 type Foo Integer Foo	Integer	Foo resolves to the Integer type literal
-type Bar String Bar	String
-type Pi Number Pi	Number
-
-# typeof resolves the Word to its bound type literal first.
+type Bar String Bar	String	
+type Pi Number Pi	Number	
+		
+# typeof resolves the Word to its bound type literal first.		
 type Foo Integer typeof Foo	ScalarType	Foo → Integer; typeof Integer → ScalarType
-type Lst List typeof Lst	NodeType
-
-# Multiple type bindings live independently.
-type Foo Integer type Bar String Foo Bar	Integer String
-
-# =====================================================================
-# 5. type — record-shape (Node/Map) bodies
-# =====================================================================
-# An implicit-map literal `{name:Type ...}` is a structural record
-# shape: a map whose keys carry expected types. type can install one
-# directly. Then `is` checks shape conformance.
-
+type Lst List typeof Lst	NodeType	
+		
+# Multiple type bindings live independently.		
+type Foo Integer type Bar String Foo Bar	Integer String	
+		
+# =====================================================================		
+# 5. type — record-shape (Node/Map) bodies		
+# =====================================================================		
+# An implicit-map literal `{name:Type ...}` is a structural record		
+# shape: a map whose keys carry expected types. type can install one		
+# directly. Then `is` checks shape conformance.		
+		
 type R { x:Integer y:String } typeof R	NodeType	an implicit map is a Map; metatype is NodeType
 type R { x:Integer } R	{x:Integer}	the bound type literal renders as the implicit-map syntax
-
-# Single-field record.
-type Point { x:Integer y:Integer } typeof Point	NodeType
-
-# Record with mixed field types.
-type Person { name:String age:Integer } typeof Person	NodeType
-
-# Nested-bracket record syntax — values can themselves be type literals.
-type Nested { kind:String n:Number } typeof Nested	NodeType
-
-# =====================================================================
-# 6. type — name validation
-# =====================================================================
-# NAME must start with a capital letter; otherwise type_error. Bodies
-# are accepted broadly: every value is a valid type body, since AQL
-# treats scalars and collections as types in their own right (the
-# singleton type whose only inhabitant equals that value). Validation
-# focuses on the name.
+		
+# Single-field record.		
+type Point { x:Integer y:Integer } typeof Point	NodeType	
+		
+# Record with mixed field types.		
+type Person { name:String age:Integer } typeof Person	NodeType	
+		
+# Nested-bracket record syntax — values can themselves be type literals.		
+type Nested { kind:String n:Number } typeof Nested	NodeType	
+		
+# =====================================================================		
+# 6. type — name validation		
+# =====================================================================		
+# NAME must start with a capital letter; otherwise type_error. Bodies		
+# are accepted broadly: every value is a valid type body, since AQL		
+# treats scalars and collections as types in their own right (the		
+# singleton type whose only inhabitant equals that value). Validation		
+# focuses on the name.		
 type foo Integer	ERROR:type_error	lowercase first char rejected
 type 1Foo Integer	ERROR:type_error	digit first char also fails the capital-letter check
-
-# =====================================================================
-# 7. type / def namespace independence
-# =====================================================================
-# def names start lowercase; type names start uppercase. The two
-# stacks are independent.
+		
+# =====================================================================		
+# 7. type / def namespace independence		
+# =====================================================================		
+# def names start lowercase; type names start uppercase. The two		
+# stacks are independent.		
 def x 5 type X Integer		x and X are different names; both succeed
 def foo 5 type Foo Integer		foo (def) and Foo (type) coexist
 type T Integer def t 5		T (type) and t (def) coexist
-
-# =====================================================================
-# 8. type stack — shadow + pop
-# =====================================================================
-# `type` pushes; `untype` pops the most-recent. Shadowing reveals the
-# previous binding when the top is popped.
-
+		
+# =====================================================================		
+# 8. type stack — shadow + pop		
+# =====================================================================		
+# `type` pushes; `untype` pops the most-recent. Shadowing reveals the		
+# previous binding when the top is popped.		
+		
 type Foo Integer type Foo String Foo	String	the String binding shadows the Integer one
 type Foo Integer type Foo String typeof Foo	ScalarType	typeof on the shadow still reports ScalarType
 type Foo Integer type Foo String untype Foo Foo	Integer	pop reveals the previous binding
 type Foo Integer untype Foo		untype on the only binding empties the stack
 type Foo Integer untype Foo Foo	ERROR:undefined_word	Foo is no longer a registered type
-
-# =====================================================================
-# 9. untype — error paths
-# =====================================================================
+		
+# =====================================================================		
+# 9. untype — error paths		
+# =====================================================================		
 untype Foo	ERROR:type_error	no Foo on the type stack
 untype foo	ERROR:type_error	lowercase name rejected before the lookup
-
-# =====================================================================
-# 10. is — type-test predicate
-# =====================================================================
-# `v is T` reads naturally: T is the upcoming forward word, v sits on
-# the prefix stack. Returns Boolean.
-
-# Scalar concrete-value tests — true if v's VType matches T.
-5 is Integer	true
+		
+# =====================================================================		
+# 10. is — type-test predicate		
+# =====================================================================		
+# `v is T` reads naturally: T is the upcoming forward word, v sits on		
+# the prefix stack. Returns Boolean.		
+		
+# Scalar concrete-value tests — true if v's VType matches T.		
+5 is Integer	true	
 5 is Number	true	Integer is a subtype of Number
 5 is Decimal	false	Integer is NOT a subtype of Decimal
-5 is String	false
+5 is String	false	
 5 is Any	true	everything is Any
-5.0 is Decimal	true
-5.0 is Number	true
-'hi' is String	true
-'hi' is Integer	false
+5.0 is Decimal	true	
+5.0 is Number	true	
+'hi' is String	true	
+'hi' is Integer	false	
 'hi' is ProperString	true	non-empty strings carry the ProperString subtype
-'hi' is EmptyString	false
-'' is String	true
+'hi' is EmptyString	false	
+'' is String	true	
 '' is EmptyString	true	the empty string is the unique inhabitant of EmptyString
-'' is ProperString	false
-true is Boolean	true
-true is Any	true
-[ 1 2 ] is List	true
-[ 1 2 ] is Map	false
-{ x:1 } is Map	true
-
-# none is its own type — only matches None and Any.
-none is None	true
-none is Any	true
-none is Integer	false
-none is List	false
-
-# Type-literal-on-type-literal: subtype lattice.
+'' is ProperString	false	
+true is Boolean	true	
+true is Any	true	
+[ 1 2 ] is List	true	
+[ 1 2 ] is Map	false	
+{ x:1 } is Map	true	
+		
+# none is its own type — only matches None and Any.		
+none is None	true	
+none is Any	true	
+none is Integer	false	
+none is List	false	
+		
+# Type-literal-on-type-literal: subtype lattice.		
 Integer is Number	true	Integer's type path Scalar/Number/Integer matches Scalar/Number
-Integer is Scalar	true
-Integer is Any	true
-Integer is Decimal	false
-Integer is String	false
+Integer is Scalar	true	
+Integer is Any	true	
+Integer is Decimal	false	
+Integer is String	false	
 Number is Scalar	true	Number itself is a Scalar subtype
-Number is Number	true
-List is Node	true
-String is Scalar	true
+Number is Number	true	
+List is Node	true	
+String is Scalar	true	
 ProperString is String	true	String subtypes flow up the lattice
-EmptyString is String	true
-ProperString is Scalar	true
+EmptyString is String	true	
+ProperString is Scalar	true	
 ProperString is EmptyString	false	siblings under String — neither matches the other
-EmptyString is ProperString	false
-
-# =====================================================================
-# 11. is — record-shape conformance
-# =====================================================================
-# When T is an implicit-map type literal, `is` checks each declared
-# key is present in v with a matching field type.
-
-type Point { x:Integer y:Integer } { x:1 y:2 } is Point	true
+EmptyString is ProperString	false	
+		
+# =====================================================================		
+# 11. is — record-shape conformance		
+# =====================================================================		
+# When T is an implicit-map type literal, `is` checks each declared		
+# key is present in v with a matching field type.		
+		
+type Point { x:Integer y:Integer } { x:1 y:2 } is Point	true	
 type Point { x:Integer y:Integer } { x:1 } is Point	false	missing key y
 type Point { x:Integer y:Integer } { x:1 y:'two' } is Point	false	y is wrong type
 type Point { x:Integer y:Integer } { x:1 y:2 z:3 } is Point	true	extra keys are OK
 type Point { x:Integer y:Integer } [ 1 2 ] is Point	false	v is a List, not a Map
-
-# =====================================================================
-# 11b. Literals as types
-# =====================================================================
-# Every value is a valid type body. A scalar literal `1` is the
-# singleton type whose only inhabitant equals 1. `is` unifies, so
-# value-equality and lattice-membership cases share one mechanism.
-
-# Scalar literals as types — only the same scalar matches.
+		
+# =====================================================================		
+# 11b. Literals as types		
+# =====================================================================		
+# Every value is a valid type body. A scalar literal `1` is the		
+# singleton type whose only inhabitant equals 1. `is` unifies, so		
+# value-equality and lattice-membership cases share one mechanism.		
+		
+# Scalar literals as types — only the same scalar matches.		
 1 is 1	true	a value is its own (singleton) type
-1 is 2	false
+1 is 2	false	
 1 is Integer	true	1 also matches the broader Integer type
-'hi' is 'hi'	true
-'hi' is 'bye'	false
+'hi' is 'hi'	true	
+'hi' is 'bye'	false	
 'hi' is String	true	'hi' is also a String
-true is true	true
-true is false	false
-true is Boolean	true
-
-# Naming a singleton via `type`.
-type One 1 1 is One	true
-type One 1 2 is One	false
-type Hello 'hello' 'hello' is Hello	true
-type Hello 'hello' 'world' is Hello	false
-
-# A type-stack binding to a scalar narrows the type-of relation.
+true is true	true	
+true is false	false	
+true is Boolean	true	
+		
+# Naming a singleton via `type`.		
+type One 1 1 is One	true	
+type One 1 2 is One	false	
+type Hello 'hello' 'hello' is Hello	true	
+type Hello 'hello' 'world' is Hello	false	
+		
+# A type-stack binding to a scalar narrows the type-of relation.		
 type One 1 1 is Integer	true	1 still satisfies the broader Integer type
 type One 1 typeof One	Integer	the binding's metatype is the value's exact type
-
-# =====================================================================
-# 11c. Lists as types — element-wise unification
-# =====================================================================
-# `is` against a list type unifies element-by-element. The list's
-# elements can themselves be type literals, scalar literals, or
-# nested shapes — all in one unified mechanism.
-
-# Scalar-only list types.
+		
+# =====================================================================		
+# 11c. Lists as types — element-wise unification		
+# =====================================================================		
+# `is` against a list type unifies element-by-element. The list's		
+# elements can themselves be type literals, scalar literals, or		
+# nested shapes — all in one unified mechanism.		
+		
+# Scalar-only list types.		
 [ 1 2 3 ] is [ 1 2 3 ]	true	exact value match
 [ 1 2 3 ] is [ 1 2 4 ]	false	element 2 differs
 [ 1 2 ] is [ 1 2 3 ]	false	length mismatch
-
-# Type-literal element sigs.
+		
+# Type-literal element sigs.		
 [ 1 2 3 ] is [ Integer Integer Integer ]	true	each element unifies with Integer
 [ 1 'x' ] is [ Integer String ]	true	mixed element types
 [ 1 'x' ] is [ Integer Integer ]	false	'x' doesn't match Integer
-
-# Mixed literal + type.
+		
+# Mixed literal + type.		
 [ 1 'x' ] is [ 1 String ]	true	first element is the literal 1, second is a String
 [ 2 'x' ] is [ 1 String ]	false	first element doesn't equal 1
-
-# A named list type.
-type Pair [ Integer Integer ] [ 1 2 ] is Pair	true
+		
+# A named list type.		
+type Pair [ Integer Integer ] [ 1 2 ] is Pair	true	
 type Pair [ Integer Integer ] [ 1 'x' ] is Pair	false	wrong element type
 type Pair [ Integer Integer ] [ 1 ] is Pair	false	wrong length
-
-# =====================================================================
-# 11d. Records with literal field values
-# =====================================================================
-# A record-shape field can be a literal (singleton type) or a type
-# literal. `is` checks each declared field is present in v with a
-# unifying field value.
-
-# Literal x:1 — only maps with x exactly 1 satisfy.
-type One { x:1 } { x:1 } is One	true
-type One { x:1 } { x:2 } is One	false
+		
+# =====================================================================		
+# 11d. Records with literal field values		
+# =====================================================================		
+# A record-shape field can be a literal (singleton type) or a type		
+# literal. `is` checks each declared field is present in v with a		
+# unifying field value.		
+		
+# Literal x:1 — only maps with x exactly 1 satisfy.		
+type One { x:1 } { x:1 } is One	true	
+type One { x:1 } { x:2 } is One	false	
 type One { x:1 } { x:1 y:99 } is One	true	extra fields are OK
 type One { x:1 } { y:1 } is One	false	missing key x
-
-# Mixed literal + type-literal fields.
-type Tag { kind:'warn' msg:String } { kind:'warn' msg:'oops' } is Tag	true
+		
+# Mixed literal + type-literal fields.		
+type Tag { kind:'warn' msg:String } { kind:'warn' msg:'oops' } is Tag	true	
 type Tag { kind:'warn' msg:String } { kind:'info' msg:'oops' } is Tag	false	kind doesn't equal 'warn'
 type Tag { kind:'warn' msg:String } { kind:'warn' msg:42 } is Tag	false	msg is not a String
-
-# Boolean literal as a field type.
-type Flag { ok:true } { ok:true } is Flag	true
-type Flag { ok:true } { ok:false } is Flag	false
-
-# =====================================================================
-# 11e. Nested records (deeper depths)
-# =====================================================================
-# Record fields can themselves be record shapes — `name:{...}` syntax.
-# `is` recurses field-by-field.
-
-type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 y:5 } } is Box	true
+		
+# Boolean literal as a field type.		
+type Flag { ok:true } { ok:true } is Flag	true	
+type Flag { ok:true } { ok:false } is Flag	false	
+		
+# =====================================================================		
+# 11e. Nested records (deeper depths)		
+# =====================================================================		
+# Record fields can themselves be record shapes — `name:{...}` syntax.		
+# `is` recurses field-by-field.		
+		
+type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 y:5 } } is Box	true	
 type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 } } is Box	false	br missing key y
 type Box { tl:{ x:Integer y:Integer } br:{ x:Integer y:Integer } } { tl:{ x:0 y:0 } br:{ x:5 y:'end' } } is Box	false	br.y is not an Integer
-
-# Three-level nesting.
-type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ c:42 } } } is Deep	true
+		
+# Three-level nesting.		
+type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ c:42 } } } is Deep	true	
 type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ c:'x' } } } is Deep	false	c is not an Integer
 type Deep { a:{ b:{ c:Integer } } } { a:{ b:{ } } } is Deep	false	c missing at the deepest level
-
-# =====================================================================
-# 11f. Records with list fields (records-of-lists, lists-in-records)
-# =====================================================================
-
-# Record with a List-typed field.
-type Tagged { tags:List } { tags:[ 'a' 'b' ] } is Tagged	true
+		
+# =====================================================================		
+# 11f. Records with list fields (records-of-lists, lists-in-records)		
+# =====================================================================		
+		
+# Record with a List-typed field.		
+type Tagged { tags:List } { tags:[ 'a' 'b' ] } is Tagged	true	
 type Tagged { tags:List } { tags:42 } is Tagged	false	tags must be a List
-
-# Record with a typed-list field — element types pinned.
-type Pair2 { tags:[ String String ] } { tags:[ 'a' 'b' ] } is Pair2	true
+		
+# Record with a typed-list field — element types pinned.		
+type Pair2 { tags:[ String String ] } { tags:[ 'a' 'b' ] } is Pair2	true	
 type Pair2 { tags:[ String String ] } { tags:[ 'a' 1 ] } is Pair2	false	second element wrong type
-
-# List of records.
+		
+# List of records.		
 [ { x:1 } { x:2 } ] is [ { x:Integer } { x:Integer } ]	true	list of two records
 [ { x:1 } { x:'oops' } ] is [ { x:Integer } { x:Integer } ]	false	one element fails record check
-
-# List of nested records.
-[ { p:{ x:1 y:2 } } { p:{ x:3 y:4 } } ] is [ { p:{ x:Integer y:Integer } } { p:{ x:Integer y:Integer } } ]	true
-
-# =====================================================================
-# 11g. typeof on literal values reports the exact value's type
-# =====================================================================
-# typeof returns a Type literal of the value's exact VType. For
-# values of named-singleton types this still reports the underlying
-# scalar type — the binding name is an alias, not a tag.
-
-typeof 1	Integer
+		
+# List of nested records.		
+[ { p:{ x:1 y:2 } } { p:{ x:3 y:4 } } ] is [ { p:{ x:Integer y:Integer } } { p:{ x:Integer y:Integer } } ]	true	
+		
+# =====================================================================		
+# 11g. typeof on literal values reports the exact value's type		
+# =====================================================================		
+# typeof returns a Type literal of the value's exact VType. For		
+# values of named-singleton types this still reports the underlying		
+# scalar type — the binding name is an alias, not a tag.		
+		
+typeof 1	Integer	
 type One 1 typeof 1	Integer	type binding doesn't change typeof on the underlying value
 type One 1 typeof One	Integer	typeof on the type-stack value resolves to its exact type
-
-# =====================================================================
-# 11h. Typed list `[:T]` and typed map `{:T}` (Node child forms)
-# =====================================================================
-# `[:T]` is a homogeneous list type — every element must satisfy T.
-# `{:T}` is a homogeneous map type — every value must satisfy T.
-# Both are constructed by the spec tokenizer's `[:` / `{:` openers
-# (and `name:[:` / `name:{:` for nested-binding inside parent maps).
-# `is` recurses on T element-by-element / value-by-value.
-
-# Typed list with scalar leaf type.
-type IntList [: Integer ] [ 1 2 3 ] is IntList	true
+		
+# =====================================================================		
+# 11h. Typed list `[:T]` and typed map `{:T}` (Node child forms)		
+# =====================================================================		
+# `[:T]` is a homogeneous list type — every element must satisfy T.		
+# `{:T}` is a homogeneous map type — every value must satisfy T.		
+# Both are constructed by the spec tokenizer's `[:` / `{:` openers		
+# (and `name:[:` / `name:{:` for nested-binding inside parent maps).		
+# `is` recurses on T element-by-element / value-by-value.		
+		
+# Typed list with scalar leaf type.		
+type IntList [: Integer ] [ 1 2 3 ] is IntList	true	
 type IntList [: Integer ] [ 1 'x' 3 ] is IntList	false	one element wrong type
 type IntList [: Integer ] [ ] is IntList	true	empty list trivially satisfies
-
-# Typed list of strings.
-type Names [: String ] [ 'a' 'b' 'c' ] is Names	true
-type Names [: String ] [ 'a' 1 ] is Names	false
-
-# Typed map with scalar leaf type — every VALUE must satisfy T (keys
-# are unconstrained).
-type IntMap {: Integer } { a:1 b:2 c:3 } is IntMap	true
+		
+# Typed list of strings.		
+type Names [: String ] [ 'a' 'b' 'c' ] is Names	true	
+type Names [: String ] [ 'a' 1 ] is Names	false	
+		
+# Typed map with scalar leaf type — every VALUE must satisfy T (keys		
+# are unconstrained).		
+type IntMap {: Integer } { a:1 b:2 c:3 } is IntMap	true	
 type IntMap {: Integer } { a:1 b:'x' } is IntMap	false	value b is wrong type
 type IntMap {: Integer } { } is IntMap	true	empty map trivially satisfies
-
-# Typed-list-of-typed-list — list of lists of integers.
-type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 4 ] ] is Grid	true
+		
+# Typed-list-of-typed-list — list of lists of integers.		
+type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 4 ] ] is Grid	true	
 type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 'x' ] ] is Grid	false	nested element wrong type
 type Grid [: [: Integer ] ] [ [ ] [ 1 ] ] is Grid	true	inner empties OK
-
-# Typed-list-of-record-shape — list whose elements are records.
-type People [: { name:String age:Integer } ] [ { name:'a' age:1 } { name:'b' age:2 } ] is People	true
+		
+# Typed-list-of-record-shape — list whose elements are records.		
+type People [: { name:String age:Integer } ] [ { name:'a' age:1 } { name:'b' age:2 } ] is People	true	
 type People [: { name:String age:Integer } ] [ { name:'a' age:'x' } ] is People	false	field type mismatch
 type People [: { name:String age:Integer } ] [ { name:'a' } ] is People	false	missing field
-
-# Typed-map-of-typed-list — values are lists of integers.
-type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 3 ] } is Index	true
+		
+# Typed-map-of-typed-list — values are lists of integers.		
+type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 3 ] } is Index	true	
 type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 'x' ] } is Index	false	inner element wrong type
-
-# Typed-map-of-record-shape — values are records.
-type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:'b' } } is Lookup	true
-type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:99 } } is Lookup	false
-
-# Mixed — typed-list of typed-maps.
-type MapList [: {: Integer } ] [ { a:1 b:2 } { c:3 } ] is MapList	true
+		
+# Typed-map-of-record-shape — values are records.		
+type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:'b' } } is Lookup	true	
+type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:99 } } is Lookup	false	
+		
+# Mixed — typed-list of typed-maps.		
+type MapList [: {: Integer } ] [ { a:1 b:2 } { c:3 } ] is MapList	true	
 type MapList [: {: Integer } ] [ { a:1 } { b:'x' } ] is MapList	false	value in second map wrong type
-
-# Typed-map of typed-maps (3 levels deep).
-type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 2 ] row2:[ 3 ] } plane2:{ row1:[ ] } } is Cube	true
+		
+# Typed-map of typed-maps (3 levels deep).		
+type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 2 ] row2:[ 3 ] } plane2:{ row1:[ ] } } is Cube	true	
 type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 'x' ] } } is Cube	false	deep element wrong type
-
-# Typed list/map at top level (no `type` binding) — `is` directly
-# against an inline typed shape.
-[ 1 2 3 ] is [: Integer ]	true
-[ 1 'x' ] is [: Integer ]	false
-{ a:1 b:2 } is {: Integer }	true
-{ a:1 b:'x' } is {: Integer }	false
-
-# typeof on a typed list/map type literal reports its metatype.
+		
+# Typed list/map at top level (no `type` binding) — `is` directly		
+# against an inline typed shape.		
+[ 1 2 3 ] is [: Integer ]	true	
+[ 1 'x' ] is [: Integer ]	false	
+{ a:1 b:2 } is {: Integer }	true	
+{ a:1 b:'x' } is {: Integer }	false	
+		
+# typeof on a typed list/map type literal reports its metatype.		
 typeof [: Integer ]	NodeType	[: Integer ] has VType=List; metatype = NodeType
-typeof {: Integer }	NodeType
-
-# =====================================================================
-# 11i. Typed list / map carrying both elements AND a child constraint
-# =====================================================================
-# `[{x:1} :{x:Integer} {x:2}]` parses to a typed-list value whose
-# ChildTypeInfo retains both the literal elements and the child
-# constraint. `{a:{x:1} :{x:Integer} b:{x:2}}` is the map analogue.
-#
-# `is` against a child-typed type validates each retained element /
-# entry-value against the child constraint. The element retention is
-# what makes `[v0 :T v1]` more useful than the bare `[:T]` form: the
-# value carries the elements forward so list / map / first / length
-# operations see them.
-
+typeof {: Integer }	NodeType	
+		
+# =====================================================================		
+# 11i. Typed list / map carrying both elements AND a child constraint		
+# =====================================================================		
+# `[{x:1} :{x:Integer} {x:2}]` parses to a typed-list value whose		
+# ChildTypeInfo retains both the literal elements and the child		
+# constraint. `{a:{x:1} :{x:Integer} b:{x:2}}` is the map analogue.		
+#		
+# `is` against a child-typed type validates each retained element /		
+# entry-value against the child constraint. The element retention is		
+# what makes `[v0 :T v1]` more useful than the bare `[:T]` form: the		
+# value carries the elements forward so list / map / first / length		
+# operations see them.		
+		
 [{x:1} :{x:Integer} {x:2}] is [: {x:Integer}]	true	all elements satisfy the child type
 [{x:'X'} :{x:Integer} {x:2}] is [: {x:Integer}]	false	first element's x is String, not Integer
 {a:{x:1} :{x:Integer} b:{x:2}} is {: {x:Integer}}	true	every entry value satisfies the child type
 {a:{x:'X'} :{x:Integer} b:{x:2}} is {: {x:Integer}}	false	entry a's value fails the child type
-
-# Mixed scalar/literal child types.
+		
+# Mixed scalar/literal child types.		
 [1 :Integer 2 3] is [: Integer]	false	parser only retains values when child is a complex map shape; bare scalar gives plain typed-list semantics — pinned for documentation
 [1 2 3] is [: Integer]	true	regular concrete list directly satisfies the typed list type
-
-# =====================================================================
-# 11j. Typed simple-value def — `def name:Type body`
-# =====================================================================
-# `def x:Integer 1` validates the body against the declared type
-# before installing. The typed-name `x:Integer` parses as the
-# implicit map `{x:Integer}`; def's [TMap, TAny] sig dispatches to
-# the typed-def handler. Mirrors the production aql defTypedHandler
-# in lang/internal/engine/native_definition.go.
-
-# Type matches → installation succeeds, name resolves to the value.
-def x:Integer 1 x	1
-def x:Integer -7 x	-7
-def s:String 'hi' s	'hi'
-def b:Boolean true b	true
-
-# Subtype satisfies parent declared types.
+		
+# =====================================================================		
+# 11j. Typed simple-value def — `def name:Type body`		
+# =====================================================================		
+# `def x:Integer 1` validates the body against the declared type		
+# before installing. The typed-name `x:Integer` parses as the		
+# implicit map `{x:Integer}`; def's [TMap, TAny] sig dispatches to		
+# the typed-def handler. Mirrors the production aql defTypedHandler		
+# in lang/internal/engine/native_definition.go.		
+		
+# Type matches → installation succeeds, name resolves to the value.		
+def x:Integer 1 x	1	
+def x:Integer -7 x	-7	
+def s:String 'hi' s	'hi'	
+def b:Boolean true b	true	
+		
+# Subtype satisfies parent declared types.		
 def n:Number 5 n	5	Integer is a subtype of Number
 def n:Number 5.0 n	5.0	Decimal is also a subtype of Number
-
-# Type mismatch → type_error at def time, no binding installed.
+		
+# Type mismatch → type_error at def time, no binding installed.		
 def x:Integer 'wrong'	ERROR:type_error	String value does not satisfy Integer
 def x:Integer 5.0	ERROR:type_error	Decimal does not satisfy Integer (sibling under Number)
 def s:String 42	ERROR:type_error	Integer does not satisfy String
-
-# Singleton typing — `1` is the type whose only inhabitant is 1.
-def x:1 1 x	1
+		
+# Singleton typing — `1` is the type whose only inhabitant is 1.		
+def x:1 1 x	1	
 def x:1 2	ERROR:type_error	2 is not the singleton 1
-
-# Record-shape typing — `def x:{a:Integer} {a:5}` accepts only matching shapes.
-def p:{ x:Integer y:Integer } { x:1 y:2 } p	{x:1 y:2}
+		
+# Record-shape typing — `def x:{a:Integer} {a:5}` accepts only matching shapes.		
+def p:{ x:Integer y:Integer } { x:1 y:2 } p	{x:1 y:2}	
 def p:{ x:Integer y:Integer } { x:1 }	ERROR:type_error	missing field y
 def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
-
-# Typed-list typing — `def xs:[: T]` accepts homogeneous lists. The
-# list is stored as a code-body, so referencing xs splices its
-# elements (canonical AQL list-def semantics, see code-splice in
-# function.tsv §2). `quote` would store as data instead.
+		
+# Typed-list typing — `def xs:[: T]` accepts homogeneous lists. The		
+# list is stored as a code-body, so referencing xs splices its		
+# elements (canonical AQL list-def semantics, see code-splice in		
+# function.tsv §2). `quote` would store as data instead.		
 def xs:[: Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
 def xs:[: Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
 def xs:[: Integer ] quote [ 1 2 3 ] xs	[1 2 3]	quote stores the list as data; xs resolves to the list value
-
-# =====================================================================
-# 11k. enum — fixed enumeration of values
-# =====================================================================
-# `enum [a b c]` builds a Disjunct from the listed values. Words in
-# the list become Atoms (so users don't need `quote` on each member).
-# The enum is typically named via `type Color enum [...]` and queried
-# with `is`.
-#
-# A child-typed list `enum [: T v0 v1 ...]` validates each value
-# against T at construction; a non-matching value triggers a type
-# error before the disjunct is built.
-
-# Atom-valued enum.
-type Color enum [ red green blue ] quote red is Color	true
-type Color enum [ red green blue ] quote green is Color	true
-type Color enum [ red green blue ] quote pink is Color	false
-
-# Integer-valued enum with child-type validation.
-type Codes enum [: Integer 200 404 500 ] 200 is Codes	true
-type Codes enum [: Integer 200 404 500 ] 500 is Codes	true
-type Codes enum [: Integer 200 404 500 ] 201 is Codes	false
-
-# Child-type rejects mismatched literals at enum-construction time.
+		
+# =====================================================================		
+# 11k. enum — fixed enumeration of values		
+# =====================================================================		
+# `enum [a b c]` builds a Disjunct from the listed values. Words in		
+# the list become Atoms (so users don't need `quote` on each member).		
+# The enum is typically named via `type Color enum [...]` and queried		
+# with `is`.		
+#		
+# A child-typed list `enum [: T v0 v1 ...]` validates each value		
+# against T at construction; a non-matching value triggers a type		
+# error before the disjunct is built.		
+		
+# Atom-valued enum.		
+type Color enum [ red green blue ] quote red is Color	true	
+type Color enum [ red green blue ] quote green is Color	true	
+type Color enum [ red green blue ] quote pink is Color	false	
+		
+# Integer-valued enum with child-type validation.		
+type Codes enum [: Integer 200 404 500 ] 200 is Codes	true	
+type Codes enum [: Integer 200 404 500 ] 500 is Codes	true	
+type Codes enum [: Integer 200 404 500 ] 201 is Codes	false	
+		
+# Child-type rejects mismatched literals at enum-construction time.		
 type Codes enum [: Integer 200 'bad' 500 ]	ERROR:type_error	'bad' is not an Integer
 type Codes enum [: String 'ok' 1 ]	ERROR:type_error	1 is not a String
-
-# String-valued enum.
-type Mode enum [: String 'off' 'on' 'auto' ] 'on' is Mode	true
-type Mode enum [: String 'off' 'on' 'auto' ] 'ok' is Mode	false
-
-# A bare enum (no `type`) returns a disjunct value usable directly.
+		
+# String-valued enum.		
+type Mode enum [: String 'off' 'on' 'auto' ] 'on' is Mode	true	
+type Mode enum [: String 'off' 'on' 'auto' ] 'ok' is Mode	false	
+		
+# A bare enum (no `type`) returns a disjunct value usable directly.		
 quote red is enum [ red green blue ]	true	the enum value behaves as a type at the right of `is`
-quote pink is enum [ red green blue ]	false
-
-# Empty enum — uninhabited.
+quote pink is enum [ red green blue ]	false	
+		
+# Empty enum — uninhabited.		
 quote red is enum [ ]	false	no alternatives means nothing satisfies
-
-# =====================================================================
-# 11l. fnsig — body-less function-shape type
-# =====================================================================
-# `fnsig [ [in] [out] … ]` produces an FnSig type literal: a structural
-# function-shape constraint with NO body. It is the type-only
-# counterpart to `fn` (which always carries a body and produces a
-# callable Function value — see function.tsv §6).
-#
-# An FnSig is not callable; its only role is as a type. The intended
-# instantiation pattern is `type NAME fnsig […]` to name the shape,
-# then `def f:NAME impl` to assert that `impl` satisfies the shape
-# before binding. (Direct value matching of FnSig vs Function uses
-# the typed-def path; the spec runner's local fixtures don't include
-# the unification machinery here, so this section sticks to what the
-# core words alone can demonstrate.)
-
-# Bare fnsig produces an FnSig type literal.
+		
+# =====================================================================		
+# 11l. fnsig — body-less function-shape type		
+# =====================================================================		
+# `fnsig [ [in] [out] … ]` produces an FnSig type literal: a structural		
+# function-shape constraint with NO body. It is the type-only		
+# counterpart to `fn` (which always carries a body and produces a		
+# callable Function value — see function.tsv §6).		
+#		
+# An FnSig is not callable; its only role is as a type. The intended		
+# instantiation pattern is `type NAME fnsig […]` to name the shape,		
+# then `def f:NAME impl` to assert that `impl` satisfies the shape		
+# before binding. (Direct value matching of FnSig vs Function uses		
+# the typed-def path; the spec runner's local fixtures don't include		
+# the unification machinery here, so this section sticks to what the		
+# core words alone can demonstrate.)		
+		
+# Bare fnsig produces an FnSig type literal.		
 typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	body-less form yields an FnSig type literal
 fnsig [ [ Integer ] [ Integer ] ] is FnSig	true	is-test confirms the type
 typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FnSig	multi-pair fnsig is still FnSig
-
-# `type NAME fnsig […]` installs the shape under NAME; the named type
-# is itself an FnSig.
+		
+# `type NAME fnsig […]` installs the shape under NAME; the named type		
+# is itself an FnSig.		
 type Mapper fnsig [ [ Integer ] [ Integer ] ] typeof Mapper	FnSig	named fnsig type round-trips through typeof
-
-# `fnsig` is strict about its outer-list grammar: each pair MUST be
-# `[in] [out]` (length is non-zero multiple of 2). Adding a body
-# triple is an error — that's `fn`'s territory.
+		
+# `fnsig` is strict about its outer-list grammar: each pair MUST be		
+# `[in] [out]` (length is non-zero multiple of 2). Adding a body		
+# triple is an error — that's `fn`'s territory.		
 fnsig [ ]	ERROR:multiple of 2	empty list is rejected
 fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with body) is rejected; use fn for that
-
-# =====================================================================
-# 11m. Instantiated enum — `def x:Color quote red`
-# =====================================================================
-# Once an enum is registered as a type via `type Color enum […]`,
-# Color is an FnSig-style disjunct constraint. The typed-def form
-# `def x:Color body` validates the body against Color: only members
-# of the disjunct succeed, anything else triggers a type_error.
-#
-# This is AQL's analogue of 'instantiating an enum value' in other
-# languages. Survey of the surrounding design space:
-#
-#   Rust          Color::Red          variant path on the enum type
-#   Swift         Color.red           case access on the enum type
-#   Java          Color.RED           static enum constant
-#   Python        Color.RED           Enum subclass attribute
-#   TypeScript    Color.Red           value of an enum type
-#   Haskell       Red                 data constructor of the sum type
-#   AQL           def x:Color quote red
-#                                     typed-def asserts `red ∈ Color` at
-#                                     bind time; x then resolves to
-#                                     Atom(red) and `x is Color` is true
-#
-# AQL's twist is that the 'instantiated value' is just the underlying
-# Atom — no nominal wrapper distinguishes `Atom(red)` from
-# `Color::Red`. The Color membership check happens at def-time; once
-# bound, x is an Atom that *happens* to satisfy Color.
-
-# Atom-valued enum — typed binding admits members.
+		
+# =====================================================================		
+# 11m. Instantiated enum — `def x:Color quote red`		
+# =====================================================================		
+# Once an enum is registered as a type via `type Color enum […]`,		
+# Color is an FnSig-style disjunct constraint. The typed-def form		
+# `def x:Color body` validates the body against Color: only members		
+# of the disjunct succeed, anything else triggers a type_error.		
+#		
+# This is AQL's analogue of 'instantiating an enum value' in other		
+# languages. Survey of the surrounding design space:		
+#		
+#   Rust          Color::Red          variant path on the enum type		
+#   Swift         Color.red           case access on the enum type		
+#   Java          Color.RED           static enum constant		
+#   Python        Color.RED           Enum subclass attribute		
+#   TypeScript    Color.Red           value of an enum type		
+#   Haskell       Red                 data constructor of the sum type		
+#   AQL           def x:Color quote red		
+#                                     typed-def asserts `red ∈ Color` at		
+#                                     bind time; x then resolves to		
+#                                     Atom(red) and `x is Color` is true		
+#		
+# AQL's twist is that the 'instantiated value' is just the underlying		
+# Atom — no nominal wrapper distinguishes `Atom(red)` from		
+# `Color::Red`. The Color membership check happens at def-time; once		
+# bound, x is an Atom that *happens* to satisfy Color.		
+		
+# Atom-valued enum — typed binding admits members.		
 type Color enum [ red green blue ] def x:Color quote red x	atom(red)	red is a Color member; bind succeeds
-type Color enum [ red green blue ] def x:Color quote green x	atom(green)
-type Color enum [ red green blue ] def x:Color quote blue x	atom(blue)
-
-# Non-member rejected.
+type Color enum [ red green blue ] def x:Color quote green x	atom(green)	
+type Color enum [ red green blue ] def x:Color quote blue x	atom(blue)	
+		
+# Non-member rejected.		
 type Color enum [ red green blue ] def x:Color quote pink	ERROR:type_error	pink is not in Color's alternatives
-
-# Membership round-trip via `is`.
+		
+# Membership round-trip via `is`.		
 type Color enum [ red green blue ] def x:Color quote red x is Color	true	the bound value still satisfies Color
-
-# Integer-valued enum — typed binding accepts matching literals.
+		
+# Integer-valued enum — typed binding accepts matching literals.		
 type Codes enum [: Integer 200 404 500 ] def s:Codes 200 s	200	200 is a Codes member
-type Codes enum [: Integer 200 404 500 ] def s:Codes 404 s	404
+type Codes enum [: Integer 200 404 500 ] def s:Codes 404 s	404	
 type Codes enum [: Integer 200 404 500 ] def s:Codes 201	ERROR:type_error	201 is not in Codes
-
-# String-valued enum — same pattern, String members.
+		
+# String-valued enum — same pattern, String members.		
 type Mode enum [: String 'off' 'on' 'auto' ] def m:Mode 'on' m	'on'	'on' is a Mode member
 type Mode enum [: String 'off' 'on' 'auto' ] def m:Mode 'fast'	ERROR:type_error	'fast' is not in Mode
-
-# =====================================================================
-# 12. Dispatch — type literals are rejected at concrete-payload sigs
-# =====================================================================
-# Every concrete-payload sig slot rejects type literals (Data == nil).
-# Type literals are still legitimately accepted at: TAny slots,
-# metatype slots (Type/*), and the TNone slot for `none`.
-
-# tagq has [Integer]→'specific' and [Any]→'any'. Every type literal
-# now uniformly falls through to [Any].
-tagq Integer	'any'
-tagq Number	'any'
-tagq Decimal	'any'
-tagq String	'any'
-tagq Boolean	'any'
-tagq Any	'any'
-tagq none	'any'
+		
+# =====================================================================		
+# 12. Dispatch — type literals are rejected at concrete-payload sigs		
+# =====================================================================		
+# Every concrete-payload sig slot rejects type literals (Data == nil).		
+# Type literals are still legitimately accepted at: TAny slots,		
+# metatype slots (Type/*), and the TNone slot for `none`.		
+		
+# tagq has [Integer]→'specific' and [Any]→'any'. Every type literal		
+# now uniformly falls through to [Any].		
+tagq Integer	'any'	
+tagq Number	'any'	
+tagq Decimal	'any'	
+tagq String	'any'	
+tagq Boolean	'any'	
+tagq Any	'any'	
+tagq none	'any'	
 tagq 5	'specific'	concrete Integer 5 hits the [Integer] sig
-
-# Arithmetic and string handlers reject type literals.
+		
+# Arithmetic and string handlers reject type literals.		
 addq Integer 1	ERROR:signature	[Number, Number] rejects Integer literal
 addq Integer Integer	ERROR:signature	both slots reject
-subq 5 Integer	ERROR:signature
+subq 5 Integer	ERROR:signature	
 addq Decimal 1.5	ERROR:signature	Decimal literal rejected
 concatq 'hi' String	ERROR:signature	[String, String] rejects String literal
-concatq String 'hi'	ERROR:signature
+concatq String 'hi'	ERROR:signature	
 not Boolean	true	core not has [TAny] fallback; CoerceBoolean(typelit) = false → true
-
-# List / Map type literals are rejected.
-lengthq List	ERROR:signature
-firstq List	ERROR:signature
-lengthq Map	ERROR:signature
-
-# Type literals at TAny continue to pass through.
+		
+# List / Map type literals are rejected.		
+lengthq List	ERROR:signature	
+firstq List	ERROR:signature	
+lengthq Map	ERROR:signature	
+		
+# Type literals at TAny continue to pass through.		
 typeof Integer	ScalarType	[TAny] sig; type literal accepted, handler returns metatype
 typeof none	None	None at [TAny]

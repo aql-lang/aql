@@ -1,65 +1,65 @@
-# Stack manipulation via the core Forth-style words: `dup`, `swap`,
-# `drop`, `over`, `rot`, `nip`, `tuck`, `dup2`, `swap2`, `drop2`,
-# `over2`. All are stack-only (BarrierPos=0) and live in
-# eng/go/core_words.go::registerCoreStack — they're part of the
-# language proper, not test fixtures.
-#
-# Argument convention (unified §1.4): args[0] is top of stack,
-# args[1] is next-deeper, etc. Handler returns are spliced back in
-# source order, so [args[0], args[1]] for swap leaves the old top
-# at the deeper position and the old second-from-top at the top.
-
 # tokens	expected	note
-
-# dup ( a — a a )
+# Stack manipulation via the core Forth-style words: `dup`, `swap`,		
+# `drop`, `over`, `rot`, `nip`, `tuck`, `dup2`, `swap2`, `drop2`,		
+# `over2`. All are stack-only (BarrierPos=0) and live in		
+# eng/go/core_words.go::registerCoreStack — they're part of the		
+# language proper, not test fixtures.		
+#		
+# Argument convention (unified §1.4): args[0] is top of stack,		
+# args[1] is next-deeper, etc. Handler returns are spliced back in		
+# source order, so [args[0], args[1]] for swap leaves the old top		
+# at the deeper position and the old second-from-top at the top.		
+		
+		
+# dup ( a — a a )		
 1 dup	1 1	dup duplicates the top
 1 2 dup	1 2 2	dup affects only the top
 'hello' dup	'hello' 'hello'	dup works on any value type
-
-# swap ( a b — b a )
+		
+# swap ( a b — b a )		
 1 2 swap	2 1	swap exchanges the top two
 1 2 3 swap	1 3 2	swap touches only the top two
 'a' 'b' swap	'b' 'a'	swap any types
-
-# drop ( a — )
+		
+# drop ( a — )		
 1 2 drop	1	drop removes the top
 1 dup drop	1	dup then drop is a no-op
 1 2 drop drop		drop twice on a 2-stack leaves it empty
-
-# over ( a b — a b a )
+		
+# over ( a b — a b a )		
 1 2 over	1 2 1	copies second-from-top onto the top
 'a' 'b' over	'a' 'b' 'a'	any-typed
 1 2 3 over	1 2 3 2	deeper values untouched
-
-# rot ( a b c — b c a )
+		
+# rot ( a b c — b c a )		
 1 2 3 rot	2 3 1	rotates top three; original top goes deepest
 'a' 'b' 'c' rot	'b' 'c' 'a'	any-typed
 1 2 3 4 rot	1 3 4 2	deeper values untouched (1 stays at bottom)
-
-# nip ( a b — b )
+		
+# nip ( a b — b )		
 1 2 nip	2	drops the second-from-top, keeps the top
 1 2 3 nip	1 3	deeper values untouched
-
-# tuck ( a b — b a b )
+		
+# tuck ( a b — b a b )		
 1 2 tuck	2 1 2	copies the top under the second
 'a' 'b' tuck	'b' 'a' 'b'	any-typed
-
-# dup2 ( a b — a b a b )
+		
+# dup2 ( a b — a b a b )		
 1 2 dup2	1 2 1 2	duplicates the top pair
 3 4 5 dup2	3 4 5 4 5	deeper untouched
-
-# swap2 ( a b c d — c d a b )
+		
+# swap2 ( a b c d — c d a b )		
 1 2 3 4 swap2	3 4 1 2	swaps two pairs
 1 2 3 4 5 6 swap2	1 2 5 6 3 4	deeper untouched
-
-# drop2 ( a b — )
+		
+# drop2 ( a b — )		
 1 2 drop2		removes the top two; empty stack
 1 2 3 4 drop2	1 2	deeper untouched
-
-# over2 ( a b c d — a b c d a b )
+		
+# over2 ( a b c d — a b c d a b )		
 1 2 3 4 over2	1 2 3 4 1 2	copies the second pair onto the top
-
-# Compositions
+		
+# Compositions		
 1 2 swap drop	2	swap → stack=[2,1] (1 on top); drop removes 1 → stack=[2]
 1 2 over swap	1 1 2	exercises a chain
 1 2 3 rot drop	2 3	rotate, then drop the new top
