@@ -73,6 +73,26 @@ typeof Node	Type	the abstract Node supertype → metatype Type
 { a:1 } is Map	true	
 { } is Map	true	
 		
+# Type-specific children: a list satisfies the typed-list		
+# type `[: T ]` when every element conforms to T; a map		
+# satisfies the typed-map type `{ : T }` when every value		
+# conforms to T. (`[: T v0 v1 … ]` with elements is the		
+# concrete typed-list form — see types.tsv §11h.)		
+[ 1 2 3 ] is [: Integer ]	true	all elements are Integers
+[ 1 2 3 ] is [: Number ]	true	Integer is a subtype of Number
+[ 1 2.0 3 ] is [: Number ]	true	mixed Integer/Decimal — both Number
+[ 1 2 3 ] is [: String ]	false	Integers are not Strings
+[ 1 'x' 3 ] is [: Integer ]	false	one element ('x') breaks conformance
+[ ] is [: Integer ]	true	an empty list vacuously satisfies any element type
+[ 'a' 'b' ] is [: String ]	true	
+[ [ 1 2 ] [ 3 4 ] ] is [: List ]	true	a list of lists conforms to [: List]
+[ 1 2 3 ] is [: Any ]	true	[: Any] is the loosest typed-list type
+{ a:1 b:2 } is { : Integer }	true	all map values are Integers
+{ a:1 b:'x' } is { : Integer }	false	one value ('x') breaks conformance
+{ } is { : Integer }	true	an empty map vacuously satisfies any value type
+[: Integer 1 2 3 ] is [: Integer ]	true	a concrete typed list satisfies its own typed-list type
+[: Integer 1 2 3 ] is List	true	and a concrete typed list is still a List
+		
 # Both are Nodes, and Nodes (like everything) are Any.		
 [ 1 2 3 ] is Node	true	
 { a:1 } is Node	true	
