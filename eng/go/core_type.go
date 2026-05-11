@@ -358,12 +358,14 @@ func registerCoreIs(r *Registry) {
 //   - T is a record-shape implicit map (`{x:Integer y:String}`):
 //     every declared key must be present in v with a matching field
 //     type. v must be a concrete map; extra keys in v are ignored.
-//   - T is the metatype `Type` (Data == nil, IsMetaType): true iff v
-//     is itself a type — any bare type literal, or a Function /
-//     FunctionSignature / Disjunct / Enum value. Concrete values and
-//     `none` are not types.
-//   - T is any other type literal (Data == nil): v's VType must match
-//     T's via the type lattice. Covers scalar / None cases.
+//   - T is the bare metatype `Type` (Data == nil, VType == Type): true
+//     iff v is itself a type — any bare type literal, any structural
+//     type body (record shape, typed list/map, disjunct, fn-shape),
+//     or any Function / FunctionSignature / Disjunct / Enum value.
+//     Concrete scalars / lists / maps and the value `none` are not.
+//   - T is any other type literal (Data == nil), including `Function` /
+//     `Disjunct` / `Enum` / `FunctionSignature`: v's VType must be a
+//     subtype of T's via the type lattice.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
 	if t.IsTypedList() {
@@ -427,20 +429,30 @@ func IsValueOfType(v, t Value) bool {
 		return true
 	}
 	if t.Data == nil {
-		// `v is Type` (and other metatype RHS): v satisfies the
-		// metatype iff v is itself a type. A bare type literal
-		// (Data == nil) always does — `Integer is Type`, `List is
-		// Type`, `Any is Type`, `Type is Type` are all true (MetatypeFor
-		// maps the literal's own VType into the Type/ branch, a subtype
-		// of Type). A concrete value's Data is non-nil, so `5 is Type`,
-		// `[ 1 2 3 ] is Type`, `none is Type` are false. Carriers are
-		// abstract VALUES, not types.
-		if IsMetaType(t.VType) && v.Data == nil && !v.Carrier {
-			return MetatypeFor(v.VType).Matches(t.VType)
+		// `v is Type` — the bare metatype: v satisfies it iff v is
+		// itself a TYPE — not merely a value whose type would qualify:
+		//
+		//   - any bare type literal (`Integer`, `List`, `Any`, `Type`,
+		//     …, Data == nil) — `Integer is Type`, `List is Type`, … are
+		//     all true;
+		//   - any structural type body (record shape `{x:Integer}`,
+		//     typed list/map `[:T]` / `{:T}`, disjunct, fn-shape, …) and
+		//     any Function / Disjunct / Enum / FunctionSignature *value*
+		//     (whose VType lives under Type/) — types too;
+		//   - a concrete scalar / list / map, and the value `none`, are
+		//     NOT types — `5 is Type`, `[1 2 3] is Type`, `none is Type`
+		//     are false. Carriers are abstract VALUES, not types.
+		//
+		// Other Type/-rooted RHS (`Function`, `Disjunct`, `Enum`,
+		// `FunctionSignature`, the legacy `ScalarType` / `NodeType` /
+		// `ObjectType` metatypes) keep the plain subtype check below, so
+		// `fn […] is Function` / `enum […] is Disjunct` still hold.
+		if t.VType.Equal(TType) {
+			if v.Carrier {
+				return false
+			}
+			return v.Data == nil || IsTypeBody(v) || IsRecordShape(v) || v.VType.Matches(TType)
 		}
-		// Otherwise v's VType must be a subtype of T — this also lets a
-		// Function / FunctionSignature / Disjunct / Enum *value* (whose
-		// VType lives under Type/) satisfy `is Type`.
 		return v.VType.Matches(t.VType)
 	}
 	_, ok := Unify(v, t)

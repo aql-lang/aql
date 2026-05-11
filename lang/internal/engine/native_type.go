@@ -466,9 +466,28 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && IsMetaType(b.VType) && a.Data == nil {
-		aMeta := MetatypeFor(a.VType)
-		return []Value{NewBoolean(aMeta.Matches(b.VType))}, nil
+	if b.Data == nil && IsMetaType(b.VType) {
+		if b.VType.Equal(TType) {
+			// `v is Type` — v must be a TYPE: a bare type literal, a
+			// structural type body (record shape, typed list/map,
+			// disjunct, fn-shape), or a Function / Disjunct / Enum /
+			// FunctionSignature value. Concrete scalars / lists / maps
+			// and the value `none` are not types; carriers are abstract
+			// values, not types.
+			if a.Carrier {
+				return []Value{NewBoolean(false)}, nil
+			}
+			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.VType.Matches(TType))}, nil
+		}
+		if a.Data == nil {
+			// Legacy metatype RHS (`ScalarType` / `NodeType` /
+			// `ObjectType`): compare the literal's metatype.
+			return []Value{NewBoolean(MetatypeFor(a.VType).Matches(b.VType))}, nil
+		}
+		// Other Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
+		// `FunctionSignature`): plain subtype check (also catches a
+		// value whose VType already lives under that type).
+		return []Value{NewBoolean(a.VType.Matches(b.VType))}, nil
 	}
 	unified, ok := Unify(a, b)
 	if !ok {

@@ -218,6 +218,7 @@ var (
 	IsConcrete                 = eng.IsConcrete
 	IsContinue                 = eng.IsContinue
 	IsMetaType                 = eng.IsMetaType
+	IsRecordShape              = eng.IsRecordShape
 	IsTypeBody                 = eng.IsTypeBody
 	IsTypeLiteral              = eng.IsTypeLiteral
 	IsTypeValue                = eng.IsTypeValue
