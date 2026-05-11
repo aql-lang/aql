@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // BuildMatrixModule creates the "aql:matrix" native module. It registers

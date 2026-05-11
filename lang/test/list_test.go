@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/eng/parser"
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
-	"github.com/metsitaba/voxgig-exp/lang/internal/native"
+	"github.com/metsitaba/voxgig-exp/lang/native"
 )
 
 // runNativeWithFiles creates a registry with native functions and in-memory files.

@@ -26,7 +26,7 @@ import (
 //	                    (T from forward, v from stack).
 //
 // Mirrors the production aql `type` / `untype` / `typeof` / `is`
-// (see lang/internal/engine/native_type.go); these are the foundational
+// (see lang/engine/native_type.go); these are the foundational
 // type-system surface that the richer words (record, table, object,
 // make, guard, inspect, …) build on. The richer words are NOT in
 // aqleng's core — they layer on top in the production engine.

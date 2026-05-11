@@ -1,0 +1,25 @@
+package native
+
+import (
+	"fmt"
+
+	"github.com/metsitaba/voxgig-exp/lang/engine"
+	voxgigstruct "github.com/voxgig/struct"
+)
+
+// The "inject" word is registered via the consolidated Natives slice in
+// natives.go.
+//
+// injectHandler calls voxgigstruct.Inject to resolve path references.
+func injectHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+	val := valueToAny(args[0])
+	store := valueToAny(args[1])
+
+	result := voxgigstruct.Inject(val, store)
+
+	out, err := anyToValue(result)
+	if err != nil {
+		return nil, fmt.Errorf("inject: %w", err)
+	}
+	return []engine.Value{out}, nil
+}

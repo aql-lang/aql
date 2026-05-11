@@ -3,7 +3,7 @@ package nativemod
 import (
 	"math"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // BuildMathModule creates the "aql:math" native module. It registers the

@@ -58,7 +58,7 @@ package eng
 // These implementations are deliberately minimal: they cover the
 // dispatch / value / type-lattice core that every consumer of
 // aqleng (including the production aql package) builds on. The
-// production aql engine in lang/internal/engine layers richer
+// production aql engine in lang/engine layers richer
 // behaviour (paren markers, /q forward capture, ObjectType bindings,
 // etc.) on top of these primitives — but the primitives themselves
 // live here so any aqleng test suite can exercise them directly.
@@ -168,7 +168,7 @@ func registerCoreDef(r *Registry) {
 		// installed by `type Color enum […]`) must be resolved through
 		// the type stack before validation. Mirrors the production
 		// aql defTypedHandler in
-		// lang/internal/engine/native_definition.go.
+		// lang/engine/native_definition.go.
 		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType.ID != "" {
 			constraint = resolved
 		}
@@ -415,7 +415,7 @@ func registerCoreArgs(r *Registry) {
 // example).
 //
 // Mirrors the canonical-Forth subset of the production engine's
-// lang/internal/engine/native_stack.go — handlers are byte-identical.
+// lang/engine/native_stack.go — handlers are byte-identical.
 // The full-stack-aware ops (depth, pick, roll) are deliberately
 // omitted: they need FullStack signatures and the spec runner's
 // dispatch path doesn't yet wire that up. They can be added later
@@ -608,7 +608,7 @@ func registerCoreOver2(r *Registry) {
 // the full sig.
 //
 // Mirrors the param-binding portion of the production engine's
-// InstallFnDef in lang/internal/engine/core_helpers.go without pulling
+// InstallFnDef in lang/engine/core_helpers.go without pulling
 // in the production engine's `__pa` / paren-marker machinery (which
 // belongs to the full parser, not the bare aqleng core).
 func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
@@ -649,5 +649,5 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 
 // (parseCoreFnParam, parseCoreFnReturn, parseCoreTypeName were
 // retired when the canonical fn-signature parser landed in
-// fn_params.go. Both core_words.go and lang/internal/engine now call
+// fn_params.go. Both core_words.go and lang/engine now call
 // ParseFnParams / ParseFnReturns / ResolveTypeName directly.)

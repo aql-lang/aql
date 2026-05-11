@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // matrixRegistry returns a registry with the aql:matrix module loaded.

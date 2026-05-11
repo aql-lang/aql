@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // BuildTimeModule creates the "aql:time" native module.

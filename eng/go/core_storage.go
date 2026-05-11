@@ -18,7 +18,7 @@ import "fmt"
 // Context-Store access (copy-on-write `set` and check-mode-tracking
 // `get`) is intentionally NOT in the kernel: those depend on the
 // per-engine context stack and live in the production lang layer
-// (see lang/internal/engine/native_storage.go). Lang's
+// (see lang/engine/native_storage.go). Lang's
 // storageNatives append the Store sigs to the eng-installed
 // dispatch.
 func registerCoreStorage(r *Registry) {

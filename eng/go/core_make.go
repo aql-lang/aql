@@ -19,7 +19,7 @@ import (
 //	make Type Any                   two-arg fallback
 //
 // Mirrors the production lang `make` (formerly in
-// lang/internal/engine/native_type_make_helpers.go); the handlers are
+// lang/engine/native_type_make_helpers.go); the handlers are
 // ported verbatim. Lang re-exports the helpers via aliases so any
 // callers that reach into the package-private surface keep working.
 func registerCoreMake(r *Registry) {

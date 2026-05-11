@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/native"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/metsitaba/voxgig-exp/lang/native"
 )
 
 // timeRegistry returns a registry with the aql:time module loaded.

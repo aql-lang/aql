@@ -9,31 +9,25 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: aql
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: aql/go.mod
+          go-version-file: lang/go.mod
 
-      - name: Tidy modules
-        run: go mod tidy
-
-      - name: Build
-        run: make build
+      - name: Build CLI
+        run: make -C cmd/go build
 
       - name: Vet
-        run: make vet
+        run: make -C lang vet
 
       - name: Lint assertions
-        run: make lint-assertions
+        run: make -C lang lint-assertions
 
       - name: Test
-        run: make test
+        run: make -C lang test
 
       - name: Build WASM
-        run: make wasm
+        run: make -C cmd/go wasm
