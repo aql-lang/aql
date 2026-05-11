@@ -6,14 +6,15 @@ import (
 	"strings"
 )
 
-// typeNatives covers the type-system words: table, make, type, untype,
-// typeof, fulltypeof, is, guard, inspect, base, tor, tand, any, all,
-// tany, tall, convert.
+// typeNatives covers the type-system words: table, type, untype,
+// typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
+// tall, convert.
 //
-// `record` and `object` are now installed by aqleng
-// (eng.RegisterCoreObjectRecord, wired from register.go) — the kernel
-// owns those structural type constructors. `make` likewise comes from
-// eng.RegisterCoreMake. Those entries are intentionally omitted here to
+// `record`, `object`, `inspect` and `make` are now installed by
+// aqleng (eng.RegisterCoreObjectRecord / eng.RegisterCoreInspect /
+// eng.RegisterCoreMake, wired from register.go) — the kernel owns the
+// structural type constructors, the introspection word, and the
+// universal `make`. Their entries are intentionally omitted here to
 // avoid double-registration.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
@@ -105,16 +106,6 @@ var typeNatives = []NativeFunc{
 			Handler:    guardHandler,
 			Returns:    []Type{TAny},
 		}},
-	},
-	{
-		Name:              "inspect",
-		ForwardPrecedence: true,
-		Signatures: []NativeSig{
-			{Args: []Type{TWord}, Handler: inspectWordHandler, Returns: []Type{TInspect}},
-			{Args: []Type{TAtom}, Handler: inspectAtomHandler, Returns: []Type{TInspect}},
-			{Args: []Type{TNode}, Handler: inspectTypeHandler, Returns: []Type{TInspect}},
-			{Args: []Type{TScalar}, Handler: inspectTypeHandler, Returns: []Type{TInspect}},
-		},
 	},
 	{
 		Name:              "base",
@@ -380,41 +371,6 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 		return []Value{val}, nil
 	}
 	return []Value{NewTypeLiteral(TNone)}, nil
-}
-
-// ---- inspect ----
-
-func inspectWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	_as0, _ := args[0].AsWord()
-	name := _as0.Name
-
-	if tv, ok := r.TopOfTypeStack(name); ok {
-		return []Value{buildTypeInspection(name, tv)}, nil
-	}
-	if top, ok := r.TopOfDefStack(name); ok {
-		if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
-			return []Value{buildTypeInspection(name, top)}, nil
-		}
-	}
-
-	return []Value{buildInspection(r, name)}, nil
-}
-
-func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name, _ := args[0].AsConcreteAtom()
-	if tv, ok := r.TopOfTypeStack(name); ok {
-		return []Value{buildTypeInspection(name, tv)}, nil
-	}
-	if top, ok := r.TopOfDefStack(name); ok {
-		if IsTypeBody(top) {
-			return []Value{buildTypeInspection(name, top)}, nil
-		}
-	}
-	return []Value{buildInspection(r, name)}, nil
-}
-
-func inspectTypeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{buildTypeInspection("", args[0])}, nil
 }
 
 // ---- base ----

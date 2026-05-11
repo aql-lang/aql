@@ -1,0 +1,194 @@
+# tokens	expected	note
+# =====================================================================		
+# inspect — machine-readable introspection of words, values, and types		
+# =====================================================================		
+# `inspect X` returns an `Inspect` value — a Map (`Node/Map/Inspect`)		
+# describing X. Three overloads:		
+#   inspect WORD   — a bare word: looked up (type stack, then def stack,		
+#                    then registered word). Returns a *word inspection*		
+#                    for a registered word, or a *type inspection* for a		
+#                    type-named binding.		
+#   inspect ATOM   — `( quote name )`: the atom is treated as a NAME and		
+#                    looked up the same way.		
+#   inspect V      — anything else (a concrete value, a type literal, a		
+#                    record / object / disjunct / enum / typed list / typed		
+#                    map / fn-shape value): returns its *type inspection*.		
+# #		
+# word inspection:  { name, kind:native|defined|unknown,		
+#                     forward_precedence?, signatures:[{args:[…]} …] }		
+# type inspection:  { name?, type:'<leaf>', kind:literal|record|object|		
+#                     table|disjunct|typed_list|typed_map|function_shape|		
+#                     dependent_scalar, …kind-specific fields }		
+# #		
+# The result carries VType `Inspect` (a subtype of `Map`) but its		
+# payload is an OrderedMap, so it renders comma-separated (`{k:v,k:v}`)		
+# via the value's own String().		
+# #		
+# Two footguns: a bare word like `true` is inspected as the NAME 'true'		
+# (unknown), not the boolean value — put it on the stack first / wrap		
+# it in `( … )` for the value. Likewise `( quote red )` inspects the		
+# name 'red', not the atom value.		
+# #		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq — [Number Number] forward-prec		
+# === end fixtures ===		
+		
+# ====================================================================		
+# 1. inspect — words (a word inspection)		
+# ====================================================================		
+		
+# --- stack ops (all stack-only; forward_precedence:false) ---		
+inspect dup	{name:'dup',kind:native,forward_precedence:false,signatures:[{args:['Any']}]}	
+inspect swap	{name:'swap',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect drop	{name:'drop',kind:native,forward_precedence:false,signatures:[{args:['Any']}]}	
+inspect over	{name:'over',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect rot	{name:'rot',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any']}]}	
+inspect nip	{name:'nip',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect tuck	{name:'tuck',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect dup2	{name:'dup2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect swap2	{name:'swap2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any','Any']}]}	
+inspect drop2	{name:'drop2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
+inspect over2	{name:'over2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any','Any']}]}	
+		
+# --- boolean / type-level connectives ---		
+inspect not	{name:'not',kind:native,forward_precedence:true,signatures:[{args:['Boolean']},{args:['Any']}]}	
+inspect and	{name:'and',kind:native,forward_precedence:true,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
+inspect or	{name:'or',kind:native,forward_precedence:true,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
+inspect tor	{name:'tor',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
+inspect tand	{name:'tand',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
+		
+# --- binding / quotation ---		
+inspect quote	{name:'quote',kind:native,forward_precedence:true,signatures:[{args:['Word']},{args:['Any']}]}	
+inspect args	{name:'args',kind:native,forward_precedence:false,signatures:[{args:[]}]}	
+inspect def	{name:'def',kind:native,forward_precedence:true,signatures:[{args:['Map','Any']},{args:['Word','Any']}]}	
+inspect fn	{name:'fn',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
+inspect fnsig	{name:'fnsig',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
+		
+# --- type system ---		
+inspect type	{name:'type',kind:native,forward_precedence:true,signatures:[{args:['Word','Any']}]}	
+inspect untype	{name:'untype',kind:native,forward_precedence:true,signatures:[{args:['Word']}]}	
+inspect typeof	{name:'typeof',kind:native,forward_precedence:true,signatures:[{args:['Any']}]}	
+inspect pathof	{name:'pathof',kind:native,forward_precedence:true,signatures:[{args:['Type']}]}	
+inspect is	{name:'is',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
+inspect enum	{name:'enum',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
+inspect make	{name:'make',kind:native,forward_precedence:true,signatures:[{args:['ScalarType','Map','Any']},{args:['Any','Any','Map']},{args:['Object','Any','Object']},{args:['ObjectType','Map']},{args:['Array','List']},{args:['ScalarType','Any']},{args:['Any','Any']}]}	
+inspect record	{name:'record',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
+inspect object	{name:'object',kind:native,forward_precedence:true,signatures:[{args:['Map','Object']},{args:['Map']}]}	
+inspect inspect	{name:'inspect',kind:native,forward_precedence:true,signatures:[{args:['Atom']},{args:['Word']},{args:['Any']}]}	
+		
+# --- state ---		
+inspect get	{name:'get',kind:native,forward_precedence:true,signatures:[{args:['Integer','Array']},{args:['Integer','Node']},{args:['Integer','Object']},{args:['String','Node']},{args:['String','Object']},{args:['Atom','Node']},{args:['Atom','Object']},{args:['Any','None']}]}	
+inspect set	{name:'set',kind:native,forward_precedence:true,signatures:[{args:['Integer','Any','Array']},{args:['String','Any','Object']},{args:['Atom','Any','Object']}]}	
+inspect do	{name:'do',kind:native,forward_precedence:true,signatures:[{args:['Map']},{args:['List']}]}	
+		
+# --- a fixture word (forward-prec, one [Number Number] sig) ---		
+inspect addq	{name:'addq',kind:native,forward_precedence:true,signatures:[{args:['Number','Number']}]}	
+		
+# ====================================================================		
+# 2. inspect — builtin type literals (a type inspection; kind:literal)		
+# ====================================================================		
+# Every type-name word, used as a value, reports `kind:literal` with		
+# `type` = its leaf name. (`FunctionSignature` is the exception — its		
+# VType is recognised as a function-shape, so it reports		
+# `kind:function_shape` with an empty signature list.)		
+		
+inspect Any	{type:'Any',kind:literal}	
+inspect None	{type:'None',kind:literal}	
+inspect Never	{type:'Never',kind:literal}	
+inspect Scalar	{type:'Scalar',kind:literal}	
+inspect Number	{type:'Number',kind:literal}	
+inspect Integer	{type:'Integer',kind:literal}	
+inspect Decimal	{type:'Decimal',kind:literal}	
+inspect String	{type:'String',kind:literal}	
+inspect ProperString	{type:'ProperString',kind:literal}	
+inspect EmptyString	{type:'EmptyString',kind:literal}	
+inspect Boolean	{type:'Boolean',kind:literal}	
+inspect Path	{type:'Path',kind:literal}	
+inspect Atom	{type:'Atom',kind:literal}	
+inspect Node	{type:'Node',kind:literal}	
+inspect List	{type:'List',kind:literal}	
+inspect Map	{type:'Map',kind:literal}	
+inspect Object	{type:'Object',kind:literal}	
+inspect Resource	{type:'Resource',kind:literal}	
+inspect Entity	{type:'Entity',kind:literal}	
+inspect Table	{type:'Table',kind:literal}	
+inspect Record	{type:'Record',kind:literal}	
+inspect Options	{type:'Options',kind:literal}	
+inspect Array	{type:'Array',kind:literal}	
+inspect Timeout	{type:'Timeout',kind:literal}	
+inspect Interval	{type:'Interval',kind:literal}	
+inspect Function	{type:'Function',kind:literal}	
+inspect FunctionSignature	{type:'FunctionSignature',kind:function_shape,signatures:[]}	
+inspect Disjunct	{type:'Disjunct',kind:literal}	
+inspect Enum	{type:'Enum',kind:literal}	
+inspect Type	{type:'Type',kind:literal}	
+		
+# ====================================================================		
+# 3. inspect — concrete values (a type inspection)		
+# ====================================================================		
+		
+# --- scalars: kind:literal, type = the value's exact VType leaf ---		
+inspect 5	{type:'Integer',kind:literal}	
+inspect -7	{type:'Integer',kind:literal}	
+inspect 5.0	{type:'Decimal',kind:literal}	
+inspect 3.14	{type:'Decimal',kind:literal}	
+inspect 'hello'	{type:'ProperString',kind:literal}	
+inspect ''	{type:'EmptyString',kind:literal}	
+inspect none	{type:'None',kind:literal}	
+		
+# --- a bare word / atom is inspected as a NAME, not as a value ---		
+inspect true	{name:'true',kind:unknown,signatures:[]}	the WORD 'true' isn't registered — not the boolean value
+inspect false	{name:'false',kind:unknown,signatures:[]}	
+inspect ( quote red )	{name:'red',kind:unknown,signatures:[]}	the atom is treated as a name to look up
+		
+# --- nodes ---		
+inspect [ ]	{type:'List',kind:literal}	an empty list
+inspect [ 1 2 3 ]	{type:'List',kind:literal}	
+inspect { }	{type:'Map',kind:literal}	an empty map
+inspect { a:1 b:2 }	{type:'Map',kind:literal}	
+inspect [ :Integer ]	{type:'List',kind:typed_list,child:'Scalar/Number/Integer'}	a typed list
+inspect { :String }	{type:'Map',kind:typed_map,child:'Scalar/String'}	a typed map
+		
+# ====================================================================		
+# 4. inspect — type VALUES (record / object / disjunct / enum / fn-shape)		
+# ====================================================================		
+# Constructed inline with parens, or named with `type NAME …` first		
+# (naming adds a `name:` field). Anonymous `object {…}` has a		
+# non-deterministic internal ID, so it's only shown via a named type.		
+		
+# --- record ---		
+inspect ( record [ { a:Integer } { b:String } ] )	{type:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
+type Pt record [ { x:Integer } { y:Integer } ] inspect Pt	{name:'Pt',type:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
+		
+# --- object (kind:object; fields includes inherited, parent first) ---		
+type Vec object { x:Integer y:Integer } inspect Vec	{name:'Vec',type:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
+type Bar object { b:Integer } type Baz object { c:String } Bar inspect Baz	{name:'Baz',type:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
+		
+# --- disjunct / enum (alternatives are the members' VType paths) ---		
+inspect ( Integer tor Boolean )	{type:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
+inspect ( enum [ red green blue ] )	{type:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	enum members are atoms
+type D ( Integer tor Boolean ) inspect D	{name:'D',type:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
+type Color enum [ red green blue ] inspect Color	{name:'Color',type:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	
+		
+# --- function-shape (fnsig) ---		
+inspect ( fnsig [ [ Integer ] [ Integer ] ] )	{type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
+inspect ( fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ] )	{type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']},{params:['String'],returns:['String']}]}	two pairs → two sigs
+type Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig',type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
+		
+# --- a function VALUE / typed-list / typed-map / alias named type ---		
+inspect ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	{type:'Function',kind:literal}	a function value reports literal — the fnsig form carries the shape
+type Ints [ :Integer ] inspect Ints	{name:'Ints',type:'List',kind:typed_list,child:'Scalar/Number/Integer'}	
+type Strs { :String } inspect Strs	{name:'Strs',type:'Map',kind:typed_map,child:'Scalar/String'}	
+type IdType Integer inspect IdType	{name:'IdType',type:'Integer',kind:literal}	an alias of a builtin — literal
+		
+# ====================================================================		
+# 5. inspect — def'd values, unknown names, and inspect-of-inspect		
+# ====================================================================		
+		
+def f 99 inspect f	{name:'f',kind:defined,signatures:[]}	a def'd plain value — kind:defined, no signatures
+def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g',kind:native,forward_precedence:true,signatures:[{args:['Integer']}]}	an fn-defined word — buildInspection sees only the compiled dispatch table, so kind:native
+inspect nonexistentword	{name:'nonexistentword',kind:unknown,signatures:[]}	not a type, def, or word
+		
+typeof ( inspect dup )	Inspect	an inspect result is an `Inspect` value
+( inspect dup ) is Map	true	`Inspect` is a subtype of `Map`
+inspect ( inspect dup )	{type:'Inspect',kind:literal}	inspecting an inspect result — a plain Inspect-typed map

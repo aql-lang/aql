@@ -29,6 +29,7 @@ package eng
 //	  record         — RecordType from a list of single-pair maps
 //	  object         — ObjectType (nominal, inheritance-aware)
 //	  make           — universal typed-value constructor
+//	  inspect        — machine-readable introspection (word / type → Map)
 //
 //	State / control:
 //	  do             — run a list body as a sub-program
@@ -72,6 +73,7 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreTypeOps(r)
 	registerCoreType(r)
 	registerCoreObjectRecord(r)
+	registerCoreInspect(r)
 	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
