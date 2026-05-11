@@ -229,6 +229,90 @@ func registerSpecWords(r *eng.Registry) {
 			Returns: []eng.Type{eng.TString},
 		}},
 	})
+
+	// ── Barrier / arity fixtures (for barrier.tsv) ────────────────
+	// nilq — a 0-arg word. Exercises 0-arity sigs and the `/0`
+	// argCount filter (the fallback-section match path).
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "nilq",
+		Signatures: []eng.NativeSig{{
+			Args: []eng.Type{},
+			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				return []eng.Value{eng.NewString("nil")}, nil
+			},
+			Returns: []eng.Type{eng.TString},
+		}},
+	})
+
+	// flexq — two overloads of different arity, [Integer] and
+	// [Integer, Integer], both forward-eligible (BarrierPos = N). The
+	// 1-arg sig is tried first, so a bare `flexq` always picks it; the
+	// `/N` argCount modifier (flexq/1, flexq/2) selects the overload
+	// explicitly, and `/1f`, `/2s` etc. combine arity selection with a
+	// forced forward/stack boundary.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "flexq", ForwardPrecedence: true,
+		Signatures: []eng.NativeSig{
+			{
+				Args: []eng.Type{eng.TInteger},
+				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+					a, _ := args[0].AsInteger()
+					return []eng.Value{eng.NewString(fmt.Sprintf("one:%d", a))}, nil
+				},
+				Returns: []eng.Type{eng.TString},
+			},
+			{
+				Args: []eng.Type{eng.TInteger, eng.TInteger},
+				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+					a, _ := args[0].AsInteger()
+					b, _ := args[1].AsInteger()
+					return []eng.Value{eng.NewString(fmt.Sprintf("two:%d,%d", a, b))}, nil
+				},
+				Returns: []eng.Type{eng.TString},
+			},
+		},
+	})
+
+	// Fixed-arity Integer formatters with an intrinsic barrier at the
+	// position named by the numeric suffix (the un-suffixed "main"
+	// series — pairq=2/B1, tripq=3/B3, quadq=4/B2, quintq=5/B3,
+	// hexq=6/B3, septq=7/B4 — plus tri1q/tri2q and quad1q/quad3q for
+	// the off-centre boundaries). Each handler renders its args in
+	// signature order, comma-separated, so a row's output reveals
+	// exactly which source token bound to which sig position.
+	// Combined with /s, /f and /N the rows reach every boundary
+	// position 0..N for arities 1..7.
+	intArgsFmt := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		parts := make([]string, len(args))
+		for i, a := range args {
+			n, _ := a.AsInteger()
+			parts[i] = strconv.FormatInt(n, 10)
+		}
+		return []eng.Value{eng.NewString(strings.Join(parts, ","))}, nil
+	}
+	intArity := func(name string, n, barrier int) {
+		args := make([]eng.Type, n)
+		for i := range args {
+			args[i] = eng.TInteger
+		}
+		r.RegisterNativeFunc(eng.NativeFunc{
+			Name: name, ForwardPrecedence: true,
+			Signatures: []eng.NativeSig{{
+				Args: args, BarrierPos: barrier,
+				Handler: intArgsFmt,
+				Returns: []eng.Type{eng.TString},
+			}},
+		})
+	}
+	intArity("tri1q", 3, 1)
+	intArity("tri2q", 3, 2)
+	intArity("quad1q", 4, 1)
+	intArity("quadq", 4, 2)
+	intArity("quad3q", 4, 3)
+	intArity("quintq", 5, 3)
+	intArity("hexq", 6, 3)
+	intArity("septq", 7, 4)
+
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "lengthq", ForwardPrecedence: true,
 		Signatures: []eng.NativeSig{{
