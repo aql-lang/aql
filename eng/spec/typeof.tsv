@@ -131,14 +131,20 @@ true is ( typeof true )	true
 [ 1 2 ] is ( typeof [ 1 2 ] )	true	
 { a:1 } is ( typeof { a:1 } )	true	
 ( quote red ) is ( typeof ( quote red ) )	true	
-# `is` between two type literals is SUBTYPING (T subtype-of U), not membership.		
+# `is` between type literals: a narrower type satisfies a wider one		
+# (`Integer is Number` -> true), and EVERY type satisfies the metatype `Type`.		
 Integer is Number	true	Integer is a subtype of Number
 Number is Integer	false	...but not the other way
 Integer is Scalar	true	
-Type is Type	true	reflexive
-Integer is ( typeof Integer )	false	`typeof Integer` is `Type`; `Integer is Type` is false — Integer is not a subtype of the metatype Type
-typeof 5 is Type	false	`typeof 5` is `Integer`; `Integer is Type` -> false (same reason)
-typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`, and `Type is Type` -> true
+Integer is Type	true	Integer is a type — every type literal satisfies the metatype `Type`
+List is Type	true	
+Any is Type	true	
+None is Type	true	the `None` *type* is a type (its sole *value* `none` is not — see §3 / types.tsv)
+Type is Type	true	`Type` itself is a type
+5 is Type	false	a concrete value is not a type
+Integer is ( typeof Integer )	true	`typeof Integer` is `Type`, and `Integer is Type` -> true
+typeof 5 is Type	true	`typeof 5` is `Integer`; `Integer is Type` -> true
+typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`; `Type is Type` -> true
 typeof typeof 5	Type	typeof of any type literal is `Type`
 typeof typeof 'a'	Type	
 typeof typeof [ 1 ]	Type	

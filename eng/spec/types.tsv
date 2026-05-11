@@ -332,6 +332,73 @@ ProperString is EmptyString	false	siblings under String — neither matches the 
 EmptyString is ProperString	false	
 		
 # =====================================================================		
+# 10b. `is Type` — every type satisfies the metatype `Type`		
+# =====================================================================		
+# `Type` is the metatype: the type whose members are types. A bare		
+# type literal (`Integer`, `List`, `Any`, ...) IS a type, so		
+# `<type> is Type` is true for every one — exhaustively. So are		
+# Function / FunctionSignature / Disjunct / Enum *values* (their VType		
+# lives under Type/). Concrete values, and the value `none`, are NOT types.		
+		
+# --- lattice extremes ---		
+Any is Type	true	the top type is a type
+None is Type	true	the `None` *type* is a type — distinct from its sole *value* `none`
+Never is Type	true	the bottom type is a type
+		
+# --- scalar family ---		
+Scalar is Type	true	
+Number is Type	true	
+Integer is Type	true	Integer is a type!
+Decimal is Type	true	
+String is Type	true	
+ProperString is Type	true	
+EmptyString is Type	true	
+Boolean is Type	true	
+Path is Type	true	
+Atom is Type	true	
+		
+# --- node family ---		
+Node is Type	true	
+List is Type	true	
+Map is Type	true	
+		
+# --- object family ---		
+Object is Type	true	
+Resource is Type	true	
+Entity is Type	true	
+Table is Type	true	
+Record is Type	true	
+Options is Type	true	
+Array is Type	true	
+Timeout is Type	true	
+Interval is Type	true	
+		
+# --- type family ---		
+Function is Type	true	
+FunctionSignature is Type	true	
+Disjunct is Type	true	
+Enum is Type	true	
+Type is Type	true	`Type` is itself a type
+		
+# --- type-bodied VALUES are types too ---		
+( fn [ [ a:Integer ] [ Integer ] [ a ] ] ) is Type	true	a function value's VType is Type/Function
+( fnsig [ [ Integer ] [ Integer ] ] ) is Type	true	a function-shape type value
+( enum [ red green blue ] ) is Type	true	an enum value is a (sub)type
+( Integer tor Boolean ) is Type	true	a disjunct value is a type
+		
+# --- but concrete VALUES are NOT types ---		
+5 is Type	false	an Integer value is not a type
+-7 is Type	false	
+5.0 is Type	false	
+true is Type	false	a Boolean value is not a type
+'hello' is Type	false	
+'' is Type	false	
+( quote red ) is Type	false	an Atom value is not a type
+none is Type	false	the value `none` is not a type (the `None` *type* is — see above)
+[ 1 2 3 ] is Type	false	a concrete list is not a type
+{ a:1 } is Type	false	a concrete map is not a type
+		
+# =====================================================================		
 # 11. is — record-shape conformance		
 # =====================================================================		
 # When T is an implicit-map type literal, `is` checks each declared		
