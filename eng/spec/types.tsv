@@ -465,65 +465,65 @@ type One 1 typeof 1	Integer	type binding doesn't change typeof on the underlying
 type One 1 typeof One	Integer	typeof on the type-stack value resolves to its exact type
 		
 # =====================================================================		
-# 11h. Typed list `[:T]` and typed map `{:T}` (Node child forms)		
+# 11h. Typed list `[ :T ]` and typed map `{ :T }` (Node child forms)		
 # =====================================================================		
-# `[:T]` is a homogeneous list type — every element must satisfy T.		
-# `{:T}` is a homogeneous map type — every value must satisfy T.		
-# Both are constructed by the spec tokenizer's `[:` / `{:` openers		
-# (and `name:[:` / `name:{:` for nested-binding inside parent maps).		
+# `[ :T ]` is a homogeneous list type — every element must satisfy T.		
+# `{ :T }` is a homogeneous map type — every value must satisfy T.		
+# Both are constructed by the spec tokenizer's `[ :` / `{ :` openers		
+# (and `name:[ :` / `name:{ :` for nested-binding inside parent maps).		
 # `is` recurses on T element-by-element / value-by-value.		
 		
 # Typed list with scalar leaf type.		
-type IntList [: Integer ] [ 1 2 3 ] is IntList	true	
-type IntList [: Integer ] [ 1 'x' 3 ] is IntList	false	one element wrong type
-type IntList [: Integer ] [ ] is IntList	true	empty list trivially satisfies
+type IntList [ :Integer ] [ 1 2 3 ] is IntList	true	
+type IntList [ :Integer ] [ 1 'x' 3 ] is IntList	false	one element wrong type
+type IntList [ :Integer ] [ ] is IntList	true	empty list trivially satisfies
 		
 # Typed list of strings.		
-type Names [: String ] [ 'a' 'b' 'c' ] is Names	true	
-type Names [: String ] [ 'a' 1 ] is Names	false	
+type Names [ :String ] [ 'a' 'b' 'c' ] is Names	true	
+type Names [ :String ] [ 'a' 1 ] is Names	false	
 		
 # Typed map with scalar leaf type — every VALUE must satisfy T (keys		
 # are unconstrained).		
-type IntMap {: Integer } { a:1 b:2 c:3 } is IntMap	true	
-type IntMap {: Integer } { a:1 b:'x' } is IntMap	false	value b is wrong type
-type IntMap {: Integer } { } is IntMap	true	empty map trivially satisfies
+type IntMap { :Integer } { a:1 b:2 c:3 } is IntMap	true	
+type IntMap { :Integer } { a:1 b:'x' } is IntMap	false	value b is wrong type
+type IntMap { :Integer } { } is IntMap	true	empty map trivially satisfies
 		
 # Typed-list-of-typed-list — list of lists of integers.		
-type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 4 ] ] is Grid	true	
-type Grid [: [: Integer ] ] [ [ 1 2 ] [ 3 'x' ] ] is Grid	false	nested element wrong type
-type Grid [: [: Integer ] ] [ [ ] [ 1 ] ] is Grid	true	inner empties OK
+type Grid [ :[ :Integer ] ] [ [ 1 2 ] [ 3 4 ] ] is Grid	true	
+type Grid [ :[ :Integer ] ] [ [ 1 2 ] [ 3 'x' ] ] is Grid	false	nested element wrong type
+type Grid [ :[ :Integer ] ] [ [ ] [ 1 ] ] is Grid	true	inner empties OK
 		
 # Typed-list-of-record-shape — list whose elements are records.		
-type People [: { name:String age:Integer } ] [ { name:'a' age:1 } { name:'b' age:2 } ] is People	true	
-type People [: { name:String age:Integer } ] [ { name:'a' age:'x' } ] is People	false	field type mismatch
-type People [: { name:String age:Integer } ] [ { name:'a' } ] is People	false	missing field
+type People [ :{ name:String age:Integer } ] [ { name:'a' age:1 } { name:'b' age:2 } ] is People	true	
+type People [ :{ name:String age:Integer } ] [ { name:'a' age:'x' } ] is People	false	field type mismatch
+type People [ :{ name:String age:Integer } ] [ { name:'a' } ] is People	false	missing field
 		
 # Typed-map-of-typed-list — values are lists of integers.		
-type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 3 ] } is Index	true	
-type Index {: [: Integer ] } { row1:[ 1 2 ] row2:[ 'x' ] } is Index	false	inner element wrong type
+type Index { :[ :Integer ] } { row1:[ 1 2 ] row2:[ 3 ] } is Index	true	
+type Index { :[ :Integer ] } { row1:[ 1 2 ] row2:[ 'x' ] } is Index	false	inner element wrong type
 		
 # Typed-map-of-record-shape — values are records.		
-type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:'b' } } is Lookup	true	
-type Lookup {: { id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:99 } } is Lookup	false	
+type Lookup { :{ id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:'b' } } is Lookup	true	
+type Lookup { :{ id:Integer name:String } } { p:{ id:1 name:'a' } q:{ id:2 name:99 } } is Lookup	false	
 		
 # Mixed — typed-list of typed-maps.		
-type MapList [: {: Integer } ] [ { a:1 b:2 } { c:3 } ] is MapList	true	
-type MapList [: {: Integer } ] [ { a:1 } { b:'x' } ] is MapList	false	value in second map wrong type
+type MapList [ :{ :Integer } ] [ { a:1 b:2 } { c:3 } ] is MapList	true	
+type MapList [ :{ :Integer } ] [ { a:1 } { b:'x' } ] is MapList	false	value in second map wrong type
 		
 # Typed-map of typed-maps (3 levels deep).		
-type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 2 ] row2:[ 3 ] } plane2:{ row1:[ ] } } is Cube	true	
-type Cube {: {: [: Integer ] } } { plane1:{ row1:[ 1 'x' ] } } is Cube	false	deep element wrong type
+type Cube { :{ :[ :Integer ] } } { plane1:{ row1:[ 1 2 ] row2:[ 3 ] } plane2:{ row1:[ ] } } is Cube	true	
+type Cube { :{ :[ :Integer ] } } { plane1:{ row1:[ 1 'x' ] } } is Cube	false	deep element wrong type
 		
 # Typed list/map at top level (no `type` binding) — `is` directly		
 # against an inline typed shape.		
-[ 1 2 3 ] is [: Integer ]	true	
-[ 1 'x' ] is [: Integer ]	false	
-{ a:1 b:2 } is {: Integer }	true	
-{ a:1 b:'x' } is {: Integer }	false	
+[ 1 2 3 ] is [ :Integer ]	true	
+[ 1 'x' ] is [ :Integer ]	false	
+{ a:1 b:2 } is { :Integer }	true	
+{ a:1 b:'x' } is { :Integer }	false	
 		
 # typeof on a typed list/map type literal reports its metatype.		
-typeof [: Integer ]	NodeType	[: Integer ] has VType=List; metatype = NodeType
-typeof {: Integer }	NodeType	
+typeof [ :Integer ]	NodeType	[ :Integer ] has VType=List; metatype = NodeType
+typeof { :Integer }	NodeType	
 		
 # =====================================================================		
 # 11i. Typed list / map carrying both elements AND a child constraint		
@@ -534,18 +534,18 @@ typeof {: Integer }	NodeType
 #		
 # `is` against a child-typed type validates each retained element /		
 # entry-value against the child constraint. The element retention is		
-# what makes `[v0 :T v1]` more useful than the bare `[:T]` form: the		
+# what makes `[v0 :T v1]` more useful than the bare `[ :T ]` form: the		
 # value carries the elements forward so list / map / first / length		
 # operations see them.		
 		
-[{x:1} :{x:Integer} {x:2}] is [: {x:Integer}]	true	all elements satisfy the child type
-[{x:'X'} :{x:Integer} {x:2}] is [: {x:Integer}]	false	first element's x is String, not Integer
-{a:{x:1} :{x:Integer} b:{x:2}} is {: {x:Integer}}	true	every entry value satisfies the child type
-{a:{x:'X'} :{x:Integer} b:{x:2}} is {: {x:Integer}}	false	entry a's value fails the child type
+[{x:1} :{x:Integer} {x:2}] is [ :{x:Integer}]	true	all elements satisfy the child type
+[{x:'X'} :{x:Integer} {x:2}] is [ :{x:Integer}]	false	first element's x is String, not Integer
+{a:{x:1} :{x:Integer} b:{x:2}} is { :{x:Integer}}	true	every entry value satisfies the child type
+{a:{x:'X'} :{x:Integer} b:{x:2}} is { :{x:Integer}}	false	entry a's value fails the child type
 		
 # Mixed scalar/literal child types.		
-[1 :Integer 2 3] is [: Integer]	false	parser only retains values when child is a complex map shape; bare scalar gives plain typed-list semantics — pinned for documentation
-[1 2 3] is [: Integer]	true	regular concrete list directly satisfies the typed list type
+[1 :Integer 2 3] is [ :Integer]	false	parser only retains values when child is a complex map shape; bare scalar gives plain typed-list semantics — pinned for documentation
+[1 2 3] is [ :Integer]	true	regular concrete list directly satisfies the typed list type
 		
 # =====================================================================		
 # 11j. Typed simple-value def — `def name:Type body`		
@@ -580,13 +580,13 @@ def p:{ x:Integer y:Integer } { x:1 y:2 } p	{x:1 y:2}
 def p:{ x:Integer y:Integer } { x:1 }	ERROR:type_error	missing field y
 def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 		
-# Typed-list typing — `def xs:[: T]` accepts homogeneous lists. The		
+# Typed-list typing — `def xs:[ :T]` accepts homogeneous lists. The		
 # list is stored as a code-body, so referencing xs splices its		
 # elements (canonical AQL list-def semantics, see code-splice in		
 # function.tsv §2). `quote` would store as data instead.		
-def xs:[: Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
-def xs:[: Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
-def xs:[: Integer ] quote [ 1 2 3 ] xs	[1 2 3]	quote stores the list as data; xs resolves to the list value
+def xs:[ :Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
+def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
+def xs:[ :Integer ] quote [ 1 2 3 ] xs	[1 2 3]	quote stores the list as data; xs resolves to the list value
 		
 # =====================================================================		
 # 11k. enum — fixed enumeration of values		
@@ -596,7 +596,7 @@ def xs:[: Integer ] quote [ 1 2 3 ] xs	[1 2 3]	quote stores the list as data; xs
 # The enum is typically named via `type Color enum [...]` and queried		
 # with `is`.		
 #		
-# A child-typed list `enum [: T v0 v1 ...]` validates each value		
+# A child-typed list `enum [ :T v0 v1 ...]` validates each value		
 # against T at construction; a non-matching value triggers a type		
 # error before the disjunct is built.		
 		
@@ -606,17 +606,17 @@ type Color enum [ red green blue ] quote green is Color	true
 type Color enum [ red green blue ] quote pink is Color	false	
 		
 # Integer-valued enum with child-type validation.		
-type Codes enum [: Integer 200 404 500 ] 200 is Codes	true	
-type Codes enum [: Integer 200 404 500 ] 500 is Codes	true	
-type Codes enum [: Integer 200 404 500 ] 201 is Codes	false	
+type Codes enum [ :Integer 200 404 500 ] 200 is Codes	true	
+type Codes enum [ :Integer 200 404 500 ] 500 is Codes	true	
+type Codes enum [ :Integer 200 404 500 ] 201 is Codes	false	
 		
 # Child-type rejects mismatched literals at enum-construction time.		
-type Codes enum [: Integer 200 'bad' 500 ]	ERROR:type_error	'bad' is not an Integer
-type Codes enum [: String 'ok' 1 ]	ERROR:type_error	1 is not a String
+type Codes enum [ :Integer 200 'bad' 500 ]	ERROR:type_error	'bad' is not an Integer
+type Codes enum [ :String 'ok' 1 ]	ERROR:type_error	1 is not a String
 		
 # String-valued enum.		
-type Mode enum [: String 'off' 'on' 'auto' ] 'on' is Mode	true	
-type Mode enum [: String 'off' 'on' 'auto' ] 'ok' is Mode	false	
+type Mode enum [ :String 'off' 'on' 'auto' ] 'on' is Mode	true	
+type Mode enum [ :String 'off' 'on' 'auto' ] 'ok' is Mode	false	
 		
 # A bare enum (no `type`) returns a disjunct value usable directly.		
 quote red is enum [ red green blue ]	true	the enum value behaves as a type at the right of `is`
@@ -695,13 +695,13 @@ type Color enum [ red green blue ] def x:Color quote pink	ERROR:type_error	pink 
 type Color enum [ red green blue ] def x:Color quote red x is Color	true	the bound value still satisfies Color
 		
 # Integer-valued enum — typed binding accepts matching literals.		
-type Codes enum [: Integer 200 404 500 ] def s:Codes 200 s	200	200 is a Codes member
-type Codes enum [: Integer 200 404 500 ] def s:Codes 404 s	404	
-type Codes enum [: Integer 200 404 500 ] def s:Codes 201	ERROR:type_error	201 is not in Codes
+type Codes enum [ :Integer 200 404 500 ] def s:Codes 200 s	200	200 is a Codes member
+type Codes enum [ :Integer 200 404 500 ] def s:Codes 404 s	404	
+type Codes enum [ :Integer 200 404 500 ] def s:Codes 201	ERROR:type_error	201 is not in Codes
 		
 # String-valued enum — same pattern, String members.		
-type Mode enum [: String 'off' 'on' 'auto' ] def m:Mode 'on' m	'on'	'on' is a Mode member
-type Mode enum [: String 'off' 'on' 'auto' ] def m:Mode 'fast'	ERROR:type_error	'fast' is not in Mode
+type Mode enum [ :String 'off' 'on' 'auto' ] def m:Mode 'on' m	'on'	'on' is a Mode member
+type Mode enum [ :String 'off' 'on' 'auto' ] def m:Mode 'fast'	ERROR:type_error	'fast' is not in Mode
 		
 # =====================================================================		
 # 12. Dispatch — type literals are rejected at concrete-payload sigs		

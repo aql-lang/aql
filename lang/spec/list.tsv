@@ -16,7 +16,7 @@
 #   4. Reordering / slicing / set-style operations.		
 #   5. Higher-order traversal (each).		
 #   6. Type-system interactions: typeof, is, type literal.		
-#   7. Typed lists `[: T …]`.		
+#   7. Typed lists `[ :T …]`.		
 #   8. Composition with def / fn bodies.		
 #		
 # Runs against the production aql registry (engine.DefaultRegistry +		
@@ -119,22 +119,22 @@ length List	ERROR:signature_error	List type literal cannot be measured
 reverse List	ERROR:signature_error	
 		
 # ====================================================================		
-# 7. Typed lists — `[: T …]`		
+# 7. Typed lists — `[ :T …]`		
 # ====================================================================		
 # A typed list carries a child-type constraint applied element-wise.		
-# `[: T]` is a TYPE declaration (no elements); `[: T v0 v1 …]` is		
+# `[ :T]` is a TYPE declaration (no elements); `[ :T v0 v1 …]` is		
 # a concrete typed list whose elements are validated against T.		
 		
 # Bare typed-list type literal.		
-typeof [: Integer ]	NodeType	the type form is a Node-family TYPE
+typeof [ :Integer ]	NodeType	the type form is a Node-family TYPE
 		
 # Concrete typed list with conforming elements.		
-[: Integer 1 2 3 ] is List	true	a typed list IS still a list
-[: Integer 1 2 3 ] is [: Integer ]	true	and satisfies its own typed-list type
+[ :Integer 1 2 3 ] is List	true	a typed list IS still a list
+[ :Integer 1 2 3 ] is [ :Integer ]	true	and satisfies its own typed-list type
 		
 # Element conformance via `is` against the type form.		
-[ 1 2 3 ] is [: Integer ]	true	plain list satisfies typed-list type when all elems unify
-[ 1 'x' 3 ] is [: Integer ]	false	mismatched element fails
+[ 1 2 3 ] is [ :Integer ]	true	plain list satisfies typed-list type when all elems unify
+[ 1 'x' 3 ] is [ :Integer ]	false	mismatched element fails
 		
 # ====================================================================		
 # 8. Composition with def		
