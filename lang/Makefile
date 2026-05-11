@@ -1,4 +1,4 @@
-.PHONY: test vet fmt lint-assertions clean
+.PHONY: test vet fmt lint vuln lint-assertions clean
 
 # This module (github.com/metsitaba/voxgig-exp/lang) is the AQL language
 # library. The command-line tools (aql, aqlweb, aqlwasm, genhelp,
@@ -23,6 +23,22 @@ fmt:
 	gofmt -w .
 	cd ../eng/go && gofmt -w .
 	cd ../cmd/go && gofmt -w .
+
+# golangci-lint across all three modules (config: ../.golangci.yml,
+# found by walking up from each module dir). Install:
+#   curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
+#     | sh -s -- -b "$$(go env GOPATH)/bin" v2.5.0
+lint:
+	golangci-lint run ./...
+	cd ../eng/go && golangci-lint run ./...
+	cd ../cmd/go && golangci-lint run ./...
+
+# Known-vulnerability scan (reachability-aware) across all three modules.
+# Install: go install golang.org/x/vuln/cmd/govulncheck@latest
+vuln:
+	govulncheck ./...
+	cd ../eng/go && govulncheck ./...
+	cd ../cmd/go && govulncheck ./...
 
 # Fail if any non-test runtime handler uses a single-value .Data.(Type)
 # assertion (panics on mismatch). Two-value (v, ok := ...) is safe.

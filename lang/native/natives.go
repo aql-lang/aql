@@ -551,7 +551,7 @@ func stackCollectHandler(args []engine.Value, _ map[string]engine.Value, stack [
 // element type joins all preserved stack carriers, leaving the original
 // stack intact below it.
 func stackCollectCheckFullStackFn(_ []engine.Value, stack []engine.Value, _ *engine.Registry) []engine.Value {
-	var elem engine.Type = engine.TAny
+	elem := engine.TAny
 	if len(stack) > 0 {
 		elem = stack[0].VType
 		for i := 1; i < len(stack); i++ {

@@ -1519,7 +1519,7 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 
 	// Also verify each step individually in a single shared engine.
 	var results []string
-	result, err = runNativeSteps(t, nil, []string{
+	_, err = runNativeSteps(t, nil, []string{
 		`type Foo object {x:Integer}`,
 		`def foo1 make Foo {x:1}`,
 	})

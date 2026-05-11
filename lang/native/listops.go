@@ -34,7 +34,7 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 //	[a,b,c] pop → [a,b] c
 func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	list := args[0].AsList().Slice()
-	if list == nil || len(list) == 0 {
+	if len(list) == 0 {
 		return nil, fmt.Errorf("pop: cannot pop from empty list")
 	}
 
@@ -70,7 +70,7 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 //	[a,b,c] shift → [b,c] a
 func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	list := args[0].AsList().Slice()
-	if list == nil || len(list) == 0 {
+	if len(list) == 0 {
 		return nil, fmt.Errorf("shift: cannot shift from empty list")
 	}
 

@@ -69,6 +69,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		return
 	}
 	for _, sig := range fn.Signatures {
+		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
 		s := Signature{
 			Args:             sig.Args,
 			Handler:          sig.Handler,

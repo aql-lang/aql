@@ -39,7 +39,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	}
 
 	// Mutate: set name "Bob" on the instance
-	result = runAQL(t, r, []Value{
+	runAQL(t, r, []Value{
 		instanceVal, NewWord("set"), NewWord("name"), NewString("Bob"),
 	})
 
@@ -224,7 +224,7 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
 
-	var rm ReadMap = mapVal.AsMap()
+	rm := mapVal.AsMap()
 	if rm == nil {
 		t.Fatal("AsMap returned nil")
 	}

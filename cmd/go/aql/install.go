@@ -88,7 +88,10 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		}
 		destPath := filepath.Join(destDir, f.Name)
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(destPath, 0755)
+			if err := os.MkdirAll(destPath, 0755); err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {

@@ -1,4 +1,4 @@
-.PHONY: build run install vet fmt test clean wasm
+.PHONY: build run install vet fmt test lint vuln clean wasm
 
 # This module (github.com/metsitaba/voxgig-exp/cmd/go) holds the AQL
 # command-line tools. The language library lives in ../../lang and the
@@ -28,6 +28,13 @@ vet:
 
 fmt:
 	gofmt -w .
+
+# golangci-lint (config: ../../.golangci.yml) and govulncheck.
+lint:
+	golangci-lint run ./...
+
+vuln:
+	govulncheck ./...
 
 clean:
 	rm -rf bin/

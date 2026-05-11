@@ -439,7 +439,6 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			}
 			if s.ReturnsFn != nil && !bestHasFn {
 				best = s
-				bestHasFn = true
 				break
 			}
 		}

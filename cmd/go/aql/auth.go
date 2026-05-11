@@ -585,7 +585,7 @@ func runPublish(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	var result map[string]string
-	json.Unmarshal(respBody, &result)
+	_ = json.Unmarshal(respBody, &result) // best-effort: a missing field just yields an empty string below
 	fmt.Fprintf(stdout, "published %s@%s\n", result["module"], result["version"])
 	return 0
 }

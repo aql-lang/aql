@@ -83,7 +83,7 @@ func main() {
 			w.WriteHeader(200)
 			json.NewEncoder(w).Encode(body)
 		default:
-			http.Error(w, `{"error":"method not allowed"}`, 405)
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
 
@@ -125,7 +125,7 @@ func main() {
 					s.moons[id] = body
 					json.NewEncoder(w).Encode(body)
 				default:
-					http.Error(w, `{"error":"method not allowed"}`, 405)
+					http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 				}
 			} else if len(parts) == 3 {
 				// /api/planet/{planet_id}/moon/{moon_id}
@@ -152,7 +152,7 @@ func main() {
 					delete(s.moons, moonID)
 					json.NewEncoder(w).Encode(map[string]any{"ok": true})
 				default:
-					http.Error(w, `{"error":"method not allowed"}`, 405)
+					http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 				}
 			}
 			return
@@ -196,7 +196,7 @@ func main() {
 			delete(s.planets, planetID)
 			json.NewEncoder(w).Encode(map[string]any{"ok": true})
 		default:
-			http.Error(w, `{"error":"method not allowed"}`, 405)
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
 

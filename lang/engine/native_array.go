@@ -1161,7 +1161,7 @@ func outerReturnsFn(args []Value, r *Registry) []Value {
 	rightElem := DataListElemTypeFromValue(args[2])
 	stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
 	// outer produces a 2D list: TList<TList<body-result>>.
-	var innerElem Type = TAny
+	innerElem := TAny
 	if len(stk) > 0 {
 		innerElem = stk[len(stk)-1].VType
 	}

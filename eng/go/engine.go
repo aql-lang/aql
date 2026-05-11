@@ -609,7 +609,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 					_as0, _ := v.AsWord()
 					if v.IsWord() && _as0.Name == "(" {
 						depth++
-						e.stepOpenParen() // converts to OpenParen and advances pointer
+						_ = e.stepOpenParen() // converts to OpenParen and advances pointer; never errors
 						continue
 					}
 					_as1, _ := v.AsWord()
@@ -1211,12 +1211,6 @@ func (e *Engine) resolvedIndicesBefore(n int) []int {
 		indices[i], indices[j] = indices[j], indices[i]
 	}
 	return indices
-}
-
-// resolvedStackBefore returns all resolved values before the pointer,
-// excluding forwards, open-parens, and the matched arg indices.
-func (e *Engine) resolvedStackBefore(excludeIndices []int) []Value {
-	return e.resolvedStackBeforeFrom(0, excludeIndices)
 }
 
 // resolvedStackBeforeFrom returns all resolved values from position 'from'
@@ -2214,7 +2208,6 @@ func (e *Engine) stepCloseParen() error {
 
 				// Remove the forward.
 				e.stackRemove(i)
-				closeIdx--
 				if i < funcIdx {
 					funcIdx--
 				}
@@ -2411,35 +2404,6 @@ func (e *Engine) isInsidePendingForward() bool {
 		}
 	}
 	return false
-}
-
-// peekForwardValue returns a value representing what the next stack element
-// would resolve to, for use in speculative signature matching. Unknown words
-// become atoms; true/false become booleans; literals are returned as-is.
-func (e *Engine) peekForwardValue() Value {
-	if e.pointer+1 >= len(e.stack) {
-		return Value{}
-	}
-	next := e.stack[e.pointer+1]
-	if next.IsWord() {
-		nw, _ := next.AsWord()
-		switch nw.Name {
-		case "true":
-			return NewBoolean(true)
-		case "false":
-			return NewBoolean(false)
-		default:
-			// If the word has a FnDef in DefStacks, peek as TFunction.
-			stack := e.registry.DefStack(nw.Name)
-			for i := len(stack) - 1; i >= 0; i-- {
-				if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-					return NewFunction(fnDef)
-				}
-			}
-			return NewAtom(nw.Name)
-		}
-	}
-	return next
 }
 
 // curryOrStack handles a terminated forward. If the word at funcIdx can
