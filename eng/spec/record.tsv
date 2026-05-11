@@ -29,7 +29,7 @@
 #   5. Structural conformance: which forms work, which return false.		
 #   6. Errors / malformed records.		
 #		
-# Runs against the production aql registry.		
+# Runs against the eng kernel registry (eng/go/spec_test.go).		
 		
 		
 # ====================================================================		

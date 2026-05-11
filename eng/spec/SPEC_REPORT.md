@@ -28,7 +28,6 @@ both inline (in the row's `note` column) and below.
 | `code-splice.tsv` | List-bound def splices its body inline at use site |
 | `leftright.tsv` | Strict left-to-right with no operator precedence |
 | `mismatch-stop.tsv` | Type-directed forward halts on mismatch, residue stays |
-| `whitespace.tsv` | Whitespace runs are equivalent to single delimiter |
 | `shadow.tsv` | Def-stack shadowing semantics |
 | `typeliteral.tsv` | Type-name words push type-literal values |
 | `resolution.tsv` | Word resolution priority order |

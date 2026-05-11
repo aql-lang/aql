@@ -460,16 +460,18 @@ func IsValueOfType(v, t Value) bool {
 }
 
 // installType validates a (name, body) pair and pushes the body onto
-// the type stack. Mirrors production aql validateAndInstallType minus
-// the ObjectType naming (ObjectType bodies are constructed by the
-// production-only `object` word, which isn't in aqleng's core).
+// the type stack. Mirrors production aql validateAndInstallType.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type
-// literal, disjunct, implicit map, typed list/map, …) OR a concrete
-// scalar / list / map literal (IsLiteralTypeBody — `type Foo 1`, the
-// singleton type whose only inhabitant is 1). The split keeps the
-// inspect / fn-shape paths aligned with structural typing while
+// literal, disjunct, implicit map, typed list/map, ObjectType, …) OR a
+// concrete scalar / list / map literal (IsLiteralTypeBody — `type Foo
+// 1`, the singleton type whose only inhabitant is 1). The split keeps
+// the inspect / fn-shape paths aligned with structural typing while
 // letting users name singletons and value-shape types.
+//
+// When the body is an anonymous ObjectType (from the `object` word),
+// binding it under NAME renames it `Object/NAME` (or `<parent>/NAME`
+// when it inherits) so `typeof` / `is` report the nominal name.
 func installType(r *Registry, name string, body Value) error {
 	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
 		return &AqlError{
@@ -499,6 +501,18 @@ func installType(r *Registry, name string, body Value) error {
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a def'd value",
 		}
+	}
+	if body.IsObjectType() {
+		info, _ := body.AsObjectType()
+		if info.Parent != nil {
+			info.Name = info.Parent.Name + "/" + name
+		} else {
+			info.Name = "Object/" + name
+		}
+		for _, p := range strings.Split(info.Name, "/") {
+			r.KnownTypeParts[p] = true
+		}
+		body = NewObjectType(info)
 	}
 	r.PushType(name, body)
 	for _, p := range strings.Split(name, "/") {

@@ -20,6 +20,20 @@ package eng
 //	  tor    — type-level union (disjunct)       ( T U — T|U )
 //	  tand   — type-level intersection           ( T U — T∩U )
 //
+//	Type system:
+//	  type / untype  — push / pop a named type binding
+//	  typeof         — the type of a value, as a Type literal
+//	  pathof         — a type's ancestry path (a List of Type)
+//	  is             — type-test predicate (`v is T`)
+//	  enum           — fixed-enumeration (Enum) type builder
+//	  record         — RecordType from a list of single-pair maps
+//	  object         — ObjectType (nominal, inheritance-aware)
+//	  make           — universal typed-value constructor
+//
+//	State / control:
+//	  do             — run a list body as a sub-program
+//	  get / set      — read / write a field on a Map / List / Record / Object
+//
 //	Stack manipulation (Forth-style; all stack-only):
 //	  dup        — duplicate top                  ( a — a a )
 //	  swap       — exchange top two               ( a b — b a )
@@ -36,9 +50,9 @@ package eng
 // `end` is NOT registered here — it's a structural keyword handled
 // directly by the engine's stepEnd path in engine.go.
 //
-// `if`, `for`, `type*`, `do`, `each`, `fold`, the higher-arity stack
-// ops (`depth`, `pick`, `roll` which need FullStack), and the rest
-// of the production word set are reserved for future addition.
+// `if`, `for`, `each`, `fold`, the higher-arity stack ops (`depth`,
+// `pick`, `roll` which need FullStack), and the rest of the production
+// word set are reserved for future addition.
 //
 // These implementations are deliberately minimal: they cover the
 // dispatch / value / type-lattice core that every consumer of
@@ -57,6 +71,7 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreBoolean(r)
 	registerCoreTypeOps(r)
 	registerCoreType(r)
+	registerCoreObjectRecord(r)
 	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)

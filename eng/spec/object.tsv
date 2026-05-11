@@ -25,7 +25,12 @@
 # field with values that satisfy each declared type. Missing fields		
 # raise an error.		
 #		
-# Runs against the production aql registry.		
+# Runs against the eng kernel registry (eng/go/spec_test.go).		
+#		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq    — [Number Number] forward-prec — args[1] + args[0]		
+#   lengthq — [List] forward-prec — list length		
+# === end fixtures ===		
 		
 		
 # ====================================================================		
@@ -40,9 +45,9 @@
 # (Object/T_xxx) — the internal ID used to disambiguate anonymous		
 # instances. Tests can't pin the exact ID, so this section uses		
 # named types in subsequent rows. Bare construction succeeds:		
-length [ object { a:Integer } ]	1	the constructor produces exactly one stack value
-length [ object { a:String b:Boolean } ]	1	multi-field anonymous still produces one value
-length [ object { } ]	1	empty-field is allowed
+lengthq [ object { a:Integer } ]	1	the constructor produces exactly one stack value
+lengthq [ object { a:String b:Boolean } ]	1	multi-field anonymous still produces one value
+lengthq [ object { } ]	1	empty-field is allowed
 		
 # ====================================================================		
 # 2. Named object types via `type NAME object {…}`		
@@ -105,11 +110,11 @@ type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' 
 # substitutes the instance value at every use site.		
 		
 type Foo object { a:String } def f make Foo { a:'hi' } f .a	'hi'	def-captured object instance preserves type & fields
-type Foo object { a:Integer } def f make Foo { a:42 } f .a add 8	50	field access composes with arithmetic
+type Foo object { a:Integer } def f make Foo { a:42 } f .a addq 8	50	field access composes with arithmetic
 		
 # ====================================================================		
 # 7. Multiple instances		
 # ====================================================================		
 # Each `make` call yields a fresh object value; they're independent.		
 		
-type Foo object { a:Integer } def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) add ( y .a )	3	
+type Foo object { a:Integer } def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	

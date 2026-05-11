@@ -18,6 +18,7 @@ func Register(r *Registry) {
 	eng.RegisterCoreTypeOps(r)
 	eng.RegisterCoreFnSig(r)
 	eng.RegisterCoreMake(r)
+	eng.RegisterCoreObjectRecord(r)
 	eng.RegisterCoreStorage(r)
 
 	// String
