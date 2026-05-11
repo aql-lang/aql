@@ -10,8 +10,8 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/metsitaba/voxgig-exp/cmd/go/internal/formatter"
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/cmd/go/internal/formatter"
+	"github.com/aql-lang/aql/lang"
 )
 
 func main() {

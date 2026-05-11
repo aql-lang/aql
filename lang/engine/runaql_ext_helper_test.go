@@ -3,7 +3,7 @@ package engine_test
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // runAQL is a test helper shared by external `package engine_test` tests.

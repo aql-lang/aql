@@ -8,8 +8,8 @@ import (
 
 	jsonic "github.com/jsonicjs/jsonic/go"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
-	"github.com/metsitaba/voxgig-exp/lang/engine/help"
+	"github.com/aql-lang/aql/lang/engine"
+	"github.com/aql-lang/aql/lang/engine/help"
 )
 
 // MetaContext provides context to meta command handlers.

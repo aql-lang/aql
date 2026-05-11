@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 // --- Algebraic laws of the type lattice ---

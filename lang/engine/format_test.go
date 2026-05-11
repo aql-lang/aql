@@ -1,13 +1,13 @@
 package engine_test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 	"strings"
 	"testing"
 
 	multisource "github.com/jsonicjs/multisource/go"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
+	"github.com/aql-lang/aql/lang/internal/fileops"
 )
 
 func TestTextFormatDecode(t *testing.T) {

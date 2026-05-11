@@ -1,6 +1,6 @@
 .PHONY: build run install vet fmt test lint vuln clean wasm
 
-# This module (github.com/metsitaba/voxgig-exp/cmd/go) holds the AQL
+# This module (github.com/aql-lang/aql/cmd/go) holds the AQL
 # command-line tools. The language library lives in ../../lang and the
 # kernel in ../../eng/go (both wired in via replace directives in go.mod).
 

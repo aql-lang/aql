@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 func TestFetchFunc(t *testing.T) {

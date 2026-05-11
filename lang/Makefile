@@ -1,6 +1,6 @@
 .PHONY: test vet fmt lint vuln lint-assertions clean
 
-# This module (github.com/metsitaba/voxgig-exp/lang) is the AQL language
+# This module (github.com/aql-lang/aql/lang) is the AQL language
 # library. The command-line tools (aql, aqlweb, aqlwasm, genhelp,
 # solardemo) live in the sibling cmd/go module — build them with
 # `make -C ../cmd/go build`.

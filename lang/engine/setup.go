@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
+	"github.com/aql-lang/aql/lang/internal/fileops"
 )
 
 // DefaultRegistry returns a registry populated with built-in primitives

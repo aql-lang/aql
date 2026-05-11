@@ -1,6 +1,6 @@
 .PHONY: test vet fmt lint vuln clean
 
-# This module (github.com/metsitaba/voxgig-exp/eng) is the AQL engine
+# This module (github.com/aql-lang/aql/eng) is the AQL engine
 # kernel + jsonic parser + kernel spec runner. It is standalone — it has
 # no dependency on the lang or cmd/go modules.
 

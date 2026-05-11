@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 type evalRequest struct {

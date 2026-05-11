@@ -1,7 +1,7 @@
 package nativemod
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // BuildSolarDemoModule creates the "aql:solardemo" native module.

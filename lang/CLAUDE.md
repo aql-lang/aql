@@ -6,13 +6,13 @@ This is **voxgig-exp**, containing **AQL** — a concatenative query language
 implemented in Go. The repo is split into three Go modules:
 
 - `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
-  (`github.com/metsitaba/voxgig-exp/eng`).
+  (`github.com/aql-lang/aql/eng`).
 - `lang/` — the language layer: `lang.New()` API, native words/modules,
   the `engine` shim, the production spec suite (this module,
-  `github.com/metsitaba/voxgig-exp/lang`).
+  `github.com/aql-lang/aql/lang`).
 - `cmd/go/` — the command-line tools: `aql` (CLI/REPL), `aqlweb`,
   `aqlwasm`, `genhelp`, `solardemo`
-  (`github.com/metsitaba/voxgig-exp/cmd/go`).
+  (`github.com/aql-lang/aql/cmd/go`).
 
 ## Build & Test
 
@@ -57,7 +57,7 @@ normally using the cached modules.
 AQL uses `github.com/jsonicjs/jsonic/go` (v0.1.6) for all tokenization and
 structural parsing. There is exactly one parser — it lives in the
 standalone **eng** module at `eng/go/parser/parse.go`
-(`github.com/metsitaba/voxgig-exp/eng/parser`); `lang.Parse` re-exports
+(`github.com/aql-lang/aql/eng/parser`); `lang.Parse` re-exports
 it. (The old hand-rolled lexer / token / AST / tree-walking evaluator
 were removed — jsonic is the sole parsing path.) Key jsonic integration:
 

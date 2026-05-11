@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 // TestCheckAddIntegerPrecision validates intra-signature value-

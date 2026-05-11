@@ -27,8 +27,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/eng"
-	"github.com/metsitaba/voxgig-exp/eng/parser"
+	"github.com/aql-lang/aql/eng"
+	"github.com/aql-lang/aql/eng/parser"
 )
 
 // specReplayCounter is bumped per call to the `replayq` test fixture

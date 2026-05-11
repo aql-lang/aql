@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/eng"
+	"github.com/aql-lang/aql/eng"
 )
 
 // valuesEqual compares two eng.Value instances for equality.

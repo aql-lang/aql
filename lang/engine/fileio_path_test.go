@@ -1,11 +1,11 @@
 package engine_test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/engine"
-	"github.com/metsitaba/voxgig-exp/lang/native"
+	"github.com/aql-lang/aql/lang/engine"
+	"github.com/aql-lang/aql/lang/native"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
+	"github.com/aql-lang/aql/lang/internal/fileops"
 )
 
 func setupMemFSForIO(t *testing.T, r *engine.Registry) *fileops.MemFileOps {

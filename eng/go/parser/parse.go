@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aql-lang/aql/eng"
 	jsonic "github.com/jsonicjs/jsonic/go"
-	"github.com/metsitaba/voxgig-exp/eng"
 )
 
 // typeNames is derived from the engine's canonical registry to prevent drift.

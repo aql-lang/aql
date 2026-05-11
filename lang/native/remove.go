@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // The "remove" word is registered via the consolidated Natives slice in

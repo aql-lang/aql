@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang"
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 func TestNew(t *testing.T) {

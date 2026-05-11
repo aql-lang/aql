@@ -11,13 +11,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/aql-lang/aql/cmd/go/internal/formatter"
+	"github.com/aql-lang/aql/cmd/go/internal/repl"
+	"github.com/aql-lang/aql/lang"
+	"github.com/aql-lang/aql/lang/engine"
+	"github.com/aql-lang/aql/lang/engine/help"
+	"github.com/aql-lang/aql/lang/native"
 	jsonic "github.com/jsonicjs/jsonic/go"
-	"github.com/metsitaba/voxgig-exp/cmd/go/internal/formatter"
-	"github.com/metsitaba/voxgig-exp/cmd/go/internal/repl"
-	"github.com/metsitaba/voxgig-exp/lang"
-	"github.com/metsitaba/voxgig-exp/lang/engine"
-	"github.com/metsitaba/voxgig-exp/lang/engine/help"
-	"github.com/metsitaba/voxgig-exp/lang/native"
 )
 
 // Version is set at build time via ldflags.

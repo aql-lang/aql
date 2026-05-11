@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/metsitaba/voxgig-exp/eng"
+import "github.com/aql-lang/aql/eng"
 
 // Register installs the engine's built-in word set on the given
 // registry. This is invoked from DefaultRegistry. Word definitions
