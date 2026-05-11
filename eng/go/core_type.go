@@ -34,7 +34,7 @@ func registerCoreType(r *Registry) {
 	registerCoreTypeWord(r)
 	registerCoreUntypeWord(r)
 	registerCoreTypeof(r)
-	registerCoreTypePathOf(r)
+	registerCorePathOf(r)
 	registerCoreIs(r)
 	registerCoreEnum(r)
 }
@@ -198,40 +198,47 @@ func registerCoreTypeof(r *Registry) {
 	})
 }
 
-// registerCoreTypePathOf installs `typepathof v`. Returns a List of
-// Type literals — the ancestry path of `typeof v`, from the top-level
-// root down to the leaf type:
+// registerCorePathOf installs `pathof T` — the ancestry path of a
+// TYPE. It takes a Type literal (not an arbitrary value) and returns
+// the chain of progressively-deeper Type literals from the top-level
+// root down to T itself, as a List of Type (`[Type [:Type]]`):
 //
-//	typepathof "a"     → [Scalar String ProperString]
-//	typepathof 5       → [Scalar Number Integer]
-//	typepathof 5.0     → [Scalar Number Decimal]
-//	typepathof true    → [Scalar Boolean]
-//	typepathof [ 1 2 ] → [Node List]
-//	typepathof { a:1 } → [Node Map]
-//	typepathof none    → [None]
-//	typepathof Integer → [Type]              (every type literal collapses to [Type])
+//	pathof Integer          → [Scalar Number Integer]
+//	pathof ProperString     → [Scalar String ProperString]
+//	pathof List             → [Node List]
+//	pathof Function         → [Type Function]
+//	pathof Enum             → [Type Disjunct Enum]
+//	pathof Type             → [Type]              (Type has no ancestors)
+//	pathof None             → [None]
 //
-// The last element always equals `typeof v`. Each element is a Type
-// literal naming a progressively-deeper type along the path, so they
-// satisfy `is` against the corresponding type name.
-func registerCoreTypePathOf(r *Registry) {
+// The last element always equals T. To get the path of a *value*'s
+// type, compose with `typeof`:
+//
+//	pathof ( typeof 5 )     → [Scalar Number Integer]   (= pathof Integer)
+//	pathof ( typeof none )  → [None]
+//	pathof ( typeof Integer ) → [Type]                  (= pathof Type)
+//
+// `pathof 5` is a signature_error — the argument must be a Type.
+func registerCorePathOf(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "typepathof",
+		Name:              "pathof",
 		ForwardPrecedence: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TAny},
+			Args: []Type{TType},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{TypePathOf(args[0])}, nil
+				return []Value{PathOf(args[0])}, nil
 			},
 			Returns: []Type{TList},
 		}},
 	})
 }
 
-// TypePathOf returns the ancestry path of `typeof v` as a List of
-// Type literals (root first, leaf last). See registerCoreTypePathOf.
-func TypePathOf(v Value) Value {
-	parts := TypeOf(v).VType.Parts
+// PathOf returns the ancestry path of the type T (a Type literal, or
+// any value whose VType is a Type subtype — e.g. a Function/Disjunct
+// value) as a List of Type literals, root first, leaf last. See
+// registerCorePathOf.
+func PathOf(t Value) Value {
+	parts := t.VType.Parts
 	elems := make([]Value, 0, len(parts))
 	for i := 1; i <= len(parts); i++ {
 		seg := append([]string(nil), parts[:i]...)
