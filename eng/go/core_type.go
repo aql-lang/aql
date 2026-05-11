@@ -32,6 +32,7 @@ func registerCoreType(r *Registry) {
 	registerCoreTypeWord(r)
 	registerCoreUntypeWord(r)
 	registerCoreTypeof(r)
+	registerCoreTypePathOf(r)
 	registerCoreIs(r)
 	registerCoreEnum(r)
 }
@@ -190,6 +191,53 @@ func registerCoreTypeof(r *Registry) {
 			Returns: []Type{TType},
 		}},
 	})
+}
+
+// registerCoreTypePathOf installs `typepathof v`. Returns a List of
+// Type literals — the ancestry path of `typeof v`, from the top-level
+// root down to the leaf type:
+//
+//	typepathof "a"     → [Scalar String ProperString]
+//	typepathof 5       → [Scalar Number Integer]
+//	typepathof 5.0     → [Scalar Number Decimal]
+//	typepathof true    → [Scalar Boolean]
+//	typepathof [ 1 2 ] → [Node List]
+//	typepathof { a:1 } → [Node Map]
+//	typepathof none    → [None]
+//	typepathof Integer → [Type ScalarType]   (type literal → metatype path)
+//
+// The last element always equals `typeof v`. Each element is a Type
+// literal naming a progressively-deeper type along the path, so they
+// satisfy `is` against the corresponding type name.
+func registerCoreTypePathOf(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "typepathof",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{{
+			Args: []Type{TAny},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{TypePathOf(args[0])}, nil
+			},
+			Returns: []Type{TList},
+		}},
+	})
+}
+
+// TypePathOf returns the ancestry path of `typeof v` as a List of
+// Type literals (root first, leaf last). See registerCoreTypePathOf.
+func TypePathOf(v Value) Value {
+	parts := TypeOf(v).VType.Parts
+	elems := make([]Value, 0, len(parts))
+	for i := 1; i <= len(parts); i++ {
+		seg := append([]string(nil), parts[:i]...)
+		pt := Type{Parts: seg}
+		fullPath := strings.Join(seg, "/")
+		if num, ok := BuiltinTypeIDs[fullPath]; ok {
+			pt.ID = FormatFixedTypeID(fullPath, num)
+		}
+		elems = append(elems, NewTypeLiteral(pt))
+	}
+	return NewList(elems)
 }
 
 // TypeOf returns the Type of v as a type-literal Value. See

@@ -42,6 +42,7 @@ var typeNameEntries = []struct {
 	{"Interval", TInterval},
 	{"Function", TFunction},
 	{"FnSig", TFnUndef},
+	{"Disjunct", TDisjunct},
 }
 
 // typeNames maps well-known type names to their Type, so bare words like

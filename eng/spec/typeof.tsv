@@ -1,0 +1,138 @@
+# tokens	expected	note
+# =====================================================================		
+# typeof / typepathof — inspecting a value's type		
+# =====================================================================		
+#		
+# `typeof v` returns the type of `v` as a Type literal:		
+#   - a concrete value → its exact VType (Integer, ProperString, …);		
+#   - the unique `none` value → None;		
+#   - a type literal → its metatype: a Scalar.. subtype → ScalarType,		
+#     a Node.. subtype → NodeType, an Object.. subtype → ObjectType,		
+#     and the abstract roots (Any, Scalar, Node, Object) → Type;		
+#   - `typeof typeof v` therefore reports the metatype.		
+#		
+# `typepathof v` returns the ancestry path of `typeof v` as a List of		
+# Type literals, root first, leaf last — the last element always		
+# equals `typeof v`:		
+#   typepathof 'a'  → [Scalar String ProperString]		
+#   typepathof 5    → [Scalar Number Integer]		
+#   typepathof none → [None]		
+#		
+# === Test fixtures (eng/go/spec_test.go::registerSpecWords) ===		
+#   lengthq — [List] forward-prec — list length		
+#   firstq  — [List] forward-prec — first element or None		
+#   addq    — [Number Number] forward-prec — args[1] + args[0]		
+#   Pre-bound defs: pi=3, tau=6, greeting='hello'.		
+# === end fixtures ===		
+		
+# ====================================================================		
+# 1. typeof — concrete scalar values		
+# ====================================================================		
+		
+typeof 5	Integer	an Integer literal
+typeof -7	Integer	negatives too
+typeof 5.0	Decimal	a Decimal literal
+typeof 3.14	Decimal	
+typeof true	Boolean	
+typeof false	Boolean	
+typeof 'hello'	ProperString	a non-empty string is a ProperString
+typeof ' '	ProperString	a single space is still non-empty
+typeof ''	EmptyString	the empty string is an EmptyString
+typeof ( quote red )	Atom	a quoted word is an Atom
+typeof none	None	the unique inhabitant of None reports None
+typeof pi	Integer	a def-bound reference resolves to the bound value first
+typeof greeting	ProperString	
+		
+# ====================================================================		
+# 2. typeof — nodes		
+# ====================================================================		
+		
+typeof [ ]	List	
+typeof [ 1 2 3 ]	List	
+typeof { }	Map	
+typeof { a:1 b:2 }	Map	
+typeof [ [ 1 ] { a:2 } ]	List	a list of mixed nodes is still a List
+		
+# ====================================================================		
+# 3. typeof — type literals report their metatype		
+# ====================================================================		
+		
+typeof Integer	ScalarType	
+typeof Number	ScalarType	
+typeof String	ScalarType	
+typeof Boolean	ScalarType	
+typeof Atom	ScalarType	
+typeof Path	ScalarType	
+typeof List	NodeType	
+typeof Map	NodeType	
+typeof Resource	ObjectType	an Object subtype → ObjectType
+typeof Entity	ObjectType	
+typeof Any	Type	the abstract top type → Type
+typeof Node	Type	the abstract Node root → Type (not NodeType)
+typeof Scalar	Type	the abstract Scalar root → Type (not ScalarType)
+typeof Object	Type	the abstract Object root → Type (not ObjectType)
+		
+# ====================================================================		
+# 4. typeof — richer values		
+# ====================================================================		
+		
+typeof fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]	Function	a function value
+typeof fnsig [ [ Integer ] [ Integer ] ]	FnSig	a function-shape type value
+typeof enum [ red green blue ]	Disjunct	an enum builds a Disjunct type value
+		
+# ====================================================================		
+# 5. typeof — round-trips		
+# ====================================================================		
+		
+5 is ( typeof 5 )	true	a value satisfies its own type
+'a' is ( typeof 'a' )	true	
+true is ( typeof true )	true	
+[ 1 2 ] is ( typeof [ 1 2 ] )	true	
+{ a:1 } is ( typeof { a:1 } )	true	
+typeof typeof 5	ScalarType	the metatype of Integer
+typeof typeof 'a'	ScalarType	the metatype of ProperString
+typeof typeof [ 1 ]	NodeType	the metatype of List
+typeof typeof { a:1 }	NodeType	the metatype of Map
+		
+# ====================================================================		
+# 6. typepathof — the ancestry path		
+# ====================================================================		
+		
+typepathof 5	[Scalar Number Integer]	
+typepathof -7	[Scalar Number Integer]	
+typepathof 5.0	[Scalar Number Decimal]	
+typepathof true	[Scalar Boolean]	
+typepathof 'hello'	[Scalar String ProperString]	the canonical example
+typepathof ''	[Scalar String EmptyString]	
+typepathof ( quote red )	[Scalar Atom]	
+typepathof none	[None]	None has no ancestors
+typepathof [ 1 2 3 ]	[Node List]	
+typepathof { a:1 }	[Node Map]	
+typepathof fn [ [ a:Integer ] [ Integer ] [ a ] ]	[Word Function]	
+typepathof fnsig [ [ Integer ] [ Integer ] ]	[Word FnSig]	
+typepathof enum [ a b c ]	[Word Disjunct]	
+typepathof Integer	[Type ScalarType]	a type literal → the path of its metatype
+typepathof List	[Type NodeType]	
+typepathof Any	[Type]	
+typepathof pi	[Scalar Number Integer]	a def-bound reference resolves first
+typepathof greeting	[Scalar String ProperString]	
+		
+# ====================================================================		
+# 7. typepathof — structure of the result		
+# ====================================================================		
+		
+typepathof 'a' is List	true	the result is itself a List
+lengthq ( typepathof 'a' )	3	Scalar / String / ProperString
+lengthq ( typepathof 5 )	3	Scalar / Number / Integer
+lengthq ( typepathof true )	2	Scalar / Boolean
+lengthq ( typepathof none )	1	just None
+lengthq ( typepathof [ 1 2 ] )	2	Node / List
+firstq ( typepathof 'a' )	Scalar	every scalar path is rooted at Scalar
+firstq ( typepathof 5 )	Scalar	
+firstq ( typepathof [ 1 2 ] )	Node	node paths are rooted at Node
+firstq ( typepathof 'a' ) is Scalar	true	the root element is the Scalar type literal
+firstq ( typepathof 'a' ) is Number	false	Scalar is not a Number — subtyping runs the other way
+( typepathof 5 ) is [ Scalar Number Integer ]	true	the whole path matches a literal template of type literals
+( typepathof 'a' ) is [ Scalar String ProperString ]	true	
+( typepathof 5 ) is [ Scalar Number String ]	false	wrong leaf
+( typepathof none ) is [ None ]	true	
