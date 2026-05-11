@@ -126,7 +126,39 @@ firstq [ [ 1 addq 2 ] [ 3 4 ] ]	[3]	first inner list, post-eval
 { outer:{ inner:( 6 addq 7 ) } }	{outer:{inner:13}}	recursion: nested map values evaluate too
 
 # ====================================================================
-# 6. Quoting — suppress list auto-eval
+# 6. Def references inside node literals
+# ====================================================================
+# Auto-evaluation resolves def-bound (and pre-bound) Words that appear
+# as values inside a List or Map literal: `def a 1 {x:a}` → `{x:1}`.
+# This composes with paren values, embedded lists, and nesting.
+
+# Bare def reference as a map value.
+def a 1 { x:a }	{x:1}	a resolves to 1 during the map's auto-eval
+def a 1 def b 2 { x:a y:b }	{x:1 y:2}	multiple def references resolve independently
+greeting { msg:greeting }	"hello" {msg:"hello"}	pre-bound `greeting` resolves (and the bare token leaves "hello" on the stack first)
+{ x:pi }	{x:3}	pre-bound `pi` (=3) resolves with no prior token
+def s "hi" { msg:s }	{msg:"hi"}	String-bound def
+
+# Bare def reference as a list element — the list auto-evaluates.
+def a 1 [ a 2 3 ]	[1 2 3]
+def a 1 def b 2 [ a b a ]	[1 2 1]
+[ pi tau pi ]	[3 6 3]	pre-bound defs resolve element-wise
+
+# Def references mixed with paren/arithmetic in node values.
+def a 1 { x:a y:( a addq 1 ) }	{x:1 y:2}	bare ref and a paren expression that uses the ref
+def a 1 def b 2 { sum:( a addq b ) }	{sum:3}
+def a 1 { items:[ a ( a addq 1 ) ] }	{items:[1 2]}	a list value mixing a bare ref and a paren
+
+# Nesting: refs resolve inside lists-in-maps, maps-in-maps, maps-in-lists.
+def n 3 { items:[ n n ] }	{items:[3 3]}	def ref inside an embedded list value
+def a 1 { outer:{ inner:a } }	{outer:{inner:1}}	def ref inside a nested map value
+def a 1 [ { x:a } { y:a } ]	[{x:1} {y:1}]	def refs inside maps inside a list
+
+# A list-bound def referenced as a node value resolves to the list itself.
+def lst quote [ 10 20 ] { xs:lst }	{xs:[10 20]}
+
+# ====================================================================
+# 7. Quoting — suppress list auto-eval
 # ====================================================================
 # `quote` flips a list's quoted flag. The bare engine won't
 # optimistically accept the function-named Word `quote` at a TList
@@ -145,7 +177,7 @@ quote { a:1 b:2 }	{a:1 b:2}	plain map round-trips unchanged
 quote { a:( 1 addq 2 ) }	{a:3}	the inner paren value still evaluates
 
 # ====================================================================
-# 7. Composition with def
+# 8. Composition with def
 # ====================================================================
 # `def NAME [body]` stores the list as a CODE BODY (NoEvalArgs on
 # def's body slot keeps it raw); each reference splices and runs it.
@@ -165,7 +197,7 @@ def lst quote [ 1 2 3 4 ] lengthq lst	4
 def lst quote [ 9 8 7 ] firstq lst	9
 
 # ====================================================================
-# 8. Nesting and round-trips
+# 9. Nesting and round-trips
 # ====================================================================
 
 lengthq [ { a:1 } { b:2 } { c:3 } ]	3	list of three maps
