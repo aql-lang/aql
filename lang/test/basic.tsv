@@ -1,0 +1,709 @@
+# Basic AQL expression tests
+# Format: expression<TAB>expected result
+# String values shown as 'text', integers as digits.
+# Multiple stack values are space-separated.
+# Empty expected means empty stack.
+
+# Integer literals
+1	1
+0	0
+42	42
+-5	-5
+999	999
+
+# String literals
+"hello"	'hello'
+'world'	'world'
+""	''
+
+# Unknown words error
+foo	ERROR:undefined_word
+abc	ERROR:undefined_word
+
+# Multiple values on stack
+1 2 3	1 2 3
+1 "hello"	1 'hello'
+
+# String functions - prefix
+"hello" upper	'HELLO'
+"WORLD" lower	'world'
+"a" upper	'A'
+
+# String functions - forward
+lower "ABC"	'abc'
+lower "B"	'b'
+
+
+# Arithmetic - prefix (post-§1.4 phase 4: handlers compute b op a, so
+# all-stack `c b sub` and swap `c sub b` both yield b - c, while the
+# all-forward / mirror forms `sub c b` etc. yield c - b).
+1 2 add	3
+10 3 sub	7
+4 5 mul	20
+10 3 div	3
+10 3 mod	1
+
+# Arithmetic - infix (swap form: handler computes b op a → 10 sub 3 = 7)
+1 add 2	3
+10 sub 3	7
+4 mul 5	20
+
+# Operator evaluation (left-to-right)
+2 add 3 mul 4	20
+2 mul 3 add 4	10
+1 add 2 mul 3 add 4	13
+10 sub 3 sub 1	6
+
+# Parentheses
+(1 add 2)	3
+(1 add 2) mul 3	9
+2 mul (3 add 4)	14
+(2 add 3) mul (4 add 1)	25
+
+# Stack operations
+1 drop
+1 2 add 3 add	6
+
+# Modifiers
+lower/f "E"	'e'
+"F" lower/s	'f'
+
+# Set/Get
+context set foo 99 end context get foo	99
+
+# Make - scalar types
+make String 9	'9'
+make String 42	'42'
+make Number "99"	99
+make Boolean 1	true
+make Boolean 0	false
+
+# Make - record type (positional)
+type Bar record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
+
+# Make - record type (named fields, reordered)
+type Bar record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+
+# Table type - creation
+table record [x:Number y:String]	table{x:Number,y:String}
+
+# Table type - with type Def
+type Foo record [x:Integer y:String] type Bar table Foo Bar	table{x:Integer,y:String}
+
+# Make - table type (positional)
+type Foo record [x:Integer y:String] type Bar table Foo make Bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Make - table type (named fields)
+type Foo record [x:Integer y:String] type Bar table Foo make Bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+
+# Table unification - compatible schemas
+type Foo record [x:Any] type Bar record [x:Number] (table Foo) unify (table Bar)	table{x:Number} true
+
+# Table unification - incompatible schemas
+type Foo record [x:Number] type Bar record [y:Number] (table Foo) unify (table Bar)	'~unify-fail' false
+
+# Table does not unify with list
+List unify table record [x:Number]	'~unify-fail' false
+
+# Record with inline disjunct field (list evaluated as code)
+record [x:Number y:[String tor None]]	record{x:Number,y:String|None}
+
+# Record with inline disjunct - unification narrows
+record [x:Number y:[String tor None]] unify record [x:Number y:String]	record{x:Number,y:String} true
+
+# Make record with inline disjunct - none value
+type Foo record [x:Number y:[String tor None]] make Foo [42 None]	{x:42,y:None}
+
+# Make record with inline disjunct - string value
+type Foo record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42,y:'hello'}
+
+# Record with user-defined type Field (disjunct for optional)
+type OptStr (String tor None) type Foo record [x:Number y:OptStr] Foo	record{x:Number,y:String|None}
+
+# Record with user-defined type - unification narrows disjunct
+type OptStr (String tor None) type Foo record [x:Number y:OptStr] Foo unify record [x:Number y:String]	record{x:Number,y:String} true
+
+# Make record with optional field - string value
+type OptStr (String tor None) type Foo record [x:Number y:OptStr] make Foo [42 "hello"]	{x:42,y:'hello'}
+
+# Make record with optional field - none value
+type OptStr (String tor None) type Foo record [x:Number y:OptStr] make Foo [42 None]	{x:42,y:None}
+
+# Def map with optional field - absence unifies as None
+def a {x:Integer y:(String tor None)} a unify {x:1}	{x:1,y:None} true
+def a {x:Integer y:(String tor None)} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+def a {x:Integer y:(String tor None)} a unify {x:1,y:None}	{x:1,y:None} true
+
+# Make record from map - all fields provided
+type Foo record [x:Number y:String] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field provided
+type Foo record [x:Number y:[String tor None]] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
+
+# Make record from map - optional field omitted (defaults to none)
+type Foo record [x:Number y:[String tor None]] make Foo {x:1}	{x:1,y:None}
+
+# Make record from named list - optional field omitted (defaults to none)
+type Foo record [x:Number y:[String tor None]] make Foo [x:1]	{x:1,y:None}
+
+# Make record from map - missing required field is an error
+type Foo record [x:Number y:String] make Foo {x:1}	ERROR:make: missing field "y"
+
+# Make record from map - unknown field is an error
+type Foo record [x:Number y:String] make Foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+
+# Options type Creation
+make Options {x:1,y:2}	options{x:1,y:2}
+
+# Options unify - concrete defaults fill in
+(make Options {x:1,y:2,z:String}) unify {y:3,z:"Z"}	{x:1,y:3,z:'Z'} true
+
+# Options with type-only field - missing fails
+(make Options {x:Integer}) unify {}	'~unify-fail' false
+
+# Options with type Field - provided value succeeds
+(make Options {x:Integer}) unify {x:1}	{x:1} true
+
+# Options with disjunct
+def d (make Options {y:(Integer tor String)}) d unify {y:1}	{y:1} true
+def d (make Options {y:(Integer tor String)}) d unify {y:"Y"}	{y:'Y'} true
+
+# Options with None in disjunct - absence defaults to None
+def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
+
+# Options - extra keys fail
+(make Options {x:1}) unify {x:2,y:3}	'~unify-fail' false
+
+# Options - concrete default overridden
+(make Options {x:1}) unify {x:99}	{x:99} true
+
+# Options - all defaults
+(make Options {x:1,y:2}) unify {}	{x:1,y:2} true
+
+# Optional field syntax ? — sugar for (type Tor None)
+{x?:Integer}	{x:Integer|None}
+
+# Computed key syntax {[key]:value} — uses defined variables
+def a "a" {[a]:1}	{a:1}
+def a "a" def b "b" {[a]:1,[b]:2}	{a:1,b:2}
+
+# Computed key syntax — evaluated key expression
+def a "x" {[a]:1}	{x:1}
+def a "x" def b "y" {[a]:1,[b]:2}	{x:1,y:2}
+
+# Optional field with Options
+(make Options {x:1,y?:String}) unify {x:2}	{x:2,y:None} true
+(make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
+
+# Optional field in def map
+def a {x:Integer y?:String} a unify {x:1}	{x:1,y:None} true
+def a {x:Integer y?:String} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
+
+# Optional function arguments — named optional param
+def add2 fn [[x:(Integer tor None) y:Integer] [Integer] [x add y]] add2 5	5
+def add2 fn [[x:(Integer tor None) y:Integer] [Integer] [x add y]] add2 10 5	15
+
+# Optional function arguments — named with ? list pair syntax
+def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 5	5
+def add3 fn [[x?:Integer y:Integer] [Integer] [x add y]] add3 10 5	15
+
+# Optional function arguments — unnamed optional param
+def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 7	7
+def addopt fn [[x?:Integer y:Integer] [Integer] [x add y]] addopt 3 7	10
+
+# Multiple optional args — 2 optional, 1 required (2^2=4 sigs)
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 1	1
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 1	11
+def f3 fn [[a?:Integer b?:Integer c:Integer] [Integer] [a add b add c]] f3 10 20 1	31
+
+# Multiple optional args — all optional (same types), 1 or 2 args
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5	5
+def f4 fn [[a?:Integer b?:Integer] [Integer] [a add b]] f4 5 3	8
+
+# 0-arg function call — all params optional
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero	0
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5	5
+def zero fn [[a?:Integer b?:Integer] [Integer] [a add b]] zero 5 3	8
+
+# 0-arg function call — no optional params (non-optional 0-arg fn)
+def pi fn [[] [Integer] [3]] pi	3
+
+# 0-arg function call — mixed optional and required
+def greet fn [[name?:String] [String] [add "Hello " name]] greet	'Hello '
+def greet fn [[name?:String] [String] [add "Hello " name]] greet "Bob"	'BobHello '
+
+# 0-arg call — single optional with different types
+def flag fn [[v?:Boolean] [Boolean] [v]] flag	false
+def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
+
+# Table with optional field - mixed string and none values
+type OptStr (String tor None) type Foo record [x:Number y:OptStr] type Bar table Foo make Bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
+
+# Record with nested user-defined record type
+type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Number,b:record{z:String}}
+
+# Do - evaluate list contents
+do [1 add 2]	3
+
+# Do - evaluate map list values (multi-word expressions need lists)
+do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+
+# Do - evaluate map word values (single words resolve directly)
+do {x:1,y:2}	{x:1,y:2}
+
+# Map with paren expressions (inline evaluation)
+{x:(3 add 4),y:(upper "a")}	{x:7,y:'A'}
+
+# Disjunct - union types via tor
+String tor None	String|None
+(String tor None) unify "a"	'a' true
+(None tor Boolean) unify None	None true
+({x:1} tor {y:2}) unify {x:1,q:9}	{q:9,x:1} true
+
+# typeof - returns a Type literal of the value's exact type. For
+# concrete values, the leaf type (Integer, String, Boolean, …); for
+# type literals, the metatype (None has 1 part so it reports Type).
+typeof 42	Integer
+typeof "hello"	ProperString
+typeof ""	EmptyString
+typeof true	Boolean
+typeof false	Boolean
+typeof [1 2 3]	List
+typeof {x:1}	Map
+typeof None	Type
+
+# fulltypeof - returns the full type Path as an atom.
+fulltypeof 42	Scalar/Number/Integer
+fulltypeof "hello"	Scalar/String/ProperString
+fulltypeof ""	Scalar/String/EmptyString
+fulltypeof true	Scalar/Boolean
+fulltypeof false	Scalar/Boolean
+fulltypeof [1 2 3]	Node/List
+fulltypeof {x:1}	Node/Map
+fulltypeof None	Type
+
+# is - type/value check: true if a unify b -> a
+42 is Number	true
+42 is Integer	true
+42 is String	false
+"hello" is String	true
+true is Boolean	true
+true is Scalar	true
+[1 2 3] is List	true
+{x:1} is Map	true
+None is None	true
+42 is Any	true
+42 is 42	true
+42 is 43	false
+
+# is - typed list: instance matches typed list constraint
+[1 2 3] is [:Number]	true
+[1 2 3] is [:Integer]	true
+[1 2 3] is [:String]	false
+["a" "b"] is [:String]	true
+[] is [:Number]	true
+
+# is - typed map: instance matches typed map constraint
+{x:1 y:2} is {:Number}	true
+{x:1 y:2} is {:Integer}	true
+{x:1 y:2} is {:String}	false
+{x:"a" y:"b"} is {:String}	true
+
+# is - concrete map matches map with type-constrained values
+{a:1} is {a:Integer}	true
+{a:1} is {a:String}	false
+{a:1,b:"x"} is {a:Integer,b:String}	true
+{a:1} is {a:Integer,b:String}	false
+
+# is - closed map: extra keys cause failure
+{x:1,z:"q"} is {x:Number}	false
+{x:1,y:2,z:3} is {x:Integer,y:Integer}	false
+{x:1} is {x:Integer,y:Integer}	false
+
+# is - closed list: length must match
+[1 2 3] is [:Integer]	true
+[1 2 3] is [:String]	false
+[1 2] is [:Number]	true
+[] is [:String]	true
+["a" 1] is [:String]	false
+["a" 1] is [:Number]	false
+
+# is - per-element type List: type Names in lists match element-wise
+["a" 1.1] is [String Decimal]	true
+[1 2] is [Integer Integer]	true
+[1 "a"] is [Integer String]	true
+["a" 1] is [String Integer]	true
+["a" 1] is [Integer String]	false
+[1 "a" true] is [Integer String Boolean]	true
+[1 2 3] is [Number Number Number]	true
+[1] is [String]	false
+[] is []	true
+[1 2] is [Integer]	false
+[1] is [Integer Integer]	false
+
+# is - booleans in lists resolve correctly
+[true false] is [Boolean Boolean]	true
+[true] is [Boolean]	true
+[1 true] is [Integer Boolean]	true
+[true "a"] is [Boolean String]	true
+[true] is [String]	false
+
+# is - atoms in lists resolve correctly
+[foo] is [Atom]	true
+[foo bar] is [Atom Atom]	true
+[1 foo] is [Integer Atom]	true
+[foo] is [String]	false
+
+# is - record type Equality (records only unify with records)
+# Use parens to scope each record expression so `is` gets both as args.
+(record [x:Number y:String]) is (record [x:Number y:String])	true
+(record [x:Number y:String]) is (record [x:Any y:Any])	true
+(record [x:Number y:String]) is (record [x:String y:String])	false
+
+# is - table type Equality (tables only unify with tables)
+type R record [x:Number] (table R) is (table R)	true
+
+# is - Node type Hierarchy (values use concrete List/Map types)
+[1 2 3] is List	true
+{x:1} is Map	true
+[1 2 3] is Map	false
+{x:1} is List	false
+42 is Node	false
+
+# eq/neq - typed list types
+[:Number] eq [:Number]	true
+[:Number] eq [:String]	false
+[:Number] neq [:String]	true
+[:Integer] eq [:Integer]	true
+[:Number] eq [:Integer]	false
+
+# eq/neq - typed map types
+{:Number} eq {:Number}	true
+{:Number} eq {:String}	false
+{:Number} neq {:String}	true
+
+# eq/neq - record types
+record [x:Number y:String] eq record [x:Number y:String]	true
+record [x:Number y:String] eq record [x:Number y:Number]	false
+record [x:Number y:String] neq record [x:Number y:Number]	true
+record [x:Number] eq record [x:Number y:String]	false
+
+# eq/neq - table types
+type R record [x:Number] (table R) eq (table R)	true
+
+# eq/neq - disjunct types
+(String tor None) eq (String tor None)	true
+(String tor None) eq (Number tor None)	false
+(String tor None) neq (Number tor None)	true
+
+# eq/neq - user-defined types
+type Foo [:Number] type Bar [:Number] Foo eq Bar	true
+type Foo [:Number] type Bar [:String] Foo neq Bar	true
+
+# eq/neq - nested complex types
+[:[:Number]] eq [:[:Number]]	true
+[:[:Number]] eq [:[:String]]	false
+{:[:Number]} eq {:[:Number]}	true
+{:[:Number]} eq {:[:String]}	false
+
+# base - returns zero/default value for a type
+base Integer	0
+base Number	0
+base String	''
+base Boolean	false
+base List	[]
+base Map	{}
+base None	None
+
+# make record with base:true - missing fields get zero values
+type P record [x:Number y:String] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - all fields provided
+type P record [x:Number y:String] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
+
+# make record with base:true - optional field gets base not none
+type P record [x:Number y:[String tor None]] make P {x:1} {base:true}	{x:1,y:''}
+
+# make record with base:true - boolean field
+type P record [x:Number y:Boolean] make P {x:1} {base:true}	{x:1,y:false}
+
+# make record with base:true - multiple missing fields
+type P record [x:Number y:String z:Boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
+
+# make record with base:true - named list form
+type P record [x:Number y:String] make P [x:1] {base:true}	{x:1,y:''}
+
+# type Name uniqueness - conflicting parts are rejected
+type Foo/String Number	ERROR:type: name part "String" in "Foo/String" conflicts with an existing type name
+
+# Comparison - lt (less than)
+1 lt 2	true
+2 lt 1	false
+1 lt 1	false
+"abc" lt "def"	true
+"def" lt "abc"	false
+"abc" lt "abc"	false
+false lt true	true
+true lt false	false
+
+# Comparison - gt (greater than)
+2 gt 1	true
+1 gt 2	false
+1 gt 1	false
+"def" gt "abc"	true
+
+# Comparison - lte (less than or equal)
+1 lte 2	true
+1 lte 1	true
+2 lte 1	false
+
+# Comparison - gte (greater than or equal)
+2 gte 1	true
+1 gte 1	true
+1 gte 2	false
+
+# Comparison - eq (exact equality)
+1 eq 1	true
+1 eq 2	false
+"abc" eq "abc"	true
+"abc" eq "def"	false
+true eq true	true
+true eq false	false
+None eq None	true
+Number eq Number	true
+Number eq String	false
+Integer eq Integer	true
+Number eq Integer	false
+Number neq String	true
+Number neq Number	false
+
+# Comparison - deq (deep equality)
+1 deq 1	true
+"abc" deq "abc"	true
+[1,2,3] deq [1,2,3]	true
+[1,2] deq [1,2,3]	false
+{x:1,y:2} deq {x:1,y:2}	true
+{x:1,y:2} deq {x:1,y:3}	false
+{x:1} deq {x:1,y:2}	false
+None deq None	true
+
+# Comparison - lt/gt error on incomparable types
+1 lt "a"	ERROR:lt: cannot compare
+[1] lt [2]	ERROR:lt: cannot compare
+
+# Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
+lt 1 2	false
+gt 2 1	false
+
+# Comparison - infix (left-to-right)
+1 add 1 lt 3	true
+2 mul 3 gte 6	true
+
+# if - 3-arg with scalar condition and scalar branches
+if true 1 2	1
+if false 1 2	2
+
+# if - 3-arg with scalar condition, true branch only returned
+if true 3 end	3
+
+# if - 2-arg, true returns value
+if true 42	42
+
+# if - 2-arg, false returns nothing (empty stack)
+1 drop if false 42
+
+# if - list condition evaluated
+if [2 lt 1] [3 add 4] [5 add 6]	11
+if [1 lt 2] [3 add 4] [5 add 6]	7
+
+# if - list branches evaluated
+if true [1 add 2] [3 add 4]	3
+if false [1 add 2] [3 add 4]	7
+
+# if - only matching branch evaluated (no error from unevaluated branch)
+if true 1 [10 div 0]	1
+if false [10 div 0] 2	2
+
+# if - falsy values: 0, "", none, false
+if 0 1 2	2
+if "" 1 2	2
+if None 1 2	2
+
+# if - truthy values: non-zero, non-empty string, true
+if 1 10 20	10
+if "yes" 10 20	10
+if 42 10 20	10
+
+# if - nested
+if true (if false 1 2) 3	2
+if false 1 (if true 2 3)	2
+
+# if - forward style
+if true "yes" "no"	'yes'
+if false "yes" "no"	'no'
+
+# Partial application (currying) via def ... end
+# def creates a word whose body is the partial application of another word.
+
+# Arithmetic currying (brackets needed for sequential planner Case D).
+# Curried form `[op K] end N op` is the swap form `N op K`, which under
+# §1.4 phase 4 yields b op a → N op K.
+def add5 [add 5] end 10 add5	15
+def sub1 [sub 1] end 10 sub1	9
+def mul3 [mul 3] end 4 mul3	12
+def div2 [div 2] end 10 div2	5
+def mod3 [mod 3] end 10 mod3	1
+
+# List-style def (quotation)
+def double [dup add] 5 double	10
+def square [dup mul] 7 square	49
+def inc [1 add] 1 inc inc inc	4
+
+# Curried boolean operators (brackets for sequential planner)
+def and_true [and true] end false and_true	false
+def or_true [or true] end false or_true	true
+
+# Curried comparison operators (brackets for sequential planner)
+def lt10 [lt 10] end 5 lt10	true
+def gte0 [gte 0] end 1 gte0	true
+
+# Curried string concatenation (brackets for sequential planner).
+# Swap form `N op K`: handler computes args[1]+args[0] = "world"+"hello ".
+def greet [add "hello "] end greet "world"	'worldhello '
+
+# Chaining curried words (brackets for sequential planner)
+def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
+def mul2 [mul 2] end def add5 [add 5] end 3 mul2 add5	11
+
+# Curried words in parentheses (brackets for sequential planner)
+def add5 [add 5] end (3 add5) mul 2	16
+
+# Composing curried words
+def add5 [add 5] end def add5_twice [add5 add5] 10 add5_twice	20
+
+# Dot - key extraction from maps (prefix form)
+{a:1} get a	1
+{a:1,b:2} get b	2
+
+# Dot - key extraction from maps (forward form)
+{a:1} get a	1
+{a:1,b:2} get b	2
+
+# Dot - nested map access (chained forward form)
+{a:{b:1}} get a get b	1
+
+# Dot - missing key returns none
+{a:1} get b	None
+
+# Dot - null safety (none parent returns none)
+None "a" get	None
+None "x" get	None
+
+# Dot - list index access
+[10,20,30] 0 get	10
+[10,20,30] 1 get	20
+[10,20,30] 2 get	30
+
+# Dot - list out of bounds returns none
+[10,20] 5 get	None
+
+# Dot - integer key on map (converted to string)
+{0:"zero",1:"one"} 0 get	'zero'
+{0:"zero",1:"one"} 1 get	'one'
+
+# Dot - integer key missing from map returns none
+{a:1} 0 get	None
+
+# Dot - string key
+{a:1} "a" get	1
+
+# Dot notation - simple (def)
+def foo a:b:1 foo.a.b	1
+
+# Dot notation - single level (def)
+def bar {x:42} bar.x	42
+
+# Dot notation - with def storing map
+def m {a:{b:{c:99}}} m.a.b.c	99
+
+# Dot notation - missing key returns none (def)
+def obj {a:1} obj.b	None
+
+# Dot notation - null propagation through chain (def)
+def obj {a:1} obj.b "c" get	None
+
+# Dot notation - store requires explicit get
+context set sv {x:42} end (context get sv) . x	42
+
+# Dot notation - leading get (stack access)
+{a:1} .a	1
+{a:{b:2}} .a.b	2
+
+# Dotr - strict key extraction (errors on missing)
+{a:1} getr a	1
+{a:1,b:2} getr b	2
+[10,20,30] 1 getr	20
+{0:"zero"} 0 getr	'zero'
+
+# Dotr - missing key is an error
+{a:1} getr b	ERROR:getr: key "b" not found in map
+
+# Dotr - none parent is an error
+None "a" getr	ERROR:getr: parent is None
+
+# Dotr - list out of bounds is an error
+[10,20] 5 getr	ERROR:getr: index 5 out of bounds (length 2)
+
+# Dotr - integer key missing from map is an error
+{a:1} 0 getr	ERROR:getr: key "0" not found in map
+
+# Dotr - !. alias
+{a:1} !. a	1
+{a:1} !. b	ERROR:getr: key "b" not found in map
+
+# Convert to string
+99 convert String	'99'
+true convert String	'true'
+
+# Convert to string - base in settings map
+10 convert String {base:"hex"}	'a'
+255 convert String {base:"HEX"}	'FF'
+
+# === Quote word ===
+
+# quote prevents list auto-evaluation
+quote [1 add 2]	[1,word(add),2]
+
+# quote converts known words to atoms
+quote add	add
+
+# quote on scalars is identity
+quote 99	99
+quote "hello"	'hello'
+
+# === List auto-evaluation ===
+
+# Lists are evaluated immediately (not quoted)
+[1 add 2]	[3]
+[2 mul 3]	[6]
+[1,2,3]	[1,2,3]
+["a","b"]	['a','b']
+
+# Nested lists are auto-evaluated recursively
+[[1 add 2],[3 add 4]]	[[3],[7]]
+
+# Empty list
+[]	[]
+
+# def body is implicitly quoted (not auto-evaluated)
+def double [dup add] 5 double	10
+def triple [dup dup add add] 3 triple	9
+
+# String interpolation with backtick template strings
+`hello`	'hello'
+`hello world`	'hello world'
+`answer: ${1 add 2}`	'answer: 3'
+def x 42; `value is ${x}`	'value is 42'
+def a 1; def b 2; `${a} and ${b}`	'1 and 2'
+`${"hi"}`	'hi'
+`price: $100`	'price: $100'

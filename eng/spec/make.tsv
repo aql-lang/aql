@@ -1,0 +1,147 @@
+# tokens	expected	note
+# =====================================================================		
+# make — universal constructor for typed values		
+# =====================================================================		
+# `make TARGET data` is AQL's general-purpose value constructor. The		
+# target dictates the construction strategy:		
+#		
+#   make Type v          coerce v to Type (parse / cast)		
+#   make Type {opts} v   scalar with options (e.g. Path { abs:true })		
+#   make Path s | [parts]      build a Path from a string or list		
+#   make Options {map}         wrap a map as an Options instance		
+#   make Type {data}     instantiate a named object — see object.tsv		
+#   make RecordType {data}     instantiate a named record — see record.tsv		
+#		
+# Dispatch is order-agnostic for the two-arg form: the matcher		
+# detects which side carries the type literal and which carries the		
+# data, so `make Integer '5'` and `'5' make Integer` both work.		
+#		
+# This file covers the parts of `make` that the aqleng-only kernel		
+# can demonstrate without relying on the production `record` /		
+# `object` constructor words. The named-type instantiation rows		
+# live in spec/prod/object.tsv, record.tsv, and resource.tsv.		
+		
+		
+# ====================================================================		
+# 1. Scalar coercion — types as targets		
+# ====================================================================		
+# Each builtin scalar type accepts strings (parsed) and the matching		
+# concrete type (passes through unchanged).		
+		
+# String target — every value flows through ValToString.		
+make String 42	'42'	Integer → String via decimal text
+make String 3.14	'3.14'	Decimal → String
+make String true	'true'	Boolean → String
+make String 'hi'	'hi'	String passthrough
+		
+# Integer target — parses decimal text; truncates floats.		
+make Integer '42'	42	String → Integer
+make Integer '-7'	-7	negative literal
+make Integer 42	42	passthrough
+		
+# Number target — same parser as Integer (Number is the supertype).		
+make Number '42'	42	parsed as Integer (the most-specific Number subtype)
+		
+# Decimal target — strict float parse.		
+make Decimal '3.14'	3.14	
+make Decimal '-2.5'	-2.5	
+make Decimal 7	7.0	Integer→Decimal goes through ValToString → ParseFloat → 7.0
+		
+# Boolean target — literal forms, numeric, fallback to non-empty.		
+make Boolean 'true'	true	
+make Boolean 'false'	false	
+make Boolean 'yes'	true	non-'true'/'false' non-empty → true
+make Boolean ''	false	empty string → false
+make Boolean 1	true	non-zero number → true
+make Boolean 0	false	zero → false
+make Boolean true	true	passthrough
+		
+# Atom target — string becomes an Atom of the same name.		
+make Atom 'foo'	atom(foo)	
+make Atom 'Bar123'	atom(Bar123)	
+		
+# ====================================================================		
+# 2. Order-agnostic two-arg dispatch		
+# ====================================================================		
+# `make` flips its arg pair when only one side is type-like. This		
+# lets the same expression read naturally from either direction.		
+		
+5 make Integer	5	stack-prefix form; 5 sits behind, Integer arrives forward
+'42' make Integer	42	String coerces via the same path as the prefix form
+make Integer 5	5	bare prefix
+3.14 make Decimal	3.14	
+'hi' make String	'hi'	
+		
+# ====================================================================		
+# 3. typeof of the constructed value		
+# ====================================================================		
+# `make` produces a value whose VType matches the target type — the		
+# converted result tags itself with the requested type, not the		
+# input's type.		
+		
+make Integer '5' typeof	Integer	parsed Integer reports its target type
+make Decimal '3.14' typeof	Decimal	
+make Boolean 'true' typeof	Boolean	
+make Atom 'x' typeof	Atom	
+# Strings get the more-specific ProperString / EmptyString subtype based		
+# on content (see eng/go/types.go); make-coerced strings carry the same.		
+make String 42 typeof	ProperString	non-empty String → ProperString subtype
+make String '' typeof	EmptyString	empty String → EmptyString subtype
+		
+# ====================================================================		
+# 4. Path construction		
+# ====================================================================		
+# Paths take a string ('a/b') or a list of parts (['a' 'b']). A		
+# leading '/' in the string sets the abs flag; an explicit		
+# `{ abs:true }` opts map promotes the result to absolute.		
+		
+make Path 'a/b/c'	a/b/c	relative path from a string
+make Path '/a/b'	/a/b	absolute path; leading '/' detected
+make Path [ 'x' 'y' 'z' ]	x/y/z	list-of-parts form
+make Path [ ]		empty list yields an empty path (renders as the empty string)
+make Path [ 'single' ]	single	
+		
+# Path with `{abs:true}` options — `make` 3-arg sig handles the opts.		
+make Path { abs:true } 'a/b'	/a/b	
+make Path { abs:true } [ 'x' 'y' ]	/x/y	
+make Path { abs:false } 'a/b'	a/b	explicit abs:false leaves the path relative
+		
+# typeof on a Path value reports Path.		
+make Path 'a/b' typeof	Path	
+		
+# ====================================================================		
+# 5. Options		
+# ====================================================================		
+# `make Options {map}` wraps a concrete map as an Options instance —		
+# the Map subtype used to carry option-shaped data.		
+		
+make Options { a:1 }	options{a:1}	one-entry options
+make Options { a:1 b:2 }	options{a:1,b:2}	multi-entry — String() comma-renders Options
+		
+# typeof on an Options instance reports Map (the underlying VType).		
+make Options { a:1 } typeof	Map	
+		
+# ====================================================================		
+# 6. Errors / rejections		
+# ====================================================================		
+# Conversion failures produce concrete error messages.		
+		
+make Integer 'abc'	ERROR:cannot convert	non-numeric strings cannot become Integers
+make Decimal 'x'	ERROR:cannot convert	
+make Number 'y'	ERROR:cannot convert	
+make Path 99	ERROR:Path source must be a list or string	Path requires list/string source
+		
+# Type-literal target with non-applicable source.		
+make List 5	ERROR:	List is a Node-family type; not a make target
+		
+# ====================================================================		
+# 7. Composition with def		
+# ====================================================================		
+# A `make`-produced value can be captured by `def` and reused —		
+# typeof and round-trip behaviour survive the def-stack.		
+		
+def n make Integer '42' n	42	def captures the parsed Integer
+def n make Integer '42' n typeof	Integer	type round-trips through the def stack
+def p make Path 'a/b/c' p	a/b/c	
+def p make Path 'a/b/c' p typeof	Path	
+def opt make Options { x:1 } opt	options{x:1}	

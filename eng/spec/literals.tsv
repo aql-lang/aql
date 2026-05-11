@@ -1,0 +1,23 @@
+# tokens	expected	note
+# aqleng spec tests — basic literal pass-through.		
+#		
+# Format: tokens<TAB>expected[<TAB>note]		
+#		
+# A line is a list of tokens that the runner converts into Value		
+# inputs and feeds to the engine. The expected column uses the same		
+# syntax for the result stack. Lines starting with # are comments.		
+#		
+# Token types:		
+#   42, -7        integer literal		
+#   3.14          decimal literal		
+#   'hello'       string literal		
+#   true, false   boolean literal		
+#   null          None type literal		
+#   addq, dup, …   bare word (looks up a registered word handler)		
+		
+1	1	scalar integer round-trips
+-7	-7	negative integer
+'hello'	'hello'	string round-trips
+true	true	true
+false	false	false
+1 2 3	1 2 3	multiple values left on the stack

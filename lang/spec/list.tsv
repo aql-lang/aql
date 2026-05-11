@@ -1,0 +1,163 @@
+# tokens	expected	note
+# =====================================================================		
+# list — sequence of values		
+# =====================================================================		
+# A list is AQL's primary sequence type: ordered, heterogeneous,		
+# value-equal. Lists are produced by `[…]` literal syntax and		
+# auto-evaluated when they appear as data on the stack at end of		
+# Run() (only if Eval=true && !Quoted), so `[1 add 2]` collapses to		
+# `[3]` automatically.		
+#		
+# This file covers:		
+#		
+#   1. Construction and rendering.		
+#   2. Auto-evaluation and quote suppression.		
+#   3. Length / shape inspection.		
+#   4. Reordering / slicing / set-style operations.		
+#   5. Higher-order traversal (each).		
+#   6. Type-system interactions: typeof, is, type literal.		
+#   7. Typed lists `[ :T …]`.		
+#   8. Composition with def / fn bodies.		
+#		
+# Runs against the production aql registry (engine.DefaultRegistry +		
+# native.Register), so all production list words are available.		
+		
+		
+# ====================================================================		
+# 1. Construction and rendering		
+# ====================================================================		
+		
+[ ]	[]	empty list literal
+[ 1 2 3 ]	[1 2 3]	homogeneous Integer list
+[ 1 'a' true ]	[1 'a' true]	heterogeneous list — Integer / String / Boolean
+[ 1 2 [ 3 4 ] 5 ]	[1 2 [3 4] 5]	nested list (auto-eval flattens nothing — sub-list stays a value)
+[ [ ] [ ] ]	[[] []]	list of empty lists
+		
+# ====================================================================		
+# 2. Auto-evaluation vs quote		
+# ====================================================================		
+# A bare list is auto-evaluated when it lands on the stack at the end		
+# of Run() (Eval=true && !Quoted). `quote` flips the Quoted flag so		
+# the list is preserved verbatim — words inside become Atoms.		
+		
+[ 1 add 2 ]	[3]	auto-eval reduces 1+2 → [3]
+[ 1 add 2 mul 3 ]	[9]	(1+2)*3 = 9
+[ 10 sub 4 add 1 ]	[7]	10-4=6, 6+1=7
+		
+quote [ 1 add 2 ]	[1 word(add) 2]	quote suppresses auto-eval; add becomes a word atom
+quote [ ]	[]	quoted empty list
+		
+# ====================================================================		
+# 3. Length / shape inspection		
+# ====================================================================		
+		
+length [ ]	0	empty list has length 0
+length [ 1 2 3 ]	3	three elements
+length [ 1 ]	1	single element
+length [ 'a' 'b' 'c' 'd' ]	4	
+		
+# Length feeds into normal arithmetic flow.		
+length [ 1 2 3 ] add 10	13	length result chains into add
+		
+# ====================================================================		
+# 4. Reordering / slicing / set ops		
+# ====================================================================		
+		
+reverse [ 1 2 3 ]	[3 2 1]	
+reverse [ ]	[]	empty stays empty
+reverse [ 'a' 'b' ]	['b' 'a']	
+		
+take 2 [ 10 20 30 40 ]	[10 20]	prefix slice
+take 0 [ 10 20 30 ]	[]	zero-length take
+take 5 [ 1 2 3 ]	[1 2 3]	overshoot just yields the whole list
+		
+unique [ 1 2 1 3 2 3 ]	[1 2 3]	dedupe preserves first-seen order
+unique [ ]	[]	
+unique [ 5 5 5 ]	[5]	all-equal collapses to one
+		
+# Composition — chained list transformations. The forward-prec		
+# `length` / `reverse` need a paren-wrapped sub-expression so `take`		
+# resolves first and the resulting list flows back as a TList arg.		
+length ( take 3 [ 10 20 30 40 50 ] )	3	take then length
+reverse ( take 2 [ 10 20 30 ] )	[20 10]	take then reverse
+		
+# ====================================================================		
+# 5. Higher-order traversal		
+# ====================================================================		
+# `each [body] [list]` runs `body` against each element. The body		
+# sees the element on the stack and produces one residual value per		
+# input.		
+		
+each [ add 1 ] [ 1 2 3 ]	[2 3 4]	add 1 to each element
+each [ dup mul ] [ 1 2 3 ]	[1 4 9]	square each element via dup mul
+each [ mul -1 ] [ 1 -2 3 ]	[-1 2 -3]	flip sign by multiplying by -1
+		
+# Empty input → empty result.		
+each [ add 1 ] [ ]	[]	
+		
+# Composition: each + length.		
+each [ dup mul ] [ 1 2 3 4 ] length	4	each preserves arity then length sees 4 entries
+		
+# ====================================================================		
+# 6. Type-system interactions		
+# ====================================================================		
+		
+typeof [ ]	List	empty list metadata
+typeof [ 1 2 3 ]	List	non-empty too
+typeof List	Type	bare List is itself a Node-family TYPE → metatype Type
+		
+# `is` — concrete list against List.		
+[ 1 2 3 ] is List	true	concrete list satisfies List
+[ ] is List	true	even an empty list
+		
+# `is` — concrete list against a sibling type returns false.		
+[ 1 2 3 ] is Map	false	
+[ 1 2 3 ] is Integer	false	
+		
+# A bare type literal is rejected at concrete-payload sigs.		
+length List	ERROR:signature_error	List type literal cannot be measured
+reverse List	ERROR:signature_error	
+		
+# ====================================================================		
+# 7. Typed lists — `[ :T …]`		
+# ====================================================================		
+# A typed list carries a child-type constraint applied element-wise.		
+# `[ :T]` is a TYPE declaration (no elements); `[ :T v0 v1 …]` is		
+# a concrete typed list whose elements are validated against T.		
+		
+# Bare typed-list type literal.		
+typeof [ :Integer ]	Type	the type form is a Node-family TYPE
+		
+# Concrete typed list with conforming elements.		
+[ :Integer 1 2 3 ] is List	true	a typed list IS still a list
+[ :Integer 1 2 3 ] is [ :Integer ]	true	and satisfies its own typed-list type
+		
+# Element conformance via `is` against the type form.		
+[ 1 2 3 ] is [ :Integer ]	true	plain list satisfies typed-list type when all elems unify
+[ 1 'x' 3 ] is [ :Integer ]	false	mismatched element fails
+		
+# ====================================================================		
+# 8. Composition with def		
+# ====================================================================		
+# A list-bound def splices its body at every reference; storing the		
+# list as data requires `quote`.		
+		
+def lst quote [ 1 2 3 ] length lst	3	quoted list resolves as data; length sees three elements
+def lst quote [ 1 2 3 ] reverse lst	[3 2 1]	
+def lst quote [ 1 2 3 ] each [ add 10 ] lst	[11 12 13]	pass quoted list through each
+		
+# Splice form: def NAME [body] inserts the body inline.		
+def doub [ dup add ] 5 doub	10	body splice — dup, add — runs against caller stack
+		
+# ====================================================================		
+# 9. List equality via `is`		
+# ====================================================================		
+# Two concrete lists with element-wise unifying contents satisfy		
+# each other as types. The right-hand list acts as a structural		
+# template.		
+		
+[ 1 2 3 ] is [ 1 2 3 ]	true	identical lists unify
+[ 1 2 ] is [ 1 2 3 ]	false	length mismatch
+[ 1 2 3 ] is [ 1 2 4 ]	false	element mismatch
+[ 1 ] is [ Integer ]	true	scalars unify against their type literal
+[ 1 'x' ] is [ Integer String ]	true	per-position type unification

@@ -1,0 +1,262 @@
+package eng
+
+// RegisterCoreInspect installs the `inspect` introspection word and is
+// wired into RegisterCoreWords. Exported so callers can install just
+// this without taking the rest of RegisterCoreWords.
+//
+//	inspect NAME   — NAME is a bare word or a quoted atom. Resolves it
+//	                 (type stack, then def stack, then registered word)
+//	                 and returns an `Inspect` value — a Map describing
+//	                 the thing.
+//	inspect V      — anything else (a concrete value, a type literal, a
+//	                 record / table / disjunct / enum / typed list /
+//	                 typed map / fn-shape / dependent scalar). Returns
+//	                 the type inspection of V.
+//
+// The result is the machine-readable counterpart of `help`:
+//
+//	word inspection:  { name, kind:native|defined|unknown,
+//	                    value?, signatures:[{args:[…]}…] }
+//	                    (`value` only for a plain `def`-bound value)
+//	type inspection:  { name?, type:"<leaf>", kind, …kind-specific }
+//	  • for a TYPE value (a type literal, record / object / disjunct /
+//	    enum / typed list / typed map / fn-shape / dependent scalar):
+//	    type = "Type" (its type-of is the metatype), struct = the
+//	    underlying-structure leaf (Map for a record shape, List for a
+//	    typed list, the named type for an object, …);
+//	  • for a CONCRETE value: type = the value's exact VType leaf, and
+//	    no `struct`.
+//	  record / table → fields:{k:"<leaf>" …}
+//	  object         → parent:"…"?, fields:{k:"<leaf>" …} (incl. inherited)
+//	  disjunct       → alternatives:["…" …]
+//	  typed_list / typed_map → child:"…"
+//	  function_shape → signatures:[{params:[…] returns:[…]} …]
+//	  dependent_scalar → leaf, lo:{kind,value}?, hi:{kind,value}?
+//	  literal        → (just kind)
+//
+// The returned value carries VType `Inspect` but its payload is an
+// OrderedMap, so it renders and round-trips like a map.
+func RegisterCoreInspect(r *Registry) {
+	registerCoreInspect(r)
+}
+
+func registerCoreInspect(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name:              "inspect",
+		ForwardPrecedence: true,
+		Signatures: []NativeSig{
+			{Args: []Type{TWord}, Handler: inspectWordHandler, Returns: []Type{TInspect}},
+			{Args: []Type{TAtom}, Handler: inspectAtomHandler, Returns: []Type{TInspect}},
+			{Args: []Type{TAny}, Handler: inspectTypeHandler, Returns: []Type{TInspect}},
+		},
+	})
+}
+
+func inspectWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	w, _ := args[0].AsWord()
+	name := w.Name
+	if tv, ok := r.TopOfTypeStack(name); ok {
+		return []Value{buildTypeInspection(name, tv)}, nil
+	}
+	if top, ok := r.TopOfDefStack(name); ok {
+		if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
+			return []Value{buildTypeInspection(name, top)}, nil
+		}
+	}
+	return []Value{buildInspection(r, name)}, nil
+}
+
+func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name, _ := args[0].AsConcreteAtom()
+	if tv, ok := r.TopOfTypeStack(name); ok {
+		return []Value{buildTypeInspection(name, tv)}, nil
+	}
+	if top, ok := r.TopOfDefStack(name); ok {
+		if IsTypeBody(top) {
+			return []Value{buildTypeInspection(name, top)}, nil
+		}
+	}
+	return []Value{buildInspection(r, name)}, nil
+}
+
+func inspectTypeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{buildTypeInspection("", args[0])}, nil
+}
+
+// buildInspection constructs a word-inspection map for the named word.
+func buildInspection(r *Registry, name string) Value {
+	result := NewOrderedMap()
+	result.Set("name", NewString(name))
+
+	fn := r.Lookup(name)
+	if fn == nil {
+		if r.HasDef(name) {
+			result.Set("kind", NewAtom("defined"))
+			// A plain `def`-bound value (not a registered word): include
+			// the value itself, e.g. `def f 99; inspect f` → {…value:99…}.
+			if v, ok := r.TopOfDefStack(name); ok {
+				result.Set("value", v)
+			}
+			result.Set("signatures", NewList(nil))
+			return NewValueRaw(TInspect, result)
+		}
+		result.Set("kind", NewAtom("unknown"))
+		result.Set("signatures", NewList(nil))
+		return NewValueRaw(TInspect, result)
+	}
+
+	if len(fn.Sigs) > 0 {
+		result.Set("kind", NewAtom("defined"))
+	} else {
+		result.Set("kind", NewAtom("native"))
+	}
+
+	var sigMaps []Value
+	for _, sig := range fn.Signatures {
+		sm := NewOrderedMap()
+
+		var argVals []Value
+		for _, argType := range sig.Args {
+			argVals = append(argVals, NewString(argType.Leaf()))
+		}
+		if argVals == nil {
+			argVals = []Value{}
+		}
+		sm.Set("args", NewList(argVals))
+
+		sigMaps = append(sigMaps, NewMap(sm))
+	}
+	if sigMaps == nil {
+		sigMaps = []Value{}
+	}
+	result.Set("signatures", NewList(sigMaps))
+
+	return NewValueRaw(TInspect, result)
+}
+
+// buildTypeInspection constructs a type-inspection map for a type value.
+func buildTypeInspection(name string, tv Value) Value {
+	result := NewOrderedMap()
+
+	if name != "" {
+		result.Set("name", NewString(name))
+	}
+
+	// A TYPE value (a bare type literal, or a structural type body) has
+	// type-of `Type`; its underlying structure leaf goes to `struct`.
+	// A concrete value reports its own VType leaf as `type` and has no
+	// `struct`.
+	if tv.Data == nil || IsTypeBody(tv) || IsRecordShape(tv) {
+		result.Set("type", NewString("Type"))
+		result.Set("struct", NewString(tv.VType.Leaf()))
+	} else {
+		result.Set("type", NewString(tv.VType.Leaf()))
+	}
+
+	switch {
+	case tv.IsRecordType():
+		result.Set("kind", NewAtom("record"))
+		rt, _ := tv.AsRecordType()
+		fields := NewOrderedMap()
+		for _, k := range rt.Fields.Keys() {
+			v, _ := rt.Fields.Get(k)
+			fields.Set(k, NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case IsRecordShape(tv):
+		result.Set("kind", NewAtom("record"))
+		m := tv.AsMap()
+		fields := NewOrderedMap()
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			fields.Set(k, NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case tv.IsObjectType():
+		result.Set("kind", NewAtom("object"))
+		oi, _ := tv.AsObjectType()
+		if oi.Parent != nil {
+			result.Set("parent", NewString(oi.Parent.Name))
+		}
+		af := oi.AllFields()
+		fields := NewOrderedMap()
+		for _, k := range af.Keys() {
+			v, _ := af.Get(k)
+			fields.Set(k, NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case tv.IsTableType():
+		result.Set("kind", NewAtom("table"))
+		tt, _ := tv.AsTableType()
+		fields := NewOrderedMap()
+		for _, k := range tt.Record.Fields.Keys() {
+			v, _ := tt.Record.Fields.Get(k)
+			fields.Set(k, NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case tv.IsDisjunct():
+		result.Set("kind", NewAtom("disjunct"))
+		di, _ := tv.AsDisjunct()
+		alts := make([]Value, len(di.Alternatives))
+		for i, alt := range di.Alternatives {
+			alts[i] = NewString(alt.VType.String())
+		}
+		result.Set("alternatives", NewList(alts))
+
+	case tv.IsTypedList():
+		result.Set("kind", NewAtom("typed_list"))
+		ci, _ := tv.AsChildType()
+		result.Set("child", NewString(ci.Child.VType.String()))
+
+	case tv.IsTypedMap():
+		result.Set("kind", NewAtom("typed_map"))
+		ci, _ := tv.AsChildType()
+		result.Set("child", NewString(ci.Child.VType.String()))
+
+	case tv.VType.Equal(TFnUndef):
+		result.Set("kind", NewAtom("function_shape"))
+		uInfo, _ := tv.Data.(FnUndefInfo)
+		sigs := make([]Value, 0, len(uInfo.Sigs))
+		for _, spec := range uInfo.Sigs {
+			sig := NewOrderedMap()
+			params := make([]Value, len(spec.Params))
+			for i, p := range spec.Params {
+				params[i] = NewString(p.Type.Leaf())
+			}
+			sig.Set("params", NewList(params))
+			rets := make([]Value, len(spec.Returns))
+			for i, ret := range spec.Returns {
+				rets[i] = NewString(ret.Leaf())
+			}
+			sig.Set("returns", NewList(rets))
+			sigs = append(sigs, NewMap(sig))
+		}
+		result.Set("signatures", NewList(sigs))
+
+	case tv.IsDepScalar():
+		result.Set("kind", NewAtom("dependent_scalar"))
+		info, _ := tv.AsDepScalar()
+		result.Set("leaf", NewString(DependentLeafFromType(tv.VType)))
+		if info.Lo != nil {
+			lo := NewOrderedMap()
+			lo.Set("kind", NewString(BoundToKind(info.Lo, true).String()))
+			lo.Set("value", info.Lo.Value)
+			result.Set("lo", NewMap(lo))
+		}
+		if info.Hi != nil {
+			hi := NewOrderedMap()
+			hi.Set("kind", NewString(BoundToKind(info.Hi, false).String()))
+			hi.Set("value", info.Hi.Value)
+			result.Set("hi", NewMap(hi))
+		}
+
+	default:
+		result.Set("kind", NewAtom("literal"))
+	}
+
+	return NewValueRaw(TInspect, result)
+}

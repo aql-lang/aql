@@ -1,0 +1,15 @@
+# tokens	expected	note
+# Error reporting. ERROR:substring asserts the error message contains		
+# the substring. The engine must NEVER panic on these inputs (cf.		
+# CLAUDE.md 'Panic Prevention').		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   negq  — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag		
+# === end fixtures ===		
+		
+nope	ERROR:undefined	bare undefined word
+addq nope 3	ERROR:signature	non-Integer in forward slot fails sig before `nope` evaluates
+addq 'hello' 3	ERROR:signature	type mismatch: addq expects two integers
+negq 'hi'	ERROR:signature	unary numeric word with wrong arg type
+addq 1	ERROR:	insufficient args for forward-precedence word

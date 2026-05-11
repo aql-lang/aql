@@ -1,0 +1,17 @@
+{
+  "stack": [
+    "Integer"
+  ],
+  "diagnostics": [
+    {
+      "code": "unreachable_branch",
+      "detail": "if condition is a constant true; else-branch is unreachable",
+      "severity": "warning"
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "warnings": 1,
+    "infos": 0
+  }
+}

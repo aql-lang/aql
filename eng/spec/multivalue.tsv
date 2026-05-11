@@ -1,0 +1,75 @@
+# tokens	expected	note
+# =====================================================================		
+# Principle: Multiple residual values on the stack are the result.		
+# =====================================================================		
+#		
+# AQL is a stack machine. A program is a sequence of tokens that push,		
+# pop, and transform stack entries. There is no distinguished 'return		
+# slot': whatever values remain on the stack at end-of-Run() are the		
+# result, in source order (first-pushed at the bottom, last-pushed		
+# on top).		
+#		
+# This file pins down the multivalue convention from several angles:		
+#  - Bare literals never converge to a single result.		
+#  - A handler that returns multiple values appends them in order.		
+#  - A paren group whose body produces multiple values transparently		
+#    surfaces them onto the outer stack (no 'tuple wrapping').		
+#  - Stack-only ops (dup, swap, drop) mutate only the values they		
+#    explicitly touch — pre-existing residency below them is		
+#    invariant.		
+#		
+# Why this matters		
+# ----------------		
+# Many languages with 'every expression has one value' semantics		
+# would silently coerce a multi-value residual into a tuple, a		
+# discard, or an error. AQL does not — leaving N values is a		
+# first-class outcome. Code generators and pretty-printers depend		
+# on this so a reader can mentally simulate the stack from the		
+# source without a wrapping layer to track.		
+#		
+# A subtler property pinned down here: paren-emitted values keep		
+# their relative order. `( 1 2 3 )` produces `1 2 3` on the outer		
+# stack (1 deepest, 3 on top), NOT a reversed `3 2 1` and NOT a		
+# packed list `[1 2 3]`. The paren is a syntactic boundary for		
+# evaluation, not a value-collection container.		
+#		
+# Spec runner notes		
+# -----------------		
+# The renderer joins the result stack with single spaces, so		
+# `1 2 3` here means three integers in that source order. The		
+# runner does NOT apply implicit auto-evaluation on bare literal		
+# stacks (only on Eval=true lists at end-of-run, which list		
+# residency does NOT trigger).		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq   — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   tripq  — [Integer Integer Integer] forward-prec — 'a,b,c' (3-arg position mixing)		
+# === end fixtures ===		
+		
+1	1	one value, one result
+1 2	1 2	two values, two results — no implicit reduction
+1 2 3	1 2 3	three values, three results
+1 'two' 3	1 'two' 3	mixed types coexist on the stack
+1 2 3 4 5	1 2 3 4 5	five values — order preserved exactly
+		
+# Stack-only words touch only their args — residue below is invariant.		
+1 2 3 dup	1 2 3 3	dup of the top extends the stack by one; deeper values unchanged
+1 2 3 drop	1 2	drop removes the top; 1 and 2 stay where they were
+1 2 3 swap	1 3 2	swap top two; 1 (deepest) untouched
+1 2 3 4 swap	1 2 4 3	with four-deep stack, swap still only touches top two
+		
+# Paren groups producing N>1 values surface them onto the outer stack.		
+( 1 )	1	single-value paren is identity on count
+( 1 2 )	1 2	two-value paren leaves both
+( 1 2 3 )	1 2 3	three-value paren leaves all three; order preserved
+( ( 1 2 ) 3 )	1 2 3	nested: inner paren's values flatten into outer
+0 ( 1 2 ) 9	0 1 2 9	paren in the middle interleaves correctly with surrounding literals
+( 1 dup )	1 1	body produces a multivalue result via dup
+( 1 2 swap )	2 1	body's swap output flows out as two separate stack entries
+		
+# Combinations: handler return then more literals.		
+addq 2 3 99	5 99	addq returns one value; 99 sits on top of the result
+addq 2 3 dup	5 5	addq → 5; dup → 5 5
+		
+# Three-arg handler returning ONE value still leaves the result alone.		
+tripq 1 2 3 99	'1,2,3' 99	tripq returns one string; 99 stays after it

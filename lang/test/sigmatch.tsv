@@ -1,0 +1,158 @@
+# Signature matching tests
+# Format: expression<TAB>expected result
+# Tests that longer and narrower type Signatures match first.
+# Tests prefix-only and forward-precedence functions.
+# Tests arguments split over the stack and future tokens.
+
+# --- Basic prefix matching (args from stack) ---
+
+# 1-arg: integer on stack, prefix (via math module)
+1 math.abs	1
+-3 math.abs	3
+
+# 2-arg prefix: both args from stack
+1 2 add	3
+10 3 sub	7
+
+# 3-arg prefix: if with scalar args
+if true 1 2	1
+if false 1 2	2
+
+# --- Suffix matching (args from future tokens) ---
+
+# 2-arg forward: left from stack, right collected from forward
+1 add 2	3
+10 sub 3	7
+4 mul 5	20
+
+# 1-arg forward: word before value
+lower "ABC"	'abc'
+upper "abc"	'ABC'
+
+# --- Narrower type Wins over wider type ---
+
+# add has [integer,integer] (score 204) and [scalar,scalar] (score 202)
+# Two integers should use integer addition, not string concatenation
+1 add 2	3
+10 add 20	30
+
+# Two strings should use scalar/string concatenation
+"hello" add " world"	'hello world'
+
+# Mixed: integer + string → scalar sig (string concat)
+"count:" add " 5"	'count: 5'
+
+# --- Operator evaluation (left-to-right) ---
+
+# Operations evaluate strictly left-to-right
+2 add 3 mul 4	20
+2 mul 3 add 4	10
+1 add 2 mul 3 add 4	13
+
+# sub chain (left-to-right)
+10 sub 3 sub 1	6
+10 sub 2 mul 3	24
+
+# --- Parentheses scope prefix matching ---
+
+# Parens isolate the prefix scope
+(1 add 2) mul 3	9
+2 mul (3 add 4)	14
+(2 add 3) mul (4 add 1)	25
+
+# Nested parens
+((1 add 2) mul 3) add 1	10
+1 add ((2 add 3) mul 4)	21
+
+# --- Stack split: some args from stack, some from forward ---
+
+# 1 already on stack, add collects 2 from forward
+1 add 2	3
+
+# Stack fully satisfies add's sig — no forward collection needed.
+# add forward-collects 3, takes 2 from stack. 1 remains.
+1 2 add 3	1 5
+
+# --- Up to 7 elements interacting ---
+
+# 4-element arithmetic chain
+1 add 2 add 3 add 4	10
+
+# 5-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5	65
+
+# 6-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5 add 6	71
+
+# 7-element chain (left-to-right)
+1 add 2 mul 3 add 4 mul 5 sub 6 add 7	66
+
+# --- Prefix-only functions ---
+
+# if is a prefix-only collector
+if true 10 20	10
+if false 10 20	20
+
+# if with list condition (evaluated)
+if [1 lt 2] 10 20	10
+if [2 lt 1] 10 20	20
+
+# if with list branches (evaluated)
+if true [1 add 2] [3 add 4]	3
+if false [1 add 2] [3 add 4]	7
+
+# --- Forward precedence with varying arg counts ---
+
+# lower/upper take 1 arg (forward precedence)
+"ABC" lower	'abc'
+lower "ABC"	'abc'
+
+# add takes 2 args (forward precedence), 1 from stack + 1 forward
+1 add 2	3
+
+# Comparison takes 2 args (forward precedence)
+1 lt 2	true
+2 gt 1	true
+1 lte 1	true
+2 gte 1	true
+1 eq 1	true
+1 neq 2	true
+
+# --- Comparison with arithmetic (left-to-right) ---
+
+# Arithmetic evaluates left-to-right before comparison
+1 add 1 lt 3	true
+2 mul 3 gte 6	true
+10 sub 5 gt 3	true
+
+# --- Curried/defined words with signature matching ---
+
+# def creates a forward-precedence word
+def add5 [add 5] end 10 add5	15
+def mul2 [mul 2] end 3 mul2	6
+
+# Chaining curried words
+def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
+
+# --- Multiple results on stack ---
+
+# Words that don't consume everything leave stack values
+1 2 3	1 2 3
+1 2 add 3 add	6
+1 2 3 add	1 5
+
+# --- Deep type Hierarchy precedence ---
+
+# or is boolean-only
+true or false	true
+false or true	true
+
+# tor creates disjunct from any two values
+String tor None	String|None
+
+# --- Suffix with all args from future (no prefix args) ---
+
+# Fully forward: forward args fill sigArgs[0] first, swap convention applies
+add 1 2	3
+sub 10 3	-7
+lt 1 2	false

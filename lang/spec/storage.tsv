@@ -1,0 +1,121 @@
+# tokens	expected	note
+# =====================================================================		
+# get / set — universal container access		
+# =====================================================================		
+# `get` and `set` are AQL's container-access pair. Both are forward-		
+# precedence with a fan of signatures so the same word can drive		
+# Stores (copy-on-write), Object instances (in-place mutation),		
+# Arrays (indexed by integer), and plain Map / List / Options nodes		
+# (read-only for `get`).		
+#		
+# Sig shape (see eng/go/core_storage.go):		
+#		
+#   set 'key' v store      copy-on-write: pushes a new layer with		
+#                          {'key':v}, propagates up the parent chain.		
+#   set field v object     in-place field mutation on an Object instance.		
+#   set i v array          in-place set at index i (bounds-checked).		
+#		
+#   get 'key' store        Store lookup; errors on missing key.		
+#   get key node           Map/List/Options lookup; missing keys yield		
+#                          the None type literal.		
+#   get key object         Object instance field access.		
+#   get i array            Array element by index.		
+#   get key None           short-circuits to None — None propagation		
+#                          for chained reads.		
+#		
+# Map/List read patterns also live in map.tsv / list.tsv. This file		
+# covers the cross-cutting surface: Store-side set/get via `context`,		
+# Object set, and the None / error paths.		
+#		
+# Runs against the production aql registry.		
+		
+		
+# ====================================================================		
+# 1. Store via `context`: set key value, then read it back		
+# ====================================================================		
+# `set` on a Store is copy-on-write: each set creates a new Store		
+# layer and propagates the update up through parent layers to the		
+# context stack. Re-querying the context returns the latest layer.		
+#		
+# Idiom: `context set KEY VAL end` — `context` pushes the current		
+# context Store onto the stack, `set` then forward-collects KEY and		
+# VAL, and `end` halts forward collection so the third arg (the		
+# container) is taken from the stack.		
+		
+context set 'x' 42 end context get 'x'	42	String key — round-trip through the context store
+context set ( quote name ) 'Alice' end context get 'name'	'Alice'	Atom key — `(quote name)` forces the atom to materialise before set's forward-collection consumes it
+		
+# Multi-key context — every `set` extends the layer chain, every		
+# `get` walks it.		
+context set 'a' 1 end context set 'b' 2 end context get 'a'	1	first key still reachable after second set
+context set 'a' 1 end context set 'b' 2 end context get 'b'	2	second key visible after its own set
+		
+# Setting the same key twice — the latest value wins (the new layer		
+# shadows the old one).		
+context set 'x' 1 end context set 'x' 2 end context get 'x'	2	shadowing semantics
+		
+# Store value flows into normal expression flow.		
+context set 'n' 7 end context get 'n' add 3	10	get-result chains into arithmetic
+		
+# Missing key on a Store raises an error.		
+context get 'missing'	ERROR:unknown key	Store get is strict; missing keys are an error
+context get quote nope	ERROR:unknown key	
+		
+# ====================================================================		
+# 2. Object-instance set		
+# ====================================================================		
+# `set` on an Object instance is in-place mutation: the instance's		
+# field map is updated directly. The Object value held by `def`		
+# observes the change on subsequent reads.		
+		
+# String-key set		
+type Foo object { a:String b:Integer } def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
+type Foo object { a:String b:Integer } def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
+		
+# Numeric field via String value — set replaces the value verbatim.		
+type Foo object { a:Integer } def f make Foo { a:5 } set 'a' 99 f f .a	99	
+		
+# ====================================================================		
+# 3. None propagation		
+# ====================================================================		
+# `get key None` yields None — lets chained accessor expressions		
+# short-circuit through missing levels without crashing.		
+		
+None get 'a'	None	None passes through string-key access
+None get 0	None	None passes through integer-key access
+None get quote x	None	
+		
+# ====================================================================		
+# 4. Map / List read summary		
+# ====================================================================		
+# Full coverage lives in map.tsv and list.tsv — these rows are a		
+# quick sanity check that the eng-resident handlers behave the same		
+# under the production registry.		
+		
+{ a:1 b:2 } get 'a'	1	
+{ a:1 b:2 } get 'b'	2	
+{ a:1 } get 'missing'	None	Map get is forgiving; missing keys yield None
+[ 10 20 30 ] get 0	10	
+[ 10 20 30 ] get 1	20	
+[ 10 20 30 ] get 5	None	out-of-bounds list access yields None
+[ 10 20 30 ] get -1	None	negative index also yields None
+{ a:1 b:2 }.a	1	dotted accessor — parser expands to ( map get a )
+{ outer:{ inner:99 } }.outer.inner	99	chained dotted access
+		
+# ====================================================================		
+# 5. Type-literal rejection		
+# ====================================================================		
+# `get` rejects bare type literals with the standard signature_error		
+# (the matcher refuses non-concrete containers before the handler		
+# runs).		
+		
+get 'a' Map	ERROR:signature_error	bare Map type literal cannot be indexed
+get 0 List	ERROR:signature_error	bare List type literal cannot be indexed
+		
+# ====================================================================		
+# 6. Composition — get inside larger expressions		
+# ====================================================================		
+		
+context set 'n' 5 end ( context get 'n' ) add ( context get 'n' )	10	parens isolate each context-get; result is 5+5
+context set 'n' 7 end def x ( context get 'n' ) x	7	def captures the looked-up value (paren keeps body coherent)
+context set 'msg' 'hi' end def s ( context get 'msg' ) s	'hi'	

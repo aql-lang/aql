@@ -1,0 +1,129 @@
+# tokens	expected	note
+# =====================================================================		
+# Resource — built-in object type for external data sources		
+# =====================================================================		
+# `Resource` and `Entity` are AQL's built-in ObjectTypes for naming		
+# external data sources. They are not registered as words; instead		
+# `installResourceTypes` (called from `engine.Register`) pushes them		
+# onto the type stack at startup. So they're available out of the		
+# box wherever the production registry is loaded.		
+#		
+# Hierarchy:		
+#		
+#   Object/Resource           {kind:String}		
+#       └── Object/Resource/Entity   {spec:String, entity:String}		
+#                                    (inherits kind from Resource)		
+#		
+# Resource is the abstract carrier; `Entity` adds the (`spec`,		
+# `entity`) coordinates that pin one specific entity within a		
+# specifier. Instances are produced via `make Entity {…}` (or via		
+# user-defined types that extend Resource / Entity).		
+#		
+# This file covers:		
+#		
+#   1. The bare type literals — Resource, Entity.		
+#   2. Inheritance check — Entity is Resource.		
+#   3. Instantiation via make.		
+#   4. Field access on instances.		
+#   5. is checks for parent / sibling types.		
+#   6. Field validation at make-time.		
+#		
+# Runs against the production aql registry.		
+		
+		
+# ====================================================================		
+# 1. Bare type literals		
+# ====================================================================		
+		
+Resource	Resource	the bare type literal renders as its name
+Entity	Entity	
+typeof Resource	Type	Resource's metatype is Type
+typeof Entity	Type	
+		
+# ====================================================================		
+# 2. Inheritance — Entity is Resource		
+# ====================================================================		
+# `is` between type literals reports whether the LHS type is a		
+# subtype of the RHS type. Entity declares Resource as parent in		
+# installResourceTypes, so the check holds.		
+		
+Entity is Resource	true	Entity inherits from Resource
+Resource is Resource	true	a type satisfies itself
+		
+# Sibling types do not satisfy each other.		
+Entity is Map	false	
+Entity is List	false	
+		
+# ====================================================================		
+# 3. Instantiation via make		
+# ====================================================================		
+# `make Entity {…}` validates the data against Entity's fields		
+# (kind:String + spec:String + entity:String, with kind inherited		
+# from Resource). Returns a typed object value rendered as		
+# `Object/Resource/Entity{…}`.		
+		
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } typeof	Entity	the made value's typeof is Entity
+make Entity { kind:'db' spec:'users' entity:'user' } typeof	Entity	
+		
+# ====================================================================		
+# 4. is checks for the made instance		
+# ====================================================================		
+# An Entity instance satisfies Entity AND its parent Resource —		
+# inheritance flows through `is` for Type values produced by		
+# `make`.		
+		
+make Entity { kind:'api' spec:'x' entity:'y' } is Entity	true	is-check matches own type
+make Entity { kind:'api' spec:'x' entity:'y' } is Resource	true	parent type is also satisfied
+		
+# Cross-family checks fail.		
+make Entity { kind:'api' spec:'x' entity:'y' } is List	false	
+make Entity { kind:'api' spec:'x' entity:'y' } is Integer	false	
+		
+# ====================================================================		
+# 5. Field access via dotted accessor		
+# ====================================================================		
+# Entity instances expose `kind`, `spec`, and `entity` as fields		
+# accessible through the standard `.field` syntax.		
+		
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .kind	'api'	
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .spec	'voxgig-solardemo'	
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .entity	'planet'	
+		
+# ====================================================================		
+# 6. Field validation at make-time		
+# ====================================================================		
+# `make Entity {…}` requires every declared field. Missing fields		
+# raise an error rather than installing a partially-typed value.		
+		
+make Entity { }	ERROR:missing field	all three fields are required
+make Entity { kind:'api' }	ERROR:missing field	missing spec and entity
+make Entity { kind:'api' spec:'x' }	ERROR:missing field	missing entity
+		
+# ====================================================================		
+# 7. Composition with def		
+# ====================================================================		
+# `def name make Entity {…}` captures an Entity instance for reuse.		
+# All field accesses and is-checks survive the round-trip through		
+# the def stack.		
+		
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .kind	'api'	
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .entity	'planet'	
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Entity	true	
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Resource	true	
+		
+# ====================================================================		
+# 8. Resource and Entity at the type-stack level		
+# ====================================================================		
+# `Resource` and `Entity` are pushed onto the type stack at startup		
+# (installResourceTypes), so they're always reachable as type		
+# literals. Subsequent `type NAME …` declarations don't shadow them.		
+		
+length [ Resource ]	1	the type literal can be wrapped in a list
+length [ Entity ]	1	
+length [ Resource Entity ]	2	both are first-class type-literal values
+		
+# A user-defined type that USES Resource or Entity as a parent must		
+# go through a user-named indirection — `type X object {…} Resource`		
+# does NOT install Resource as the parent because the bare Resource		
+# type literal does not satisfy `object`'s second-arg slot at parse		
+# time. Inheriting requires an intermediate user type.		

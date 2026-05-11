@@ -1,0 +1,158 @@
+# tokens	expected	note
+# =====================================================================		
+# Structure — non-scalar values inside Nodes, resolved at depth		
+# =====================================================================		
+# Companion to nodes.tsv. Where nodes.tsv covers the structural		
+# mechanics of List/Map (construction, auto-eval, quoting) with mostly		
+# scalar contents, this file focuses on what happens when the *values*		
+# inside a structure are richer: type literals, record-shape maps,		
+# enums (disjuncts), Function values, FunctionSignature type values, and atoms —		
+# and especially on `def` / `type` references to such values resolving		
+# arbitrarily deep inside nested Lists and Maps.		
+#		
+# Notes on a couple of rough edges:		
+#   - Function and FunctionSignature *values* stringify verbosely (they carry		
+#     whole signature structs), so rows that embed them check the		
+#     containing Node's `typeof` / `is` rather than rendering the		
+#     value itself.		
+#   - A `def`-bound *function* referenced bare inside a structure		
+#     auto-invokes (the FnDef-literal auto-call rule) rather than		
+#     embedding the function value — so `def f fn[…] {x:f}` is an		
+#     error, not `{x:<fn>}`. To embed a function value, write the		
+#     `( fn … )` literal inline.		
+#   - Object / record *instances* (via `make Type …` /		
+#     `make RecordType …`) need the production constructor words		
+#     (`object`, `record`) which aren't in the kernel — those are		
+#     covered in lang/spec/object.tsv and lang/spec/record.tsv. A		
+#     'record' in the structural sense `{ field:Type … }` (a map all		
+#     of whose values are type literals) IS a kernel construct and is		
+#     exercised here.		
+#		
+# === Test fixtures (eng/go/spec_test.go::registerSpecWords) ===		
+#   addq / subq / mulq  — [Number Number] forward-prec — args[1] op args[0]		
+#   lengthq             — [List] forward-prec — list length		
+#   firstq              — [List] forward-prec — first element or None		
+#   Pre-bound defs: pi=3, tau=6, greeting='hello'.		
+# === end fixtures ===		
+		
+		
+# ====================================================================		
+# 1. Type literals as structure values		
+# ====================================================================		
+# A type literal (Integer, String, …) is a perfectly good Node value.		
+# A list of type literals; a map whose values are type literals (the		
+# latter is a record-shape — see §2).		
+		
+[ Integer String Boolean ]	[Integer String Boolean]	list of three type literals
+lengthq [ Integer String Boolean ]	3	
+firstq [ Integer String ]	Integer	first element is the Integer type literal
+{ a:Integer }	{a:Integer}	single type-literal value
+{ a:Integer b:String c:Boolean }	{a:Integer b:String c:Boolean}	(source already in sorted-key order)
+		
+# def / type references to a type literal resolve when the structure		
+# auto-evaluates.		
+def t Integer { x:t }	{x:Integer}	`t` (bound to Integer) resolves as a map value
+def t Integer [ t t String ]	[Integer Integer String]	resolves element-wise in a list
+type IdType Integer { id:IdType }	{id:Integer}	a `type`-named binding referenced as a value
+type IdType Integer [ IdType String ]	[Integer String]	
+		
+# ====================================================================		
+# 2. Record-shape maps as structure values		
+# ====================================================================		
+# `{ field:Type … }` — a map all of whose values are type bodies — is		
+# a record-shape (a Node-family TYPE). It can sit inside another Node		
+# as a value; nesting goes to any depth.		
+		
+{ schema:{ id:Integer name:String } }	{schema:{id:Integer name:String}}	a record-shape as a map value
+{ schema:{ id:Integer name:String } } typeof	Type	the whole thing is itself a record-shape → metatype Type
+{ rows:[ { id:Integer } { id:Integer } ] }	{rows:[{id:Integer} {id:Integer}]}	a list of record-shapes as a value
+{ outer:{ middle:{ inner:Integer } } }	{outer:{middle:{inner:Integer}}}	three-deep record-shape nesting
+{ schema:[ Integer String ] }	{schema:[Integer String]}	a typed-tuple-ish list as a value
+		
+# def / type references inside record-shapes resolve at depth.		
+def t Integer { schema:{ id:t name:String } }	{schema:{id:Integer name:String}}	
+type IdType Integer { schema:{ id:IdType } }	{schema:{id:Integer}}	
+def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}	
+		
+# ====================================================================		
+# 3. Enums (disjuncts) as structure values		
+# ====================================================================		
+# `enum [ … ]` builds a Disjunct type. Embed it directly with a paren		
+# (`{ k:( enum … ) }`) or — more usefully — name it with `type` and		
+# reference the name.		
+		
+{ e:( enum [ red green blue ] ) }	{e:red|green|blue}	disjunct value as a map value
+{ choices:[ ( enum [ a b ] ) ( enum [ c d ] ) ] }	{choices:[a|b c|d]}	list of disjuncts
+firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a|b	
+		
+# type-named enum referenced at depth.		
+type Color enum [ red green blue ] { c:Color }	{c:red|green|blue}	
+type Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red|green|blue red|green|blue]}	
+type Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red|green|blue}}}	
+type Color enum [ red green blue ] firstq [ Color ]	red|green|blue	
+		
+# ====================================================================		
+# 4. Functions as structure values		
+# ====================================================================		
+# A function VALUE (the `( fn … )` literal, not a def-bound name)		
+# can be a Node element. It stringifies verbosely, so these rows		
+# inspect the containing Node rather than the function itself.		
+		
+{ h:( fn [ [ x:Integer ] [ Integer ] [ x addq 1 ] ] ) } typeof	Map	a map whose value is a function is still a Map
+{ h:( fn [ [ x:Integer ] [ Integer ] [ x ] ] ) } is Node	true	
+[ ( fn [ [ x:Integer ] [ Integer ] [ x ] ] ) ] is List	true	
+lengthq [ ( fn [ [ x:Integer ] [ Integer ] [ x ] ] ) ( fn [ [ y:Integer ] [ Integer ] [ y ] ] ) ]	2	a list of two function values
+		
+# A def-bound function referenced bare inside a structure auto-invokes		
+# (the FnDef-literal auto-call rule) instead of embedding the value —		
+# so this is an error, not `{fn:<function>}`.		
+def double fn [ [ a:Integer ] [ Integer ] [ a addq a ] ] { fn:double }	ERROR:signature_error	`double` auto-calls with no args inside the map literal
+		
+# ====================================================================		
+# 5. FunctionSignature type values as structure values		
+# ====================================================================		
+# `fnsig [ … ]` builds an FunctionSignature (function-shape) type value. Like a		
+# function value it stringifies verbosely, so these rows check the		
+# containing Node.		
+		
+{ s:( fnsig [ [ Integer ] [ Integer ] ] ) } typeof	Map	
+{ s:( fnsig [ [ Integer ] [ Integer ] ] ) } is Map	true	
+type Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
+		
+# ====================================================================		
+# 6. Atoms (quoted words) as structure values		
+# ====================================================================		
+# `( quote name )` captures `name` as an Atom — the clean way to put a		
+# symbolic value inside a structure.		
+		
+{ tag:( quote red ) }	{tag:atom(red)}	
+{ tags:[ ( quote red ) ( quote green ) ( quote blue ) ] }	{tags:[atom(red) atom(green) atom(blue)]}	
+[ ( quote x ) ( quote y ) ]	[atom(x) atom(y)]	
+		
+# def-bound atom referenced at depth.		
+def a ( quote red ) { tag:a }	{tag:atom(red)}	
+def a ( quote red ) { deep:{ inner:[ { x:a } ] } }	{deep:{inner:[{x:atom(red)}]}}	
+def a ( quote red ) lengthq [ a a a ]	3	
+def a ( quote red ) firstq [ a ( quote green ) ]	atom(red)	
+		
+# ====================================================================		
+# 7. Def references at depth — the core 'go deeper' cases		
+# ====================================================================		
+# A `def` / `type` name used as a value resolves wherever it appears		
+# in a nested List/Map, however deep.		
+		
+def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
+def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
+def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
+def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
+type Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a|b|c base:a|b|c}}}	type-named disjunct, three deep, twice
+def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:atom(red)}]}}}	atom, four deep
+		
+# Mixed: a config-shaped structure combining a type, a disjunct, an		
+# atom, and a paren-evaluated number, all at depth, plus a def		
+# reference resolving inside it.		
+def n 2 type Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:atom(red)} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+		
+# Auto-eval still mixes freely with these: a paren-evaluated scalar		
+# value alongside a type-literal value in the same nested map.		
+def n 5 { row:{ value:( n mulq 2 ) type:Integer } }	{row:{type:Integer value:10}}	

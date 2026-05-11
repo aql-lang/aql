@@ -1,0 +1,84 @@
+# tokens	expected	note
+# =====================================================================		
+# Principle: Def-stack shadowing semantics.		
+# =====================================================================		
+#		
+# `def NAME value` pushes onto a per-name stack in the registry. Every		
+# new `def` for the same NAME shadows the previous binding without		
+# erasing it; the previous binding is recovered if the top is popped		
+# (the spec runner has no `undef` so we cannot test pop behavior here,		
+# only shadowing-via-push).		
+#		
+# Rules being asserted		
+# --------------------		
+# 1. The most recent `def` for a name wins until shadowed again or popped.		
+# 2. Shadowing is per-name; a `def x` does not affect a `def y`.		
+# 3. Shadowing applies to ALL def kinds: simple values, fn definitions,		
+#    list bodies, and (would apply to) Type bindings.		
+# 4. A def binding can shadow a registered builtin function. This is		
+#    tested in resolution.tsv with `def addq 99 addq → 99`. Re-pinned		
+#    here as part of the shadow story.		
+# 5. Inline references inside an expression 'freeze' the resolution at		
+#    the moment the reference fires — re-defining later does NOT		
+#    retroactively change a value already pushed onto the stack.		
+#		
+# Why this matters		
+# ----------------		
+# Per-name stacks (rather than a flat scope mutating in place) is the		
+# foundation of fn-body sandboxing: a sub-engine pushes parameter		
+# bindings, runs the body, then pops. Shadowing has to be reversible		
+# without touching outer bindings. This file pins the layer model		
+# even where the spec runner can't directly invoke pop.		
+#		
+# Spec runner notes		
+# -----------------		
+# Pre-bound: `pi=3`, `tau=6`, `greeting='hello'`. Each is a single-		
+# layer push so the def stack for those names has depth 1 at start.		
+		
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+#   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
+#   mulq  — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)		
+#		
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).		
+# === end fixtures ===		
+		
+		
+# Single shadow, then read.		
+def x 5 def x 10 x	10	most-recent push wins
+def x 5 def x 10 def x 99 x	99	three pushes, top wins
+		
+# Two shadows of different names — independence.		
+def x 5 def y 6 x y	5 6	x and y are independent stacks
+def x 5 def y 6 def x 10 x y	10 6	shadow x; y unaffected
+		
+# Shadow then re-read in same expression.		
+def x 5 x def x 10 x	5 10	first read sees 5 (only one push at that point); second read sees 10 (after second push)
+		
+# Re-defining after a use does NOT retroactively change the earlier value.		
+def x 5 x x addq def x 10 x	10 10	first addq fires with both reads of x=5 — produces 10 on stack; then `def x 10` shadows; final x reads 10. Stack: [10, 10].
+		
+# Shadowing the pre-bound `pi`.		
+def pi 99 pi	99	user shadow of pre-bound pi → 99 wins
+pi def pi 99 pi	3 99	first read 3 (pre-bound), then shadow, then read 99
+pi pi def pi 99 pi pi	3 3 99 99	mix of pre-shadow and post-shadow reads
+		
+# Shadowing a registered native (builtin function).		
+def addq 99 addq	99	def shadows the registered native; bare addq resolves to 99 simple-value
+def addq 99 def addq 100 addq	100	shadow the shadow; 100 wins
+def addq 99 addq addq	99 99	two reads after shadow — both produce 99
+		
+# Function name and value name share the SAME def stack — there is		
+# no separate namespace for functions vs values. So shadowing addq		
+# with an integer makes the function unreachable until popped.		
+def addq 'hello' addq	'hello'	def stores a String under addq; bare addq resolves to 'hello'
+def addq 'hello' 1 addq	1 'hello'	1 pushes; addq resolves via def to 'hello' — registered native shadowed
+		
+# Composition with list-body splice. The body captures the current		
+# def state at SPLICE TIME (i.e. at the use site), not at def time.		
+def doub [ dup addq ] 5 def doub [ dup mulq ] 5 doub	5 25	first 5 push; second def shadows doub; 5 doub splices the SECOND body → dup mulq → 25. The first 5 stays on the stack as residue.
+		
+# A list-body shadow of a simple-value def — splicing kicks in.		
+# Note: def consumes its two forward args and leaves nothing on the		
+# stack; the original 5 from `def x 5` is NEVER on the stack to begin		
+# with (it's stored in the def, not pushed as residue).		
+def x 5 def x [ 100 ] x	100	first def stores x=5 (consumes 5, no residue); second def shadows x with [100]; `x` splices [100] → push 100

@@ -1,0 +1,247 @@
+# tokens	expected	note
+# =====================================================================		
+# typeof / pathof — inspecting types		
+# =====================================================================		
+#		
+# `typeof v` returns the type of `v` as a Type literal:		
+#   - a concrete value -> its exact VType (Integer, ProperString, ...);		
+#   - the unique `none` value -> None;		
+#   - ANY type literal -> `Type`. Metatypes are collapsed: the		
+#     type-of-a-type-literal is uniformly `Type` — there is no		
+#     ScalarType / NodeType / ObjectType layer. So `typeof typeof v`		
+#     is always `Type`.		
+#		
+# `pathof T` takes a TYPE (a Type literal, or any value whose VType is		
+# a Type subtype — a Function / Disjunct / Enum value) and returns its		
+# ancestry path as a List of Type literals, root first, leaf last —		
+# declared signature `[ Type [:Type] ]`. The last element equals `T`:		
+#   pathof Integer       -> [Scalar Number Integer]		
+#   pathof List          -> [Node List]		
+#   pathof Enum          -> [Type Disjunct Enum]		
+#   pathof Type          -> [Type]		
+#   pathof None          -> [None]		
+# `pathof` does NOT accept a non-type value: `pathof 5` is a		
+# signature_error. To get the path of a value's type, compose:		
+# `pathof ( typeof 5 )` -> [Scalar Number Integer].		
+#		
+# === Test fixtures (eng/go/spec_test.go::registerSpecWords) ===		
+#   lengthq — [List] forward-prec — list length		
+#   firstq  — [List] forward-prec — first element or None		
+#   addq    — [Number Number] forward-prec — args[1] + args[0]		
+#   concatq — [String String] forward-prec — args[1] ++ args[0]		
+#   Pre-bound defs: pi=3, tau=6, greeting='hello'.		
+# === end fixtures ===		
+		
+# ====================================================================		
+# 1. typeof — concrete scalar values		
+# ====================================================================		
+		
+typeof 5	Integer	an Integer literal
+typeof -7	Integer	negatives too
+typeof 5.0	Decimal	a Decimal literal
+typeof 3.14	Decimal	
+typeof true	Boolean	
+typeof false	Boolean	
+typeof 'hello'	ProperString	a non-empty string is a ProperString
+typeof ' '	ProperString	a single space is still non-empty
+typeof ''	EmptyString	the empty string is an EmptyString
+typeof ( quote red )	Atom	a quoted word is an Atom
+typeof none	None	the unique inhabitant of None reports None
+typeof pi	Integer	a def-bound reference resolves to the bound value first
+typeof greeting	ProperString	
+		
+# ====================================================================		
+# 2. typeof — nodes		
+# ====================================================================		
+		
+typeof [ ]	List	
+typeof [ 1 2 3 ]	List	
+typeof { }	Map	
+typeof { a:1 b:2 }	Map	
+typeof [ [ 1 ] { a:2 } ]	List	a list of mixed nodes is still a List
+typeof { a:[ 1 ] b:{ c:2 } }	Map	a map with mixed node values is still a Map
+		
+# ====================================================================		
+# 3. typeof — type literals: every one reports `Type` (exhaustive)		
+# ====================================================================		
+# Every well-known type name, when used as a value, has typeof `Type`.		
+		
+# --- the lattice extremes ---		
+typeof Any	Type	the top type
+typeof None	Type	the unit type (its sole *value* `none` reports None — see §1)
+typeof Never	Type	the empty/bottom type
+		
+# --- scalar family ---		
+typeof Scalar	Type	
+typeof Number	Type	
+typeof Integer	Type	metatypes are collapsed — no ScalarType layer
+typeof Decimal	Type	
+typeof String	Type	
+typeof ProperString	Type	
+typeof EmptyString	Type	
+typeof Boolean	Type	
+typeof Path	Type	
+typeof Atom	Type	
+		
+# --- node family ---		
+typeof Node	Type	no NodeType layer either
+typeof List	Type	
+typeof Map	Type	
+		
+# --- object family ---		
+typeof Object	Type	no ObjectType layer either
+typeof Resource	Type	
+typeof Entity	Type	
+typeof Table	Type	
+typeof Record	Type	
+typeof Options	Type	
+typeof Array	Type	
+typeof Timeout	Type	
+typeof Interval	Type	
+		
+# --- type family (Function / FunctionSignature / Disjunct / Enum all parent to Type) ---		
+typeof Function	Type	the Function *type* literal
+typeof FunctionSignature	Type	
+typeof Disjunct	Type	
+typeof Enum	Type	
+typeof Type	Type	the Type type literal is itself a Type
+		
+# ====================================================================		
+# 4. typeof — function / fnsig / enum / tor values		
+# ====================================================================		
+		
+typeof fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]	Function	a one-signature function value
+typeof fn [ Integer Integer [ addq 1 ] ]	Function	abbreviated form: bare input/output types, no param lists; body uses the stack
+typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ s:String ] [ String ] [ s ] ]	Function	a multi-signature function (two full triples) — params `a` and `s` are bound in their bodies
+typeof fn [ Integer Integer [ addq 1 ] String String [ concatq '!' ] ]	Function	multi-signature, abbreviated form — bodies are param-free (the abbreviated form binds no names)
+typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	a one-signature function-shape type value
+typeof fnsig [ Integer Integer ]	FunctionSignature	abbreviated form: bare types, no body
+typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	a multi-signature shape — still a FunctionSignature
+typeof fnsig [ Integer Integer String String ]	FunctionSignature	multi-signature shape, abbreviated form
+typeof enum [ red green blue ]	Enum	an enum value is an Enum (a subtype of Disjunct)
+typeof ( Integer tor Boolean )	Disjunct	a `tor` union is a plain Disjunct
+		
+# ====================================================================		
+# 5. typeof — round-trips		
+# ====================================================================		
+		
+5 is ( typeof 5 )	true	a CONCRETE value satisfies its own type
+'a' is ( typeof 'a' )	true	
+true is ( typeof true )	true	
+[ 1 2 ] is ( typeof [ 1 2 ] )	true	
+{ a:1 } is ( typeof { a:1 } )	true	
+( quote red ) is ( typeof ( quote red ) )	true	
+# `is` between type literals: a narrower type satisfies a wider one		
+# (`Integer is Number` -> true), and EVERY type satisfies the metatype `Type`		
+# (exhaustively in types.tsv §10b). A concrete value is not a type.		
+Integer is Number	true	Integer is a subtype of Number
+Number is Integer	false	...but not the other way
+Integer is Scalar	true	
+Integer is Type	true	Integer is a type — every type literal satisfies the metatype `Type`
+5 is Type	false	a concrete value is not a type
+Integer is ( typeof Integer )	true	`typeof Integer` is `Type`, and `Integer is Type` -> true
+typeof 5 is Type	true	`typeof 5` is `Integer`; `Integer is Type` -> true
+typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`; `Type is Type` -> true
+typeof typeof 5	Type	typeof of any type literal is `Type`
+typeof typeof 'a'	Type	
+typeof typeof [ 1 ]	Type	
+typeof typeof { a:1 }	Type	
+typeof typeof Integer	Type	
+typeof typeof Enum	Type	
+typeof typeof none	Type	`typeof none` is the type literal `None`, whose own `typeof` is `Type`
+		
+# ====================================================================		
+# 6. pathof — the ancestry path of a TYPE		
+# ====================================================================		
+# `pathof T` walks T's ancestry, root first, leaf (= T) last.		
+		
+# --- scalar family ---		
+pathof Scalar	[Scalar]	a root has a one-element path
+pathof Number	[Scalar Number]	
+pathof Integer	[Scalar Number Integer]	the canonical example
+pathof Decimal	[Scalar Number Decimal]	
+pathof String	[Scalar String]	
+pathof ProperString	[Scalar String ProperString]	
+pathof EmptyString	[Scalar String EmptyString]	
+pathof Boolean	[Scalar Boolean]	
+pathof Atom	[Scalar Atom]	
+pathof Path	[Scalar Path]	
+		
+# --- node family ---		
+pathof Node	[Node]	
+pathof List	[Node List]	
+pathof Map	[Node Map]	
+		
+# --- object family ---		
+pathof Object	[Object]	
+pathof Resource	[Object Resource]	
+pathof Entity	[Object Resource Entity]	
+pathof Table	[Object Table]	
+pathof Record	[Object Record]	
+pathof Array	[Object Array]	
+		
+# --- type family ---		
+pathof Type	[Type]	Type has no ancestors
+pathof Function	[Type Function]	
+pathof FunctionSignature	[Type FunctionSignature]	
+pathof Disjunct	[Type Disjunct]	
+pathof Enum	[Type Disjunct Enum]	Enum is a subtype of Disjunct, whose parent is Type
+		
+# --- lattice extremes ---		
+pathof Any	[Any]	
+pathof None	[None]	
+pathof Never	[Never]	
+		
+# --- pathof composed with typeof: the ancestry of a VALUE's type ---		
+pathof ( typeof 5 )	[Scalar Number Integer]	= pathof Integer
+pathof ( typeof 5.0 )	[Scalar Number Decimal]	
+pathof ( typeof true )	[Scalar Boolean]	
+pathof ( typeof 'hello' )	[Scalar String ProperString]	
+pathof ( typeof '' )	[Scalar String EmptyString]	
+pathof ( typeof ( quote red ) )	[Scalar Atom]	
+pathof ( typeof none )	[None]	
+pathof ( typeof [ 1 2 3 ] )	[Node List]	
+pathof ( typeof { a:1 } )	[Node Map]	
+pathof ( typeof Integer )	[Type]	= pathof Type — typeof Integer is Type
+pathof ( typeof ( enum [ a b c ] ) )	[Type Disjunct Enum]	= pathof Enum
+pathof ( typeof pi )	[Scalar Number Integer]	pi = 3
+pathof ( typeof greeting )	[Scalar String ProperString]	greeting = 'hello'
+		
+# --- pathof also accepts a Function / FunctionSignature / Disjunct / Enum VALUE		
+#     directly, since its VType is itself a Type subtype ---		
+pathof ( fn [ Integer Integer [ addq 1 ] ] )	[Type Function]	
+pathof ( fnsig [ Integer Integer ] )	[Type FunctionSignature]	
+pathof ( enum [ a b c ] )	[Type Disjunct Enum]	
+pathof ( Integer tor Boolean )	[Type Disjunct]	
+		
+# --- pathof rejects non-type values: the argument must be a Type ---		
+pathof 5	ERROR:signature_error	an Integer is not a Type
+pathof 'hello'	ERROR:signature_error	
+pathof true	ERROR:signature_error	
+pathof [ 1 2 3 ]	ERROR:signature_error	a concrete list is not a Type — use `pathof ( typeof [ 1 2 3 ] )`
+pathof { a:1 }	ERROR:signature_error	a concrete map is not a Type
+		
+# ====================================================================		
+# 7. pathof — structure of the result		
+# ====================================================================		
+		
+pathof Integer is List	true	the result is itself a List
+lengthq ( pathof Integer )	3	Scalar / Number / Integer
+lengthq ( pathof Number )	2	Scalar / Number
+lengthq ( pathof Boolean )	2	Scalar / Boolean
+lengthq ( pathof Entity )	3	Object / Resource / Entity
+lengthq ( pathof Type )	1	Type has no ancestors
+lengthq ( pathof None )	1	
+lengthq ( pathof Enum )	3	Type / Disjunct / Enum
+firstq ( pathof Integer )	Scalar	every scalar path is rooted at Scalar
+firstq ( pathof List )	Node	node paths are rooted at Node
+firstq ( pathof Resource )	Object	object paths are rooted at Object
+firstq ( pathof Function )	Type	function / disjunct / enum paths are rooted at Type
+firstq ( pathof Integer ) is Scalar	true	the root element is the Scalar type literal
+firstq ( pathof Integer ) is Number	false	Scalar is not a subtype of Number — subtyping runs the other way
+( pathof Integer ) is [ Scalar Number Integer ]	true	the whole path matches a literal template of type literals
+( pathof ProperString ) is [ Scalar String ProperString ]	true	
+( pathof Integer ) is [ Scalar Number String ]	false	wrong leaf
+( pathof Type ) is [ Type ]	true	
+( pathof Enum ) is [ Type Disjunct Enum ]	true	
+( pathof ( typeof 5 ) ) is [ Scalar Number Integer ]	true	composed form matches too
