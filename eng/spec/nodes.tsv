@@ -1,0 +1,175 @@
+# =====================================================================
+# Nodes — List and Map: construction, auto-eval, quoting, interactions
+# =====================================================================
+# AQL's two structural Node types:
+#
+#   List  `[ … ]`     — ordered, heterogeneous sequence (Node/List).
+#   Map   `{ k:v … }` — keyed associative collection (Node/Map). At
+#                       runtime keys are emitted in sorted order, so
+#                       multi-key examples here use already-sorted
+#                       source for clarity.
+#
+# Both are subtypes of the abstract `Node` (and, like everything, of
+# `Any`). `typeof` on a bare `List`/`Map` type literal reports the
+# metatype `NodeType`; on the abstract `Node`, `Type`.
+#
+# Lists carry an `eval=true` flag from the parser and auto-evaluate in
+# two contexts (see §4–§5):
+#   - when consumed as a word argument (unless the slot is NoEvalArgs);
+#   - when still residual on the stack at end of Run.
+# `quote` flags a list `quoted=true`, suppressing both. `quote` on a
+# Map is a pass-through (Maps aren't spliced, so there's nothing to
+# suppress) — embedded paren expressions inside a Map still evaluate.
+#
+# === Test fixtures (eng/go/spec_test.go::registerSpecWords) ===
+#   addq     — [Number Number] forward-prec — args[1] + args[0]
+#   subq     — [Number Number] forward-prec — args[1] - args[0]
+#   mulq     — [Number Number] forward-prec — args[1] * args[0]
+#   lengthq  — [List] forward-prec — list length as Integer
+#   firstq   — [List] forward-prec — first element, or None for []
+#   Pre-bound defs: pi=3, tau=6, greeting="hello".
+# === end fixtures ===
+
+# tokens	expected	note
+
+# ====================================================================
+# 1. List construction
+# ====================================================================
+
+[ ]	[]	empty list literal
+[ 1 2 3 ]	[1 2 3]	homogeneous Integer list
+[ 1 "a" true ]	[1 "a" true]	heterogeneous — Integer / String / Boolean
+[ [ 1 2 ] [ 3 4 ] ]	[[1 2] [3 4]]	list of lists (no flattening)
+[ [ ] [ ] ]	[[] []]	list of empty lists
+
+# ====================================================================
+# 2. Map construction
+# ====================================================================
+
+{ }	{}	empty map literal
+{ a:1 }	{a:1}	single entry
+{ a:1 b:2 }	{a:1 b:2}	two entries (source already in sorted-key order)
+{ a:1 b:2 c:3 }	{a:1 b:2 c:3}	three entries
+{ age:30 name:"Alice" }	{age:30 name:"Alice"}	heterogeneous values; runtime emits keys sorted
+{ outer:{ inner:1 } }	{outer:{inner:1}}	nested map
+{ xs:[ 1 2 3 ] }	{xs:[1 2 3]}	map whose value is a list
+{ a:{ b:1 } c:[ 2 3 ] }	{a:{b:1} c:[2 3]}	mixed nested map + list values
+
+# ====================================================================
+# 3. Type-system: typeof / is
+# ====================================================================
+
+typeof [ ]	List	concrete list reports List
+typeof [ 1 2 3 ]	List
+typeof { }	Map	concrete map reports Map
+typeof { a:1 b:2 }	Map
+typeof List	NodeType	bare List type literal → metatype NodeType
+typeof Map	NodeType
+typeof Node	Type	the abstract Node supertype → metatype Type
+
+# `is` against the exact node type.
+[ 1 2 3 ] is List	true
+[ ] is List	true
+{ a:1 } is Map	true
+{ } is Map	true
+
+# Both are Nodes, and Nodes (like everything) are Any.
+[ 1 2 3 ] is Node	true
+{ a:1 } is Node	true
+[ ] is Node	true
+[ 1 2 3 ] is Any	true
+{ a:1 } is Any	true
+
+# Cross-kind / scalar checks fail.
+[ 1 2 3 ] is Map	false
+{ a:1 } is List	false
+[ 1 2 3 ] is Integer	false
+{ a:1 } is Integer	false
+
+# A bare type literal at a concrete-payload slot is rejected.
+lengthq List	ERROR:signature_error	List type literal cannot be measured
+firstq Map	ERROR:signature_error
+
+# ====================================================================
+# 4. List auto-evaluation
+# ====================================================================
+# A parser list (eval=true) runs through a sub-engine when consumed
+# as a word argument; the residual sub-stack becomes the list.
+
+lengthq [ 1 addq 2 ]	1	[1 addq 2] → [3] before lengthq sees it
+firstq [ 1 addq 2 ]	3	first element of the evaluated single-element list
+lengthq [ 1 2 3 ]	3	pure literals — auto-eval is a no-op
+lengthq [ ( 1 addq 2 ) ( 3 mulq 4 ) ]	2	parens pre-evaluate; auto-eval just normalises
+firstq [ ( 10 subq 3 ) ( 1 addq 1 ) ]	7	10-3 = 7 is the first residual
+
+# Auto-eval at end of Run — residual eval-lists on the stack drain.
+[ 1 addq 2 ]	[3]
+[ 1 2 3 ]	[1 2 3]	literals untouched
+[ ( 1 addq 2 ) ( 4 mulq 2 ) ]	[3 8]	each paren expression evaluates; residual stack becomes contents
+[ pi tau ]	[3 6]	def references resolve during auto-eval
+
+# Nested lists: the outer list auto-evaluates, inner lists too.
+lengthq [ [ 1 addq 2 ] [ 3 4 ] ]	2	two inner lists; the [1 addq 2] one becomes [3]
+firstq [ [ 1 addq 2 ] [ 3 4 ] ]	[3]	first inner list, post-eval
+
+# ====================================================================
+# 5. Map auto-evaluation
+# ====================================================================
+# A parser map auto-evaluates its values: paren expressions are
+# inline-evaluated, and embedded eval-lists are evaluated in place.
+
+{ a:( 1 addq 2 ) }	{a:3}	paren value evaluates
+{ a:( 1 addq 2 ) b:( 3 mulq 4 ) }	{a:3 b:12}	every paren value evaluates independently
+{ a:1 b:( pi mulq tau ) }	{a:1 b:18}	def references resolve inside paren values
+{ a:[ 1 addq 2 ] }	{a:[3]}	an embedded eval-list value evaluates to [3]
+{ a:[ 1 addq 2 ] b:( 3 mulq 4 ) }	{a:[3] b:12}	mixed list-value and paren-value
+{ outer:{ inner:( 6 addq 7 ) } }	{outer:{inner:13}}	recursion: nested map values evaluate too
+
+# ====================================================================
+# 6. Quoting — suppress list auto-eval
+# ====================================================================
+# `quote` flips a list's quoted flag. The bare engine won't
+# optimistically accept the function-named Word `quote` at a TList
+# slot, so paren-wrap `( quote … )` when feeding a word directly.
+
+lengthq ( quote [ 1 addq 2 ] )	3	quoted list keeps all 3 raw tokens — including word(addq)
+firstq ( quote [ 1 addq 2 ] )	1	quoted; first element is the integer 1
+quote [ 1 addq 2 ]	[1 word(addq) 2]	a residual quoted list is NOT auto-evaluated at end of Run
+quote [ ]	[]	quoted empty list
+lengthq ( quote [ [ 1 2 ] [ 3 4 5 ] ] )	2	quote suppresses only the outer eval flag; structure intact
+firstq ( quote [ [ 1 2 ] [ 3 4 5 ] ] )	[1 2]	first element is still the inner list
+
+# `quote` on a Map is a pass-through — Maps don't splice, so there's
+# nothing to suppress, and embedded paren values still evaluate.
+quote { a:1 b:2 }	{a:1 b:2}	plain map round-trips unchanged
+quote { a:( 1 addq 2 ) }	{a:3}	the inner paren value still evaluates
+
+# ====================================================================
+# 7. Composition with def
+# ====================================================================
+# `def NAME [body]` stores the list as a CODE BODY (NoEvalArgs on
+# def's body slot keeps it raw); each reference splices and runs it.
+# `def NAME quote [body]` stores it as DATA — no splicing.
+# `def NAME {map}` binds the map as a value; references substitute it.
+
+def doub [ 1 addq ] 5 doub	6	body splices: stack=[5], 1, addq → 6
+def square [ dup mulq ] 7 square	49	dup, mulq: 7*7
+def lst quote [ 1 2 3 ] lengthq lst	3	quoted list resolves as data — three elements
+def lst quote [ 1 2 3 ] firstq lst	1
+def m { a:1 b:2 } m	{a:1 b:2}	map binding round-trips
+def m quote { a:1 b:2 } m	{a:1 b:2}	quote on a map binding — still just the map value
+def empty [ ] 5 empty	5	empty-body splice is a no-op; 5 stays
+
+# A def-bound list flows into a list-consuming word.
+def lst quote [ 1 2 3 4 ] lengthq lst	4
+def lst quote [ 9 8 7 ] firstq lst	9
+
+# ====================================================================
+# 8. Nesting and round-trips
+# ====================================================================
+
+lengthq [ { a:1 } { b:2 } { c:3 } ]	3	list of three maps
+firstq [ { a:1 } { b:2 } ]	{a:1}	first element is the first map
+[ { a:( 1 addq 1 ) } { b:( 2 addq 2 ) } ]	[{a:2} {b:4}]	auto-eval reaches paren values inside maps inside the list
+{ items:[ ( 1 addq 1 ) ( 2 addq 2 ) ] }	{items:[2 4]}	embedded eval-list inside a map value
+{ a:[ { x:1 } { x:2 } ] }	{a:[{x:1} {x:2}]}	list-of-maps as a map value
