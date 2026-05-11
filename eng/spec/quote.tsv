@@ -9,7 +9,7 @@
 quote a	atom(a)	bare undefined word becomes atom
 quote dup	atom(dup)	even though dup is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
 quote 5	5	scalar passes through
-quote "hi"	"hi"	string passes through
+quote 'hi'	'hi'	string passes through
 quote true	atom(true)	`true`/`false` parse as Words; quote captures the upcoming Word as an Atom
 quote [ 1 2 3 ]	[1 2 3]	list passes through
 

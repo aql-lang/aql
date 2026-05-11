@@ -29,7 +29,7 @@
 
 [ ]	[]	empty list literal
 [ 1 2 3 ]	[1 2 3]	homogeneous Integer list
-[ 1 "a" true ]	[1 "a" true]	heterogeneous list — Integer / String / Boolean
+[ 1 'a' true ]	[1 'a' true]	heterogeneous list — Integer / String / Boolean
 [ 1 2 [ 3 4 ] 5 ]	[1 2 [3 4] 5]	nested list (auto-eval flattens nothing — sub-list stays a value)
 [ [ ] [ ] ]	[[] []]	list of empty lists
 
@@ -54,7 +54,7 @@ quote [ ]	[]	quoted empty list
 length [ ]	0	empty list has length 0
 length [ 1 2 3 ]	3	three elements
 length [ 1 ]	1	single element
-length [ "a" "b" "c" "d" ]	4
+length [ 'a' 'b' 'c' 'd' ]	4
 
 # Length feeds into normal arithmetic flow.
 length [ 1 2 3 ] add 10	13	length result chains into add
@@ -65,7 +65,7 @@ length [ 1 2 3 ] add 10	13	length result chains into add
 
 reverse [ 1 2 3 ]	[3 2 1]
 reverse [ ]	[]	empty stays empty
-reverse [ "a" "b" ]	["b" "a"]
+reverse [ 'a' 'b' ]	['b' 'a']
 
 take 2 [ 10 20 30 40 ]	[10 20]	prefix slice
 take 0 [ 10 20 30 ]	[]	zero-length take
@@ -134,7 +134,7 @@ typeof [: Integer ]	NodeType	the type form is a Node-family TYPE
 
 # Element conformance via `is` against the type form.
 [ 1 2 3 ] is [: Integer ]	true	plain list satisfies typed-list type when all elems unify
-[ 1 "x" 3 ] is [: Integer ]	false	mismatched element fails
+[ 1 'x' 3 ] is [: Integer ]	false	mismatched element fails
 
 # ====================================================================
 # 8. Composition with def
@@ -160,4 +160,4 @@ def doub [ dup add ] 5 doub	10	body splice — dup, add — runs against caller 
 [ 1 2 ] is [ 1 2 3 ]	false	length mismatch
 [ 1 2 3 ] is [ 1 2 4 ]	false	element mismatch
 [ 1 ] is [ Integer ]	true	scalars unify against their type literal
-[ 1 "x" ] is [ Integer String ]	true	per-position type unification
+[ 1 'x' ] is [ Integer String ]	true	per-position type unification

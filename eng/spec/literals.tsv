@@ -9,7 +9,7 @@
 # Token types:
 #   42, -7        integer literal
 #   3.14          decimal literal
-#   "hello"       string literal
+#   'hello'       string literal
 #   true, false   boolean literal
 #   null          None type literal
 #   addq, dup, …   bare word (looks up a registered word handler)
@@ -17,7 +17,7 @@
 # tokens	expected	note
 1	1	scalar integer round-trips
 -7	-7	negative integer
-"hello"	"hello"	string round-trips
+'hello'	'hello'	string round-trips
 true	true	true
 false	false	false
 1 2 3	1 2 3	multiple values left on the stack

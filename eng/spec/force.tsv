@@ -1,6 +1,6 @@
 # Word-level dispatch overrides /s and /f.
 #
-# Per CLAUDE.md "Argument Ordering": at the call site a word may addq
+# Per CLAUDE.md 'Argument Ordering': at the call site a word may addq
 # /s to force all args from the stack (forwardLimit=0) or /f to force
 # all args from forward (forwardLimit=N). They override the sig's
 # declared BarrierPos. /f additionally forbids stack supplementation:

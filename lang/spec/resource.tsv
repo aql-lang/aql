@@ -62,8 +62,8 @@ Entity is List	false
 # from Resource). Returns a typed object value rendered as
 # `Object/Resource/Entity{…}`.
 
-make Entity { kind:"api" spec:"voxgig-solardemo" entity:"planet" } typeof	Entity	the made value's typeof is Entity
-make Entity { kind:"db" spec:"users" entity:"user" } typeof	Entity
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } typeof	Entity	the made value's typeof is Entity
+make Entity { kind:'db' spec:'users' entity:'user' } typeof	Entity
 
 # ====================================================================
 # 4. is checks for the made instance
@@ -72,12 +72,12 @@ make Entity { kind:"db" spec:"users" entity:"user" } typeof	Entity
 # inheritance flows through `is` for ObjectType values produced by
 # `make`.
 
-make Entity { kind:"api" spec:"x" entity:"y" } is Entity	true	is-check matches own type
-make Entity { kind:"api" spec:"x" entity:"y" } is Resource	true	parent type is also satisfied
+make Entity { kind:'api' spec:'x' entity:'y' } is Entity	true	is-check matches own type
+make Entity { kind:'api' spec:'x' entity:'y' } is Resource	true	parent type is also satisfied
 
 # Cross-family checks fail.
-make Entity { kind:"api" spec:"x" entity:"y" } is List	false
-make Entity { kind:"api" spec:"x" entity:"y" } is Integer	false
+make Entity { kind:'api' spec:'x' entity:'y' } is List	false
+make Entity { kind:'api' spec:'x' entity:'y' } is Integer	false
 
 # ====================================================================
 # 5. Field access via dotted accessor
@@ -85,9 +85,9 @@ make Entity { kind:"api" spec:"x" entity:"y" } is Integer	false
 # Entity instances expose `kind`, `spec`, and `entity` as fields
 # accessible through the standard `.field` syntax.
 
-make Entity { kind:"api" spec:"voxgig-solardemo" entity:"planet" } .kind	"api"
-make Entity { kind:"api" spec:"voxgig-solardemo" entity:"planet" } .spec	"voxgig-solardemo"
-make Entity { kind:"api" spec:"voxgig-solardemo" entity:"planet" } .entity	"planet"
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .kind	'api'
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .spec	'voxgig-solardemo'
+make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .entity	'planet'
 
 # ====================================================================
 # 6. Field validation at make-time
@@ -96,8 +96,8 @@ make Entity { kind:"api" spec:"voxgig-solardemo" entity:"planet" } .entity	"plan
 # raise an error rather than installing a partially-typed value.
 
 make Entity { }	ERROR:missing field	all three fields are required
-make Entity { kind:"api" }	ERROR:missing field	missing spec and entity
-make Entity { kind:"api" spec:"x" }	ERROR:missing field	missing entity
+make Entity { kind:'api' }	ERROR:missing field	missing spec and entity
+make Entity { kind:'api' spec:'x' }	ERROR:missing field	missing entity
 
 # ====================================================================
 # 7. Composition with def
@@ -106,10 +106,10 @@ make Entity { kind:"api" spec:"x" }	ERROR:missing field	missing entity
 # All field accesses and is-checks survive the round-trip through
 # the def stack.
 
-def planet make Entity { kind:"api" spec:"solardemo" entity:"planet" } planet .kind	"api"
-def planet make Entity { kind:"api" spec:"solardemo" entity:"planet" } planet .entity	"planet"
-def planet make Entity { kind:"api" spec:"solardemo" entity:"planet" } planet is Entity	true
-def planet make Entity { kind:"api" spec:"solardemo" entity:"planet" } planet is Resource	true
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .kind	'api'
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .entity	'planet'
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Entity	true
+def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Resource	true
 
 # ====================================================================
 # 8. Resource and Entity at the type-stack level

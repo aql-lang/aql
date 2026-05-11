@@ -3,10 +3,10 @@
 # happens later (at consume or end-of-Run).
 # =====================================================================
 #
-# Per LANGREF.10.md ("Lists are quotation"):
+# Per LANGREF.10.md ('Lists are quotation'):
 #
-#   "Square brackets create a list of *unevaluated* values. Words
-#    inside a list are stored literally — they are not executed."
+#   'Square brackets create a list of *unevaluated* values. Words
+#    inside a list are stored literally — they are not executed.'
 #
 # This is a property of the TOKENIZER / PARSER: `[ 1 addq 2 ]` produces
 # a 3-element list `[Integer(1), Word(addq), Integer(2)]` that is NOT
@@ -47,13 +47,13 @@
 #
 # Why this matters
 # ----------------
-# Auto-eval is the bridge from "lists are data" to "lists are code".
+# Auto-eval is the bridge from 'lists are data' to 'lists are code'.
 # It removes the need for an explicit `do` in the common case while
 # preserving the option to suppress (via `quote`).
 #
 # The error-swallowing surface in execMatch (#4) is a real footgun:
 # a typo inside a list arg silently leaves the typo in the consumed
-# list. The "Deviations" section of the report covers the proposed
+# list. The 'Deviations' section of the report covers the proposed
 # fix.
 
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
@@ -68,7 +68,7 @@
 [ 1 addq 2 ]	[3]	auto-eval at end of Run reduces [1, addq, 2] to [3]
 [ 1 2 3 ]	[1 2 3]	pure literals — auto-eval is a no-op
 [ ( 1 addq 2 ) ]	[3]	paren inside list — paren pre-evaluates to 3, list residue is [3]
-[ 1 addq 2 1 addq 3 ]	[1 6]	the body runs as ONE program: 1 addq 2 → 3 leaves [1,3]; second addq: forward 3 + stack top 3 → 6 (the 1 stays as residue). Result list is [1, 6]. Demonstrates that a "list body" is a single program, not isolated expressions.
+[ 1 addq 2 1 addq 3 ]	[1 6]	the body runs as ONE program: 1 addq 2 → 3 leaves [1,3]; second addq: forward 3 + stack top 3 → 6 (the 1 stays as residue). Result list is [1, 6]. Demonstrates that a 'list body' is a single program, not isolated expressions.
 [ ]	[]	empty list — autoEvalList short-circuits
 
 # 2. Consumed list auto-evaluates BEFORE the handler.

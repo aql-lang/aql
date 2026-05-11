@@ -4,7 +4,7 @@
 # where a = args[0], b = args[1] (matches the production engine's
 # addConcatHandler in lang/internal/engine/native_math.go and the
 # numericBinary convention used by subq/addq/mulq). The natural infix
-# reading therefore works:  `"hello" concatq " world" → "hello world"`.
+# reading therefore works:  `'hello' concatq ' world' → 'hello world'`.
 #
 # Equivalence-class enumeration is in mirror.tsv.
 
@@ -13,12 +13,12 @@
 # === end fixtures ===
 
 # tokens	expected	note
-"hello"	"hello"	string literal
-"hello" concatq " world"	"hello world"	infix natural reading: stk=["hello"], fwd=[" world"] → sig=[" world", "hello"] → handler returns "hello"+" world"
-"hello" " world" concatq	"hello world"	postfix: stk=["hello", " world"] top=" world" → sig=[" world", "hello"] → "hello"+" world"
-concatq " world" "hello"	"hello world"	prefix in the same equivalence class: fwd=[" world", "hello"] → sig=[" world", "hello"]
-concatq "hello" " world"	" worldhello"	other class: fwd=["hello", " world"] → sig=["hello", " world"] → handler returns " world"+"hello"
-" world" concatq "hello"	" worldhello"	other class infix: stk=[" world"], fwd=["hello"] → sig=["hello", " world"]
-"a" "b" concatq	"ab"	postfix in class A: stk=["a", "b"] top="b" → sig=["b", "a"] → handler returns "a"+"b"
+'hello'	'hello'	string literal
+'hello' concatq ' world'	'hello world'	infix natural reading: stk=['hello'], fwd=[' world'] → sig=[' world', 'hello'] → handler returns 'hello'+' world'
+'hello' ' world' concatq	'hello world'	postfix: stk=['hello', ' world'] top=' world' → sig=[' world', 'hello'] → 'hello'+' world'
+concatq ' world' 'hello'	'hello world'	prefix in the same equivalence class: fwd=[' world', 'hello'] → sig=[' world', 'hello']
+concatq 'hello' ' world'	' worldhello'	other class: fwd=['hello', ' world'] → sig=['hello', ' world'] → handler returns ' world'+'hello'
+' world' concatq 'hello'	' worldhello'	other class infix: stk=[' world'], fwd=['hello'] → sig=['hello', ' world']
+'a' 'b' concatq	'ab'	postfix in class A: stk=['a', 'b'] top='b' → sig=['b', 'a'] → handler returns 'a'+'b'
 not true	false	boolean negation
 not false	true	boolean negation

@@ -27,7 +27,7 @@
 #   mulq     — [Number Number] forward-prec — args[1] * args[0]
 #   lengthq  — [List] forward-prec — list length as Integer
 #   firstq   — [List] forward-prec — first element, or None for []
-#   Pre-bound defs: pi=3, tau=6, greeting="hello".
+#   Pre-bound defs: pi=3, tau=6, greeting='hello'.
 # === end fixtures ===
 
 # tokens	expected	note
@@ -38,7 +38,7 @@
 
 [ ]	[]	empty list literal
 [ 1 2 3 ]	[1 2 3]	homogeneous Integer list
-[ 1 "a" true ]	[1 "a" true]	heterogeneous — Integer / String / Boolean
+[ 1 'a' true ]	[1 'a' true]	heterogeneous — Integer / String / Boolean
 [ [ 1 2 ] [ 3 4 ] ]	[[1 2] [3 4]]	list of lists (no flattening)
 [ [ ] [ ] ]	[[] []]	list of empty lists
 
@@ -50,7 +50,7 @@
 { a:1 }	{a:1}	single entry
 { a:1 b:2 }	{a:1 b:2}	two entries (source already in sorted-key order)
 { a:1 b:2 c:3 }	{a:1 b:2 c:3}	three entries
-{ age:30 name:"Alice" }	{age:30 name:"Alice"}	heterogeneous values; runtime emits keys sorted
+{ age:30 name:'Alice' }	{age:30 name:'Alice'}	heterogeneous values; runtime emits keys sorted
 { outer:{ inner:1 } }	{outer:{inner:1}}	nested map
 { xs:[ 1 2 3 ] }	{xs:[1 2 3]}	map whose value is a list
 { a:{ b:1 } c:[ 2 3 ] }	{a:{b:1} c:[2 3]}	mixed nested map + list values
@@ -135,9 +135,9 @@ firstq [ [ 1 addq 2 ] [ 3 4 ] ]	[3]	first inner list, post-eval
 # Bare def reference as a map value.
 def a 1 { x:a }	{x:1}	a resolves to 1 during the map's auto-eval
 def a 1 def b 2 { x:a y:b }	{x:1 y:2}	multiple def references resolve independently
-greeting { msg:greeting }	"hello" {msg:"hello"}	pre-bound `greeting` resolves (and the bare token leaves "hello" on the stack first)
+greeting { msg:greeting }	'hello' {msg:'hello'}	pre-bound `greeting` resolves (and the bare token leaves 'hello' on the stack first)
 { x:pi }	{x:3}	pre-bound `pi` (=3) resolves with no prior token
-def s "hi" { msg:s }	{msg:"hi"}	String-bound def
+def s 'hi' { msg:s }	{msg:'hi'}	String-bound def
 
 # Bare def reference as a list element — the list auto-evaluates.
 def a 1 [ a 2 3 ]	[1 2 3]

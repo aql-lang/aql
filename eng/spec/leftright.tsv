@@ -8,10 +8,10 @@
 # evaluates them strictly left-to-right. Each word collects its
 # arguments before the next word executes.
 #
-# This is distinct from "nested forward" (which would let an inner
+# This is distinct from 'nested forward' (which would let an inner
 # function fire inside an outer's arg slot — see nested-forward.tsv:
 # that case ERRORS in aqleng without explicit parens). Left-to-right
-# is what powers the "infix-looking" reader: `2 addq 3 mulq 4` reads
+# is what powers the 'infix-looking' reader: `2 addq 3 mulq 4` reads
 # as `(2 + 3) * 4 = 20` because `addq` fires first, leaving 5 on the
 # stack, then `mulq` collects 4 forward and finds 5 on the stack.
 #
@@ -36,7 +36,7 @@
 # Why this matters
 # ----------------
 # AQL has no operator precedence table — the language picks the
-# uniform rule "left to right, with parens for override". This avoids
+# uniform rule 'left to right, with parens for override'. This avoids
 # the entire precedence-table category of design questions that other
 # languages spend tooling on (associativity / parentheses-suggester /
 # precedence-fix-it lints). The test rows here pin down the rule:
@@ -49,7 +49,7 @@
 #   negq  — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag
 #   subq  — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
 #
-#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting="hello" (String).
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).
 # === end fixtures ===
 
 # tokens	expected	note

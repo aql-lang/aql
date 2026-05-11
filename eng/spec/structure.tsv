@@ -23,7 +23,7 @@
 #     `make RecordType …`) need the production constructor words
 #     (`object`, `record`) which aren't in the kernel — those are
 #     covered in lang/spec/object.tsv and lang/spec/record.tsv. A
-#     "record" in the structural sense `{ field:Type … }` (a map all
+#     'record' in the structural sense `{ field:Type … }` (a map all
 #     of whose values are type literals) IS a kernel construct and is
 #     exercised here.
 #
@@ -31,7 +31,7 @@
 #   addq / subq / mulq  — [Number Number] forward-prec — args[1] op args[0]
 #   lengthq             — [List] forward-prec — list length
 #   firstq              — [List] forward-prec — first element or None
-#   Pre-bound defs: pi=3, tau=6, greeting="hello".
+#   Pre-bound defs: pi=3, tau=6, greeting='hello'.
 # === end fixtures ===
 
 # tokens	expected	note
@@ -136,7 +136,7 @@ def a ( quote red ) lengthq [ a a a ]	3
 def a ( quote red ) firstq [ a ( quote green ) ]	atom(red)
 
 # ====================================================================
-# 7. Def references at depth — the core "go deeper" cases
+# 7. Def references at depth — the core 'go deeper' cases
 # ====================================================================
 # A `def` / `type` name used as a value resolves wherever it appears
 # in a nested List/Map, however deep.

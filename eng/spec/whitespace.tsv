@@ -28,7 +28,7 @@
 # ----------------
 # A pretty-printer / formatter relies on the rule that re-spacing
 # a program never changes its semantics. Pin the rule explicitly so
-# any future tokenizer change (e.g. a "significant indentation"
+# any future tokenizer change (e.g. a 'significant indentation'
 # experiment) shows up as a regression here.
 #
 # Spec runner notes
@@ -38,7 +38,7 @@
 #     for i < len(s) && (s[i] == ' ' || s[i] == '\t') { i++ }
 #
 # at the start of each token. So leading whitespace is consumed
-# before each token, and there is no "empty token" production —
+# before each token, and there is no 'empty token' production —
 # the loop simply moves on to the next non-whitespace.
 
 # tokens	expected	note
@@ -51,11 +51,11 @@
 1 2 3	1 2 3	canonical single-space form (control)
 1     addq     2	3	multiple-space-separated forward call still works
 addq   2   3	5	multiple spaces between word and forward args
-"hello world"	"hello world"	whitespace inside a string is preserved verbatim
-"   "	"   "	a string of three spaces is a 3-character string
+'hello world'	'hello world'	whitespace inside a string is preserved verbatim
+'   '	'   '	a string of three spaces is a 3-character string
 [ 1 2 3 ]	[1 2 3]	list element separation
 [   1   2   3   ]	[1 2 3]	multiple spaces inside brackets reduce to single
-[ 1   "a   b"   3 ]	[1 "a   b" 3]	whitespace inside a list-element string preserved
+[ 1   'a   b'   3 ]	[1 'a   b' 3]	whitespace inside a list-element string preserved
 
 # Empty / all-whitespace input.
 # (TSV row encodings here use literal empty input cells.)

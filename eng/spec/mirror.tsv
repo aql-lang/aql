@@ -34,7 +34,7 @@
 # returns 3 - 10 = -7. The natural infix reading `10 subq 3 → 7`
 # (analogous to `10 - 3`) follows directly from this convention.
 #
-# There is NO "swap form". Every arrangement is an equally valid
+# There is NO 'swap form'. Every arrangement is an equally valid
 # surface syntax; the matching algorithm just maps each one to a
 # specific (args[0], args[1]) pair.
 #
@@ -43,7 +43,7 @@
 # The matching algorithm is the most-cited contract in the language
 # — every infix-style call site in user code depends on it. Pinning
 # both equivalence classes (rather than just one of them as
-# "canonical") in regression rows means a refactor that flips the
+# 'canonical') in regression rows means a refactor that flips the
 # class assignment for any single arrangement surfaces here at PR
 # time.
 
@@ -58,7 +58,7 @@
 # These three arrangements are equivalent by the matching algorithm.
 10 subq 3	7	infix: stk=[10], fwd=[3] → sig[0]=3 (fwd), sig[1]=10 (stk) → handler returns 10-3
 10 3 subq	7	postfix: stk=[10, 3] with 3 on top → sig[0]=3 (top), sig[1]=10 (deeper) → 10-3
-subq 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3 — same class as the two above; intentional that the prefix form lists the "right operand" first
+subq 3 10	7	prefix: fwd=[3, 10] in source order → sig[0]=3, sig[1]=10 → 10-3 — same class as the two above; intentional that the prefix form lists the 'right operand' first
 
 # Class B (sig=[10, 3] for X=10, Y=3): result = 3 - 10 = -7.
 # These three arrangements are also equivalent — they just map to
@@ -68,11 +68,11 @@ subq 10 3	-7	prefix: fwd=[10, 3] → sig=[10, 3] → handler returns 3-10
 3 10 subq	-7	postfix: stk=[3, 10] with 10 on top → sig[0]=10, sig[1]=3 → 3-10
 
 # Cross-check with `concatq` (also non-commutative, also a forward-prec
-# handler computing `b + a`). Class A produces "hello world", class B
-# produces " worldhello".
-"hello" concatq " world"	"hello world"	infix: handler returns "hello"+" world" via sig=[" world", "hello"]
-"hello" " world" concatq	"hello world"	postfix
-concatq " world" "hello"	"hello world"	prefix (note the arg order)
-concatq "hello" " world"	" worldhello"	prefix in the OTHER class
-" world" concatq "hello"	" worldhello"	infix in the OTHER class
-" world" "hello" concatq	" worldhello"	postfix in the OTHER class
+# handler computing `b + a`). Class A produces 'hello world', class B
+# produces ' worldhello'.
+'hello' concatq ' world'	'hello world'	infix: handler returns 'hello'+' world' via sig=[' world', 'hello']
+'hello' ' world' concatq	'hello world'	postfix
+concatq ' world' 'hello'	'hello world'	prefix (note the arg order)
+concatq 'hello' ' world'	' worldhello'	prefix in the OTHER class
+' world' concatq 'hello'	' worldhello'	infix in the OTHER class
+' world' 'hello' concatq	' worldhello'	postfix in the OTHER class

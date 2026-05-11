@@ -3,8 +3,8 @@
 # =====================================================================
 #
 # AQL is a stack machine. A program is a sequence of tokens that push,
-# pop, and transform stack entries. There is no distinguished "return
-# slot": whatever values remain on the stack at end-of-Run() are the
+# pop, and transform stack entries. There is no distinguished 'return
+# slot': whatever values remain on the stack at end-of-Run() are the
 # result, in source order (first-pushed at the bottom, last-pushed
 # on top).
 #
@@ -12,14 +12,14 @@
 #  - Bare literals never converge to a single result.
 #  - A handler that returns multiple values appends them in order.
 #  - A paren group whose body produces multiple values transparently
-#    surfaces them onto the outer stack (no "tuple wrapping").
+#    surfaces them onto the outer stack (no 'tuple wrapping').
 #  - Stack-only ops (dup, swap, drop) mutate only the values they
 #    explicitly touch — pre-existing residency below them is
 #    invariant.
 #
 # Why this matters
 # ----------------
-# Many languages with "every expression has one value" semantics
+# Many languages with 'every expression has one value' semantics
 # would silently coerce a multi-value residual into a tuple, a
 # discard, or an error. AQL does not — leaving N values is a
 # first-class outcome. Code generators and pretty-printers depend
@@ -42,14 +42,14 @@
 
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
 #   addq   — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
-#   tripq  — [Integer Integer Integer] forward-prec — "a,b,c" (3-arg position mixing)
+#   tripq  — [Integer Integer Integer] forward-prec — 'a,b,c' (3-arg position mixing)
 # === end fixtures ===
 
 # tokens	expected	note
 1	1	one value, one result
 1 2	1 2	two values, two results — no implicit reduction
 1 2 3	1 2 3	three values, three results
-1 "two" 3	1 "two" 3	mixed types coexist on the stack
+1 'two' 3	1 'two' 3	mixed types coexist on the stack
 1 2 3 4 5	1 2 3 4 5	five values — order preserved exactly
 
 # Stack-only words touch only their args — residue below is invariant.
@@ -72,4 +72,4 @@ addq 2 3 99	5 99	addq returns one value; 99 sits on top of the result
 addq 2 3 dup	5 5	addq → 5; dup → 5 5
 
 # Three-arg handler returning ONE value still leaves the result alone.
-tripq 1 2 3 99	"1,2,3" 99	tripq returns one string; 99 stays after it
+tripq 1 2 3 99	'1,2,3' 99	tripq returns one string; 99 stays after it

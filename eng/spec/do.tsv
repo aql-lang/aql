@@ -1,5 +1,5 @@
 # =====================================================================
-# do — explicit "evaluate this list or map" word
+# do — explicit 'evaluate this list or map' word
 # =====================================================================
 # `do` is the explicit counterpart to AQL's implicit list-auto-eval
 # rule. It comes in two shapes:
@@ -59,7 +59,7 @@ do [ 1 addq 2 ] addq 10	13	first do→3 then 3+10
 do { a:5 }	{a:5}	scalar values pass through untouched
 do { a:[ 1 addq 2 ] }	{a:3}	list inside map gets evaluated; result replaces the slot
 do { a:[ 1 addq 2 ] b:[ 4 mulq 5 ] }	{a:3 b:20}	multiple slots evaluate independently
-do { a:1 b:[ 2 addq 3 ] c:"hi" }	{a:1 b:5 c:"hi"}	non-list slots pass through
+do { a:1 b:[ 2 addq 3 ] c:'hi' }	{a:1 b:5 c:'hi'}	non-list slots pass through
 
 # Nested maps — recursion descends.
 do { outer:{ inner:[ 6 addq 7 ] } }	{outer:{inner:13}}	deep walk evaluates leaf list

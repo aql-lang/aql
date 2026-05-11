@@ -71,7 +71,7 @@
 # Spec runner notes
 # -----------------
 # - The pre-bound def stack at run time: `pi=3`, `tau=6`,
-#   `greeting="hello"`. These are the canonical witnesses for
+#   `greeting='hello'`. These are the canonical witnesses for
 #   simple-value def resolution.
 # - There is no `untype` / `undef` in the spec runner, so we cannot
 #   test pop-then-resolve transitions here.
@@ -79,7 +79,7 @@
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
 #   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)
 #
-#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting="hello" (String).
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).
 # === end fixtures ===
 
 # tokens	expected	note
@@ -87,7 +87,7 @@
 # 4. Simple-value def resolution.
 pi	3	pre-bound def: pi → Integer(3)
 tau	6	pre-bound def: tau → Integer(6)
-greeting	"hello"	pre-bound def: greeting → "hello"
+greeting	'hello'	pre-bound def: greeting → 'hello'
 pi pi	3 3	repeated reference produces two copies on the stack
 pi tau	3 6	multiple defs interleave with literals fine
 

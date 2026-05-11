@@ -29,7 +29,7 @@
 # Note: at runtime the map's keys are emitted in sorted order rather
 # than literal-source order, so multi-key examples in this file use
 # already-sorted source for clarity.
-{ age:30 name:"Alice" }	{age:30 name:"Alice"}	heterogeneous values
+{ age:30 name:'Alice' }	{age:30 name:'Alice'}	heterogeneous values
 { a:[ 1 2 ] b:{ x:9 } }	{a:[1 2] b:{x:9}}	nested list and map values
 
 # ====================================================================
@@ -64,12 +64,12 @@ length Map	ERROR:signature_error
 
 # Single-field shape.
 { a:5 } is { a:Integer }	true	concrete value satisfies declared type
-{ a:"x" } is { a:Integer }	false	String does not satisfy Integer
+{ a:'x' } is { a:Integer }	false	String does not satisfy Integer
 { b:5 } is { a:Integer }	false	missing key fails
 
 # Two-field shape.
-{ a:5 b:"x" } is { a:Integer b:String }	true	both fields satisfy
-{ a:"y" b:"x" } is { a:Integer b:String }	false	a is wrong type
+{ a:5 b:'x' } is { a:Integer b:String }	true	both fields satisfy
+{ a:'y' b:'x' } is { a:Integer b:String }	false	a is wrong type
 { a:5 b:7 } is { a:Integer b:String }	false	b is wrong type
 
 # Subtype satisfaction.
@@ -78,7 +78,7 @@ length Map	ERROR:signature_error
 
 # Nested record shapes.
 { inner:{ x:5 } } is { inner:{ x:Integer } }	true	depth-2 unification
-{ inner:{ x:"y" } } is { inner:{ x:Integer } }	false	nested type mismatch
+{ inner:{ x:'y' } } is { inner:{ x:Integer } }	false	nested type mismatch
 
 # ====================================================================
 # 4. Typed map — `{: T …}`
@@ -95,7 +95,7 @@ typeof {: Integer }	NodeType	the bare typed-map form is a Node-family TYPE
 
 # Plain map satisfies a typed-map type if every value unifies with T.
 { a:1 b:2 } is {: Integer }	true	all-Integer values
-{ a:1 b:"x" } is {: Integer }	false	wrong value type
+{ a:1 b:'x' } is {: Integer }	false	wrong value type
 
 # ====================================================================
 # 5. Field accessors
@@ -107,7 +107,7 @@ typeof {: Integer }	NodeType	the bare typed-map form is a Node-family TYPE
 # Dotted accessor.
 { a:1 b:2 }.a	1
 { a:1 b:2 }.b	2
-{ x:"hello" y:"world" }.x	"hello"
+{ x:'hello' y:'world' }.x	'hello'
 
 # Chained dotted access on nested maps.
 { outer:{ inner:99 } }.outer.inner	99

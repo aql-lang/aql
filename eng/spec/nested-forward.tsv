@@ -32,7 +32,7 @@
 # 3. Left-to-right intermediate-on-stack works WITHOUT parens — the
 #    inner fires first because its tokens come left of the outer.
 # 4. A def whose body is a list (`def NAME [body]`) splices its body
-#    AT THE PUSH SITE — there is no "wait for forward args" mode for
+#    AT THE PUSH SITE — there is no 'wait for forward args' mode for
 #    list-body defs. So `def doub [dup addq] doub 5` fails: the body
 #    is spliced immediately and `dup` runs on an empty stack.
 #    `5 doub` works because 5 is pushed first, then `doub` splices
@@ -50,12 +50,12 @@
 # can scan left-to-right and know that each forward-collecting word
 # absorbs ONLY non-word literals (and pre-evaluated paren groups).
 # Without it, `addq 1 mulq 2 3` would be ambiguous between
-# `addq(1, mulq(2, 3))` and "the 5-token program that left a residue".
+# `addq(1, mulq(2, 3))` and 'the 5-token program that left a residue'.
 # The engine picks the unambiguous reading: parens are explicit, the
 # rest is a flat scan.
 #
 # This file is the regression test for the boundary rule. Each
-# "should error" row pins the rule down; each "with parens" row
+# 'should error' row pins the rule down; each 'with parens' row
 # shows the workaround the language design intends.
 
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===

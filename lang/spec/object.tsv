@@ -59,8 +59,8 @@ type Foo object { a:String b:Boolean } typeof Foo	Foo	multi-field named type
 # `make NAME data` validates each declared field against `data` and
 # returns a typed object value.
 
-type Foo object { a:String } make Foo { a:"hi" } typeof	Foo	the made value's typeof is the type name
-type Foo object { a:String b:Integer } make Foo { a:"hi" b:9 } typeof	Foo
+type Foo object { a:String } make Foo { a:'hi' } typeof	Foo	the made value's typeof is the type name
+type Foo object { a:String b:Integer } make Foo { a:'hi' b:9 } typeof	Foo
 
 # Missing required field → error.
 type Foo object { a:String } make Foo { }	ERROR:missing field	make rejects missing fields
@@ -70,9 +70,9 @@ type Foo object { a:String } make Foo { }	ERROR:missing field	make rejects missi
 # ====================================================================
 # Object instances support the same `.field` syntax that maps do.
 
-type Foo object { a:String } make Foo { a:"hi" } .a	"hi"
-type Foo object { a:String b:Integer } make Foo { a:"x" b:7 } .a	"x"
-type Foo object { a:String b:Integer } make Foo { a:"x" b:7 } .b	7
+type Foo object { a:String } make Foo { a:'hi' } .a	'hi'
+type Foo object { a:String b:Integer } make Foo { a:'x' b:7 } .a	'x'
+type Foo object { a:String b:Integer } make Foo { a:'x' b:7 } .b	7
 
 # Chained field access — object whose field is another object.
 type Inner object { v:Integer } type Outer object { i:Inner } make Outer { i:( make Inner { v:99 } ) } .i .v	99
@@ -88,15 +88,15 @@ type Inner object { v:Integer } type Outer object { i:Inner } make Outer { i:( m
 type Foo object { a:String } type Bar object { b:Integer } Foo typeof Bar	Bar
 
 # A Bar instance satisfies Foo (parent) via `is`.
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:"x" b:9 } is Foo	true	Bar inherits Foo's contract
+type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } is Foo	true	Bar inherits Foo's contract
 
 # Multi-level inheritance.
 type A object { a:Integer } type B object { b:Integer } A type C object { c:Integer } B make C { a:1 b:2 c:3 } is A	true	C extends B extends A
 type A object { a:Integer } type B object { b:Integer } A type C object { c:Integer } B make C { a:1 b:2 c:3 } typeof	C
 
 # Inherited field access — Foo's `a` is reachable on a Bar instance.
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:"x" b:9 } .a	"x"
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:"x" b:9 } .b	9
+type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } .a	'x'
+type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } .b	9
 
 # ====================================================================
 # 6. Composition with def
@@ -104,7 +104,7 @@ type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:"x" 
 # A made instance can be captured by `def`. The bound name then
 # substitutes the instance value at every use site.
 
-type Foo object { a:String } def f make Foo { a:"hi" } f .a	"hi"	def-captured object instance preserves type & fields
+type Foo object { a:String } def f make Foo { a:'hi' } f .a	'hi'	def-captured object instance preserves type & fields
 type Foo object { a:Integer } def f make Foo { a:42 } f .a add 8	50	field access composes with arithmetic
 
 # ====================================================================

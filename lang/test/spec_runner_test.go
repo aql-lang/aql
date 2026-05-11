@@ -30,7 +30,7 @@ import (
 
 // renderSpecValue renders a value in the spec format. The spec format
 // diverges from Value.String for clarity in expected columns: strings
-// double-quoted, atoms as `atom(name)`, lists as space-separated
+// single-quoted, atoms as `atom(name)`, lists as space-separated
 // `[a b c]`, maps as `{k:v k:v}`, type literals as their leaf, and
 // `none` lowercase.
 func renderSpecValue(v eng.Value) string {
@@ -50,7 +50,7 @@ func renderSpecValue(v eng.Value) string {
 		return eng.FormatDecimal(f)
 	case v.VType.Matches(eng.TString):
 		s, _ := v.AsString()
-		return "\"" + s + "\""
+		return "'" + s + "'"
 	case v.VType.Matches(eng.TBoolean):
 		b, _ := v.AsBoolean()
 		if b {

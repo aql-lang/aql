@@ -58,7 +58,7 @@ record [ { tag:Atom } ]	record{tag:Atom}
 # 2. typeof and is
 # ====================================================================
 # A record value's VType is Node/Map (records share the map vtype),
-# so `typeof` reports `Map`. The richer "this is a record"
+# so `typeof` reports `Map`. The richer 'this is a record'
 # information lives in the value's Data subtype.
 
 typeof record [ { a:Integer } ]	Map	records are Map-typed under the hood
@@ -86,7 +86,7 @@ type R record [ { a:Integer } { b:String } ] R	record{a:Integer,b:String}
 # typed schema for downstream tools.
 
 type R record [ { a:Integer } ] make R { a:5 }	{a:5}
-type R record [ { a:Integer } { b:String } ] make R { a:1 b:"x" }	{a:1 b:"x"}
+type R record [ { a:Integer } { b:String } ] make R { a:1 b:'x' }	{a:1 b:'x'}
 type R record [ { a:Integer } ] make R { a:5 } typeof	Map	made record is a Map
 
 # ====================================================================
@@ -100,8 +100,8 @@ type R record [ { a:Integer } ] make R { a:5 } typeof	Map	made record is a Map
 
 # Implicit shape — works structurally.
 { a:5 } is { a:Integer }	true	implicit-shape unification
-{ a:"x" } is { a:Integer }	false	wrong type
-{ a:5 b:"x" } is { a:Integer b:String }	true	multi-field implicit shape
+{ a:'x' } is { a:Integer }	false	wrong type
+{ a:5 b:'x' } is { a:Integer b:String }	true	multi-field implicit shape
 
 # Explicit record — narrower; plain maps do NOT satisfy it.
 { a:5 } is record [ { a:Integer } ]	false	a plain map is not a record
@@ -122,4 +122,4 @@ def sch record [ { x:Integer } { y:Integer } ] sch	record{x:Integer,y:Integer}
 
 record [ ]	ERROR:	empty record list — must have at least one field
 record { a:Integer }	ERROR:	argument must be a list, not a map
-record [ "not a map" ]	ERROR:	each element must be a pair (single-key map)
+record [ 'not a map' ]	ERROR:	each element must be a pair (single-key map)

@@ -52,7 +52,7 @@
 #   mulq     — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)
 #   subq     — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)
 #
-#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting="hello" (String).
+#   Pre-bound simple-value defs: pi=3 (Integer), tau=6 (Integer), greeting='hello' (String).
 # === end fixtures ===
 
 # tokens	expected	note
@@ -60,19 +60,19 @@
 # ====================================================================
 # 1. Simple-value def
 # ====================================================================
-# Pre-bound from spec_test.go: pi=3, tau=6, greeting="hello".
+# Pre-bound from spec_test.go: pi=3, tau=6, greeting='hello'.
 
 pi	3	bare def reference yields its bound value
 pi pi	3 3	repeated reference yields two copies on the stack
 pi addq 1	4	def value flows into a forward arg slot
 1 addq pi	4	def value satisfies a stack arg slot
-greeting	"hello"	string-typed def
-greeting concatq greeting	"hellohello"	string def used twice
+greeting	'hello'	string-typed def
+greeting concatq greeting	'hellohello'	string def used twice
 tau	6	larger Integer values resolve normally
 pi mulq tau	18	mulq with both args from defs
 def small 7 small	7	user-defined Integer def
 def small 7 small addq small	14	user def used in both slots
-def msg "hi" msg concatq msg	"hihi"	user-defined string def
+def msg 'hi' msg concatq msg	'hihi'	user-defined string def
 
 # ====================================================================
 # 2. List-body splice
@@ -168,7 +168,7 @@ def f fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ n:Integer m:Integer ] [ Inte
 
 # Two type overloads — same arity, different types.
 def g fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ s:String ] [ String ] [ s concatq s ] ] g 7	14	Integer sig matches: 7+7=14
-def g fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ s:String ] [ String ] [ s concatq s ] ] g "hi"	"hihi"	String sig matches: "hi"+"hi"
+def g fn [ [ n:Integer ] [ Integer ] [ n addq n ] [ s:String ] [ String ] [ s concatq s ] ] g 'hi'	'hihi'	String sig matches: 'hi'+'hi'
 
 # Three overloads: 0-arg, 1-arg, 2-arg.
 def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:Integer ] [ Integer ] [ n m addq ] ] h	0	0-arg sig
@@ -184,13 +184,13 @@ def h fn [ [ ] [ Integer ] [ 0 ] [ n:Integer ] [ Integer ] [ n ] [ n:Integer m:I
 # (it does not auto-call against trailing args at the top level).
 #
 # `fn` is strict: the outer list MUST be a non-zero multiple of 3
-# (input output body triples). For the type-only "shape" form (no
+# (input output body triples). For the type-only 'shape' form (no
 # body, just input/output pairs) use `fnsig` — see §6b.
 
 # A bare fn produces a Function value. With ≥1-arg sigs the value sits
 # on the stack until consumed; a 0-arg fn auto-calls when it lands at
 # the engine's pointer (the FnDef-literal auto-call rule), so 0-arg
-# bare-fn tests aren't observable as "Function" values directly.
+# bare-fn tests aren't observable as 'Function' values directly.
 typeof fn [ [ a:Integer ] [ Integer ] [ a a addq ] ]	Function	the value is of type Function
 fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] is Function	true	is-test confirms the type
 
@@ -254,7 +254,7 @@ def f5 fn [ [ a:Integer b:Integer c:Integer ] [ Integer ] [ args lengthq ] ] 1 2
 # A standalone `?` Word AFTER a param marks the preceding param as
 # optional. ExpandOptionalSigs generates one overload per non-empty
 # subset of optional params; omitted slots are filled by the type's
-# BaseValue (Integer→0, String→"", List→[], etc.). Required params
+# BaseValue (Integer→0, String→'', List→[], etc.). Required params
 # (without `?`) are always present. The numbers.tsv §8b block covers
 # the numeric BaseValue subset in more depth — these rows pin the
 # core mechanism in the function-definition context.

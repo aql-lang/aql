@@ -77,7 +77,7 @@ def times-two [ 2 mulq/s ] 5 times-two	10	`: 2* 2 * ;` — Forth's classic `2*` 
 def times-two [ 2 mulq/s ] -3 times-two	-6	times-two on a negative
 
 # Mid-stream chaining: with /s the body doesn't grab the next literal.
-def incr [ 1 addq/s ] 1 incr 2 incr	2 3	1 incr → 2 (consumes only the 1); 2 incr → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 incr → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes "2 2 incr"; second incr splices → "2 2 1 addq/s" → addq/s stack=[2,2,1] sig=[1,2] → 3; final: "2 3"
+def incr [ 1 addq/s ] 1 incr 2 incr	2 3	1 incr → 2 (consumes only the 1); 2 incr → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 incr → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes '2 2 incr'; second incr splices → '2 2 1 addq/s' → addq/s stack=[2,2,1] sig=[1,2] → 3; final: '2 3'
 
 def double [ dup addq/s ] 5 double	10	`: double dup + ;` — addq/s pulls both from stack
 def double [ dup addq/s ] 7 double	14
@@ -117,7 +117,7 @@ def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
 # `: dup2 over over ;` — duplicate top pair via two `over` calls.
 # Trace [a, b]: over → [a, b, a]; over → [a, b, a, b].
 def dup2-alt [ over over ] 1 2 dup2-alt	1 2 1 2	classic `: dup2 over over ;` — pure stack ops, no /s needed
-def dup2-alt [ over over ] "x" "y" dup2-alt	"x" "y" "x" "y"	any-typed
+def dup2-alt [ over over ] 'x' 'y' dup2-alt	'x' 'y' 'x' 'y'	any-typed
 def dup2-alt [ over over ] 1 2 dup2-alt dup2	1 2 1 2 1 2	chained: alt then core dup2
 
 # `: nip swap drop ;` — drop second-from-top, keeping the top.
@@ -133,7 +133,7 @@ def tuck-alt [ swap over ] 1 2 tuck-alt	2 1 2	classic `: tuck swap over ;`
 # Classic Forth: `: anti-rot rot rot ;` — pure stack, no /s.
 # Trace [a, b, c]: rot → [b, c, a]; rot → [c, a, b].
 def anti-rot [ rot rot ] 1 2 3 anti-rot	3 1 2	`: anti-rot rot rot ;` — anti-rotate
-def anti-rot [ rot rot ] "a" "b" "c" anti-rot	"c" "a" "b"	any-typed
+def anti-rot [ rot rot ] 'a' 'b' 'c' anti-rot	'c' 'a' 'b'	any-typed
 def anti-rot [ rot rot ] 0 1 2 3 anti-rot	0 3 1 2	deeper element (0) untouched
 
 # ---------- 6. Negation via `0 swap subq` ----------

@@ -12,23 +12,23 @@
 #            patterns:{0: 0}  → returns 1   (base case)
 #            no patterns      → returns the arg unchanged (catch-all)
 #   codeq — two overloads on [Integer]:
-#            patterns:{0: 99} → returns "ninety-nine"
-#            no patterns      → returns "general"
+#            patterns:{0: 99} → returns 'ninety-nine'
+#            no patterns      → returns 'general'
 #   routeq — two overloads on [String]:
-#            patterns:{0: "admin"} → returns "matched-admin"
-#            no patterns           → returns "other"
+#            patterns:{0: 'admin'} → returns 'matched-admin'
+#            no patterns           → returns 'other'
 
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
-#   codeq   — [Integer] Patterns{0:99}→"ninety-nine" / fallback →"general" — literal-pattern dispatch
+#   codeq   — [Integer] Patterns{0:99}→'ninety-nine' / fallback →'general' — literal-pattern dispatch
 #   factq   — [Integer] Patterns{0:0}→1 / fallback [Integer]→n — §1.1 literal-pattern dispatch
-#   routeq  — [String] Patterns{0:"admin"}→"matched-admin" / fallback →"other" — literal-pattern dispatch
+#   routeq  — [String] Patterns{0:'admin'}→'matched-admin' / fallback →'other' — literal-pattern dispatch
 # === end fixtures ===
 
 # tokens	expected	note
 factq 0	1	pattern 0 matches → base-case overload
 factq 5	5	non-zero falls through to catch-all → echoes the arg
 factq 1	1	1 fails the {0:0} pattern, catch-all returns 1 unchanged
-codeq 99	"ninety-nine"	pattern 99 matches → specific string
-codeq 42	"general"	non-99 falls through to catch-all
-routeq "admin"	"matched-admin"	string-literal pattern matches on Data equality
-routeq "user"	"other"	non-admin string falls through
+codeq 99	'ninety-nine'	pattern 99 matches → specific string
+codeq 42	'general'	non-99 falls through to catch-all
+routeq 'admin'	'matched-admin'	string-literal pattern matches on Data equality
+routeq 'user'	'other'	non-admin string falls through
