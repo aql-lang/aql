@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/nativemod"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runSteps executes a sequence of AQL expressions on a shared engine,

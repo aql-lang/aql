@@ -7,12 +7,13 @@ package engine
 // eng.RegisterCoreBoolean from register.go.
 //
 // What stays here:
-//   `otherwise` — None-coalescing (distinct from `or` which
-//                 short-circuits on falsy, so 0 or 5 = 5 but
-//                 0 otherwise 5 = 0).
-//   `xor`/`nand`/`nor`/`iff`/`xnor` — classical connectives that
-//                                     coerce non-booleans via
-//                                     CoerceBoolean.
+//
+//	`otherwise` — None-coalescing (distinct from `or` which
+//	              short-circuits on falsy, so 0 or 5 = 5 but
+//	              0 otherwise 5 = 0).
+//	`xor`/`nand`/`nor`/`iff`/`xnor` — classical connectives that
+//	                                  coerce non-booleans via
+//	                                  CoerceBoolean.
 var booleanNatives = []NativeFunc{
 	{
 		Name:              "otherwise",

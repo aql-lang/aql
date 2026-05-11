@@ -16,25 +16,26 @@ import "fmt"
 //
 // Why these characters and not others
 // -----------------------------------
-//   `[a-z_]` first — uppercase is reserved for type names
-//                    (Integer, String, …) so that the engine can
-//                    disambiguate type-literal words from value-
-//                    word resolution at lookup time. Lowercase and
-//                    underscore as starting characters keep user
-//                    words disjoint from type-name fallback words.
-//                    Underscore as a leading character covers the
-//                    discard-placeholder convention (`_`) and the
-//                    engine-internal-marker convention (`__pa`,
-//                    `__mark`, …) under one rule.
-//   `0-9` rest     — common idiom (dup2, swap2, add-two).
-//   `-`            — kebab-case is the language's chosen separator
-//                    convention (anti-rot, add-two, dup2-alt).
-//   `_`            — also accepted mid-name for snake-case
-//                    interoperability (fact_acc, double_then_inc).
-//   `?`            — Lisp/Scheme/Ruby predicate convention. Common
-//                    enough that production words like `leap-year?`,
-//                    `before?`, `equal?` need it. Allowed anywhere
-//                    after the first character.
+//
+//	`[a-z_]` first — uppercase is reserved for type names
+//	                 (Integer, String, …) so that the engine can
+//	                 disambiguate type-literal words from value-
+//	                 word resolution at lookup time. Lowercase and
+//	                 underscore as starting characters keep user
+//	                 words disjoint from type-name fallback words.
+//	                 Underscore as a leading character covers the
+//	                 discard-placeholder convention (`_`) and the
+//	                 engine-internal-marker convention (`__pa`,
+//	                 `__mark`, …) under one rule.
+//	`0-9` rest     — common idiom (dup2, swap2, add-two).
+//	`-`            — kebab-case is the language's chosen separator
+//	                 convention (anti-rot, add-two, dup2-alt).
+//	`_`            — also accepted mid-name for snake-case
+//	                 interoperability (fact_acc, double_then_inc).
+//	`?`            — Lisp/Scheme/Ruby predicate convention. Common
+//	                 enough that production words like `leap-year?`,
+//	                 `before?`, `equal?` need it. Allowed anywhere
+//	                 after the first character.
 //
 // Returns nil for valid names; an *AqlError with code
 // "invalid_word_name" otherwise. Callers are expected to surface the

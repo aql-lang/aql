@@ -9,8 +9,8 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "from",
-		Summary: "Start a query from a table.",
+		Word:        "from",
+		Summary:     "Start a query from a table.",
 		Description: "Creates a new query builder targeting the named table or table value.",
 	})
 
@@ -22,50 +22,50 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "order",
-		Summary: "Specify sort order for query results.",
+		Word:        "order",
+		Summary:     "Specify sort order for query results.",
 		Description: "Orders query results by the specified columns. Use [col desc] for descending.",
 	})
 
 	register(&Entry{
-		Word:    "limit",
-		Summary: "Limit the number of query results.",
+		Word:        "limit",
+		Summary:     "Limit the number of query results.",
 		Description: "Restricts the query to return at most n rows.",
 	})
 
 	register(&Entry{
-		Word:    "offset",
-		Summary: "Skip rows in query results.",
+		Word:        "offset",
+		Summary:     "Skip rows in query results.",
 		Description: "Skips the first n rows before returning results.",
 	})
 
 	register(&Entry{
-		Word:    "distinct",
-		Summary: "Remove duplicate rows from query results.",
+		Word:        "distinct",
+		Summary:     "Remove duplicate rows from query results.",
 		Description: "Adds SELECT DISTINCT to the query.",
 	})
 
 	register(&Entry{
-		Word:    "group",
-		Summary: "Group query results by columns.",
+		Word:        "group",
+		Summary:     "Group query results by columns.",
 		Description: "Groups rows by the specified columns for aggregate queries.",
 	})
 
 	register(&Entry{
-		Word:    "having",
-		Summary: "Filter grouped query results.",
+		Word:        "having",
+		Summary:     "Filter grouped query results.",
 		Description: "Filters groups after GROUP BY, like WHERE but for aggregated values.",
 	})
 
 	register(&Entry{
-		Word:    "as",
-		Summary: "Alias a table in a query.",
+		Word:        "as",
+		Summary:     "Alias a table in a query.",
 		Description: "Sets an alias for the query's source table.",
 	})
 
 	register(&Entry{
-		Word:    "star",
-		Summary: "Push a wildcard column selector.",
+		Word:        "star",
+		Summary:     "Push a wildcard column selector.",
 		Description: "Pushes the * selector for use in SELECT * queries. Stack-only.",
 	})
 

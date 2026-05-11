@@ -1,17 +1,16 @@
 package test
 
 // Spec-runner test for files under lang/test/spec/. Each TSV row is
-// parsed with the production aql parser (parser.Parse) and run
-// against a fresh production registry (engine.DefaultRegistry +
-// native.Register) — the full language layer, so these specs can
-// exercise any registered word (record / object / make / get /
-// length / …) and the builtin Resource / Entity types installed by
-// installResourceTypes.
+// parsed with the AQL parser (eng/parser) and run against a fresh
+// production registry (engine.DefaultRegistry + native.Register) — the
+// full language layer, so these specs can exercise any registered word
+// (record / object / make / get / length / …) and the builtin
+// Resource / Entity types installed by installResourceTypes.
 //
 // The kernel-only spec suite (q-suffixed fixtures, eng.RegisterCoreWords)
-// lives in eng/test/spec_runner_test.go — it tests the engine kernel
-// in isolation. The render helpers below are duplicated there because
-// the two runners are in separate Go modules.
+// lives in eng/go/spec_test.go — it tests the engine kernel in
+// isolation. The render helpers below are duplicated there because the
+// two runners are in separate Go modules (eng vs lang).
 
 import (
 	"bufio"
@@ -23,9 +22,9 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/eng"
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // renderSpecValue renders a value in the spec format. The spec format

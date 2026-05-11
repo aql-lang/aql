@@ -350,4 +350,3 @@ func inferUnaryMathReturns(name string, sig Signature) []string {
 		return []string{"Scalar/Number/Decimal"}
 	}
 }
-

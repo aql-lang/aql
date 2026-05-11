@@ -1,9 +1,11 @@
 package engine_test
+
 import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"testing"
 )
+
 // --- make Path from list ---
 
 func TestMakePathFromList(t *testing.T) {

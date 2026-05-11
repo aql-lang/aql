@@ -4,9 +4,9 @@ import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,
@@ -104,7 +104,7 @@ export "Math" {double:double}`,
 
 func TestMemFSModuleWithAqlJson(t *testing.T) {
 	files := map[string]string{
-		"mymod/index.aql":    `export "API" {x:42}`,
+		"mymod/index.aql":     `export "API" {x:42}`,
 		"mymod/.aql/aql.json": `{"name":"mymod","main":"index.aql"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
@@ -121,8 +121,8 @@ func TestMemFSModuleWithAqlJson(t *testing.T) {
 
 func TestMemFSModuleCustomMain(t *testing.T) {
 	files := map[string]string{
-		"lib/core.aql":       `export "Core" {pi:3}`,
-		"lib/.aql/aql.json":  `{"name":"lib","main":"core.aql"}`,
+		"lib/core.aql":      `export "Core" {pi:3}`,
+		"lib/.aql/aql.json": `{"name":"lib","main":"core.aql"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./lib"`,
@@ -138,7 +138,7 @@ func TestMemFSModuleCustomMain(t *testing.T) {
 
 func TestMemFSModuleTwoImports(t *testing.T) {
 	files := map[string]string{
-		"math.aql":    `def add1 fn [[n:Integer] [Integer] [n add 1]]
+		"math.aql": `def add1 fn [[n:Integer] [Integer] [n add 1]]
 export "Math" {add1:add1}`,
 		"strings.aql": `def greet fn [[s:String] [String] ["hello " add s]]
 export "Strings" {greet:greet}`,

@@ -7,8 +7,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runQuery sets up a registry, loads a CSV file, stores it, and runs a query.
@@ -3012,16 +3012,16 @@ func TestMixedTypeStorage(t *testing.T) {
 	// Row with string values that need coercion to numeric types
 	row1 := engine.NewOrderedMap()
 	row1.Set("name", engine.NewString("Alice"))
-	row1.Set("score", engine.NewString("95.5")) // string → REAL coercion
+	row1.Set("score", engine.NewString("95.5"))  // string → REAL coercion
 	row1.Set("active", engine.NewString("true")) // string → boolean coercion
 	row1.Set("count", engine.NewString("42"))    // string → INTEGER coercion
 
 	// Row with proper typed values
 	row2 := engine.NewOrderedMap()
 	row2.Set("name", engine.NewString("Bob"))
-	row2.Set("score", engine.NewInteger(88))      // integer → REAL coercion
-	row2.Set("active", engine.NewBoolean(false))   // boolean → INTEGER (0/1)
-	row2.Set("count", engine.NewBoolean(true))     // boolean → INTEGER coercion
+	row2.Set("score", engine.NewInteger(88))     // integer → REAL coercion
+	row2.Set("active", engine.NewBoolean(false)) // boolean → INTEGER (0/1)
+	row2.Set("count", engine.NewBoolean(true))   // boolean → INTEGER coercion
 
 	td := engine.TableData{
 		Record: recType,

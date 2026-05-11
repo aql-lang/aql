@@ -45,22 +45,22 @@ func TestValidateWordNameRejects(t *testing.T) {
 		wantInMsg string // substring expected in the error detail
 	}{
 		{"", "empty"},
-		{"Integer", "[a-z_]"},     // uppercase first
-		{"String", "[a-z_]"},      // uppercase first
-		{"X", "[a-z_]"},           // uppercase first
-		{"123", "[a-z_]"},         // digit first
-		{"2dup", "[a-z_]"},        // digit first
-		{"-rot", "[a-z_]"},        // hyphen first
-		{"?question", "[a-z_]"},   // ? first
-		{"!bang", "[a-z_]"},       // ! first
-		{"foo bar", "illegal"},    // space mid-name
-		{"foo!bar", "illegal"},    // ! mid-name
-		{"foo*bar", "illegal"},    // * mid-name
-		{"foo+bar", "illegal"},    // + mid-name
-		{"foo.bar", "illegal"},    // . mid-name
-		{"fooBar", "illegal"},     // uppercase mid-name
-		{"foo$", "illegal"},       // $ mid-name
-		{"foo/", "illegal"},       // / mid-name
+		{"Integer", "[a-z_]"},   // uppercase first
+		{"String", "[a-z_]"},    // uppercase first
+		{"X", "[a-z_]"},         // uppercase first
+		{"123", "[a-z_]"},       // digit first
+		{"2dup", "[a-z_]"},      // digit first
+		{"-rot", "[a-z_]"},      // hyphen first
+		{"?question", "[a-z_]"}, // ? first
+		{"!bang", "[a-z_]"},     // ! first
+		{"foo bar", "illegal"},  // space mid-name
+		{"foo!bar", "illegal"},  // ! mid-name
+		{"foo*bar", "illegal"},  // * mid-name
+		{"foo+bar", "illegal"},  // + mid-name
+		{"foo.bar", "illegal"},  // . mid-name
+		{"fooBar", "illegal"},   // uppercase mid-name
+		{"foo$", "illegal"},     // $ mid-name
+		{"foo/", "illegal"},     // / mid-name
 	}
 	for _, c := range cases {
 		err := ValidateWordName(c.name)
@@ -130,9 +130,9 @@ func TestDefRejectsBadName(t *testing.T) {
 // marker) are both valid under the unified [a-z_] first-char rule.
 func TestUnderscoreLeading(t *testing.T) {
 	for _, name := range []string{
-		"_",                       // discard placeholder
-		"__pa", "__mark", "__fw",  // engine-internal markers
-		"_unused", "_tmp-result",  // user-facing leading underscore
+		"_",                      // discard placeholder
+		"__pa", "__mark", "__fw", // engine-internal markers
+		"_unused", "_tmp-result", // user-facing leading underscore
 	} {
 		if err := ValidateWordName(name); err != nil {
 			t.Errorf("underscore-leading %q should be valid, got %v", name, err)

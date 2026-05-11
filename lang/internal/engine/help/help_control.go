@@ -32,14 +32,14 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "break",
-		Summary: "Exit the current for loop early.",
+		Word:        "break",
+		Summary:     "Exit the current for loop early.",
 		Description: "Immediately terminates the innermost for loop. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:    "continue",
-		Summary: "Skip to the next iteration of the current for loop.",
+		Word:        "continue",
+		Summary:     "Skip to the next iteration of the current for loop.",
 		Description: "Skips the rest of the current loop body and continues with the next iteration. Stack-only.",
 	})
 

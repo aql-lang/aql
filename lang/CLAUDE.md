@@ -42,15 +42,11 @@ normally using the cached modules.
 ## Jsonic Token Usage
 
 AQL uses `github.com/jsonicjs/jsonic/go` (v0.1.6) for all tokenization and
-structural parsing. The custom lexer (`internal/lexer/`) and token types
-(`internal/token/`) are legacy stubs — not used in the parse pipeline;
-they back only the hand-rolled `internal/parser` legacy parser exercised
-by `internal/evaluator`'s tests.
-
-The real parser lives in the standalone **eng** module —
-`eng/go/parser/parse.go` (`github.com/metsitaba/voxgig-exp/eng/parser`).
-`lang/internal/parser.Parse` and `lang.Parse` both re-export it. Key
-jsonic integration:
+structural parsing. There is exactly one parser — it lives in the
+standalone **eng** module at `eng/go/parser/parse.go`
+(`github.com/metsitaba/voxgig-exp/eng/parser`); `lang.Parse` re-exports
+it. (The old hand-rolled lexer / token / AST / tree-walking evaluator
+were removed — jsonic is the sole parsing path.) Key jsonic integration:
 
 - **Options**: `TextInfo:true` (quoted vs unquoted distinction),
   `ListRef/MapRef:true` (structural metadata), `Pair:true` and `Child:true`

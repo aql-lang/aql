@@ -4,8 +4,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // TestMapFunctionAccess verifies that functions stored in plain maps

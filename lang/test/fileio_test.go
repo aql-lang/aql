@@ -1,14 +1,14 @@
 package test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"bytes"
+	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runWithFiles creates a registry with in-memory files and runs AQL.

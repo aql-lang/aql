@@ -375,8 +375,9 @@ func distinctHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 // group: [columns(forward), table/query(prefix)] -> [query-builder]
 // Usage: from sales group by [region]
-//        from sales group by [region product]
-//        from sales group [region]
+//
+//	from sales group by [region product]
+//	from sales group [region]
 func groupListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	table := args[0]
 	colList := args[1]

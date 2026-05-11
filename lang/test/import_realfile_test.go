@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // testdataDir returns the absolute path to the testdata directory.

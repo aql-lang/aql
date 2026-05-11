@@ -400,4 +400,3 @@ func (s *SQLiteStore) DropTable(name string) {
 	_, _ = s.db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdent(name)))
 	delete(s.tables, name)
 }
-

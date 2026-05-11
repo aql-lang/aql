@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runWithSource parses and runs AQL source, returning the error.

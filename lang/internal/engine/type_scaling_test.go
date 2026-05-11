@@ -522,9 +522,9 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 		{Args: []Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler},                         // depth 2
 		{Args: []Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},                     // depth 3
 		{Args: []Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},                 // depth 4
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Handler: dummyHandler},           // depth 5
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},       // depth 6
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler},  // depth 7
+		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Handler: dummyHandler},          // depth 5
+		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},      // depth 6
+		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler}, // depth 7
 	}
 	SortSignatures(sigs)
 
@@ -772,4 +772,3 @@ func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
 	}
 	t.Logf("10,000 Unify calls completed in %v", elapsed)
 }
-

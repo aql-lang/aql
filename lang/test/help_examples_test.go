@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine/help"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // TestHelpAllWords checks that every registered word produces valid

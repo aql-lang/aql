@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // TestBoolean runs every line of boolean.tsv as a parse+run+compare

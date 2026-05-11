@@ -540,10 +540,11 @@ func buildSigArgs(vals []string, prefix, nArgs int) []string {
 
 // buildExampleExpr constructs an expression with `prefix` args on stack
 // and the rest forward. Mirrors the precedence layout:
-//   prefix=0: word v0 v1 v2      (all forward)
-//   prefix=1: v2 word v0 v1      (last on stack)
-//   prefix=2: v2 v1 word v0      (last two on stack)
-//   prefix=3: v2 v1 v0 word      (all on stack)
+//
+//	prefix=0: word v0 v1 v2      (all forward)
+//	prefix=1: v2 word v0 v1      (last on stack)
+//	prefix=2: v2 v1 word v0      (last two on stack)
+//	prefix=3: v2 v1 v0 word      (all on stack)
 func buildExampleExpr(name string, vals []string, prefix, nArgs int) string {
 	var parts []string
 	// Stack args: last `prefix` vals, outermost (deepest) first

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // =====================================================================
@@ -297,8 +297,8 @@ func TestDiamondTopLevel(t *testing.T) {
 	// A and B both export, top level imports both.
 	files := map[string]string{
 		"shared.aql": `export "Shared" {val:7}`,
-		"a.aql": `export "A" {x:1}`,
-		"b.aql": `export "B" {y:2}`,
+		"a.aql":      `export "A" {x:1}`,
+		"b.aql":      `export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{

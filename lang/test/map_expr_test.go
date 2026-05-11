@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // runExpr parses and runs a multi-line AQL expression with a fresh registry.

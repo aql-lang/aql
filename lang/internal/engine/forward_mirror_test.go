@@ -1,8 +1,9 @@
 package engine_test
+
 import (
+	"fmt"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"fmt"
 	"testing"
 )
 

@@ -5,33 +5,33 @@ package eng
 // minimal native subset needed to express the AQL language design's
 // core constructs:
 //
-//   Binding / quotation:
-//     def    — name binding (simple values, list bodies, fn definitions)
-//     fn     — function literal builder (typed params, return types, body)
-//     quote  — explicit data capture (suppresses word evaluation)
-//     args   — per-fn-call positional argument frame
+//	Binding / quotation:
+//	  def    — name binding (simple values, list bodies, fn definitions)
+//	  fn     — function literal builder (typed params, return types, body)
+//	  quote  — explicit data capture (suppresses word evaluation)
+//	  args   — per-fn-call positional argument frame
 //
-//   Boolean / logical connectives:
-//     not    — boolean negation                  ( a — !a )
-//     and    — short-circuit conjunction         ( a b — a∧b ); returns the first falsy or last truthy operand
-//     or     — short-circuit disjunction         ( a b — a∨b ); returns the first truthy or last falsy operand
+//	Boolean / logical connectives:
+//	  not    — boolean negation                  ( a — !a )
+//	  and    — short-circuit conjunction         ( a b — a∧b ); returns the first falsy or last truthy operand
+//	  or     — short-circuit disjunction         ( a b — a∨b ); returns the first truthy or last falsy operand
 //
-//   Type-level connectives (run-time disjunct/intersect builders):
-//     tor    — type-level union (disjunct)       ( T U — T|U )
-//     tand   — type-level intersection           ( T U — T∩U )
+//	Type-level connectives (run-time disjunct/intersect builders):
+//	  tor    — type-level union (disjunct)       ( T U — T|U )
+//	  tand   — type-level intersection           ( T U — T∩U )
 //
-//   Stack manipulation (Forth-style; all stack-only):
-//     dup        — duplicate top                  ( a — a a )
-//     swap       — exchange top two               ( a b — b a )
-//     drop       — remove top                     ( a — )
-//     over       — copy second-from-top to top    ( a b — a b a )
-//     rot        — rotate top three               ( a b c — b c a )
-//     nip        — drop second-from-top           ( a b — b )
-//     tuck       — copy top under second          ( a b — b a b )
-//     dup2       — duplicate top pair             ( a b — a b a b )
-//     swap2      — swap top two pairs             ( a b c d — c d a b )
-//     drop2      — remove top two                 ( a b — )
-//     over2      — copy second pair to top        ( a b c d — a b c d a b )
+//	Stack manipulation (Forth-style; all stack-only):
+//	  dup        — duplicate top                  ( a — a a )
+//	  swap       — exchange top two               ( a b — b a )
+//	  drop       — remove top                     ( a — )
+//	  over       — copy second-from-top to top    ( a b — a b a )
+//	  rot        — rotate top three               ( a b c — b c a )
+//	  nip        — drop second-from-top           ( a b — b )
+//	  tuck       — copy top under second          ( a b — b a b )
+//	  dup2       — duplicate top pair             ( a b — a b a b )
+//	  swap2      — swap top two pairs             ( a b c d — c d a b )
+//	  drop2      — remove top two                 ( a b — )
+//	  over2      — copy second pair to top        ( a b c d — a b c d a b )
 //
 // `end` is NOT registered here — it's a structural keyword handled
 // directly by the engine's stepEnd path in engine.go.
@@ -202,14 +202,14 @@ func registerCoreDef(r *Registry) {
 // there are overloads — same shape the production aql `fn` accepts.
 // A single-sig def therefore wraps the three lists in an outer list:
 //
-//   def double fn [ [a:Integer] [Integer] [a a addq] ]
+//	def double fn [ [a:Integer] [Integer] [a a addq] ]
 //
 // Multi-sig is the same shape with N triples flat in the outer list:
 //
-//   def f fn [
-//     [n:Integer]            [Integer] [n addq n]
-//     [n:Integer m:Integer]  [Integer] [n m mulq]
-//   ]
+//	def f fn [
+//	  [n:Integer]            [Integer] [n addq n]
+//	  [n:Integer m:Integer]  [Integer] [n m mulq]
+//	]
 //
 // Routes through ParseFnDef in fn_def.go — same code path the
 // production aql `def`/`fn` use. The shared parser handles:

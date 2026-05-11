@@ -10,8 +10,8 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "typeof",
-		Summary: "Return the type name of a value.",
+		Word:        "typeof",
+		Summary:     "Return the type name of a value.",
 		Description: "Consumes the top value and pushes its type name as an atom.",
 	})
 
@@ -44,8 +44,8 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "type",
-		Summary: "Define a named type.",
+		Word:        "type",
+		Summary:     "Define a named type.",
 		Description: "Registers a named type definition for later use.",
 	})
 

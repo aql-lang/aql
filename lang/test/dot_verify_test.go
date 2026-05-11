@@ -4,8 +4,8 @@ import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 func runAQLText(t *testing.T, r *engine.Registry, src string) ([]engine.Value, error) {

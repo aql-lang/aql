@@ -3,9 +3,9 @@ package test
 import (
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // --- merge ---

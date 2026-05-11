@@ -12,20 +12,20 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "sub",
-		Summary: "Subtract the top value from the second value.",
+		Word:        "sub",
+		Summary:     "Subtract the top value from the second value.",
 		Description: "Subtracts: a b sub produces a - b.",
 	})
 
 	register(&Entry{
-		Word:    "mul",
-		Summary: "Multiply two numbers.",
+		Word:        "mul",
+		Summary:     "Multiply two numbers.",
 		Description: "Multiplies two numeric values.",
 	})
 
 	register(&Entry{
-		Word:    "div",
-		Summary: "Divide the second value by the top value.",
+		Word:        "div",
+		Summary:     "Divide the second value by the top value.",
 		Description: "Divides: a b div produces a / b. Integer division truncates toward zero.",
 		Notes: []string{
 			"Division by zero produces an error.",
@@ -33,14 +33,14 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "mod",
-		Summary: "Compute the remainder of integer division.",
+		Word:        "mod",
+		Summary:     "Compute the remainder of integer division.",
 		Description: "Computes: a b mod produces a %% b.",
 	})
 
 	register(&Entry{
-		Word:    "pow",
-		Summary: "Raise a number to a power.",
+		Word:        "pow",
+		Summary:     "Raise a number to a power.",
 		Description: "Computes: a b pow produces a^b.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
@@ -50,57 +50,57 @@ func init() {
 	// --- aql:math native module (requires: \"aql:math\" import) ---
 
 	register(&Entry{
-		Word:    "abs",
-		Summary: "Return the absolute value of a number.",
+		Word:        "abs",
+		Summary:     "Return the absolute value of a number.",
 		Description: "Returns the absolute (non-negative) value.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "negate",
-		Summary: "Negate a number (flip the sign).",
+		Word:        "negate",
+		Summary:     "Negate a number (flip the sign).",
 		Description: "Returns -n for input n.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "min",
-		Summary: "Return the smaller of two numbers.",
+		Word:        "min",
+		Summary:     "Return the smaller of two numbers.",
 		Description: "Returns the minimum of two values.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "max",
-		Summary: "Return the larger of two numbers.",
+		Word:        "max",
+		Summary:     "Return the larger of two numbers.",
 		Description: "Returns the maximum of two values.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "sign",
-		Summary: "Return the sign of a number (-1, 0, or 1).",
+		Word:        "sign",
+		Summary:     "Return the sign of a number (-1, 0, or 1).",
 		Description: "Returns -1 for negative, 0 for zero, 1 for positive.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "ceil",
-		Summary: "Round a decimal up to the nearest integer.",
+		Word:        "ceil",
+		Summary:     "Round a decimal up to the nearest integer.",
 		Description: "Returns the smallest integer value greater than or equal to the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "floor",
-		Summary: "Round a decimal down to the nearest integer.",
+		Word:        "floor",
+		Summary:     "Round a decimal down to the nearest integer.",
 		Description: "Returns the largest integer value less than or equal to the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "round",
-		Summary: "Round a decimal to the nearest integer.",
+		Word:        "round",
+		Summary:     "Round a decimal to the nearest integer.",
 		Description: "Rounds to the nearest integer; ties round away from zero.",
 		Notes: []string{
 			"Uses Go's math.Round: 0.5 rounds away from zero.",
@@ -109,121 +109,121 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "trunc",
-		Summary: "Truncate a decimal toward zero.",
+		Word:        "trunc",
+		Summary:     "Truncate a decimal toward zero.",
 		Description: "Removes the fractional part, rounding toward zero.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "sqrt",
-		Summary: "Compute the square root.",
+		Word:        "sqrt",
+		Summary:     "Compute the square root.",
 		Description: "Returns the square root of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "cbrt",
-		Summary: "Compute the cube root.",
+		Word:        "cbrt",
+		Summary:     "Compute the cube root.",
 		Description: "Returns the cube root of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "exp",
-		Summary: "Compute e raised to a power.",
+		Word:        "exp",
+		Summary:     "Compute e raised to a power.",
 		Description: "Returns e^x where e is Euler's number.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "log",
-		Summary: "Compute the natural logarithm.",
+		Word:        "log",
+		Summary:     "Compute the natural logarithm.",
 		Description: "Returns the natural logarithm (base e) of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "log2",
-		Summary: "Compute the base-2 logarithm.",
+		Word:        "log2",
+		Summary:     "Compute the base-2 logarithm.",
 		Description: "Returns the base-2 logarithm of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "log10",
-		Summary: "Compute the base-10 logarithm.",
+		Word:        "log10",
+		Summary:     "Compute the base-10 logarithm.",
 		Description: "Returns the base-10 logarithm of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "sin",
-		Summary: "Compute the sine (input in radians).",
+		Word:        "sin",
+		Summary:     "Compute the sine (input in radians).",
 		Description: "Returns the sine of the input angle in radians.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "cos",
-		Summary: "Compute the cosine (input in radians).",
+		Word:        "cos",
+		Summary:     "Compute the cosine (input in radians).",
 		Description: "Returns the cosine of the input angle in radians.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "tan",
-		Summary: "Compute the tangent (input in radians).",
+		Word:        "tan",
+		Summary:     "Compute the tangent (input in radians).",
 		Description: "Returns the tangent of the input angle in radians.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "asin",
-		Summary: "Compute the arc sine (result in radians).",
+		Word:        "asin",
+		Summary:     "Compute the arc sine (result in radians).",
 		Description: "Returns the arc sine of the input. Input must be in [-1, 1].",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "acos",
-		Summary: "Compute the arc cosine (result in radians).",
+		Word:        "acos",
+		Summary:     "Compute the arc cosine (result in radians).",
 		Description: "Returns the arc cosine of the input. Input must be in [-1, 1].",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "atan",
-		Summary: "Compute the arc tangent (result in radians).",
+		Word:        "atan",
+		Summary:     "Compute the arc tangent (result in radians).",
 		Description: "Returns the arc tangent of the input.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "atan2",
-		Summary: "Compute the two-argument arc tangent.",
+		Word:        "atan2",
+		Summary:     "Compute the two-argument arc tangent.",
 		Description: "Returns atan2(y, x): y x atan2. Handles quadrant correctly.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "hypot",
-		Summary: "Compute the hypotenuse length.",
+		Word:        "hypot",
+		Summary:     "Compute the hypotenuse length.",
 		Description: "Returns sqrt(x*x + y*y) without overflow: x y hypot.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "math-pi",
-		Summary: "Push the constant pi onto the stack.",
+		Word:        "math-pi",
+		Summary:     "Push the constant pi onto the stack.",
 		Description: "Pushes the mathematical constant pi (3.14159...). Stack-only.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
-		Word:    "math-e",
-		Summary: "Push Euler's number e onto the stack.",
+		Word:        "math-e",
+		Summary:     "Push Euler's number e onto the stack.",
 		Description: "Pushes the mathematical constant e (2.71828...). Stack-only.",
-		Notes: []string{"Requires: \"aql:math\" import"},
+		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 }

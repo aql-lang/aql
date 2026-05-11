@@ -706,11 +706,11 @@ func TestCheckForLoopBadBody(t *testing.T) {
 
 // PerfSample captures one check vs run timing sample.
 type PerfSample struct {
-	Program     string
-	CheckNs     int64
-	RunNs       int64
-	CheckStack  []string
-	RunResult   int
+	Program    string
+	CheckNs    int64
+	RunNs      int64
+	CheckStack []string
+	RunResult  int
 }
 
 // runPerfComparison measures Check() and Run() for a program, N

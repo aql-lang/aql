@@ -29,10 +29,10 @@ package eng
 // The list contains signature triples: [input-sig, output-sig, body],
 // repeated as needed for multi-overload definitions:
 //
-//   def fact fn [
-//     [n:Integer]            [Integer]  [n 1 addq]
-//     [n:Integer m:Integer]  [Integer]  [n m mulq]
-//   ]
+//	def fact fn [
+//	  [n:Integer]            [Integer]  [n 1 addq]
+//	  [n:Integer m:Integer]  [Integer]  [n m mulq]
+//	]
 //
 // The list above contains 6 elements (= 2 triples), producing 2
 // FnSigs. Each element of a triple may be abbreviated: a non-list

@@ -488,7 +488,7 @@ func TestPublishWithValidToken(t *testing.T) {
 
 	// Publish with valid token.
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: authmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [authmod.aql]\n",
+		"aql.jsonic":  "name: authmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [authmod.aql]\n",
 		"authmod.aql": "1",
 	})
 

@@ -3,16 +3,16 @@ package eng
 // registerCoreDo installs `do BODY` — the explicit "evaluate this list
 // or map" word. Two overloads:
 //
-//   do [body]   — runs the list as a sub-program against a fresh
-//                 sub-engine and returns its residual stack. The body
-//                 is captured raw (NoEvalArgs) so callers can pass
-//                 lists that would otherwise auto-evaluate.
+//	do [body]   — runs the list as a sub-program against a fresh
+//	              sub-engine and returns its residual stack. The body
+//	              is captured raw (NoEvalArgs) so callers can pass
+//	              lists that would otherwise auto-evaluate.
 //
-//   do {map}    — recursively walks a map literal, evaluating any
-//                 embedded list values as sub-programs. The result is
-//                 a parallel map with each list slot replaced by its
-//                 evaluation result (a single value if the body
-//                 produced one, otherwise a list of all results).
+//	do {map}    — recursively walks a map literal, evaluating any
+//	              embedded list values as sub-programs. The result is
+//	              a parallel map with each list slot replaced by its
+//	              evaluation result (a single value if the body
+//	              produced one, otherwise a list of all results).
 //
 // Mirrors the production aql `do` (see
 // lang/internal/engine/native_control.go::doListHandler /

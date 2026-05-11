@@ -53,8 +53,8 @@ func TestToFloat64(t *testing.T) {
 		{int64(42), 42.0},
 		{"1.5", 1.5},
 		{[]byte("2.5"), 2.5},
-		{true, 0},     // default case
-		{"abc", 0},    // unparseable string
+		{true, 0},  // default case
+		{"abc", 0}, // unparseable string
 	}
 	for _, tt := range tests {
 		got := toFloat64(tt.input)

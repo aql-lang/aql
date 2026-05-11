@@ -10,8 +10,8 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "printstr",
-		Summary: "Print a value to stdout without a trailing newline.",
+		Word:        "printstr",
+		Summary:     "Print a value to stdout without a trailing newline.",
 		Description: "Same as print but does not append a newline at the end.",
 	})
 
@@ -47,20 +47,20 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "stdin",
-		Summary: "Push the stdin path string.",
+		Word:        "stdin",
+		Summary:     "Push the stdin path string.",
 		Description: "Pushes the special path \"<stdin>\" for use with read. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:    "stdout",
-		Summary: "Push the stdout path string.",
+		Word:        "stdout",
+		Summary:     "Push the stdout path string.",
 		Description: "Pushes the special path \"<stdout>\" for use with write. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:    "stderr",
-		Summary: "Push the stderr path string.",
+		Word:        "stderr",
+		Summary:     "Push the stderr path string.",
 		Description: "Pushes the special path \"<stderr>\" for use with write. Stack-only.",
 	})
 }

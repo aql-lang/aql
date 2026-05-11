@@ -6,22 +6,22 @@ import (
 
 // registerCoreType installs the language-fundamental type words:
 //
-//   type NAME body    — bind a type name (NAME must start [A-Z]) to a
-//                       type body (a type literal, disjunct, implicit
-//                       map shape, or any value satisfying IsTypeBody).
-//                       Pushes onto the type stack — `type Foo Integer;
-//                       type Foo String` shadows; `untype Foo` pops.
+//	type NAME body    — bind a type name (NAME must start [A-Z]) to a
+//	                    type body (a type literal, disjunct, implicit
+//	                    map shape, or any value satisfying IsTypeBody).
+//	                    Pushes onto the type stack — `type Foo Integer;
+//	                    type Foo String` shadows; `untype Foo` pops.
 //
-//   untype NAME       — pop the most-recent binding for NAME from the
-//                       type stack. Errors if no binding exists.
+//	untype NAME       — pop the most-recent binding for NAME from the
+//	                    type stack. Errors if no binding exists.
 //
-//   typeof v          — return the type of v as a type-literal Value
-//                       (e.g. typeof 5 → Integer, typeof Integer →
-//                       ScalarType, typeof none → None).
+//	typeof v          — return the type of v as a type-literal Value
+//	                    (e.g. typeof 5 → Integer, typeof Integer →
+//	                    ScalarType, typeof none → None).
 //
-//   v is T            — Boolean: does v satisfy type T? Forward sig is
-//                       [Any | Any], so `5 is Integer` reads naturally
-//                       (T from forward, v from stack).
+//	v is T            — Boolean: does v satisfy type T? Forward sig is
+//	                    [Any | Any], so `5 is Integer` reads naturally
+//	                    (T from forward, v from stack).
 //
 // Mirrors the production aql `type` / `untype` / `typeof` / `is`
 // (see lang/internal/engine/native_type.go); these are the foundational
@@ -46,15 +46,15 @@ func registerCoreType(r *Registry) {
 //
 // Used in the same shape as `fn`:
 //
-//   def Color enum [red green blue]
-//   red is Color    → true
-//   pink is Color   → false
+//	def Color enum [red green blue]
+//	red is Color    → true
+//	pink is Color   → false
 //
 // And with child types:
 //
-//   def Codes enum [: Integer 200 404 500]
-//   200 is Codes  → true
-//   201 is Codes  → false
+//	def Codes enum [: Integer 200 404 500]
+//	200 is Codes  → true
+//	201 is Codes  → false
 func registerCoreEnum(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:              "enum",
@@ -158,16 +158,16 @@ func registerCoreUntypeWord(r *Registry) {
 // registerCoreTypeof installs `typeof v`. Returns a Type literal —
 // the type of v, expressed as a value:
 //
-//   typeof 5            → Integer        (concrete value's exact type)
-//   typeof 5.0          → Decimal
-//   typeof "x"          → String
-//   typeof true         → Boolean
-//   typeof none         → None           (None has a single inhabitant)
-//   typeof [ 1 2 ]      → List
-//   typeof { a:1 }      → Map
-//   typeof Integer      → ScalarType     (type literals → their metatype)
-//   typeof List         → NodeType
-//   typeof Any          → Type
+//	typeof 5            → Integer        (concrete value's exact type)
+//	typeof 5.0          → Decimal
+//	typeof "x"          → String
+//	typeof true         → Boolean
+//	typeof none         → None           (None has a single inhabitant)
+//	typeof [ 1 2 ]      → List
+//	typeof { a:1 }      → Map
+//	typeof Integer      → ScalarType     (type literals → their metatype)
+//	typeof List         → NodeType
+//	typeof Any          → Type
 //
 // Rules:
 //   - For `none` (the unique inhabitant of None), return None itself.

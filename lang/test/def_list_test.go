@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"github.com/metsitaba/voxgig-exp/lang/internal/nativemod"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]engine.Value, error) {

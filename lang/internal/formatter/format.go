@@ -411,8 +411,6 @@ func capitalize(s string) string {
 	return string(runes)
 }
 
-
-
 // --- Emitter ---
 
 func emitRoot(n *Node, indent int) string {

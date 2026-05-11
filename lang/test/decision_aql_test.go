@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/metsitaba/voxgig-exp/eng/parser"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
 	"github.com/metsitaba/voxgig-exp/lang/internal/nativemod"
-	"github.com/metsitaba/voxgig-exp/lang/internal/parser"
 )
 
 // buildDecisionFileAQL generates the full decision.aql file content.

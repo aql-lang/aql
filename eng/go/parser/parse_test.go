@@ -1601,8 +1601,8 @@ func TestParseWordDirectCoverage(t *testing.T) {
 		{"hello", "hello", true},
 		{"foo/2s", "foo", true},
 		{"foo/0", "foo", true},
-		{"foo/bad", "foo/bad", true},   // unrecognized modifier
-		{"foo/", "foo/", true},         // slash at end not processed
+		{"foo/bad", "foo/bad", true}, // unrecognized modifier
+		{"foo/", "foo/", true},       // slash at end not processed
 	}
 	for _, tt := range tests {
 		v, err := parseWord(tt.input)
@@ -1900,4 +1900,3 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 	// Backtick string with $ but no ${ is just a plain string.
 	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
 }
-

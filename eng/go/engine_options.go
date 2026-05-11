@@ -47,9 +47,9 @@ type EngineOptions struct {
 //
 //   - As a starting point for callers who want to override only a
 //     few fields:
-//         opts := DefaultEngineOptions()
-//         opts.MaxSteps = 5000
-//         e, err := NewWithOptions(r, opts)
+//     opts := DefaultEngineOptions()
+//     opts.MaxSteps = 5000
+//     e, err := NewWithOptions(r, opts)
 //
 //   - As a documentation pin: code that reads a partial EngineOptions
 //     and fills the gaps from this function makes the default-fallback
@@ -62,11 +62,11 @@ type EngineOptions struct {
 // the fields they care about get the defaults for the rest "for
 // free". Two ways to write a partial-options call:
 //
-//   e, err := NewWithOptions(r, EngineOptions{MaxSteps: 5000})
+//	e, err := NewWithOptions(r, EngineOptions{MaxSteps: 5000})
 //
-//   opts := DefaultEngineOptions()
-//   opts.Words = []string{"def", "fn"}
-//   e, err := NewWithOptions(r, opts)
+//	opts := DefaultEngineOptions()
+//	opts.Words = []string{"def", "fn"}
+//	e, err := NewWithOptions(r, opts)
 //
 // Both are idiomatic. The struct-literal form is more compact for
 // one-or-two-field overrides; the DefaultEngineOptions-then-mutate

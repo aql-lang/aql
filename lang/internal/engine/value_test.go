@@ -1,8 +1,10 @@
 package engine_test
+
 import (
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"testing"
 )
+
 func TestValueStringTypes(t *testing.T) {
 	tests := []struct {
 		name string

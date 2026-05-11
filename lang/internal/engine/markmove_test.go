@@ -1,8 +1,9 @@
 package engine_test
+
 import (
+	"bytes"
 	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
 	"github.com/metsitaba/voxgig-exp/lang/internal/native"
-	"bytes"
 	"strings"
 	"testing"
 )
