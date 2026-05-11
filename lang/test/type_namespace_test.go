@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 // --- Name-confusion guards between `type` and `def` ---

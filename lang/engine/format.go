@@ -9,7 +9,7 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 	multisource "github.com/jsonicjs/multisource/go"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
+	"github.com/aql-lang/aql/lang/internal/fileops"
 )
 
 // Format encodes and decodes file content for a named representation

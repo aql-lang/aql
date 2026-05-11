@@ -197,10 +197,11 @@ thresholds can be ratcheted down as the hotspots are refactored.
 
 | Module | Files | Lines | Code | Comments | `scc` complexity |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `eng/go` | 42 | 20,918 | 14,863 | 4,391 | 4,034 |
-| `lang` | 201 | 75,068 | 61,776 | 6,042 | 15,796 |
+| `eng/go` | 42 | 20,781 | 14,735 | 4,393 | 3,991 |
+| `lang` | 201 | 74,923 | 61,645 | 6,038 | 15,753 |
 | `cmd/go` | 19 | 6,565 | 5,541 | 312 | 1,254 |
-| **total (Go)** | **262** | **102,551** | **82,180** | **10,745** | **21,084** |
+| `util/go` | 1 | 187 | 144 | 30 | 43 |
+| **total (Go)** | **263** | **102,456** | **82,065** | **10,773** | **21,041** |
 
 (`scc complexity` is a heuristic score, useful as a relative size signal
 rather than a strict metric.)
@@ -265,23 +266,22 @@ Everything else clears the current gate (cyclo 70 / cognit 200).
 
 | Where |
 | --- |
-| `eng/go/spec_test.go:369-417` ↔ `lang/test/spec_runner_test.go:36-84` |
 | `lang/test/boolean_test.go:19-97` ↔ `lang/test/syntax_test.go:26-107` |
 | `lang/test/basic_test.go:15-93` ↔ `lang/test/options_params_test.go:15-89` |
 | `lang/test/arg_order_test.go:1-89` ↔ `lang/test/options_params_test.go:1-89` |
 
-All four are test files / test-table boilerplate. The gate
+All three are test-table boilerplate inside `lang/test/`. The gate
 (`dupl.threshold: 400` tokens) sits above the worst current group, so
-they don't trip it; raising the threshold higher (e.g. 800) catches
-nothing. New copy-paste larger than the current worst would fail.
+they don't trip it; raising the threshold higher catches nothing. New
+copy-paste larger than the current worst would fail.
 
-The cross-module group — the spec-runner harness, replicated between
-`eng/go/spec_test.go` and `lang/test/spec_runner_test.go` — is the most
-interesting from a design standpoint: both modules implement a
-near-identical "read `.tsv`, parse tokens, run an engine, compare
-output" loop. Extracting a shared `specrunner` helper (under `eng`, the
-lower module) would deduplicate it — unless keeping `eng` self-contained
-is a deliberate design constraint.
+The previously-noted cross-module clone — the spec-runner harness,
+which had `eng/go/spec_test.go` and `lang/test/spec_runner_test.go`
+implementing the same "read `.tsv`, parse tokens, run an engine,
+compare output" loop — has been extracted into the new
+`github.com/aql-lang/aql/util/go/specrunner` module. Both test files
+now call `specrunner.RunDir(t, ..., func(input) ([]eng.Value, error)
+{...})` and just supply their own engine setup.
 
 ### Running the tools standalone
 
@@ -293,10 +293,10 @@ go install github.com/uudashr/gocognit/cmd/gocognit@latest
 go install github.com/mibk/dupl@latest
 go install github.com/boyter/scc/v3@latest
 
-gocyclo  -ignore '_test\.go$' -top 25  eng/go lang cmd/go
-gocognit -top 25                       eng/go lang cmd/go
-dupl     -t 300                        eng/go lang cmd/go
-scc      --no-cocomo                   eng/go lang cmd/go
+gocyclo  -ignore '_test\.go$' -top 25  eng/go lang cmd/go util/go
+gocognit -top 25                       eng/go lang cmd/go util/go
+dupl     -t 300                        eng/go lang cmd/go util/go
+scc      --no-cocomo                   eng/go lang cmd/go util/go
 ```
 
 `make lint` invokes the golangci-lint-bundled versions of `gocyclo`,

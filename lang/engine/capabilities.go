@@ -1,9 +1,9 @@
 package engine
 
 import (
-	"github.com/metsitaba/voxgig-exp/eng"
+	"github.com/aql-lang/aql/eng"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/fileops"
+	"github.com/aql-lang/aql/lang/internal/fileops"
 )
 
 // Host-side capability keys. The host installs implementations under

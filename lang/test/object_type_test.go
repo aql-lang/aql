@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // TestObjectTypeDefine defines a named object type and verifies its structure.

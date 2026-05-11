@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine/help"
+	"github.com/aql-lang/aql/lang/engine/help"
 )
 
 // EnableDynamicHelp sets up the OnRegisterHook so that functions

@@ -1,7 +1,7 @@
 package native
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // Register installs every entry in the consolidated Natives slice into

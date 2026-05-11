@@ -1,12 +1,12 @@
 package test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/native"
+	"github.com/aql-lang/aql/lang/native"
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/eng/parser"
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/eng/parser"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // runWithOSFiles creates a registry using real OS file ops and runs AQL.

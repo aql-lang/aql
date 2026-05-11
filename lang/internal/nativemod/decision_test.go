@@ -3,8 +3,8 @@ package nativemod
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/eng/parser"
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/eng/parser"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 func decisionRegistry(t *testing.T) *engine.Registry {

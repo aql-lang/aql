@@ -1,12 +1,12 @@
-module github.com/metsitaba/voxgig-exp/cmd/go
+module github.com/aql-lang/aql/cmd/go
 
 go 1.24.7
 
 require (
+	github.com/aql-lang/aql/eng v0.0.0
+	github.com/aql-lang/aql/lang v0.0.0
 	github.com/chzyer/readline v1.5.1
 	github.com/jsonicjs/jsonic/go v0.1.6
-	github.com/metsitaba/voxgig-exp/eng v0.0.0
-	github.com/metsitaba/voxgig-exp/lang v0.0.0
 	golang.org/x/crypto v0.32.0
 	golang.org/x/term v0.28.0
 	voxgiguniversalsdk v0.1.1
@@ -31,9 +31,11 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/metsitaba/voxgig-exp/eng v0.0.0 => ../../eng/go
+replace github.com/aql-lang/aql/eng v0.0.0 => ../../eng/go
 
-replace github.com/metsitaba/voxgig-exp/lang v0.0.0 => ../../lang
+replace github.com/aql-lang/aql/lang v0.0.0 => ../../lang
+
+replace github.com/aql-lang/aql/util/go v0.0.0 => ../../util/go
 
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 

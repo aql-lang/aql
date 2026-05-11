@@ -1,0 +1,23 @@
+.PHONY: test vet fmt lint vuln clean
+
+# This module (github.com/aql-lang/aql/util/go) is the shared TSV
+# spec-runner scaffolding used by eng/go and lang's spec tests.
+
+test:
+	go test ./...
+
+vet:
+	go vet ./...
+
+fmt:
+	gofmt -w .
+
+# golangci-lint (config: ../../.golangci.yml, found by walking up).
+lint:
+	golangci-lint run ./...
+
+vuln:
+	govulncheck ./...
+
+clean:
+	go clean -testcache

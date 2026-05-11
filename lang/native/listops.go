@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // The list-mutation words (push/pop/unshift/shift) are registered via the

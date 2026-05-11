@@ -1,6 +1,6 @@
 // Package engine is a thin shim over the eng module: it re-exports
 // eng's types and functions so the surrounding lang codebase can import
-// "github.com/metsitaba/voxgig-exp/lang/engine" while the actual engine
+// "github.com/aql-lang/aql/lang/engine" while the actual engine
 // machinery lives in the standalone eng module.
 //
 // Word-defining files (native_*.go, format.go, query.go, sqlite.go,
@@ -10,7 +10,7 @@
 package engine
 
 import (
-	"github.com/metsitaba/voxgig-exp/eng"
+	"github.com/aql-lang/aql/eng"
 )
 
 // Type aliases — every exported type from aqleng is re-exported here.

@@ -4,11 +4,11 @@
 package test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/native"
+	"github.com/aql-lang/aql/lang/native"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/eng/parser"
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/eng/parser"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 // runQuery sets up a registry, loads a CSV file, stores it, and runs a query.

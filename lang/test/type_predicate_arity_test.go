@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 // Integration tests for the predicate-fn invocation path. The

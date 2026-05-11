@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 const defaultFetchTimeout = 30 * time.Second

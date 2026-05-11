@@ -1,43 +1,48 @@
 .PHONY: test vet fmt lint vuln lint-assertions clean
 
-# This module (github.com/metsitaba/voxgig-exp/lang) is the AQL language
+# This module (github.com/aql-lang/aql/lang) is the AQL language
 # library. The command-line tools (aql, aqlweb, aqlwasm, genhelp,
 # solardemo) live in the sibling cmd/go module — build them with
 # `make -C ../cmd/go build`.
 #
-# The targets below also run the standalone eng module (the kernel +
-# parser + kernel spec runner) and the cmd/go module so `make test`
-# exercises the whole repo.
+# The targets below also run the eng module (kernel + parser + kernel
+# spec runner), the util/go module (shared TSV spec-runner scaffolding)
+# and the cmd/go module so `make test` exercises the whole repo.
 
 test:
 	go test ./...
 	cd ../eng/go && go test ./...
+	cd ../util/go && go test ./...
 	cd ../cmd/go && go test ./...
 
 vet:
 	go vet ./...
 	cd ../eng/go && go vet ./...
+	cd ../util/go && go vet ./...
 	cd ../cmd/go && go vet ./...
 
 fmt:
 	gofmt -w .
 	cd ../eng/go && gofmt -w .
+	cd ../util/go && gofmt -w .
 	cd ../cmd/go && gofmt -w .
 
-# golangci-lint across all three modules (config: ../.golangci.yml,
+# golangci-lint across all four modules (config: ../.golangci.yml,
 # found by walking up from each module dir). Install:
 #   curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
 #     | sh -s -- -b "$$(go env GOPATH)/bin" v2.5.0
 lint:
 	golangci-lint run ./...
 	cd ../eng/go && golangci-lint run ./...
+	cd ../util/go && golangci-lint run ./...
 	cd ../cmd/go && golangci-lint run ./...
 
-# Known-vulnerability scan (reachability-aware) across all three modules.
+# Known-vulnerability scan (reachability-aware) across all four modules.
 # Install: go install golang.org/x/vuln/cmd/govulncheck@latest
 vuln:
 	govulncheck ./...
 	cd ../eng/go && govulncheck ./...
+	cd ../util/go && govulncheck ./...
 	cd ../cmd/go && govulncheck ./...
 
 # Fail if any non-test runtime handler uses a single-value .Data.(Type)

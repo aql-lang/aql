@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang"
+	"github.com/aql-lang/aql/lang"
 )
 
 // --- Predicate evaluation: sandbox + CheckMode handling ---
