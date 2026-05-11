@@ -16,11 +16,6 @@ var typeNames = eng.TypeNameTable()
 
 func boolPtr(b bool) *bool { return &b }
 
-// isWhitespace returns true if the byte is a whitespace character.
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
-}
-
 // parenGroup represents items collected between ( and ) by the jsonic grammar.
 // At the top level, these are expanded to engine paren markers. In data context
 // (map values), they become ParenExpr values for inline evaluation.

@@ -13,7 +13,7 @@ package nativemod
 import (
 	"fmt"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // modules maps native module names to their builder functions.

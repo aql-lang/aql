@@ -3,7 +3,7 @@ package lang
 import (
 	"testing"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 func TestRegisterFormat(t *testing.T) {

@@ -15,7 +15,7 @@ package eng
 //	              produced one, otherwise a list of all results).
 //
 // Mirrors the production aql `do` (see
-// lang/internal/engine/native_control.go::doListHandler /
+// lang/engine/native_control.go::doListHandler /
 // doMapHandler). Errors in the list form are wrapped as Error values
 // rather than aborting — this matches the production semantics where
 // `do` participates in carrier-style flows that want to observe

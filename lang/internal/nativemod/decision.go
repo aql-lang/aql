@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
-	"github.com/metsitaba/voxgig-exp/lang/internal/native"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
+	"github.com/metsitaba/voxgig-exp/lang/native"
 )
 
 // decisionParseCache caches the parsed AQL tokens for the decision module

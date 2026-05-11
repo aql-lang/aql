@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // BuildTimeModule creates the "aql:time" native module.
@@ -230,7 +230,7 @@ func parseISO8601Duration(s string) (engine.CalDurationData, time.Duration, bool
 			return engine.CalDurationData{}, 0, false, fmt.Errorf("duration: invalid time component in %q", s)
 		}
 		n := 0.0
-		fmt.Sscanf(timePart[:i], "%f", &n)
+		_, _ = fmt.Sscanf(timePart[:i], "%f", &n)
 		switch timePart[i] {
 		case 'H':
 			clk += time.Duration(n * float64(time.Hour))

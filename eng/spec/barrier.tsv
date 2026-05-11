@@ -1,23 +1,200 @@
 # tokens	expected	note
-# Mixed BarrierPos: 0 < B < N. Forward fills sig[0..B-1]; sig[B..N-1]		
-# must come from the stack. Distinct from /s (B=0) and /f (B=N) which		
-# are call-site overrides — here the boundary is intrinsic to the sig.		
+# Barrier dispatch. Each Signature declares BarrierPos B — the count		
+# of leading args (sig[0..B-1]) that MAY be filled from forward tokens,		
+# in source order; the rest (sig[B..N-1]) always come from the stack,		
+# top-down. So B=0 is legacy stack-only, B=N is legacy forward-prec,		
+# and 0 < B < N mixes the two. Call-site modifiers override B:		
+#   /s  → B becomes 0 (all stack).		
+#   /f  → B becomes N (all forward) AND is strict: if the forward scan		
+#         can't fill every slot the sig is rejected — no stack fallback.		
+#   /K  → only consider overloads whose total arg count is K.		
+#   /Kf, /Ks → the /K arity filter combined with /f or /s.		
+# The handler always sees args in signature order: args[0] is whatever		
+# bound to sig[0], args[1] to sig[1], … regardless of which side it		
+# came from. (Plain /s and /f on a 2-arg forward-prec word are also		
+# covered in force.tsv; this file widens to arities 0..7, off-centre		
+# barriers, the /K filter, and combinations.)		
 #		
-# Test word `pairq` has a single sig:		
-#   args:    [Integer, Integer]		
-#   barrierPos: 1		
-#   handler: (a, b) => formats `a:b` as a string		
-#		
-# So forward fills sig[0] (one token), sig[1] must come from the stack.		
-		
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
-#   pairq  — [Integer | Integer] BarrierPos=1 — 'a:b' (mixed forward/stack)		
+#   nilq    — []                   (no barrier)   → 'nil'		
+#   negq    — [Number]             B=1            → -a		
+#   addq    — [Number Number]      B=2 (fwd-prec) → a+b   (decimal contagion)		
+#   subq    — [Number Number]      B=2 (fwd-prec) → b-a		
+#   pairq   — [Integer | Integer]  B=1            → 'a:b'		
+#   tri1q   — [Integer ×3]         B=1            → 'a,b,c'		
+#   tri2q   — [Integer ×3]         B=2            → 'a,b,c'		
+#   tripq   — [Integer ×3]         B=3            → 'a,b,c'		
+#   quad1q  — [Integer ×4]         B=1            → 'a,b,c,d'		
+#   quadq   — [Integer ×4]         B=2            → 'a,b,c,d'		
+#   quad3q  — [Integer ×4]         B=3            → 'a,b,c,d'		
+#   quintq  — [Integer ×5]         B=3            → 'a,b,c,d,e'		
+#   hexq    — [Integer ×6]         B=3            → 'a,b,c,d,e,f'		
+#   septq   — [Integer ×7]         B=4            → 'a,b,c,d,e,f,g'		
+#   flexq   — [Integer]→'one:a'  |  [Integer Integer]→'two:a,b'  (both B=N)		
 # === end fixtures ===		
 		
+# ── arity 0 ─────────────────────────────────────────────────────		
+nilq	'nil'	a 0-arg word fires immediately, consuming nothing
+1 nilq	1 'nil'	0-arg word leaves the prior stack value untouched
+nilq 1	'nil' 1	0-arg word consumes no forward token; 1 runs after
+nilq nilq	'nil' 'nil'	two independent 0-arg calls
+nilq/0	'nil'	/0 selects the 0-arg overload (matched via the fallback path)
+1 nilq/0	1 'nil'	/0, stack value untouched
+nilq/1	ERROR:signature_error	/1 — nilq has no 1-arg overload
+		
+# ── arity 1 — negq, B=1 (the single arg is forward-eligible) ────		
+negq 5	-5	forward token fills sig[0]
+5 negq	-5	no forward token → sig[0] from the stack top
+negq/f 5	-5	/f → B=1 (=N): forward fills sig[0]
+5 negq/f	ERROR:signature_error	/f is strict: forward scan finds no token, sig[0] stays unfilled
+negq/s 5	ERROR:signature_error	/s → B=0: sig[0] must come from the (empty) stack
+5 negq/s	-5	/s → B=0: sig[0] from the stack
+5 negq/s 7	-5 7	/s closes the forward window, so 7 is not consumed; runs after
+negq/1 5	-5	/1 picks the (only) 1-arg overload; B=1 default
+5 negq/1	-5	/1, sig[0] from the stack
+negq/1f 5	-5	/1 + /f
+5 negq/1f	ERROR:signature_error	/1 + /f strict: nothing forward to fill sig[0]
+negq/1s 5	ERROR:signature_error	/1 + /s: empty stack
+5 negq/1s	-5	/1 + /s: sig[0] from the stack
+negq/2 5	ERROR:signature_error	/2 — negq has no 2-arg overload
+		
+# ── arity 2, barrier 1 — pairq [Integer | Integer] ─────────────		
 2 pairq 5	'5:2'	stack=[2], forward=[5]: sig[0]=5 (fwd), sig[1]=2 (stk) → '5:2'
-2 5 pairq	'5:2'	all-stack: sig[0]=top=5, sig[1]=2 (forward limit unused, stack supplies both)
-pairq 5 2	ERROR:signature_error	all-forward: forward limit=1 fills sig[0]=5, sig[1] needs stack but stack empty
-3 7 pairq 5	3 '5:7'	stack=[3,7], forward=[5]: sig[0]=5 (fwd), sig[1]=top=7 (stk); 3 left dangling
-pairq/f 5 2	'5:2'	/f overrides barrier to N, both args from forward
-2 pairq/s 5	ERROR:signature_error	/s overrides barrier to 0, only one stack value but two needed
-2 5 pairq/s	'5:2'	/s overrides barrier to 0, both args from stack
+2 5 pairq	'5:2'	no forward token → both from stack: sig[0]=top=5, sig[1]=2
+pairq 5 2	ERROR:signature_error	forward limit=1 fills sig[0]=5; sig[1] needs the stack, which is empty
+3 7 pairq 5	3 '5:7'	stack=[3,7], forward=[5]: sig[0]=5 (fwd), sig[1]=top=7 (stk); 3 dangles
+pairq/f 5 2	'5:2'	/f → B=2: both from forward, sig[0]=5, sig[1]=2
+2 pairq/s 5	ERROR:signature_error	/s → B=0: only one stack value but two are needed
+2 5 pairq/s	'5:2'	/s → B=0: both args from the stack
+2 5 pairq/s 7	'5:2' 7	/s closes the forward window, so 7 dangles
+pairq/2 5 2	ERROR:signature_error	/2 is a no-op arity filter here; behaviour is still B=1 → empty-stack error
+2 pairq/2 5	'5:2'	/2 (same single sig), B=1: sig[0]=5 (fwd), sig[1]=2 (stk)
+pairq/2f 5 2	'5:2'	/2 + /f → all forward
+2 5 pairq/2s	'5:2'	/2 + /s → all stack
+		
+# ── arity 2, barrier 2 — addq / subq (forward-prec, B=N) ───────		
+addq 2 3	5	B=2: both from forward, 2+3
+2 addq 3	5	forward=[3], stack=[2]: sig[0]=3 (fwd), sig[1]=2 (stk), 3+2 (swap form)
+2 3 addq	5	all from stack: sig[0]=top=3, sig[1]=2, 3+2
+subq 10 3	-7	sig[0]=10, sig[1]=3 → args[1]-args[0] = 3-10
+10 subq 3	7	swap form: sig[0]=3 (fwd), sig[1]=10 (stk) → 10-3
+10 3 subq	7	all stack: sig[0]=3 (top), sig[1]=10 → 10-3
+subq/s 10 3	ERROR:signature_error	/s → B=0: forward token 10 ignored, only one stack value
+10 3 subq/s	7	/s → B=0: sig[0]=top=3, sig[1]=10 → 10-3
+addq/f 2 3	5	/f → B=2 (no-op): 2+3
+2 addq/f 3	ERROR:signature_error	/f strict: forward fills only sig[0]=3, sig[1] would need the stack
+		
+# ── arity 3 — barriers 1, 2, 3 (tri1q / tri2q / tripq) ─────────		
+tri1q 1 2 3	ERROR:signature_error	B=1: forward fills sig[0]=1 (limit hit); sig[1],sig[2] need an empty stack
+2 3 tri1q 1	'1,3,2'	stack=[2,3], forward=[1]: sig[0]=1 (fwd), sig[1]=top=3, sig[2]=2
+1 2 3 tri1q	'3,2,1'	no forward token → all stack, top-down: sig[0]=3, sig[1]=2, sig[2]=1
+3 tri1q 1 2	ERROR:signature_error	B=1: sig[0]=1 (fwd); 2 not consumed; sig[1],sig[2] need 2 stack values, only 1 (=3)
+tri1q/f 1 2 3	'1,2,3'	/f → B=3: all forward in source order
+2 3 tri1q/f 1	ERROR:signature_error	/f strict: forward fills only sig[0]=1, no fallback to the stack
+1 2 3 tri1q/s	'3,2,1'	/s → B=0: all stack, top-down
+2 3 tri1q/s 1	ERROR:signature_error	/s → B=0: forward token 1 ignored, only two stack values
+tri2q 1 2 3	ERROR:signature_error	B=2: forward fills sig[0]=1, sig[1]=2; sig[2] needs an empty stack
+3 tri2q 1 2	'1,2,3'	stack=[3], forward=[1 2]: sig[0]=1, sig[1]=2 (fwd), sig[2]=top=3
+2 3 tri2q 1	'1,3,2'	forward fills sig[0]=1 then hits the end (limit 2 not reached); sig[1]=top=3, sig[2]=2
+1 2 3 tri2q	'3,2,1'	no forward token → all stack, top-down
+3 tri2q/f 1 2	ERROR:signature_error	/f strict: forward fills sig[0]=1, sig[1]=2 then ends; sig[2] unfilled
+1 2 3 tri2q/s	'3,2,1'	/s → B=0: all stack
+tripq 1 2 3	'1,2,3'	B=3: all forward in source order
+1 tripq 2 3	'2,3,1'	forward fills sig[0]=2, sig[1]=3 then ends; sig[2]=top=1 from the stack
+1 2 tripq 3	'3,2,1'	forward fills sig[0]=3 then ends; sig[1]=top=2, sig[2]=1 from the stack
+1 2 3 tripq	'3,2,1'	no forward token → all stack, top-down
+tripq/s 1 2 3	ERROR:signature_error	/s → B=0: 1 2 3 are forward tokens, ignored; stack is empty
+1 2 3 tripq/s	'3,2,1'	/s → B=0: all stack
+1 2 3 tripq/s 4 5	'3,2,1' 4 5	/s consumes only the stack; 4 and 5 run afterward
+tripq/f 1 2 3	'1,2,3'	/f → B=3: all forward
+1 tripq/f 2 3	ERROR:signature_error	/f strict: forward fills sig[0]=2, sig[1]=3 then ends; sig[2] unfilled (plain `1 tripq 2 3` works)
+tripq/3 1 2 3	'1,2,3'	/3 no-op arity filter; B=3 → all forward
+tripq/3f 1 2 3	'1,2,3'	/3 + /f
+1 2 3 tripq/3s	'3,2,1'	/3 + /s → all stack
+tripq/2 1 2 3	ERROR:signature_error	/2 — tripq has no 2-arg overload
+tripq/4 1 2 3 4	ERROR:signature_error	/4 — tripq has no 4-arg overload
+		
+# ── arity 4 — barriers 1, 2, 3 (quad1q / quadq / quad3q) ───────		
+1 2 3 4 quad1q	'4,3,2,1'	no forward token → all stack, top-down
+2 3 4 quad1q 1	'1,4,3,2'	B=1: sig[0]=1 (fwd); sig[1]=top=4, sig[2]=3, sig[3]=2
+quad1q 1 2 3 4	ERROR:signature_error	B=1: sig[0]=1 (fwd, limit hit); sig[1..3] need an empty stack
+quad1q/f 1 2 3 4	'1,2,3,4'	/f → B=4: all forward
+2 3 4 quad1q/f 1	ERROR:signature_error	/f strict: forward fills only sig[0]=1
+1 2 3 4 quad1q/s	'4,3,2,1'	/s → B=0: all stack
+1 2 3 4 quadq	'4,3,2,1'	no forward token → all stack, top-down
+3 4 quadq 1 2	'1,2,4,3'	B=2: sig[0]=1, sig[1]=2 (fwd); sig[2]=top=4, sig[3]=3
+quadq 1 2 3 4	ERROR:signature_error	B=2: sig[0]=1, sig[1]=2 (fwd, limit hit); 3,4 not consumed; sig[2],sig[3] need an empty stack
+1 2 quadq 3 4	'3,4,2,1'	B=2: sig[0]=3, sig[1]=4 (fwd); sig[2]=top=2, sig[3]=1
+quadq/f 1 2 3 4	'1,2,3,4'	/f → B=4: all forward
+1 2 quadq/f 3 4	ERROR:signature_error	/f strict: forward fills sig[0]=3, sig[1]=4 then ends; sig[2],sig[3] unfilled (plain form works)
+1 2 3 4 quadq/s	'4,3,2,1'	/s → B=0: all stack
+1 2 3 4 quadq/s 5 6	'4,3,2,1' 5 6	/s consumes only the stack; 5 and 6 run afterward
+quadq/s 1 2 3 4	ERROR:signature_error	/s → B=0: 1 2 3 4 are forward tokens, ignored; empty stack
+quadq/4 1 2 3 4	ERROR:signature_error	/4 no-op arity filter; still B=2 → empty-stack error
+1 2 quadq/4 3 4	'3,4,2,1'	/4 + B=2: sig[0]=3, sig[1]=4 (fwd); sig[2]=top=2, sig[3]=1
+quadq/4f 1 2 3 4	'1,2,3,4'	/4 + /f → all forward
+1 2 3 4 quadq/4s	'4,3,2,1'	/4 + /s → all stack
+quadq/3 1 2 3	ERROR:signature_error	/3 — quadq has no 3-arg overload
+1 2 3 4 quad3q	'4,3,2,1'	no forward token → all stack, top-down
+4 quad3q 1 2 3	'1,2,3,4'	B=3: sig[0]=1, sig[1]=2, sig[2]=3 (fwd); sig[3]=top=4
+quad3q 1 2 3 4	ERROR:signature_error	B=3: sig[0..2]=1,2,3 (fwd, limit hit); 4 not consumed; sig[3] needs an empty stack
+2 3 4 quad3q 1	'1,4,3,2'	forward fills sig[0]=1 then ends (limit 3 not reached); sig[1]=top=4, sig[2]=3, sig[3]=2
+quad3q/f 1 2 3 4	'1,2,3,4'	/f → B=4: all forward
+4 quad3q/f 1 2 3	ERROR:signature_error	/f strict: forward fills sig[0..2]=1,2,3 then ends; sig[3] unfilled (plain `4 quad3q 1 2 3` works)
+1 2 3 4 quad3q/s	'4,3,2,1'	/s → B=0: all stack
+		
+# ── arity 5 — quintq, B=3 ───────────────────────────────────────		
+1 2 3 4 5 quintq	'5,4,3,2,1'	no forward token → all stack, top-down
+4 5 quintq 1 2 3	'1,2,3,5,4'	B=3: sig[0..2]=1,2,3 (fwd); sig[3]=top=5, sig[4]=4
+quintq 1 2 3 4 5	ERROR:signature_error	B=3: sig[0..2]=1,2,3 (fwd, limit hit); 4,5 not consumed; sig[3],sig[4] need an empty stack
+1 2 quintq 3 4 5	'3,4,5,2,1'	B=3: sig[0..2]=3,4,5 (fwd); sig[3]=top=2, sig[4]=1
+quintq/f 1 2 3 4 5	'1,2,3,4,5'	/f → B=5: all forward
+1 2 quintq/f 3 4 5	ERROR:signature_error	/f strict: forward fills sig[0..2]=3,4,5 then ends; sig[3],sig[4] unfilled
+1 2 3 4 5 quintq/s	'5,4,3,2,1'	/s → B=0: all stack
+quintq/5f 1 2 3 4 5	'1,2,3,4,5'	/5 + /f → all forward
+1 2 3 4 5 quintq/5s	'5,4,3,2,1'	/5 + /s → all stack
+quintq/4 1 2 3 4	ERROR:signature_error	/4 — quintq has no 4-arg overload
+		
+# ── arity 6 — hexq, B=3 ─────────────────────────────────────────		
+1 2 3 4 5 6 hexq	'6,5,4,3,2,1'	no forward token → all stack, top-down
+4 5 6 hexq 1 2 3	'1,2,3,6,5,4'	B=3: sig[0..2]=1,2,3 (fwd); sig[3]=top=6, sig[4]=5, sig[5]=4
+hexq 1 2 3 4 5 6	ERROR:signature_error	B=3: sig[0..2]=1,2,3 (fwd, limit hit); 4,5,6 not consumed; sig[3..5] need an empty stack
+1 2 3 hexq 4 5 6	'4,5,6,3,2,1'	B=3: sig[0..2]=4,5,6 (fwd); sig[3]=top=3, sig[4]=2, sig[5]=1
+hexq/f 1 2 3 4 5 6	'1,2,3,4,5,6'	/f → B=6: all forward
+1 2 3 hexq/f 4 5 6	ERROR:signature_error	/f strict: forward fills sig[0..2]=4,5,6 then ends; sig[3..5] unfilled
+1 2 3 4 5 6 hexq/s	'6,5,4,3,2,1'	/s → B=0: all stack
+		
+# ── arity 7 — septq, B=4 ────────────────────────────────────────		
+1 2 3 4 5 6 7 septq	'7,6,5,4,3,2,1'	no forward token → all stack, top-down
+5 6 7 septq 1 2 3 4	'1,2,3,4,7,6,5'	B=4: sig[0..3]=1,2,3,4 (fwd); sig[4]=top=7, sig[5]=6, sig[6]=5
+septq 1 2 3 4 5 6 7	ERROR:signature_error	B=4: sig[0..3]=1,2,3,4 (fwd, limit hit); 5,6,7 not consumed; sig[4..6] need an empty stack
+1 2 3 septq 4 5 6 7	'4,5,6,7,3,2,1'	B=4: sig[0..3]=4,5,6,7 (fwd); sig[4]=top=3, sig[5]=2, sig[6]=1
+septq/f 1 2 3 4 5 6 7	'1,2,3,4,5,6,7'	/f → B=7: all forward
+1 2 3 septq/f 4 5 6 7	ERROR:signature_error	/f strict: forward fills sig[0..3]=4,5,6,7 then ends; sig[4..6] unfilled
+1 2 3 4 5 6 7 septq/s	'7,6,5,4,3,2,1'	/s → B=0: all stack
+septq/7f 1 2 3 4 5 6 7	'1,2,3,4,5,6,7'	/7 + /f → all forward
+1 2 3 4 5 6 7 septq/7s	'7,6,5,4,3,2,1'	/7 + /s → all stack
+		
+# ── /K arity filter on an overload set — flexq [Integer] | [Integer Integer] ──		
+flexq 5	'one:5'	only one arg available → the 2-arg overload can't fill, so the 1-arg one matches
+flexq 5 7	'two:5,7'	enough args for the 2-arg overload → it wins; forward fills sig[0]=5, sig[1]=7
+5 flexq	'one:5'	one stack value → 1-arg overload, sig[0] from the stack top
+5 7 flexq	'two:7,5'	two stack values → 2-arg overload: sig[0]=top=7, sig[1]=5
+flexq/1 5	'one:5'	/1 forces the 1-arg overload
+flexq/1 5 7	'one:5' 7	/1, then 7 dangles
+flexq/2 5 7	'two:5,7'	/2 forces the 2-arg overload; B=2 → both forward
+flexq/2 5	ERROR:signature_error	/2: forward fills sig[0]=5 then ends; sig[1] needs an empty stack
+5 flexq/2 7	'two:7,5'	/2: sig[0]=7 (fwd), sig[1]=top=5 (stk)
+5 7 flexq/2	'two:7,5'	/2: no forward token → sig[0]=top=7, sig[1]=5
+5 7 flexq/1	5 'one:7'	/1: sig[0]=top=7 → 'one:7'; 5 dangles
+flexq/2f 5 7	'two:5,7'	/2 + /f → both forward (B already 2)
+5 flexq/2f 7	ERROR:signature_error	/2 + /f strict: forward fills only sig[0]=7; no stack fallback
+5 7 flexq/2s	'two:7,5'	/2 + /s → both from the stack
+5 flexq/2s 7	ERROR:signature_error	/2 + /s: forward token 7 ignored, only one stack value
+flexq/2s 5 7	ERROR:signature_error	/2 + /s: 5 7 are forward tokens, ignored; empty stack
+flexq/1f 5	'one:5'	/1 + /f
+flexq/1s 5	ERROR:signature_error	/1 + /s: empty stack
+5 flexq/1s	'one:5'	/1 + /s: sig[0] from the stack
+5 7 flexq/1s	5 'one:7'	/1 + /s: sig[0]=top=7; 5 dangles
+flexq/0	ERROR:signature_error	/0 — flexq has no 0-arg overload
+flexq/3 5 7 9	ERROR:signature_error	/3 — flexq has no 3-arg overload

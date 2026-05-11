@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/lang"
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 func TestNew(t *testing.T) {

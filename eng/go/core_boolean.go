@@ -29,7 +29,7 @@ package eng
 //                  fails to unify collapses to Never.
 //
 // These five words are bytewise-identical ports of the production
-// lang/internal/engine/native_boolean.go and native_type.go
+// lang/engine/native_boolean.go and native_type.go
 // registrations (with their dependencies — tandValues + helpers —
 // also moved into aqleng; see fn_params.go's pattern for how the
 // move played out).

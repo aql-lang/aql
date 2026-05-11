@@ -1,12 +1,12 @@
 package test
 
 import (
-	"github.com/metsitaba/voxgig-exp/lang/internal/native"
+	"github.com/metsitaba/voxgig-exp/lang/native"
 	"strings"
 	"testing"
 
 	"github.com/metsitaba/voxgig-exp/eng/parser"
-	"github.com/metsitaba/voxgig-exp/lang/internal/engine"
+	"github.com/metsitaba/voxgig-exp/lang/engine"
 )
 
 // runWithSource parses and runs AQL source, returning the error.

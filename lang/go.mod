@@ -3,7 +3,6 @@ module github.com/metsitaba/voxgig-exp/lang
 go 1.24.7
 
 require (
-	github.com/chzyer/readline v1.5.1
 	github.com/jsonicjs/csv/go v0.1.2
 	github.com/jsonicjs/jsonic/go v0.1.6
 	github.com/metsitaba/voxgig-exp/eng v0.0.0
@@ -15,8 +14,6 @@ require (
 require (
 	github.com/jsonicjs/directive/go v0.1.0 // indirect
 	github.com/jsonicjs/multisource/go v0.1.2
-	golang.org/x/crypto v0.32.0
-	golang.org/x/term v0.28.0
 )
 
 require (

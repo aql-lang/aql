@@ -2,21 +2,34 @@
 
 ## Project
 
-This is **voxgig-exp**, containing **AQL** — a concatenative query language implemented in Go (`aql/` directory).
+This is **voxgig-exp**, containing **AQL** — a concatenative query language
+implemented in Go. The repo is split into three Go modules:
+
+- `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
+  (`github.com/metsitaba/voxgig-exp/eng`).
+- `lang/` — the language layer: `lang.New()` API, native words/modules,
+  the `engine` shim, the production spec suite (this module,
+  `github.com/metsitaba/voxgig-exp/lang`).
+- `cmd/go/` — the command-line tools: `aql` (CLI/REPL), `aqlweb`,
+  `aqlwasm`, `genhelp`, `solardemo`
+  (`github.com/metsitaba/voxgig-exp/cmd/go`).
 
 ## Build & Test
 
 ```bash
-cd aql
-make test       # or: go test ./...
-make build
-make vet
-make fmt
+cd lang
+make test       # tests lang + eng + cmd/go ; or: go test ./...
+make vet        # vets all three modules
+make fmt        # gofmt all three modules
+
+cd ../cmd/go
+make build      # builds bin/aql
+make wasm       # builds ../../docs/index.html
 ```
 
 Run a specific test:
 ```bash
-go test ./test/ -run "TestFactorialTypeScaling" -v
+cd lang && go test ./test/ -run "TestFactorialTypeScaling" -v
 ```
 
 ## Dependencies
@@ -294,7 +307,7 @@ overlays) only need to update the helpers.
 ## Helper API discipline
 
 The engine consolidates several distributed implicit contracts behind
-helper APIs in `internal/engine/util.go`. Use the helpers rather than
+helper APIs in `engine/util.go`. Use the helpers rather than
 the underlying state. Adding direct field access regresses the
 consolidation and will be flagged in code review.
 
@@ -404,7 +417,7 @@ Key patterns to follow:
   `IsOptionsType()`, `IsTypedMap()` to discriminate, and guard
   `AsMap()` calls — it returns nil for non-OrderedMap data.
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
-  `internal/native/transform.go` have nil-Data guards. If you add new
+  `native/transform.go` have nil-Data guards. If you add new
   conversion helpers, include the same guard.
 - **Engine builtin handlers.** Check `args[N].Data == nil` before calling
   `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
