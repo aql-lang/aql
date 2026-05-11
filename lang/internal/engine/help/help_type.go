@@ -17,9 +17,11 @@ func init() {
 
 	register(&Entry{
 		Word:    "inspect",
-		Summary: "Return a detailed map describing a registered word.",
-		Description: "Returns a map with name, kind, forward_precedence, and signatures for " +
-			"the named word. Useful for introspecting built-in and user-defined words.",
+		Summary: "Return a detailed map describing a word, value, or type.",
+		Description: "For a word: a map with name, kind, and signatures. For a value or " +
+			"type: a map with type ('Type' for a type value, otherwise the value's " +
+			"type leaf), struct (the underlying-structure leaf, for types), kind, and " +
+			"kind-specific fields (fields / alternatives / child / signatures / …).",
 	})
 
 	register(&Entry{

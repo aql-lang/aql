@@ -2360,10 +2360,17 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	if _as109 != "literal" {
 		t.Errorf("kind = %v, want literal", kind)
 	}
+	// A named type's `type` is the metatype "Type"; its underlying
+	// structure leaf goes to `struct`.
 	typ, _ := m.Get("type")
 	_as110, _ := typ.AsString()
-	if _as110 != "Number" {
-		t.Errorf("type = %v, want 'Number'", typ)
+	if _as110 != "Type" {
+		t.Errorf("type = %v, want 'Type'", typ)
+	}
+	strct, _ := m.Get("struct")
+	_asStruct, _ := strct.AsString()
+	if _asStruct != "Number" {
+		t.Errorf("struct = %v, want 'Number'", strct)
 	}
 }
 

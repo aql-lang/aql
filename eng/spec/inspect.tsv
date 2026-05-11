@@ -15,14 +15,25 @@
 #                    map / fn-shape value): returns its *type inspection*.		
 # #		
 # word inspection:  { name, kind:native|defined|unknown,		
-#                     forward_precedence?, signatures:[{args:[…]} …] }		
-# type inspection:  { name?, type:'<leaf>', kind:literal|record|object|		
-#                     table|disjunct|typed_list|typed_map|function_shape|		
-#                     dependent_scalar, …kind-specific fields }		
+#                     signatures:[{args:[…]} …] }		
+# type inspection:  { name?, type:'…', struct:'…'?, kind:…, … }		
+#   - for a TYPE value (a type literal, record / object / disjunct /		
+#     enum / typed list / typed map / fn-shape, …): `type` is 'Type'		
+#     (its type-of is the metatype) and `struct` is the underlying-		
+#     structure leaf — 'Map' for a record shape, 'List' for a typed		
+#     list, the named type for an object, etc.;		
+#   - for a CONCRETE value: `type` is the value's exact VType leaf and		
+#     there is no `struct`.		
+#   kind:literal       → (just kind, plus type/struct)		
+#   kind:record/table  → fields:{k:'…' …}		
+#   kind:object        → parent:'…'?, fields:{k:'…' …} (incl. inherited)		
+#   kind:disjunct      → alternatives:['…' …]		
+#   kind:typed_list / typed_map → child:'…'		
+#   kind:function_shape → signatures:[{params:[…] returns:[…]} …]		
+#   kind:dependent_scalar → leaf, lo:{kind,value}?, hi:{kind,value}?		
 # #		
 # The result carries VType `Inspect` (a subtype of `Map`) but its		
-# payload is an OrderedMap, so it renders comma-separated (`{k:v,k:v}`)		
-# via the value's own String().		
+# payload is an OrderedMap, so it renders comma-separated via String().		
 # #		
 # Two footguns: a bare word like `true` is inspected as the NAME 'true'		
 # (unknown), not the boolean value — put it on the stack first / wrap		
@@ -37,97 +48,99 @@
 # 1. inspect — words (a word inspection)		
 # ====================================================================		
 		
-# --- stack ops (all stack-only; forward_precedence:false) ---		
-inspect dup	{name:'dup',kind:native,forward_precedence:false,signatures:[{args:['Any']}]}	
-inspect swap	{name:'swap',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect drop	{name:'drop',kind:native,forward_precedence:false,signatures:[{args:['Any']}]}	
-inspect over	{name:'over',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect rot	{name:'rot',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any']}]}	
-inspect nip	{name:'nip',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect tuck	{name:'tuck',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect dup2	{name:'dup2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect swap2	{name:'swap2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any','Any']}]}	
-inspect drop2	{name:'drop2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any']}]}	
-inspect over2	{name:'over2',kind:native,forward_precedence:false,signatures:[{args:['Any','Any','Any','Any']}]}	
+# --- stack ops ---		
+inspect dup	{name:'dup',kind:native,signatures:[{args:['Any']}]}	
+inspect swap	{name:'swap',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect drop	{name:'drop',kind:native,signatures:[{args:['Any']}]}	
+inspect over	{name:'over',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect rot	{name:'rot',kind:native,signatures:[{args:['Any','Any','Any']}]}	
+inspect nip	{name:'nip',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect tuck	{name:'tuck',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect dup2	{name:'dup2',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect swap2	{name:'swap2',kind:native,signatures:[{args:['Any','Any','Any','Any']}]}	
+inspect drop2	{name:'drop2',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect over2	{name:'over2',kind:native,signatures:[{args:['Any','Any','Any','Any']}]}	
 		
 # --- boolean / type-level connectives ---		
-inspect not	{name:'not',kind:native,forward_precedence:true,signatures:[{args:['Boolean']},{args:['Any']}]}	
-inspect and	{name:'and',kind:native,forward_precedence:true,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
-inspect or	{name:'or',kind:native,forward_precedence:true,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
-inspect tor	{name:'tor',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
-inspect tand	{name:'tand',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
+inspect not	{name:'not',kind:native,signatures:[{args:['Boolean']},{args:['Any']}]}	
+inspect and	{name:'and',kind:native,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
+inspect or	{name:'or',kind:native,signatures:[{args:['Boolean','Boolean']},{args:['Any','Any']}]}	
+inspect tor	{name:'tor',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect tand	{name:'tand',kind:native,signatures:[{args:['Any','Any']}]}	
 		
 # --- binding / quotation ---		
-inspect quote	{name:'quote',kind:native,forward_precedence:true,signatures:[{args:['Word']},{args:['Any']}]}	
-inspect args	{name:'args',kind:native,forward_precedence:false,signatures:[{args:[]}]}	
-inspect def	{name:'def',kind:native,forward_precedence:true,signatures:[{args:['Map','Any']},{args:['Word','Any']}]}	
-inspect fn	{name:'fn',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
-inspect fnsig	{name:'fnsig',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
+inspect quote	{name:'quote',kind:native,signatures:[{args:['Word']},{args:['Any']}]}	
+inspect args	{name:'args',kind:native,signatures:[{args:[]}]}	
+inspect def	{name:'def',kind:native,signatures:[{args:['Map','Any']},{args:['Word','Any']}]}	
+inspect fn	{name:'fn',kind:native,signatures:[{args:['List']}]}	
+inspect fnsig	{name:'fnsig',kind:native,signatures:[{args:['List']}]}	
 		
 # --- type system ---		
-inspect type	{name:'type',kind:native,forward_precedence:true,signatures:[{args:['Word','Any']}]}	
-inspect untype	{name:'untype',kind:native,forward_precedence:true,signatures:[{args:['Word']}]}	
-inspect typeof	{name:'typeof',kind:native,forward_precedence:true,signatures:[{args:['Any']}]}	
-inspect pathof	{name:'pathof',kind:native,forward_precedence:true,signatures:[{args:['Type']}]}	
-inspect is	{name:'is',kind:native,forward_precedence:true,signatures:[{args:['Any','Any']}]}	
-inspect enum	{name:'enum',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
-inspect make	{name:'make',kind:native,forward_precedence:true,signatures:[{args:['ScalarType','Map','Any']},{args:['Any','Any','Map']},{args:['Object','Any','Object']},{args:['ObjectType','Map']},{args:['Array','List']},{args:['ScalarType','Any']},{args:['Any','Any']}]}	
-inspect record	{name:'record',kind:native,forward_precedence:true,signatures:[{args:['List']}]}	
-inspect object	{name:'object',kind:native,forward_precedence:true,signatures:[{args:['Map','Object']},{args:['Map']}]}	
-inspect inspect	{name:'inspect',kind:native,forward_precedence:true,signatures:[{args:['Atom']},{args:['Word']},{args:['Any']}]}	
+inspect type	{name:'type',kind:native,signatures:[{args:['Word','Any']}]}	
+inspect untype	{name:'untype',kind:native,signatures:[{args:['Word']}]}	
+inspect typeof	{name:'typeof',kind:native,signatures:[{args:['Any']}]}	
+inspect pathof	{name:'pathof',kind:native,signatures:[{args:['Type']}]}	
+inspect is	{name:'is',kind:native,signatures:[{args:['Any','Any']}]}	
+inspect enum	{name:'enum',kind:native,signatures:[{args:['List']}]}	
+inspect make	{name:'make',kind:native,signatures:[{args:['ScalarType','Map','Any']},{args:['Any','Any','Map']},{args:['Object','Any','Object']},{args:['ObjectType','Map']},{args:['Array','List']},{args:['ScalarType','Any']},{args:['Any','Any']}]}	
+inspect record	{name:'record',kind:native,signatures:[{args:['List']}]}	
+inspect object	{name:'object',kind:native,signatures:[{args:['Map','Object']},{args:['Map']}]}	
+inspect inspect	{name:'inspect',kind:native,signatures:[{args:['Atom']},{args:['Word']},{args:['Any']}]}	
 		
 # --- state ---		
-inspect get	{name:'get',kind:native,forward_precedence:true,signatures:[{args:['Integer','Array']},{args:['Integer','Node']},{args:['Integer','Object']},{args:['String','Node']},{args:['String','Object']},{args:['Atom','Node']},{args:['Atom','Object']},{args:['Any','None']}]}	
-inspect set	{name:'set',kind:native,forward_precedence:true,signatures:[{args:['Integer','Any','Array']},{args:['String','Any','Object']},{args:['Atom','Any','Object']}]}	
-inspect do	{name:'do',kind:native,forward_precedence:true,signatures:[{args:['Map']},{args:['List']}]}	
+inspect get	{name:'get',kind:native,signatures:[{args:['Integer','Array']},{args:['Integer','Node']},{args:['Integer','Object']},{args:['String','Node']},{args:['String','Object']},{args:['Atom','Node']},{args:['Atom','Object']},{args:['Any','None']}]}	
+inspect set	{name:'set',kind:native,signatures:[{args:['Integer','Any','Array']},{args:['String','Any','Object']},{args:['Atom','Any','Object']}]}	
+inspect do	{name:'do',kind:native,signatures:[{args:['Map']},{args:['List']}]}	
 		
-# --- a fixture word (forward-prec, one [Number Number] sig) ---		
-inspect addq	{name:'addq',kind:native,forward_precedence:true,signatures:[{args:['Number','Number']}]}	
+# --- a fixture word ---		
+inspect addq	{name:'addq',kind:native,signatures:[{args:['Number','Number']}]}	
 		
 # ====================================================================		
-# 2. inspect — builtin type literals (a type inspection; kind:literal)		
+# 2. inspect — builtin type literals (type:'Type', struct = the leaf)		
 # ====================================================================		
-# Every type-name word, used as a value, reports `kind:literal` with		
-# `type` = its leaf name. (`FunctionSignature` is the exception — its		
-# VType is recognised as a function-shape, so it reports		
+# Every type-name word, used as a value, is a TYPE — `type` is 'Type',		
+# `struct` is its own leaf, `kind` is 'literal'. (`FunctionSignature`		
+# is the exception: its VType is recognised as a function-shape, so		
 # `kind:function_shape` with an empty signature list.)		
 		
-inspect Any	{type:'Any',kind:literal}	
-inspect None	{type:'None',kind:literal}	
-inspect Never	{type:'Never',kind:literal}	
-inspect Scalar	{type:'Scalar',kind:literal}	
-inspect Number	{type:'Number',kind:literal}	
-inspect Integer	{type:'Integer',kind:literal}	
-inspect Decimal	{type:'Decimal',kind:literal}	
-inspect String	{type:'String',kind:literal}	
-inspect ProperString	{type:'ProperString',kind:literal}	
-inspect EmptyString	{type:'EmptyString',kind:literal}	
-inspect Boolean	{type:'Boolean',kind:literal}	
-inspect Path	{type:'Path',kind:literal}	
-inspect Atom	{type:'Atom',kind:literal}	
-inspect Node	{type:'Node',kind:literal}	
-inspect List	{type:'List',kind:literal}	
-inspect Map	{type:'Map',kind:literal}	
-inspect Object	{type:'Object',kind:literal}	
-inspect Resource	{type:'Resource',kind:literal}	
-inspect Entity	{type:'Entity',kind:literal}	
-inspect Table	{type:'Table',kind:literal}	
-inspect Record	{type:'Record',kind:literal}	
-inspect Options	{type:'Options',kind:literal}	
-inspect Array	{type:'Array',kind:literal}	
-inspect Timeout	{type:'Timeout',kind:literal}	
-inspect Interval	{type:'Interval',kind:literal}	
-inspect Function	{type:'Function',kind:literal}	
-inspect FunctionSignature	{type:'FunctionSignature',kind:function_shape,signatures:[]}	
-inspect Disjunct	{type:'Disjunct',kind:literal}	
-inspect Enum	{type:'Enum',kind:literal}	
-inspect Type	{type:'Type',kind:literal}	
+inspect Any	{type:'Type',struct:'Any',kind:literal}	
+inspect None	{type:'Type',struct:'None',kind:literal}	
+inspect Never	{type:'Type',struct:'Never',kind:literal}	
+inspect Scalar	{type:'Type',struct:'Scalar',kind:literal}	
+inspect Number	{type:'Type',struct:'Number',kind:literal}	
+inspect Integer	{type:'Type',struct:'Integer',kind:literal}	
+inspect Decimal	{type:'Type',struct:'Decimal',kind:literal}	
+inspect String	{type:'Type',struct:'String',kind:literal}	
+inspect ProperString	{type:'Type',struct:'ProperString',kind:literal}	
+inspect EmptyString	{type:'Type',struct:'EmptyString',kind:literal}	
+inspect Boolean	{type:'Type',struct:'Boolean',kind:literal}	
+inspect Path	{type:'Type',struct:'Path',kind:literal}	
+inspect Atom	{type:'Type',struct:'Atom',kind:literal}	
+inspect Node	{type:'Type',struct:'Node',kind:literal}	
+inspect List	{type:'Type',struct:'List',kind:literal}	
+inspect Map	{type:'Type',struct:'Map',kind:literal}	
+inspect Object	{type:'Type',struct:'Object',kind:literal}	
+inspect Resource	{type:'Type',struct:'Resource',kind:literal}	
+inspect Entity	{type:'Type',struct:'Entity',kind:literal}	
+inspect Table	{type:'Type',struct:'Table',kind:literal}	
+inspect Record	{type:'Type',struct:'Record',kind:literal}	
+inspect Options	{type:'Type',struct:'Options',kind:literal}	
+inspect Array	{type:'Type',struct:'Array',kind:literal}	
+inspect Timeout	{type:'Type',struct:'Timeout',kind:literal}	
+inspect Interval	{type:'Type',struct:'Interval',kind:literal}	
+inspect Function	{type:'Type',struct:'Function',kind:literal}	
+inspect Disjunct	{type:'Type',struct:'Disjunct',kind:literal}	
+inspect Enum	{type:'Type',struct:'Enum',kind:literal}	
+inspect Type	{type:'Type',struct:'Type',kind:literal}	
+inspect FunctionSignature	{type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[]}	
 		
 # ====================================================================		
 # 3. inspect — concrete values (a type inspection)		
 # ====================================================================		
+# A concrete value reports its own VType leaf as `type`, with no		
+# `struct` — it IS that type, it doesn't *describe* one.		
 		
-# --- scalars: kind:literal, type = the value's exact VType leaf ---		
+# --- scalars ---		
 inspect 5	{type:'Integer',kind:literal}	
 inspect -7	{type:'Integer',kind:literal}	
 inspect 5.0	{type:'Decimal',kind:literal}	
@@ -141,54 +154,58 @@ inspect true	{name:'true',kind:unknown,signatures:[]}	the WORD 'true' isn't regi
 inspect false	{name:'false',kind:unknown,signatures:[]}	
 inspect ( quote red )	{name:'red',kind:unknown,signatures:[]}	the atom is treated as a name to look up
 		
-# --- nodes ---		
-inspect [ ]	{type:'List',kind:literal}	an empty list
+# --- nodes: a plain list/map is a concrete value (no struct);		
+#     a record SHAPE, typed list, or typed map IS a type (type:'Type') ---		
+inspect [ ]	{type:'List',kind:literal}	an empty list — a concrete value
 inspect [ 1 2 3 ]	{type:'List',kind:literal}	
-inspect { }	{type:'Map',kind:literal}	an empty map
-inspect { a:1 b:2 }	{type:'Map',kind:literal}	
-inspect [ :Integer ]	{type:'List',kind:typed_list,child:'Scalar/Number/Integer'}	a typed list
-inspect { :String }	{type:'Map',kind:typed_map,child:'Scalar/String'}	a typed map
+inspect { }	{type:'Map',kind:literal}	an empty map — a concrete value
+inspect { a:1 b:2 }	{type:'Map',kind:literal}	a map with concrete values — a concrete value
+inspect { x:Integer }	{type:'Type',struct:'Map',kind:record,fields:{x:'Integer'}}	a record shape — a TYPE; struct is Map
+inspect { x:Integer y:String }	{type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'String'}}	
+inspect { a:{ b:Integer } }	{type:'Type',struct:'Map',kind:record,fields:{a:'Map'}}	nested shape — the inner shape's leaf is 'Map'
+inspect [ :Integer ]	{type:'Type',struct:'List',kind:typed_list,child:'Scalar/Number/Integer'}	a typed list — a TYPE; struct is List
+inspect { :String }	{type:'Type',struct:'Map',kind:typed_map,child:'Scalar/String'}	a typed map — a TYPE; struct is Map
 		
 # ====================================================================		
 # 4. inspect — type VALUES (record / object / disjunct / enum / fn-shape)		
 # ====================================================================		
-# Constructed inline with parens, or named with `type NAME …` first		
-# (naming adds a `name:` field). Anonymous `object {…}` has a		
-# non-deterministic internal ID, so it's only shown via a named type.		
+# All report type:'Type'. `struct` is the value's VType leaf — 'Map'		
+# for a record, 'Enum' / 'Disjunct' for an enum / union, the named		
+# type for an object. Naming via `type NAME …` adds a `name:` field.		
 		
 # --- record ---		
-inspect ( record [ { a:Integer } { b:String } ] )	{type:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
-type Pt record [ { x:Integer } { y:Integer } ] inspect Pt	{name:'Pt',type:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
+inspect ( record [ { a:Integer } { b:String } ] )	{type:'Type',struct:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
+type Pt record [ { x:Integer } { y:Integer } ] inspect Pt	{name:'Pt',type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
 		
-# --- object (kind:object; fields includes inherited, parent first) ---		
-type Vec object { x:Integer y:Integer } inspect Vec	{name:'Vec',type:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
-type Bar object { b:Integer } type Baz object { c:String } Bar inspect Baz	{name:'Baz',type:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
+# --- object (struct is the named type; fields includes inherited, parent first) ---		
+type Vec object { x:Integer y:Integer } inspect Vec	{name:'Vec',type:'Type',struct:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
+type Bar object { b:Integer } type Baz object { c:String } Bar inspect Baz	{name:'Baz',type:'Type',struct:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
 		
 # --- disjunct / enum (alternatives are the members' VType paths) ---		
-inspect ( Integer tor Boolean )	{type:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
-inspect ( enum [ red green blue ] )	{type:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	enum members are atoms
-type D ( Integer tor Boolean ) inspect D	{name:'D',type:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
-type Color enum [ red green blue ] inspect Color	{name:'Color',type:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	
+inspect ( Integer tor Boolean )	{type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
+inspect ( enum [ red green blue ] )	{type:'Type',struct:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	enum members are atoms
+type D ( Integer tor Boolean ) inspect D	{name:'D',type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
+type Color enum [ red green blue ] inspect Color	{name:'Color',type:'Type',struct:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	
 		
 # --- function-shape (fnsig) ---		
-inspect ( fnsig [ [ Integer ] [ Integer ] ] )	{type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
-inspect ( fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ] )	{type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']},{params:['String'],returns:['String']}]}	two pairs → two sigs
-type Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig',type:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
+inspect ( fnsig [ [ Integer ] [ Integer ] ] )	{type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
+inspect ( fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ] )	{type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']},{params:['String'],returns:['String']}]}	two pairs → two sigs
+type Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig',type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
 		
 # --- a function VALUE / typed-list / typed-map / alias named type ---		
-inspect ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	{type:'Function',kind:literal}	a function value reports literal — the fnsig form carries the shape
-type Ints [ :Integer ] inspect Ints	{name:'Ints',type:'List',kind:typed_list,child:'Scalar/Number/Integer'}	
-type Strs { :String } inspect Strs	{name:'Strs',type:'Map',kind:typed_map,child:'Scalar/String'}	
-type IdType Integer inspect IdType	{name:'IdType',type:'Integer',kind:literal}	an alias of a builtin — literal
+inspect ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	{type:'Type',struct:'Function',kind:literal}	a function value is a (predicate) type — type:'Type', struct:'Function'
+type Ints [ :Integer ] inspect Ints	{name:'Ints',type:'Type',struct:'List',kind:typed_list,child:'Scalar/Number/Integer'}	
+type Strs { :String } inspect Strs	{name:'Strs',type:'Type',struct:'Map',kind:typed_map,child:'Scalar/String'}	
+type IdType Integer inspect IdType	{name:'IdType',type:'Type',struct:'Integer',kind:literal}	an alias of a builtin — type:'Type', struct:'Integer'
 		
 # ====================================================================		
 # 5. inspect — def'd values, unknown names, and inspect-of-inspect		
 # ====================================================================		
 		
 def f 99 inspect f	{name:'f',kind:defined,signatures:[]}	a def'd plain value — kind:defined, no signatures
-def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g',kind:native,forward_precedence:true,signatures:[{args:['Integer']}]}	an fn-defined word — buildInspection sees only the compiled dispatch table, so kind:native
+def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g',kind:native,signatures:[{args:['Integer']}]}	an fn-defined word — buildInspection sees only the compiled dispatch table, so kind:native
 inspect nonexistentword	{name:'nonexistentword',kind:unknown,signatures:[]}	not a type, def, or word
 		
 typeof ( inspect dup )	Inspect	an inspect result is an `Inspect` value
 ( inspect dup ) is Map	true	`Inspect` is a subtype of `Map`
-inspect ( inspect dup )	{type:'Inspect',kind:literal}	inspecting an inspect result — a plain Inspect-typed map
+inspect ( inspect dup )	{type:'Inspect',kind:literal}	an inspect result is a concrete value (an `Inspect` map), not a type — type:'Inspect', no struct

@@ -16,8 +16,15 @@ package eng
 // The result is the machine-readable counterpart of `help`:
 //
 //	word inspection:  { name, kind:native|defined|unknown,
-//	                    forward_precedence, signatures:[{args:[…]}…] }
+//	                    signatures:[{args:[…]}…] }
 //	type inspection:  { name?, type:"<leaf>", kind, …kind-specific }
+//	  • for a TYPE value (a type literal, record / object / disjunct /
+//	    enum / typed list / typed map / fn-shape / dependent scalar):
+//	    type = "Type" (its type-of is the metatype), struct = the
+//	    underlying-structure leaf (Map for a record shape, List for a
+//	    typed list, the named type for an object, …);
+//	  • for a CONCRETE value: type = the value's exact VType leaf, and
+//	    no `struct`.
 //	  record / table → fields:{k:"<leaf>" …}
 //	  object         → parent:"…"?, fields:{k:"<leaf>" …} (incl. inherited)
 //	  disjunct       → alternatives:["…" …]
@@ -98,8 +105,6 @@ func buildInspection(r *Registry, name string) Value {
 		result.Set("kind", NewAtom("native"))
 	}
 
-	result.Set("forward_precedence", NewBoolean(fn.ForwardPrecedence))
-
 	var sigMaps []Value
 	for _, sig := range fn.Signatures {
 		sm := NewOrderedMap()
@@ -131,7 +136,16 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("name", NewString(name))
 	}
 
-	result.Set("type", NewString(tv.VType.Leaf()))
+	// A TYPE value (a bare type literal, or a structural type body) has
+	// type-of `Type`; its underlying structure leaf goes to `struct`.
+	// A concrete value reports its own VType leaf as `type` and has no
+	// `struct`.
+	if tv.Data == nil || IsTypeBody(tv) || IsRecordShape(tv) {
+		result.Set("type", NewString("Type"))
+		result.Set("struct", NewString(tv.VType.Leaf()))
+	} else {
+		result.Set("type", NewString(tv.VType.Leaf()))
+	}
 
 	switch {
 	case tv.IsRecordType():
@@ -140,6 +154,16 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
+			fields.Set(k, NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", NewMap(fields))
+
+	case IsRecordShape(tv):
+		result.Set("kind", NewAtom("record"))
+		m := tv.AsMap()
+		fields := NewOrderedMap()
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
 			fields.Set(k, NewString(v.VType.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
