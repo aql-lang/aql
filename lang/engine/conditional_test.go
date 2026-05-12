@@ -1,6 +1,78 @@
 package engine
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestIfClauseList exercises the clause-list form of `if`:
+//
+//	if [c1 b1 c2 b2 … else]
+//
+// even-index elements are conditions, the following odd-index element is
+// that clause's body, and a trailing element (odd-length list) is the
+// else. The first truthy condition wins; later conditions are not
+// evaluated. Elements may be code-body lists (evaluated / spliced) or
+// plain values (used as-is).
+func TestIfClauseList(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	L := func(vs ...Value) Value { return NewList(vs) }
+	S, B, I, W := NewString, NewBoolean, NewInteger, NewWord
+
+	tests := []struct {
+		name   string
+		tokens []Value
+		want   string // space-joined Value.String() of the result stack; "" = empty
+	}{
+		{"first-cond-truthy", []Value{W("if"), L(B(true), S("yes"))}, "'yes'"},
+		{"first-cond-falsy-no-else", []Value{W("if"), L(B(false), S("yes"))}, ""},
+		{"second-cond-truthy", []Value{W("if"), L(B(false), S("a"), B(true), S("b"), S("c"))}, "'b'"},
+		{"none-match-else", []Value{W("if"), L(B(false), S("a"), B(false), S("b"), S("c"))}, "'c'"},
+		{"none-match-no-else", []Value{W("if"), L(B(false), S("a"), B(false), S("b"))}, ""},
+		{"lone-else", []Value{W("if"), L(S("only"))}, "'only'"},
+		{"empty-list", []Value{W("if"), L()}, ""},
+		{"truthy-int-cond", []Value{W("if"), L(I(7), S("nz"), S("z"))}, "'nz'"},
+		{"zero-int-cond-falls-to-else", []Value{W("if"), L(I(0), S("nz"), S("z"))}, "'z'"},
+		{"code-body-cond-first-matches", []Value{W("if"), L(
+			L(I(1), W("gt"), I(0)), S("pos"),
+			L(I(1), W("lt"), I(0)), S("neg"),
+			S("zero"))}, "'pos'"},
+		{"code-body-cond-second-matches", []Value{W("if"), L(
+			L(I(1), W("lt"), I(0)), S("pos"),
+			L(I(1), W("gt"), I(0)), S("neg"),
+			S("zero"))}, "'neg'"},
+		{"code-body-cond-none-matches", []Value{W("if"), L(
+			L(I(1), W("lt"), I(0)), S("pos"),
+			L(I(0), W("lt"), I(0)), S("neg"),
+			S("zero"))}, "'zero'"},
+		{"code-body-body-then-evaluated", []Value{W("if"), L(B(true),
+			L(I(1), W("add"), I(2)), L(I(10), W("add"), I(20)))}, "3"},
+		{"code-body-body-else-evaluated", []Value{W("if"), L(B(false),
+			L(I(1), W("add"), I(2)), L(I(10), W("add"), I(20)))}, "30"},
+		{"stack-form", []Value{L(B(true), S("x")), W("if")}, "'x'"},
+		// The second condition would raise undefined_word if evaluated;
+		// it isn't, because the first condition matches first.
+		{"short-circuit", []Value{W("if"), L(B(true), S("first"),
+			L(W("never-evaluated-word")), S("never"))}, "'first'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toks := make([]Value, len(tt.tokens))
+			copy(toks, tt.tokens)
+			got := runAQL(t, r, toks)
+			parts := make([]string, len(got))
+			for i, v := range got {
+				parts[i] = v.String()
+			}
+			if joined := strings.Join(parts, " "); joined != tt.want {
+				t.Errorf("got %q, want %q", joined, tt.want)
+			}
+		})
+	}
+}
 
 func TestIsTruthy(t *testing.T) {
 	tests := []struct {
