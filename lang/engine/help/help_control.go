@@ -14,8 +14,15 @@ func init() {
 	register(&Entry{
 		Word:    "if",
 		Summary: "Conditional execution.",
-		Description: "If the boolean is true, evaluates the first list (then branch). " +
-			"If false and a second list is provided, evaluates that instead (else branch).",
+		Description: "If the condition is true, evaluates the then branch; with a third " +
+			"argument, a false condition evaluates the else branch instead. Given a " +
+			"single list `[c1 b1 c2 b2 … else]`, the even elements are conditions and " +
+			"the following odd element is that clause's body; conditions are tried in " +
+			"order and the first true one's body runs (a trailing element is the else).",
+		Notes: []string{
+			"A condition or branch that is a list is evaluated as code; a plain value is used as-is.",
+			"In the clause-list form, conditions after the first match are not evaluated.",
+		},
 	})
 
 	register(&Entry{

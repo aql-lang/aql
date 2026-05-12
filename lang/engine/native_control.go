@@ -43,6 +43,21 @@ var controlNatives = []NativeFunc{
 				Handler:    if2Handler,
 				ReturnsFn:  if2ReturnsFn,
 			},
+			// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
+			// are conditions, the following odd element is that clause's
+			// body, and a trailing element (odd-length list) is the
+			// else. Conditions are tried left-to-right; the first truthy
+			// one's body runs, the rest are not evaluated. Each element
+			// may be a code-body list (evaluated / spliced) or a plain
+			// value (used as-is). Must be tried after if3/if2 so the
+			// legacy `if <listCond> <then> [<else>]` forms still win when
+			// extra args are present. See ifClause in conditional.go.
+			{
+				Args:       []Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    ifListHandler,
+				ReturnsFn:  ifListReturnsFn,
+			},
 		},
 	},
 	{
@@ -299,6 +314,56 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)}
 	}
 	return []Value{JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))}
+}
+
+// ifListHandler implements the clause-list form `if [c1 b1 c2 b2 … else]`.
+// It hands the (raw, NoEval'd) list's elements to ifClause, which produces
+// the token stream the engine then runs.
+func ifListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, fmt.Errorf("if: clause-list argument must be a concrete list, got a type literal")
+	}
+	return ifClause(args[0].AsList().Slice()), nil
+}
+
+// ifListReturnsFn type-checks the clause-list form: the result is the
+// join of every clause body's last value plus the else clause (or None
+// when there is no else, since an unmatched `if` produces nothing).
+// Condition bodies are still run for their diagnostics but don't
+// contribute to the return type. Unlike if3/if2 this does no per-clause
+// guard narrowing — multi-clause narrowing isn't modelled.
+func ifListReturnsFn(args []Value, r *Registry) []Value {
+	if !IsConcrete(args[0]) || !args[0].VType.Equal(TList) {
+		return []Value{NewCarrier(TAny)}
+	}
+	elems := args[0].AsList().Slice()
+
+	var joined []Value
+	add := func(stk []Value) {
+		if joined == nil {
+			joined = stk
+		} else {
+			joined = JoinCarrierStacks(joined, stk)
+		}
+	}
+
+	i := 0
+	for ; i+1 < len(elems); i += 2 {
+		if isCodeBody(elems[i]) {
+			RunCarrierBody(r, elems[i]) // run the condition body for diagnostics only
+		}
+		add(RunCarrierBody(r, elems[i+1]))
+	}
+	if i < len(elems) {
+		add(RunCarrierBody(r, elems[i])) // lone else
+	} else {
+		add([]Value{NewCarrier(TNone)}) // no else: an unmatched if yields nothing
+	}
+
+	if len(joined) == 0 {
+		return nil
+	}
+	return []Value{joined[len(joined)-1]}
 }
 
 // ---- for / break / continue handlers ----
