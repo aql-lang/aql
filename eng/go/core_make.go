@@ -15,8 +15,8 @@ import (
 //	make ObjectType data            instantiate a named object
 //	make Object data Object         instantiate with prototype
 //	make Array [list]               build an Array
-//	make Type Type {opts}           three-arg shape with arbitrary options
-//	make Type Any                   two-arg fallback
+//	make *Type *Type {opts}           three-arg shape with arbitrary options
+//	make *Type Any                   two-arg fallback
 //
 // Mirrors the production lang `make` (formerly in
 // lang/engine/native_type_make_helpers.go); the handlers are
@@ -24,16 +24,16 @@ import (
 // callers that reach into the package-private surface keep working.
 func registerCoreMake(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "make",
-		ForwardPrecedence: true,
+		Name:        "make",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TArray, TList}, Handler: makeArrayHandler, Returns: []Type{TArray}},
-			{Args: []Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []Type{TObject, TAny, TObject}, Handler: makeWithPrototype, Returns: []Type{TObject}},
-			{Args: []Type{TAny, TAny, TMap}, Handler: makeWithOpts, Returns: []Type{TAny}},
-			{Args: []Type{TAny, TAny}, Handler: makeHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TArray, TList}, Handler: makeArrayHandler, Returns: []*Type{TArray}},
+			{Args: []*Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TObject, TAny, TObject}, Handler: makeWithPrototype, Returns: []*Type{TObject}},
+			{Args: []*Type{TAny, TAny, TMap}, Handler: makeWithOpts, Returns: []*Type{TAny}},
+			{Args: []*Type{TAny, TAny}, Handler: makeHandler, Returns: []*Type{TAny}},
 		},
 	})
 }
@@ -288,7 +288,11 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 		}
 	}
 
-	return []Value{NewObjectInstance(ObjectInstanceInfo{
+	instanceType := objType.Type
+	if instanceType == nil {
+		instanceType = TObject
+	}
+	return []Value{NewObjectInstance(instanceType, ObjectInstanceInfo{
 		TypeRef:   &objType,
 		Fields:    result,
 		Prototype: prototype,
@@ -464,7 +468,7 @@ func makeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	var targetVal, srcVal, protoVal Value
 	for _, a := range resolved {
 		switch {
-		case a.IsObjectType() && targetVal.VType.Equal(Type{}):
+		case a.IsObjectType() && targetVal.VType.Equal(nil):
 			targetVal = a
 		case a.IsObjectInstance():
 			protoVal = a
@@ -491,10 +495,10 @@ func makeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	for _, a := range args {
 		resolved := ResolveTypeLiteralDef(a, reg)
 		switch {
-		case isTypeLike(resolved) && targetVal.VType.Equal(Type{}):
+		case isTypeLike(resolved) && targetVal.VType.Equal(nil):
 			targetVal = resolved
 		default:
-			if srcVal.VType.Equal(Type{}) {
+			if srcVal.VType.Equal(nil) {
 				srcVal = a
 			} else {
 				optsVal = a
@@ -591,7 +595,7 @@ func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 // MakeConvert converts a source value to a target scalar type.
 // Exported so production lang and downstream tooling can reuse the
 // same scalar-coercion logic that backs `make`.
-func MakeConvert(src Value, targetType Type) (Value, error) {
+func MakeConvert(src Value, targetType *Type) (Value, error) {
 	switch {
 	case targetType.Matches(TString):
 		return NewString(ValToString(src)), nil

@@ -22,96 +22,96 @@ import (
 // stack. `installResourceTypes` handles those during engine.Register.
 var typeNatives = []NativeFunc{
 	{
-		Name:              "table",
-		ForwardPrecedence: true,
+		Name:        "table",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:           []Type{TAny},
+			Args:           []*Type{TAny},
 			Handler:        tableHandler,
-			Returns:        []Type{TTable},
+			Returns:        []*Type{TTable},
 			RunInCheckMode: true,
 		}},
 	},
 	{
-		Name:              "type",
-		ForwardPrecedence: true,
+		Name:        "type",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:           []Type{TString, TAny},
+				Args:           []*Type{TString, TAny},
 				Handler:        typeHandler,
-				Returns:        []Type{},
+				Returns:        []*Type{},
 				RunInCheckMode: true,
 			},
 			{
-				Args:           []Type{TAtom, TAny},
+				Args:           []*Type{TAtom, TAny},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        typeHandler,
-				Returns:        []Type{},
+				Returns:        []*Type{},
 				RunInCheckMode: true,
 			},
 		},
 	},
 	{
-		Name:              "untype",
-		ForwardPrecedence: true,
+		Name:        "untype",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:           []Type{TString},
+				Args:           []*Type{TString},
 				Handler:        untypeHandler,
-				Returns:        []Type{},
+				Returns:        []*Type{},
 				RunInCheckMode: true,
 			},
 			{
-				Args:           []Type{TAtom},
+				Args:           []*Type{TAtom},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        untypeHandler,
-				Returns:        []Type{},
+				Returns:        []*Type{},
 				RunInCheckMode: true,
 			},
 		},
 	},
 	{
-		Name:              "typeof",
-		ForwardPrecedence: true,
+		Name:        "typeof",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny},
+			Args:    []*Type{TAny},
 			Handler: typeofHandler,
-			Returns: []Type{TAtom},
+			Returns: []*Type{TAtom},
 		}},
 	},
 	{
-		Name:              "fulltypeof",
-		ForwardPrecedence: true,
+		Name:        "fulltypeof",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny},
+			Args:    []*Type{TAny},
 			Handler: fulltypeofHandler,
-			Returns: []Type{TAtom},
+			Returns: []*Type{TAtom},
 		}},
 	},
 	{
-		Name:              "is",
-		ForwardPrecedence: true,
+		Name:        "is",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
+			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
 			Handler:    isHandler,
-			Returns:    []Type{TBoolean},
+			Returns:    []*Type{TBoolean},
 		}},
 	},
 	{
-		Name:              "guard",
-		ForwardPrecedence: true,
+		Name:        "guard",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TBoolean},
+			Args:       []*Type{TAny, TBoolean},
 			BarrierPos: 1,
 			Handler:    guardHandler,
-			Returns:    []Type{TAny},
+			Returns:    []*Type{TAny},
 		}},
 	},
 	{
-		Name:              "base",
-		ForwardPrecedence: true,
+		Name:        "base",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TAny},
+			Args:      []*Type{TAny},
 			Handler:   baseHandler,
 			ReturnsFn: ReturnsIdentity(0),
 		}},
@@ -119,45 +119,45 @@ var typeNatives = []NativeFunc{
 	// `tor` and `tand` moved to eng/go/core_boolean.go; installed
 	// via eng.RegisterCoreTypeOps from register.go.
 	{
-		Name:              "any",
-		ForwardPrecedence: true,
+		Name:        "any",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList}, Handler: anyHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
-		Name:              "all",
-		ForwardPrecedence: true,
+		Name:        "all",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList}, Handler: allHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
-		Name:              "tany",
-		ForwardPrecedence: true,
+		Name:        "tany",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList}, Handler: tanyHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TList}, Handler: tanyHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
-		Name:              "tall",
-		ForwardPrecedence: true,
+		Name:        "tall",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TList}, Handler: tallHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TList}, Handler: tallHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
-		Name:              "convert",
-		ForwardPrecedence: true,
+		Name:        "convert",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:      []Type{TScalarType, TMap, TScalar},
+				Args:      []*Type{TScalarType, TMap, TScalar},
 				Patterns:  map[int]Value{1: convertOptsPattern()},
 				Handler:   convert3Handler,
 				ReturnsFn: ReturnsIdentity(0),
 			},
 			{
-				Args:      []Type{TScalarType, TScalar},
+				Args:      []*Type{TScalarType, TScalar},
 				Handler:   convert2Handler,
 				ReturnsFn: ReturnsIdentity(0),
 			},
@@ -182,10 +182,10 @@ func installResourceTypes(r *Registry) {
 	resourceInfo := ObjectTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     FormatFixedTypeID("Object/Resource", BuiltinTypeIDs["Object/Resource"]),
+		ID:     BuiltinIDForPath("Object/Resource"),
 	}
 
-	InstallDef(r, "Resource", NewObjectType(resourceInfo))
+	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
 
 	resourceVal, _ := r.TopOfDefStack("Resource")
 	installedResource, _ := resourceVal.AsObjectType()
@@ -197,10 +197,10 @@ func installResourceTypes(r *Registry) {
 	entityInfo := ObjectTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     FormatFixedTypeID("Object/Resource/Entity", BuiltinTypeIDs["Object/Resource/Entity"]),
+		ID:     BuiltinIDForPath("Object/Resource/Entity"),
 	}
 
-	InstallDef(r, "Entity", NewObjectType(entityInfo))
+	InstallDef(r, "Entity", NewObjectType(TResourceEntity, entityInfo))
 }
 
 // ---- table ----
@@ -226,7 +226,7 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 		return fmt.Errorf("type %s: type names must start with a capital letter", name)
 	}
 	if !r.HasType(name) {
-		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
+		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
 			return err
 		}
 	}
@@ -244,13 +244,20 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 			info.Name = "Object/" + name
 		}
 		for _, p := range strings.Split(info.Name, "/") {
-			r.KnownTypeParts[p] = true
+			r.RegisterPart(p)
 		}
-		body = NewObjectType(info)
+		parentDef := TObject
+		if info.Parent != nil && info.Parent.Type != nil {
+			parentDef = info.Parent.Type
+		}
+		def := r.Types.MintType(name, parentDef)
+		body = NewObjectType(def, info)
+		r.Types.Bind(name, def, body)
+	} else {
+		r.PushType(name, body)
 	}
-	r.PushType(name, body)
 	for _, p := range strings.Split(name, "/") {
-		r.KnownTypeParts[p] = true
+		r.RegisterPart(p)
 	}
 	return nil
 }
@@ -290,7 +297,11 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	// Delegate to the canonical typeof: a concrete value → its exact
 	// VType path; ANY type literal → "Type" (metatypes are collapsed —
 	// no ScalarType / NodeType / ObjectType layer); none → "None".
-	parts := TypeOf(args[0]).VType.Parts
+	def := TypeOf(args[0]).VType
+	var parts []string
+	for d := def; d != nil; d = d.Parent {
+		parts = append([]string{d.Name}, parts...)
+	}
 	if len(parts) > 0 {
 		last := parts[len(parts)-1]
 		if len(last) > 0 && last[0] >= '0' && last[0] <= '9' {
@@ -483,7 +494,7 @@ func convertOptsPattern() Value {
 }
 
 // convertTo performs the actual scalar-type conversion.
-func convertTo(src Value, targetType Type, base string) (Value, error) {
+func convertTo(src Value, targetType *Type, base string) (Value, error) {
 	switch {
 	case targetType.Matches(TString):
 		if base == "" {

@@ -68,9 +68,9 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 	}
 
 	info := &help.FuncInfo{
-		Name:              fn.Name,
-		ForwardPrecedence: fn.ForwardPrecedence,
-		Entry:             help.Lookup(name),
+		Name:        fn.Name,
+		ForwardArgs: fn.HasForwardSigs(),
+		Entry:       help.Lookup(name),
 	}
 
 	for _, sig := range fn.Signatures {
@@ -145,7 +145,7 @@ func inferExact(name string, sig Signature) []string {
 		}
 		return []string{"Scalar/String"}
 
-	// Type ops
+	// *Type ops
 	case "typeof", "fulltypeof":
 		return []string{"Scalar/Atom"}
 	case "is":
@@ -230,11 +230,11 @@ func inferExact(name string, sig Signature) []string {
 		}
 		return []string{"Scalar/Boolean"}
 
-	// Type union: tor builds a disjunct from any two values.
+	// *Type union: tor builds a disjunct from any two values.
 	case "tor":
 		return []string{"Any"}
 
-	// Type conjunction: tand merges/unifies two values.
+	// *Type conjunction: tand merges/unifies two values.
 	case "tand":
 		return []string{"Any"}
 

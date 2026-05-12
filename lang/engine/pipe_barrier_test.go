@@ -93,8 +93,8 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 // TestPipeBarrierSortOrder verifies that piped signatures sort before
 // non-piped signatures of equal arity.
 func TestPipeBarrierSortOrder(t *testing.T) {
-	piped := engine.Signature{Args: []engine.Type{engine.TAtom, engine.TNode}, BarrierPos: 1}
-	plain := engine.Signature{Args: []engine.Type{engine.TAtom, engine.TNode}}
+	piped := engine.Signature{Args: []*engine.Type{engine.TAtom, engine.TNode}, BarrierPos: 1}
+	plain := engine.Signature{Args: []*engine.Type{engine.TAtom, engine.TNode}}
 	if engine.SignatureScore(&piped) <= engine.SignatureScore(&plain) {
 		t.Errorf("piped score %d should be > plain score %d",
 			engine.SignatureScore(&piped), engine.SignatureScore(&plain))

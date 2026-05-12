@@ -1127,7 +1127,7 @@ token costs today. Per token processed in `engine.Run`:
    `skipSet`, one for the results splice if net size grows).
 
 Steps 4 and 5 dominate for any program with meaningful control
-flow or forward precedence. A single `add` in `1 add 2` form
+flow or forward arg collection. A single `add` in `1 add 2` form
 goes through:
 
 - `add` pushed as a Word.
@@ -1424,7 +1424,7 @@ reviewed and reordered before any of them are written up.
     sentinel error must unwind the compiled frame correctly
     (currently uses Go error propagation; the bytecode VM needs
     an equivalent).
-12. **Stack-only vs forward precedence defaults.** `/s` and `/f`
+12. **Stack-only vs forward arg collection defaults.** `/s` and `/f`
     modifiers on word invocations and on word definitions both
     affect arg collection. Easy to miss on a per-site basis.
 13. **Constant-pool identity.** Interning breaks `===`-style
@@ -1806,7 +1806,7 @@ Analogous concern for `return` from user fns: if a
 `FALLBACK_INTERP` returns, it must unwind the compiled call
 frame, not just the interpreter's sub-engine.
 
-### 10.7 Stack-only vs forward precedence defaults (inventory #12)
+### 10.7 Stack-only vs forward arg collection defaults (inventory #12)
 
 `def/s` (stack-only) and `def/f` (forward-only) modifiers are
 settable both at definition time (per word) and at call site
@@ -1819,7 +1819,7 @@ matched tells the compiler the actual arg layout. The compiler
 just emits `CALL_NATIVE sig_id` for the selected signature.
 The invocation modifiers don't survive into the bytecode; they
 resolve at compile time. The gotcha is the test matrix: every
-word with forward precedence needs tests exercising `/s` and
+word with forward arg collection needs tests exercising `/s` and
 `/f` invocations to confirm the compiler picks the right
 signature. Mechanical, but easy to miss.
 

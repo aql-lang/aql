@@ -69,11 +69,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 
 	modReg.RegisterNativeFunc(NativeFunc{
-		Name:              "export",
-		ForwardPrecedence: true,
+		Name:        "export",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TAtom, TMap},
+				Args: []*Type{TAtom, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
@@ -82,10 +82,10 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as1, eargs[1].AsMap())
 					return nil, nil
 				},
-				Returns: []Type{},
+				Returns: []*Type{},
 			},
 			{
-				Args: []Type{TString, TMap},
+				Args: []*Type{TString, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
@@ -94,7 +94,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as2, eargs[1].AsMap())
 					return nil, nil
 				},
-				Returns: []Type{},
+				Returns: []*Type{},
 			},
 		},
 	})

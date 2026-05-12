@@ -16,10 +16,10 @@ package engine
 //	                                  CoerceBoolean.
 var booleanNatives = []NativeFunc{
 	{
-		Name:              "otherwise",
-		ForwardPrecedence: true,
+		Name:        "otherwise",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, Returns: []*Type{TAny}},
 		},
 	},
 	boolBinaryNative("xor", func(a, b bool) bool { return a != b }),
@@ -40,11 +40,11 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 		return []Value{NewBoolean(fn(a, b))}, nil
 	}
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, Handler: handler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, Handler: handler, Returns: []Type{TBoolean}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: handler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny, TAny}, Handler: handler, Returns: []*Type{TBoolean}},
 		},
 	}
 }

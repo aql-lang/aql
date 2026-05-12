@@ -341,7 +341,7 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 
 	// All builtin IDs are unique
 	ids := map[string]string{}
-	builtins := map[string]engine.Type{
+	builtins := map[string]*engine.Type{
 		"TAny": engine.TAny, "TNone": engine.TNone, "TScalar": engine.TScalar,
 		"TString": engine.TString, "TStringProper": engine.TStringProper,
 		"TStringEmpty": engine.TStringEmpty, "TNumber": engine.TNumber,
@@ -359,10 +359,9 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 		ids[typ.ID] = name
 	}
 
-	// Runtime-created types should NOT have fixed IDs
-	rt, _ := engine.NewType("String/Custom")
-	if rt.ID != "" {
-		t.Errorf("runtime type should have empty ID, got %s", rt.ID)
+	// NewType is strict — unregistered paths error.
+	if _, err := engine.NewType("String/Custom"); err == nil {
+		t.Error("NewType('String/Custom') should error — unknown type")
 	}
 }
 

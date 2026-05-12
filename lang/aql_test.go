@@ -425,9 +425,9 @@ func TestRegisterForwardWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" as a forward-precedence word: 5 double => 10
+	// Register "double" as a forward-collecting word: 5 double => 10
 	a.Register("double", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			n, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(n * 2)}, nil
@@ -448,9 +448,9 @@ func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "double" with forward precedence — can collect arg after the word.
+	// Register "double" as a forward-collecting word — can collect arg after the word.
 	a.Register("double", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			n, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(n * 2)}, nil
@@ -473,7 +473,7 @@ func TestRegisterStackOnlyWord(t *testing.T) {
 	}
 	// Register "neg" as stack-only: 5 neg => -5
 	a.RegisterStackOnly("neg", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			n, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(-n)}, nil
@@ -495,7 +495,7 @@ func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.RegisterStackOnly("neg", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			n, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(-n)}, nil
@@ -518,14 +518,14 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	// Register "square" with two signatures: integer and string.
 	a.Register("square",
 		lang.Signature{
-			Args: []lang.Type{lang.TInteger},
+			Args: []*lang.Type{lang.TInteger},
 			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 				n, _ := args[0].AsInteger()
 				return []lang.Value{lang.NewInteger(n * n)}, nil
 			},
 		},
 		lang.Signature{
-			Args: []lang.Type{lang.TString},
+			Args: []*lang.Type{lang.TString},
 			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 				s, _ := args[0].AsString()
 				return []lang.Value{lang.NewString(s + s)}, nil
@@ -559,7 +559,7 @@ func TestRegisterLeftToRight(t *testing.T) {
 	}
 
 	a.Register("myadd", lang.Signature{
-		Args: []lang.Type{lang.TInteger, lang.TInteger},
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			a0, _ := args[0].AsInteger()
 			a1, _ := args[1].AsInteger()
@@ -567,7 +567,7 @@ func TestRegisterLeftToRight(t *testing.T) {
 		},
 	})
 	a.Register("mymul", lang.Signature{
-		Args: []lang.Type{lang.TInteger, lang.TInteger},
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			m0, _ := args[0].AsInteger()
 			m1, _ := args[1].AsInteger()
@@ -593,7 +593,7 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 	// Register "divmod" that returns quotient and remainder.
 	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
 	a.Register("divmod", lang.Signature{
-		Args: []lang.Type{lang.TInteger, lang.TInteger},
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			a, _ := args[1].AsInteger()
 			b, _ := args[0].AsInteger()
@@ -619,7 +619,7 @@ func TestRegisterErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Register("fail", lang.Signature{
-		Args: []lang.Type{lang.TAny},
+		Args: []*lang.Type{lang.TAny},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			return nil, fmt.Errorf("intentional error")
 		},
@@ -640,7 +640,7 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Register("triple", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			t0, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(t0 * 3)}, nil
@@ -668,7 +668,7 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 	}
 
 	a.Register("custom", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			c0, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(c0 + 100)}, nil
@@ -697,7 +697,7 @@ func TestRegisterStringHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Register("shout", lang.Signature{
-		Args: []lang.Type{lang.TString},
+		Args: []*lang.Type{lang.TString},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			s, _ := args[0].AsString()
 			return []lang.Value{lang.NewString(strings.ToUpper(s) + "!")}, nil
@@ -720,7 +720,7 @@ func TestRegisterZeroArgWord(t *testing.T) {
 	}
 	counter := 0
 	a.Register("tick", lang.Signature{
-		Args: []lang.Type{},
+		Args: []*lang.Type{},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			counter++
 			return []lang.Value{lang.NewInteger(int64(counter))}, nil
@@ -744,7 +744,7 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	// Add a new integer signature to the built-in "upper" word.
 	// The existing string signature still works; the new one handles integers.
 	a.Register("upper", lang.Signature{
-		Args: []lang.Type{lang.TInteger},
+		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			u0, _ := args[0].AsInteger()
 			return []lang.Value{lang.NewInteger(u0 + 1000)}, nil
@@ -771,13 +771,9 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 }
 
 func TestNewTypeCustom(t *testing.T) {
-	// Verify NewType creates usable custom types.
-	myType, err := lang.NewType("Custom/Special")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if myType.String() != "Custom/Special" {
-		t.Errorf("got %q, want Custom/Special", myType.String())
+	// NewType is strict: unregistered paths error out.
+	if _, err := lang.NewType("Custom/Special"); err == nil {
+		t.Error("NewType('Custom/Special') should error — unknown type")
 	}
 }
 
@@ -787,7 +783,7 @@ func TestRegisterWithTypeAny(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Register("identity", lang.Signature{
-		Args: []lang.Type{lang.TAny},
+		Args: []*lang.Type{lang.TAny},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
 			return args, nil
 		},

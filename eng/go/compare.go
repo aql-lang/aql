@@ -230,56 +230,56 @@ var ComparisonNatives = []NativeFunc{
 	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
 	// Also accepts `Integer lt N` to construct a DepInteger constraint.
 	{
-		Name:              "lt",
-		ForwardPrecedence: true,
+		Name:        "lt",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			makeDepScalarSig("lt", DepLT),
 			{
-				Args:    []Type{TAny, TAny},
+				Args:    []*Type{TAny, TAny},
 				Handler: ltHandler,
-				Returns: []Type{TBoolean},
+				Returns: []*Type{TBoolean},
 			},
 		},
 	},
 
 	// gt: [any, any] -> [boolean] — greater than
 	{
-		Name:              "gt",
-		ForwardPrecedence: true,
+		Name:        "gt",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			makeDepScalarSig("gt", DepGT),
 			{
-				Args:    []Type{TAny, TAny},
+				Args:    []*Type{TAny, TAny},
 				Handler: gtHandler,
-				Returns: []Type{TBoolean},
+				Returns: []*Type{TBoolean},
 			},
 		},
 	},
 
 	// lte: [any, any] -> [boolean] — less than or equal
 	{
-		Name:              "lte",
-		ForwardPrecedence: true,
+		Name:        "lte",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			makeDepScalarSig("lte", DepLTE),
 			{
-				Args:    []Type{TAny, TAny},
+				Args:    []*Type{TAny, TAny},
 				Handler: lteHandler,
-				Returns: []Type{TBoolean},
+				Returns: []*Type{TBoolean},
 			},
 		},
 	},
 
 	// gte: [any, any] -> [boolean] — greater than or equal
 	{
-		Name:              "gte",
-		ForwardPrecedence: true,
+		Name:        "gte",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			makeDepScalarSig("gte", DepGTE),
 			{
-				Args:    []Type{TAny, TAny},
+				Args:    []*Type{TAny, TAny},
 				Handler: gteHandler,
-				Returns: []Type{TBoolean},
+				Returns: []*Type{TBoolean},
 			},
 		},
 	},
@@ -291,34 +291,34 @@ var ComparisonNatives = []NativeFunc{
 
 	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
 	{
-		Name:              "eq",
-		ForwardPrecedence: true,
+		Name:        "eq",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny, TAny},
+			Args:    []*Type{TAny, TAny},
 			Handler: eqHandler,
-			Returns: []Type{TBoolean},
+			Returns: []*Type{TBoolean},
 		}},
 	},
 
 	// neq: [any, any] -> [boolean] — not equal (negation of eq)
 	{
-		Name:              "neq",
-		ForwardPrecedence: true,
+		Name:        "neq",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny, TAny},
+			Args:    []*Type{TAny, TAny},
 			Handler: neqHandler,
-			Returns: []Type{TBoolean},
+			Returns: []*Type{TBoolean},
 		}},
 	},
 
 	// deq: [any, any] -> [boolean] — deep equality (traverse non-scalars)
 	{
-		Name:              "deq",
-		ForwardPrecedence: true,
+		Name:        "deq",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny, TAny},
+			Args:    []*Type{TAny, TAny},
 			Handler: deqHandler,
-			Returns: []Type{TBoolean},
+			Returns: []*Type{TBoolean},
 		}},
 	},
 }

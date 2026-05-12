@@ -226,7 +226,7 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	}
 	r.Register("side-effect",
 		Signature{
-			Args: []Type{TAny},
+			Args: []*Type{TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				callCount++
 				return args, nil
@@ -859,7 +859,7 @@ func TestEngineBaseTypes(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		typeLit Type
+		typeLit *Type
 		wantStr string
 	}{
 		{"number", TNumber, "0"},

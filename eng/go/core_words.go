@@ -169,7 +169,7 @@ func registerCoreDef(r *Registry) {
 		// the type stack before validation. Mirrors the production
 		// aql defTypedHandler in
 		// lang/engine/native_definition.go.
-		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType.ID != "" {
+		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType != nil {
 			constraint = resolved
 		}
 		body := args[1]
@@ -191,24 +191,24 @@ func registerCoreDef(r *Registry) {
 		return []Value{}, nil
 	}
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "def",
-		ForwardPrecedence: true,
+		Name:        "def",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
 				// Typed-name binding: def name:Type body. Sorts first
 				// because TMap is more specific than TWord at the same
 				// depth (higher inherent score).
-				Args:          []Type{TMap, TAny},
+				Args:          []*Type{TMap, TAny},
 				NoEvalArgs:    map[int]bool{1: true},
 				NoEvalMapArgs: map[int]bool{0: true},
 				Handler:       typedHandler,
-				Returns:       []Type{},
+				Returns:       []*Type{},
 			},
 			{
-				Args:       []Type{TWord, TAny},
+				Args:       []*Type{TWord, TAny},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    plainHandler,
-				Returns:    []Type{},
+				Returns:    []*Type{},
 			},
 		},
 	})
@@ -255,10 +255,10 @@ func registerCoreDef(r *Registry) {
 // value usable as a type constraint.
 func registerCoreFn(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "fn",
-		ForwardPrecedence: true,
+		Name:        "fn",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList},
+			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				if args[0].Data == nil {
@@ -280,7 +280,7 @@ func registerCoreFn(r *Registry) {
 				}
 				return []Value{NewFunction(info)}, nil
 			},
-			Returns: []Type{TFunction},
+			Returns: []*Type{TFunction},
 		}},
 	})
 }
@@ -300,10 +300,10 @@ func registerCoreFn(r *Registry) {
 // eng/go/fnsig.go::FnUndefMatchesFnDef.
 func registerCoreFnSig(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "fnsig",
-		ForwardPrecedence: true,
+		Name:        "fnsig",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList},
+			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				if args[0].Data == nil {
@@ -325,7 +325,7 @@ func registerCoreFnSig(r *Registry) {
 				}
 				return []Value{NewFnUndef(info)}, nil
 			},
-			Returns: []Type{TFnUndef},
+			Returns: []*Type{TFnUndef},
 		}},
 	})
 }
@@ -338,19 +338,19 @@ func registerCoreFnSig(r *Registry) {
 //     auto-eval, etc.) treat them as data instead of code.
 func registerCoreQuote(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "quote",
-		ForwardPrecedence: true,
+		Name:        "quote",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TWord},
+				Args: []*Type{TWord},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					w, _ := args[0].AsWord()
 					return []Value{NewAtom(w.Name)}, nil
 				},
-				Returns: []Type{TAtom},
+				Returns: []*Type{TAtom},
 			},
 			{
-				Args:       []Type{TAny},
+				Args:       []*Type{TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					v := args[0]
@@ -359,7 +359,7 @@ func registerCoreQuote(r *Registry) {
 					}
 					return []Value{v}, nil
 				},
-				Returns: []Type{TAny},
+				Returns: []*Type{TAny},
 			},
 		},
 	})
@@ -381,33 +381,33 @@ func registerCoreArgs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "args",
 		Signatures: []NativeSig{{
-			Args: []Type{},
+			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				if top, ok := reg.TopArgs(); ok {
 					return []Value{top}, nil
 				}
 				return []Value{NewList(nil)}, nil
 			},
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "__pa",
-		ForwardPrecedence: true,
+		Name:        "__pa",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{},
+			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				reg.PopArgs()
 				return nil, nil
 			},
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	})
 }
 
 // registerCoreStack installs the Forth-style stack manipulation
 // primitives. All are stack-only (BarrierPos = 0 by default; no
-// ForwardPrecedence flag). Argument convention is the unified §1.4
+// ForwardArgs flag). Argument convention is the unified §1.4
 // rule: args[0] is the top of stack, args[1] is the next-deeper,
 // etc. Splice ordering: the returned []Value is laid back onto the
 // stack in source order, so an N-arg word that returns the same N
@@ -443,7 +443,7 @@ func registerCoreDup(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dup",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny},
+			Args: []*Type{TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[0], args[0]}, nil
 			},
@@ -460,7 +460,7 @@ func registerCoreSwap(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "swap",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[0], args[1]}, nil
 			},
@@ -473,7 +473,7 @@ func registerCoreDrop(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "drop",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny},
+			Args: []*Type{TAny},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
 			},
@@ -488,7 +488,7 @@ func registerCoreOver(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "over",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[1], args[0], args[1]}, nil
 			},
@@ -502,7 +502,7 @@ func registerCoreRot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "rot",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny, TAny},
+			Args: []*Type{TAny, TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[1], args[0], args[2]}, nil
 			},
@@ -516,7 +516,7 @@ func registerCoreNip(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "nip",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[0]}, nil
 			},
@@ -531,7 +531,7 @@ func registerCoreTuck(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "tuck",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[0], args[1], args[0]}, nil
 			},
@@ -545,7 +545,7 @@ func registerCoreDup2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dup2",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[1], args[0], args[1], args[0]}, nil
 			},
@@ -559,7 +559,7 @@ func registerCoreSwap2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "swap2",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny, TAny, TAny},
+			Args: []*Type{TAny, TAny, TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[1], args[0], args[3], args[2]}, nil
 			},
@@ -572,7 +572,7 @@ func registerCoreDrop2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "drop2",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny},
+			Args: []*Type{TAny, TAny},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
 			},
@@ -586,7 +586,7 @@ func registerCoreOver2(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "over2",
 		Signatures: []NativeSig{{
-			Args: []Type{TAny, TAny, TAny, TAny},
+			Args: []*Type{TAny, TAny, TAny, TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{args[3], args[2], args[1], args[0], args[3], args[2]}, nil
 			},
@@ -615,7 +615,7 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 	nativeSigs := make([]NativeSig, 0, len(sigs))
 	for _, sigOrig := range sigs {
 		sig := sigOrig // capture per-iteration
-		argTypes := make([]Type, len(sig.Params))
+		argTypes := make([]*Type, len(sig.Params))
 		for i, p := range sig.Params {
 			argTypes[i] = p.Type
 		}
@@ -641,9 +641,9 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 		})
 	}
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
-		Signatures:        nativeSigs,
+		Name:        name,
+		ForwardArgs: true,
+		Signatures:  nativeSigs,
 	})
 }
 

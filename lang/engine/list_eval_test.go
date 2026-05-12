@@ -18,7 +18,7 @@ func TestListEvalAsArg(t *testing.T) {
 
 	// Register a word that takes a list and returns it unchanged.
 	r.Register("passlist", engine.Signature{
-		Args: []engine.Type{engine.TList},
+		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{args[0]}, nil
 		},
@@ -59,7 +59,7 @@ func TestListEvalArithmetic(t *testing.T) {
 	}
 
 	r.Register("passlist", engine.Signature{
-		Args: []engine.Type{engine.TList},
+		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{args[0]}, nil
 		},
@@ -89,7 +89,7 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 	}
 
 	r.Register("passlist", engine.Signature{
-		Args: []engine.Type{engine.TList},
+		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{args[0]}, nil
 		},
@@ -144,7 +144,7 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	// Register a word "listlen" that takes a list and returns its length,
 	// via a module function (FnDef with captured registry).
 	r.Register("listlen", engine.Signature{
-		Args: []engine.Type{engine.TList},
+		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			lst := args[0].AsList()
 			return []engine.Value{engine.NewInteger(int64(lst.Len()))}, nil
@@ -185,7 +185,7 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 	})
 
 	r.Register("passlist", engine.Signature{
-		Args: []engine.Type{engine.TList},
+		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{args[0]}, nil
 		},

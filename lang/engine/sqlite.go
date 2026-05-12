@@ -43,7 +43,7 @@ func init() {
 }
 
 // aqlTypeToSQLType maps an AQL field type to a SQLite column type.
-func aqlTypeToSQLType(t Type) string {
+func aqlTypeToSQLType(t *Type) string {
 	switch {
 	case t.Matches(TInteger):
 		return "INTEGER"
@@ -102,7 +102,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 
 	// Create table with typed columns based on the record schema.
 	colDefs := make([]string, len(columns))
-	colTypes := make([]Type, len(columns))
+	colTypes := make([]*Type, len(columns))
 	for i, col := range columns {
 		fieldVal, _ := td.Record.Fields.Get(col)
 		colTypes[i] = fieldVal.VType
@@ -193,7 +193,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	}
 
 	// Resolve the type for each result column.
-	colTypes := make([]Type, len(cols))
+	colTypes := make([]*Type, len(cols))
 	for i, col := range cols {
 		colTypes[i] = TString // default
 		if schema != nil {
@@ -237,7 +237,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 
 // aqlValueToSQLParam converts an AQL Value to a Go value suitable for
 // a SQL parameter placeholder, respecting the target column type.
-func aqlValueToSQLParam(v Value, colType Type) interface{} {
+func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 	if v.VType.Equal(TNone) {
 		return nil
 	}
@@ -314,7 +314,7 @@ func aqlValueToSQLParam(v Value, colType Type) interface{} {
 
 // sqlResultToAQLValue converts a raw SQLite result value to the appropriate
 // AQL Value based on the expected column type.
-func sqlResultToAQLValue(raw interface{}, colType Type) Value {
+func sqlResultToAQLValue(raw interface{}, colType *Type) Value {
 	if raw == nil {
 		return NewValueRaw(TNone, nil)
 	}

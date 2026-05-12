@@ -69,8 +69,8 @@ func TestPathSubtype_DepIntegerIsNotInteger(t *testing.T) {
 func TestPathSubtype_AgreesWithMatchesOnPrefixCases(t *testing.T) {
 	cases := []struct {
 		name            string
-		t               Type
-		pattern         Type
+		t               *Type
+		pattern         *Type
 		wantPathSubtype bool
 		wantMatches     bool
 	}{

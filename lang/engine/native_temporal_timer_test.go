@@ -92,7 +92,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 	// Register a custom word that sets an atomic flag when called.
 	var flag atomic.Int32
 	reg.RegisterStackOnly("testflag", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
@@ -125,7 +125,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 
 	var flag atomic.Int32
 	reg.RegisterStackOnly("testflag", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
@@ -196,7 +196,7 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 
 	var counter atomic.Int32
 	reg.RegisterStackOnly("testinc", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			counter.Add(1)
 			return nil, nil
@@ -249,7 +249,7 @@ func TestCancelTimeout(t *testing.T) {
 
 	var flag atomic.Int32
 	reg.RegisterStackOnly("testflag", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			flag.Store(1)
 			return nil, nil
@@ -285,7 +285,7 @@ func TestCancelInterval(t *testing.T) {
 
 	var counter atomic.Int32
 	reg.RegisterStackOnly("testinc", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			counter.Add(1)
 			return nil, nil

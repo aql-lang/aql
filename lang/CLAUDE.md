@@ -116,7 +116,7 @@ Key conversion functions in `parse.go`:
 
 Post §1.4 unification, dispatch is governed by **one** rule applied
 to every signature, regardless of whether the word was historically
-"forward-precedence" or "stack-only":
+"forward-collecting" or "stack-only":
 
 > Each `Signature` declares a boundary `BarrierPos` (the position of
 > the `|` marker). Args at sig positions `[0..BarrierPos-1]` may be
@@ -220,7 +220,7 @@ happens in two contexts for parser-created lists (`Eval=true`):
 2. **When unconsumed on the stack at end of Run()**: `autoEvalStack` runs
    `autoEvalList` on remaining lists with `Eval=true && !Quoted`.
 
-The `quote` word (forward precedence) prevents evaluation:
+The `quote` word (forward arg collection) prevents evaluation:
 - `quote [1 add 2]` → `[Integer(1), Word(add), Integer(2)]`
 - `quote a` → `Atom(a)` (words become atoms)
 - `quote 99` → `99` (scalars unchanged)

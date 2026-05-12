@@ -17,48 +17,48 @@ import "fmt"
 // here, not in the kernel.
 var storageNatives = []NativeFunc{
 	{
-		Name:              "set",
-		ForwardPrecedence: true,
+		Name:        "set",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// Store (copy-on-write)
 			{
-				Args:      []Type{TString, TAny, TStore},
+				Args:      []*Type{TString, TAny, TStore},
 				Handler:   setStoreHandler,
-				Returns:   []Type{},
+				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn,
 			},
 			{
-				Args:      []Type{TAtom, TAny, TStore},
+				Args:      []*Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setStoreHandler,
-				Returns:   []Type{},
+				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn,
 			},
 		},
 	},
 	{
-		Name:              "get",
-		ForwardPrecedence: true,
+		Name:        "get",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// [Key | Store] — check-mode-aware ReturnsFn picks up a
 			// typed carrier from a previously-set key.
 			{
-				Args: []Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
+				Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
 				ReturnsFn: getStoreReturnsFn,
 			},
 			{
-				Args: []Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
+				Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
 				ReturnsFn: getStoreReturnsFn,
 			},
 		},
 	},
 	{
-		Name:              "context",
-		ForwardPrecedence: true,
+		Name:        "context",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{},
+			Args:    []*Type{},
 			Handler: contextHandler,
-			Returns: []Type{TStore},
+			Returns: []*Type{TStore},
 		}},
 	},
 }
@@ -112,5 +112,5 @@ func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if store == nil {
 		return nil, fmt.Errorf("context: no active context")
 	}
-	return []Value{NewStoreValue(store)}, nil
+	return []Value{NewStoreValue(TStore, store)}, nil
 }

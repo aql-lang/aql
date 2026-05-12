@@ -31,7 +31,7 @@ Representative references:
 ## AQL Baseline (Current Repository)
 AQL in this repository is currently strongest as a **concatenative data/query language** with:
 
-- Stack + forward precedence evaluation
+- Stack + forward arg collection evaluation
 - Module/import/export mechanics
 - Typed records and function signatures
 - Collections, transforms, query/table operations

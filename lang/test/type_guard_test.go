@@ -64,7 +64,7 @@ func TestGuard_BarrierPosDoesNotEatNextToken(t *testing.T) {
 	}
 }
 
-// Used inside `def x:Type body` via a transforming predicate: the
+// Used inside `def x:*Type body` via a transforming predicate: the
 // returned value is what binds.
 func TestGuard_TypedDefAcceptsTransformed(t *testing.T) {
 	got := runOne(t, `type Up fn [x:Any Any [(x is String) guard (x upper)]]

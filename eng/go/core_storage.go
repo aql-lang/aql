@@ -3,8 +3,8 @@ package eng
 import "fmt"
 
 // registerCoreStorage installs the `get` and `set` words — the
-// universal container-access pair. Both are forward-precedence with
-// a fan of signatures for the value-side container kinds:
+// universal container-access pair. Both collect their args forward
+// (by default), with a fan of signatures for the value-side container kinds:
 //
 //   - Node (Map / List / Options / record-shape) — read via `get`.
 //     Maps and Lists are immutable in the kernel, so `set` is NOT
@@ -23,46 +23,46 @@ import "fmt"
 // dispatch.
 func registerCoreStorage(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "set",
-		ForwardPrecedence: true,
+		Name:        "set",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// Array (indexed by integer)
 			{
-				Args:    []Type{TInteger, TAny, TArray},
+				Args:    []*Type{TInteger, TAny, TArray},
 				Handler: setArrayHandler,
-				Returns: []Type{},
+				Returns: []*Type{},
 			},
 			// Object
 			{
-				Args:    []Type{TString, TAny, TObject},
+				Args:    []*Type{TString, TAny, TObject},
 				Handler: setObjectHandler,
-				Returns: []Type{},
+				Returns: []*Type{},
 			},
 			{
-				Args:      []Type{TAtom, TAny, TObject},
+				Args:      []*Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setObjectHandler,
-				Returns:   []Type{},
+				Returns:   []*Type{},
 			},
 		},
 	})
 
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "get",
-		ForwardPrecedence: true,
+		Name:        "get",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// [Key | Node] — covers Map, List, Options, record-shape
-			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
-			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
-			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
 			// [Key | Array]
-			{Args: []Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
 			// [Key | Object]
-			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
-			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
-			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | None] — chained-read propagation.
-			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []Type{TNone}},
+			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 		},
 	})
 }

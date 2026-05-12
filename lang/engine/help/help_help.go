@@ -7,7 +7,7 @@ func init() {
 		Description: "With no argument, prints a summary of the help word itself. " +
 			"Given a word name (as a word, atom, or string), prints detailed help " +
 			"including description, signatures, examples, and notes. " +
-			"Has forward precedence, so 'add help' works directly.",
+			"Has forward arg collection, so 'add help' works directly.",
 		Notes: []string{
 			"Help is available for all built-in words.",
 			"Use word form (add help) for any registered word.",

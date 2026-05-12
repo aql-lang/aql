@@ -196,7 +196,7 @@ func TestAwaitFirst(t *testing.T) {
 	// Register a word that records call order.
 	var order atomic.Int32
 	reg.RegisterStackOnly("testorder", engine.Signature{
-		Args: []engine.Type{},
+		Args: []*engine.Type{},
 		Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			return []engine.Value{engine.NewInteger(int64(order.Add(1)))}, nil
 		},

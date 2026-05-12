@@ -23,7 +23,7 @@ import "strings"
 // whose Data==nil when the signature requires a concrete TList or
 // TMap). Typed-list carriers (element type known) are produced via
 // NewCarrierTypedList / NewCarrierTypedListValue.
-func NewCarrier(t Type) Value {
+func NewCarrier(t *Type) Value {
 	v := NewValueRaw(t, nil)
 	v.Carrier = true
 	if t.Equal(TList) || t.Equal(TMap) {
@@ -38,7 +38,7 @@ func NewCarrier(t Type) Value {
 // The Carrier flag is still set so the rest of the engine treats it
 // as abstract. Downstream list-consuming words can recover the
 // element carrier via dataListElemType.
-func NewCarrierTypedList(elem Type) Value {
+func NewCarrierTypedList(elem *Type) Value {
 	v := NewTypedList(NewCarrier(elem))
 	v.Carrier = true
 	return v
@@ -86,7 +86,7 @@ func ReturnsListElemAt(i int) ReturnsFunc {
 // dataListElemType that lives in carrier.go so ReturnsFunc helpers
 // don't depend on the native_array_higher.go symbol. It reads the
 // ChildTypeInfo first, then joins concrete element VTypes.
-func DataListElemTypeFromValue(data Value) Type {
+func DataListElemTypeFromValue(data Value) *Type {
 	if data.Data == nil {
 		return TAny
 	}
@@ -222,7 +222,7 @@ func ReturnsIdentity(mapping ...int) ReturnsFunc {
 // ReturnsStatic builds a ReturnsFunc that always produces a fixed list
 // of carrier types, independent of args. Equivalent to setting Returns
 // directly; provided so ReturnsFn call sites can be uniform.
-func ReturnsStatic(types ...Type) ReturnsFunc {
+func ReturnsStatic(types ...*Type) ReturnsFunc {
 	return func(_ []Value, _ *Registry) []Value {
 		out := make([]Value, len(types))
 		for i, t := range types {
@@ -251,21 +251,20 @@ func ReturnsNumericBinary() ReturnsFunc {
 // paths, as a new Type. For example, given Number/Integer/42 and
 // Number/Integer/99, returns Number/Integer. Returns TAny if there is
 // no shared prefix.
-func CommonAncestorType(a, b Type) Type {
-	n := len(a.Parts)
-	if len(b.Parts) < n {
-		n = len(b.Parts)
-	}
-	shared := 0
-	for shared < n && a.Parts[shared] == b.Parts[shared] {
-		shared++
-	}
-	if shared == 0 {
+func CommonAncestorType(a, b *Type) *Type {
+	if a == nil || b == nil {
 		return TAny
 	}
-	parts := make([]string, shared)
-	copy(parts, a.Parts[:shared])
-	return Type{Parts: parts}
+	seen := make(map[*Type]bool)
+	for d := a; d != nil; d = d.Parent {
+		seen[d] = true
+	}
+	for d := b; d != nil; d = d.Parent {
+		if seen[d] {
+			return d
+		}
+	}
+	return TAny
 }
 
 // CarrierDisjunctCap is the maximum number of alternatives a carrier
@@ -323,7 +322,7 @@ func JoinCarriers(a, b Value) Value {
 		// least one part). This collapses value-tagged literals (e.g.
 		// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
 		anc := CommonAncestorType(a.VType, b.VType)
-		if len(anc.Parts) > 0 && !anc.Equal(TAny) {
+		if anc != nil && !anc.Equal(TAny) {
 			return NewCarrier(anc)
 		}
 	}
@@ -705,7 +704,7 @@ func (r *Registry) AddCheckDiagnostic(d CheckDiagnostic) {
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
-	Type Type
+	Type *Type
 }
 
 // extractGuardClauses walks a condition list looking for triplets

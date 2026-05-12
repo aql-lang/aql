@@ -1260,7 +1260,7 @@ func TestCheckBuiltinsAnnotated(t *testing.T) {
 	}
 }
 
-// --- Type-check interaction with the strict undefined-word rule ---
+// --- *Type-check interaction with the strict undefined-word rule ---
 //
 // Outside check mode, an undefined word at the pointer is now a hard
 // error from `stepWord`. Inside check mode, `stepWord` deliberately

@@ -442,7 +442,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	fnDef := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
 		}},
 	}
@@ -492,7 +492,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	fnDef := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
 		}},
 	}
@@ -549,7 +549,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 	fnDef := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewInteger(99)},
 		}},
 	}
@@ -591,7 +591,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	fnDef := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("path")},
 		}},
 	}
@@ -634,14 +634,14 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	fnDef1 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    identityBody,
 		}},
 	}
 	fnDef2 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    identityBody,
 		}},
 	}
@@ -698,14 +698,14 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	fnDef1 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
 		}},
 	}
 	fnDef2 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    []engine.Value{engine.NewInteger(99)},
 		}},
 	}
@@ -750,14 +750,14 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	fnDef1 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    identityBody,
 		}},
 	}
 	fnDef2 := engine.FnDefInfo{
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []engine.Type{engine.TAny},
+			Returns: []*engine.Type{engine.TAny},
 			Body:    identityBody,
 		}},
 	}

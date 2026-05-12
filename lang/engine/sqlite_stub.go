@@ -11,7 +11,7 @@ import (
 )
 
 // aqlTypeToSQLType maps an AQL field type to a SQLite column type.
-func aqlTypeToSQLType(t Type) string {
+func aqlTypeToSQLType(t *Type) string {
 	switch {
 	case t.Matches(TInteger):
 		return "INTEGER"
@@ -89,7 +89,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 
 	// Create table with typed columns.
 	colDefs := make([]string, len(columns))
-	colTypes := make([]Type, len(columns))
+	colTypes := make([]*Type, len(columns))
 	for i, col := range columns {
 		fieldVal, _ := td.Record.Fields.Get(col)
 		colTypes[i] = fieldVal.VType
@@ -164,7 +164,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	numCols := jsCols.Length()
 
 	cols := make([]string, numCols)
-	colTypes := make([]Type, numCols)
+	colTypes := make([]*Type, numCols)
 	for i := 0; i < numCols; i++ {
 		cols[i] = jsCols.Index(i).String()
 		colTypes[i] = TString // default
@@ -215,7 +215,7 @@ func (s *SQLiteStore) DropTable(name string) {
 }
 
 // aqlValueToJSParam converts an AQL Value to a JS value for sql.js binding.
-func aqlValueToJSParam(v Value, colType Type) any {
+func aqlValueToJSParam(v Value, colType *Type) any {
 	if v.VType.Equal(TNone) {
 		return js.Null()
 	}
@@ -281,7 +281,7 @@ func aqlValueToJSParam(v Value, colType Type) any {
 }
 
 // jsValueToAQL converts a sql.js result value to an AQL Value.
-func jsValueToAQL(v js.Value, colType Type) Value {
+func jsValueToAQL(v js.Value, colType *Type) Value {
 	if v.IsNull() || v.IsUndefined() {
 		return NewValueRaw(TNone, nil)
 	}

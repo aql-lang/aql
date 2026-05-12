@@ -19,9 +19,9 @@ package engine
 //
 //	r.RegisterNativeFunc(NativeFunc{
 //	    Name: "...",
-//	    ForwardPrecedence: true,
+//	    ForwardArgs: true,
 //	    Signatures: []NativeSig{
-//	        {Args: []Type{TNumber, TNumber}, Handler: numericBinaryHandler(intFn, decFn), ReturnsFn: ReturnsNumericBinary()},
+//	        {Args: []*Type{TNumber, TNumber}, Handler: numericBinaryHandler(intFn, decFn), ReturnsFn: ReturnsNumericBinary()},
 //	        // …extra sigs (date, duration, ...) inline as needed.
 //	    },
 //	})

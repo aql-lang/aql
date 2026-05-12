@@ -36,7 +36,7 @@ Sources reviewed:
 | `implies` | 2     | `[boolean, boolean] -> [boolean]`                  | yes      | 0          |
 | `or`      | 2     | `[boolean, boolean] -> [boolean]` **and** `[any, any] -> [disjunct]` | yes | 1 on both  |
 
-All six are registered with `ForwardPrecedence: true`, so the standard
+All six are registered with `ForwardArgs: true`, so the standard
 concatenative mirror applies — they can appear in any of the prefix /
 mixed / forward positions described in `lang/CLAUDE.md` §"Argument
 Ordering". For example, `and` accepts:
@@ -246,7 +246,7 @@ Two viable shapes, not mutually exclusive:
   ```
 
 - **New words**: `andalso`, `orelse` (Erlang style) or `&&`, `||`.
-  Implement them as forward-precedence words with two signatures,
+  Implement them as forward-collecting words with two signatures,
   one of which wraps the RHS in a sub-engine `do` and runs it only
   when needed. This keeps the strict `and`/`or` intact for users
   who want eager evaluation (useful for effectful code).
@@ -521,7 +521,7 @@ them.
 ## 10. Summary
 
 AQL's boolean layer is small, regular, and conceptually clean:
-forward-precedence words with strict `[boolean, boolean]`
+forward-collecting words with strict `[boolean, boolean]`
 signatures, plus `not`. The one overload is `or`, which doubles as a
 type-union constructor via a `[any, any]` signature guarded by
 `BarrierPos`. The notable omission is short-circuit evaluation:

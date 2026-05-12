@@ -313,7 +313,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 			if c.Raw != "" && c.Alias != "" {
 				outputName = c.Alias
 			}
-			if len(c.ResultType.Parts) > 0 {
+			if c.ResultType != nil {
 				resultFields.Set(outputName, NewTypeLiteral(c.ResultType))
 			} else if fieldVal, ok := merged.Fields.Get(c.Name); ok {
 				resultFields.Set(outputName, fieldVal)
@@ -373,7 +373,7 @@ type columnSpec struct {
 	Name       string // column name (empty if Raw is set)
 	Alias      string // empty means no alias
 	Raw        string // raw SQL expression (for aggregates, cast, etc.)
-	ResultType Type   // expected result type (zero value means inherit from source)
+	ResultType *Type  // expected result type (zero value means inherit from source)
 }
 
 // parseColumnSpec parses the column list from a select word.
@@ -557,8 +557,8 @@ func aqlTypenameToSQLType(name string) string {
 	}
 }
 
-// sqlTypeToAQLType maps a SQL type string back to an AQL Type.
-func sqlTypeToAQLType(sqlType string) Type {
+// sqlTypeToAQLType maps a SQL type string back to an AQL *Type.
+func sqlTypeToAQLType(sqlType string) *Type {
 	switch sqlType {
 	case "INTEGER":
 		return TInteger

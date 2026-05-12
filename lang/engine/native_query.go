@@ -19,159 +19,159 @@ var queryNatives = []NativeFunc{
 		// star is stack-only — emits NewAtom("*") with no args.
 		Signatures: []NativeSig{{
 			Handler: starHandler,
-			Returns: []Type{TAtom},
+			Returns: []*Type{TAtom},
 		}},
 	},
 	{
-		Name:              "from",
-		ForwardPrecedence: true,
+		Name:        "from",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAtom},
+			Args:    []*Type{TAtom},
 			Handler: fromHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "as",
-		ForwardPrecedence: true,
+		Name:        "as",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TAtom},
+			Args:    []*Type{TList, TAtom},
 			Handler: asHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "select",
-		ForwardPrecedence: true,
+		Name:        "select",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// Suffix: "select star from ..." → [TAtom, TList]
 			{
-				Args:    []Type{TAtom, TList},
+				Args:    []*Type{TAtom, TList},
 				Handler: selectStarForwardHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 			// Infix: "from ... select star" → [TList, TAtom]
 			{
-				Args:    []Type{TList, TAtom},
+				Args:    []*Type{TList, TAtom},
 				Handler: selectStarInfixHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 			{
-				Args:    []Type{TList, TList},
+				Args:    []*Type{TList, TList},
 				Handler: selectColsHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 		},
 	},
 	{
-		Name:              "where",
-		ForwardPrecedence: true,
+		Name:        "where",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TList},
+			Args:    []*Type{TList, TList},
 			Handler: queryWhereHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "order",
-		ForwardPrecedence: true,
+		Name:        "order",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TList, TList},
+				Args:    []*Type{TList, TList},
 				Handler: orderListHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 			{
-				Args:    []Type{TList, TAtom},
+				Args:    []*Type{TList, TAtom},
 				Handler: orderAtomHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 		},
 	},
 	{
-		Name:              "by",
-		ForwardPrecedence: true,
+		Name:        "by",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TAtom},
+				Args:    []*Type{TAtom},
 				Handler: byAtomHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 			{
-				Args:    []Type{TList},
+				Args:    []*Type{TList},
 				Handler: byListHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 		},
 	},
 	{
-		Name:              "limit",
-		ForwardPrecedence: true,
+		Name:        "limit",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TInteger},
+			Args:    []*Type{TList, TInteger},
 			Handler: limitHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "offset",
-		ForwardPrecedence: true,
+		Name:        "offset",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TInteger},
+			Args:    []*Type{TList, TInteger},
 			Handler: offsetHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "distinct",
-		ForwardPrecedence: true,
+		Name:        "distinct",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList},
+			Args:    []*Type{TList},
 			Handler: distinctHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "group",
-		ForwardPrecedence: true,
+		Name:        "group",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TList, TList},
+				Args:    []*Type{TList, TList},
 				Handler: groupListHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 			{
-				Args:    []Type{TList, TAtom},
+				Args:    []*Type{TList, TAtom},
 				Handler: groupAtomHandler,
-				Returns: []Type{TList},
+				Returns: []*Type{TList},
 			},
 		},
 	},
 	{
-		Name:              "having",
-		ForwardPrecedence: true,
+		Name:        "having",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TList},
+			Args:    []*Type{TList, TList},
 			Handler: havingHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "on",
-		ForwardPrecedence: true,
+		Name:        "on",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TList},
+			Args:    []*Type{TList, TList},
 			Handler: onHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 	{
-		Name:              "using",
-		ForwardPrecedence: true,
+		Name:        "using",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TList},
+			Args:    []*Type{TList, TList},
 			Handler: usingHandler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	},
 
@@ -501,12 +501,12 @@ func joinWordNative(name, joinType string) NativeFunc {
 	}
 
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TAtom},
+			Args:    []*Type{TList, TAtom},
 			Handler: handler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	}
 }
@@ -536,12 +536,12 @@ func setOpWordNative(name, op string) NativeFunc {
 	}
 
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList, TList},
+			Args:    []*Type{TList, TList},
 			Handler: handler,
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	}
 }

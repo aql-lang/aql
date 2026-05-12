@@ -119,7 +119,7 @@ What the parser and engine already use, that bears on the design:
 
 ## 5. The canonical concatenative core
 
-Four new engine words. All four are forward-precedence; `gen` and
+Four new engine words. All four are forward-collecting; `gen` and
 `apply` use `NoEvalArgs` on their list argument so the parser does
 not auto-evaluate it.
 
@@ -205,7 +205,7 @@ intBox is (Box apply [Integer])         # → true
 intBox is (Box apply [Number])          # → true (Integer extends Number)
 ```
 
-The parens are needed only because `apply` is forward-precedence and
+The parens are needed only because `apply` is forward-collecting and
 we want it to bind tightly inside an annotation. In word context
 (top level) the parens are unnecessary: `Box apply [Integer]` stands
 alone.
@@ -969,7 +969,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
 
 - **Canonical form:** four engine words — `gen` (declare params),
   `extends` (constrain), `default` (default value), `apply`
-  (instantiate). All ordinary forward-precedence words; `gen` and
+  (instantiate). All ordinary forward-collecting words; `gen` and
   `apply` use `NoEvalArgs` on their list.
 - **Sugar:** angle brackets, TS-style. `Box<T>`, `<T extends C>`,
   `<T = D>`, `Box<Integer>`. Pure lexer rewrite to the canonical

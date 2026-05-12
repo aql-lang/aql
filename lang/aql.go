@@ -53,7 +53,7 @@ var (
 	TResourceEntity = engine.TResourceEntity
 )
 
-// NewType creates a Type from a slash-separated path (e.g. "string/proper",
+// NewType creates a *Type from a slash-separated path (e.g. "string/proper",
 // "number/integer"). Use this for custom or hierarchical types.
 var NewType = engine.NewType
 
@@ -211,9 +211,10 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 	formats[name] = f
 }
 
-// Register adds a named word with one or more signatures.
-// Registered words use forward precedence: the engine tries to collect
-// arguments from after the word before falling back to prefix matching.
+// Register adds a named word with one or more signatures. Any sig
+// whose BarrierPos is left at 0 is treated as forward-collecting:
+// the engine collects arguments from tokens after the word before
+// falling back to stack matching.
 //
 // Example — register a word "double" that doubles an integer
 // (extra handler params are context, stack, and registry — use _ to ignore):

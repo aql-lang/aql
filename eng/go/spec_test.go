@@ -59,36 +59,36 @@ func registerSpecWords(r *eng.Registry) {
 			return []eng.Value{eng.NewDecimal(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
 		}
 	}
-	numberPair := []eng.Type{eng.TNumber, eng.TNumber}
+	numberPair := []*eng.Type{eng.TNumber, eng.TNumber}
 
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "addq", ForwardPrecedence: true,
+		Name: "addq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
-			Returns: []eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "subq", ForwardPrecedence: true,
+		Name: "subq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
-			Returns: []eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "mulq", ForwardPrecedence: true,
+		Name: "mulq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
-			Returns: []eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "negq", ForwardPrecedence: true,
+		Name: "negq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{eng.TNumber}, BarrierPos: 1,
+			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				if args[0].VType.Matches(eng.TInteger) {
 					n, _ := args[0].AsInteger()
@@ -97,135 +97,135 @@ func registerSpecWords(r *eng.Registry) {
 				f, _ := args[0].AsDecimal()
 				return []eng.Value{eng.NewDecimal(-f)}, nil
 			},
-			Returns: []eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "concatq", ForwardPrecedence: true,
+		Name: "concatq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{eng.TString, eng.TString},
+			Args: []*eng.Type{eng.TString, eng.TString},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := args[0].AsString()
 				b, _ := args[1].AsString()
 				return []eng.Value{eng.NewString(b + a)}, nil
 			},
-			Returns: []eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "describeq", ForwardPrecedence: true,
+		Name: "describeq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{
-				Args: []eng.Type{eng.TInteger},
+				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					n, _ := args[0].AsInteger()
 					return []eng.Value{eng.NewString("int:" + strconv.FormatInt(n, 10))}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 			{
-				Args: []eng.Type{eng.TString},
+				Args: []*eng.Type{eng.TString},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					s, _ := args[0].AsString()
 					return []eng.Value{eng.NewString("str:" + s)}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tagq", ForwardPrecedence: true,
+		Name: "tagq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
-			{Args: []eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			{Args: []*eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("any")}, nil
-			}, Returns: []eng.Type{eng.TString}},
-			{Args: []eng.Type{eng.TInteger}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			}, Returns: []*eng.Type{eng.TString}},
+			{Args: []*eng.Type{eng.TInteger}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("specific")}, nil
-			}, Returns: []eng.Type{eng.TString}},
+			}, Returns: []*eng.Type{eng.TString}},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "factq", ForwardPrecedence: true,
+		Name: "factq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{
-				Args: []eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
+				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewInteger(1)}, nil
 				},
-				Returns: []eng.Type{eng.TInteger},
+				Returns: []*eng.Type{eng.TInteger},
 			},
 			{
-				Args: []eng.Type{eng.TInteger},
+				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					n, _ := args[0].AsInteger()
 					return []eng.Value{eng.NewInteger(n)}, nil
 				},
-				Returns: []eng.Type{eng.TInteger},
+				Returns: []*eng.Type{eng.TInteger},
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "codeq", ForwardPrecedence: true,
+		Name: "codeq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{
-				Args: []eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
+				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("ninety-nine")}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 			{
-				Args: []eng.Type{eng.TInteger},
+				Args: []*eng.Type{eng.TInteger},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("general")}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "routeq", ForwardPrecedence: true,
+		Name: "routeq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{
-				Args: []eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
+				Args: []*eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("matched-admin")}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 			{
-				Args: []eng.Type{eng.TString},
+				Args: []*eng.Type{eng.TString},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("other")}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tripq", ForwardPrecedence: true,
+		Name: "tripq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
+			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := args[0].AsInteger()
 				b, _ := args[1].AsInteger()
 				c, _ := args[2].AsInteger()
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d,%d,%d", a, b, c))}, nil
 			},
-			Returns: []eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "pairq", ForwardPrecedence: true,
+		Name: "pairq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args:       []eng.Type{eng.TInteger, eng.TInteger},
+			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := args[0].AsInteger()
 				b, _ := args[1].AsInteger()
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d:%d", a, b))}, nil
 			},
-			Returns: []eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString},
 		}},
 	})
 
@@ -235,11 +235,11 @@ func registerSpecWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "nilq",
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{},
+			Args: []*eng.Type{},
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("nil")}, nil
 			},
-			Returns: []eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString},
 		}},
 	})
 
@@ -250,24 +250,24 @@ func registerSpecWords(r *eng.Registry) {
 	// explicitly, and `/1f`, `/2s` etc. combine arity selection with a
 	// forced forward/stack boundary.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "flexq", ForwardPrecedence: true,
+		Name: "flexq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{
-				Args: []eng.Type{eng.TInteger},
+				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					a, _ := args[0].AsInteger()
 					return []eng.Value{eng.NewString(fmt.Sprintf("one:%d", a))}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 			{
-				Args: []eng.Type{eng.TInteger, eng.TInteger},
+				Args: []*eng.Type{eng.TInteger, eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					a, _ := args[0].AsInteger()
 					b, _ := args[1].AsInteger()
 					return []eng.Value{eng.NewString(fmt.Sprintf("two:%d,%d", a, b))}, nil
 				},
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			},
 		},
 	})
@@ -290,16 +290,16 @@ func registerSpecWords(r *eng.Registry) {
 		return []eng.Value{eng.NewString(strings.Join(parts, ","))}, nil
 	}
 	intArity := func(name string, n, barrier int) {
-		args := make([]eng.Type, n)
+		args := make([]*eng.Type, n)
 		for i := range args {
 			args[i] = eng.TInteger
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
-			Name: name, ForwardPrecedence: true,
+			Name: name, ForwardArgs: true,
 			Signatures: []eng.NativeSig{{
 				Args: args, BarrierPos: barrier,
 				Handler: intArgsFmt,
-				Returns: []eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString},
 			}},
 		})
 	}
@@ -313,20 +313,20 @@ func registerSpecWords(r *eng.Registry) {
 	intArity("septq", 7, 4)
 
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "lengthq", ForwardPrecedence: true,
+		Name: "lengthq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{eng.TList},
+			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst := args[0].AsList()
 				return []eng.Value{eng.NewInteger(int64(lst.Len()))}, nil
 			},
-			Returns: []eng.Type{eng.TInteger},
+			Returns: []*eng.Type{eng.TInteger},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "firstq", ForwardPrecedence: true,
+		Name: "firstq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args: []eng.Type{eng.TList},
+			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst := args[0].AsList()
 				if lst.Len() == 0 {
@@ -334,13 +334,13 @@ func registerSpecWords(r *eng.Registry) {
 				}
 				return []eng.Value{lst.Get(0)}, nil
 			},
-			Returns: []eng.Type{eng.TAny},
+			Returns: []*eng.Type{eng.TAny},
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "replayq", ForwardPrecedence: true,
+		Name: "replayq", ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args:       []eng.Type{eng.TList},
+			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				body := args[0].AsList().Slice()

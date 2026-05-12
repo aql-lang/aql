@@ -14,7 +14,7 @@ import (
 // the helper API in util.go (PushDef/PopDef/TopOfDefStack/HasDef/
 // DefStackDepth/SetDefStack/DefStack/DefNames/SnapshotDefDepths/
 // RestoreToDefDepths/TruncateDefStack/ReplaceDefTop/DeleteDef and the
-// matching Type-side helpers PushType/PopType/HasType/TopOfTypeStack/
+// matching *Type-side helpers PushType/PopType/HasType/TopOfTypeStack/
 // TypeStackDepth/TypeNames/SnapshotTypeStacks/RestoreTypeStacks). New
 // callers must use those methods; direct field access is deliberately
 // disabled by the lowercase identifiers.
@@ -24,7 +24,7 @@ type Registry struct {
 	// type literals, records, disjuncts, typed lists/maps, options,
 	// records, object types, dependent scalars (DepInteger, DepString,
 	// …), function-shape types (FnUndef), and predicate types
-	// (FnDef/Function used as type-defining functions). Type values
+	// (FnDef/Function used as type-defining functions). *Type values
 	// live here, not in defStacks, because they are NOT independently
 	// callable — a predicate type Bbd is only ever consulted via type
 	// operations (`def n:Bbd v`, `v is Bbd`, `inspect Bbd`), never
@@ -36,7 +36,7 @@ type Registry struct {
 	// `def`'s shadowing semantics so users can introduce a temporary
 	// alias inside a sub-program and revert it without registry
 	// surgery.
-	types             map[string][]Value                                 // name → stack of type values
+	Types             *TypeTable                                         // dynamic types installed by the `type` word; each push mints a fresh Type
 	capabilities      map[string]any                                     // host-installed plugin slots (see capability.go)
 	Output            io.Writer                                          // output writer for print/printstr and stdout
 	ErrOutput         io.Writer                                          // error output writer for stderr
@@ -45,7 +45,6 @@ type Registry struct {
 	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
 	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
 	argsStack         []Value                                            // stack of args lists for nested fn calls; access via PushArgs/PopArgs/TopArgs
-	KnownTypeParts    map[string]bool                                    // set of all type path parts (for uniqueness enforcement)
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
 	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
@@ -192,14 +191,13 @@ type CheckDiagnostic struct {
 // See capability.go for the plugin contract.
 func NewRegistry() (*Registry, error) {
 	r := &Registry{
-		defStacks:      make(map[string][]Value),
-		types:          make(map[string][]Value),
-		capabilities:   make(map[string]any),
-		Output:         os.Stdout,
-		ErrOutput:      os.Stderr,
-		Input:          os.Stdin,
-		KnownTypeParts: builtinTypeParts(),
-		SDKCache:       make(map[string]any),
+		defStacks:    make(map[string][]Value),
+		Types:        NewDynamicTypeTable(),
+		capabilities: make(map[string]any),
+		Output:       os.Stdout,
+		ErrOutput:    os.Stderr,
+		Input:        os.Stdin,
+		SDKCache:     make(map[string]any),
 	}
 	return r, nil
 }
@@ -281,7 +279,9 @@ func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
 	}
 }
 
-// Register adds one or more signatures to a named function with forward precedence.
+// Register adds one or more signatures to a named function. Sigs are
+// treated as forward-arg defaults: any sig with BarrierPos still 0 has
+// it lifted to len(Args), so all positions are forward-eligible.
 // Signatures are stored in a FnDefInfo entry in DefStacks.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
@@ -296,8 +296,11 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	}
 }
 
-// RegisterStackOnly adds signatures to a named function without forward precedence.
-// Signatures are stored in a FnDefInfo entry in DefStacks.
+// RegisterStackOnly adds signatures to a named function. Sigs are
+// taken as-is: BarrierPos stays at 0 (no forward-arg defaulting), so
+// every position is matched from the stack unless the sig itself
+// raises BarrierPos. Signatures are stored in a FnDefInfo entry in
+// DefStacks.
 func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -324,9 +327,13 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // every arg is forward-eligible. When forwardPrec is false (old
 // stack-only registration), BarrierPos stays at zero — boundary at the
 // start, every arg from the stack.
-func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature) {
+func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature) {
+	// If the caller registered with forward-arg defaults, fill in
+	// BarrierPos for any sig that didn't set it explicitly. Sigs with
+	// BarrierPos already non-zero, or sigs registered via the
+	// stack-only path, are left alone.
 	for i := range sigs {
-		if sigs[i].BarrierPos == 0 && forwardPrec && len(sigs[i].Args) > 0 {
+		if sigs[i].BarrierPos == 0 && forwardArgs && len(sigs[i].Args) > 0 {
 			sigs[i].BarrierPos = len(sigs[i].Args)
 		}
 	}
@@ -335,7 +342,6 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 		if fnDef, ok := top.Data.(FnDefInfo); ok {
 			fnDef.Signatures = append(fnDef.Signatures, sigs...)
 			SortSignatures(fnDef.Signatures)
-			fnDef.ForwardPrecedence = forwardPrec
 			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
 			top.Data = fnDef
 			r.ReplaceDefTop(name, top)
@@ -344,9 +350,8 @@ func (r *Registry) upsertFnDef(name string, forwardPrec bool, sigs ...Signature)
 	}
 	// No existing FnDefInfo on top — push a new one.
 	fnDef := FnDefInfo{
-		Name:              name,
-		Signatures:        append([]Signature(nil), sigs...),
-		ForwardPrecedence: forwardPrec,
+		Name:       name,
+		Signatures: append([]Signature(nil), sigs...),
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
@@ -434,16 +439,16 @@ func (r *Registry) InitRootContext() {
 	}
 	fsStore.Set("mem", NewBoolean(false))
 	fsStore.Set("impl", NewTypeLiteral(TNone))
-	sysStore.Set("fs", NewStoreValue(fsStore))
+	sysStore.Set("fs", NewStoreValue(TStore, fsStore))
 
 	// __val: a Store for user-defined values
 	valStore := &StoreInstanceInfo{
 		TypeName: "Object/Store",
 		Data:     make(map[string]Value),
 	}
-	sysStore.Set("__val", NewStoreValue(valStore))
+	sysStore.Set("__val", NewStoreValue(TStore, valStore))
 
-	root.Set("__sys", NewStoreValue(sysStore))
+	root.Set("__sys", NewStoreValue(TStore, sysStore))
 	r.PushExistingContext(root)
 }
 
@@ -483,11 +488,11 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		return []Value{NewDecimal(op(v))}, nil
 	}
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TInteger}, Handler: handler, Returns: []Type{TDecimal}},
-			{Args: []Type{TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
 		},
 	}
 }
@@ -506,12 +511,12 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		return []Value{NewDecimal(result)}, nil
 	}
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TDecimal, TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
-			{Args: []Type{TNumber, TDecimal}, Handler: handler, Returns: []Type{TDecimal}},
-			{Args: []Type{TDecimal, TNumber}, Handler: handler, Returns: []Type{TDecimal}},
+			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}},
 		},
 	}
 }
@@ -530,10 +535,10 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		return []Value{NewInteger(result)}, nil
 	}
 	return NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TInteger, TInteger}, Handler: handler, Returns: []Type{TInteger}},
+			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}},
 		},
 	}
 }
@@ -598,6 +603,57 @@ func (r *Registry) ContextSet(key string, val Value) {
 		store = r.ContextStore()
 	}
 	store.Set(key, val)
+}
+
+// IsKnownPart reports whether part is already used by any registered
+// type — builtin or dynamic. Used to enforce part-name uniqueness when
+// installing a new `type Foo …`.
+func (r *Registry) IsKnownPart(part string) bool {
+	if Builtin.parts[part] {
+		return true
+	}
+	if r != nil && r.Types != nil && r.Types.parts[part] {
+		return true
+	}
+	return false
+}
+
+// RegisterPart records part as used by this Registry's dynamic types
+// so subsequent IsKnownPart calls flag it. Idempotent.
+func (r *Registry) RegisterPart(part string) {
+	if r == nil || r.Types == nil {
+		return
+	}
+	r.Types.parts[part] = true
+}
+
+// ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
+// a richer definition installed under the same name (e.g. an ObjectTypeInfo
+// from RegisterResource or a `type Foo object {…}` binding). If so it
+// returns that value; otherwise it returns the original unchanged. This
+// lets the parser eagerly resolve all type names while the engine still
+// picks up installed ObjectType defs.
+//
+// User-defined types now live in r.Types (post-§5.2); the DefStacks
+// fallback is retained only for value-side ObjectType installations
+// from outside the type word (e.g. legacy RegisterResource paths).
+func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
+	if v.Data != nil || reg == nil || v.VType == nil {
+		return v
+	}
+	name := TypeNameByID(v.VType.ID)
+	if name == "" {
+		return v
+	}
+	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
+		return tv
+	}
+	if top, ok := reg.TopOfDefStack(name); ok {
+		if top.IsObjectType() {
+			return top
+		}
+	}
+	return v
 }
 
 // StoreKey converts a Value to a string key for the store.

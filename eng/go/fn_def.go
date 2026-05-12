@@ -60,7 +60,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 
 		concreteReturns := OutputSigIsConcreteReturns(outputSig)
 
-		var returns []Type
+		var returns []*Type
 		if !concreteReturns {
 			returns, err = ParseFnReturns(outputSig)
 			if err != nil {
@@ -80,7 +80,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			if len(retVals) > 0 {
 				bodyElems = append(bodyElems, NewWord("end"))
 				bodyElems = append(bodyElems, retVals...)
-				returns = make([]Type, len(retVals))
+				returns = make([]*Type, len(retVals))
 				for j := range retVals {
 					returns[j] = TAny
 				}

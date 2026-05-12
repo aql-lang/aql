@@ -27,7 +27,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(instance)
+	instanceVal := NewObjectInstance(TObject, instance)
 
 	// Verify initial value
 	result := runAQL(t, r, []Value{
@@ -73,7 +73,7 @@ func TestObjectSetFieldString(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(instance)
+	instanceVal := NewObjectInstance(TObject, instance)
 
 	// Mutate via string key
 	result := runAQL(t, r, []Value{
@@ -111,7 +111,7 @@ func TestObjectSetAddsNewField(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(instance)
+	instanceVal := NewObjectInstance(TObject, instance)
 
 	// Add a new field "b"
 	runAQL(t, r, []Value{
@@ -148,8 +148,8 @@ func TestObjectMutationSharedReference(t *testing.T) {
 			return m
 		}(),
 	}
-	ref1 := NewObjectInstance(instance)
-	ref2 := NewObjectInstance(instance) // same underlying Fields pointer
+	ref1 := NewObjectInstance(TObject, instance)
+	ref2 := NewObjectInstance(TObject, instance) // same underlying Fields pointer
 
 	// Mutate via ref1
 	runAQL(t, r, []Value{
@@ -264,7 +264,7 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Test",
 	}
-	inst := NewObjectInstance(ObjectInstanceInfo{
+	inst := NewObjectInstance(TObject, ObjectInstanceInfo{
 		TypeRef: &objType,
 		Fields:  objFields,
 	})
@@ -445,7 +445,7 @@ func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
 	r.InitRootContext()
 	// Put store in context
 	ctx := r.ContextStore()
-	ctx.Set("s", NewStoreValue(store))
+	ctx.Set("s", NewStoreValue(TStore, store))
 
 	e := New(r)
 	// Get the nested store, set a key on it
@@ -484,8 +484,8 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 		TypeName: "Object/Store",
 		Data:     make(map[string]Value),
 	}
-	parent.Set("child", NewStoreValue(child))
-	ctx.Set("parent", NewStoreValue(parent))
+	parent.Set("child", NewStoreValue(TStore, child))
+	ctx.Set("parent", NewStoreValue(TStore, parent))
 
 	e := New(r)
 	// context get parent → get child → set val 42
@@ -524,7 +524,7 @@ func TestStoreCOWPrototypeResolution(t *testing.T) {
 		TypeName: "Object/Store",
 		Data:     map[string]Value{"a": NewInteger(1), "b": NewInteger(2)},
 	}
-	ctx.Set("s", NewStoreValue(store))
+	ctx.Set("s", NewStoreValue(TStore, store))
 
 	e := New(r)
 	// Set "a" to 99, then read both "a" and "b"

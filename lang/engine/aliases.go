@@ -5,7 +5,7 @@
 //
 // Word-defining files (native_*.go, format.go, query.go, sqlite.go,
 // fileio.go, conditional.go, forloop.go) continue to live here. Anything
-// that's truly engine machinery (Registry, Value, Type, signatures,
+// that's truly engine machinery (Registry, Value, *Type, signatures,
 // matching, unification, …) is now in eng.
 package engine
 
@@ -13,7 +13,7 @@ import (
 	"github.com/aql-lang/aql/eng"
 )
 
-// Type aliases — every exported type from aqleng is re-exported here.
+// *Type aliases — every exported type from aqleng is re-exported here.
 type (
 	AqlError           = eng.AqlError
 	ArrayInstanceInfo  = eng.ArrayInstanceInfo
@@ -74,7 +74,7 @@ type (
 	WordInfo           = eng.WordInfo
 )
 
-// Well-known Type values — re-exported for convenience.
+// Well-known *Type values — re-exported for convenience.
 var (
 	TAny            = eng.TAny
 	TArray          = eng.TArray
@@ -162,9 +162,8 @@ const (
 
 // Sentinel values exposed by the engine.
 var (
-	BuiltinTypeIDs = eng.BuiltinTypeIDs
-	ErrBreak       = eng.ErrBreak
-	ErrContinue    = eng.ErrContinue
+	ErrBreak    = eng.ErrBreak
+	ErrContinue = eng.ErrContinue
 )
 
 // Function re-exports — every exported aqleng function.
@@ -206,10 +205,10 @@ var (
 	FnSigMatchesSpec           = eng.FnSigMatchesSpec
 	FnSigSatisfiesSpec         = eng.FnSigSatisfiesSpec
 	FnUndefMatchesFnDef        = eng.FnUndefMatchesFnDef
-	FormatFixedTypeID          = eng.FormatFixedTypeID
+	BuiltinIDForPath           = eng.BuiltinIDForPath
+	MintTestType               = eng.MintTestType
 	GenerateID                 = eng.GenerateID
 	GenerateObjectTypeID       = eng.GenerateObjectTypeID
-	IDPrefixForParts           = eng.IDPrefixForParts
 	IDPrefixForType            = eng.IDPrefixForType
 	InstallDef                 = eng.InstallDef
 	InstallFnDef               = eng.InstallFnDef

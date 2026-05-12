@@ -20,46 +20,46 @@ import (
 // produce the reversed result.
 var mathNatives = []NativeFunc{
 	{
-		Name:              "add",
-		ForwardPrecedence: true,
+		Name:        "add",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TNumber, TNumber},
+				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
 					func(a, b int64) (Value, error) { return NewInteger(b + a), nil },
 					func(a, b float64) (Value, error) { return NewDecimal(b + a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(),
 			},
-			{Args: []Type{TScalar, TScalar}, Handler: addConcatHandler, Returns: []Type{TString}},
-			{Args: []Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []Type{TDate}},
-			{Args: []Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []Type{TDateTime}},
-			{Args: []Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []Type{TInstant}},
-			{Args: []Type{TDate, TClkDuration}, Handler: addDateClkHandler, Returns: []Type{TDateTime}},
+			{Args: []*Type{TScalar, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}},
+			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}},
+			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}},
+			{Args: []*Type{TDate, TClkDuration}, Handler: addDateClkHandler, Returns: []*Type{TDateTime}},
 		},
 	},
 	{
-		Name:              "sub",
-		ForwardPrecedence: true,
+		Name:        "sub",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TNumber, TNumber},
+				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
 					func(a, b int64) (Value, error) { return NewInteger(b - a), nil },
 					func(a, b float64) (Value, error) { return NewDecimal(b - a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(),
 			},
-			{Args: []Type{TDate, TCalDuration}, Handler: subDateCalHandler, Returns: []Type{TDate}},
-			{Args: []Type{TDateTime, TClkDuration}, Handler: subDateTimeClkHandler, Returns: []Type{TDateTime}},
-			{Args: []Type{TInstant, TClkDuration}, Handler: subInstantClkHandler, Returns: []Type{TInstant}},
+			{Args: []*Type{TDate, TCalDuration}, Handler: subDateCalHandler, Returns: []*Type{TDate}},
+			{Args: []*Type{TDateTime, TClkDuration}, Handler: subDateTimeClkHandler, Returns: []*Type{TDateTime}},
+			{Args: []*Type{TInstant, TClkDuration}, Handler: subInstantClkHandler, Returns: []*Type{TInstant}},
 		},
 	},
 	{
-		Name:              "mul",
-		ForwardPrecedence: true,
+		Name:        "mul",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TNumber, TNumber},
+			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) { return NewInteger(b * a), nil },
 				func(a, b float64) (Value, error) { return NewDecimal(b * a), nil },
@@ -68,10 +68,10 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:              "div",
-		ForwardPrecedence: true,
+		Name:        "div",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TNumber, TNumber},
+			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
 					if a == 0 {
@@ -90,10 +90,10 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:              "mod",
-		ForwardPrecedence: true,
+		Name:        "mod",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TNumber, TNumber},
+			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
 					if a == 0 {
@@ -112,10 +112,10 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:              "pow",
-		ForwardPrecedence: true,
+		Name:        "pow",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TNumber, TNumber},
+			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
 					// Compute b ** a under §1.4 swap-form preference.

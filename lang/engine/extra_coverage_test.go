@@ -848,12 +848,9 @@ func TestExtraIsTruthyRecordType(t *testing.T) {
 // ── 9. types.go: mustType and NewType ───────────────────────────────────
 
 func TestExtraNewTypeValid(t *testing.T) {
-	tp, err := NewType("String/Proper")
-	if err != nil {
-		t.Fatalf("NewType('String/Proper') error: %v", err)
-	}
-	if tp.String() != "Scalar/String/Proper" {
-		t.Errorf("got %q, want 'Scalar/String/Proper'", tp.String())
+	// NewType is strict — "String/Proper" is not a builtin and must error.
+	if _, err := NewType("String/Proper"); err == nil {
+		t.Error("NewType('String/Proper') should error — not a builtin")
 	}
 }
 
@@ -869,8 +866,8 @@ func TestExtraNewTypeSinglePart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewType('Number') error: %v", err)
 	}
-	if len(tp.Parts) != 2 || tp.Parts[0] != "Scalar" || tp.Parts[1] != "Number" {
-		t.Errorf("unexpected parts: %v", tp.Parts)
+	if tp.String() != "Scalar/Number" {
+		t.Errorf("unexpected type path: %v", tp.String())
 	}
 }
 
@@ -884,7 +881,7 @@ func TestExtraTypeSpecificity(t *testing.T) {
 }
 
 func TestExtraTypeIsSubtypeOf(t *testing.T) {
-	child, _ := NewType("String/Proper")
+	child := MintTestType("String/Proper")
 	parent, _ := NewType("String")
 	if !child.IsSubtypeOf(parent) {
 		t.Error("String/Proper should be subtype of String")
@@ -910,7 +907,7 @@ func TestExtraTypeEqual(t *testing.T) {
 }
 
 func TestExtraTypeMatches(t *testing.T) {
-	child, _ := NewType("String/Proper")
+	child := MintTestType("String/Proper")
 	parent, _ := NewType("String")
 	if !child.Matches(parent) {
 		t.Error("String/Proper should match String pattern")

@@ -176,7 +176,7 @@ const indexHTML = `<!DOCTYPE html>
   <span>concatenative query language</span>
 </header>
 <div id="output">
-<div class="line line-info">Welcome to the AQL Web REPL. Type expressions and press Enter to evaluate.</div>
+<div class="line line-info">Welcome to the AQL Web REPL. *Type expressions and press Enter to evaluate.</div>
 <div class="line line-info">Examples: 1 add 2 &nbsp;|&nbsp; "hello" upper &nbsp;|&nbsp; [1 2 3] len &nbsp;|&nbsp; def double [dup add]</div>
 </div>
 <div id="input-row">
@@ -203,7 +203,7 @@ const indexHTML = `<!DOCTYPE html>
     try {
       const res = await fetch('/api/eval', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-*Type': 'application/json'},
         body: JSON.stringify({code: code})
       });
       const data = await res.json();

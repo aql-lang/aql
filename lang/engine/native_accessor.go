@@ -17,19 +17,19 @@ import "fmt"
 //	[10,20] 5 getr     → ERROR (index out of bounds)
 var accessorNatives = []NativeFunc{
 	{
-		Name:              "getr",
-		ForwardPrecedence: true,
+		Name:        "getr",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			// [Key | Node] — key forward, container from stack
-			{Args: []Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler},
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler},
 			// [Key | Object]
-			{Args: []Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
-			{Args: []Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
-			{Args: []Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
+			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
+			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
+			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 			// [Key | None]
-			{Args: []Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
+			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
 		},
 	},
 }

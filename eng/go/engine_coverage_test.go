@@ -10,15 +10,15 @@ import (
 // using only the public NativeFunc registration API. No parser, no
 // built-in word library.
 
-// --- Type system primitives ---------------------------------------------
+// --- *Type system primitives ---------------------------------------------
 
 func TestTypePathBuiltins(t *testing.T) {
 	// Round-trip a few well-known type names through the canonical
-	// table and confirm they reach the correct Type values.
+	// table and confirm they reach the correct *Type values.
 	table := TypeNameTable()
 	cases := []struct {
 		name string
-		want Type
+		want *Type
 	}{
 		{"Integer", TInteger},
 		{"String", TString},
@@ -74,7 +74,7 @@ func TestValueConstructors(t *testing.T) {
 	cases := []struct {
 		name  string
 		value Value
-		want  Type
+		want  *Type
 	}{
 		{"integer", NewInteger(42), TInteger},
 		{"decimal", NewDecimal(3.14), TDecimal},
@@ -189,11 +189,11 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	// types.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "describe",
-		ForwardPrecedence: true,
+		Name:        "describe",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TInteger},
+				Args: []*Type{TInteger},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					n, _ := args[0].AsInteger()
 					if n == 0 {
@@ -201,15 +201,15 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 					}
 					return []Value{NewString("nonzero-int")}, nil
 				},
-				Returns: []Type{TString},
+				Returns: []*Type{TString},
 			},
 			{
-				Args: []Type{TString},
+				Args: []*Type{TString},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					s, _ := args[0].AsString()
 					return []Value{NewString("string:" + s)}, nil
 				},
-				Returns: []Type{TString},
+				Returns: []*Type{TString},
 			},
 		},
 	})
@@ -242,24 +242,24 @@ func TestSignatureScoreFavoursSpecificity(t *testing.T) {
 	hits := map[string]int{}
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "tag",
-		ForwardPrecedence: true,
+		Name:        "tag",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []Type{TAny},
+				Args: []*Type{TAny},
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					hits["any"]++
 					return []Value{NewString("any")}, nil
 				},
-				Returns: []Type{TString},
+				Returns: []*Type{TString},
 			},
 			{
-				Args: []Type{TInteger},
+				Args: []*Type{TInteger},
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					hits["int"]++
 					return []Value{NewString("int")}, nil
 				},
-				Returns: []Type{TString},
+				Returns: []*Type{TString},
 			},
 		},
 	})
@@ -290,16 +290,16 @@ func TestOutputCapture(t *testing.T) {
 	r, _ := NewRegistry()
 	r.Output = &buf
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "emit",
-		ForwardPrecedence: true,
+		Name:        "emit",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TString},
+			Args: []*Type{TString},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				s, _ := args[0].AsString()
 				reg.Output.Write([]byte(s))
 				return nil, nil
 			},
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	})
 	r.InitRootContext()
@@ -319,10 +319,10 @@ func TestAqlErrorPropagation(t *testing.T) {
 	// error from Run with the same code.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "bork",
-		ForwardPrecedence: true,
+		Name:        "bork",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger},
+			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				return nil, reg.AqlError("test_failure", "always fails", "bork")
 			},

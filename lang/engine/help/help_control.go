@@ -56,7 +56,7 @@ func init() {
 		Description: "Defines a new word with the given name and body. When the word is later " +
 			"invoked, the body is evaluated. Definitions are stackable: multiple defs " +
 			"for the same name stack, and undef pops the top definition. " +
-			"Has forward precedence, so both 'def name body' and 'body def name' work " +
+			"Has forward arg collection, so both 'def name body' and 'body def name' work " +
 			"via flexible argument matching.",
 		Notes: []string{
 			"def accepts a word or string as the name.",

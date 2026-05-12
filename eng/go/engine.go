@@ -5,112 +5,6 @@ import (
 	"strings"
 )
 
-// typeNameEntries is the single canonical registry of well-known type names.
-// Both the parser and engine derive their lookup tables from this slice.
-var typeNameEntries = []struct {
-	Name string
-	Type Type
-}{
-	{"Any", TAny},
-	{"None", TNone},
-	{"Never", TNever},
-	{"Scalar", TScalar},
-	{"Number", TNumber},
-	{"Integer", TInteger},
-	{"Decimal", TDecimal},
-	{"String", TString},
-	{"ProperString", TStringProper},
-	{"EmptyString", TStringEmpty},
-	{"Boolean", TBoolean},
-	{"Path", TPath},
-	{"Atom", TAtom},
-	{"Node", TNode},
-	{"List", TList},
-	{"Map", TMap},
-	{"Table", TTable},
-	{"Record", TRecord},
-	{"Options", TOptions},
-	{"Object", TObject},
-	{"Resource", TResource},
-	{"Entity", TResourceEntity},
-	{"Array", TArray},
-	{"Type", TType},
-	{"Timeout", TTimeout},
-	{"Interval", TInterval},
-	{"Function", TFunction},
-	{"FunctionSignature", TFnUndef},
-	{"Disjunct", TDisjunct},
-	{"Enum", TEnum},
-}
-
-// typeNames maps well-known type names to their Type, so bare words like
-// "number" or "string" resolve to type-literal values instead of strings.
-// Built from typeNameEntries at init time.
-var typeNames = func() map[string]Type {
-	m := make(map[string]Type, len(typeNameEntries))
-	for _, e := range typeNameEntries {
-		m[e.Name] = e.Type
-	}
-	return m
-}()
-
-// TypeNameTable returns the canonical mapping of all well-known type names
-// to their Type. Used by both the parser and engine.
-func TypeNameTable() map[string]Type {
-	return typeNames
-}
-
-// typeNamesByTypeID maps a Type's ID back to its canonical name. Built at init
-// from typeNameEntries. Used by ResolveTypeLiteralDef to find DefStack entries
-// that shadow a bare type literal.
-var typeNamesByTypeID = func() map[string]string {
-	m := make(map[string]string, len(typeNameEntries))
-	for _, e := range typeNameEntries {
-		if e.Type.ID != "" {
-			m[e.Type.ID] = e.Name
-		}
-	}
-	return m
-}()
-
-// TypeNameByID returns the canonical user-facing name for a Type ID
-// (e.g. the ID for "Type/FunctionSignature" → "FunctionSignature").
-// Returns the empty string if no entry exists. Renderers may use this
-// to display a type literal's well-known name; for well-named builtin
-// types it equals Type.Leaf().
-func TypeNameByID(id string) string {
-	return typeNamesByTypeID[id]
-}
-
-// ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
-// a richer definition installed under the same name (e.g. an ObjectTypeInfo
-// from RegisterResource or a `type Foo object {…}` binding). If so it
-// returns that value; otherwise it returns the original unchanged. This
-// lets the parser eagerly resolve all type names while the engine still
-// picks up installed ObjectType defs.
-//
-// User-defined types now live in r.Types (post-§5.2); the DefStacks
-// fallback is retained only for value-side ObjectType installations
-// from outside the type word (e.g. legacy RegisterResource paths).
-func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
-	if v.Data != nil || reg == nil {
-		return v
-	}
-	name, ok := typeNamesByTypeID[v.VType.ID]
-	if !ok {
-		return v
-	}
-	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
-		return tv
-	}
-	if top, ok := reg.TopOfDefStack(name); ok {
-		if top.IsObjectType() {
-			return top
-		}
-	}
-	return v
-}
-
 // stackHeadroom is the extra capacity allocated beyond current need,
 // so that most insert/splice operations avoid heap allocation.
 const stackHeadroom = 8
@@ -185,15 +79,17 @@ func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
 // positioned at the body slot of a typed binding whose constraint is
 // a function-shape type (TFnUndef).
 //
-// Forward-precedence collection works by inserting a Forward marker
-// after the func word and then letting the engine evaluate upcoming
-// tokens normally; the marker holds the matched signature. So when a
-// fn dispatch fails inside a deferred forward collection, walking
-// back through the stack finds the Forward marker for the outer
-// collector. If that collector is `def` and its typed-name map
-// (already on the stack at FuncIndex+1+CollectedArgs..) carries a
-// fn-shape constraint, the failing dispatch is exactly the §7.2
-// "user wrote a fn name where they meant `(quote name)`" case.
+// Deferred forward-arg dispatch works by inserting a Forward marker
+// after the func word and letting the engine evaluate upcoming tokens
+// normally; the marker holds the matched signature plus arg-count
+// bookkeeping. When a fn dispatch fails inside that deferred
+// collection, walking back through the stack finds the Forward marker
+// for the outer collector. If that collector is `def` and its
+// typed-name map (sitting at FuncIndex - CollectedArgs, since
+// stepLiteral splices each collected arg in immediately before the
+// func word) carries a fn-shape constraint, the failing dispatch is
+// exactly the §7.2 "user wrote a fn name where they meant
+// `(quote name)`" case.
 func (e *Engine) isFnShapeTypedBindingContext() bool {
 	if e.registry == nil || e.pointer == 0 {
 		return false
@@ -257,7 +153,7 @@ func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError 
 }
 
 // returnTypeError builds a detailed AqlError for a return type mismatch.
-func (e *Engine) returnTypeError(funcName string, index int, expected Type, got Value) *AqlError {
+func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
 		funcName, index, expected, got.VType)
 	hint := "value: " + ValToString(got)
@@ -445,7 +341,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			e.pointer++
 
 		default:
-			if val.VType.Equal(Type{}) {
+			if val.VType.Equal(nil) {
 				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {
@@ -851,11 +747,11 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	// Pre-evaluate paren expressions in the forward scan range so that
-	// matchSignature sees fully resolved values (rule 1.5).
-	// Skip when ForceStack is set (all args come from the stack, no
-	// forward scan will happen) — premature paren evaluation can resolve
-	// names that haven't been defined yet by a pending outer forward.
-	if (fn.ForwardPrecedence && !w.ForceStack) || w.ForceForward {
+	// matchSignature sees fully resolved values (rule 1.5). Only needed
+	// when at least one signature wants forward args (BarrierPos > 0)
+	// and the call hasn't been forced to stack mode via /s; or when /f
+	// explicitly forces forward collection.
+	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
 		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
 			return err
 		}
@@ -865,10 +761,11 @@ func (e *Engine) stepWord(val Value) error {
 	resolved := e.effectiveResolved()
 	sig, positions := e.matchSignature(fn, w, resolved)
 
-	// Fallback for ForwardPrecedence words: when nearest-first matching
-	// fails, retry with deepest-first (ForceStack). This handles CallAQL
-	// sub-engines where FnDef args are placed in deepest-first order.
-	if sig == nil && fn.ForwardPrecedence && !w.ForceStack {
+	// Retry fallback for words with forward-collecting sigs: when
+	// nearest-first matching fails, retry with deepest-first
+	// (ForceStack). Handles CallAQL sub-engines where FnDef args are
+	// placed in deepest-first order on the input stack.
+	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
 		wDeep.ForceStack = true
 		sig, positions = e.matchSignature(fn, wDeep, resolved)
@@ -1231,8 +1128,11 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 	return stack
 }
 
-// insertForward handles a forward-precedence word by placing a forward
-// primitive after the word on the stack.
+// insertForward records a deferred dispatch by placing a Forward
+// marker after the func word on the stack. The marker carries the
+// matched signature plus arg-count bookkeeping; subsequent literals
+// are routed into its arg slots until ExpectedArgs is reached, at
+// which point the marker triggers handler execution.
 func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, stackArgs ...int) error {
 	pArgs := 0
 	if len(stackArgs) > 0 {
@@ -1544,9 +1444,8 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
 		fn = &FnDefInfo{
-			Name:              fnDef.Name,
-			Signatures:        fnSigsToSignatures(fnDef.Sigs),
-			ForwardPrecedence: true,
+			Name:       fnDef.Name,
+			Signatures: fnSigsToSignatures(fnDef.Sigs),
 		}
 	}
 	if fn == nil {
@@ -1679,7 +1578,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 func fnSigsToSignatures(sigs []FnSig) []Signature {
 	out := make([]Signature, len(sigs))
 	for i, sig := range sigs {
-		argTypes := make([]Type, len(sig.Params))
+		argTypes := make([]*Type, len(sig.Params))
 		var patterns map[int]Value
 		for j, p := range sig.Params {
 			argTypes[j] = p.Type
@@ -2060,7 +1959,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	delete(e.marks, info.To)
 
 	// Check if condition produced a value.
-	if condResult.VType.Parts == nil {
+	if condResult.VType == nil {
 		e.stackSplice(markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
 		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
@@ -2470,9 +2369,10 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 
 		testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
 
-		// For forward-precedence functions, rearrange values so forward
-		// args are first and stack args are reversed before matching.
-		if fn.ForwardPrecedence && sac > 0 {
+		// For words whose sigs collect forward args, rearrange values
+		// so forward args are first and stack args are reversed before
+		// matching.
+		if fn.HasForwardSigs() && sac > 0 {
 			e.pointer = funcIdx
 			e.rearrangeForForward(sac, collectedCount)
 		}

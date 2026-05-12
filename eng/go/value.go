@@ -193,7 +193,7 @@ type TableTypeInfo struct {
 // FnParam describes one parameter in a function signature.
 type FnParam struct {
 	Name     string // empty for unnamed positional parameters
-	Type     Type
+	Type     *Type
 	Pattern  *Value // optional: map/list pattern for structural matching
 	Optional bool   // true if this param was marked optional via ?
 }
@@ -201,7 +201,7 @@ type FnParam struct {
 // FnSig describes one overload of a function definition.
 type FnSig struct {
 	Params     []FnParam
-	Returns    []Type // declared return types (nil = unchecked)
+	Returns    []*Type // declared return types (nil = unchecked)
 	Body       []Value
 	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
 }
@@ -214,22 +214,41 @@ type FnSig struct {
 // Signatures is the compiled dispatch table (typed args + Go handlers).
 // For Go builtins, Sigs is nil and Signatures holds the native handlers.
 // For AQL fn defs, InstallFnDef converts Sigs into Signatures with handler
-// closures that splice body tokens. ForwardPrecedence controls whether the
-// engine tries forward collection before stack matching.
+// closures that splice body tokens. Whether the engine tries forward
+// collection is determined per-signature via Signature.BarrierPos —
+// derive the word-level summary via fn.HasForwardSigs.
 type FnDefInfo struct {
-	Name              string
-	Sigs              []FnSig     // AQL-defined overloads (nil for Go-implemented words)
-	Signatures        []Signature // compiled dispatch table
-	ForwardPrecedence bool        // true = try forward-first; false = stack-only
-	MaxForwardArgs    int         // longest forward arg count across all sigs (respecting barriers)
-	Registry          *Registry
+	Name           string
+	Sigs           []FnSig     // AQL-defined overloads (nil for Go-implemented words)
+	Signatures     []Signature // compiled dispatch table
+	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
+	Registry       *Registry
+}
+
+// HasForwardSigs reports whether any compiled signature has a non-zero
+// BarrierPos — i.e. at least one signature wants to collect args from
+// tokens following the word. Used by the dispatcher to decide whether
+// pre-evaluation of upcoming parens is worthwhile and whether a
+// stack-only retry should be attempted on first-pass match failure.
+// The result is derived from the sigs, not stored — Signature is the
+// source of truth.
+func (fn *FnDefInfo) HasForwardSigs() bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if fn.Signatures[i].BarrierPos > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // FnSigSpec describes a signature specification without a body, used for
 // targeted undef of specific function signatures.
 type FnSigSpec struct {
 	Params  []FnParam
-	Returns []Type
+	Returns []*Type
 }
 
 // FnUndefInfo holds signature specs for targeted undef of function signatures.
@@ -240,7 +259,7 @@ type FnUndefInfo struct {
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
 	FuncName     string
-	Returns      []Type
+	Returns      []*Type
 	UnnamedCount int // number of unnamed params pushed onto the stack before the body
 }
 
@@ -263,6 +282,7 @@ type ObjectTypeInfo struct {
 	Parent          *ObjectTypeInfo // parent object type (nil if direct child of Object)
 	ID              string          // unique internal ID: "T_" + 12 hex chars
 	Name            string          // full type path (e.g. "Object/Foo/Bar")
+	Type            *Type           // canonical *Type identity; populated by MintType during installation
 	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 
@@ -499,7 +519,7 @@ type ForwardInfo struct {
 // Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
 	ID        string
-	VType     Type
+	VType     *Type
 	Data      interface{}
 	Quoted    bool   // true when value was produced by the quote word; prevents auto-evaluation
 	Eval      bool   // true for parser-created lists that should auto-evaluate at end of Run
@@ -539,12 +559,27 @@ func GenerateID(prefix string) string {
 
 // IDPrefixForType returns the ID prefix for a given type:
 // "S_" for Scalar, "N_" for Node, "W_" for Word, "T_" for Object/Any/None.
-func IDPrefixForType(t Type) string {
-	return IDPrefixForParts(t.Parts)
+func IDPrefixForType(t *Type) string {
+	if t == nil {
+		return "T_"
+	}
+	root := t.Root()
+	if root == nil {
+		return "T_"
+	}
+	switch root.Name {
+	case "Scalar":
+		return "S_"
+	case "Node":
+		return "N_"
+	case "Word":
+		return "W_"
+	}
+	return "T_"
 }
 
 // NewValueRaw creates a Value with an auto-generated ID based on the type category.
-func NewValueRaw(t Type, data interface{}) Value {
+func NewValueRaw(t *Type, data interface{}) Value {
 	return Value{
 		ID:    GenerateID(IDPrefixForType(t)),
 		VType: t,
@@ -717,7 +752,7 @@ func NewPath(parts []string, abs bool) Value {
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
 // The Data is nil since type literals have no specific literal value.
-func NewTypeLiteral(t Type) Value {
+func NewTypeLiteral(t *Type) Value {
 	return NewValueRaw(t, nil)
 }
 
@@ -866,60 +901,55 @@ func NewEnum(alternatives []Value) Value {
 	return NewValueRaw(TEnum, DisjunctInfo{Alternatives: alternatives})
 }
 
-// NewObjectType creates an object type value. The type path is derived from
-// the ObjectTypeInfo.Name field. If Name is empty, the ID is used as the
-// type path suffix under "Object/".
-func NewObjectType(info ObjectTypeInfo) Value {
-	name := info.Name
-	if name == "" {
-		name = "Object/" + info.ID
-	}
-	t, _ := NewType(name)
+// NewObjectType creates an object type value. The caller must
+// provide the canonical *Type identity — typically minted via
+// r.Types.MintType for named types being installed, or for anonymous
+// `object {…}` declarations. The info's Type field is set to t for
+// downstream code that needs the parent's *Type when extending.
+func NewObjectType(t *Type, info ObjectTypeInfo) Value {
+	info.Type = t
 	return NewValueRaw(t, info)
 }
 
-// NewObjectInstance creates an object instance value. The type path matches
-// the object type's Name so instances are subtypes of their type's hierarchy.
-func NewObjectInstance(info ObjectInstanceInfo) Value {
-	name := info.TypeRef.Name
-	if name == "" {
-		name = "Object/" + info.TypeRef.ID
-	}
-	t, _ := NewType(name)
+// NewObjectInstance creates an object instance value of the given
+// type. The caller must provide the type's *Type identity (typically
+// info.TypeRef.Type for the type currently being instantiated).
+func NewObjectInstance(t *Type, info ObjectInstanceInfo) Value {
 	return NewValueRaw(t, info)
 }
 
-// NewStore creates a Store value with the given type name.
-// If typeName is empty, defaults to "Object/Store".
-func NewStore(typeName string) Value {
-	if typeName == "" {
-		typeName = "Object/Store"
+// NewStore creates a Store value of the given type. Pass TStore for
+// the builtin Object/Store, TStoreSystem for Object/Store/System, or
+// a user-defined *Type for a custom store subtype. The Value's
+// TypeName is derived from t.Path() for legacy prototype-chain code
+// that compares store types by path string.
+func NewStore(t *Type) Value {
+	if t == nil {
+		t = TStore
 	}
-	t, _ := NewType(typeName)
 	return NewValueRaw(t, &StoreInstanceInfo{
-		TypeName: typeName,
+		TypeName: t.Path(),
 		Data:     make(map[string]Value),
 	})
 }
 
 // NewStoreValue wraps an existing StoreInstanceInfo into a Value.
-func NewStoreValue(si *StoreInstanceInfo) Value {
-	typeName := si.TypeName
-	if typeName == "" {
-		typeName = "Object/Store"
+// Pass t = nil to default to TStore.
+func NewStoreValue(t *Type, si *StoreInstanceInfo) Value {
+	if t == nil {
+		t = TStore
 	}
-	t, _ := NewType(typeName)
 	return NewValueRaw(t, si)
 }
 
-// NewStoreWithPrototype creates a Store value with a prototype chain.
-func NewStoreWithPrototype(typeName string, prototype *StoreInstanceInfo) Value {
-	if typeName == "" {
-		typeName = "Object/Store"
+// NewStoreWithPrototype creates a Store value of the given type with
+// a prototype chain. Pass t = nil to default to TStore.
+func NewStoreWithPrototype(t *Type, prototype *StoreInstanceInfo) Value {
+	if t == nil {
+		t = TStore
 	}
-	t, _ := NewType(typeName)
 	return NewValueRaw(t, &StoreInstanceInfo{
-		TypeName:  typeName,
+		TypeName:  t.Path(),
 		Data:      make(map[string]Value),
 		Prototype: prototype,
 	})

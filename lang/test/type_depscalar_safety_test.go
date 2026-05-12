@@ -9,7 +9,7 @@ import (
 
 // --- DepScalar safety: don't fall through scalar dispatch ---
 //
-// `Type.Matches` is overridden so that `DepInteger.Matches(TInteger)`
+// `*Type.Matches` is overridden so that `DepInteger.Matches(TInteger)`
 // is true (used by sig matching). The risk is any code that does
 // `if v.VType.Matches(TString) { _, _ := v.AsString() }` — on a
 // DepScalar payload, AsString errors, the underscore swallows the

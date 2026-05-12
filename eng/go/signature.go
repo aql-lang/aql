@@ -13,10 +13,11 @@ type Handler func(args []Value, ctx map[string]Value, stack []Value, r *Registry
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
 // on the stack, Args[last] = top of the stack for stack matching).
 //
-// For forward-precedence words the engine collects future values into Args[0],
-// Args[1], ... in order, then pushes them onto the stack and retries as a stack match.
+// Args[0..BarrierPos-1] are forward-eligible — the engine collects them
+// from the tokens following the word, then dispatches once all are
+// present. Args[BarrierPos..N-1] are matched from the stack in reverse.
 type Signature struct {
-	Args    []Type
+	Args    []*Type
 	Handler Handler
 
 	// FullStack, when true, causes the engine to pass the full resolved
@@ -87,7 +88,7 @@ type Signature struct {
 	// mode, it skips the handler and pushes carrier values typed by
 	// Returns. When nil or empty, the checker falls back to a
 	// conservative approximation (see engine carrier handling).
-	Returns []Type
+	Returns []*Type
 
 	// ReturnsFn, when non-nil, overrides Returns for static
 	// type-checking: the checker calls it with the carrier-typed args
@@ -255,7 +256,7 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 //
 // See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
 // user-facing description of this rule.
-func sigTypeMatches(v Value, t Type) bool {
+func sigTypeMatches(v Value, t *Type) bool {
 	if v.VType.Matches(t) {
 		return true
 	}
@@ -303,7 +304,7 @@ func sigTypeMatches(v Value, t Type) bool {
 // has a single inhabitant and that's it. This covers both the spec
 // runner's NewNone() (Data != nil sentinel) and production aql's
 // `NewTypeLiteral(TNone)` (Data == nil, used as the "null" value).
-func rejectsTypeLiteral(v Value, expectedType Type) bool {
+func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if v.Data != nil {
 		return false
 	}
@@ -423,7 +424,7 @@ var typeInherentScores = map[string]int{
 
 // typeInherentScore returns the inherent score for a type.
 // Defaults to 1000 for types not in the map.
-func typeInherentScore(t Type) int {
+func typeInherentScore(t *Type) int {
 	path := t.String()
 	if s, ok := typeInherentScores[path]; ok {
 		return s

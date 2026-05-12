@@ -17,7 +17,7 @@ package eng
 //   a or b       — returns args[1] (=b) if it is truthy,
 //                  else args[0] (=a); same coercion rule
 //
-// tor / tand operate on Type-shaped values:
+// tor / tand operate on *Type-shaped values:
 //
 //   T tor U      — disjunct union; flattens nested disjuncts,
 //                  removes Never (the disjunct identity), and
@@ -44,11 +44,11 @@ func registerCoreBoolean(r *Registry) {
 // registerCoreOr — `or` with TBoolean and TAny overloads.
 func registerCoreOr(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "or",
-		ForwardPrecedence: true,
+		Name:        "or",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TAny}},
 		},
 	})
 }
@@ -56,11 +56,11 @@ func registerCoreOr(r *Registry) {
 // registerCoreAnd — `and` with TBoolean and TAny overloads.
 func registerCoreAnd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "and",
-		ForwardPrecedence: true,
+		Name:        "and",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny, TAny}, Handler: andHandler, Returns: []Type{TAny}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}},
 		},
 	})
 }
@@ -68,11 +68,11 @@ func registerCoreAnd(r *Registry) {
 // registerCoreNot — `not` with TBoolean and TAny overloads.
 func registerCoreNot(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "not",
-		ForwardPrecedence: true,
+		Name:        "not",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TBoolean}, Handler: notHandler, Returns: []Type{TBoolean}},
-			{Args: []Type{TAny}, Handler: notHandler, Returns: []Type{TBoolean}},
+			{Args: []*Type{TBoolean}, Handler: notHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny}, Handler: notHandler, Returns: []*Type{TBoolean}},
 		},
 	})
 }
@@ -86,10 +86,10 @@ func registerCoreTypeOps(r *Registry) {
 // registerCoreTor — `tor` (type-level disjunct union).
 func registerCoreTor(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "tor",
-		ForwardPrecedence: true,
+		Name:        "tor",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
+			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
 			Handler:    torHandler,
 			ReturnsFn:  torReturnsFn,
@@ -100,13 +100,13 @@ func registerCoreTor(r *Registry) {
 // registerCoreTand — `tand` (type-level intersection).
 func registerCoreTand(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "tand",
-		ForwardPrecedence: true,
+		Name:        "tand",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
+			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
 			Handler:    tandHandler,
-			Returns:    []Type{TAny},
+			Returns:    []*Type{TAny},
 		}},
 	})
 }

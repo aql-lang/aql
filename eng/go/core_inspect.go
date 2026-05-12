@@ -42,12 +42,12 @@ func RegisterCoreInspect(r *Registry) {
 
 func registerCoreInspect(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "inspect",
-		ForwardPrecedence: true,
+		Name:        "inspect",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []Type{TWord}, Handler: inspectWordHandler, Returns: []Type{TInspect}},
-			{Args: []Type{TAtom}, Handler: inspectAtomHandler, Returns: []Type{TInspect}},
-			{Args: []Type{TAny}, Handler: inspectTypeHandler, Returns: []Type{TInspect}},
+			{Args: []*Type{TWord}, Handler: inspectWordHandler, Returns: []*Type{TInspect}},
+			{Args: []*Type{TAtom}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}},
+			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}},
 		},
 	})
 }
@@ -143,7 +143,7 @@ func buildTypeInspection(name string, tv Value) Value {
 	}
 
 	// A TYPE value (a bare type literal, or a structural type body) has
-	// type-of `Type`; its underlying structure leaf goes to `struct`.
+	// type-of `*Type`; its underlying structure leaf goes to `struct`.
 	// A concrete value reports its own VType leaf as `type` and has no
 	// `struct`.
 	if tv.Data == nil || IsTypeBody(tv) || IsRecordShape(tv) {

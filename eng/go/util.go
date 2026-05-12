@@ -342,101 +342,81 @@ func (r *Registry) RestoreToDefDepths(snap map[string]int) {
 // the type stack, or zero Value and false if the stack is empty /
 // name unbound. The type counterpart of TopOfDefStack.
 func (r *Registry) TopOfTypeStack(name string) (Value, bool) {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return Value{}, false
 	}
-	ts := r.types[name]
-	if len(ts) == 0 {
-		return Value{}, false
-	}
-	return ts[len(ts)-1], true
+	return r.Types.TopBody(name)
 }
 
-// PushType pushes a new binding for name onto the type stack. The
-// previous top (if any) becomes shadowed and is restored when an
-// `untype name` pops the new entry.
+// PushType pushes a new binding for name onto the type stack. Each
+// push mints a fresh Type so the new declaration carries a distinct
+// identity even when it shadows an outer one. The previous top (if any)
+// becomes shadowed and is restored when an `untype name` pops the new
+// entry.
 func (r *Registry) PushType(name string, v Value) {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return
 	}
-	r.types[name] = append(r.types[name], v)
+	r.Types.PushType(name, v)
 }
 
 // PopType pops the top binding for name. Returns true if there was
 // a binding to pop. If the stack becomes empty the entry is
 // removed from the map so HasType returns false.
 func (r *Registry) PopType(name string) bool {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return false
 	}
-	ts := r.types[name]
-	if len(ts) == 0 {
-		return false
-	}
-	if len(ts) == 1 {
-		delete(r.types, name)
-		return true
-	}
-	r.types[name] = ts[:len(ts)-1]
-	return true
+	_, ok := r.Types.PopType(name)
+	return ok
 }
 
 // HasType reports whether name has any active type binding.
 func (r *Registry) HasType(name string) bool {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return false
 	}
-	return len(r.types[name]) > 0
+	return r.Types.Has(name)
 }
 
 // TypeStackDepth returns the number of bindings currently stacked for
 // type name (0 if unbound).
 func (r *Registry) TypeStackDepth(name string) int {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return 0
 	}
-	return len(r.types[name])
+	return r.Types.Depth(name)
 }
 
 // TypeNames returns a snapshot of all names currently bound in the
 // type stacks. Mirrors DefNames.
 func (r *Registry) TypeNames() []string {
-	if r == nil {
+	if r == nil || r.Types == nil {
 		return nil
 	}
-	names := make([]string, 0, len(r.types))
-	for k := range r.types {
-		names = append(names, k)
-	}
-	return names
+	return r.Types.Names()
 }
 
-// SnapshotTypeStacks returns a deep copy of the type-stack registry.
-// Pair with RestoreTypeStacks to roll back arbitrary mutations
-// (push, pop, replace) — depth-only snapshots aren't sufficient for
-// callers like the predicate sandbox where the body may pop a stack
-// and then re-push a different value.
-func (r *Registry) SnapshotTypeStacks() map[string][]Value {
-	if r == nil {
+// SnapshotTypeStacks returns a deep copy of the dynamic type table.
+// Pair with RestoreTypeStacks to roll back arbitrary mutations (push,
+// pop, replace) — depth-only snapshots aren't sufficient for callers
+// like the predicate sandbox where the body may pop a stack and then
+// re-push a different value.
+func (r *Registry) SnapshotTypeStacks() *TypeTable {
+	if r == nil || r.Types == nil {
 		return nil
 	}
-	dup := make(map[string][]Value, len(r.types))
-	for k, stack := range r.types {
-		s := make([]Value, len(stack))
-		copy(s, stack)
-		dup[k] = s
-	}
-	return dup
+	return r.Types.Clone()
 }
 
-// RestoreTypeStacks replaces the entire type-stack registry with
-// snap. The caller is responsible for snap being a deep copy (see
+// RestoreTypeStacks replaces the entire dynamic type table with snap.
+// The caller is responsible for snap being a deep copy (see
 // SnapshotTypeStacks); RestoreTypeStacks does not duplicate again.
-func (r *Registry) RestoreTypeStacks(snap map[string][]Value) {
+func (r *Registry) RestoreTypeStacks(snap *TypeTable) {
 	if r == nil {
 		return
 	}
-	r.types = snap
+	r.Types = snap
 }
 
 // --- ArgsStack helpers --------------------------------------------------
@@ -674,7 +654,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 // per-call diagnostics or step counters set during the predicate
 // don't leak.
 type predicateSandbox struct {
-	types    map[string][]Value
+	types    *TypeTable
 	ctxStack []*StoreInstanceInfo
 	check    CheckState
 }

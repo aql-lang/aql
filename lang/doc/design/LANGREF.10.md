@@ -318,7 +318,7 @@ lower "ABC"     => 'abc'
 10 sub 3        => 7
 ```
 
-By default most words have *forward precedence*: when prefix arguments
+By default most words have *forward arg collection*: when prefix arguments
 are available they are tried first; forward collection is the fallback.
 Stack-manipulation words (`dup`, `swap`, `drop`) are stack-only by
 default.
@@ -1251,7 +1251,7 @@ element, or the last truthy element if all are truthy). Returns
 
 ### Comparison Words
 
-Comparison words take two arguments with forward precedence.
+Comparison words take two arguments with forward arg collection.
 They use natural type comparisons: integers
 compare numerically, strings compare lexicographically, booleans
 compare as `false < true`, atoms compare lexicographically on
@@ -2416,7 +2416,7 @@ none x !.                   => ERROR
 #### `inspect`
 
 Return an introspection map for a word, containing its name, kind
-(`builtin` or `defined`), whether it has forward precedence, and its
+(`builtin` or `defined`), whether it has forward arg collection, and its
 list of signatures.
 
 *Signature:* `[word] -> [map]`
@@ -3205,7 +3205,7 @@ longest argument list with narrowest types.
 ## Type Algebra
 
 `tand` (intersection) and `tor` (union) compose types into a bounded
-distributive lattice. Both operators are forward-precedence with
+distributive lattice. Both operators are forward-collecting with
 `BarrierPos=1` so chains don't greedily consume.
 
 ```

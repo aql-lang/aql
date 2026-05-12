@@ -117,7 +117,6 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// of the same name) so overloading works across stacked defs.
 		if prev := r.Lookup(name); prev != nil {
 			fnDef.Signatures = append([]Signature(nil), prev.Signatures...)
-			fnDef.ForwardPrecedence = prev.ForwardPrecedence
 		}
 		// Push the FnDefInfo to DefStacks first, then InstallFnDef→Register→
 		// upsertFnDef will update its Signatures in place.
@@ -148,9 +147,20 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		}
 		// Register the name parts as known type parts.
 		for _, p := range strings.Split(info.Name, "/") {
-			r.KnownTypeParts[p] = true
+			r.RegisterPart(p)
 		}
-		body = NewObjectType(info)
+		// Preserve the body's *Type identity (set by the caller via
+		// NewObjectType). InstallDef rewrites info.Name based on the
+		// def name and parent, then re-wraps the value — but the def
+		// itself stays the caller's choice. For builtin object types
+		// (Resource, Entity) the caller passes the canonical builtin
+		// *Type; for user-defined object types installed as defs the
+		// caller is responsible for minting first.
+		def := body.VType
+		if def == nil {
+			def = TObject
+		}
+		body = NewObjectType(def, info)
 		r.PushDef(name, body)
 		return
 	}
@@ -196,7 +206,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	// Expand optional parameters into additional signatures.
 	fnDef.Sigs = ExpandOptionalSigs(name, fnDef.Sigs)
 	for _, sig := range fnDef.Sigs {
-		argTypes := make([]Type, len(sig.Params))
+		argTypes := make([]*Type, len(sig.Params))
 		var patterns map[int]Value
 		for i, p := range sig.Params {
 			argTypes[i] = p.Type
@@ -289,7 +299,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			paramNames[i] = p.Name
 			paramPatterns[i] = p.Pattern
 		}
-		declaredReturns := append([]Type(nil), s.Returns...)
+		declaredReturns := append([]*Type(nil), s.Returns...)
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
 		returnsFn := func(args []Value, _ *Registry) []Value {
@@ -369,8 +379,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		}
 
 		r.RegisterNativeFunc(NativeFunc{
-			Name:              name,
-			ForwardPrecedence: !isStackOnly,
+			Name:        name,
+			ForwardArgs: !isStackOnly,
 			Signatures: []NativeSig{{
 				Args:       argTypes,
 				Handler:    handler,
@@ -579,7 +589,7 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	for parent != nil {
 		newParent := &StoreInstanceInfo{
 			TypeName:  parent.TypeName,
-			Data:      map[string]Value{parentKey: NewStoreValue(current)},
+			Data:      map[string]Value{parentKey: NewStoreValue(nil, current)},
 			Prototype: parent,
 			Parent:    parent.Parent,
 			ParentKey: parent.ParentKey,
@@ -805,7 +815,7 @@ func FnDefsOverlap(a, b FnDefInfo) bool {
 
 // BaseValue returns the zero/default value for a given type, similar to Go's
 // zero values. Used by both the "base" word and "make" with base:true option.
-func BaseValue(t Type) (Value, error) {
+func BaseValue(t *Type) (Value, error) {
 	switch {
 	case t.Matches(TInteger):
 		return NewInteger(0), nil

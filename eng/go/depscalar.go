@@ -147,25 +147,24 @@ func NewDepScalar(kind DepKind, bound Value) Value {
 // the last *named* part of the bound's lattice path, looked up
 // against the well-known scalar bases. Returns "" for unsupported
 // bound types.
-func dependentLeafFromBoundType(t Type) string {
-	// Walk from the most specific path down: Integer/42 should yield
-	// "Integer", not "42". The well-known scalar bases live at depth
-	// ≤ 3, so any value-tagged subtype (e.g. Number/Integer/42) is
-	// stripped down to its last named ancestor.
-	for n := len(t.Parts); n >= 1; n-- {
-		prefix := t.Parts[:n]
-		switch {
-		case len(prefix) == 3 && prefix[0] == "Scalar" && prefix[1] == "Number" && prefix[2] == "Integer":
+func dependentLeafFromBoundType(t *Type) string {
+	// Walk the ancestry from the most specific to root, returning the
+	// first match against a well-known scalar base. Value-tagged
+	// subtypes (e.g. Number/Integer/42) strip down to their last named
+	// ancestor.
+	for d := t; d != nil; d = d.Parent {
+		switch d {
+		case TInteger:
 			return "Integer"
-		case len(prefix) == 3 && prefix[0] == "Scalar" && prefix[1] == "Number" && prefix[2] == "Decimal":
+		case TDecimal:
 			return "Decimal"
-		case len(prefix) == 2 && prefix[0] == "Scalar" && prefix[1] == "Number":
+		case TNumber:
 			return "Number"
-		case len(prefix) == 2 && prefix[0] == "Scalar" && prefix[1] == "String":
+		case TString:
 			return "String"
-		case len(prefix) == 2 && prefix[0] == "Scalar" && prefix[1] == "Boolean":
+		case TBoolean:
 			return "Boolean"
-		case len(prefix) == 2 && prefix[0] == "Scalar" && prefix[1] == "Atom":
+		case TAtom:
 			return "Atom"
 		}
 	}
@@ -174,7 +173,7 @@ func dependentLeafFromBoundType(t Type) string {
 
 // DependentLeafBaseType returns the scalar base type for a given
 // dependent leaf name, or (TNone, false) if the leaf is unknown.
-func DependentLeafBaseType(leaf string) (Type, bool) {
+func DependentLeafBaseType(leaf string) (*Type, bool) {
 	switch leaf {
 	case "Integer":
 		return TInteger, true
@@ -196,14 +195,18 @@ func DependentLeafBaseType(leaf string) (Type, bool) {
 // Dep<Leaf> path, or "" if the type is not a dependent scalar path.
 // Accepts trailing path components (forward-compat) so a future
 // value-tagged DepInteger subtype keeps reporting "Integer".
-func DependentLeafFromType(t Type) string {
-	if len(t.Parts) < 3 || t.Parts[0] != "Type" || t.Parts[1] != "Dependent" {
-		return ""
+func DependentLeafFromType(t *Type) string {
+	// Walk up until the parent is Type/Dependent. Accepts deeper paths
+	// (forward-compat) per the doc comment.
+	for d := t; d != nil && d.Parent != nil; d = d.Parent {
+		if d.Parent == TDependent {
+			if !strings.HasPrefix(d.Name, "Dep") {
+				return ""
+			}
+			return strings.TrimPrefix(d.Name, "Dep")
+		}
 	}
-	if !strings.HasPrefix(t.Parts[2], "Dep") {
-		return ""
-	}
-	return strings.TrimPrefix(t.Parts[2], "Dep")
+	return ""
 }
 
 // IsDepScalar reports whether the value is any dependent scalar type.
@@ -419,7 +422,7 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 // running it during check is safe.
 func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
-		Args: []Type{TScalar, TScalarType},
+		Args: []*Type{TScalar, TScalarType},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map
@@ -441,7 +444,7 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 			}
 			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
-		Returns:        []Type{TDependent},
+		Returns:        []*Type{TDependent},
 		RunInCheckMode: true,
 	}
 }
@@ -458,13 +461,13 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 // Lives in depscalar.go alongside the rest of the dependent-type
 // machinery; surfaced into the engine through ComparisonNatives.
 var betweenNative = NativeFunc{
-	Name:              "between",
-	ForwardPrecedence: true,
+	Name:        "between",
+	ForwardArgs: true,
 	Signatures: []NativeSig{
 		{
-			Args:           []Type{TScalar, TScalar, TScalarType},
+			Args:           []*Type{TScalar, TScalar, TScalarType},
 			Handler:        betweenHandler,
-			Returns:        []Type{TDependent},
+			Returns:        []*Type{TDependent},
 			RunInCheckMode: true,
 		},
 	},

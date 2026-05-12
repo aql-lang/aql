@@ -9,7 +9,7 @@ import (
 
 // --- type shadowing + untype ---
 //
-// Type bindings now stack like `def` bindings. `type Foo X; type Foo
+// *Type bindings now stack like `def` bindings. `type Foo X; type Foo
 // Y` pushes Y on top so subsequent uses see Y; `untype Foo` pops Y
 // and X becomes active again. Once the stack empties, the name is
 // unbound. Mirrors `def` / `undef` semantics so users have a single

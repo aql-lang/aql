@@ -8,7 +8,7 @@ import (
 )
 
 // TestForwardMirrorPattern verifies the symmetric mirror equivalence for
-// forward-precedence words with 1–7 args. For a word f with args a,b,c:
+// forward-collecting words with 1–7 args. For a word f with args a,b,c:
 //
 //	f a b c  <=>  c f a b  <=>  c b f a  <=>  c b a f
 //
@@ -21,7 +21,7 @@ import (
 // The canonical result for correct ordering is always 123...N.
 
 func RegisterMirrorTestWord(r *engine.Registry, name string, arity int) {
-	args := make([]engine.Type, arity)
+	args := make([]*engine.Type, arity)
 	for i := range args {
 		args[i] = engine.TInteger
 	}

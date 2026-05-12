@@ -18,12 +18,12 @@ The usual forth style primitives are provided by the system: dup, swap, etc.
 
 
 Some words can use future tokens as if they were on the stack
-already. This is called forward precedence.
+already. This is called forward arg collection.
 
-All words should use forward precedence unless explicitly defined to
+All words should use forward arg collection unless explicitly defined to
 have stack only args. The traditional forth words such as dup, swap,
 drop, etc always have stack only args. Everything else has forward
-precedence. For forward precedence, the engine signature matching
+precedence. For forward arg collection, the engine signature matching
 should attempt to find the longest and most specific match against
 future tokens. Partial matches are then completed by looking at prefix
 values, that is, the stack. Evaluation is strictly left-to-right.
@@ -134,7 +134,7 @@ Tokens from the future stack are called forward arguments.
 A word can accept one or more type signatures. These are specified as
 lists in reverse stack order.
 
-By default all words have forward precedence. This means they are
+By default all words have forward arg collection. This means they are
 eligible to collect arguments from future tokens. When prefix arguments
 are available on the stack, prefix matching is tried first; forward
 matching acts as a fallback. When invoked, to force stack only, append
@@ -188,7 +188,7 @@ def bar [[] [] [2 mul]]
 def bar [[ 2 mul ]]
 ```
 
-If a word has forward precedence (the default), the arguments to match
+If a word has forward arg collection (the default), the arguments to match
 against the signature can be constructed using the stack and future
 tokens as follows: match each type in the signature in order against
 future tokens, until a mismatch, then continue matching against the
@@ -215,7 +215,7 @@ All three are equivalent (sig[0]=nearest, sig[1]=next nearest):
 * [|] -> `1.5 2 area` -> [3|]   (all prefix: top=2→sig[0], 1.5→sig[1])
 
 
-Implementation: words themselves should never deal with forward precedence. Instead the 
+Implementation: words themselves should never deal with forward arg collection. Instead the 
 interpreter should move any matched values from the future stack onto the main stack, and the
 word can then proceed normally, as if the values had been prefix values all along.
 

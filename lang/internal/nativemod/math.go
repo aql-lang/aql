@@ -64,7 +64,7 @@ func makeUnaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 		Sigs: []engine.FnSig{
 			{
 				Params:  []engine.FnParam{{Type: engine.TNumber}},
-				Returns: []engine.Type{engine.TNumber},
+				Returns: []*engine.Type{engine.TNumber},
 				Body:    []engine.Value{engine.NewWord(wordName)},
 			},
 		},
@@ -84,7 +84,7 @@ func makeBinaryFnDef(wordName string, subReg *engine.Registry) engine.Value {
 					{Type: engine.TNumber},
 					{Type: engine.TNumber},
 				},
-				Returns: []engine.Type{engine.TNumber},
+				Returns: []*engine.Type{engine.TNumber},
 				Body:    []engine.Value{engine.NewWord(wordName)},
 			},
 		},
@@ -100,7 +100,7 @@ func makeConstFnDef(wordName string, subReg *engine.Registry) engine.Value {
 		Sigs: []engine.FnSig{
 			{
 				Params:  []engine.FnParam{},
-				Returns: []engine.Type{engine.TDecimal},
+				Returns: []*engine.Type{engine.TDecimal},
 				Body:    []engine.Value{engine.NewWord(wordName)},
 			},
 		},
@@ -116,11 +116,11 @@ var MathNatives = func() []engine.NativeFunc {
 	out := []engine.NativeFunc{
 		// abs: integer or decimal -> matching numeric.
 		{
-			Name:              "abs",
-			ForwardPrecedence: true,
+			Name:        "abs",
+			ForwardArgs: true,
 			Signatures: []engine.NativeSig{
 				{
-					Args: []engine.Type{engine.TInteger},
+					Args: []*engine.Type{engine.TInteger},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						v, err := args[0].AsConcreteInteger()
 						if err != nil {
@@ -131,10 +131,10 @@ var MathNatives = func() []engine.NativeFunc {
 						}
 						return []engine.Value{engine.NewInteger(v)}, nil
 					},
-					Returns: []engine.Type{engine.TInteger},
+					Returns: []*engine.Type{engine.TInteger},
 				},
 				{
-					Args: []engine.Type{engine.TDecimal},
+					Args: []*engine.Type{engine.TDecimal},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						d, err := args[0].AsConcreteDecimal()
 						if err != nil {
@@ -142,17 +142,17 @@ var MathNatives = func() []engine.NativeFunc {
 						}
 						return []engine.Value{engine.NewDecimal(math.Abs(d))}, nil
 					},
-					Returns: []engine.Type{engine.TDecimal},
+					Returns: []*engine.Type{engine.TDecimal},
 				},
 			},
 		},
 		// negate: integer or decimal.
 		{
-			Name:              "negate",
-			ForwardPrecedence: true,
+			Name:        "negate",
+			ForwardArgs: true,
 			Signatures: []engine.NativeSig{
 				{
-					Args: []engine.Type{engine.TInteger},
+					Args: []*engine.Type{engine.TInteger},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						v, err := args[0].AsConcreteInteger()
 						if err != nil {
@@ -160,10 +160,10 @@ var MathNatives = func() []engine.NativeFunc {
 						}
 						return []engine.Value{engine.NewInteger(-v)}, nil
 					},
-					Returns: []engine.Type{engine.TInteger},
+					Returns: []*engine.Type{engine.TInteger},
 				},
 				{
-					Args: []engine.Type{engine.TDecimal},
+					Args: []*engine.Type{engine.TDecimal},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						d, err := args[0].AsConcreteDecimal()
 						if err != nil {
@@ -171,17 +171,17 @@ var MathNatives = func() []engine.NativeFunc {
 						}
 						return []engine.Value{engine.NewDecimal(-d)}, nil
 					},
-					Returns: []engine.Type{engine.TDecimal},
+					Returns: []*engine.Type{engine.TDecimal},
 				},
 			},
 		},
 		// sign: integer or decimal -> integer (-1/0/1).
 		{
-			Name:              "sign",
-			ForwardPrecedence: true,
+			Name:        "sign",
+			ForwardArgs: true,
 			Signatures: []engine.NativeSig{
 				{
-					Args: []engine.Type{engine.TInteger},
+					Args: []*engine.Type{engine.TInteger},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						v, err := args[0].AsConcreteInteger()
 						if err != nil {
@@ -196,10 +196,10 @@ var MathNatives = func() []engine.NativeFunc {
 							return []engine.Value{engine.NewInteger(0)}, nil
 						}
 					},
-					Returns: []engine.Type{engine.TInteger},
+					Returns: []*engine.Type{engine.TInteger},
 				},
 				{
-					Args: []engine.Type{engine.TDecimal},
+					Args: []*engine.Type{engine.TDecimal},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 						v, err := args[0].AsConcreteDecimal()
 						if err != nil {
@@ -214,7 +214,7 @@ var MathNatives = func() []engine.NativeFunc {
 							return []engine.Value{engine.NewInteger(0)}, nil
 						}
 					},
-					Returns: []engine.Type{engine.TInteger},
+					Returns: []*engine.Type{engine.TInteger},
 				},
 			},
 		},
@@ -287,25 +287,25 @@ var MathNatives = func() []engine.NativeFunc {
 
 	// Math constants — zero-arg stack-only.
 	out = append(out, engine.NativeFunc{
-		Name:              "math-pi",
-		ForwardPrecedence: false,
+		Name:        "math-pi",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{},
+			Args: []*engine.Type{},
 			Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				return []engine.Value{engine.NewDecimal(math.Pi)}, nil
 			},
-			Returns: []engine.Type{engine.TDecimal},
+			Returns: []*engine.Type{engine.TDecimal},
 		}},
 	})
 	out = append(out, engine.NativeFunc{
-		Name:              "math-e",
-		ForwardPrecedence: false,
+		Name:        "math-e",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{},
+			Args: []*engine.Type{},
 			Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				return []engine.Value{engine.NewDecimal(math.E)}, nil
 			},
-			Returns: []engine.Type{engine.TDecimal},
+			Returns: []*engine.Type{engine.TDecimal},
 		}},
 	})
 
@@ -321,9 +321,9 @@ func mergeBinaryNumNatives(name string, intNative, numNative engine.NativeFunc) 
 	sigs = append(sigs, intNative.Signatures...)
 	sigs = append(sigs, numNative.Signatures...)
 	return engine.NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
-		Signatures:        sigs,
+		Name:        name,
+		ForwardArgs: true,
+		Signatures:  sigs,
 	}
 }
 
@@ -331,10 +331,10 @@ func mergeBinaryNumNatives(name string, intNative, numNative engine.NativeFunc) 
 // words: decimal -> integer via int64(fn(d)).
 func ceilFloorNative(name string, fn func(float64) float64) engine.NativeFunc {
 	return engine.NativeFunc{
-		Name:              name,
-		ForwardPrecedence: true,
+		Name:        name,
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []engine.Type{engine.TDecimal},
+			Args: []*engine.Type{engine.TDecimal},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				d, err := args[0].AsConcreteDecimal()
 				if err != nil {
@@ -342,7 +342,7 @@ func ceilFloorNative(name string, fn func(float64) float64) engine.NativeFunc {
 				}
 				return []engine.Value{engine.NewInteger(int64(fn(d)))}, nil
 			},
-			Returns: []engine.Type{engine.TInteger},
+			Returns: []*engine.Type{engine.TInteger},
 		}},
 	}
 }
@@ -357,14 +357,14 @@ func atan2Native() engine.NativeFunc {
 		return []engine.Value{engine.NewDecimal(math.Atan2(b, a))}, nil
 	}
 	return engine.NativeFunc{
-		Name:              "atan2",
-		ForwardPrecedence: true,
+		Name:        "atan2",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TDecimal, engine.TDecimal}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
-			{Args: []engine.Type{engine.TNumber, engine.TDecimal}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
-			{Args: []engine.Type{engine.TDecimal, engine.TNumber}, Handler: numHandler, Returns: []engine.Type{engine.TDecimal}},
+			{Args: []*engine.Type{engine.TDecimal, engine.TDecimal}, Handler: numHandler, Returns: []*engine.Type{engine.TDecimal}},
+			{Args: []*engine.Type{engine.TNumber, engine.TDecimal}, Handler: numHandler, Returns: []*engine.Type{engine.TDecimal}},
+			{Args: []*engine.Type{engine.TDecimal, engine.TNumber}, Handler: numHandler, Returns: []*engine.Type{engine.TDecimal}},
 			{
-				Args: []engine.Type{engine.TInteger, engine.TInteger},
+				Args: []*engine.Type{engine.TInteger, engine.TInteger},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					a0, err := args[0].AsConcreteInteger()
 					if err != nil {
@@ -376,7 +376,7 @@ func atan2Native() engine.NativeFunc {
 					}
 					return []engine.Value{engine.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
 				},
-				Returns: []engine.Type{engine.TDecimal},
+				Returns: []*engine.Type{engine.TDecimal},
 			},
 		},
 	}
@@ -389,7 +389,7 @@ func hypotNative() engine.NativeFunc {
 		return math.Hypot(a, b), nil
 	})
 	intSig := engine.NativeSig{
-		Args: []engine.Type{engine.TInteger, engine.TInteger},
+		Args: []*engine.Type{engine.TInteger, engine.TInteger},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 			a0, err := args[0].AsConcreteInteger()
 			if err != nil {
@@ -401,11 +401,11 @@ func hypotNative() engine.NativeFunc {
 			}
 			return []engine.Value{engine.NewDecimal(math.Hypot(float64(a0), float64(a1)))}, nil
 		},
-		Returns: []engine.Type{engine.TDecimal},
+		Returns: []*engine.Type{engine.TDecimal},
 	}
 	return engine.NativeFunc{
-		Name:              base.Name,
-		ForwardPrecedence: true,
-		Signatures:        append(append([]engine.NativeSig{}, base.Signatures...), intSig),
+		Name:        base.Name,
+		ForwardArgs: true,
+		Signatures:  append(append([]engine.NativeSig{}, base.Signatures...), intSig),
 	}
 }

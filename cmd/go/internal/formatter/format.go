@@ -356,7 +356,7 @@ func tokenToNodeKind(tk TokenKind) NodeKind {
 	return NdWord
 }
 
-// --- Type capitalization ---
+// --- *Type capitalization ---
 
 // capitalizeTypesInTree walks the tree and capitalizes known type
 // names. A word is capitalized if it's a known type name AND:

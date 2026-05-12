@@ -242,7 +242,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					continue
 				}
 
-				// Type mismatch — stop forward scanning.
+				// *Type mismatch — stop forward scanning.
 				break
 			}
 		}
@@ -433,7 +433,7 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 			continue
 		}
 		// Concrete scalar pattern? Always check.
-		// Type-literal / non-concrete pattern on a forward position?
+		// *Type-literal / non-concrete pattern on a forward position?
 		// Skip — handlers may further constrain inside the body.
 		if isForward && pattern.Data == nil {
 			continue

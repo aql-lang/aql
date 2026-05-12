@@ -9,7 +9,7 @@ import (
 
 // --- Name-confusion guards between `type` and `def` ---
 //
-// Type names live in r.Types; def names live in DefStacks (and are
+// *Type names live in r.Types; def names live in DefStacks (and are
 // registered as callables when the body is a fn). The two namespaces
 // must NOT share a name, otherwise a single source token has two
 // meanings depending on context. Both directions of the clash are

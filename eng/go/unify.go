@@ -619,7 +619,7 @@ func unifyOptionsField(optVal, cVal Value) (Value, bool) {
 
 // optionsBaseType returns the base (non-literal) type for a concrete value.
 // For example, integer 42 (Scalar/Number/Integer/42) returns TInteger.
-func optionsBaseType(v Value) Type {
+func optionsBaseType(v Value) *Type {
 	switch {
 	case v.VType.Matches(TInteger):
 		return TInteger
@@ -866,12 +866,12 @@ func ResolveWordsDeep(v Value) Value {
 // UnifyNatives defines the "unify" word: [any, any] -> [any, boolean].
 var UnifyNatives = []NativeFunc{
 	{
-		Name:              "unify",
-		ForwardPrecedence: true,
+		Name:        "unify",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny, TAny},
+			Args:    []*Type{TAny, TAny},
 			Handler: unifyHandler,
-			Returns: []Type{TAny, TBoolean},
+			Returns: []*Type{TAny, TBoolean},
 		}},
 	},
 }

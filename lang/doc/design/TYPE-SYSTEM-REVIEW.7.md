@@ -453,7 +453,7 @@ pass. Runtime semantics unchanged.
 A `Integer | String` shorthand for `Integer tor String` would save
 a few keystrokes, but AQL's design philosophy prefers words over
 symbols: every operator in the language is a named word that
-participates in the same forward-precedence dispatch. Adding a
+participates in the same forward-collecting dispatch. Adding a
 punctuation operator for one type-algebra case introduces a
 discontinuity for marginal DX gain — `(Integer tor String)` is
 already the language's way of saying it.

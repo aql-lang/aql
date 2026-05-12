@@ -981,11 +981,11 @@ func TestEngineCoreUnknownWordErrors(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecBasic(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Name: "x", Type: TNumber}},
-		Returns: []Type{TNumber},
+		Returns: []*Type{TNumber},
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []Type{TNumber},
+		Returns: []*Type{TNumber},
 	}
 	if !FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should match spec (types match, ignoring names)")
@@ -1007,11 +1007,11 @@ func TestEngineCoreFnSigMatchesSpecDiffParamCount(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecDiffReturnCount(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []Type{TNumber},
+		Returns: []*Type{TNumber},
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []Type{TNumber, TString},
+		Returns: []*Type{TNumber, TString},
 	}
 	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different return count")
@@ -1021,11 +1021,11 @@ func TestEngineCoreFnSigMatchesSpecDiffReturnCount(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecDiffReturnType(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []Type{TNumber},
+		Returns: []*Type{TNumber},
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []Type{TString},
+		Returns: []*Type{TString},
 	}
 	if FnSigMatchesSpec(sig, spec) {
 		t.Error("sig should not match spec with different return type")
@@ -1051,7 +1051,7 @@ func TestEngineCoreFnSigMatchesSpecDiffParamType(t *testing.T) {
 func TestEngineCoreResolveTypeName(t *testing.T) {
 	cases := []struct {
 		name string
-		want Type
+		want *Type
 	}{
 		{"Any", TAny},
 		{"None", TNone},
@@ -1077,12 +1077,9 @@ func TestEngineCoreResolveTypeName(t *testing.T) {
 }
 
 func TestEngineCoreResolveTypeNameCustom(t *testing.T) {
-	got, err := resolveTypeName("MyCustom")
-	if err != nil {
-		t.Fatalf("resolveTypeName('MyCustom'): %v", err)
-	}
-	if got.String() != "MyCustom" {
-		t.Errorf("resolveTypeName('MyCustom') = %v, want MyCustom", got)
+	// Unregistered names error — undefined types fail at construction.
+	if _, err := resolveTypeName("MyCustom"); err == nil {
+		t.Error("expected error for unregistered type 'MyCustom'")
 	}
 }
 

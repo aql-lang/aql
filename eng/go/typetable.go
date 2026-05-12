@@ -1,0 +1,602 @@
+package eng
+
+import (
+	"fmt"
+	"strings"
+)
+
+// OriginKind classifies where a *Type was registered. Every *Type
+// is either seeded at init from the package-level builtinDecls list
+// (OriginBuiltin) or minted at runtime via TypeTable.MintType — the
+// path the `type` word and the anonymous `object {…}` handler take
+// when introducing new identities (OriginUserDef).
+type OriginKind uint8
+
+const (
+	// OriginBuiltin is set on every *Type seeded from builtinDecls
+	// into the package-level Builtin table. Builtins have a stable
+	// FixedID and never go away. Value-tagged subtypes minted by
+	// NewType for paths like Scalar/Number/Integer/42 are also
+	// OriginBuiltin — they're parametric instances of a builtin
+	// parent, not user declarations.
+	OriginBuiltin OriginKind = iota
+	// OriginUserDef is set on every *Type minted by TypeTable.MintType
+	// — the named `type Foo …` flow and the anonymous `object {…}`
+	// constructor. Each mint produces a fresh *Type with a unique ID;
+	// named types are then registered via Bind, anonymous ones are
+	// not.
+	OriginUserDef
+)
+
+// String returns a short human-readable label for the origin.
+func (o OriginKind) String() string {
+	switch o {
+	case OriginBuiltin:
+		return "builtin"
+	case OriginUserDef:
+		return "userdef"
+	}
+	return "unknown"
+}
+
+// Type is the canonical metadata for a single type identity. Identity
+// is pointer equality on Type; the lattice is encoded by Parent
+// pointers, not by path-string prefixes. Builtins are seeded at init
+// from builtinDecls; the `type` word mints fresh Type values at
+// runtime (each declaration mints a new identity — even when its name
+// shadows an outer one).
+type Type struct {
+	ID         string     // canonical identity (e.g. "S_000000000004")
+	Name       string     // last segment of path (e.g. "ProperString")
+	Parent     *Type      // nil for roots
+	FixedID    int        // >0 for builtins; 0 for dynamic
+	IsInternal bool       // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind // builtin / userdef
+}
+
+// IsNative reports whether t is a built-in type seeded at init from
+// the package-level builtinDecls list. Returns false for user-defined
+// types installed via the `type` word and for transient pool entries
+// minted by NewType for unknown paths. Safe to call on a nil receiver.
+func (t *Type) IsNative() bool {
+	return t != nil && t.Origin == OriginBuiltin
+}
+
+// Path returns the slash-separated path by walking up the parent chain.
+func (t *Type) Path() string {
+	if t == nil {
+		return ""
+	}
+	if t.Parent == nil {
+		return t.Name
+	}
+	return t.Parent.Path() + "/" + t.Name
+}
+
+// Root returns the top of the ancestry chain.
+func (t *Type) Root() *Type {
+	if t == nil {
+		return nil
+	}
+	for t.Parent != nil {
+		t = t.Parent
+	}
+	return t
+}
+
+// IsAncestor reports whether ancestor lies on t's parent chain (or is t).
+func (t *Type) IsAncestor(ancestor *Type) bool {
+	for x := t; x != nil; x = x.Parent {
+		if x == ancestor {
+			return true
+		}
+	}
+	return false
+}
+
+// TypeBinding pairs a Type with a per-scope body. The body holds the
+// user-installed payload (record schema, options schema, ObjectTypeInfo, …)
+// while the Def carries the identity that survives shadow pops.
+type TypeBinding struct {
+	Def  *Type
+	Body Value
+}
+
+// TypeTable is the canonical catalogue of types. Builtin is the package-
+// level table; per-Registry dynamic tables extend it via PushType.
+type TypeTable struct {
+	byID      map[string]*Type
+	byName    map[string][]TypeBinding // shadowing stack — top is the active binding
+	parts     map[string]bool          // every Part name used by a registered type
+	bypath    map[string]*Type         // builtin-only path index (dynamic types can collide on path)
+	rootSet   map[string]bool          // roots, for fast IsRoot checks
+	leafIndex map[string]string        // builtin leaf-name → full path; "" if ambiguous
+	seq       int                      // counter for minting dynamic IDs
+}
+
+// dynamicIDBase is the starting point for minted IDs, chosen well above
+// any builtin FixedID so dynamic IDs never collide with builtins.
+const dynamicIDBase = 0x10000000
+
+// Lookup returns the Type for a builtin path, or nil if none.
+// Dynamic types are NOT in this index — use LookupByName for shadow-
+// aware resolution and LookupByID for direct identity lookup.
+func (tt *TypeTable) Lookup(path string) *Type {
+	if tt == nil {
+		return nil
+	}
+	return tt.bypath[path]
+}
+
+// LookupByID returns the Type for a canonical ID, or nil if none.
+func (tt *TypeTable) LookupByID(id string) *Type {
+	if tt == nil || id == "" {
+		return nil
+	}
+	return tt.byID[id]
+}
+
+// LookupByName returns the active Type for a user-facing short name,
+// honoring shadowing (top of stack wins). Returns nil if unbound.
+func (tt *TypeTable) LookupByName(name string) *Type {
+	if tt == nil {
+		return nil
+	}
+	s := tt.byName[name]
+	if len(s) == 0 {
+		return nil
+	}
+	return s[len(s)-1].Def
+}
+
+// IsRoot reports whether part is a top-level root name (Scalar, Node, …).
+func (tt *TypeTable) IsRoot(part string) bool {
+	if tt == nil {
+		return false
+	}
+	return tt.rootSet[part]
+}
+
+// KnownPart reports whether part appears in any registered type's path.
+func (tt *TypeTable) KnownPart(part string) bool {
+	if tt == nil {
+		return false
+	}
+	return tt.parts[part]
+}
+
+// NewDynamicTypeTable returns an empty TypeTable for per-Registry use.
+// Builtins are NOT pre-seeded; lookups for builtins go through the
+// package-level Builtin table at call sites that need them.
+func NewDynamicTypeTable() *TypeTable {
+	return &TypeTable{
+		byID:   make(map[string]*Type),
+		byName: make(map[string][]TypeBinding),
+		parts:  make(map[string]bool),
+	}
+}
+
+// mintID generates a fresh ID for a dynamically registered Type.
+// The prefix mirrors the builtin convention (S_/N_/W_/T_) so dynamic
+// IDs carry the same root-category signal as builtins.
+func (tt *TypeTable) mintID(parent *Type) string {
+	tt.seq++
+	prefix := "T_"
+	if parent != nil {
+		switch parent.Root().Name {
+		case "Scalar":
+			prefix = "S_"
+		case "Node":
+			prefix = "N_"
+		case "Word":
+			prefix = "W_"
+		}
+	}
+	return fmt.Sprintf("%s%012x", prefix, dynamicIDBase+tt.seq)
+}
+
+// MintType creates a fresh *Type with Origin=OriginUserDef and
+// registers it in byID. The returned *Type is unbound — call Bind to
+// associate it with a user-facing name. Callers typically mint, then
+// construct a body Value using the returned *Type as its VType, then
+// Bind. Anonymous types (e.g. `object {…}` not installed by name)
+// skip the Bind step and just keep the *Type as the Value's identity.
+func (tt *TypeTable) MintType(name string, parent *Type) *Type {
+	def := &Type{
+		Name:   name,
+		Parent: parent,
+		Origin: OriginUserDef,
+	}
+	def.ID = tt.mintID(parent)
+	tt.byID[def.ID] = def
+	return def
+}
+
+// Bind associates name with the pre-minted def and body. Each Bind
+// pushes a new shadow layer onto byName[name]; Pop removes the top.
+// The def must have been minted via MintType (or be a builtin).
+func (tt *TypeTable) Bind(name string, def *Type, body Value) {
+	tt.byName[name] = append(tt.byName[name], TypeBinding{Def: def, Body: body})
+	for _, p := range strings.Split(name, "/") {
+		tt.parts[p] = true
+	}
+}
+
+// PushType is a convenience wrapper around MintType + Bind for the
+// common installation path: mint a fresh *Type using body.VType as
+// parent, then bind. The body keeps its original VType (typically a
+// metatype like TRecord / TFnUndef) so `typeof Foo` returns the body
+// metatype; the minted def carries the distinct user-facing identity
+// of this declaration. Returns the minted *Type.
+func (tt *TypeTable) PushType(name string, body Value) *Type {
+	def := tt.MintType(name, body.VType)
+	tt.Bind(name, def, body)
+	return def
+}
+
+// PopType removes the top binding for name. Returns the popped Body and ok.
+func (tt *TypeTable) PopType(name string) (Value, bool) {
+	s := tt.byName[name]
+	if len(s) == 0 {
+		return Value{}, false
+	}
+	top := s[len(s)-1]
+	if len(s) == 1 {
+		delete(tt.byName, name)
+	} else {
+		tt.byName[name] = s[:len(s)-1]
+	}
+	if top.Def != nil {
+		delete(tt.byID, top.Def.ID)
+	}
+	return top.Body, true
+}
+
+// TopBody returns the active Body for name, or zero Value and false if
+// unbound. Mirrors today's TopOfTypeStack.
+func (tt *TypeTable) TopBody(name string) (Value, bool) {
+	s := tt.byName[name]
+	if len(s) == 0 {
+		return Value{}, false
+	}
+	return s[len(s)-1].Body, true
+}
+
+// Has reports whether name has any active binding.
+func (tt *TypeTable) Has(name string) bool {
+	return len(tt.byName[name]) > 0
+}
+
+// Depth returns the number of bindings stacked for name.
+func (tt *TypeTable) Depth(name string) int {
+	return len(tt.byName[name])
+}
+
+// Names returns all currently-bound names in arbitrary order.
+func (tt *TypeTable) Names() []string {
+	names := make([]string, 0, len(tt.byName))
+	for k := range tt.byName {
+		names = append(names, k)
+	}
+	return names
+}
+
+// Clone returns a deep copy of tt — used for snapshot/restore around
+// predicate sandbox boundaries. Type pointers are shared (defs are
+// immutable once minted); only the stacks themselves are duplicated.
+func (tt *TypeTable) Clone() *TypeTable {
+	if tt == nil {
+		return nil
+	}
+	nt := &TypeTable{
+		byID:   make(map[string]*Type, len(tt.byID)),
+		byName: make(map[string][]TypeBinding, len(tt.byName)),
+		parts:  make(map[string]bool, len(tt.parts)),
+		seq:    tt.seq,
+	}
+	for k, v := range tt.byID {
+		nt.byID[k] = v
+	}
+	for k, v := range tt.byName {
+		nt.byName[k] = append([]TypeBinding(nil), v...)
+	}
+	for k, v := range tt.parts {
+		nt.parts[k] = v
+	}
+	return nt
+}
+
+// builtinDecl describes one builtin type. The declarative list below
+// is the SINGLE SOURCE OF TRUTH for all builtin types — IDs, parents,
+// user-facing visibility, everything.
+type builtinDecl struct {
+	Path       string
+	FixedID    int
+	IsInternal bool   // true for Word/__XX runtime markers
+	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+}
+
+// builtinDecls lists every builtin type. Parent-first ordering is
+// required so registerBuiltin can wire Parent pointers as it walks.
+//
+// FixedID values are stable across runs and must not change once
+// assigned — they appear in serialized IDs. New types must use a fresh
+// number, never recycle an old one.
+var builtinDecls = []builtinDecl{
+	// Roots
+	{Path: "Any", FixedID: 1},
+	{Path: "None", FixedID: 2},
+	{Path: "Never", FixedID: 61},
+	{Path: "Scalar", FixedID: 3},
+	{Path: "Node", FixedID: 11},
+	{Path: "Object", FixedID: 30},
+	{Path: "Word", FixedID: 17},
+	{Path: "Type", FixedID: 39},
+
+	// Scalar branch
+	{Path: "Scalar/String", FixedID: 4},
+	{Path: "Scalar/String/ProperString", FixedID: 5},
+	{Path: "Scalar/String/EmptyString", FixedID: 6},
+	{Path: "Scalar/Number", FixedID: 7},
+	{Path: "Scalar/Number/Integer", FixedID: 8},
+	{Path: "Scalar/Number/Decimal", FixedID: 9},
+	{Path: "Scalar/Number/Matrix", FixedID: 50},
+	{Path: "Scalar/Boolean", FixedID: 10},
+	{Path: "Scalar/Path", FixedID: 47},
+	{Path: "Scalar/Atom", FixedID: 18},
+	{Path: "Scalar/Time", FixedID: 48},
+	{Path: "Scalar/Time/Date", FixedID: 49},
+	{Path: "Scalar/Time/DateTime", FixedID: 52},
+	{Path: "Scalar/Time/Instant", FixedID: 53},
+	{Path: "Scalar/Time/TimeOfDay", FixedID: 54},
+	{Path: "Scalar/Time/Duration", FixedID: 55},
+	{Path: "Scalar/Time/Duration/CalDuration", FixedID: 56},
+	{Path: "Scalar/Time/Duration/ClkDuration", FixedID: 57},
+	{Path: "Scalar/Time/Timezone", FixedID: 58},
+
+	// Node branch
+	{Path: "Node/List", FixedID: 12},
+	{Path: "Node/List/Args", FixedID: 13},
+	{Path: "Node/Map", FixedID: 14},
+	{Path: "Node/Map/Options", FixedID: 38},
+	{Path: "Node/Map/Inspect", FixedID: 31},
+
+	// Object branch
+	{Path: "Object/Table", FixedID: 15},
+	{Path: "Object/Record", FixedID: 16},
+	{Path: "Object/Store", FixedID: 42},
+	{Path: "Object/Store/System", FixedID: 43},
+	{Path: "Object/Array", FixedID: 44},
+	{Path: "Object/Error", FixedID: 45},
+	{Path: "Object/Resource", FixedID: 36},
+	{Path: "Object/Resource/Entity", FixedID: 37},
+	{Path: "Object/Fetch", FixedID: 33},
+	{Path: "Object/Fetch/Request", FixedID: 34},
+	{Path: "Object/Fetch/Response", FixedID: 35},
+	{Path: "Object/Timeout", FixedID: 59},
+	{Path: "Object/Interval", FixedID: 60},
+
+	// Word branch — Word/__XX entries are internal runtime markers.
+	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)
+	// so ResolveTypeName / NewType can resolve them by their lang-level
+	// label rather than the underscore-marker leaf.
+	{Path: "Word/__FW", FixedID: 21, IsInternal: true, Alias: "Forward"},
+	{Path: "Word/__OP", FixedID: 22, IsInternal: true, Alias: "Paren"},
+	{Path: "Word/__PE", FixedID: 63, IsInternal: true},
+	{Path: "Word/__IS", FixedID: 51, IsInternal: true},
+	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef"},
+	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck"},
+	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark"},
+	{Path: "Word/__MV", FixedID: 28, IsInternal: true, Alias: "Move"},
+	{Path: "Word/__MD", FixedID: 29, IsInternal: true, Alias: "Module"},
+	{Path: "Word/__IN", FixedID: 20, IsInternal: true},
+	{Path: "Word/__IN/__DC", FixedID: 64, IsInternal: true},
+
+	// Type (metatype) branch
+	{Path: "Type/Function", FixedID: 19},
+	{Path: "Type/FunctionSignature", FixedID: 24},
+	{Path: "Type/Disjunct", FixedID: 26},
+	{Path: "Type/Disjunct/Enum", FixedID: 62},
+	{Path: "Type/ScalarType", FixedID: 40},
+	{Path: "Type/NodeType", FixedID: 41},
+	{Path: "Type/ObjectType", FixedID: 46},
+	{Path: "Type/Dependent", FixedID: 65},
+	{Path: "Type/Dependent/DepInteger", FixedID: 66},
+	{Path: "Type/Dependent/DepDecimal", FixedID: 67},
+	{Path: "Type/Dependent/DepNumber", FixedID: 68},
+	{Path: "Type/Dependent/DepString", FixedID: 69},
+	{Path: "Type/Dependent/DepBoolean", FixedID: 70},
+	{Path: "Type/Dependent/DepAtom", FixedID: 71},
+}
+
+// Builtin is the package-level TypeTable holding every builtin type.
+// It is populated once at init from builtinDecls and is read-only
+// thereafter — per-Registry dynamic tables extend it via PushType.
+var Builtin = newBuiltinTypeTable()
+
+func newBuiltinTypeTable() *TypeTable {
+	tt := &TypeTable{
+		byID:      make(map[string]*Type, len(builtinDecls)),
+		byName:    make(map[string][]TypeBinding),
+		parts:     make(map[string]bool),
+		bypath:    make(map[string]*Type, len(builtinDecls)),
+		rootSet:   make(map[string]bool),
+		leafIndex: make(map[string]string),
+	}
+	for _, d := range builtinDecls {
+		tt.registerBuiltin(d)
+	}
+	return tt
+}
+
+func (tt *TypeTable) registerBuiltin(d builtinDecl) {
+	parts := strings.Split(d.Path, "/")
+	var parent *Type
+	if len(parts) > 1 {
+		parentPath := strings.Join(parts[:len(parts)-1], "/")
+		parent = tt.bypath[parentPath]
+		if parent == nil {
+			panic(fmt.Sprintf("typetable: parent %q not registered before %q (declare parents first in builtinDecls)", parentPath, d.Path))
+		}
+	}
+	id := formatFixedID(d.Path, d.FixedID)
+	if existing, dup := tt.byID[id]; dup {
+		panic(fmt.Sprintf("typetable: duplicate FixedID %d for %q (already used by %q)", d.FixedID, d.Path, existing.Path()))
+	}
+	def := &Type{
+		ID:         id,
+		Name:       parts[len(parts)-1],
+		Parent:     parent,
+		FixedID:    d.FixedID,
+		IsInternal: d.IsInternal,
+		Origin:     OriginBuiltin,
+	}
+	tt.byID[id] = def
+	tt.bypath[d.Path] = def
+	if parent == nil {
+		tt.rootSet[d.Path] = true
+	}
+	if !d.IsInternal {
+		tt.byName[def.Name] = []TypeBinding{{Def: def}}
+	}
+	for _, p := range parts {
+		tt.parts[p] = true
+	}
+	if existing, dup := tt.leafIndex[def.Name]; dup {
+		// Ambiguous leaf name — mark with "" so ExpandShortName won't expand.
+		if existing != "" {
+			tt.leafIndex[def.Name] = ""
+		}
+	} else {
+		tt.leafIndex[def.Name] = d.Path
+	}
+	if d.Alias != "" {
+		tt.leafIndex[d.Alias] = d.Path
+	}
+}
+
+// ExpandShortName returns the full builtin path for a short leaf name
+// (e.g. "Integer" → "Scalar/Number/Integer"). Returns ok=false if the
+// name is unknown or maps to multiple builtin paths.
+func (tt *TypeTable) ExpandShortName(short string) (string, bool) {
+	if tt == nil {
+		return "", false
+	}
+	p, ok := tt.leafIndex[short]
+	if !ok || p == "" {
+		return "", false
+	}
+	return p, true
+}
+
+// formatFixedID formats a fixed numeric ID with the prefix derived
+// from the path's root part. Output is 14 chars: "<prefix>_<12 hex>".
+func formatFixedID(path string, num int) string {
+	root := path
+	if i := strings.IndexByte(path, '/'); i >= 0 {
+		root = path[:i]
+	}
+	prefix := "T_"
+	switch root {
+	case "Scalar":
+		prefix = "S_"
+	case "Node":
+		prefix = "N_"
+	case "Word":
+		prefix = "W_"
+	}
+	return fmt.Sprintf("%s%012x", prefix, num)
+}
+
+// MintTestType is a test-only helper that mints a *Type from a
+// slash-separated path, walking from the builtin root where possible
+// and minting intermediate *Types as needed. Used by lattice / Matches /
+// Specificity tests that need synthetic type hierarchies; production
+// code goes through NewType (strict — unknown paths error) or
+// TypeTable.MintType (explicit name + parent).
+//
+// Short-name first parts are auto-expanded the same way NewType does
+// it, so MintTestType("Number/Float") attaches under the builtin
+// Scalar/Number rather than under a fresh top-level "Number".
+//
+// Minted entries are cached per path string so repeated calls return
+// the same *Type. Origin is OriginUserDef. NOT for use outside tests.
+func MintTestType(path string) *Type {
+	if def := testTypePool[path]; def != nil {
+		return def
+	}
+	parts := strings.Split(path, "/")
+	// Auto-expand short-name first parts via the Builtin leaf index
+	// (mirrors NewType so test paths under "Number" land beneath
+	// Scalar/Number).
+	if _, isRoot := Builtin.bypath[parts[0]]; !isRoot {
+		if fullPrefix, ok := Builtin.ExpandShortName(parts[0]); ok {
+			expanded := fullPrefix
+			if len(parts) > 1 {
+				expanded += "/" + strings.Join(parts[1:], "/")
+			}
+			parts = strings.Split(expanded, "/")
+		}
+	}
+	fullPath := strings.Join(parts, "/")
+	// If the fully-expanded path is itself a builtin, return that — no
+	// need to mint a separate test type for known types.
+	if def := Builtin.bypath[fullPath]; def != nil {
+		testTypePool[path] = def
+		return def
+	}
+	var parent *Type
+	if len(parts) > 1 {
+		parentPath := strings.Join(parts[:len(parts)-1], "/")
+		if p := Builtin.bypath[parentPath]; p != nil {
+			parent = p
+		} else {
+			parent = MintTestType(parentPath)
+		}
+	}
+	testTypeSeq++
+	prefix := "T_"
+	if parent != nil {
+		if root := parent.Root(); root != nil {
+			switch root.Name {
+			case "Scalar":
+				prefix = "S_"
+			case "Node":
+				prefix = "N_"
+			case "Word":
+				prefix = "W_"
+			}
+		}
+	}
+	def := &Type{
+		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
+		Name:   parts[len(parts)-1],
+		Parent: parent,
+		Origin: OriginUserDef,
+	}
+	testTypePool[path] = def
+	return def
+}
+
+var testTypePool = map[string]*Type{}
+var testTypeSeq int
+
+// BuiltinIDForPath returns the canonical Builtin ID for path, or ""
+// if the path is not a registered builtin.
+func BuiltinIDForPath(path string) string {
+	if def := Builtin.bypath[path]; def != nil {
+		return def.ID
+	}
+	return ""
+}
+
+// mustBuiltinType returns the Type for a builtin path. Panics if the
+// path is not registered — used by the well-known T* constants in
+// types.go, where any missing entry is a programmer error.
+func mustBuiltinType(path string) *Type {
+	def := Builtin.bypath[path]
+	if def == nil {
+		panic(fmt.Sprintf("typetable: builtin %q not in Builtin table", path))
+	}
+	return def
+}

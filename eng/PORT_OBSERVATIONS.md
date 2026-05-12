@@ -215,7 +215,7 @@ The TS port already has this shape: `tryForwardSplit` and
 `tryStackOnly` produce the args array in sig order in *one place*. The
 Go engine should follow.
 
-### 1.4 Stack-only vs forward-precedence — RESOLVED via boundary-aware unified dispatch
+### 1.4 Stack-only vs forward-collecting — RESOLVED via boundary-aware unified dispatch
 
 The asker correctly noted: is the difference in the *implementation
 functions*, or in the *AQL language itself*? **Both — but the language
@@ -227,7 +227,7 @@ word with sig `[A, B]`):
 
 | If `op` is registered as | A binds to | B binds to | Reason |
 |---|---|---|---|
-| **forward-precedence**   | `2` (top)    | `1` (bottom) | nearest-first; mirror rule (`b a f → sig[0]=a, sig[1]=b`) |
+| **forward-collecting**   | `2` (top)    | `1` (bottom) | nearest-first; mirror rule (`b a f → sig[0]=a, sig[1]=b`) |
 | **stack-only**           | `1` (bottom) | `2` (top)    | deepest-first |
 
 So `1 2 sub` gives `sub(2, 1) = 1` if `sub` is forward-prec
@@ -251,7 +251,7 @@ The implementation echoes this:
 - `match.go::matchSignature` carries a `nearestFirst` boolean derived
   from `!stackOnly && !ForceStack` and uses it to choose stack-arg
   walk direction.
-- `rearrangeForForward` only fires for forward-precedence words; for
+- `rearrangeForForward` only fires for forward-collecting words; for
   stack-only words the stack values are read in source order.
 
 **Why it exists.** Forward-precedence words read like infix /
@@ -309,7 +309,7 @@ of the callee.
 
    So the impact on the spec set is zero — the regression suite
    doesn't catch this. In the Go engine's full word library, the
-   audit list is every word registered without `ForwardPrecedence:
+   audit list is every word registered without `ForwardArgs:
    true`; each handler needs to be checked for index-order
    assumptions. Most are 0- or 1-arg ops where order doesn't matter;
    the genuine 2+-arg stack-only words are few (the stack manipulators).
@@ -337,13 +337,13 @@ Implemented in two commits. The unified rule is now:
 > **source order**: sig[0] = first forward token, sig[1] = second.
 
 `BarrierPos == 0` corresponds to the legacy stack-only contract;
-`BarrierPos == N` corresponds to legacy forward-precedence;
+`BarrierPos == N` corresponds to legacy forward-collecting;
 intermediate values give partial-boundary sigs (`def g fn [[A B | C]
 …]` — A and B forward-eligible, C must come from the stack).
 
 Concrete implications:
 
-- The word-level `ForwardPrecedence` flag is no longer consulted by
+- The word-level `ForwardArgs` flag is no longer consulted by
   the matcher. `Registry.upsertFnDef` normalises every sig's
   `BarrierPos` at registration time: a forward-prec sig that hadn't
   set BarrierPos gets it set to `len(Args)`; a stack-only sig stays

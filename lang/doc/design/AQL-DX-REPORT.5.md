@@ -247,7 +247,7 @@ for 5 [math.negate i]     # BROKEN: negate can't forward-collect i
 
 **Suggested fix:** Consider making `execFnDefLiteral` attempt forward
 collection when prefix matching fails, analogous to how registered
-words with forward precedence work. This would unify the calling
+words with forward arg collection work. This would unify the calling
 convention.
 
 ---

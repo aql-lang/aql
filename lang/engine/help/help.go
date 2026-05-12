@@ -29,10 +29,10 @@ type SigInfo struct {
 
 // FuncInfo carries everything needed for dynamic help rendering.
 type FuncInfo struct {
-	Name              string
-	ForwardPrecedence bool
-	Sigs              []SigInfo
-	Entry             *Entry // static docs (may be nil)
+	Name        string
+	ForwardArgs bool
+	Sigs        []SigInfo
+	Entry       *Entry // static docs (may be nil)
 }
 
 // registry holds all help entries keyed by word name.
@@ -166,7 +166,7 @@ func FormatDynamic(info FuncInfo) string {
 
 	// Precedence
 	b.WriteByte('\n')
-	if info.ForwardPrecedence {
+	if info.ForwardArgs {
 		b.WriteString("Precedence: forward — looks ahead for arguments first.\n")
 		writePrecedenceExamples(&b, info)
 	} else {
@@ -397,7 +397,7 @@ func ExampleExprs(info FuncInfo) []string {
 			minPrefix = 0
 		}
 		var prefixes []int
-		if !info.ForwardPrecedence {
+		if !info.ForwardArgs {
 			prefixes = []int{nArgs}
 		} else if sigArgsSameType(sig) {
 			for p := minPrefix; p <= nArgs; p++ {
@@ -467,7 +467,7 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 			minPrefix = 0
 		}
 		var prefixes []int
-		if !info.ForwardPrecedence {
+		if !info.ForwardArgs {
 			prefixes = []int{nArgs} // all on stack
 		} else if sigArgsSameType(sig) {
 			for p := minPrefix; p <= nArgs; p++ {

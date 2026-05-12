@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-// --- Type system tests ---
+// --- *Type system tests ---
 
 func TestTypeMatches(t *testing.T) {
 	tests := []struct {
 		name    string
-		typ     Type
-		pattern Type
+		typ     *Type
+		pattern *Type
 		want    bool
 	}{
 		{"exact match", TStringProper, TStringProper, true},
@@ -1552,28 +1552,16 @@ func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
 }
 
 func TestEdgeTypeUnrelatedTypes(t *testing.T) {
-	tFoo, err := NewType("Foo/Bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tBaz, err := NewType("Baz")
-	if err != nil {
-		t.Fatal(err)
-	}
+	tFoo := MintTestType("Foo/Bar")
+	tBaz := MintTestType("Baz")
 	if tFoo.Matches(tBaz) {
 		t.Error("foo/bar should not match baz")
 	}
 }
 
 func TestEdgeTypeDeeplyNested(t *testing.T) {
-	tDeep, err := NewType("A/B/C/D")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tShallow, err := NewType("A/B")
-	if err != nil {
-		t.Fatal(err)
-	}
+	tDeep := MintTestType("A/B/C/D")
+	tShallow := MintTestType("A/B")
 	if !tDeep.Matches(tShallow) {
 		t.Error("a/b/c/d should match a/b")
 	}
@@ -1583,7 +1571,7 @@ func TestEdgeTypeDeeplyNested(t *testing.T) {
 }
 
 func TestEdgeTypeSelfMatch(t *testing.T) {
-	types := []Type{TAny, TString, TStringProper, TStringEmpty, TInteger}
+	types := []*Type{TAny, TString, TStringProper, TStringEmpty, TInteger}
 	for _, typ := range types {
 		if !typ.Matches(typ) {
 			t.Errorf("%s should match itself", typ)
@@ -3394,7 +3382,7 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Register("echo", Signature{
-		Args:    []Type{TAny},
+		Args:    []*Type{TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil },
 	})
 	e := NewTop(r)
@@ -3415,7 +3403,7 @@ func TestEdgeSignatureMultipleForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Register("pair", Signature{
-		Args: []Type{TAny, TAny},
+		Args: []*Type{TAny, TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return args, nil
 		},
@@ -3439,7 +3427,7 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Register("triple", Signature{
-		Args: []Type{TAny},
+		Args: []*Type{TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0], args[0], args[0]}, nil
 		},
@@ -5047,8 +5035,8 @@ func TestUnhandledErrorOnStack(t *testing.T) {
 func TestMetatypeFor(t *testing.T) {
 	tests := []struct {
 		name string
-		typ  Type
-		want Type
+		typ  *Type
+		want *Type
 	}{
 		{"String → ScalarType", TString, TScalarType},
 		{"Number → ScalarType", TNumber, TScalarType},
@@ -5083,7 +5071,7 @@ func TestMetatypeFor(t *testing.T) {
 func TestIsMetaType(t *testing.T) {
 	tests := []struct {
 		name string
-		typ  Type
+		typ  *Type
 		want bool
 	}{
 		{"Type", TType, true},

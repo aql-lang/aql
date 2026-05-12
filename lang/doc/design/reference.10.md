@@ -193,7 +193,7 @@ All stack words are stack-only (`/s`).
 
 ### Arithmetic
 
-All arithmetic words have forward precedence and work on Integer and
+All arithmetic words have forward arg collection and work on Integer and
 Decimal with automatic promotion.
 
 | Word | Operation | Example |

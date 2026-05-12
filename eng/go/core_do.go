@@ -22,19 +22,19 @@ package eng
 // failures without stopping the host program.
 func registerCoreDo(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "do",
-		ForwardPrecedence: true,
+		Name:        "do",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:       []Type{TList},
+				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    doListHandler,
-				Returns:    []Type{TAny},
+				Returns:    []*Type{TAny},
 			},
 			{
-				Args:    []Type{TMap},
+				Args:    []*Type{TMap},
 				Handler: doMapHandler,
-				Returns: []Type{TAny},
+				Returns: []*Type{TAny},
 			},
 		},
 	})

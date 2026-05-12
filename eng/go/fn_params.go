@@ -17,20 +17,20 @@ import (
 //   ParseFnParams(r, inputSig)  ([]FnParam, int, error)
 //      — walks an `[ p1 p2 … ]` list and returns the FnParams plus
 //        the BarrierPos (`|` position).
-//   ParseFnReturns(outputSig)   ([]Type, error)
+//   ParseFnReturns(outputSig)   ([]*Type, error)
 //      — walks an `[ T1 T2 … ]` return-type list (or a single type
 //        value) and returns the Types.
-//   ResolveSigType(r, v)        (Type, *Value, error)
-//      — converts a Value (from a param's type slot) into a Type
+//   ResolveSigType(r, v)        (*Type, *Value, error)
+//      — converts a Value (from a param's type slot) into a *Type
 //        plus an optional pattern Value for structural matching.
-//   ResolveTypeName(name)       (Type, error)
-//      — maps a bare type-name string to its Type. Defers to NewType
+//   ResolveTypeName(name)       (*Type, error)
+//      — maps a bare type-name string to its *Type. Defers to NewType
 //        for non-builtin paths.
 //   LookupDefType(r, name)      *Value
 //      — resolves a name to a type-body value via the type stack
 //        first, then the def stack. Returns nil if neither layer
 //        carries a type-body for that name.
-//   ResolveDefType(v)           (Type, *Value, error)
+//   ResolveDefType(v)           (*Type, *Value, error)
 //      — converts a def'd type value (record, options, plain type
 //        literal) into a sig type + pattern.
 //
@@ -41,8 +41,8 @@ import (
 //
 // The input is a List containing some mix of:
 //   - Bare type-name Words: `Integer`, `String`, …
-//   - Type-literal values
-//   - Implicit-pair maps `{name:Type}` — the standard typed-param
+//   - *Type-literal values
+//   - Implicit-pair maps `{name:*Type}` — the standard typed-param
 //     form. The name may have a trailing `?` to mark the param
 //     optional, and the type slot may be a paren expression that
 //     evaluates to a type or a disjunct that includes None (which
@@ -146,11 +146,11 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		case elem.IsWord():
 			_as4, _ := elem.AsWord()
 			name := _as4.Name
-			// `name:Type` colon-delimited form. Used by minimal
+			// `name:*Type` colon-delimited form. Used by minimal
 			// tokenizers (e.g. the aqleng spec runner, whose
 			// whitespace-only lexer produces a single Word for
 			// `n:Integer`). Production parsers using jsonic produce
-			// the `{name:Type}` implicit-map form instead, handled
+			// the `{name:*Type}` implicit-map form instead, handled
 			// in the TMap case above. Either form is accepted here
 			// so a single ParseFnParams serves both consumers.
 			if idx := strings.Index(name, ":"); idx > 0 {
@@ -203,19 +203,19 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
-func ParseFnReturns(outputSig Value) ([]Type, error) {
+func ParseFnReturns(outputSig Value) ([]*Type, error) {
 	if !outputSig.VType.Equal(TList) || outputSig.Data == nil {
 		t, _, err := ResolveSigType(nil, outputSig)
 		if err != nil {
 			return nil, err
 		}
-		return []Type{t}, nil
+		return []*Type{t}, nil
 	}
 	elems := outputSig.AsList()
 	if elems.Len() == 0 {
 		return nil, nil
 	}
-	types := make([]Type, elems.Len())
+	types := make([]*Type, elems.Len())
 	for i, e := range elems.Slice() {
 		var err error
 		types[i], _, err = ResolveSigType(nil, e)
@@ -226,9 +226,9 @@ func ParseFnReturns(outputSig Value) ([]Type, error) {
 	return types, nil
 }
 
-// ResolveSigType converts a Value (from a pair's value side) to a Type
+// ResolveSigType converts a Value (from a pair's value side) to a *Type
 // plus an optional pattern Value for structural matching.
-func ResolveSigType(r *Registry, v Value) (Type, *Value, error) {
+func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Data == nil {
 		return v.VType, nil, nil
 	}
@@ -263,7 +263,7 @@ func ResolveSigType(r *Registry, v Value) (Type, *Value, error) {
 		v.VType.Matches(TString) ||
 		v.VType.Matches(TAtom)) {
 		pattern := v
-		var kind Type
+		var kind *Type
 		switch {
 		case v.VType.Matches(TInteger):
 			kind = TInteger
@@ -311,7 +311,7 @@ func LookupDefType(r *Registry, name string) *Value {
 
 // ResolveDefType converts a def'd type value (record, options, plain
 // type literal) into a sig type + pattern.
-func ResolveDefType(v Value) (Type, *Value, error) {
+func ResolveDefType(v Value) (*Type, *Value, error) {
 	if v.IsRecordType() {
 		rt, _ := v.AsRecordType()
 		pat := NewMap(rt.Fields)
@@ -328,10 +328,10 @@ func ResolveDefType(v Value) (Type, *Value, error) {
 	return TAny, nil, nil
 }
 
-// ResolveTypeName maps a type name string to its engine Type.
+// ResolveTypeName maps a type name string to its engine *Type.
 // Special-cases the well-known names; falls back to NewType for any
 // other slash-separated path.
-func ResolveTypeName(name string) (Type, error) {
+func ResolveTypeName(name string) (*Type, error) {
 	switch name {
 	case "Any":
 		return TAny, nil

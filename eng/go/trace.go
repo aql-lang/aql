@@ -105,12 +105,12 @@ func TraceVisibleLen(s string) int {
 //	trace [1 add 2 mul 3]
 var TraceNatives = []NativeFunc{
 	{
-		Name:              "trace",
-		ForwardPrecedence: true,
+		Name:        "trace",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList},
+			Args:    []*Type{TList},
 			Handler: traceHandler,
-			Returns: []Type{TAny},
+			Returns: []*Type{TAny},
 		}},
 	},
 }

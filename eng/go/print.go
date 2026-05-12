@@ -14,21 +14,21 @@ import (
 //   - tables: printed as a formatted table with column headers
 var PrintNatives = []NativeFunc{
 	{
-		Name:              "print",
-		ForwardPrecedence: true,
+		Name:        "print",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny},
+			Args:    []*Type{TAny},
 			Handler: printHandler,
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	},
 	{
-		Name:              "printstr",
-		ForwardPrecedence: true,
+		Name:        "printstr",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TAny},
+			Args:    []*Type{TAny},
 			Handler: printstrHandler,
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	},
 }

@@ -72,7 +72,7 @@ func TestNewDepScalarAtom(t *testing.T) {
 
 func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewDecimal(0.0))
-	for _, anc := range []Type{TDecimal, TNumber, TScalar, TAny} {
+	for _, anc := range []*Type{TDecimal, TNumber, TScalar, TAny} {
 		if !d.VType.Matches(anc) {
 			t.Errorf("DepDecimal does not match ancestor %s", anc)
 		}
@@ -81,13 +81,13 @@ func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 
 func TestDepStringMatchesStringAncestors(t *testing.T) {
 	d := NewDepScalar(DepLT, NewString("m"))
-	for _, anc := range []Type{TString, TScalar, TAny} {
+	for _, anc := range []*Type{TString, TScalar, TAny} {
 		if !d.VType.Matches(anc) {
 			t.Errorf("DepString does not match ancestor %s", anc)
 		}
 	}
 	// DepString must NOT match Number or Boolean.
-	for _, foreign := range []Type{TNumber, TInteger, TBoolean} {
+	for _, foreign := range []*Type{TNumber, TInteger, TBoolean} {
 		if d.VType.Matches(foreign) {
 			t.Errorf("DepString unexpectedly matches %s", foreign)
 		}
@@ -107,7 +107,7 @@ func TestDepAtomMatchesAtom(t *testing.T) {
 // DepInteger continues to work via the new general path (sanity).
 func TestDepIntegerStillMatchesInteger(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewInteger(10))
-	for _, anc := range []Type{TInteger, TNumber, TScalar, TAny} {
+	for _, anc := range []*Type{TInteger, TNumber, TScalar, TAny} {
 		if !d.VType.Matches(anc) {
 			t.Errorf("DepInteger no longer matches ancestor %s", anc)
 		}

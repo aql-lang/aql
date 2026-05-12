@@ -133,8 +133,10 @@ func RenderValue(v eng.Value) string {
 	case v.IsNone():
 		return "none"
 	case v.Data == nil:
-		if name := eng.TypeNameByID(v.VType.ID); name != "" {
-			return name
+		if v.VType != nil {
+			if name := eng.TypeNameByID(v.VType.ID); name != "" {
+				return name
+			}
 		}
 		return v.VType.Leaf()
 	case v.VType.Matches(eng.TInteger):

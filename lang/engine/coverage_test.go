@@ -1706,7 +1706,7 @@ func TestResolveSigTypeMap(t *testing.T) {
 }
 
 func TestResolveTypeName(t *testing.T) {
-	cases := map[string]Type{
+	cases := map[string]*Type{
 		"Any": TAny, "None": TNone, "Number": TNumber,
 		"Integer": TInteger, "String": TString, "Boolean": TBoolean,
 		"Atom": TAtom, "List": TList, "Map": TMap, "Scalar": TScalar,
@@ -1723,13 +1723,9 @@ func TestResolveTypeName(t *testing.T) {
 }
 
 func TestResolveTypeNameUnknown(t *testing.T) {
-	// Unknown names create a new named type via NewType
-	got, err := resolveTypeName("Foobar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.String() != "Foobar" {
-		t.Errorf("expected named type 'Foobar', got %s", got)
+	// Unknown names error out — undefined types can't be silently materialised.
+	if _, err := resolveTypeName("Foobar"); err == nil {
+		t.Error("expected error for unknown type 'Foobar'")
 	}
 }
 
@@ -3790,7 +3786,7 @@ func TestPeekForwardValueInContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward precedence
+	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward arg collection
 	// e.g., "add" with forward: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	_as54, _ := result[0].AsInteger()
@@ -4382,7 +4378,7 @@ func TestMatchSignaturePatternReject(t *testing.T) {
 	patternVal := NewMap(patternMap)
 
 	sig := Signature{
-		Args:     []Type{TMap},
+		Args:     []*Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
 		Handler:  func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil },
 	}
@@ -4415,14 +4411,14 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 	patternVal := NewMap(patternMap)
 
 	specificSig := Signature{
-		Args:     []Type{TMap},
+		Args:     []*Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("specific")}, nil
 		},
 	}
 	fallbackSig := Signature{
-		Args: []Type{TMap},
+		Args: []*Type{TMap},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("fallback")}, nil
 		},
@@ -4464,7 +4460,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 		Sigs: []FnSig{
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
-				Returns: []Type{TString},
+				Returns: []*Type{TString},
 				Body:    []Value{NewString("yes")},
 			},
 		},
@@ -4614,7 +4610,7 @@ func TestParseFnReturnsListError(t *testing.T) {
 func TestFlexibleMatchTooFewValues(t *testing.T) {
 	// Fewer values than types should return nil, false.
 	values := []Value{NewInteger(1)}
-	types := []Type{TInteger, TString}
+	types := []*Type{TInteger, TString}
 	result, ok := FlexibleMatch(values, &Signature{Args: types})
 	if ok || result != nil {
 		t.Errorf("expected no match with fewer values than types")

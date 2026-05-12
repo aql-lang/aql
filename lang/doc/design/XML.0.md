@@ -174,7 +174,7 @@ From the survey:
 - **Result is itself a queryable collection.** Goquery returns a
   `*Selection` which is itself selectable. AQL should make selector
   results lists of node values that accept further selector words as
-  suffixes — chaining falls out of the existing forward-precedence
+  suffixes — chaining falls out of the existing forward-collecting
   rule.
 - **Regex post-filter.** Parsel's `re()` and Scrapy's `.re_first()`
   show that regex composition on selector output is a frequent need;

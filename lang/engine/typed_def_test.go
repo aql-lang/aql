@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// --- Typed `def` syntax: def name:Type value ---
+// --- Typed `def` syntax: def name:*Type value ---
 //
 // `def x:Integer 1` parses as `def {x:Integer} 1` at the top level
 // (jsonic treats `x:Integer` as a single-pair map). The new

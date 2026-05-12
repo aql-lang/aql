@@ -159,7 +159,7 @@ MATCH_SIGNATURE(signatures[], stack[], modifiers):
 
 ## 5. Reversed Stack Matching — `MatchSignatureReversed`
 
-Used for forward-precedence words when all arguments end up on the stack but
+Used for forward-collecting words when all arguments end up on the stack but
 in reversed order (top of stack = first argument).
 
 ```
@@ -186,7 +186,7 @@ MATCH_SIGNATURE_REVERSED(signatures[], stack[], modifiers):
 
 ## 6. Forward Matching — `plannerBestSigForForward`
 
-When a word has forward precedence, it can collect arguments from tokens that
+When a word has forward arg collection, it can collect arguments from tokens that
 appear after it in the source. The planner decides which signature to use and
 how many args come from the stack vs. from forward tokens.
 

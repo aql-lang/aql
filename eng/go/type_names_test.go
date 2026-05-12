@@ -2,54 +2,37 @@ package eng
 
 import "testing"
 
-// TestTypeNameTableConsistency verifies that typeNameEntries and TypeNameTable
-// are consistent — every entry produces a table entry with the correct type.
+// TestTypeNameTableConsistency verifies that TypeNameTable and TypeNameByID
+// are mutually consistent against the Builtin TypeTable.
 func TestTypeNameTableConsistency(t *testing.T) {
 	full := TypeNameTable()
 
 	if len(full) == 0 {
 		t.Fatal("TypeNameTable is empty")
 	}
-	if len(full) != len(typeNameEntries) {
-		t.Fatalf("TypeNameTable has %d entries but typeNameEntries has %d",
-			len(full), len(typeNameEntries))
-	}
 
-	// Every entry in the canonical list must appear in the full table.
-	for _, e := range typeNameEntries {
-		ft, ok := full[e.Name]
-		if !ok {
-			t.Errorf("typeNameEntries has %q but TypeNameTable does not", e.Name)
+	// Every entry must round-trip name → *Type → ID → name.
+	for name, ft := range full {
+		if ft == nil {
+			t.Errorf("TypeNameTable[%q] has nil Def", name)
 			continue
 		}
-		if !ft.Equal(e.Type) {
-			t.Errorf("type mismatch for %q: entry=%v, table=%v", e.Name, e.Type, ft)
+		if ft.ID == "" {
+			continue // tolerate transitional entries
 		}
-	}
-
-	// Reverse map must also be consistent.
-	for _, e := range typeNameEntries {
-		if e.Type.ID == "" {
-			continue // runtime types have no fixed ID
-		}
-		rev, ok := typeNamesByTypeID[e.Type.ID]
-		if !ok {
-			t.Errorf("typeNamesByTypeID missing reverse entry for %q (ID=%s)", e.Name, e.Type.ID)
-			continue
-		}
-		if rev != e.Name {
-			t.Errorf("typeNamesByTypeID[%s] = %q, want %q", e.Type.ID, rev, e.Name)
+		got := TypeNameByID(ft.ID)
+		if got != name {
+			t.Errorf("TypeNameByID(%s) = %q, want %q", ft.ID, got, name)
 		}
 	}
 }
 
-// TestTypeNameTableNoDuplicates ensures no name appears twice in typeNameEntries.
+// TestTypeNameTableNoDuplicates ensures every entry in the Builtin byName
+// table is non-ambiguous (single stack entry at init, no duplicates).
 func TestTypeNameTableNoDuplicates(t *testing.T) {
-	seen := make(map[string]bool)
-	for _, e := range typeNameEntries {
-		if seen[e.Name] {
-			t.Errorf("duplicate entry in typeNameEntries: %q", e.Name)
+	for name, stack := range Builtin.byName {
+		if len(stack) != 1 {
+			t.Errorf("Builtin.byName[%q] has %d entries at init; expected 1", name, len(stack))
 		}
-		seen[e.Name] = true
 	}
 }

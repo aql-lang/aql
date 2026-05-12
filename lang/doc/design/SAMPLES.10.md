@@ -202,7 +202,7 @@ markers being ##
 
 Quoted source is directly placed onto future token stream.
 
-The built in def has forward precedence with signature: 
+The built in def has forward arg collection with signature: 
 ```
 [
   [word any] []
@@ -239,7 +239,7 @@ returns <3 7 6>
 
 `def square [ [number] [number] [dup mul]]`
 
-Words are effectively functions. Thus square takes one argument, forward precedence. 
+Words are effectively functions. Thus square takes one argument, forward arg collection. 
 The argument can be:
 
 - list with 3n entries
@@ -249,7 +249,7 @@ Multiples of three define other signatures
 
 
 `def square [ number number [dup mul]]` - same as above, 
-except function square now has forward precedence, abbreviate signatures for single args and returns.
+except function square now has forward arg collection, abbreviate signatures for single args and returns.
 
 Recursion is possible using defined name, or `recur`
 

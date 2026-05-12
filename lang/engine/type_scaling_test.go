@@ -6,13 +6,9 @@ import (
 	"time"
 )
 
-func mustTestType(t *testing.T, path string) Type {
+func mustTestType(t *testing.T, path string) *Type {
 	t.Helper()
-	typ, err := NewType(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return typ
+	return MintTestType(path)
 }
 
 // --- Multi-level type construction and String() ---
@@ -33,8 +29,8 @@ func TestNewTypeMultiLevel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			typ := mustTestType(t, tt.path)
-			if len(typ.Parts) != tt.parts {
-				t.Errorf("NewType(%q).Parts has %d elements, want %d", tt.path, len(typ.Parts), tt.parts)
+			if typ.Specificity() != tt.parts {
+				t.Errorf("NewType(%q).Specificity() = %d, want %d", tt.path, typ.Specificity(), tt.parts)
 			}
 			if typ.String() != tt.path {
 				t.Errorf("String() = %q, want %q", typ.String(), tt.path)
@@ -452,7 +448,7 @@ func TestUnifyDeepHierarchy7Levels(t *testing.T) {
 	t7 := mustTestType(t, "A")
 
 	deepest := Value{VType: t1, Data: nil}
-	ancestors := []Type{t2, t3, t4, t5, t6, t7}
+	ancestors := []*Type{t2, t3, t4, t5, t6, t7}
 
 	for _, anc := range ancestors {
 		ancestor := Value{VType: anc, Data: nil}
@@ -518,13 +514,13 @@ func TestUnifyNoneWithNoneSucceeds(t *testing.T) {
 func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 	// Register signatures at different specificity levels
 	sigs := []Signature{
-		{Args: []Type{mustTestType(t, "Data")}, Handler: dummyHandler},                             // depth 1
-		{Args: []Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler},                         // depth 2
-		{Args: []Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},                     // depth 3
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},                 // depth 4
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Handler: dummyHandler},          // depth 5
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},      // depth 6
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler}, // depth 7
+		{Args: []*Type{mustTestType(t, "Data")}, Handler: dummyHandler},                             // depth 1
+		{Args: []*Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler},                         // depth 2
+		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},                     // depth 3
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},                 // depth 4
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Handler: dummyHandler},          // depth 5
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler},      // depth 6
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler}, // depth 7
 	}
 	SortSignatures(sigs)
 
@@ -543,10 +539,10 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 func TestMatchSignatureMidLevelType(t *testing.T) {
 	// Only register signatures up to depth 4
 	sigs := []Signature{
-		{Args: []Type{mustTestType(t, "Data")}, Handler: dummyHandler},
-		{Args: []Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler},
-		{Args: []Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},
-		{Args: []Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},
+		{Args: []*Type{mustTestType(t, "Data")}, Handler: dummyHandler},
+		{Args: []*Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler},
+		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler},
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler},
 	}
 	SortSignatures(sigs)
 
@@ -666,7 +662,7 @@ func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
 	parent := mustTestType(t, "A/B")
 
 	// Create 10,000 sibling types: a/b/0, a/b/1, ..., a/b/9999
-	siblings := make([]Type, numSiblings)
+	siblings := make([]*Type, numSiblings)
 	for i := 0; i < numSiblings; i++ {
 		siblings[i] = mustTestType(t, fmt.Sprintf("A/B/%d", i))
 	}
@@ -697,7 +693,7 @@ func TestIsSubtypeOfEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
 	parent := mustTestType(t, "A/B")
 
-	siblings := make([]Type, numSiblings)
+	siblings := make([]*Type, numSiblings)
 	for i := 0; i < numSiblings; i++ {
 		siblings[i] = mustTestType(t, fmt.Sprintf("A/B/%d", i))
 	}
@@ -728,7 +724,7 @@ func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 	parent := mustTestType(t, "A/B")
 
 	sigs := []Signature{
-		{Args: []Type{parent}, Handler: dummyHandler},
+		{Args: []*Type{parent}, Handler: dummyHandler},
 	}
 
 	start := time.Now()
@@ -761,7 +757,7 @@ func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
 			t.Fatalf("Unify(A/B/%d, A/B) should succeed", i)
 		}
 		// Should return the child (narrower type)
-		if result.VType.Parts[2] != fmt.Sprintf("%d", i) {
+		if result.VType.Leaf() != fmt.Sprintf("%d", i) {
 			t.Fatalf("Unify(A/B/%d, A/B) returned wrong type: %s", i, result.VType)
 		}
 	}

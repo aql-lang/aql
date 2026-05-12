@@ -588,7 +588,7 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewNone(), nil
 	}
 
-	// Type names resolve to type literals even in word context, so that
+	// *Type names resolve to type literals even in word context, so that
 	// they retain their meaning inside quotations (e.g. [String,Decimal]).
 	if t, ok := typeNames[name]; ok {
 		return eng.NewTypeLiteral(t), nil

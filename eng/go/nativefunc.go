@@ -4,14 +4,14 @@ package eng
 // and configuration. All predefined words (core and extension) use this
 // type for registration.
 type NativeFunc struct {
-	Name              string
-	ForwardPrecedence bool
-	Signatures        []NativeSig
+	Name        string
+	ForwardArgs bool
+	Signatures  []NativeSig
 }
 
 // NativeSig describes one overload of a native function.
 type NativeSig struct {
-	Args    []Type
+	Args    []*Type
 	Handler Handler
 
 	// FullStack, when true, causes the engine to pass the full resolved
@@ -41,7 +41,7 @@ type NativeSig struct {
 
 	// Returns lists the declared return types for static type-checking.
 	// See Signature.Returns for details.
-	Returns []Type
+	Returns []*Type
 
 	// ReturnsFn computes the carrier return values for a signature in
 	// static type-check mode. See Signature.ReturnsFn for details.
@@ -85,7 +85,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
 		}
-		if fn.ForwardPrecedence {
+		if fn.ForwardArgs {
 			r.Register(fn.Name, s)
 		} else {
 			r.RegisterStackOnly(fn.Name, s)

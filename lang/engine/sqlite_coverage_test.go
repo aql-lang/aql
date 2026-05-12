@@ -6,7 +6,7 @@ import (
 
 func TestAqlTypeToSQLType(t *testing.T) {
 	tests := []struct {
-		typ  Type
+		typ  *Type
 		want string
 	}{
 		{TInteger, "INTEGER"},

@@ -216,7 +216,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 }
 
 // =============================================================================
-// Test 3: Type-literal safety — no panics
+// Test 3: *Type-literal safety — no panics
 //
 // For every word that accepts TMap, TList, or TAny arguments, passing a bare
 // type literal (Map or List) must produce an error — never a panic.
@@ -258,7 +258,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"for-list-body", `for 3 List`},
 		{"for-list-range", `for List [1]`},
 
-		// Type ops
+		// *Type ops
 		{"convert-type-literal", `Map convert String`},
 		{"make-list", `Integer make List`},
 
@@ -304,7 +304,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"and-map-map", `Map and Map`},
 		{"tor-list-list", `List tor List`},
 
-		// Type checking with type literals
+		// *Type checking with type literals
 		{"typeof-map", `Map typeof`},
 		{"typeof-list", `List typeof`},
 		{"is-map-integer", `Map is Integer`},
@@ -321,12 +321,12 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"unshift-list", `1 unshift List`},
 
 		// Metatype type literals
-		{"typeof-type", `Type typeof`},
+		{"typeof-type", `*Type typeof`},
 		{"typeof-scalartype", `ScalarType typeof`},
 		{"typeof-nodetype", `NodeType typeof`},
-		{"is-type-type", `Type is Type`},
-		{"is-scalartype-type", `ScalarType is Type`},
-		{"is-nodetype-type", `NodeType is Type`},
+		{"is-type-type", `*Type is *Type`},
+		{"is-scalartype-type", `ScalarType is *Type`},
+		{"is-nodetype-type", `NodeType is *Type`},
 
 		// Undef with type literals
 		{"undef-map", `undef Map`},

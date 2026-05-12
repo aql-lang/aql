@@ -11,34 +11,34 @@ import "fmt"
 // independently testable.
 var controlNatives = []NativeFunc{
 	{
-		Name:              "do",
-		ForwardPrecedence: true,
+		Name:        "do",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:       []Type{TList},
+				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    doListHandler,
 				ReturnsFn:  doListReturnsFn,
 			},
 			{
-				Args:    []Type{TMap},
+				Args:    []*Type{TMap},
 				Handler: doMapHandler,
-				Returns: []Type{TAny},
+				Returns: []*Type{TAny},
 			},
 		},
 	},
 	{
-		Name:              "if",
-		ForwardPrecedence: true,
+		Name:        "if",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:       []Type{TAny, TAny, TAny},
+				Args:       []*Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
 				Handler:    if3Handler,
 				ReturnsFn:  if3ReturnsFn,
 			},
 			{
-				Args:       []Type{TAny, TAny},
+				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    if2Handler,
 				ReturnsFn:  if2ReturnsFn,
@@ -53,7 +53,7 @@ var controlNatives = []NativeFunc{
 			// legacy `if <listCond> <then> [<else>]` forms still win when
 			// extra args are present. See ifClause in conditional.go.
 			{
-				Args:       []Type{TList},
+				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    ifListHandler,
 				ReturnsFn:  ifListReturnsFn,
@@ -61,17 +61,17 @@ var controlNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:              "for",
-		ForwardPrecedence: true,
+		Name:        "for",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:       []Type{TInteger, TList},
+				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forCountHandler,
 				ReturnsFn:  forIntegerListReturnsFn,
 			},
 			{
-				Args:       []Type{TList, TList},
+				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forRangeHandler,
 				ReturnsFn:  forListListReturnsFn,
@@ -79,30 +79,30 @@ var controlNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:              "break",
-		ForwardPrecedence: false,
+		Name:        "break",
+		ForwardArgs: false,
 		Signatures: []NativeSig{{
 			Handler: breakHandler,
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	},
 	{
-		Name:              "continue",
-		ForwardPrecedence: false,
+		Name:        "continue",
+		ForwardArgs: false,
 		Signatures: []NativeSig{{
 			Handler: continueHandler,
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	},
 	{
-		Name:              "error",
-		ForwardPrecedence: true,
+		Name:        "error",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:       []Type{TList, TError},
+				Args:       []*Type{TList, TError},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    errorHandler,
-				Returns:    []Type{TError},
+				Returns:    []*Type{TError},
 			},
 		},
 	},
@@ -398,7 +398,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 // forCarrierAnalyse runs the body once with the iterator bound as a
 // typed carrier and returns a typed list whose element type mirrors
 // the body's residual top-of-stack.
-func forCarrierAnalyse(r *Registry, iterName string, iterType Type, args []Value) []Value {
+func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value) []Value {
 	body := args[len(args)-1]
 	r.PushDef(iterName, NewCarrier(iterType))
 	stk, _ := RunCarrierBodyWithDefs(r, body)

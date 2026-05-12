@@ -33,16 +33,16 @@ func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 // Used as the canonical "engine works at all" probe.
 func registerAdd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "add",
-		ForwardPrecedence: true,
+		Name:        "add",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger, TInteger},
+			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, _ := args[0].AsInteger()
 				b, _ := args[1].AsInteger()
 				return []Value{NewInteger(a + b)}, nil
 			},
-			Returns: []Type{TInteger},
+			Returns: []*Type{TInteger},
 		}},
 	})
 }
@@ -51,32 +51,32 @@ func registerAdd(r *Registry) {
 // multi-word dispatch test.
 func registerMul(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "mul",
-		ForwardPrecedence: true,
+		Name:        "mul",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger, TInteger},
+			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, _ := args[0].AsInteger()
 				b, _ := args[1].AsInteger()
 				return []Value{NewInteger(a * b)}, nil
 			},
-			Returns: []Type{TInteger},
+			Returns: []*Type{TInteger},
 		}},
 	})
 }
 
-// registerNeg is a stack-only unary word for testing the
-// non-forward-precedence path.
+// registerNeg is a stack-only unary word for testing the path where
+// a word's sigs have BarrierPos=0 (no forward arg collection).
 func registerNeg(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "neg",
 		Signatures: []NativeSig{{
-			Args: []Type{TInteger},
+			Args: []*Type{TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				n, _ := args[0].AsInteger()
 				return []Value{NewInteger(-n)}, nil
 			},
-			Returns: []Type{TInteger},
+			Returns: []*Type{TInteger},
 		}},
 	})
 }
@@ -109,7 +109,7 @@ func TestSmokeRunWithNoWords(t *testing.T) {
 	}
 }
 
-func TestSmokeAddForwardPrecedence(t *testing.T) {
+func TestSmokeAddForwardArgs(t *testing.T) {
 	// `add 2 3` uses forward collection; the handler should see args[0]=2, args[1]=3.
 	out := runWith(t, registerAdd, []Value{NewWord("add"), NewInteger(2), NewInteger(3)})
 	if len(out) != 1 {
@@ -155,7 +155,7 @@ func TestSmokeMultipleWords(t *testing.T) {
 }
 
 func TestSmokeStackOnlyDispatch(t *testing.T) {
-	// `5 neg` — neg is registered without ForwardPrecedence so the
+	// `5 neg` — neg is registered without ForwardArgs so the
 	// engine must consume the prefix value.
 	out := runWith(t, registerNeg, []Value{NewInteger(5), NewWord("neg")})
 	if len(out) != 1 {

@@ -15,26 +15,26 @@ import (
 var Natives = []engine.NativeFunc{
 	// ---- boolean ----
 	{
-		Name:              "implies",
-		ForwardPrecedence: true,
+		Name:        "implies",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TBoolean, engine.TBoolean}, Handler: impliesHandler, Returns: []engine.Type{engine.TBoolean}},
-			{Args: []engine.Type{engine.TAny, engine.TAny}, Handler: impliesHandler, Returns: []engine.Type{engine.TBoolean}},
+			{Args: []*engine.Type{engine.TBoolean, engine.TBoolean}, Handler: impliesHandler, Returns: []*engine.Type{engine.TBoolean}},
+			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: impliesHandler, Returns: []*engine.Type{engine.TBoolean}},
 		},
 	},
 
 	// ---- control flow ----
 	{
-		Name:              "quote",
-		ForwardPrecedence: true,
+		Name:        "quote",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
 			{
-				Args:    []engine.Type{engine.TWord},
+				Args:    []*engine.Type{engine.TWord},
 				Handler: quoteWordHandler,
-				Returns: []engine.Type{engine.TAtom},
+				Returns: []*engine.Type{engine.TAtom},
 			},
 			{
-				Args:           []engine.Type{engine.TAny},
+				Args:           []*engine.Type{engine.TAny},
 				NoEvalArgs:     map[int]bool{0: true},
 				Handler:        quoteAnyHandler,
 				RunInCheckMode: true,
@@ -45,11 +45,11 @@ var Natives = []engine.NativeFunc{
 
 	// ---- file ops ----
 	{
-		Name:              "folder",
-		ForwardPrecedence: true,
+		Name:        "folder",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TOptions, engine.TPath}, Handler: folderOptsHandler, Returns: []engine.Type{engine.TList}},
-			{Args: []engine.Type{engine.TPath}, Handler: folderHandler, Returns: []engine.Type{engine.TList}},
+			{Args: []*engine.Type{engine.TOptions, engine.TPath}, Handler: folderOptsHandler, Returns: []*engine.Type{engine.TList}},
+			{Args: []*engine.Type{engine.TPath}, Handler: folderHandler, Returns: []*engine.Type{engine.TList}},
 		},
 	},
 
@@ -58,10 +58,10 @@ var Natives = []engine.NativeFunc{
 
 	// ---- stack ----
 	{
-		Name:              "stack",
-		ForwardPrecedence: false,
+		Name:        "stack",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{{
-			Args:             []engine.Type{engine.TInteger},
+			Args:             []*engine.Type{engine.TInteger},
 			FullStack:        true,
 			Handler:          stackCollectHandler,
 			CheckFullStackFn: stackCollectCheckFullStackFn,
@@ -70,330 +70,330 @@ var Natives = []engine.NativeFunc{
 
 	// ---- temporal ----
 	{
-		Name:              "now",
-		ForwardPrecedence: false,
+		Name:        "now",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{{
-			Args:    []engine.Type{},
+			Args:    []*engine.Type{},
 			Handler: nowHandler,
-			Returns: []engine.Type{engine.TInstant},
+			Returns: []*engine.Type{engine.TInstant},
 		}},
 	},
 	{
-		Name:              "sleep",
-		ForwardPrecedence: true,
+		Name:        "sleep",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args:    []engine.Type{engine.TInteger},
+			Args:    []*engine.Type{engine.TInteger},
 			Handler: sleepHandler,
-			Returns: []engine.Type{},
+			Returns: []*engine.Type{},
 		}},
 	},
 	{
-		Name:              "interval",
-		ForwardPrecedence: true,
+		Name:        "interval",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TInteger, engine.TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []engine.Type{engine.TInterval}},
-			{Args: []engine.Type{engine.TInteger, engine.TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []engine.Type{engine.TInterval}},
+			{Args: []*engine.Type{engine.TInteger, engine.TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*engine.Type{engine.TInterval}},
+			{Args: []*engine.Type{engine.TInteger, engine.TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*engine.Type{engine.TInterval}},
 		},
 	},
 	{
-		Name:              "cancel",
-		ForwardPrecedence: true,
+		Name:        "cancel",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TTimeout}, Handler: cancelTimeoutHandler, Returns: []engine.Type{}},
-			{Args: []engine.Type{engine.TInterval}, Handler: cancelIntervalHandler, Returns: []engine.Type{}},
+			{Args: []*engine.Type{engine.TTimeout}, Handler: cancelTimeoutHandler, Returns: []*engine.Type{}},
+			{Args: []*engine.Type{engine.TInterval}, Handler: cancelIntervalHandler, Returns: []*engine.Type{}},
 		},
 	},
 
 	// ---- list (table query) ----
 	{
-		Name:              "list",
-		ForwardPrecedence: true,
+		Name:        "list",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TResourceEntity}, Handler: listEntityOptsHandler},
-			{Args: []engine.Type{engine.TResourceEntity}, Handler: listEntityHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: listAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap}, Handler: listAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: listFilterHandler},
-			{Args: []engine.Type{engine.TList}, Handler: listAllHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: listRecordFilterHandler},
-			{Args: []engine.Type{engine.TMap}, Handler: listRecordAllHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: listEntityOptsHandler},
+			{Args: []*engine.Type{engine.TResourceEntity}, Handler: listEntityHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: listAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: listAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: listFilterHandler},
+			{Args: []*engine.Type{engine.TList}, Handler: listAllHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: listRecordFilterHandler},
+			{Args: []*engine.Type{engine.TMap}, Handler: listRecordAllHandler},
 		},
 	},
 
 	// ---- create ----
 	{
-		Name:              "create",
-		ForwardPrecedence: true,
+		Name:        "create",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TResourceEntity}, Handler: createEntityOptsHandler},
-			{Args: []engine.Type{engine.TResourceEntity}, Handler: createEntityHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: createAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap}, Handler: createAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: createHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: createRecordHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: createEntityOptsHandler},
+			{Args: []*engine.Type{engine.TResourceEntity}, Handler: createEntityHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: createAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: createAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: createHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: createRecordHandler},
 		},
 	},
 
 	// ---- load ----
 	{
-		Name:              "load",
-		ForwardPrecedence: true,
+		Name:        "load",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TResourceEntity}, Handler: loadEntityOptsHandler},
-			{Args: []engine.Type{engine.TResourceEntity}, Handler: loadEntityHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: loadAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap}, Handler: loadAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: loadHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: loadRecordHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: loadEntityOptsHandler},
+			{Args: []*engine.Type{engine.TResourceEntity}, Handler: loadEntityHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: loadAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: loadAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: loadHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: loadRecordHandler},
 		},
 	},
 
 	// ---- update ----
 	{
-		Name:              "update",
-		ForwardPrecedence: true,
+		Name:        "update",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TResourceEntity}, Handler: updateEntityOptsHandler},
-			{Args: []engine.Type{engine.TResourceEntity}, Handler: updateEntityHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: updateAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap}, Handler: updateAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: updateHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: updateRecordHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: updateEntityOptsHandler},
+			{Args: []*engine.Type{engine.TResourceEntity}, Handler: updateEntityHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: updateAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: updateAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: updateHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: updateRecordHandler},
 		},
 	},
 
 	// ---- remove ----
 	{
-		Name:              "remove",
-		ForwardPrecedence: true,
+		Name:        "remove",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TResourceEntity}, Handler: removeEntityOptsHandler},
-			{Args: []engine.Type{engine.TResourceEntity}, Handler: removeEntityHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: removeAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap}, Handler: removeAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: removeHandler},
-			{Args: []engine.Type{engine.TMap, engine.TMap}, Handler: removeRecordHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: removeEntityOptsHandler},
+			{Args: []*engine.Type{engine.TResourceEntity}, Handler: removeEntityHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: removeAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: removeAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: removeHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: removeRecordHandler},
 		},
 	},
 
 	// ---- transform ----
 	{
-		Name:              "transform",
-		ForwardPrecedence: true,
+		Name:        "transform",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: transformHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: transformHandler},
 		},
 	},
 
 	// ---- merge ----
 	{
-		Name:              "merge",
-		ForwardPrecedence: true,
+		Name:        "merge",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TList, engine.TMap}, Handler: mergeListMapHandler},
-			{Args: []engine.Type{engine.TMap, engine.TList}, Handler: mergeMapListHandler},
-			{Args: []engine.Type{engine.TAny, engine.TAny}, Handler: mergeHandler},
+			{Args: []*engine.Type{engine.TList, engine.TMap}, Handler: mergeListMapHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: mergeMapListHandler},
+			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: mergeHandler},
 		},
 	},
 
 	// ---- validate ----
 	{
-		Name:              "validate",
-		ForwardPrecedence: true,
+		Name:        "validate",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: validateHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: validateHandler},
 		},
 	},
 
 	// ---- getpath ----
 	{
-		Name:              "getpath",
-		ForwardPrecedence: true,
+		Name:        "getpath",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TString, engine.TAny}, Handler: getpathHandler},
+			{Args: []*engine.Type{engine.TString, engine.TAny}, Handler: getpathHandler},
 		},
 	},
 
 	// ---- setpath ----
 	{
-		Name:              "setpath",
-		ForwardPrecedence: true,
+		Name:        "setpath",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TString, engine.TAny, engine.TAny}, Handler: setpathHandler},
-			{Args: []engine.Type{engine.TAny, engine.TString, engine.TAny}, Handler: setpathHandler},
+			{Args: []*engine.Type{engine.TString, engine.TAny, engine.TAny}, Handler: setpathHandler},
+			{Args: []*engine.Type{engine.TAny, engine.TString, engine.TAny}, Handler: setpathHandler},
 		},
 	},
 
 	// ---- inject ----
 	{
-		Name:              "inject",
-		ForwardPrecedence: true,
+		Name:        "inject",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TAny}, Handler: injectHandler},
+			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: injectHandler},
 		},
 	},
 
 	// ---- clone ----
 	{
-		Name:              "clone",
-		ForwardPrecedence: false,
+		Name:        "clone",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny}, Handler: cloneHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: cloneHandler},
 		},
 	},
 
 	// ---- walk ----
 	{
-		Name:              "walk",
-		ForwardPrecedence: false,
+		Name:        "walk",
+		ForwardArgs: false,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TFunction, engine.TFunction, engine.TAny}, Handler: walkBeforeAfterHandler},
-			{Args: []engine.Type{engine.TFunction, engine.TAny}, Handler: walkBeforeHandler},
-			{Args: []engine.Type{engine.TAny}, Handler: walkHandler},
+			{Args: []*engine.Type{engine.TFunction, engine.TFunction, engine.TAny}, Handler: walkBeforeAfterHandler},
+			{Args: []*engine.Type{engine.TFunction, engine.TAny}, Handler: walkBeforeHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: walkHandler},
 		},
 	},
 
 	// ---- selector ----
 	{
-		Name:              "selector",
-		ForwardPrecedence: true,
+		Name:        "selector",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: selectorHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: selectorHandler},
 		},
 	},
 
 	// ---- size ----
 	{
-		Name:              "size",
-		ForwardPrecedence: true,
+		Name:        "size",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny}, Handler: sizeHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: sizeHandler},
 		},
 	},
 
 	// ---- pad ----
 	{
-		Name:              "pad",
-		ForwardPrecedence: true,
+		Name:        "pad",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TInteger, engine.TAny}, Handler: padWidthHandler},
-			{Args: []engine.Type{engine.TAny}, Handler: padDefaultHandler},
+			{Args: []*engine.Type{engine.TInteger, engine.TAny}, Handler: padWidthHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: padDefaultHandler},
 		},
 	},
 
 	// ---- items ----
 	{
-		Name:              "items",
-		ForwardPrecedence: true,
+		Name:        "items",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny}, Handler: itemsHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: itemsHandler},
 		},
 	},
 
 	// ---- fetch ----
 	{
-		Name:              "fetch",
-		ForwardPrecedence: true,
+		Name:        "fetch",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TString, engine.TMap}, Handler: fetchStringMapHandler},
-			{Args: []engine.Type{engine.TMap}, Handler: fetchMapHandler},
-			{Args: []engine.Type{engine.TString}, Handler: fetchStringHandler},
+			{Args: []*engine.Type{engine.TString, engine.TMap}, Handler: fetchStringMapHandler},
+			{Args: []*engine.Type{engine.TMap}, Handler: fetchMapHandler},
+			{Args: []*engine.Type{engine.TString}, Handler: fetchStringHandler},
 		},
 	},
 
 	// ---- prepare ----
 	{
-		Name:              "prepare",
-		ForwardPrecedence: true,
+		Name:        "prepare",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap}, Handler: prepareAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: prepareAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
 		},
 	},
 
 	// ---- direct ----
 	{
-		Name:              "direct",
-		ForwardPrecedence: true,
+		Name:        "direct",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap}, Handler: directAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+			{Args: []*engine.Type{engine.TMap}, Handler: directAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
 		},
 	},
 
 	// ---- flatten ----
 	{
-		Name:              "flatten",
-		ForwardPrecedence: true,
+		Name:        "flatten",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TInteger, engine.TList}, Handler: flattenDepthHandler},
-			{Args: []engine.Type{engine.TList}, Handler: flattenDefaultHandler},
+			{Args: []*engine.Type{engine.TInteger, engine.TList}, Handler: flattenDepthHandler},
+			{Args: []*engine.Type{engine.TList}, Handler: flattenDefaultHandler},
 		},
 	},
 
 	// ---- filter ----
 	{
-		Name:              "filter",
-		ForwardPrecedence: true,
+		Name:        "filter",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TFunction, engine.TAny}, Handler: filterHandler},
+			{Args: []*engine.Type{engine.TFunction, engine.TAny}, Handler: filterHandler},
 		},
 	},
 
 	// ---- join ----
 	{
-		Name:              "join",
-		ForwardPrecedence: true,
+		Name:        "join",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TString, engine.TList}, Handler: joinSepHandler},
-			{Args: []engine.Type{engine.TList}, Handler: joinDefaultHandler},
+			{Args: []*engine.Type{engine.TString, engine.TList}, Handler: joinSepHandler},
+			{Args: []*engine.Type{engine.TList}, Handler: joinDefaultHandler},
 		},
 	},
 
 	// ---- jsonify ----
 	{
-		Name:              "jsonify",
-		ForwardPrecedence: true,
+		Name:        "jsonify",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TMap, engine.TAny}, Handler: jsonifyFlagsHandler},
-			{Args: []engine.Type{engine.TAny}, Handler: jsonifyDefaultHandler},
+			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: jsonifyFlagsHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: jsonifyDefaultHandler},
 		},
 	},
 
 	// ---- listops (push/pop/unshift/shift) ----
 	{
-		Name:              "push",
-		ForwardPrecedence: true,
+		Name:        "push",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TList}, Handler: pushHandler},
+			{Args: []*engine.Type{engine.TAny, engine.TList}, Handler: pushHandler},
 		},
 	},
 	{
-		Name:              "pop",
-		ForwardPrecedence: true,
+		Name:        "pop",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TList}, Handler: popHandler},
+			{Args: []*engine.Type{engine.TList}, Handler: popHandler},
 		},
 	},
 	{
-		Name:              "unshift",
-		ForwardPrecedence: true,
+		Name:        "unshift",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny, engine.TList}, Handler: unshiftHandler},
+			{Args: []*engine.Type{engine.TAny, engine.TList}, Handler: unshiftHandler},
 		},
 	},
 	{
-		Name:              "shift",
-		ForwardPrecedence: true,
+		Name:        "shift",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TList}, Handler: shiftHandler},
+			{Args: []*engine.Type{engine.TList}, Handler: shiftHandler},
 		},
 	},
 
 	// ---- istype ----
 	{
-		Name:              "istype",
-		ForwardPrecedence: true,
+		Name:        "istype",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TAny}, Handler: istypeHandler},
+			{Args: []*engine.Type{engine.TAny}, Handler: istypeHandler},
 		},
 	},
 }
@@ -412,15 +412,15 @@ func apiPatternValue() engine.Value {
 // inputs.
 func stringSliceNative() engine.NativeFunc {
 	return engine.NativeFunc{
-		Name:              "slice",
-		ForwardPrecedence: true,
+		Name:        "slice",
+		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
-			{Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TString}, Handler: sliceStartEndHandler, Returns: []engine.Type{engine.TString}},
-			{Args: []engine.Type{engine.TInteger, engine.TInteger, engine.TList}, Handler: sliceStartEndHandler, Returns: []engine.Type{engine.TList}},
-			{Args: []engine.Type{engine.TInteger, engine.TString}, Handler: sliceStartHandler, Returns: []engine.Type{engine.TString}},
-			{Args: []engine.Type{engine.TInteger, engine.TList}, Handler: sliceStartHandler, Returns: []engine.Type{engine.TList}},
-			{Args: []engine.Type{engine.TString}, Handler: sliceAllHandler, Returns: []engine.Type{engine.TString}},
-			{Args: []engine.Type{engine.TList}, Handler: sliceAllHandler, Returns: []engine.Type{engine.TList}},
+			{Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TString}, Handler: sliceStartEndHandler, Returns: []*engine.Type{engine.TString}},
+			{Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TList}, Handler: sliceStartEndHandler, Returns: []*engine.Type{engine.TList}},
+			{Args: []*engine.Type{engine.TInteger, engine.TString}, Handler: sliceStartHandler, Returns: []*engine.Type{engine.TString}},
+			{Args: []*engine.Type{engine.TInteger, engine.TList}, Handler: sliceStartHandler, Returns: []*engine.Type{engine.TList}},
+			{Args: []*engine.Type{engine.TString}, Handler: sliceAllHandler, Returns: []*engine.Type{engine.TString}},
+			{Args: []*engine.Type{engine.TList}, Handler: sliceAllHandler, Returns: []*engine.Type{engine.TList}},
 		},
 	}
 }

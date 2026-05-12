@@ -6,9 +6,9 @@ import (
 	"github.com/aql-lang/aql/lang"
 )
 
-// Surface-syntax tests for `def name:Type value`.
+// Surface-syntax tests for `def name:*Type value`.
 //
-// At the top level, jsonic parses `name:Type` as a single-pair map,
+// At the top level, jsonic parses `name:*Type` as a single-pair map,
 // so the new [Map, Any] sig on `def` picks it up and uses the map's
 // only key as the name and its only value as the type constraint.
 // The body must unify with the constraint or the def errors and is

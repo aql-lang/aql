@@ -62,10 +62,10 @@ func registerCoreType(r *Registry) {
 //	201 is Codes  → false
 func registerCoreEnum(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "enum",
-		ForwardPrecedence: true,
+		Name:        "enum",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList},
+			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				list := args[0]
@@ -77,7 +77,7 @@ func registerCoreEnum(r *Registry) {
 				if list.IsTypedList() {
 					ci, _ := list.AsChildType()
 					childType = ci.Child
-					hasChild = childType.VType.Parts != nil
+					hasChild = childType.VType != nil
 				}
 				elems := list.AsList()
 				alts := make([]Value, 0, elems.Len())
@@ -101,7 +101,7 @@ func registerCoreEnum(r *Registry) {
 				}
 				return []Value{NewEnum(alts)}, nil
 			},
-			Returns: []Type{TEnum},
+			Returns: []*Type{TEnum},
 		}},
 	})
 }
@@ -114,10 +114,10 @@ func registerCoreEnum(r *Registry) {
 // literal type expressions, not code to evaluate.
 func registerCoreTypeWord(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "type",
-		ForwardPrecedence: true,
+		Name:        "type",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TWord, TAny},
+			Args:       []*Type{TWord, TAny},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				w, _ := args[0].AsWord()
@@ -127,7 +127,7 @@ func registerCoreTypeWord(r *Registry) {
 				}
 				return nil, nil
 			},
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	})
 }
@@ -135,10 +135,10 @@ func registerCoreTypeWord(r *Registry) {
 // registerCoreUntypeWord installs `untype NAME`. Name arrives as a Word.
 func registerCoreUntypeWord(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "untype",
-		ForwardPrecedence: true,
+		Name:        "untype",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TWord},
+			Args: []*Type{TWord},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				w, _ := args[0].AsWord()
 				if !IsCapitalisedName(w.Name) {
@@ -155,7 +155,7 @@ func registerCoreUntypeWord(r *Registry) {
 				}
 				return nil, nil
 			},
-			Returns: []Type{},
+			Returns: []*Type{},
 		}},
 	})
 }
@@ -186,14 +186,14 @@ func registerCoreUntypeWord(r *Registry) {
 // produces the expected answers.
 func registerCoreTypeof(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "typeof",
-		ForwardPrecedence: true,
+		Name:        "typeof",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TAny},
+			Args: []*Type{TAny},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{TypeOf(args[0])}, nil
 			},
-			Returns: []Type{TType},
+			Returns: []*Type{TType},
 		}},
 	})
 }
@@ -221,14 +221,14 @@ func registerCoreTypeof(r *Registry) {
 // `pathof 5` is a signature_error — the argument must be a Type.
 func registerCorePathOf(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "pathof",
-		ForwardPrecedence: true,
+		Name:        "pathof",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []Type{TType},
+			Args: []*Type{TType},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{PathOf(args[0])}, nil
 			},
-			Returns: []Type{TList},
+			Returns: []*Type{TList},
 		}},
 	})
 }
@@ -238,16 +238,15 @@ func registerCorePathOf(r *Registry) {
 // value) as a List of Type literals, root first, leaf last. See
 // registerCorePathOf.
 func PathOf(t Value) Value {
-	parts := t.VType.Parts
-	elems := make([]Value, 0, len(parts))
-	for i := 1; i <= len(parts); i++ {
-		seg := append([]string(nil), parts[:i]...)
-		pt := Type{Parts: seg}
-		fullPath := strings.Join(seg, "/")
-		if num, ok := BuiltinTypeIDs[fullPath]; ok {
-			pt.ID = FormatFixedTypeID(fullPath, num)
-		}
-		elems = append(elems, NewTypeLiteral(pt))
+	// Walk the def's ancestry from root down to t, producing one type
+	// literal per ancestor.
+	var chain []*Type
+	for d := t.VType; d != nil; d = d.Parent {
+		chain = append([]*Type{d}, chain...)
+	}
+	elems := make([]Value, 0, len(chain))
+	for _, d := range chain {
+		elems = append(elems, NewTypeLiteral(d))
 	}
 	return NewList(elems)
 }
@@ -334,15 +333,15 @@ func IsRecordShape(v Value) bool {
 //   - T is anything else: structurally unify v with T.
 func registerCoreIs(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "is",
-		ForwardPrecedence: true,
+		Name:        "is",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TAny, TAny},
+			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewBoolean(IsValueOfType(args[1], args[0]))}, nil
 			},
-			Returns: []Type{TBoolean},
+			Returns: []*Type{TBoolean},
 		}},
 	})
 }
@@ -486,7 +485,7 @@ func installType(r *Registry, name string, body Value) error {
 		}
 	}
 	if !r.HasType(name) {
-		if err := ValidateTypeNameParts(name, r.KnownTypeParts); err != nil {
+		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
 			return err
 		}
 	}
@@ -510,13 +509,20 @@ func installType(r *Registry, name string, body Value) error {
 			info.Name = "Object/" + name
 		}
 		for _, p := range strings.Split(info.Name, "/") {
-			r.KnownTypeParts[p] = true
+			r.RegisterPart(p)
 		}
-		body = NewObjectType(info)
+		parentDef := TObject
+		if info.Parent != nil && info.Parent.Type != nil {
+			parentDef = info.Parent.Type
+		}
+		def := r.Types.MintType(name, parentDef)
+		body = NewObjectType(def, info)
+		r.Types.Bind(name, def, body)
+	} else {
+		r.PushType(name, body)
 	}
-	r.PushType(name, body)
 	for _, p := range strings.Split(name, "/") {
-		r.KnownTypeParts[p] = true
+		r.RegisterPart(p)
 	}
 	return nil
 }

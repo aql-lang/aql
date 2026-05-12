@@ -17,206 +17,206 @@ import (
 var arrayNatives = []NativeFunc{
 	// ---- core ----
 	{
-		Name:              "iota",
-		ForwardPrecedence: true,
+		Name:        "iota",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TInteger},
+			Args:      []*Type{TInteger},
 			Handler:   iotaHandler,
 			ReturnsFn: returnsCarrierTypedListInteger,
 		}},
 	},
 	{
-		Name:              "shape",
-		ForwardPrecedence: true,
+		Name:        "shape",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   shapeHandler,
 			ReturnsFn: returnsCarrierTypedListInteger,
 		}},
 	},
 	{
-		Name:              "rank",
-		ForwardPrecedence: true,
+		Name:        "rank",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList},
+			Args:    []*Type{TList},
 			Handler: rankHandler,
-			Returns: []Type{TInteger},
+			Returns: []*Type{TInteger},
 		}},
 	},
 	{
-		Name:              "length",
-		ForwardPrecedence: true,
+		Name:        "length",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:    []Type{TList},
+			Args:    []*Type{TList},
 			Handler: lengthHandler,
-			Returns: []Type{TInteger},
+			Returns: []*Type{TInteger},
 		}},
 	},
 	{
-		Name:              "reshape",
-		ForwardPrecedence: true,
+		Name:        "reshape",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   reshapeHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "arr-flatten",
-		ForwardPrecedence: true,
+		Name:        "arr-flatten",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   arrFlattenHandler,
 			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	},
 	{
-		Name:              "arr-transpose",
-		ForwardPrecedence: true,
+		Name:        "arr-transpose",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   arrTransposeHandler,
 			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	},
 	{
-		Name:              "reverse",
-		ForwardPrecedence: true,
+		Name:        "reverse",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   reverseHandler,
 			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	},
 	{
-		Name:              "take",
-		ForwardPrecedence: true,
+		Name:        "take",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TInteger, TList},
+			Args:      []*Type{TInteger, TList},
 			Handler:   takeHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "shed",
-		ForwardPrecedence: true,
+		Name:        "shed",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TInteger, TList},
+			Args:      []*Type{TInteger, TList},
 			Handler:   shedHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "where",
-		ForwardPrecedence: true,
+		Name:        "where",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   whereHandler,
 			ReturnsFn: returnsCarrierTypedListInteger,
 		}},
 	},
 	{
-		Name:              "unique",
-		ForwardPrecedence: true,
+		Name:        "unique",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   uniqueHandler,
 			ReturnsFn: ReturnsPreserveListAt(0),
 		}},
 	},
 	{
-		Name:              "grade",
-		ForwardPrecedence: true,
+		Name:        "grade",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   gradeHandler,
 			ReturnsFn: returnsCarrierTypedListInteger,
 		}},
 	},
 	{
-		Name:              "at",
-		ForwardPrecedence: true,
+		Name:        "at",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   atHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "sortby",
-		ForwardPrecedence: true,
+		Name:        "sortby",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   sortbyHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "member",
-		ForwardPrecedence: true,
+		Name:        "member",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   memberHandler,
 			ReturnsFn: returnsCarrierTypedListBoolean,
 		}},
 	},
 	{
-		Name:              "arr-indexof",
-		ForwardPrecedence: true,
+		Name:        "arr-indexof",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   arrIndexofHandler,
 			ReturnsFn: returnsCarrierTypedListInteger,
 		}},
 	},
 	{
-		Name:              "group",
-		ForwardPrecedence: true,
+		Name:        "group",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:    []Type{TList, TList},
+				Args:    []*Type{TList, TList},
 				Handler: groupTwoHandler,
-				Returns: []Type{TMap},
+				Returns: []*Type{TMap},
 			},
 			{
-				Args:    []Type{TList},
+				Args:    []*Type{TList},
 				Handler: groupOneHandler,
-				Returns: []Type{TMap},
+				Returns: []*Type{TMap},
 			},
 		},
 	},
 	{
-		Name:              "replicate",
-		ForwardPrecedence: true,
+		Name:        "replicate",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   replicateHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "expand",
-		ForwardPrecedence: true,
+		Name:        "expand",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList, TList},
+			Args:      []*Type{TList, TList},
 			Handler:   expandHandler,
 			ReturnsFn: ReturnsPreserveListAt(1),
 		}},
 	},
 	{
-		Name:              "window",
-		ForwardPrecedence: true,
+		Name:        "window",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TInteger, TList},
+			Args:      []*Type{TInteger, TList},
 			Handler:   windowHandler,
 			ReturnsFn: windowReturnsFn,
 		}},
 	},
 	{
-		Name:              "pairs",
-		ForwardPrecedence: true,
+		Name:        "pairs",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:      []Type{TList},
+			Args:      []*Type{TList},
 			Handler:   pairsHandler,
 			ReturnsFn: pairsReturnsFn,
 		}},
@@ -224,32 +224,32 @@ var arrayNatives = []NativeFunc{
 
 	// ---- higher-order ----
 	{
-		Name:              "each",
-		ForwardPrecedence: true,
+		Name:        "each",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList, TList},
+			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    eachHandler,
 			ReturnsFn:  eachReturnsFn,
 		}},
 	},
 	{
-		Name:              "fold",
-		ForwardPrecedence: true,
+		Name:        "fold",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
 				// With initial value: init fold body data → result.
 				// Sig is body-first (matching each/scan) so the swap form
 				// `init fold body data` collects body+data forward and
 				// init from the stack.
-				Args:       []Type{TList, TList, TAny},
+				Args:       []*Type{TList, TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    foldWithInitHandler,
 				ReturnsFn:  foldWithInitReturnsFn,
 			},
 			{
 				// Without initial: body data → result (uses first element as init)
-				Args:       []Type{TList, TList},
+				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    foldNoInitHandler,
 				ReturnsFn:  foldNoInitReturnsFn,
@@ -257,30 +257,30 @@ var arrayNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:              "scan",
-		ForwardPrecedence: true,
+		Name:        "scan",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList, TList},
+			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    scanHandler,
 			ReturnsFn:  scanReturnsFn,
 		}},
 	},
 	{
-		Name:              "outer",
-		ForwardPrecedence: true,
+		Name:        "outer",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList, TList, TList},
+			Args:       []*Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    outerHandler,
 			ReturnsFn:  outerReturnsFn,
 		}},
 	},
 	{
-		Name:              "inner",
-		ForwardPrecedence: true,
+		Name:        "inner",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []Type{TList, TList, TList, TList},
+			Args:       []*Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
 			Handler:    innerHandler,
 			ReturnsFn:  innerReturnsFn,
@@ -972,7 +972,7 @@ func eachReturnsFn(args []Value, r *Registry) []Value {
 // residual carrier stack, or nil if the body is not concrete. The
 // primary purpose is side-effect: any diagnostics the body produces
 // (type mismatches, undefined words) are accumulated on the registry.
-func analyseHigherOrderBody(r *Registry, body Value, elems ...Type) []Value {
+func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 	if body.Data == nil {
 		return nil
 	}

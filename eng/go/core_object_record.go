@@ -32,29 +32,29 @@ func RegisterCoreObjectRecord(r *Registry) {
 
 func registerCoreObjectRecord(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "record",
-		ForwardPrecedence: true,
+		Name:        "record",
+		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:           []Type{TList},
+			Args:           []*Type{TList},
 			Handler:        recordHandler,
-			Returns:        []Type{TRecord},
+			Returns:        []*Type{TRecord},
 			RunInCheckMode: true,
 		}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
-		Name:              "object",
-		ForwardPrecedence: true,
+		Name:        "object",
+		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:           []Type{TMap, TObject},
+				Args:           []*Type{TMap, TObject},
 				Handler:        objectWithParentHandler,
-				Returns:        []Type{TObjectType},
+				Returns:        []*Type{TObjectType},
 				RunInCheckMode: true,
 			},
 			{
-				Args:           []Type{TMap},
+				Args:           []*Type{TMap},
 				Handler:        objectHandler,
-				Returns:        []Type{TObjectType},
+				Returns:        []*Type{TObjectType},
 				RunInCheckMode: true,
 			},
 		},
@@ -125,7 +125,8 @@ func objectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		ID:     id,
 		Name:   "",
 	}
-	return []Value{NewObjectType(info)}, nil
+	def := r.Types.MintType(id, TObject)
+	return []Value{NewObjectType(def, info)}, nil
 }
 
 func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -168,5 +169,10 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		ID:     id,
 		Name:   "",
 	}
-	return []Value{NewObjectType(info)}, nil
+	parentDef := parentInfo.Type
+	if parentDef == nil {
+		parentDef = TObject
+	}
+	def := r.Types.MintType(id, parentDef)
+	return []Value{NewObjectType(def, info)}, nil
 }
