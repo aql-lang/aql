@@ -29,9 +29,12 @@ var Natives = []engine.NativeFunc{
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{
 			{
-				Args:    []*engine.Type{engine.TWord},
-				Handler: quoteWordHandler,
-				Returns: []*engine.Type{engine.TAtom},
+				// /q captures the upcoming Word as an Atom for us; the
+				// handler just marks it Quoted=true.
+				Args:      []*engine.Type{engine.TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   quoteWordHandler,
+				Returns:   []*engine.Type{engine.TAtom},
 			},
 			{
 				Args:           []*engine.Type{engine.TAny},
@@ -467,10 +470,10 @@ func impliesHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.V
 	return []engine.Value{engine.NewBoolean(!left || right)}, nil
 }
 
-// quoteWordHandler converts the upcoming Word literal to a quoted Atom.
+// quoteWordHandler marks the captured atom (already converted from the
+// upcoming Word by /q) as Quoted=true.
 func quoteWordHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	w, _ := args[0].AsWord()
-	v := engine.NewAtom(w.Name)
+	v := args[0]
 	v.Quoted = true
 	return []engine.Value{v}, nil
 }

@@ -182,14 +182,17 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		}
 
 		// Paren group: expand to engine paren markers at top level.
+		// Emit typed OpenParen / CloseParen values directly so the
+		// engine can recognise them by VType identity (no stepWord
+		// name-dispatch needed).
 		if pg, ok := items[i].(parenGroup); ok {
-			values = append(values, eng.NewWord("("))
+			values = append(values, eng.NewOpenParen())
 			inner, err := convertTopLevelItems([]any(pg))
 			if err != nil {
 				return nil, err
 			}
 			values = append(values, inner...)
-			values = append(values, eng.NewWord(")"))
+			values = append(values, eng.NewCloseParen())
 			continue
 		}
 
@@ -586,6 +589,17 @@ func parseWord(text string) (eng.Value, error) {
 	// for engine-side resolution).
 	if name == "none" {
 		return eng.NewNone(), nil
+	}
+
+	// Reserved tape-syntax tokens emit typed marker values so the
+	// engine recognises them by VType identity (parens, end / ';').
+	// These would otherwise become plain Word values that the engine
+	// would have to name-dispatch in stepWord.
+	switch name {
+	case "end":
+		return eng.NewEnd(), nil
+	case ")":
+		return eng.NewCloseParen(), nil
 	}
 
 	// *Type names resolve to type literals even in word context, so that

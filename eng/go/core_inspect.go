@@ -45,25 +45,13 @@ func registerCoreInspect(r *Registry) {
 		Name:        "inspect",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TWord}, Handler: inspectWordHandler, Returns: []*Type{TInspect}},
-			{Args: []*Type{TAtom}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}},
+			// /q captures the upcoming Word as an Atom; the same sig
+			// also matches an explicit Atom on the stack (per
+			// signature.go §1.5 — Atom/q subsumes Atom).
+			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}},
 			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}},
 		},
 	})
-}
-
-func inspectWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	w, _ := args[0].AsWord()
-	name := w.Name
-	if tv, ok := r.TopOfTypeStack(name); ok {
-		return []Value{buildTypeInspection(name, tv)}, nil
-	}
-	if top, ok := r.TopOfDefStack(name); ok {
-		if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
-			return []Value{buildTypeInspection(name, top)}, nil
-		}
-	}
-	return []Value{buildInspection(r, name)}, nil
 }
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -72,7 +60,10 @@ func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return []Value{buildTypeInspection(name, tv)}, nil
 	}
 	if top, ok := r.TopOfDefStack(name); ok {
-		if IsTypeBody(top) {
+		// FnDef / Function defs are functions, not types — report
+		// their sig structure via buildInspection instead of treating
+		// the def as a type body.
+		if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
 			return []Value{buildTypeInspection(name, top)}, nil
 		}
 	}

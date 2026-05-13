@@ -59,7 +59,7 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 	// def matrix {trace:"my-trace-fn"}
 	// matrix.trace → "my-trace-fn" (not the debug trace word)
 	runAQL(t, r, []engine.Value{
-		engine.NewWord("def"), engine.NewWord("matrix"), engine.NewMap(moduleMap), engine.NewWord("end"),
+		engine.NewWord("def"), engine.NewWord("matrix"), engine.NewMap(moduleMap), engine.NewEnd(),
 	})
 
 	// matrix get trace — should do map lookup, not execute trace word

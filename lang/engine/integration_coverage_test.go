@@ -133,7 +133,7 @@ func TestIntegUndefRemovesDef(t *testing.T) {
 	// def my-val 99 end my-val undef my-val end
 	// After undef, my-val should not be found (error or just word)
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("my-val"), NewInteger(99), NewWord("end"),
+		NewWord("def"), NewWord("my-val"), NewInteger(99), NewEnd(),
 		NewWord("my-val"),
 	})
 	_as4, _ := result[0].AsInteger()
@@ -155,7 +155,7 @@ func TestIntegUndefWithString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// def my-val 42 end undef "my-val"
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("my-val"), NewInteger(42), NewWord("end"),
+		NewWord("def"), NewWord("my-val"), NewInteger(42), NewEnd(),
 		NewWord("undef"), NewString("my-val"),
 	})
 	if len(result) != 0 {
@@ -176,7 +176,7 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("my-fn"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// Verify my-fn works: 5 my-fn => 6
@@ -207,7 +207,7 @@ func TestIntegFnMultipleParams(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("add-two"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// 3 5 add-two => 8
@@ -229,7 +229,7 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("inc"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	if len(result) != 0 {
 		t.Fatalf("def should return nothing, got %v", result)
@@ -293,7 +293,7 @@ func TestIntegFnSingleValueAbbreviation(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("inc2"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	result := runAQL(t, r, []Value{NewInteger(7), NewWord("inc2")})
@@ -341,7 +341,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import mymod
@@ -370,7 +370,7 @@ func TestIntegModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod2"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import [orig renamed] mymod2
@@ -396,7 +396,7 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import [[expA newA] [expB newB]] mm
@@ -441,7 +441,7 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("wmod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import with word names (instead of atoms/strings)
@@ -464,7 +464,7 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import NewName mymod — renames single export Orig to NewName
@@ -487,7 +487,7 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// import Renamed mymod — renames single export Orig to Renamed (atom)
@@ -510,7 +510,7 @@ func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	_, err := New(r).Run([]Value{NewWord("import"), NewWord("Only"), NewWord("mm")})

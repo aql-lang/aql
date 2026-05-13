@@ -1,0 +1,192 @@
+# tokens	expected	note
+# Interpolated strings — backtick-delimited templates with `${...}`
+# expression segments.
+#
+# The parser (eng/go/parser/parse.go::convertInterpGroup) produces a
+# plain TString when no `${}` segments are present, and a TInterpString
+# (a slice of InterpPart) when at least one is. The engine's Run loop
+# dispatches TInterpString via evalInterpString (engine.go), which
+# walks each part:
+#   • literal segments are concatenated verbatim;
+#   • expression segments are evaluated in a sub-engine sharing the
+#     parent registry, and every residual value is stringified via
+#     ValToString and concatenated to the output buffer.
+# The whole interpolation collapses to a single TString that then
+# flows through stepLiteral.
+#
+# Note: the spec renderer wraps TString values in single quotes — so
+# an evaluation that produces the string "x" shows as 'x' in the
+# expected column.
+
+# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===
+#   addq, subq, mulq  — number ops (handler returns b+a etc.)
+#   negq              — number negation
+#   concatq           — string concat (handler returns args[1] + args[0])
+# === end fixtures ===
+
+
+# --- Plain (no-interpolation) form ---
+
+`hello`	'hello'	backtick with no ${} parses to a plain TString, not InterpString
+``	''	empty backtick yields the empty TString
+
+
+# --- Single expression ---
+
+`${42}`	'42'	integer in interp segment
+`${'foo'}`	'foo'	string-typed value loses its quotes when stringified into the result
+`${true}`	'true'	boolean → "true"
+`${false}`	'false'	boolean → "false"
+`${negq 5}`	'-5'	negative integer
+`${1 addq 2}`	'3'	infix arithmetic in segment
+`${addq 1 2}`	'3'	prefix form yields the same result (forward-collected args)
+`${quote bar}`	'bar'	atom stringifies to its name
+
+
+# --- Literal + interpolation mixes ---
+
+`value=${42}`	'value=42'	literal prefix + interp
+`${42} units`	'42 units'	interp + literal suffix
+`before ${1 addq 2} after`	'before 3 after'	literal-interp-literal
+`${1} and ${2}`	'1 and 2'	two interps with literal between
+`${1}${2}`	'12'	adjacent interps, no separator
+`pre${1}mid${2}post`	'pre1mid2post'	multiple interps flanked by literals
+
+
+# --- Multi-value residuals ---
+# A `${...}` expression that leaves multiple values on the sub-engine's
+# stack stringifies each in order and concatenates them — no separator.
+
+`${1 2 3}`	'123'	three literals → "1"+"2"+"3"
+`${'a' 'b' 'c'}`	'abc'	three strings concatenated
+`${'x' 1 true}`	'x1true'	mixed types stringified together
+
+
+# --- Variable interpolation through the shared registry ---
+# evalInterpString creates the sub-engine with the parent's registry,
+# so def'd names resolve through the normal DefStack lookup.
+
+def x 5 `value=${x}`	'value=5'	def installs x; interp resolves it
+def x 7 def y 11 `${x addq y}`	'18'	two defs, used together in one expression
+def name 'Ada' `hello ${name}`	'hello Ada'	string-valued def, no quotes appear in output
+
+
+# --- Composition with other words ---
+# The final TString flows through stepLiteral, so an interp is a
+# first-class value on the tape — composable with everything else.
+
+`hello ${42}` concatq ' world'	'hello 42 world'	interp result becomes the stack arg for concatq
+`a${1}` `b${2}` concatq	'a1b2'	postfix concatq over two pre-evaluated interps (sig=[top, bottom] → 'a1'+'b2')
+
+
+# --- Empty / whitespace-only literal segments ---
+
+`${1}   ${2}`	'1   2'	multi-space literal preserved verbatim
+` ${42}`	' 42'	leading literal space preserved
+`${42} `	'42 '	trailing literal space preserved
+
+
+# --- Error: control-flow signal raised inside an interp ---
+# `break`/`continue` set Registry.FlowCtrl. The sub-engine handling
+# the `${...}` body can't find an enclosing loop on its own tape, so
+# it returns cleanly with the flag still set. The outer Run picks
+# the flag up, also finds no loop, and converts the unhandled signal
+# to a runtime error at the top-level engine boundary.
+
+`${break}`	ERROR:break outside loop	flow-control signal bubbles out of the interp, top-level Run errors
+`${continue}`	ERROR:continue outside loop	same path for continue
+
+
+# --- Error: invalid arguments inside an interp expression ---
+
+`${addq 1 'foo'}`	ERROR:	addq sig is [Number, Number]; 'foo' triggers a signature mismatch
+`${concatq 1 2}`	ERROR:	concatq sig is [String, String]; integers don't match
+
+
+# --- Node values (List / Map) inside ${...} ---
+# A list or map appearing inside `${...}` is a normal sub-engine value.
+# At the sub-engine's end-of-Run, autoEvalStack collapses eval-flagged
+# lists by running their contents as a sub-program, so an expression
+# list with words inside (`[1 addq 2]`) becomes its result before
+# stringification. Map values auto-evaluate too (paren-valued entries,
+# embedded eval-lists, def references in value position).
+#
+# Stringification falls through ValToString's default branch to
+# Value.String(), which formats lists as `[a,b,c]` and maps as
+# `{k:v,k:v}` — comma-separated, no spaces, map keys in sorted order.
+
+`${[1 2 3]}`	'[1,2,3]'	literal list (auto-eval is a no-op on pure literals)
+`${[]}`	'[]'	empty list
+`${[1 addq 2]}`	'[3]'	list auto-evaluates inside the sub-engine before stringification
+`${[1 addq 2 mulq 5]}`	'[15]'	chained ops collapse to a single residual element
+`${[1 [2 3]]}`	'[1,[2,3]]'	nested list — inner list stringified by Value.String() recursion
+`${[[1 2] [3 4]]}`	'[[1,2],[3,4]]'	list of lists
+`${{a:1}}`	'{a:1}'	single-entry map
+`${{a:1 b:2}}`	'{a:1,b:2}'	multi-entry map; runtime emits keys in sorted order
+`${{a:(1 addq 2)}}`	'{a:3}'	paren value auto-evaluates during the sub-engine's autoEvalMap
+`${{outer:{inner:5}}}`	'{outer:{inner:5}}'	nested map
+
+# Node-consuming words inside an interp expression — the returned
+# scalar flows through ValToString just like a top-level literal.
+`${lengthq [1 2 3]}`	'3'	lengthq returns the integer 3
+`${firstq [10 20 30]}`	'10'	firstq returns the first element
+
+# Nodes mixed with surrounding literal text.
+`xs=${[1 2 3]}`	'xs=[1,2,3]'	literal prefix + list interpolation
+`size=${lengthq [1 2 3]} items=${[1 2 3]}`	'size=3 items=[1,2,3]'	two interps; one returns a scalar, the other a node
+
+# Def-bound nodes resolve through the shared registry. Use `quote` on
+# the def body so the binding stores the list/map as data (no splice).
+def lst quote [ 10 20 30 ] `items=${lst}`	'items=[10,20,30]'	quoted list def, interpolated by name
+def m quote { a:1 b:2 } `map=${m}`	'map={a:1,b:2}'	quoted map def, interpolated by name
+
+# Multi-value residual with nodes — each list stringifies separately
+# and the buffer concatenates them with no separator.
+`${[1 2] [3 4]}`	'[1,2][3,4]'	two literal lists end up on the sub-engine's residual stack
+
+# Error: a non-node passed to a node-consuming word inside the interp
+# surfaces as a signature error from the sub-engine.
+`${lengthq 5}`	ERROR:signature_error	lengthq sig is [List]; an Integer at the slot is a sig mismatch
+
+
+# --- Nested interps and siblings ---
+# Backticks parse recursively inside ${...}: the parser hands the
+# inner backtick text back through convertInterpGroup, producing a
+# nested InterpString that the sub-engine evaluates via its own
+# evalInterpString call. Depth is unbounded; siblings at any level
+# stringify left-to-right with no separator beyond the literals
+# the user wrote between them.
+
+# Single level of nesting.
+`outer ${`inner`}`	'outer inner'	inner is a plain backtick string (no ${} inside) — still parses as a String value
+`${`inner`}`	'inner'	bare nested-only, no surrounding literals on the outer
+`pre ${`mid`} post`	'pre mid post'	outer literals around an inner that has none of its own
+`outer ${`inner ${42}`}`	'outer inner 42'	inner has its own ${} segment — evaluated by the inner sub-engine
+
+# Two and three levels of nesting.
+`${`${42}`}`	'42'	depth-2: ${ ${42} } wrapped once more
+`${`${`${42}`}`}`	'42'	depth-3: same value, more wrappers
+`L1 ${`L2 ${`L3 ${'core'}`}`}`	'L1 L2 L3 core'	three levels, each with its own literal prefix
+`${`a${`b${`c`}`}`}`	'abc'	concatenated nested literals — abc reconstructed from three layers
+
+# Sibling ${...} segments at the same level.
+`${`a`} ${`b`}`	'a b'	two siblings, plain inner strings, separated by a literal space
+`${`a${1}`}${`b${2}`}`	'a1b2'	siblings each with their own inner ${} — no separator between them
+`${`x`}-${`y`}-${`z`}`	'x-y-z'	three siblings separated by literal hyphens
+`(${`${1}`}, ${`${2}`}, ${`${3}`})`	'(1, 2, 3)'	three siblings, each containing a one-level nested interp
+
+# Multiple inner interps inside ONE outer ${...}. Each backtick is
+# a separate sub-engine value; all of them land on the sub-engine's
+# residual and are stringified together (multi-value residual rule).
+`${`${1}` `${2}`}`	'12'	two backtick interps inside one ${}
+`${`a` `b` `c`}`	'abc'	three plain backticks inside one ${}
+
+# Defs and arithmetic crossing nesting levels — the shared registry
+# means a def installed at top level is visible at every depth.
+def x 5 `outer ${`inner=${x}`}`	'outer inner=5'	x resolved inside a depth-2 interp
+def x 3 def y 4 `${`${x addq y}`}`	'7'	two-level wrap with arithmetic at the bottom
+def x 7 `${`x is ${x}`} (squared: ${x mulq x})`	'x is 7 (squared: 49)'	siblings at the outer level — one a nested interp, the other an arithmetic expression
+
+# Errors raised in an inner interp bubble through every layer.
+`${`${break}`}`	ERROR:break outside loop	signal raised at depth 2 reaches the top-level engine
+`pre ${`${addq 1 'no'}`} post`	ERROR:signature_error	sig error inside the inner interp propagates as a normal error

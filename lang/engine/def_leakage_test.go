@@ -23,13 +23,13 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewImplicitMap(pairX)}),
 		engine.NewList([]engine.Value{engine.NewTypeLiteral(engine.TInteger)}),
 		engine.NewList([]engine.Value{
-			engine.NewWord("def"), engine.NewWord("localvar"), engine.NewInteger(99), engine.NewWord("end"),
+			engine.NewWord("def"), engine.NewWord("localvar"), engine.NewInteger(99), engine.NewEnd(),
 			engine.NewWord("x"), engine.NewWord("add"), engine.NewWord("localvar"),
 		}),
 	})
 	runAQL(t, r, []engine.Value{
 		engine.NewWord("def"), engine.NewWord("myfn"),
-		engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewWord("fn"), fnBody, engine.NewEnd(),
 	})
 
 	// Call the fn: 1 myfn → 100
@@ -65,14 +65,14 @@ func TestDefLeakageDotNotation(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewTypeLiteral(engine.TString)}),
 		engine.NewList([]engine.Value{
 			engine.NewWord("def"), engine.NewWord("op"),
-			engine.NewWord("("), engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("op"), engine.NewWord(")"),
-			engine.NewWord("end"),
+			engine.NewOpenParen(), engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("op"), engine.NewCloseParen(),
+			engine.NewEnd(),
 			engine.NewWord("op"),
 		}),
 	})
 	runAQL(t, r, []engine.Value{
 		engine.NewWord("def"), engine.NewWord("process"),
-		engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewWord("fn"), fnBody, engine.NewEnd(),
 	})
 
 	// Build a map {op:"add"} and call process.
@@ -118,14 +118,14 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewTypeLiteral(engine.TInteger)}),
 		engine.NewList([]engine.Value{
 			engine.NewWord("def"), engine.NewWord("tmp"),
-			engine.NewWord("("), engine.NewWord("n"), engine.NewWord("add"), engine.NewInteger(1), engine.NewWord(")"),
-			engine.NewWord("end"),
+			engine.NewOpenParen(), engine.NewWord("n"), engine.NewWord("add"), engine.NewInteger(1), engine.NewCloseParen(),
+			engine.NewEnd(),
 			engine.NewWord("tmp"),
 		}),
 	})
 	runAQL(t, r, []engine.Value{
 		engine.NewWord("def"), engine.NewWord("counter"),
-		engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewWord("fn"), fnBody, engine.NewEnd(),
 	})
 
 	// Call multiple times — tmp should never accumulate.

@@ -21,6 +21,7 @@ func Register(r *Registry) {
 	eng.RegisterCoreObjectRecord(r)
 	eng.RegisterCoreInspect(r)
 	eng.RegisterCoreStorage(r)
+	eng.RegisterCoreFlowCtrl(r)
 
 	// String
 	for _, n := range stringNatives {

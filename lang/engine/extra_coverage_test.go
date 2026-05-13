@@ -726,7 +726,7 @@ func TestExtraStepEndNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("end")})
+	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
 	_as1, _ := result[0].AsNumber()
 	if len(result) != 1 || _as1 != 1.0 {
 		t.Errorf("end with no forward: got %v, want [1]", result)
@@ -740,7 +740,7 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("end"),
+		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 	})
 	_as2, _ := result[0].AsNumber()
 	if len(result) != 1 || _as2 != 3.0 {

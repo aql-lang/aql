@@ -1464,7 +1464,7 @@ func TestTraceColorizeForward(t *testing.T) {
 }
 
 func TestTraceColorizeOpenParen(t *testing.T) {
-	got := TraceColorize(NewWord("("))
+	got := TraceColorize(NewOpenParen())
 	visible := stripANSI(got)
 	if !strings.Contains(visible, "(") {
 		t.Errorf("expected '(', got %q", visible)
@@ -1540,7 +1540,7 @@ func TestStepEndNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("end")})
+	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
 	_as32, _ := result[0].AsInteger()
 	if len(result) != 1 || _as32 != 1 {
 		t.Errorf("expected [1], got %v", result)
@@ -1554,7 +1554,7 @@ func TestDefEndExplicit(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewInteger(42), NewEnd(),
 		NewWord("foo"),
 	})
 	_as33, _ := result[0].AsInteger()
@@ -1570,7 +1570,7 @@ func TestParenResolvesForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 	})
 	_as34, _ := result[0].AsInteger()
 	if len(result) != 1 || _as34 != 3 {
@@ -1583,7 +1583,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewInteger(1), NewWord(")")})
+	err = runAQLError(t, r, []Value{NewInteger(1), NewCloseParen()})
 	if err == nil {
 		t.Fatal("expected error for unmatched close paren")
 	}
@@ -2559,7 +2559,7 @@ func TestStepEndWithForwardBeforeEnd(t *testing.T) {
 	}
 	// def myval 42 end 1 add myval
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("myval"), NewInteger(42), NewWord("end"),
+		NewWord("def"), NewWord("myval"), NewInteger(42), NewEnd(),
 		NewInteger(1), NewWord("add"), NewWord("myval"),
 	})
 	_as49, _ := result[0].AsInteger()
@@ -2577,7 +2577,7 @@ func TestStepEndTerminatesDef(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("a"),
 		NewList([]Value{NewInteger(1), NewWord("add")}),
-		NewWord("end"),
+		NewEnd(),
 		NewInteger(10), NewWord("a"),
 	})
 	_as50, _ := result[0].AsInteger()
@@ -3964,7 +3964,7 @@ func TestCallAQLBasic(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// Look up the function
@@ -4010,7 +4010,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	fnVal, _ := r.TopOfDefStack("inc")
@@ -4133,7 +4133,7 @@ func TestArgsInsideFn(t *testing.T) {
 		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewEnd(),
 	})
 	result := runAQL(t, r, []Value{
 		NewWord("sum2"), NewInteger(3), NewInteger(7),

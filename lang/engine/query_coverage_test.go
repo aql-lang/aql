@@ -1073,10 +1073,10 @@ func TestQueryCovWhereInSubquery(t *testing.T) {
 		engine.NewWord("from"), engine.NewWord("products"),
 		engine.NewWord("where"), engine.NewList([]engine.Value{
 			engine.NewAtom("id"), engine.NewAtom("in"),
-			engine.NewWord("("),
+			engine.NewOpenParen(),
 			engine.NewWord("select"), engine.NewList([]engine.Value{engine.NewAtom("product_id")}),
 			engine.NewWord("from"), engine.NewWord("orders"),
-			engine.NewWord(")"),
+			engine.NewCloseParen(),
 		}),
 	})
 	td := extractTD(t, result[0])
@@ -1102,12 +1102,12 @@ func TestQueryCovSelectScalarSubquery(t *testing.T) {
 		engine.NewWord("select"), engine.NewList([]engine.Value{
 			engine.NewAtom("name"),
 			engine.NewList([]engine.Value{
-				engine.NewWord("("),
+				engine.NewOpenParen(),
 				engine.NewWord("select"), engine.NewList([]engine.Value{
 					engine.NewList([]engine.Value{engine.NewAtom("max"), engine.NewAtom("price")}),
 				}),
 				engine.NewWord("from"), engine.NewWord("products"),
-				engine.NewWord(")"),
+				engine.NewCloseParen(),
 				engine.NewAtom("max_price"),
 			}),
 		}),

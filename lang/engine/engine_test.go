@@ -1017,7 +1017,7 @@ func TestSetGetForward(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
@@ -1090,7 +1090,7 @@ func TestSetGetString(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("name"), NewString("hello"),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewString("name"),
 	})
 	if err != nil {
@@ -1115,9 +1115,9 @@ func TestSetOverwrite(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(1),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(2),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("x"),
 	})
 	if err != nil {
@@ -1152,7 +1152,7 @@ func TestEndNoOp(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewInteger(42), NewWord("end")})
+	result, err := e.Run([]Value{NewInteger(42), NewEnd()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1174,8 +1174,8 @@ func TestEndMultiple(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(1), NewWord("end"),
-		NewInteger(2), NewWord("end"),
+		NewInteger(1), NewEnd(),
+		NewInteger(2), NewEnd(),
 		NewInteger(3),
 	})
 	if err != nil {
@@ -1201,7 +1201,7 @@ func TestEndTerminatesForward(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99), NewWord("end"), NewInteger(88),
+		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99), NewEnd(), NewInteger(88),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1225,7 +1225,7 @@ func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
@@ -1249,7 +1249,7 @@ func TestEndInsufficientArgs(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewWord("set"), NewWord("foo"), NewWord("end"),
+		NewWord("set"), NewWord("foo"), NewEnd(),
 	})
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -1265,7 +1265,7 @@ func TestSetGetStorePersistsWithinRun(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(100),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
@@ -1320,21 +1320,21 @@ func TestParenSimpleArithmetic(t *testing.T) {
 		// 1 mul (2 add 3) → 1*(2+3) = 5
 		{"mul paren add", []Value{
 			NewInteger(1), NewWord("mul"),
-			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+			NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 		}, 5},
 		// (2 add 3) → 5
 		{"just paren", []Value{
-			NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+			NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 		}, 5},
 		// (2 mul 3) add 4 → 6+4 = 10
 		{"paren mul then add", []Value{
-			NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
+			NewOpenParen(), NewInteger(2), NewWord("mul"), NewInteger(3), NewCloseParen(),
 			NewWord("add"), NewInteger(4),
 		}, 10},
 		// 2 mul (3 add 4) → 2*7 = 14
 		{"mul paren add 2", []Value{
 			NewInteger(2), NewWord("mul"),
-			NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord(")"),
+			NewOpenParen(), NewInteger(3), NewWord("add"), NewInteger(4), NewCloseParen(),
 		}, 14},
 	}
 	for _, tt := range tests {
@@ -1364,8 +1364,8 @@ func TestParenWithSet(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"),
-		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
-		NewWord("end"),
+		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("foo"),
 	})
 	if err != nil {
@@ -1389,10 +1389,10 @@ func TestParenNested(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("),
+		NewOpenParen(),
 		NewInteger(1), NewWord("add"),
-		NewWord("("), NewInteger(2), NewWord("mul"), NewInteger(3), NewWord(")"),
-		NewWord(")"),
+		NewOpenParen(), NewInteger(2), NewWord("mul"), NewInteger(3), NewCloseParen(),
+		NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1415,7 +1415,7 @@ func TestParenLiteral(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(42), NewWord(")"),
+		NewOpenParen(), NewInteger(42), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1437,7 +1437,7 @@ func TestParenUnmatchedOpen(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewWord("("), NewInteger(1),
+		NewOpenParen(), NewInteger(1),
 	})
 	if err == nil {
 		t.Fatal("expected error for unmatched open paren, got nil")
@@ -1451,7 +1451,7 @@ func TestParenUnmatchedClose(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewInteger(1), NewWord(")"),
+		NewInteger(1), NewCloseParen(),
 	})
 	if err == nil {
 		t.Fatal("expected error for unmatched close paren, got nil")
@@ -1471,13 +1471,13 @@ func TestParenWithLeftToRight(t *testing.T) {
 	}{
 		// (1 add 2) mul 3 → left-to-right with parens: 3*3 = 9
 		{"paren groups evaluate first", []Value{
-			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+			NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 			NewWord("mul"), NewInteger(3),
 		}, 9},
 		// 3 mul (1 add 2) → left-to-right: 3*3 = 9
 		{"mul paren group", []Value{
 			NewInteger(3), NewWord("mul"),
-			NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+			NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 		}, 9},
 	}
 	for _, tt := range tests {
@@ -1745,7 +1745,7 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("mykey"), NewInteger(42),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("mykey"),
 	})
 	if err != nil {
@@ -2311,7 +2311,7 @@ func TestEdgeEndAtStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	result, err := e.Run([]Value{NewWord("end")})
+	result, err := e.Run([]Value{NewEnd()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2328,7 +2328,7 @@ func TestEdgeEndConsecutive(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("end"), NewWord("end"), NewWord("end"),
+		NewEnd(), NewEnd(), NewEnd(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2347,8 +2347,8 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(42), NewString("mykey"), NewWord("set"),
-		NewWord("end"),
-		NewWord("context"), NewWord("get"), NewWord("mykey"), NewWord("end"),
+		NewEnd(),
+		NewWord("context"), NewWord("get"), NewWord("mykey"), NewEnd(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2370,10 +2370,10 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("set"), NewWord("a"), NewInteger(99), NewWord("end"),
-		NewWord("context"), NewWord("set"), NewWord("b"), NewInteger(88), NewWord("end"),
-		NewWord("("), NewWord("context"), NewWord("get"), NewWord("a"), NewWord(")"),
-		NewWord("("), NewWord("context"), NewWord("get"), NewWord("b"), NewWord(")"),
+		NewWord("context"), NewWord("set"), NewWord("a"), NewInteger(99), NewEnd(),
+		NewWord("context"), NewWord("set"), NewWord("b"), NewInteger(88), NewEnd(),
+		NewOpenParen(), NewWord("context"), NewWord("get"), NewWord("a"), NewCloseParen(),
+		NewOpenParen(), NewWord("context"), NewWord("get"), NewWord("b"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2401,7 +2401,7 @@ func TestEdgeEndBetweenLiterals(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(1), NewInteger(2), NewWord("end"), NewInteger(3),
+		NewInteger(1), NewInteger(2), NewEnd(), NewInteger(3),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2423,7 +2423,7 @@ func TestEdgeSetWithIntegerKey(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("42"), NewInteger(100),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewString("42"),
 	})
 	if err != nil {
@@ -2443,7 +2443,7 @@ func TestEdgeSetEmptyString(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(1), NewString(""), NewWord("set"),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewString(""), NewWord("get"),
 	})
 	if err != nil {
@@ -2465,7 +2465,7 @@ func TestEdgeSetValueIsString(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("greeting"), NewString("hello"),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewString("greeting"),
 	})
 	if err != nil {
@@ -2487,7 +2487,7 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(10),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("x"),
 		NewWord("add"), NewInteger(5),
 	})
@@ -2509,8 +2509,8 @@ func TestEdgeSetComputedValue(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("total"),
-		NewWord("("), NewInteger(3), NewWord("mul"), NewInteger(7), NewWord(")"),
-		NewWord("end"),
+		NewOpenParen(), NewInteger(3), NewWord("mul"), NewInteger(7), NewCloseParen(),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("total"),
 	})
 	if err != nil {
@@ -2635,7 +2635,7 @@ func TestEdgeEmptyParens(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewWord(")"),
+		NewOpenParen(), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2653,7 +2653,7 @@ func TestEdgeParenMultipleValues(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(1), NewInteger(2), NewInteger(3), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewInteger(2), NewInteger(3), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2678,9 +2678,9 @@ func TestEdgeParenDeeplyNested(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewWord("("), NewWord("("),
+		NewOpenParen(), NewOpenParen(), NewOpenParen(),
 		NewInteger(5),
-		NewWord(")"), NewWord(")"), NewWord(")"),
+		NewCloseParen(), NewCloseParen(), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2699,11 +2699,11 @@ func TestEdgeParenNestedArithmetic(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("),
-		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		NewOpenParen(),
+		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 		NewWord("mul"),
-		NewWord("("), NewInteger(4), NewWord("sub"), NewInteger(1), NewWord(")"),
-		NewWord(")"),
+		NewOpenParen(), NewInteger(4), NewWord("sub"), NewInteger(1), NewCloseParen(),
+		NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2722,7 +2722,7 @@ func TestEdgeParenWithFunction(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewString("hello"), NewWord("upper"), NewWord(")"),
+		NewOpenParen(), NewString("hello"), NewWord("upper"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2741,7 +2741,7 @@ func TestEdgeParenWithDup(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(1), NewWord("dup"), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewWord("dup"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2759,7 +2759,7 @@ func TestEdgeParenAfterLiteral(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewInteger(10), NewWord("("), NewInteger(5), NewWord(")"),
+		NewInteger(10), NewOpenParen(), NewInteger(5), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2781,7 +2781,7 @@ func TestEdgeParenCloseWithNoOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(reg)
-	_, err = e.Run([]Value{NewWord(")")})
+	_, err = e.Run([]Value{NewCloseParen()})
 	if err == nil {
 		t.Fatal("expected error for ) with no (, got nil")
 	}
@@ -2795,7 +2795,7 @@ func TestEdgeParenMultipleOpenUnmatched(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewWord("("), NewWord("("), NewInteger(1), NewWord(")"),
+		NewOpenParen(), NewOpenParen(), NewInteger(1), NewCloseParen(),
 	})
 	if err == nil {
 		t.Fatal("expected error for unmatched (, got nil")
@@ -2810,8 +2810,8 @@ func TestEdgeParenConsecutive(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(1), NewWord(")"),
-		NewWord("("), NewInteger(2), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewCloseParen(),
+		NewOpenParen(), NewInteger(2), NewCloseParen(),
 		NewWord("add"),
 	})
 	if err != nil {
@@ -2831,7 +2831,7 @@ func TestEdgeParenWithUnknownWordErrors(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewWord("("), NewWord("foo"), NewWord(")"),
+		NewOpenParen(), NewWord("foo"), NewCloseParen(),
 	})
 	if err == nil {
 		t.Fatal("expected error for undefined word in paren, got nil")
@@ -2847,7 +2847,7 @@ func TestEdgeParenOrphanedForwardInside(t *testing.T) {
 	}
 	e := New(reg)
 	_, err = e.Run([]Value{
-		NewWord("("), NewWord("add"), NewInteger(1), NewWord(")"),
+		NewOpenParen(), NewWord("add"), NewInteger(1), NewCloseParen(),
 	})
 	if err == nil {
 		t.Fatal("expected error for orphaned forward inside parens, got nil")
@@ -2864,7 +2864,7 @@ func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"),
-		NewWord("("), NewInteger(2), NewWord(")"),
+		NewOpenParen(), NewInteger(2), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2883,7 +2883,7 @@ func TestEdgeParenWithEndNoOp(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(1), NewWord("end"), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewEnd(), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2903,7 +2903,7 @@ func TestEdgeParenComplexExpression(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewWord("mul"),
-		NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5), NewWord(")"),
+		NewOpenParen(), NewInteger(3), NewWord("add"), NewInteger(4), NewWord("mul"), NewInteger(5), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2922,9 +2922,9 @@ func TestEdgeParenSiblingExpressions(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
+		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 		NewWord("mul"),
-		NewWord("("), NewInteger(3), NewWord("add"), NewInteger(4), NewWord(")"),
+		NewOpenParen(), NewInteger(3), NewWord("add"), NewInteger(4), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2947,9 +2947,9 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"),
-		NewWord("("), NewWord("lower"), NewString("KEY"), NewWord(")"),
-		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
-		NewWord("end"),
+		NewOpenParen(), NewWord("lower"), NewString("KEY"), NewCloseParen(),
+		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
@@ -3026,7 +3026,7 @@ func TestEdgeUpperInParens(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+		NewOpenParen(), NewString("abc"), NewWord("upper"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3083,7 +3083,7 @@ func TestEdgeForwardUpperThenLower(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
-		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+		NewOpenParen(), NewString("abc"), NewWord("upper"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3148,7 +3148,7 @@ func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewInteger(1),
-		NewWord("("), NewInteger(2), NewWord("add"), NewWord(")"),
+		NewOpenParen(), NewInteger(2), NewWord("add"), NewCloseParen(),
 	})
 	if err == nil {
 		t.Fatal("expected error for add with insufficient args in paren scope, got nil")
@@ -3187,7 +3187,7 @@ func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := NewTop(r)
-	result, err := e.Run([]Value{NewInteger(1), NewWord("end")})
+	result, err := e.Run([]Value{NewInteger(1), NewEnd()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3204,7 +3204,7 @@ func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
 	}
 	e := NewTop(r)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(42), NewWord(")"),
+		NewOpenParen(), NewInteger(42), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3227,7 +3227,7 @@ func TestEdgeResultCollectedByPendingForward(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
-		NewWord("("), NewString("abc"), NewWord("upper"), NewWord(")"),
+		NewOpenParen(), NewString("abc"), NewWord("upper"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3278,7 +3278,7 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	// Set in reg1, verify it works within same execution
 	result, err := e1.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(111),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("key"),
 	})
 	if err != nil {
@@ -3477,7 +3477,7 @@ func TestEdgeEndInsideParenNoForward(t *testing.T) {
 	}
 	e := New(reg)
 	result, err := e.Run([]Value{
-		NewWord("("), NewInteger(42), NewWord("end"), NewWord(")"),
+		NewOpenParen(), NewInteger(42), NewEnd(), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3498,8 +3498,8 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("a"),
-		NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
-		NewWord("end"),
+		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("a"),
 	})
 	if err != nil {
@@ -4252,7 +4252,7 @@ func TestDefForthDefWithEnd(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
-		NewWord("def"), NewWord("double"), NewWord("end"),
+		NewWord("def"), NewWord("double"), NewEnd(),
 		NewInteger(5), NewWord("double"),
 	})
 	if err != nil {
@@ -4304,7 +4304,7 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(42),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("x"),
 	})
 	if err != nil {
@@ -4363,7 +4363,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	input := []Value{
 		NewWord("type"), NewWord("Point"),
 		NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("Point"),
 	}
 	result, err := e.Run(input)

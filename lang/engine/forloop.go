@@ -85,6 +85,7 @@ func parseRange(elems []Value) (start, end, step int64, err error) {
 	}
 }
 
-// ErrBreak, ErrContinue: re-exported from aqleng via aliases.go
-// IsBreak: re-exported from aqleng via aliases.go
-// IsContinue: re-exported from aqleng via aliases.go
+// break and continue words now live in eng/go/flowctrl.go; they raise
+// a FlowCtrl signal on the Registry rather than returning a sentinel
+// error. FlowCtrl / FlowBreak / FlowContinue are re-exported via
+// aliases.go.

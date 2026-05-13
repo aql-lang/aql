@@ -23,7 +23,7 @@ func matrixRegistry(t *testing.T) *engine.Registry {
 // matGet is a shorthand: ( matrix get <word> )
 func matGet(word string) []engine.Value {
 	return []engine.Value{
-		engine.NewWord("("), engine.NewWord("matrix"), engine.NewWord("get"), engine.NewWord(word), engine.NewWord(")"),
+		engine.NewOpenParen(), engine.NewWord("matrix"), engine.NewWord("get"), engine.NewWord(word), engine.NewCloseParen(),
 	}
 }
 

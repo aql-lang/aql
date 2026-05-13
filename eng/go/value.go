@@ -804,6 +804,20 @@ func NewOpenParen() Value {
 	return NewValueRaw(TOpenParen, nil)
 }
 
+// NewCloseParen creates a close-paren marker value. Emitted by the
+// parser for `)` so the engine can recognise it by VType identity
+// instead of by string compare.
+func NewCloseParen() Value {
+	return NewValueRaw(TCloseParen, nil)
+}
+
+// NewEnd creates an end-marker value (the `end` / `;` keyword).
+// Emitted by the parser so the engine can recognise it by VType
+// identity instead of by string compare.
+func NewEnd() Value {
+	return NewValueRaw(TEnd, nil)
+}
+
 // NewParenExpr creates a paren expression value containing items to evaluate.
 // Used by the parser for paren groups in map/list value positions.
 // autoEvalMap evaluates these by running the items in a sub-engine with
@@ -1185,6 +1199,16 @@ func (v Value) IsBoolean() bool {
 // IsOpenParen reports whether this value is an open-paren marker.
 func (v Value) IsOpenParen() bool {
 	return v.VType.Equal(TOpenParen)
+}
+
+// IsCloseParen reports whether this value is a close-paren marker.
+func (v Value) IsCloseParen() bool {
+	return v.VType.Equal(TCloseParen)
+}
+
+// IsEnd reports whether this value is an end-marker.
+func (v Value) IsEnd() bool {
+	return v.VType.Equal(TEnd)
 }
 
 // IsParenExpr reports whether this value is a paren expression.
@@ -1642,6 +1666,10 @@ func (v Value) String() string {
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
+	case v.IsCloseParen():
+		return ")"
+	case v.IsEnd():
+		return "end"
 	case v.IsParenExpr():
 		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
 	case v.IsMark():

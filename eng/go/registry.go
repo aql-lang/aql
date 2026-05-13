@@ -60,6 +60,15 @@ type Registry struct {
 	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
 	// §3.3) can snapshot/restore one field instead of ten.
 	Check CheckState
+
+	// FlowCtrl carries the active control-flow signal (break, continue,
+	// ...). Set by the corresponding handlers; consumed by the engine's
+	// Run loop. Lives on the registry rather than the engine so that
+	// sub-engines (which share a registry) naturally propagate the
+	// signal upward — the outer Run sees the flag after its handler
+	// returns, without the signal having to ride the error channel.
+	// See flowctrl.go.
+	FlowCtrl FlowCtrl
 }
 
 // CheckState aggregates the static type-checking state that used to

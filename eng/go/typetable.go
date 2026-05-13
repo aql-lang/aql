@@ -382,6 +382,8 @@ var builtinDecls = []builtinDecl{
 	// label rather than the underscore-marker leaf.
 	{Path: "Word/__FW", FixedID: 21, IsInternal: true, Alias: "Forward"},
 	{Path: "Word/__OP", FixedID: 22, IsInternal: true, Alias: "Paren"},
+	{Path: "Word/__CP", FixedID: 72, IsInternal: true, Alias: "CloseParen"},
+	{Path: "Word/__ED", FixedID: 73, IsInternal: true, Alias: "End"},
 	{Path: "Word/__PE", FixedID: 63, IsInternal: true},
 	{Path: "Word/__IS", FixedID: 51, IsInternal: true},
 	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef"},

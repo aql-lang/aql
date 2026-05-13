@@ -31,6 +31,7 @@ type (
 	DisjunctInfo       = eng.DisjunctInfo
 	Engine             = eng.Engine
 	ErrorInfo          = eng.ErrorInfo
+	FlowCtrl           = eng.FlowCtrl
 	FnDefInfo          = eng.FnDefInfo
 	FnParam            = eng.FnParam
 	FnSig              = eng.FnSig
@@ -160,10 +161,12 @@ const (
 	DepLTE = eng.DepLTE
 )
 
-// Sentinel values exposed by the engine.
-var (
-	ErrBreak    = eng.ErrBreak
-	ErrContinue = eng.ErrContinue
+// Flow-control signal values exposed by the engine. These travel
+// through Registry.FlowCtrl, not the error channel.
+const (
+	FlowNone     = eng.FlowNone
+	FlowBreak    = eng.FlowBreak
+	FlowContinue = eng.FlowContinue
 )
 
 // Function re-exports — every exported aqleng function.
@@ -212,10 +215,8 @@ var (
 	IDPrefixForType            = eng.IDPrefixForType
 	InstallDef                 = eng.InstallDef
 	InstallFnDef               = eng.InstallFnDef
-	IsBreak                    = eng.IsBreak
 	IsCapitalisedName          = eng.IsCapitalisedName
 	IsConcrete                 = eng.IsConcrete
-	IsContinue                 = eng.IsContinue
 	IsMetaType                 = eng.IsMetaType
 	IsRecordShape              = eng.IsRecordShape
 	IsTypeBody                 = eng.IsTypeBody
@@ -289,6 +290,8 @@ var (
 	NewObjectInstance          = eng.NewObjectInstance
 	NewObjectType              = eng.NewObjectType
 	NewOpenParen               = eng.NewOpenParen
+	NewCloseParen              = eng.NewCloseParen
+	NewEnd                     = eng.NewEnd
 	NewOptionsType             = eng.NewOptionsType
 	NewOrderedMap              = eng.NewOrderedMap
 	NewParenExpr               = eng.NewParenExpr

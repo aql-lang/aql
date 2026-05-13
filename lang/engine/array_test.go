@@ -571,11 +571,11 @@ func TestCompositionSumOfSquares(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("fold"),
 		engine.NewList([]engine.Value{engine.NewWord("add")}),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("each"),
 		engine.NewList([]engine.Value{engine.NewWord("dup"), engine.NewWord("mul")}),
-		engine.NewWord("("), engine.NewWord("iota"), engine.NewInteger(5), engine.NewWord(")"),
-		engine.NewWord(")"),
+		engine.NewOpenParen(), engine.NewWord("iota"), engine.NewInteger(5), engine.NewCloseParen(),
+		engine.NewCloseParen(),
 	})
 	_as64, _ := result[0].AsInteger()
 	if _as64 != 30 {

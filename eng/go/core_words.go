@@ -77,6 +77,7 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
+	RegisterCoreFlowCtrl(r)
 }
 
 // RegisterCoreBoolean installs the boolean / logical-connective core
@@ -136,16 +137,16 @@ func RegisterCoreStorage(r *Registry) {
 // stack under NAME.
 func registerCoreDef(r *Registry) {
 	plainHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-		w, _ := args[0].AsWord()
-		if err := ValidateWordName(w.Name); err != nil {
+		name, _ := args[0].AsConcreteAtom()
+		if err := ValidateWordName(name); err != nil {
 			return nil, err
 		}
 		if info, ok := args[1].Data.(FnDefInfo); ok {
-			sigs := ExpandOptionalSigs(w.Name, info.Sigs)
-			installCoreFnDef(reg, w.Name, sigs...)
+			sigs := ExpandOptionalSigs(name, info.Sigs)
+			installCoreFnDef(reg, name, sigs...)
 			return []Value{}, nil
 		}
-		reg.PushDef(w.Name, args[1])
+		reg.PushDef(name, args[1])
 		return []Value{}, nil
 	}
 	typedHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -205,7 +206,8 @@ func registerCoreDef(r *Registry) {
 				Returns:       []*Type{},
 			},
 			{
-				Args:       []*Type{TWord, TAny},
+				Args:       []*Type{TAtom, TAny},
+				QuoteArgs:  map[int]bool{0: true},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    plainHandler,
 				Returns:    []*Type{},
@@ -342,10 +344,12 @@ func registerCoreQuote(r *Registry) {
 		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args: []*Type{TWord},
+				// /q captures the upcoming Word as an Atom for us, so
+				// the handler just returns the atom unchanged.
+				Args:      []*Type{TAtom},
+				QuoteArgs: map[int]bool{0: true},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					w, _ := args[0].AsWord()
-					return []Value{NewAtom(w.Name)}, nil
+					return []Value{args[0]}, nil
 				},
 				Returns: []*Type{TAtom},
 			},

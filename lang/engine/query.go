@@ -681,8 +681,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	// Check for paren tokens at this level.
 	hasParen := false
 	for _, e := range result {
-		_as15, _ := e.AsWord()
-		if e.IsWord() && _as15.Name == "(" {
+		if e.IsOpenParen() {
 			hasParen = true
 			break
 		}
@@ -695,18 +694,14 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	var out []Value
 	idx := 0
 	for idx < len(result) {
-		_as16, _ := result[idx].AsWord()
-		if result[idx].IsWord() && _as16.Name == "(" {
+		if result[idx].IsOpenParen() {
 			depth := 1
 			j := idx + 1
 			for j < len(result) && depth > 0 {
-				if result[j].IsWord() {
-					wj, _ := result[j].AsWord()
-					if wj.Name == "(" {
-						depth++
-					} else if wj.Name == ")" {
-						depth--
-					}
+				if result[j].IsOpenParen() {
+					depth++
+				} else if result[j].IsCloseParen() {
+					depth--
 				}
 				j++
 			}
@@ -745,11 +740,10 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 		return condList, nil
 	}
 
-	// Quick scan: any open-paren words?
+	// Quick scan: any open-paren markers?
 	hasParen := false
 	for _, e := range elems {
-		_as19, _ := e.AsWord()
-		if e.IsWord() && _as19.Name == "(" {
+		if e.IsOpenParen() {
 			hasParen = true
 			break
 		}
@@ -779,19 +773,15 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	var result []Value
 	i := 0
 	for i < len(elems) {
-		_as20, _ := elems[i].AsWord()
-		if elems[i].IsWord() && _as20.Name == "(" {
+		if elems[i].IsOpenParen() {
 			// Find the matching close paren.
 			depth := 1
 			j := i + 1
 			for j < len(elems) && depth > 0 {
-				if elems[j].IsWord() {
-					wj2, _ := elems[j].AsWord()
-					if wj2.Name == "(" {
-						depth++
-					} else if wj2.Name == ")" {
-						depth--
-					}
+				if elems[j].IsOpenParen() {
+					depth++
+				} else if elems[j].IsCloseParen() {
+					depth--
 				}
 				j++
 			}

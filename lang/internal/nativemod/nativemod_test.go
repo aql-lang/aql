@@ -118,9 +118,9 @@ func TestMathDotAbs(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewInteger(-5),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("abs"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsInteger()
 	if v != 5 {
@@ -132,9 +132,9 @@ func TestMathDotSin(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(0),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sin"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 0.0 {
@@ -146,9 +146,9 @@ func TestMathDotCos(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(0),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("cos"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 1.0 {
@@ -160,9 +160,9 @@ func TestMathDotSqrt(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(4),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sqrt"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 2.0 {
@@ -176,9 +176,9 @@ func TestMathDotMin(t *testing.T) {
 	// We need: 3 7 (math get min)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewInteger(3), engine.NewInteger(7),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("min"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsInteger()
 	if v != 3 {
@@ -190,9 +190,9 @@ func TestMathDotMax(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewInteger(3), engine.NewInteger(7),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("max"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsInteger()
 	if v != 7 {
@@ -203,9 +203,9 @@ func TestMathDotMax(t *testing.T) {
 func TestMathDotPi(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("pi"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if math.Abs(v-math.Pi) > 0.0001 {
@@ -216,9 +216,9 @@ func TestMathDotPi(t *testing.T) {
 func TestMathDotE(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("e"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if math.Abs(v-math.E) > 0.0001 {
@@ -230,9 +230,9 @@ func TestMathDotNegate(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewInteger(5),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("negate"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsInteger()
 	if v != -5 {
@@ -244,9 +244,9 @@ func TestMathDotCeil(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(1.2),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("ceil"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 2.0 {
@@ -258,9 +258,9 @@ func TestMathDotFloor(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(1.8),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("floor"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 1.0 {
@@ -272,9 +272,9 @@ func TestMathDotRound(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewDecimal(1.5),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("round"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsNumber()
 	if v != 2.0 {
@@ -286,9 +286,9 @@ func TestMathDotSign(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []engine.Value{
 		engine.NewInteger(-7),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sign"),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	v, _ := result[0].AsInteger()
 	if v != -1 {

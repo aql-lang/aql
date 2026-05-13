@@ -28,7 +28,7 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("a"), engine.NewWord("b"), engine.NewWord("add"), engine.NewWord("c"), engine.NewWord("add")}),
 	})
 	tokens := []engine.Value{
-		engine.NewWord("def"), engine.NewWord("joiner"), engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewWord("def"), engine.NewWord("joiner"), engine.NewWord("fn"), fnBody, engine.NewEnd(),
 		engine.NewString("A"), engine.NewString("B"), engine.NewString("C"), engine.NewWord("joiner"),
 	}
 	result, err := engine.NewTop(r).Run(tokens)

@@ -205,14 +205,14 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	// its key instead of forward-collecting the intended key).
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("str"), engine.NewString("hello"),
-		engine.NewWord("end"),
+		engine.NewEnd(),
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("num"), engine.NewInteger(42),
-		engine.NewWord("end"),
+		engine.NewEnd(),
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("bool"), engine.NewBoolean(true),
-		engine.NewWord("end"),
-		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("str"), engine.NewWord(")"),
-		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("num"), engine.NewWord(")"),
-		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("bool"), engine.NewWord(")"),
+		engine.NewEnd(),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("str"), engine.NewCloseParen(),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("num"), engine.NewCloseParen(),
+		engine.NewOpenParen(), engine.NewWord("context"), engine.NewWord("get"), engine.NewString("bool"), engine.NewCloseParen(),
 	})
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(result))

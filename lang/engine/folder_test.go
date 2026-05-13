@@ -125,10 +125,10 @@ func TestFolderWithMakePath(t *testing.T) {
 
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"),
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("make"), engine.NewWord("Path"),
 		engine.NewList([]engine.Value{engine.NewString("foo"), engine.NewString("bar")}),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	})
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)

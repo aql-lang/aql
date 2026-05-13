@@ -103,7 +103,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					input := make([]Value, 0, len(items)+2)
 					input = append(input, NewOpenParen())
 					input = append(input, items...)
-					input = append(input, NewWord(")"))
+					input = append(input, NewCloseParen())
 					result, err := sub.Run(input)
 					if err == nil && len(result) == 1 {
 						typeVal = result[0]

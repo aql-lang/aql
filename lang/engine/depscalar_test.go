@@ -269,11 +269,11 @@ func TestIsCheckWithDepDecimal(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewDecimal(2.0),
 		NewWord("is"),
-		NewWord("("),
+		NewOpenParen(),
 		NewTypeLiteral(TDecimal),
 		NewWord("gte"),
 		NewDecimal(1.5),
-		NewWord(")"),
+		NewCloseParen(),
 	})
 	got, _ := result[0].AsBoolean()
 	if !got {
@@ -289,11 +289,11 @@ func TestIsCheckWithDepString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("apple"),
 		NewWord("is"),
-		NewWord("("),
+		NewOpenParen(),
 		NewTypeLiteral(TString),
 		NewWord("lt"),
 		NewString("banana"),
-		NewWord(")"),
+		NewCloseParen(),
 	})
 	got, _ := result[0].AsBoolean()
 	if !got {

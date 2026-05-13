@@ -116,7 +116,7 @@ func TestParseUnknownWord(t *testing.T) {
 }
 
 func TestParseEndKeyword(t *testing.T) {
-	assertParse(t, "end", []eng.Value{eng.NewWord("end")})
+	assertParse(t, "end", []eng.Value{eng.NewEnd()})
 }
 
 func TestParseMultipleWords(t *testing.T) {
@@ -198,7 +198,7 @@ func TestParseSetWithEnd(t *testing.T) {
 		eng.NewWord("set"),
 		eng.NewWord("foo"),
 		eng.NewInteger(99),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 	})
 }
 
@@ -207,47 +207,47 @@ func TestParseSetWithEnd(t *testing.T) {
 func TestParseSimpleParens(t *testing.T) {
 	// (1 add 2)
 	assertParse(t, "(1 add 2)", []eng.Value{
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewInteger(1),
 		eng.NewWord("add"),
 		eng.NewInteger(2),
-		eng.NewWord(")"),
+		eng.NewCloseParen(),
 	})
 }
 
 func TestParseNestedParens(t *testing.T) {
 	// (1 add (2 mul 3))
 	assertParse(t, "(1 add (2 mul 3))", []eng.Value{
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewInteger(1),
 		eng.NewWord("add"),
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewInteger(2),
 		eng.NewWord("mul"),
 		eng.NewInteger(3),
-		eng.NewWord(")"),
-		eng.NewWord(")"),
+		eng.NewCloseParen(),
+		eng.NewCloseParen(),
 	})
 }
 
 func TestParseAdjacentParens(t *testing.T) {
 	// (1)(2) — no space between groups
 	assertParse(t, "(1)(2)", []eng.Value{
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewInteger(1),
-		eng.NewWord(")"),
-		eng.NewWord("("),
+		eng.NewCloseParen(),
+		eng.NewOpenParen(),
 		eng.NewInteger(2),
-		eng.NewWord(")"),
+		eng.NewCloseParen(),
 	})
 }
 
 func TestParseParenAroundWord(t *testing.T) {
 	// (add)
 	assertParse(t, "(add)", []eng.Value{
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewWord("add"),
-		eng.NewWord(")"),
+		eng.NewCloseParen(),
 	})
 }
 
@@ -403,11 +403,11 @@ func TestParseFullInfixWithParens(t *testing.T) {
 	assertParse(t, "2 mul (3 add 4)", []eng.Value{
 		eng.NewInteger(2),
 		eng.NewWord("mul"),
-		eng.NewWord("("),
+		eng.NewOpenParen(),
 		eng.NewInteger(3),
 		eng.NewWord("add"),
 		eng.NewInteger(4),
-		eng.NewWord(")"),
+		eng.NewCloseParen(),
 	})
 }
 
@@ -427,7 +427,7 @@ func TestParseStorageSetGet(t *testing.T) {
 		eng.NewWord("set"),
 		eng.NewWord("x"),
 		eng.NewInteger(10),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 		eng.NewWord("get"),
 		eng.NewWord("x"),
 	})
@@ -508,11 +508,11 @@ func TestParseMultilineScript(t *testing.T) {
 		eng.NewWord("set"),
 		eng.NewWord("x"),
 		eng.NewInteger(10),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 		eng.NewWord("set"),
 		eng.NewWord("y"),
 		eng.NewInteger(20),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 		eng.NewWord("get"),
 		eng.NewWord("x"),
 		eng.NewWord("add"),
@@ -866,14 +866,14 @@ func TestParseSemicolonAsEnd(t *testing.T) {
 		eng.NewInteger(1),
 		eng.NewWord("add"),
 		eng.NewInteger(2),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 		eng.NewInteger(99),
 	})
 }
 
 func TestParseSemicolonStandalone(t *testing.T) {
 	assertParse(t, ";", []eng.Value{
-		eng.NewWord("end"),
+		eng.NewEnd(),
 	})
 }
 
@@ -881,7 +881,7 @@ func TestParseSemicolonAdjacentToWord(t *testing.T) {
 	// "foo;bar" — semicolon is a fixed token, so it splits the text
 	assertParse(t, "foo;bar", []eng.Value{
 		eng.NewWord("foo"),
-		eng.NewWord("end"),
+		eng.NewEnd(),
 		eng.NewWord("bar"),
 	})
 }

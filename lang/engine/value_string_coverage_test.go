@@ -14,7 +14,7 @@ func TestValueStringWord(t *testing.T) {
 }
 
 func TestValueStringOpenParen(t *testing.T) {
-	v := engine.NewWord("(")
+	v := engine.NewOpenParen()
 	if !strings.Contains(v.String(), "(") {
 		t.Errorf("expected word containing (, got %s", v.String())
 	}

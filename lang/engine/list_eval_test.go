@@ -28,8 +28,8 @@ func TestListEvalAsArg(t *testing.T) {
 	// def c2 20
 	// [c1 c2] passlist → [10, 20]
 	result := runAQL(t, r, []engine.Value{
-		engine.NewWord("def"), engine.NewWord("c1"), engine.NewInteger(10), engine.NewWord("end"),
-		engine.NewWord("def"), engine.NewWord("c2"), engine.NewInteger(20), engine.NewWord("end"),
+		engine.NewWord("def"), engine.NewWord("c1"), engine.NewInteger(10), engine.NewEnd(),
+		engine.NewWord("def"), engine.NewWord("c2"), engine.NewInteger(20), engine.NewEnd(),
 		engine.NewEvalList([]engine.Value{engine.NewWord("c1"), engine.NewWord("c2")}),
 		engine.NewWord("passlist"),
 	})
@@ -123,7 +123,7 @@ func TestListEvalNoEvalArgsPreservesCodeBody(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("def"), engine.NewWord("double"),
 		engine.NewEvalList([]engine.Value{engine.NewWord("dup"), engine.NewWord("add")}),
-		engine.NewWord("end"),
+		engine.NewEnd(),
 		engine.NewInteger(5), engine.NewWord("double"),
 	})
 	_as3, _ := result[0].AsNumber()
@@ -155,8 +155,8 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	// def b 20
 	// [a b] listlen → 2 (list was auto-evaluated to [10, 20], length is 2)
 	result := runAQL(t, r, []engine.Value{
-		engine.NewWord("def"), engine.NewWord("a"), engine.NewInteger(10), engine.NewWord("end"),
-		engine.NewWord("def"), engine.NewWord("b"), engine.NewInteger(20), engine.NewWord("end"),
+		engine.NewWord("def"), engine.NewWord("a"), engine.NewInteger(10), engine.NewEnd(),
+		engine.NewWord("def"), engine.NewWord("b"), engine.NewInteger(20), engine.NewEnd(),
 		engine.NewEvalList([]engine.Value{engine.NewWord("a"), engine.NewWord("b")}),
 		engine.NewWord("listlen"),
 	})

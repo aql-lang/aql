@@ -31,7 +31,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	})
 	runAQL(t, r, []engine.Value{
 		engine.NewWord("def"), engine.NewWord("f"),
-		engine.NewWord("fn"), fnBody, engine.NewWord("end"),
+		engine.NewWord("fn"), fnBody, engine.NewEnd(),
 	})
 
 	// "hello" f 42 → "hello" is on stack, f forward-collects 42.

@@ -426,7 +426,7 @@ func TestStoreCOWBasic(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("k"), NewInteger(7),
-		NewWord("end"),
+		NewEnd(),
 		NewWord("context"), NewWord("get"), NewWord("k"),
 	})
 	_as15, _ := result[0].AsInteger()
@@ -493,7 +493,7 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 		NewWord("context"), NewWord("get"), NewWord("parent"),
 		NewWord("get"), NewWord("child"),
 		NewWord("set"), NewWord("val"), NewInteger(42),
-		NewWord("end"),
+		NewEnd(),
 		// Now read it back through the context
 		NewWord("context"), NewWord("get"), NewWord("parent"),
 		NewWord("get"), NewWord("child"),
@@ -531,17 +531,17 @@ func TestStoreCOWPrototypeResolution(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("get"), NewWord("s"),
 		NewWord("set"), NewWord("a"), NewInteger(99),
-		NewWord("end"),
+		NewEnd(),
 		// Read "a" (from COW layer)
 		NewOpenParen(),
 		NewWord("context"), NewWord("get"), NewWord("s"),
 		NewWord("get"), NewWord("a"),
-		NewWord(")"),
+		NewCloseParen(),
 		// Read "b" (from prototype, unchanged)
 		NewOpenParen(),
 		NewWord("context"), NewWord("get"), NewWord("s"),
 		NewWord("get"), NewWord("b"),
-		NewWord(")"),
+		NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

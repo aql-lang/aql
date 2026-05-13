@@ -557,7 +557,7 @@ func TestEngineDef(t *testing.T) {
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("inc"), body, NewWord("end"),
+		NewWord("def"), NewWord("inc"), body, NewEnd(),
 		NewInteger(5), NewWord("inc"),
 	})
 	_as24, _ := result[0].AsInteger()
@@ -574,9 +574,9 @@ func TestEngineUndef(t *testing.T) {
 	// def foo 42 end foo undef foo end foo → error (foo undefined after undef)
 	e := New(r)
 	_, err = e.Run([]Value{
-		NewWord("def"), NewWord("foo"), NewInteger(42), NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewInteger(42), NewEnd(),
 		NewWord("foo"),
-		NewWord("undef"), NewWord("foo"), NewWord("end"),
+		NewWord("undef"), NewWord("foo"), NewEnd(),
 		NewWord("foo"),
 	})
 	if err == nil {
@@ -891,7 +891,7 @@ func TestEngineFn(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("double"),
 	})
 	_as44, _ := result[0].AsInteger()
@@ -914,7 +914,7 @@ func TestEngineFnNamed(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("square"),
 	})
 	_as45, _ := result[0].AsInteger()
@@ -937,7 +937,7 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 	})
 	// All prefix: nearest→sig[0]=Integer, next→sig[1]=String
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewString("a"), NewInteger(1), NewWord("catter"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
@@ -958,7 +958,7 @@ func TestEngineFnCatterPartialForward(t *testing.T) {
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewWord("catter"), NewInteger(2), NewString("b"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
@@ -979,7 +979,7 @@ func TestEngineFnCatterFullForward(t *testing.T) {
 		NewList([]Value{NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewWord("catter"), NewInteger(3), NewString("c"),
 	})
 	if len(result) != 1 || !result[0].VType.Matches(TString) {
@@ -999,7 +999,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	})
 
 	defTokens := []Value{
-		NewWord("def"), NewWord("joiner"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("joiner"), NewWord("fn"), fnBody, NewEnd(),
 	}
 
 	// Subtest: all args from prefix (stack)
@@ -1093,7 +1093,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		NewList(concatDropBody(4)),
 	})
 	defTokens := []Value{
-		NewWord("def"), NewWord("mix4"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("mix4"), NewWord("fn"), fnBody, NewEnd(),
 	}
 
 	// All prefix: nearest→sig[0]=String, next→sig[1]=Integer, next→sig[2]=Boolean, deepest→sig[3]=String
@@ -1172,7 +1172,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		NewList(concatDropBody(5)),
 	})
 	defTokens := []Value{
-		NewWord("def"), NewWord("mix5"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("mix5"), NewWord("fn"), fnBody, NewEnd(),
 	}
 
 	// All prefix: nearest→sig[0]=String, ..., deepest→sig[4]=String
@@ -1238,7 +1238,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		NewList(concatDropBody(7)),
 	})
 	defTokens := []Value{
-		NewWord("def"), NewWord("mix7"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("mix7"), NewWord("fn"), fnBody, NewEnd(),
 	}
 	// Expected concat in sig order: "p123.5trueq456r7"
 	want := "p123.5trueq456r7"
@@ -1327,7 +1327,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		NewList(concatDropBody(3)),
 	})
 	cat3Def := []Value{
-		NewWord("def"), NewWord("cat3"), NewWord("fn"), cat3Body, NewWord("end"),
+		NewWord("def"), NewWord("cat3"), NewWord("fn"), cat3Body, NewEnd(),
 	}
 
 	// def cat4 fn [[string integer boolean string] [string]
@@ -1338,7 +1338,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		NewList(concatDropBody(4)),
 	})
 	cat4Def := []Value{
-		NewWord("def"), NewWord("cat4"), NewWord("fn"), cat4Body, NewWord("end"),
+		NewWord("def"), NewWord("cat4"), NewWord("fn"), cat4Body, NewEnd(),
 	}
 
 	// cat3 "A" "B" "C" end "trailing" -> cat3 gets "ABC", "trailing" on stack
@@ -1349,7 +1349,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, cat3Def...),
 			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"),
-			NewWord("end"), NewString("trailing"),
+			NewEnd(), NewString("trailing"),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
@@ -1375,7 +1375,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, cat4Def...),
 			NewString("Z"), NewWord("cat4"), NewString("X"), NewInteger(7), NewBoolean(true),
-			NewWord("end"), NewString("after"),
+			NewEnd(), NewString("after"),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
@@ -1400,12 +1400,12 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			t.Fatal(err)
 		}
 		tokens := append(append([]Value{}, cat3Def...),
-			NewWord("("),
-			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"), NewWord("end"),
-			NewWord(")"),
-			NewWord("("),
-			NewWord("cat3"), NewString("D"), NewString("E"), NewString("F"), NewWord("end"),
-			NewWord(")"),
+			NewOpenParen(),
+			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"), NewEnd(),
+			NewCloseParen(),
+			NewOpenParen(),
+			NewWord("cat3"), NewString("D"), NewString("E"), NewString("F"), NewEnd(),
+			NewCloseParen(),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
@@ -1434,12 +1434,12 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		tokens := append([]Value{}, cat4Def...)
 		tokens = append(tokens, cat3Def...)
 		tokens = append(tokens,
-			NewWord("("),
-			NewWord("cat4"), NewString("m"), NewInteger(9), NewBoolean(false), NewString("n"), NewWord("end"),
-			NewWord(")"),
-			NewWord("("),
-			NewWord("cat3"), NewString("x"), NewString("y"), NewString("z"), NewWord("end"),
-			NewWord(")"),
+			NewOpenParen(),
+			NewWord("cat4"), NewString("m"), NewInteger(9), NewBoolean(false), NewString("n"), NewEnd(),
+			NewCloseParen(),
+			NewOpenParen(),
+			NewWord("cat3"), NewString("x"), NewString("y"), NewString("z"), NewEnd(),
+			NewCloseParen(),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
@@ -1467,7 +1467,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, cat3Def...),
 			NewString("P"), NewString("Q"), NewWord("cat3"), NewString("R"),
-			NewWord("end"), NewString("extra"),
+			NewEnd(), NewString("extra"),
 		)
 		result := runAQL(t, r, tokens)
 		if len(result) != 2 {
@@ -1522,7 +1522,7 @@ func TestEngineFnLiteralType(t *testing.T) {
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(0), NewWord("adder"),
 	})
 	_as78, _ := result[0].AsInteger()
@@ -1544,7 +1544,7 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
 	err = runAQLError(t, r, []Value{
-		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("adder"),
 	})
 	if err == nil {
@@ -1568,7 +1568,7 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 		NewList([]Value{NewWord("add"), NewInteger(20)}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(0), NewWord("handler"),
 	})
 	_as79, _ := result[0].AsInteger()
@@ -1604,7 +1604,7 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	})
 	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("doubler"),
 	})
 	_as81, _ := result[0].AsInteger()
@@ -1632,7 +1632,7 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	})
 	// Define using string name (def sig selection changed with new type hierarchy).
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("doubler"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("doubler"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// Prefix call with arg on stack should work.
@@ -1676,7 +1676,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo "x" → "xQ" (string matches sig 1: "x" add "Q")
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewString("x"), NewWord("foo"),
 	})
 	_as83, _ := result[0].AsString()
@@ -1686,7 +1686,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo 1 → "1P" (integer matches sig 2: 1 add "P")
 	result = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(1), NewWord("foo"),
 	})
 	_as84, _ := result[0].AsString()
@@ -1696,7 +1696,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 
 	// foo 99 → "NN" (literal 99 matches sig 3: drop "NN")
 	result = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(99), NewWord("foo"),
 	})
 	_as85, _ := result[0].AsString()
@@ -1719,7 +1719,7 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("double"),
 	})
 	_as86, _ := result[0].AsInteger()
@@ -1748,7 +1748,7 @@ func TestEngineFnFactorial(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
 			NewWord("x"),
-			NewWord("("), NewWord("fact"), NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"), NewWord(")"),
+			NewOpenParen(), NewWord("fact"), NewOpenParen(), NewWord("x"), NewWord("sub"), NewInteger(1), NewCloseParen(), NewCloseParen(),
 			NewWord("mul"),
 		}),
 	})
@@ -1764,7 +1764,7 @@ func TestEngineFnFactorial(t *testing.T) {
 	}
 	for _, tc := range tests {
 		result := runAQL(t, r, []Value{
-			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewEnd(),
 			NewInteger(tc.input), NewWord("fact"),
 		})
 		_as87, _ := result[0].AsInteger()
@@ -1801,7 +1801,7 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 		{"dup mul fact (dup sub 1)", []Value{
 			NewWord("dup"), NewWord("mul"),
 			NewWord("fact"),
-			NewWord("("), NewWord("dup"), NewWord("sub"), NewInteger(1), NewWord(")"),
+			NewOpenParen(), NewWord("dup"), NewWord("sub"), NewInteger(1), NewCloseParen(),
 		}},
 	}
 
@@ -1829,7 +1829,7 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 		for _, tc := range tests {
 			e := NewTop(r)
 			result, err := e.Run([]Value{
-				NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
+				NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewEnd(),
 				NewInteger(tc.input), NewWord("fact"),
 			})
 			if err != nil {
@@ -1875,7 +1875,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{
 			NewWord("x"),
-			NewWord("("), NewWord("fact"), NewWord("("), NewWord("x"), NewWord("sub"), NewInteger(1), NewWord(")"), NewWord(")"),
+			NewOpenParen(), NewWord("fact"), NewOpenParen(), NewWord("x"), NewWord("sub"), NewInteger(1), NewCloseParen(), NewCloseParen(),
 			NewWord("mul"),
 		}),
 	})
@@ -1891,7 +1891,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 	}
 	for _, tc := range tests {
 		result := runAQL(t, r, []Value{
-			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewWord("end"),
+			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewEnd(),
 			NewInteger(tc.input), NewWord("fact"),
 		})
 		_as89, _ := result[0].AsInteger()
@@ -1913,7 +1913,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	yf.Set("y", NewTypeLiteral(TNumber))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Point"), NewWord("record"), fields, NewWord("end"),
+		NewWord("type"), NewWord("Point"), NewWord("record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
 	if len(result) != 1 || !result[0].IsRecordType() {
@@ -1934,7 +1934,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	vals := NewList([]Value{NewInteger(1), NewString("hi")})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("P"), NewWord("record"), fields, NewWord("end"),
+		NewWord("type"), NewWord("P"), NewWord("record"), fields, NewEnd(),
 		NewWord("make"), NewWord("P"), vals,
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
@@ -2477,7 +2477,7 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("double"),
 	})
 	_as116, _ := result[0].AsInteger()
@@ -2499,7 +2499,7 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	err = runAQLError(t, r, []Value{
-		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("bad"),
 	})
 	if err == nil {
@@ -2525,7 +2525,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewList([]Value{NewWord("dup")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("toomany"),
 	})
 	_as117, _ := result[0].AsInteger()
@@ -2541,7 +2541,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("dup")}),
 	})
 	err = runAQLError(t, r, []Value{
-		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody2, NewWord("end"),
+		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody2, NewEnd(),
 		NewInteger(5), NewWord("bad"),
 	})
 	if err == nil {
@@ -2565,7 +2565,7 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 		NewList([]Value{}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(42), NewWord("identity"),
 	})
 	_as118, _ := result[0].AsInteger()
@@ -2587,7 +2587,7 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("dbl"),
 	})
 	_as119, _ := result[0].AsInteger()
@@ -2609,7 +2609,7 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 		NewList([]Value{NewWord("dup")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(3), NewWord("dup2"),
 	})
 	_as121, _ := result[0].AsInteger()
@@ -2633,7 +2633,7 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(6), NewWord("square"),
 	})
 	_as122, _ := result[0].AsInteger()
@@ -2657,7 +2657,7 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
 	})
 	err = runAQLError(t, r, []Value{
-		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("isbig"),
 	})
 	if err == nil {
@@ -2684,7 +2684,7 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 	})
 	// Test number overload
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(10), NewWord("add1"),
 	})
 	_as123, _ := result[0].AsInteger()
@@ -2721,8 +2721,8 @@ func TestPiecemealDef(t *testing.T) {
 
 	// Define both sigs
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
 	})
 
 	// Test number sig
@@ -2763,9 +2763,9 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 
 	// def number sig, def string sig, undef (pops string sig), test number sig
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("undef"), NewWord("foo"), NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
+		NewWord("undef"), NewWord("foo"), NewEnd(),
 		NewInteger(3), NewWord("foo"),
 	})
 	if len(result) != 1 {
@@ -2802,9 +2802,9 @@ func TestFnUndefTargeted(t *testing.T) {
 
 	// def both sigs, targeted remove number sig, string sig still works
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
 	result := runAQL(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
@@ -2842,9 +2842,9 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	})
 
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2877,8 +2877,8 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 	})
 
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -2912,8 +2912,8 @@ func TestFnUndefRemovesAll(t *testing.T) {
 
 	e := New(r)
 	_, err = e.Run([]Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 		NewWord("foo"),
 	})
 	// foo should error (undefined after all sigs removed)
@@ -2942,8 +2942,8 @@ func TestPiecemealStackUnwind(t *testing.T) {
 
 	// Define both
 	_ = runAQL(t, r, []Value{
-		NewWord("def"), NewString("foo"), NewWord("fn"), bodyA, NewWord("end"),
-		NewWord("def"), NewString("foo"), NewWord("fn"), bodyB, NewWord("end"),
+		NewWord("def"), NewString("foo"), NewWord("fn"), bodyA, NewEnd(),
+		NewWord("def"), NewString("foo"), NewWord("fn"), bodyB, NewEnd(),
 	})
 
 	// Both sigs work
@@ -2964,7 +2964,7 @@ func TestPiecemealStackUnwind(t *testing.T) {
 
 	// Undef pops B (string sig), A (number sig) remains
 	_ = runAQL(t, r, []Value{
-		NewWord("undef"), NewWord("foo"), NewWord("end"),
+		NewWord("undef"), NewWord("foo"), NewEnd(),
 	})
 	result = runAQL(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
@@ -3138,7 +3138,7 @@ func TestInterpStringWithExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewString("world"), NewWord("def"), NewWord("name"), NewWord("end"),
+		NewString("world"), NewWord("def"), NewWord("name"), NewEnd(),
 		NewInterpString([]InterpPart{
 			{Lit: "hello "},
 			{Expr: []Value{NewWord("name")}},
@@ -3179,8 +3179,8 @@ func TestInterpStringMultipleExprs(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("def"), NewWord("a"), NewWord("end"),
-		NewInteger(2), NewWord("def"), NewWord("b"), NewWord("end"),
+		NewInteger(1), NewWord("def"), NewWord("a"), NewEnd(),
+		NewInteger(2), NewWord("def"), NewWord("b"), NewEnd(),
 		NewInterpString([]InterpPart{
 			{Expr: []Value{NewWord("a")}},
 			{Lit: " and "},
@@ -3202,7 +3202,7 @@ func TestInterpStringInMapValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewInteger(42), NewWord("def"), NewWord("x"), NewWord("end"),
+		NewInteger(42), NewWord("def"), NewWord("x"), NewEnd(),
 		NewEvalMap(func() *OrderedMap {
 			om := NewOrderedMap()
 			om.Set("msg", NewInterpString([]InterpPart{

@@ -117,12 +117,13 @@ func registerCoreTypeWord(r *Registry) {
 		Name:        "type",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:       []*Type{TWord, TAny},
+			Args:       []*Type{TAtom, TAny},
+			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				w, _ := args[0].AsWord()
+				name, _ := args[0].AsConcreteAtom()
 				body := args[1]
-				if err := installType(reg, w.Name, body); err != nil {
+				if err := installType(reg, name, body); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -138,19 +139,20 @@ func registerCoreUntypeWord(r *Registry) {
 		Name:        "untype",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []*Type{TWord},
+			Args:      []*Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				w, _ := args[0].AsWord()
-				if !IsCapitalisedName(w.Name) {
+				name, _ := args[0].AsConcreteAtom()
+				if !IsCapitalisedName(name) {
 					return nil, &AqlError{
 						Code:   "type_error",
-						Detail: "untype " + w.Name + ": type names must start with a capital letter",
+						Detail: "untype " + name + ": type names must start with a capital letter",
 					}
 				}
-				if !reg.PopType(w.Name) {
+				if !reg.PopType(name) {
 					return nil, &AqlError{
 						Code:   "type_error",
-						Detail: "untype " + w.Name + ": no such type binding",
+						Detail: "untype " + name + ": no such type binding",
 					}
 				}
 				return nil, nil

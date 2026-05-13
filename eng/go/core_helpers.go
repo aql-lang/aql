@@ -5,22 +5,6 @@ import (
 	"strings"
 )
 
-// Sentinel errors for break and continue.
-var (
-	ErrBreak    = fmt.Errorf("break")
-	ErrContinue = fmt.Errorf("continue")
-)
-
-// IsBreak reports whether the error is a break sentinel.
-func IsBreak(err error) bool {
-	return err == ErrBreak
-}
-
-// IsContinue reports whether the error is a continue sentinel.
-func IsContinue(err error) bool {
-	return err == ErrContinue
-}
-
 // InstallDef registers a new word as a literal substitution or a typed
 // function definition. Multiple defs for the same name stack; undef pops
 // the top.
@@ -286,7 +270,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					UnnamedCount: unnamedCount,
 				}))
 			}
-			result = append(result, NewWord(")"))
+			result = append(result, NewCloseParen())
 			return result, nil
 		}
 		// Static type-check: analyse the body once per arg-type
@@ -943,7 +927,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 							NewWord("args"),
 							NewAtom(fmt.Sprintf("%d", presentIdx)),
 							NewWord("get"),
-							NewWord(")"),
+							NewCloseParen(),
 						)
 					}
 					presentIdx++

@@ -36,6 +36,8 @@ var (
 	TFunction       = mustType("Type/Function")
 	TForward        = mustType("Word/__FW")
 	TOpenParen      = mustType("Word/__OP")
+	TCloseParen     = mustType("Word/__CP")
+	TEnd            = mustType("Word/__ED")
 	TParenExpr      = mustType("Word/__PE")
 	TInterpString   = mustType("Word/__IS")
 	TFnDef          = mustType("Word/__FN")

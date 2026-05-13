@@ -15,6 +15,14 @@ const stackHeadroom = 8
 type TraceCallback func(step int, pointer int, stack []Value, note string)
 
 // Engine is the AQL stack machine.
+//
+// Execution model: `stack` is a rewriting tape, not a LIFO stack. The
+// input program is loaded onto it whole; `pointer` then walks forward
+// and the value under the pointer dispatches (word → run, forward →
+// advance, open-paren → group, ...). A dispatched word may splice
+// values into the tape in place — consuming neighbours, inserting
+// results. Execution ends when the pointer walks off the end; the
+// residual tape is the result.
 type Engine struct {
 	stack     []Value
 	pointer   int
@@ -24,6 +32,7 @@ type Engine struct {
 	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
+	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 }
 
 // New creates an Engine with the given function registry.
@@ -34,8 +43,10 @@ func New(registry *Registry) *Engine {
 }
 
 // NewTop creates a top-level Engine with the maximum step limit (22222).
+// isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
+// as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: 22222}
+	return &Engine{registry: registry, stepLimit: 22222, isTop: true}
 }
 
 // SetSource sets the original source text for error reporting.
@@ -223,8 +234,14 @@ func (e *Engine) stackSplice(i, count int, replacements ...Value) {
 	copy(e.stack[i:], replacements)
 }
 
-// Run executes the input values through the stack machine and returns the
-// resulting stack.
+// Run executes the input values through the stack machine and returns
+// the residual stack — there is no single "result value". After the
+// pointer walks off the end, end-of-input cleanup runs (resolve
+// pending forwards, reject stray `(`, strip mark/move markers,
+// auto-evaluate leftover lists/maps); whatever Values remain are
+// returned. Callers decide the shape they want: take [0] for a single
+// value, keep the slice for a list, or splice it back into a parent
+// tape.
 func (e *Engine) Run(input []Value) ([]Value, error) {
 	// Push a scoped context Store whose prototype is the parent context.
 	parent := e.registry.ContextStore()
@@ -239,6 +256,10 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		input = StripToCarriers(input)
 	}
 
+	// Load the program onto the tape. Reuse the existing backing array
+	// when it already fits; otherwise allocate len(input)+stackHeadroom
+	// so the first few in-place splices don't have to grow the slice.
+	// `copy` (not alias) — later mutations don't touch the caller's input.
 	if cap(e.stack) >= len(input) {
 		e.stack = e.stack[:len(input)]
 	} else {
@@ -290,16 +311,6 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		switch {
 		case val.IsWord():
 			if err := e.stepWord(val); err != nil {
-				if IsBreak(err) {
-					if e.handleLoopBreak() {
-						continue
-					}
-				}
-				if IsContinue(err) {
-					if e.handleLoopContinue() {
-						continue
-					}
-				}
 				return nil, err
 			}
 
@@ -308,6 +319,16 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 
 		case val.IsOpenParen():
 			e.pointer++
+
+		case val.IsCloseParen():
+			if err := e.stepCloseParen(); err != nil {
+				return nil, err
+			}
+
+		case val.IsEnd():
+			if err := e.stepEnd(); err != nil {
+				return nil, err
+			}
 
 		case val.IsParenExpr():
 			// ParenExpr values are only used inside maps (created by
@@ -348,6 +369,24 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 				return nil, err
 			}
 		}
+
+		// Flow-control signal raised during the step (by a break/
+		// continue handler or by a sub-engine sharing this registry).
+		// Try to resolve locally; if no enclosing loop is on this
+		// tape, leave the flag set and bail out of the loop so an
+		// outer Run frame can catch it.
+		if e.registry.FlowCtrl != FlowNone {
+			if e.handleFlowCtrl() {
+				continue
+			}
+			return e.exitWithFlowCtrl()
+		}
+	}
+
+	// If the loop exited naturally (pointer walked off the end) with a
+	// signal still set, fall through to the same handler.
+	if e.registry.FlowCtrl != FlowNone {
+		return e.exitWithFlowCtrl()
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
@@ -429,6 +468,14 @@ func (e *Engine) resolveOrphanedForwards() error {
 				if err := e.stepWord(val); err != nil {
 					return err
 				}
+			case val.IsCloseParen():
+				if err := e.stepCloseParen(); err != nil {
+					return err
+				}
+			case val.IsEnd():
+				if err := e.stepEnd(); err != nil {
+					return err
+				}
 			case val.IsForward():
 				e.pointer++
 			case val.IsOpenParen():
@@ -437,6 +484,11 @@ func (e *Engine) resolveOrphanedForwards() error {
 				if err := e.stepLiteral(); err != nil {
 					return err
 				}
+			}
+			// Propagate any flow-control signal raised by the
+			// step; the outer Run frame will resolve it.
+			if e.registry.FlowCtrl != FlowNone {
+				return nil
 			}
 		}
 	}
@@ -467,106 +519,103 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 			break
 		}
 
-		if tok.IsWord() {
-			ww, _ := tok.AsWord()
-			if ww.Name == "end" || ww.Name == ")" {
-				break
+		// Boundary tokens: end / ) stop the pre-eval scan.
+		if tok.IsEnd() || tok.IsCloseParen() {
+			break
+		}
+
+		// Open paren: evaluate the sub-expression in-place.
+		if tok.IsOpenParen() {
+			savedPointer := e.pointer
+			e.pointer = scanIdx
+
+			// Advance past the OpenParen marker.
+			if err := e.stepOpenParen(); err != nil {
+				e.pointer = savedPointer
+				return err
 			}
 
-			// Open paren: evaluate the sub-expression in-place.
-			if ww.Name == "(" {
-				savedPointer := e.pointer
-				e.pointer = scanIdx
-
-				// stepOpenParen converts "(" to OpenParen marker.
-				if err := e.stepOpenParen(); err != nil {
-					e.pointer = savedPointer
-					return err
+			// Step through contents until we reach the matching ")".
+			// Track paren depth so that inner parens (e.g. from fn
+			// body expansion) are processed without prematurely
+			// breaking on their ")" tokens.
+			depth := 1
+			for limit := 0; limit < 2222 && depth > 0; limit++ {
+				if e.pointer >= len(e.stack) {
+					break
 				}
+				v := e.stack[e.pointer]
 
-				// Step through contents until we reach the matching ")".
-				// Track paren depth so that inner parens (e.g. from fn
-				// body expansion) are processed without prematurely
-				// breaking on their ")" tokens.
-				depth := 1
-				for limit := 0; limit < 2222 && depth > 0; limit++ {
-					if e.pointer >= len(e.stack) {
+				if v.IsOpenParen() {
+					depth++
+					e.pointer++
+					continue
+				}
+				if v.IsCloseParen() {
+					depth--
+					if err := e.stepCloseParen(); err != nil {
+						e.pointer = savedPointer
+						return err
+					}
+					if depth == 0 {
 						break
 					}
-					v := e.stack[e.pointer]
-
-					// Track depth changes from open/close parens.
-					if v.IsOpenParen() {
-						depth++
-						e.pointer++
-						continue
-					}
-					// Also catch word("(") not yet converted to OpenParen.
-					_as0, _ := v.AsWord()
-					if v.IsWord() && _as0.Name == "(" {
-						depth++
-						_ = e.stepOpenParen() // converts to OpenParen and advances pointer; never errors
-						continue
-					}
-					_as1, _ := v.AsWord()
-					if v.IsWord() && _as1.Name == ")" {
-						depth--
-						if depth == 0 {
-							// This is the matching ")" for our paren.
-							if err := e.stepCloseParen(); err != nil {
-								e.pointer = savedPointer
-								return err
-							}
-							break
-						}
-						// Inner ")" — process normally.
-						if err := e.stepCloseParen(); err != nil {
-							e.pointer = savedPointer
-							return err
-						}
-						continue
-					}
-
-					// Normal evaluation inside paren.
-					switch {
-					case v.IsWord():
-						if err := e.stepWord(v); err != nil {
-							e.pointer = savedPointer
-							return err
-						}
-					case v.IsMark():
-						e.stepMark(v)
-					case v.IsMove():
-						if err := e.stepMove(v); err != nil {
-							e.pointer = savedPointer
-							return err
-						}
-					case v.IsForward():
-						e.pointer++
-					case v.IsReturnCheck():
-						e.pointer++
-					case v.IsDefCleanup():
-						e.stepDefCleanup(v)
-						e.pointer++
-					default:
-						if err := e.stepLiteral(); err != nil {
-							e.pointer = savedPointer
-							return err
-						}
-					}
+					continue
 				}
 
-				e.pointer = savedPointer
-				// The paren has been collapsed; the result value(s) are now
-				// at scanIdx. Each result counts as a resolved value.
-				// Count how many values replaced the paren expression.
-				// We don't know exactly, but at least one was produced.
-				// Just count the value at scanIdx as one resolved value.
-				resolved++
-				scanIdx++
-				continue
+				// Normal evaluation inside paren.
+				switch {
+				case v.IsWord():
+					if err := e.stepWord(v); err != nil {
+						e.pointer = savedPointer
+						return err
+					}
+				case v.IsEnd():
+					if err := e.stepEnd(); err != nil {
+						e.pointer = savedPointer
+						return err
+					}
+				case v.IsMark():
+					e.stepMark(v)
+				case v.IsMove():
+					if err := e.stepMove(v); err != nil {
+						e.pointer = savedPointer
+						return err
+					}
+				case v.IsForward():
+					e.pointer++
+				case v.IsReturnCheck():
+					e.pointer++
+				case v.IsDefCleanup():
+					e.stepDefCleanup(v)
+					e.pointer++
+				default:
+					if err := e.stepLiteral(); err != nil {
+						e.pointer = savedPointer
+						return err
+					}
+				}
+				// Propagate any flow-control signal raised by
+				// the step; the outer Run frame will resolve it.
+				if e.registry.FlowCtrl != FlowNone {
+					e.pointer = savedPointer
+					return nil
+				}
 			}
 
+			e.pointer = savedPointer
+			// The paren has been collapsed; the result value(s) are now
+			// at scanIdx. Each result counts as a resolved value.
+			// Count how many values replaced the paren expression.
+			// We don't know exactly, but at least one was produced.
+			// Just count the value at scanIdx as one resolved value.
+			resolved++
+			scanIdx++
+			continue
+		}
+
+		if tok.IsWord() {
+			ww, _ := tok.AsWord()
 			// Function word: count as resolved (may be captured by
 			// QuoteArgs/TWord matching). Don't stop — continue scanning
 			// so that parens beyond function words are pre-evaluated
@@ -586,24 +635,22 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 }
 
 // stepWord handles a word (function reference) at the current pointer.
+//
+// The reserved tape-syntactic tokens — `(`, `)`, `end` — never reach
+// here: the parser emits them as typed OpenParen / CloseParen / End
+// values, and the Run-loop switch dispatches them directly. stepWord
+// therefore deals only with regular named words.
 func (e *Engine) stepWord(val Value) error {
 	w, _ := val.AsWord()
 
-	if w.Name == "end" {
-		return e.stepEnd()
-	}
-	if w.Name == "(" {
-		return e.stepOpenParen()
-	}
-	if w.Name == ")" {
-		return e.stepCloseParen()
-	}
-
-	// If there is a pending forward whose next expected argument is TWord,
-	// collect this word as-is rather than executing it. This lets words
-	// like def, undef, and var receive word names even for already-defined
-	// words (e.g. "undef foo" when foo is defined).
-	if e.hasPendingForwardExpectingWord() {
+	// If there is a pending forward whose next slot is /q-marked
+	// (QuoteArgs), capture this Word as data (converted to an Atom
+	// further down the pipeline) rather than executing it. This is the
+	// general word-capture mechanism: def, undef, type, untype, quote,
+	// inspect, and similar words all declare /q on their name slot, so
+	// `undef foo` works even when foo is currently defined. See
+	// signature.go §1.5 on /q.
+	if e.hasPendingForwardQuoteArg() {
 		return e.stepLiteral()
 	}
 
@@ -1188,12 +1235,19 @@ func (e *Engine) stepLiteral() error {
 	// Check if the value matches the next expected arg positionally.
 	// Once matchSignature has chosen a signature, args are collected in
 	// order — no permutation or sig switching is permitted.
+	//
+	// When a /q-marked TAtom slot accepts a Word, convert the Word to
+	// an Atom in place so the eventual handler sees a uniform Atom
+	// value rather than having to polymorphically extract a name from
+	// either shape.
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
 		nextIdx := fwd.CollectedArgs
 		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			w, _ := val.AsWord()
+			e.stack[valIdx] = NewAtom(w.Name)
 			matches = true
 		}
 		if !matches {
@@ -1317,15 +1371,23 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	for _, part := range parts {
 		if part.Expr == nil {
 			buf.WriteString(part.Lit)
-		} else {
-			sub := New(e.registry)
-			result, err := sub.Run(part.Expr)
-			if err != nil {
-				return Value{}, err
-			}
-			for _, r := range result {
-				buf.WriteString(ValToString(r))
-			}
+			continue
+		}
+		sub := New(e.registry)
+		result, err := sub.Run(part.Expr)
+		if err != nil {
+			return Value{}, err
+		}
+		for _, r := range result {
+			buf.WriteString(ValToString(r))
+		}
+		// If the expression raised a flow-control signal, stop
+		// evaluating further parts. The outer Run loop will catch
+		// the flag and unwind. Continuing would call sub.Run with
+		// a stale flag still set and could produce observable
+		// side effects from later parts.
+		if e.registry.FlowCtrl != FlowNone {
+			break
 		}
 	}
 	return NewString(buf.String()), nil
@@ -1392,7 +1454,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			input := make([]Value, 0, len(items)+2)
 			input = append(input, NewOpenParen())
 			input = append(input, items...)
-			input = append(input, NewWord(")"))
+			input = append(input, NewCloseParen())
 			result, err := sub.Run(input)
 			if err != nil {
 				return Value{}, err
@@ -1698,7 +1760,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			UnnamedCount: unnamedCount,
 		}))
 	}
-	tokens = append(tokens, NewWord(")"))
+	tokens = append(tokens, NewCloseParen())
 
 	if len(indices) == nArgs && nArgs > 0 {
 		firstArgIdx := indices[0]
@@ -1982,9 +2044,45 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	return nil
 }
 
-// handleLoopBreak handles a break sentinel error by finding the nearest
-// enclosing for-loop (move with continuation) and terminating it.
-// Returns true if break was handled, false if no enclosing loop was found.
+// handleFlowCtrl dispatches the active flow-control signal to the
+// matching tape-level resolver. Returns true if the signal was consumed
+// (the resolver found an enclosing loop on this tape and rewrote it),
+// false if no resolver was applicable and the flag should bubble up.
+//
+// On a true return, FlowCtrl has been cleared. On false, it is left
+// set for an outer Run frame to handle.
+func (e *Engine) handleFlowCtrl() bool {
+	var handled bool
+	switch e.registry.FlowCtrl {
+	case FlowBreak:
+		handled = e.handleLoopBreak()
+	case FlowContinue:
+		handled = e.handleLoopContinue()
+	}
+	if handled {
+		e.registry.FlowCtrl = FlowNone
+	}
+	return handled
+}
+
+// exitWithFlowCtrl returns from Run when a flow-control signal could
+// not be resolved on this tape. For a top-level engine this is the
+// "break/continue outside loop" error path; for a sub-engine, the flag
+// stays set on the shared registry and the residual tape is returned
+// cleanly so an outer Run can resolve it.
+func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
+	if e.isTop {
+		ctrl := e.registry.FlowCtrl
+		e.registry.FlowCtrl = FlowNone
+		return nil, e.runtimeError("halt", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
+	}
+	return e.stack, nil
+}
+
+// handleLoopBreak resolves a FlowBreak signal by finding the nearest
+// enclosing for-loop (move with continuation) on this tape and
+// terminating it. Returns true if a loop was found and rewritten,
+// false if no enclosing loop was on the tape.
 func (e *Engine) handleLoopBreak() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
@@ -2017,10 +2115,10 @@ func (e *Engine) handleLoopBreak() bool {
 	return false
 }
 
-// handleLoopContinue handles a continue sentinel error by finding the nearest
-// enclosing for-loop and advancing to the next iteration (discarding the
-// current iteration's partial results).
-// Returns true if continue was handled, false if no enclosing loop was found.
+// handleLoopContinue resolves a FlowContinue signal by finding the
+// nearest enclosing for-loop and advancing to the next iteration
+// (discarding the current iteration's partial results). Returns true
+// if a loop was found, false if no enclosing loop was on the tape.
 func (e *Engine) handleLoopContinue() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
@@ -2133,6 +2231,22 @@ func (e *Engine) stepCloseParen() error {
 						if closeIdx < 0 {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
+					case val.IsCloseParen():
+						if err := e.stepCloseParen(); err != nil {
+							return err
+						}
+						closeIdx = e.findCloseParenAfter(openIdx)
+						if closeIdx < 0 {
+							return e.syntaxError("unmatched closing parenthesis", ")")
+						}
+					case val.IsEnd():
+						if err := e.stepEnd(); err != nil {
+							return err
+						}
+						closeIdx = e.findCloseParenAfter(openIdx)
+						if closeIdx < 0 {
+							return e.syntaxError("unmatched closing parenthesis", ")")
+						}
 					case val.IsForward():
 						e.pointer++
 					case val.IsOpenParen():
@@ -2150,6 +2264,11 @@ func (e *Engine) stepCloseParen() error {
 						if closeIdx < 0 {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
+					}
+					// Propagate any flow-control signal raised by
+					// the step; the outer Run frame will resolve it.
+					if e.registry.FlowCtrl != FlowNone {
+						return nil
 					}
 				}
 				break // restart the outer loop to check for more forwards
@@ -2228,20 +2347,18 @@ func (e *Engine) stepCloseParen() error {
 	return nil
 }
 
-// findCloseParenAfter finds the index of the ")" word after the given openIdx.
+// findCloseParenAfter finds the index of the matching close-paren marker
+// after the given openIdx.
 func (e *Engine) findCloseParenAfter(openIdx int) int {
 	depth := 0
 	for i := openIdx + 1; i < len(e.stack); i++ {
 		if e.stack[i].IsOpenParen() {
 			depth++
-		} else if e.stack[i].IsWord() {
-			sw, _ := e.stack[i].AsWord()
-			if sw.Name == ")" {
-				if depth == 0 {
-					return i
-				}
-				depth--
+		} else if e.stack[i].IsCloseParen() {
+			if depth == 0 {
+				return i
 			}
+			depth--
 		}
 	}
 	return -1
@@ -2428,9 +2545,12 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 	e.pointer = funcIdx
 }
 
-// hasPendingForwardExpectingWord checks if there is a pending forward
-// whose next expected argument is TWord.
-func (e *Engine) hasPendingForwardExpectingWord() bool {
+// hasPendingForwardQuoteArg reports whether there is a pending forward
+// whose next slot is marked /q (QuoteArgs) — meaning the upcoming Word
+// should be captured as an Atom rather than executed. This is the
+// general word-capture mechanism used by def, undef, type, untype,
+// quote, inspect, etc.; see signature.go §1.5 on /q.
+func (e *Engine) hasPendingForwardQuoteArg() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
 		if e.stack[i].IsOpenParen() {
 			break
@@ -2441,14 +2561,7 @@ func (e *Engine) hasPendingForwardExpectingWord() bool {
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
-				if fwd.Sig.Args[nextIdx].Equal(TWord) {
-					return true
-				}
-				// /q modifier: capture word without evaluation.
-				if fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] {
-					return true
-				}
-				return false
+				return fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx]
 			}
 			break
 		}

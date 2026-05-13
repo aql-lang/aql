@@ -284,7 +284,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			_as0, _ := decl.AsWord()
 			name := _as0.Name
 			varNames = append(varNames, name)
-			result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
+			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 
 		case decl.VType.Equal(TList) && decl.Data != nil:
 			declElems := decl.AsList()
@@ -303,12 +303,12 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name))
 			result = append(result, declElems.Slice()[1:]...)
-			result = append(result, NewWord("end"))
+			result = append(result, NewEnd())
 
 		case decl.VType.Matches(TString):
 			name, _ := decl.AsString()
 			varNames = append(varNames, name)
-			result = append(result, NewWord("def"), NewWord(name), NewWord("end"))
+			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 
 		default:
 			return nil, fmt.Errorf("var: invalid declaration: %s", decl.String())
@@ -396,7 +396,7 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	tokens = append(tokens, doubled)
 	bodyCopy := bodyElems.Slice()
 	tokens = append(tokens, bodyCopy...)
-	tokens = append(tokens, NewWord(")"))
+	tokens = append(tokens, NewCloseParen())
 	return tokens, nil
 }
 

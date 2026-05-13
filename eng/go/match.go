@@ -37,14 +37,13 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	//   - /f (ForceForward) → boundary at N, all forward
 	insideForward := e.isInsidePendingForward()
 
-	// When the next forward token is a Word, prefer signatures
-	// expecting TWord or /q at position 0 (inspect-style name
-	// capture). The user wrote a Word, not a String — the /q sig
-	// captures the user's intent that the name is data, not a call
-	// site. The non-/q TString sister sig is for callers who pass a
-	// string literal. This also covers untype Foo (Foo in r.Types),
-	// `m.Color` after import (Color is a key in the imported map),
-	// and inspect-style name capture.
+	// When the next forward token is a Word, prefer signatures with
+	// /q at position 0 (inspect-style name capture). The user wrote a
+	// Word, not a String — the /q sig captures the user's intent that
+	// the name is data, not a call site. The non-/q TString sister
+	// sig is for callers who pass a string literal. This also covers
+	// untype Foo (Foo in r.Types), `m.Color` after import (Color is a
+	// key in the imported map), and inspect-style name capture.
 	preferWordSig := false
 	if e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
@@ -83,9 +82,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 
-		// Check if this is a preferred (TWord/q at arg[0]) signature.
+		// Check if this is a preferred (/q at arg[0]) signature.
 		isPreferred := preferWordSig && nArgs > 0 &&
-			(sig.Args[0].Equal(TWord) || (sig.QuoteArgs != nil && sig.QuoteArgs[0]))
+			sig.QuoteArgs != nil && sig.QuoteArgs[0]
 
 		// Effective forward limit for this match attempt. /s and /f
 		// override the sig's declared boundary.
@@ -120,29 +119,22 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break
 				}
 
+				// 1.4: end, ) — boundary, stop.
+				if tok.IsEnd() || tok.IsCloseParen() {
+					break
+				}
+
+				// 1.5: open parens are pre-evaluated by preEvalParens
+				// before matching begins. If one remains, treat as boundary.
+				if tok.IsOpenParen() {
+					break
+				}
+
 				if tok.IsWord() {
 					ww, _ := tok.AsWord()
-
-					// 1.4: "end", ")" — boundary, stop.
-					if ww.Name == "end" || ww.Name == ")" {
-						break
-					}
-
-					// 1.5: open parens are pre-evaluated by preEvalParens
-					// before matching begins. If one remains, treat as boundary.
-					if ww.Name == "(" {
-						break
-					}
-
-					// Sig expects TWord: any word matches directly.
-					if TWord.Matches(expectedType) {
-						positions[fwd] = scanIdx
-						fwd++
-						scanIdx++
-						continue
-					}
-
-					// /q modifier: word treated as Atom.
+					// /q modifier: capture the upcoming Word as an Atom
+					// (the conversion happens at insertForward / stepLiteral
+					// time; here we just count it as a match).
 					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
 						if TAtom.Matches(expectedType) {
 							positions[fwd] = scanIdx

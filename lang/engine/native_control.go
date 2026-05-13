@@ -78,22 +78,9 @@ var controlNatives = []NativeFunc{
 			},
 		},
 	},
-	{
-		Name:        "break",
-		ForwardArgs: false,
-		Signatures: []NativeSig{{
-			Handler: breakHandler,
-			Returns: []*Type{},
-		}},
-	},
-	{
-		Name:        "continue",
-		ForwardArgs: false,
-		Signatures: []NativeSig{{
-			Handler: continueHandler,
-			Returns: []*Type{},
-		}},
-	},
+	// break and continue are installed by eng.RegisterCoreFlowCtrl
+	// (see eng/go/flowctrl.go); their handlers signal via
+	// Registry.FlowCtrl rather than returning an error.
 	{
 		Name:        "error",
 		ForwardArgs: true,
@@ -407,14 +394,6 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		return []Value{NewCarrier(TList)}
 	}
 	return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
-}
-
-func breakHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return nil, ErrBreak
-}
-
-func continueHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return nil, ErrContinue
 }
 
 // ---- error handler ----

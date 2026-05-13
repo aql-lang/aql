@@ -9,7 +9,7 @@ func spliceArg(v Value) []Value {
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
 		result = append(result, elems.Slice()...)
-		result = append(result, NewWord(")"))
+		result = append(result, NewCloseParen())
 		return result
 	}
 	return []Value{v}

@@ -26,9 +26,9 @@ func callTimeDot(word string, stackVals ...engine.Value) []engine.Value {
 	var input []engine.Value
 	input = append(input, stackVals...)
 	input = append(input,
-		engine.NewWord("("),
+		engine.NewOpenParen(),
 		engine.NewWord("time"), engine.NewWord("get"), engine.NewWord(word),
-		engine.NewWord(")"),
+		engine.NewCloseParen(),
 	)
 	return input
 }

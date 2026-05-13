@@ -13,7 +13,7 @@ func TestEngineCoreStepEndMultipleEnds(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Multiple ends with no pending forwards — should be harmlessly removed
 	result := runAQL(t, r, []Value{
-		NewInteger(5), NewWord("end"), NewWord("end"),
+		NewInteger(5), NewEnd(), NewEnd(),
 	})
 	_as0, _ := result[0].AsNumber()
 	if len(result) != 1 || _as0 != 5 {
@@ -26,7 +26,7 @@ func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 	// "end" should terminate a forward expression: 10 add 20 end 99
 	// The add consumes 10 and 20 via end, leaving 30 and 99
 	result := runAQL(t, r, []Value{
-		NewInteger(10), NewWord("add"), NewInteger(20), NewWord("end"), NewInteger(99),
+		NewInteger(10), NewWord("add"), NewInteger(20), NewEnd(), NewInteger(99),
 	})
 	if len(result) != 2 {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
@@ -48,7 +48,7 @@ func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 	// Push 3 → stack=[3, 3]. Second add prefers stack: add(3,3)=6.
 	// Push 4 → [6, 4]. Semicolons don't create stack barriers.
 	result := runAQL(t, r, []Value{
-		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("end"),
+		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 		NewInteger(3), NewWord("add"), NewInteger(4),
 	})
 	if len(result) != 2 {
@@ -72,7 +72,7 @@ func TestEngineCoreParenSimple(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// ( 2 add 3 ) => 5
 	result := runAQL(t, r, []Value{
-		NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
 	_as5, _ := result[0].AsNumber()
 	if len(result) != 1 || _as5 != 5 {
@@ -84,8 +84,8 @@ func TestEngineCoreParenNested(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// ( ( 1 add 2 ) add 3 ) => 6
 	result := runAQL(t, r, []Value{
-		NewWord("("), NewWord("("), NewInteger(1), NewWord("add"), NewInteger(2), NewWord(")"),
-		NewWord("add"), NewInteger(3), NewWord(")"),
+		NewOpenParen(), NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
+		NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
 	_as6, _ := result[0].AsNumber()
 	if len(result) != 1 || _as6 != 6 {
@@ -96,7 +96,7 @@ func TestEngineCoreParenNested(t *testing.T) {
 func TestEngineCoreParenUnmatched(t *testing.T) {
 	r, _ := DefaultRegistry()
 	err := runAQLError(t, r, []Value{
-		NewWord(")"),
+		NewCloseParen(),
 	})
 	if err == nil {
 		t.Error("expected error for unmatched closing paren")
@@ -106,7 +106,7 @@ func TestEngineCoreParenUnmatched(t *testing.T) {
 func TestEngineCoreParenUnmatchedOpen(t *testing.T) {
 	r, _ := DefaultRegistry()
 	err := runAQLError(t, r, []Value{
-		NewWord("("), NewInteger(1),
+		NewOpenParen(), NewInteger(1),
 	})
 	if err == nil {
 		t.Error("expected error for unmatched opening paren")
@@ -117,7 +117,7 @@ func TestEngineCoreParenAsBarrier(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Parens create a scope barrier: 10 ( 2 add 3 ) => 10 5
 	result := runAQL(t, r, []Value{
-		NewInteger(10), NewWord("("), NewInteger(2), NewWord("add"), NewInteger(3), NewWord(")"),
+		NewInteger(10), NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
 	if len(result) != 2 {
 		t.Fatalf("got %d results, want 2: %v", len(result), result)
@@ -149,7 +149,7 @@ func TestEngineCoreFnDefNamedParam(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("double"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	result := runAQL(t, r, []Value{NewInteger(7), NewWord("double")})
 	_as9, _ := result[0].AsNumber()
@@ -178,7 +178,7 @@ func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("my-overload"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// Integer overload
@@ -209,7 +209,7 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("bad-return"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("bad-return")})
 	if err == nil {
@@ -230,7 +230,7 @@ func TestEngineCoreFnNonListBody(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("always42"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("always42")})
 	_as12, _ := result[0].AsNumber()
@@ -247,7 +247,7 @@ func TestEngineCoreUndefBasic(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// def my-val 100 end my-val => 100
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("my-val-undef"), NewInteger(100), NewWord("end"),
+		NewWord("def"), NewWord("my-val-undef"), NewInteger(100), NewEnd(),
 	})
 	result := runAQL(t, r, []Value{NewWord("my-val-undef")})
 	_as13, _ := result[0].AsNumber()
@@ -270,10 +270,10 @@ func TestEngineCoreUndefShadowing(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// def "x-shadow" 1 end def "x-shadow" 2 end x-shadow => 2
 	runAQL(t, r, []Value{
-		NewWord("def"), NewString("x-shadow"), NewInteger(1), NewWord("end"),
+		NewWord("def"), NewString("x-shadow"), NewInteger(1), NewEnd(),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewString("x-shadow"), NewInteger(2), NewWord("end"),
+		NewWord("def"), NewString("x-shadow"), NewInteger(2), NewEnd(),
 	})
 	result := runAQL(t, r, []Value{NewWord("x-shadow")})
 	_as14, _ := result[0].AsNumber()
@@ -293,7 +293,7 @@ func TestEngineCoreUndefShadowing(t *testing.T) {
 func TestEngineCoreUndefWithStringName(t *testing.T) {
 	r, _ := DefaultRegistry()
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("str-undef"), NewInteger(77), NewWord("end"),
+		NewWord("def"), NewWord("str-undef"), NewInteger(77), NewEnd(),
 	})
 	runAQL(t, r, []Value{NewWord("undef"), NewString("str-undef")})
 	e := New(r)
@@ -316,7 +316,7 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("tgt-undef"),
 		NewWord("fn"), fnBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// Verify it works
@@ -613,7 +613,7 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("cmod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	runAQL(t, r, []Value{NewWord("import"), NewWord("cmod")})
 
@@ -639,7 +639,7 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("rmod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 	renameList := NewList([]Value{NewAtom("origName"), NewAtom("newName")})
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
@@ -663,7 +663,7 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mmod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	renameList := NewList([]Value{
@@ -688,7 +688,7 @@ func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("emod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// Empty rename list should error
@@ -710,7 +710,7 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("memod"),
 		NewWord("module"), moduleBody,
-		NewWord("end"),
+		NewEnd(),
 	})
 
 	// Try to rename a non-existent export
@@ -870,7 +870,7 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 	// "true" as forward should resolve to boolean
 	// Test indirectly: def myval true end myval => true
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("true-val"), NewWord("true"), NewWord("end"),
+		NewWord("def"), NewWord("true-val"), NewWord("true"), NewEnd(),
 		NewWord("true-val"),
 	})
 	_as39, _ := result[0].AsBoolean()
@@ -882,7 +882,7 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("false-val"), NewWord("false"), NewWord("end"),
+		NewWord("def"), NewWord("false-val"), NewWord("false"), NewEnd(),
 		NewWord("false-val"),
 	})
 	_as40, _ := result[0].AsBoolean()
@@ -895,7 +895,7 @@ func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// An explicit Atom value can be the body of a def (def atom-val 'myatom).
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewWord("end"),
+		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewEnd(),
 		NewWord("atom-val"),
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
@@ -1218,7 +1218,7 @@ func TestEngineCoreFnImplicitMapNamedParamE2E(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("inc"),
 	})
 	_as46, _ := result[0].AsInteger()
@@ -1240,7 +1240,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 		NewList([]Value{NewString("matched")}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// {a:1} foo → match
@@ -1280,7 +1280,7 @@ func TestEngineCoreFnExplicitMapNotNamedParam(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("bar"), NewWord("fn"), fnBody, NewWord("end"),
+		NewWord("def"), NewWord("bar"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// 5 bar → fails: no map on stack, or x not bound

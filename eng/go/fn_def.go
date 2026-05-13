@@ -78,7 +78,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		if concreteReturns {
 			retVals := OutputSigValues(outputSig)
 			if len(retVals) > 0 {
-				bodyElems = append(bodyElems, NewWord("end"))
+				bodyElems = append(bodyElems, NewEnd())
 				bodyElems = append(bodyElems, retVals...)
 				returns = make([]*Type, len(retVals))
 				for j := range retVals {
