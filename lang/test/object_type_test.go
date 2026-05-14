@@ -671,7 +671,7 @@ func TestMakeObjectInheritedFields(t *testing.T) {
 		_v26, _ := b.AsInteger()
 		t.Errorf("expected b=3, got %d", _v26)
 	}
-	if !c.Data.(bool) {
+	if cb, _ := c.AsBoolean(); !cb {
 		t.Error("expected c=true")
 	}
 }
@@ -788,7 +788,7 @@ func TestMakeObjectBooleanDefault(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	if !v.Data.(bool) {
+	if vb, _ := v.AsBoolean(); !vb {
 		t.Error("expected x=true (default)")
 	}
 }
@@ -804,7 +804,7 @@ func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	if v.Data.(bool) {
+	if vb, _ := v.AsBoolean(); vb {
 		t.Error("expected x=false (overridden)")
 	}
 }
@@ -1237,7 +1237,7 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 				t.Errorf("field %s: expected %q, got %q", k, exp, _v69)
 			}
 		case bool:
-			if v.Data.(bool) != exp {
+			if vb, _ := v.AsBoolean(); vb != exp {
 				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
 			}
 		}
@@ -1291,7 +1291,7 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 				t.Errorf("field %s: expected %q, got %q", k, exp, _v73)
 			}
 		case bool:
-			if v.Data.(bool) != exp {
+			if vb, _ := v.AsBoolean(); vb != exp {
 				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
 			}
 		}

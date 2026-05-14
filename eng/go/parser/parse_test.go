@@ -1465,7 +1465,7 @@ func TestResolveTextValueTypes(t *testing.T) {
 		{"false", func(v eng.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(eng.TBoolean) && !b }},
 		{"Number", func(v eng.Value) bool { return v.VType.Equal(eng.TNumber) }},
 		{"String", func(v eng.Value) bool { return v.VType.Equal(eng.TString) }},
-		{"hello", func(v eng.Value) bool { s, _ := v.AsString(); return v.VType.Matches(eng.TAtom) && s == "hello" }},
+		{"hello", func(v eng.Value) bool { s, _ := v.AsAtom(); return v.VType.Matches(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)

@@ -1,6 +1,9 @@
 package eng
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // registerCoreStorage installs the `get` and `set` words — the
 // universal container-access pair. Both collect their args forward
@@ -115,6 +118,24 @@ func GetKey(v Value) string {
 	if v.IsAtom() {
 		_as2, _ := v.AsAtom()
 		return _as2
+	}
+	// Primitive scalar fallbacks: render the payload via the
+	// dedicated accessors rather than `%v` on the boxed payload
+	// (post Step 5b: Data is e.g. IntPayload{N:5}, not int64(5)).
+	if v.VType.Matches(TInteger) {
+		n, _ := v.AsInteger()
+		return strconv.FormatInt(n, 10)
+	}
+	if v.VType.Matches(TDecimal) {
+		f, _ := v.AsDecimal()
+		return FormatDecimal(f)
+	}
+	if v.VType.Matches(TBoolean) {
+		b, _ := v.AsBoolean()
+		if b {
+			return "true"
+		}
+		return "false"
 	}
 	return fmt.Sprintf("%v", v.Data)
 }

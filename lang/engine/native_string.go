@@ -125,8 +125,15 @@ var stringNatives = []NativeFunc{
 // transforms that share the same shape.
 func unaryStringNative(name string, fn func(string) string) NativeFunc {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		s, ok := args[0].Data.(string)
-		if !ok {
+		// Two sigs route here — [TString] and [TAtom]. Read via the
+		// type-specific accessor so the post-Step-5 payload variants
+		// (StrPayload / AtomPayload) are surfaced correctly.
+		var s string
+		if args[0].IsAtom() {
+			s, _ = args[0].AsAtom()
+		} else if as, err := args[0].AsString(); err == nil {
+			s = as
+		} else {
 			return nil, fmt.Errorf("%s: expected string, got %s", name, args[0].String())
 		}
 		return []Value{NewString(fn(s))}, nil

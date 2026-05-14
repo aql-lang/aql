@@ -3031,7 +3031,7 @@ func TestTypeofMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			got, _ := result[0].AsString()
+			got, _ := result[0].AsAtom()
 			if got != tt.wantFull {
 				t.Errorf("fulltypeof %s = %q, want %q", tt.name, got, tt.wantFull)
 			}

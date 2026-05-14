@@ -162,7 +162,7 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 	}
 	if v, ok := m.Get("base"); ok {
 		v = ResolveWordValue(v)
-		if b, bOk := v.Data.(bool); bOk && b {
+		if b, bErr := v.AsBoolean(); bErr == nil && b {
 			useBase = true
 		}
 	}

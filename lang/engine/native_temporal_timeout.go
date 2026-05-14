@@ -16,7 +16,14 @@ func RunTimerCallback(r *Registry, callback Value, isList bool) {
 		input = make([]Value, len(callback.AsList().Slice()))
 		copy(input, callback.AsList().Slice())
 	} else {
-		name, _ := callback.AsString()
+		// Callback is an Atom (from /q) or String (quoted form);
+		// either yields a word name to invoke.
+		var name string
+		if callback.IsAtom() {
+			name, _ = callback.AsAtom()
+		} else {
+			name, _ = callback.AsString()
+		}
 		input = []Value{NewWord(name)}
 	}
 	// Execute and discard results — timer callbacks run for side effects.

@@ -607,6 +607,21 @@ func StoreKey(v Value) string {
 		_as17, _ := v.AsAtom()
 		return _as17
 	}
+	if v.VType.Matches(TInteger) {
+		n, _ := v.AsInteger()
+		return strconv.FormatInt(n, 10)
+	}
+	if v.VType.Matches(TDecimal) {
+		f, _ := v.AsDecimal()
+		return FormatDecimal(f)
+	}
+	if v.VType.Matches(TBoolean) {
+		b, _ := v.AsBoolean()
+		if b {
+			return "true"
+		}
+		return "false"
+	}
 	return fmt.Sprintf("%v", v.Data)
 }
 

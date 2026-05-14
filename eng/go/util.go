@@ -211,6 +211,15 @@ func (v Value) AsConcreteString() (string, error) {
 	if v.IsDepScalar() {
 		return "", fmt.Errorf("AsConcreteString: value is a dependent-type constraint (%s), not a concrete String", v.VType.String())
 	}
+	// Handlers with dual [TString]+[TAtom] signatures (trim, upper,
+	// lower, concat, …) call into AsConcreteString from either path;
+	// historically they relied on the raw-string payload being
+	// shared between strings and atoms. Post Step 5, atoms carry
+	// AtomPayload; accept it here so the "textual content" semantic
+	// of AsConcreteString is preserved for those handlers.
+	if v.IsAtom() {
+		return v.AsAtom()
+	}
 	return v.AsString()
 }
 

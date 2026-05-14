@@ -602,9 +602,9 @@ func NewValueRaw(t *Type, data interface{}) Value {
 // emptiness without resorting to a length comparison.
 func NewString(s string) Value {
 	if s == "" {
-		return NewValueRaw(TStringEmpty, s)
+		return NewValueRaw(TStringEmpty, StrPayload{S: s})
 	}
-	return NewValueRaw(TStringProper, s)
+	return NewValueRaw(TStringProper, StrPayload{S: s})
 }
 
 // NewInteger creates a number/integer value with VType = Scalar/Number/Integer.
@@ -612,12 +612,12 @@ func NewString(s string) Value {
 // Signature.Patterns, not through a per-value type-path leaf. See
 // the NewString comment for the rationale.
 func NewInteger(n int64) Value {
-	return NewValueRaw(TInteger, n)
+	return NewValueRaw(TInteger, IntPayload{N: n})
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.
 func NewDecimal(f float64) Value {
-	return NewValueRaw(TDecimal, f)
+	return NewValueRaw(TDecimal, DecPayload{F: f})
 }
 
 // FormatDecimal renders a float64 with a guaranteed decimal point so the
@@ -642,7 +642,7 @@ func formatDecimal(f float64) string { return FormatDecimal(f) }
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	return NewValueRaw(TBoolean, b)
+	return NewValueRaw(TBoolean, BoolPayload{B: b})
 }
 
 // NewList creates a list value from a slice of Values.
@@ -740,14 +740,14 @@ func NewTableType(record RecordTypeInfo) Value {
 
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
-	return NewValueRaw(TAtom, name)
+	return NewValueRaw(TAtom, AtomPayload{Name: name})
 }
 
 // NewPath creates a Path value from parts and an absolute flag.
 func NewPath(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return NewValueRaw(TPath, PathInfo{Parts: p, Abs: abs})
+	return NewValueRaw(TPath, PathPayload{Info: PathInfo{Parts: p, Abs: abs}})
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
@@ -1408,17 +1408,16 @@ func (v Value) AsModule() (ModuleDesc, error) {
 // IsAtom reports whether this value is an atom.
 // IsPath reports whether this value is a Path.
 func (v Value) IsPath() bool {
-	_, ok := v.Data.(PathInfo)
+	_, ok := v.Data.(PathPayload)
 	return ok && v.VType.Equal(TPath)
 }
 
 // AsPath returns the PathInfo, or an error if the value is not a path.
 func (v Value) AsPath() (PathInfo, error) {
-	info, ok := v.Data.(PathInfo)
-	if !ok {
-		return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+	if pp, ok := v.Data.(PathPayload); ok {
+		return pp.Info, nil
 	}
-	return info, nil
+	return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
 }
 
 func (v Value) IsAtom() bool {
@@ -1430,11 +1429,10 @@ func (v Value) AsAtom() (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsAtom: nil data")
 	}
-	s, ok := v.Data.(string)
-	if !ok {
-		return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
+	if ap, ok := v.Data.(AtomPayload); ok {
+		return ap.Name, nil
 	}
-	return s, nil
+	return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
@@ -1542,11 +1540,10 @@ func (v Value) AsString() (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsString: nil data")
 	}
-	s, ok := v.Data.(string)
-	if !ok {
-		return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
+	if sp, ok := v.Data.(StrPayload); ok {
+		return sp.S, nil
 	}
-	return s, nil
+	return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
 }
 
 // AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
@@ -1554,11 +1551,10 @@ func (v Value) AsInteger() (int64, error) {
 	if v.Data == nil {
 		return 0, fmt.Errorf("AsInteger: nil data")
 	}
-	n, ok := v.Data.(int64)
-	if !ok {
-		return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
+	if ip, ok := v.Data.(IntPayload); ok {
+		return ip.N, nil
 	}
-	return n, nil
+	return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
 }
 
 // AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
@@ -1566,11 +1562,10 @@ func (v Value) AsDecimal() (float64, error) {
 	if v.Data == nil {
 		return 0.0, fmt.Errorf("AsDecimal: nil data")
 	}
-	f, ok := v.Data.(float64)
-	if !ok {
-		return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
+	if dp, ok := v.Data.(DecPayload); ok {
+		return dp.F, nil
 	}
-	return f, nil
+	return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
 }
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
@@ -1589,11 +1584,10 @@ func (v Value) AsBoolean() (bool, error) {
 	if v.Data == nil {
 		return false, fmt.Errorf("AsBoolean: nil data")
 	}
-	b, ok := v.Data.(bool)
-	if !ok {
-		return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
+	if bp, ok := v.Data.(BoolPayload); ok {
+		return bp.B, nil
 	}
-	return b, nil
+	return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
 }
 
 // AsList returns the []Value payload, or nil if the data is not a []Value.
@@ -1734,15 +1728,17 @@ func (v Value) String() string {
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
 	case v.VType.Matches(TString):
-		return fmt.Sprintf("'%s'", v.Data)
+		s, _ := v.AsString()
+		return fmt.Sprintf("'%s'", s)
 	case v.VType.Equal(TAtom):
-		s, _ := v.Data.(string)
+		s, _ := v.AsAtom()
 		return s
 	case v.VType.Matches(TDecimal):
 		_as4, _ := v.AsDecimal()
 		return formatDecimal(_as4)
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.Data)
+		n, _ := v.AsInteger()
+		return fmt.Sprintf("%d", n)
 	case v.VType.Matches(TBoolean):
 		_as5, _ := v.AsBoolean()
 		if _as5 {

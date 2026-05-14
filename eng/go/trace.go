@@ -52,8 +52,8 @@ func TraceColorize(v Value) string {
 		}
 		return cCyan + "false" + cReset
 	case v.VType.Equal(TAtom):
-		s, ok := v.Data.(string)
-		if !ok {
+		s, err := v.AsAtom()
+		if err != nil {
 			return cRed + fmt.Sprintf("%v", v.Data) + cReset
 		}
 		return cRed + s + cReset
