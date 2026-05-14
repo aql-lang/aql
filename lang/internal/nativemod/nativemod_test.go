@@ -34,7 +34,7 @@ func mathRegistry(t *testing.T) *engine.Registry {
 	}
 	// Install exports as defs — same as the import handler does.
 	for name, exportMap := range desc.Exports {
-		r.PushDef(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, engine.NewMap(exportMap))
 	}
 	return r
 }

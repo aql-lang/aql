@@ -9,7 +9,7 @@ package eng
 // file I/O, format encoders/decoders, or a SQL store. The host
 // installs a service:
 //
-//	r.SetCapability("engine.fileops", myFileOps)
+//	r.Capabilities.Set("engine.fileops", myFileOps)
 //
 // and a word handler retrieves it:
 //
@@ -21,64 +21,73 @@ package eng
 // keyed by name, etc.) are typically grouped behind one capability
 // whose value is a map.
 //
-// SetCapability INSTALLS or REPLACES; DeleteCapability REMOVES. The
-// previous version overloaded SetCapability(name, nil) to also delete,
-// which made `SetCapability("flag", aMaybeNilPointer)` a footgun: a
-// typed-nil interface argument silently became a delete instead of a
-// "store the nil value" call. The two-method form removes the
-// ambiguity. Storing an explicit nil value is now a real operation
-// (the capability is present and its value is nil).
+// Set INSTALLS or REPLACES; Delete REMOVES. The two-method form
+// removes the ambiguity of a single Set-with-nil overload, which made
+// `Set("flag", aMaybeNilPointer)` a footgun: a typed-nil interface
+// argument would silently become a delete instead of "store the nil
+// value". Storing an explicit nil value is a real operation here.
 
-// Capability returns the value stored under name and true, or nil and
-// false if no capability is registered under that name.
-func (r *Registry) Capability(name string) (any, bool) {
-	if r == nil || r.capabilities == nil {
+// CapabilityRegistry is the kernel's plugin slot store. See package
+// docs above.
+type CapabilityRegistry struct {
+	store map[string]any
+}
+
+// NewCapabilityRegistry returns an empty capability registry.
+func NewCapabilityRegistry() *CapabilityRegistry {
+	return &CapabilityRegistry{store: make(map[string]any)}
+}
+
+// Get returns the value stored under name and true, or (nil, false)
+// if no capability is registered under that name.
+func (c *CapabilityRegistry) Get(name string) (any, bool) {
+	if c == nil {
 		return nil, false
 	}
-	v, ok := r.capabilities[name]
+	v, ok := c.store[name]
 	return v, ok
 }
 
-// SetCapability installs (or replaces) the value under name. To
-// remove a capability, call DeleteCapability — passing a nil value
-// here STORES nil, it does not delete.
-func (r *Registry) SetCapability(name string, value any) {
-	if r == nil {
+// Set installs (or replaces) the value under name. To remove a
+// capability, call Delete — passing a nil value here STORES nil, it
+// does not delete.
+func (c *CapabilityRegistry) Set(name string, value any) {
+	if c == nil {
 		return
 	}
-	if r.capabilities == nil {
-		r.capabilities = make(map[string]any)
+	if c.store == nil {
+		c.store = make(map[string]any)
 	}
-	r.capabilities[name] = value
+	c.store[name] = value
 }
 
-// DeleteCapability removes the entry for name. Returns true if a
-// capability was present and removed, false if no capability existed.
-func (r *Registry) DeleteCapability(name string) bool {
-	if r == nil || r.capabilities == nil {
+// Delete removes the entry for name. Returns true if a capability was
+// present and removed, false if no capability existed.
+func (c *CapabilityRegistry) Delete(name string) bool {
+	if c == nil {
 		return false
 	}
-	if _, ok := r.capabilities[name]; !ok {
+	if _, ok := c.store[name]; !ok {
 		return false
 	}
-	delete(r.capabilities, name)
+	delete(c.store, name)
 	return true
 }
 
-// CapabilityNames returns the set of registered capability names in
-// arbitrary order. Useful for debugging and snapshot/restore.
-func (r *Registry) CapabilityNames() []string {
-	if r == nil {
+// Names returns the set of registered capability names in arbitrary
+// order. Useful for debugging and snapshot/restore.
+func (c *CapabilityRegistry) Names() []string {
+	if c == nil {
 		return nil
 	}
-	names := make([]string, 0, len(r.capabilities))
-	for k := range r.capabilities {
+	names := make([]string, 0, len(c.store))
+	for k := range c.store {
 		names = append(names, k)
 	}
 	return names
 }
 
-// Cap is a typed convenience wrapper around Registry.Capability. It
+// Cap is a typed convenience wrapper around r.Capabilities.Get. It
 // returns the capability cast to T plus true on success, or T's zero
 // value plus false when the capability is missing or stored under a
 // different concrete type.
@@ -87,7 +96,10 @@ func (r *Registry) CapabilityNames() []string {
 // generic methods on an existing type.
 func Cap[T any](r *Registry, name string) (T, bool) {
 	var zero T
-	v, ok := r.Capability(name)
+	if r == nil {
+		return zero, false
+	}
+	v, ok := r.Capabilities.Get(name)
 	if !ok {
 		return zero, false
 	}

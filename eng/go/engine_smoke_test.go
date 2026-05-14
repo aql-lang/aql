@@ -88,10 +88,10 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 	}
 	// A fresh registry has no defs, no types stack entries — proves the
 	// engine ships zero words by itself.
-	if names := r.DefNames(); len(names) != 0 {
+	if names := r.Defs.Names(); len(names) != 0 {
 		t.Errorf("expected empty def stack, got %v", names)
 	}
-	if names := r.TypeNames(); len(names) != 0 {
+	if names := r.Types.Names(); len(names) != 0 {
 		t.Errorf("expected empty type stack, got %v", names)
 	}
 }

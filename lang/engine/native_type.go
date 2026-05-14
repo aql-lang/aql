@@ -187,7 +187,7 @@ func installResourceTypes(r *Registry) {
 
 	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
 
-	resourceVal, _ := r.TopOfDefStack("Resource")
+	resourceVal, _ := r.Defs.Top("Resource")
 	installedResource, _ := resourceVal.AsObjectType()
 
 	entityFields := NewOrderedMap()
@@ -225,7 +225,7 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 	if !IsCapitalisedName(name) {
 		return fmt.Errorf("type %s: type names must start with a capital letter", name)
 	}
-	if !r.HasType(name) {
+	if !r.Types.Has(name) {
 		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
 			return err
 		}
@@ -233,7 +233,7 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 	if r.Lookup(name) != nil {
 		return fmt.Errorf("type %s: name clash — already a registered function", name)
 	}
-	if r.HasDef(name) {
+	if r.Defs.Has(name) {
 		return fmt.Errorf("type %s: name clash — already a def'd value", name)
 	}
 	if body.IsObjectType() {
@@ -254,7 +254,7 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 		body = NewObjectType(def, info)
 		r.Types.Bind(name, def, body)
 	} else {
-		r.PushType(name, body)
+		r.Types.PushType(name, body)
 	}
 	for _, p := range strings.Split(name, "/") {
 		r.RegisterPart(p)
@@ -276,7 +276,7 @@ func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !IsCapitalisedName(name) {
 		return nil, fmt.Errorf("untype %s: type names must start with a capital letter", name)
 	}
-	if !r.PopType(name) {
+	if _, ok := r.Types.PopType(name); !ok {
 		return nil, fmt.Errorf("untype %s: no such type binding", name)
 	}
 	return nil, nil
@@ -320,7 +320,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	a, b := args[1], args[0]
 	if b.VType.Equal(TFnUndef) && a.IsAtom() {
 		name, _ := a.AsAtom()
-		if top, ok := r.TopOfDefStack(name); ok {
+		if top, ok := r.Defs.Top(name); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 				a = top
 			}

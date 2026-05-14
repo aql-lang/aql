@@ -559,7 +559,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	_ = result
 
 	// Verify the export was installed
-	if !r.HasDef("greet") {
+	if !r.Defs.Has("greet") {
 		t.Error("expected 'greet' to be defined after import")
 	}
 }
@@ -587,7 +587,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	})
 	_ = result
 
-	if !r.HasDef("bar") {
+	if !r.Defs.Has("bar") {
 		t.Error("expected 'bar' to be defined after renamed import")
 	}
 }
@@ -639,7 +639,7 @@ func TestModuleImportSelectedExports(t *testing.T) {
 		result[0],
 	})
 
-	if !r.HasDef("alpha") {
+	if !r.Defs.Has("alpha") {
 		t.Error("expected 'alpha' to be defined")
 	}
 }
@@ -673,10 +673,10 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 		result[0],
 	})
 
-	if !r.HasDef("r") {
+	if !r.Defs.Has("r") {
 		t.Error("expected 'r' to be defined")
 	}
-	if !r.HasDef("s") {
+	if !r.Defs.Has("s") {
 		t.Error("expected 's' to be defined")
 	}
 }

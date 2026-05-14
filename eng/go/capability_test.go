@@ -10,12 +10,12 @@ import (
 
 func TestCapabilityRoundTrip(t *testing.T) {
 	r, _ := NewRegistry()
-	if _, ok := r.Capability("missing"); ok {
+	if _, ok := r.Capabilities.Get("missing"); ok {
 		t.Error("unset capability should be missing")
 	}
 
-	r.SetCapability("foo", 42)
-	v, ok := r.Capability("foo")
+	r.Capabilities.Set("foo", 42)
+	v, ok := r.Capabilities.Get("foo")
 	if !ok {
 		t.Fatal("foo capability should be present after set")
 	}
@@ -24,16 +24,16 @@ func TestCapabilityRoundTrip(t *testing.T) {
 	}
 
 	// Replace.
-	r.SetCapability("foo", "replaced")
-	v, _ = r.Capability("foo")
+	r.Capabilities.Set("foo", "replaced")
+	v, _ = r.Capabilities.Get("foo")
 	if v.(string) != "replaced" {
 		t.Errorf("after replace: got %v, want \"replaced\"", v)
 	}
 
 	// SetCapability(name, nil) STORES nil — it no longer doubles as
 	// a delete. Use DeleteCapability for that.
-	r.SetCapability("foo", nil)
-	v, ok = r.Capability("foo")
+	r.Capabilities.Set("foo", nil)
+	v, ok = r.Capabilities.Get("foo")
 	if !ok {
 		t.Error("capability should still be present after storing a nil value")
 	}
@@ -42,13 +42,13 @@ func TestCapabilityRoundTrip(t *testing.T) {
 	}
 
 	// Delete and verify.
-	if !r.DeleteCapability("foo") {
+	if !r.Capabilities.Delete("foo") {
 		t.Error("DeleteCapability should report true on existing key")
 	}
-	if _, ok := r.Capability("foo"); ok {
+	if _, ok := r.Capabilities.Get("foo"); ok {
 		t.Error("capability should be gone after DeleteCapability")
 	}
-	if r.DeleteCapability("foo") {
+	if r.Capabilities.Delete("foo") {
 		t.Error("DeleteCapability should report false on missing key")
 	}
 }
@@ -69,7 +69,7 @@ func TestCapNilSafety(t *testing.T) {
 func TestCapTypedSuccess(t *testing.T) {
 	type counter struct{ n int }
 	r, _ := NewRegistry()
-	r.SetCapability("c", &counter{n: 7})
+	r.Capabilities.Set("c", &counter{n: 7})
 
 	c, ok := Cap[*counter](r, "c")
 	if !ok {
@@ -84,7 +84,7 @@ func TestCapTypedWrongType(t *testing.T) {
 	// Capability is stored as a string; asking for an int returns the
 	// zero value and false rather than panicking.
 	r, _ := NewRegistry()
-	r.SetCapability("answer", "forty-two")
+	r.Capabilities.Set("answer", "forty-two")
 
 	n, ok := Cap[int](r, "answer")
 	if ok {
@@ -97,14 +97,14 @@ func TestCapTypedWrongType(t *testing.T) {
 
 func TestCapabilityNames(t *testing.T) {
 	r, _ := NewRegistry()
-	if names := r.CapabilityNames(); len(names) != 0 {
+	if names := r.Capabilities.Names(); len(names) != 0 {
 		t.Errorf("fresh registry: %v, want empty", names)
 	}
 
-	r.SetCapability("a", 1)
-	r.SetCapability("b", 2)
-	r.SetCapability("c", 3)
-	got := r.CapabilityNames()
+	r.Capabilities.Set("a", 1)
+	r.Capabilities.Set("b", 2)
+	r.Capabilities.Set("c", 3)
+	got := r.Capabilities.Names()
 	if len(got) != 3 {
 		t.Fatalf("got %d names, want 3 (%v)", len(got), got)
 	}
@@ -125,7 +125,7 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 	type calc struct{ factor int64 }
 
 	r, _ := NewRegistry()
-	r.SetCapability("scaler", &calc{factor: 10})
+	r.Capabilities.Set("scaler", &calc{factor: 10})
 
 	r.RegisterNativeFunc(NativeFunc{
 		Name:        "scale",
@@ -196,7 +196,7 @@ func TestCapabilityMapPattern(t *testing.T) {
 	}
 
 	r, _ := NewRegistry()
-	r.SetCapability("formats", formats)
+	r.Capabilities.Set("formats", formats)
 
 	got, ok := Cap[map[string]*formatter](r, "formats")
 	if !ok {

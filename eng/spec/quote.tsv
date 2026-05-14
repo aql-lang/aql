@@ -6,13 +6,13 @@
 # - `quote LITERAL` returns the value unchanged.		
 # - `quote LIST` returns the list as-is.		
 		
-quote a	atom(a)	bare undefined word becomes atom
-quote dup	atom(dup)	even though dup is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
+quote a	(quote a)	bare undefined word becomes atom
+quote dup	(quote dup)	even though dup is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
 quote 5	5	scalar passes through
 quote 'hi'	'hi'	string passes through
-quote true	atom(true)	`true`/`false` parse as Words; quote captures the upcoming Word as an Atom
-quote [ 1 2 3 ]	[1 2 3]	list passes through
-		
-# Round-trip through def: x bound to atom(NAME), then resolved.		
-def x quote a x	atom(a)	define x as atom(a), then resolve x → atom(a)
-def x quote dup x	atom(dup)	define x as atom(dup); resolving x yields the atom (dup is never dispatched)
+quote true	(quote true)	`true`/`false` parse as Words; quote captures the upcoming Word as an Atom
+quote [ 1 2 3 ]	(quote [1 2 3])	quoted list preserves the quote wrapper through rendering
+
+# Round-trip through def: x bound to (quote NAME), then resolved.
+def x quote a x	(quote a)	define x as (quote a), then resolve x → (quote a)
+def x quote dup x	(quote dup)	define x as (quote dup); resolving x yields the atom (dup is never dispatched)

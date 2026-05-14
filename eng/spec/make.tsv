@@ -57,8 +57,8 @@ make Boolean 0	false	zero → false
 make Boolean true	true	passthrough
 		
 # Atom target — string becomes an Atom of the same name.		
-make Atom 'foo'	atom(foo)	
-make Atom 'Bar123'	atom(Bar123)	
+make Atom 'foo'	(quote foo)
+make Atom 'Bar123'	(quote Bar123)
 		
 # ====================================================================		
 # 2. Order-agnostic two-arg dispatch		

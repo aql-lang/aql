@@ -76,7 +76,7 @@ func setStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 }
 
 func setStoreReturnsFn(args []Value, r *Registry) []Value {
-	r.RecordContextSet(StoreKey(args[0]), args[1])
+	r.Check.RecordContextSet(StoreKey(args[0]), args[1])
 	return nil
 }
 
@@ -96,7 +96,7 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 }
 
 func getStoreReturnsFn(args []Value, r *Registry) []Value {
-	v, _ := r.LookupContextType(StoreKey(args[0]))
+	v, _ := r.Check.LookupContextType(StoreKey(args[0]))
 	return []Value{v}
 }
 
@@ -108,7 +108,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 // The context is a Store (Object/Store), allowing get/set to operate on it
 // directly and prototype chain resolution for nested scopes.
 func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	store := reg.ContextStore()
+	store := reg.Contexts.Top()
 	if store == nil {
 		return nil, fmt.Errorf("context: no active context")
 	}

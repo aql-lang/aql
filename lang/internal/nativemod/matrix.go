@@ -58,7 +58,7 @@ func BuildMatrixModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	// Vector
 	exports.Set("dot", makeListListToDecFnDef("matrix-dot", subReg))
 
-	modID := parent.NextModuleID()
+	modID := parent.Modules.NextID()
 	desc := engine.ModuleDesc{
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"matrix": exports},

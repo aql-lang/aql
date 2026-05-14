@@ -27,7 +27,7 @@ func HostFileOps(r *Registry) fileops.FileOps {
 // SetHostFileOps installs the active fileops capability and re-wires
 // any registered jsonic-format multisource resolver to use it.
 func SetHostFileOps(r *Registry, ops fileops.FileOps) {
-	r.SetCapability(CapFileOps, ops)
+	r.Capabilities.Set(CapFileOps, ops)
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
 			jf.Resolver = MakeFileOpsResolver(ops)
@@ -45,7 +45,7 @@ func HostFormats(r *Registry) map[string]Format {
 
 // SetHostFormats installs the format registry as a single capability.
 func SetHostFormats(r *Registry, formats map[string]Format) {
-	r.SetCapability(CapFormats, formats)
+	r.Capabilities.Set(CapFormats, formats)
 }
 
 // HostSQLite returns the SQLite store installed on r, or nil if none.
@@ -56,7 +56,7 @@ func HostSQLite(r *Registry) *SQLiteStore {
 
 // SetHostSQLite installs the SQLite store as a capability.
 func SetHostSQLite(r *Registry, store *SQLiteStore) {
-	r.SetCapability(CapSQLite, store)
+	r.Capabilities.Set(CapSQLite, store)
 }
 
 // EffectiveFileOps returns the fileops to use for the current
@@ -70,7 +70,7 @@ func EffectiveFileOps(r *Registry) fileops.FileOps {
 	if r == nil {
 		return nil
 	}
-	store := r.ContextStore()
+	store := r.Contexts.Top()
 	if store == nil {
 		return HostFileOps(r)
 	}
@@ -100,7 +100,7 @@ func EffectiveFileOps(r *Registry) fileops.FileOps {
 			return mem
 		}
 		mem := fileops.NewMem()
-		r.SetCapability(CapMemFileOps, mem)
+		r.Capabilities.Set(CapMemFileOps, mem)
 		return mem
 	}
 	return HostFileOps(r)

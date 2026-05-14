@@ -149,7 +149,7 @@ func registerCoreUntypeWord(r *Registry) {
 						Detail: "untype " + name + ": type names must start with a capital letter",
 					}
 				}
-				if !reg.PopType(name) {
+				if _, ok := reg.Types.PopType(name); !ok {
 					return nil, &AqlError{
 						Code:   "type_error",
 						Detail: "untype " + name + ": no such type binding",
@@ -486,7 +486,7 @@ func installType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": type names must start with a capital letter",
 		}
 	}
-	if !r.HasType(name) {
+	if !r.Types.Has(name) {
 		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
 			return err
 		}
@@ -497,7 +497,7 @@ func installType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": name clash — already a registered function",
 		}
 	}
-	if r.HasDef(name) {
+	if r.Defs.Has(name) {
 		return &AqlError{
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a def'd value",
@@ -521,7 +521,7 @@ func installType(r *Registry, name string, body Value) error {
 		body = NewObjectType(def, info)
 		r.Types.Bind(name, def, body)
 	} else {
-		r.PushType(name, body)
+		r.Types.PushType(name, body)
 	}
 	for _, p := range strings.Split(name, "/") {
 		r.RegisterPart(p)

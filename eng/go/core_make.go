@@ -686,12 +686,12 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		} else {
 			name, _ = v.AsString()
 		}
-		if tv, ok := r.TopOfTypeStack(name); ok {
+		if tv, ok := r.Types.TopBody(name); ok {
 			if IsTypeBody(tv) {
 				return tv
 			}
 		}
-		if top, ok := r.TopOfDefStack(name); ok {
+		if top, ok := r.Defs.Top(name); ok {
 			if IsTypeBody(top) {
 				return top
 			}

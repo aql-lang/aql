@@ -385,7 +385,7 @@ func TestMapFieldDecimal_TypeLiteralValue(t *testing.T) {
 
 func TestTopOfDefStack_Empty(t *testing.T) {
 	r, _ := NewRegistry()
-	v, ok := r.TopOfDefStack("nonexistent")
+	v, ok := r.Defs.Top("nonexistent")
 	if ok {
 		t.Errorf("missing name returned ok=true (v=%v)", v)
 	}
@@ -393,8 +393,8 @@ func TestTopOfDefStack_Empty(t *testing.T) {
 
 func TestTopOfDefStack_SingleEntry(t *testing.T) {
 	r, _ := NewRegistry()
-	r.PushDef("x", NewInteger(42))
-	v, ok := r.TopOfDefStack("x")
+	r.Defs.Push("x", NewInteger(42))
+	v, ok := r.Defs.Top("x")
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
@@ -406,10 +406,10 @@ func TestTopOfDefStack_SingleEntry(t *testing.T) {
 
 func TestTopOfDefStack_StackedReturnsTop(t *testing.T) {
 	r, _ := NewRegistry()
-	r.PushDef("x", NewInteger(1))
-	r.PushDef("x", NewInteger(2))
-	r.PushDef("x", NewInteger(3))
-	v, ok := r.TopOfDefStack("x")
+	r.Defs.Push("x", NewInteger(1))
+	r.Defs.Push("x", NewInteger(2))
+	r.Defs.Push("x", NewInteger(3))
+	v, ok := r.Defs.Top("x")
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
@@ -419,11 +419,11 @@ func TestTopOfDefStack_StackedReturnsTop(t *testing.T) {
 	}
 }
 
-func TestTopOfDefStack_NilRegistry(t *testing.T) {
-	var r *Registry
-	v, ok := r.TopOfDefStack("x")
+func TestTopOfDefStack_NilDefTable(t *testing.T) {
+	var dt *DefTable
+	v, ok := dt.Top("x")
 	if ok {
-		t.Errorf("nil registry: ok=true, v=%v", v)
+		t.Errorf("nil DefTable: ok=true, v=%v", v)
 	}
 }
 
@@ -432,8 +432,8 @@ func TestTopOfDefStack_NilRegistry(t *testing.T) {
 func TestResolveTypedName_TypesPriority(t *testing.T) {
 	// r.Types should win over DefStacks for the same name.
 	r, _ := NewRegistry()
-	r.PushType("X", NewString("from-types"))
-	r.PushDef("X", NewString("from-defstacks"))
+	r.Types.PushType("X", NewString("from-types"))
+	r.Defs.Push("X", NewString("from-defstacks"))
 	v, ok := r.ResolveTypedName("X")
 	if !ok {
 		t.Fatalf("expected ok=true")
@@ -446,7 +446,7 @@ func TestResolveTypedName_TypesPriority(t *testing.T) {
 
 func TestResolveTypedName_FallbackToDefStacks(t *testing.T) {
 	r, _ := NewRegistry()
-	r.PushDef("X", NewString("from-defstacks"))
+	r.Defs.Push("X", NewString("from-defstacks"))
 	v, ok := r.ResolveTypedName("X")
 	if !ok {
 		t.Fatalf("expected ok=true")
@@ -570,7 +570,7 @@ func TestResolveTypedNameValue_NotAWord(t *testing.T) {
 
 func TestResolveTypedNameValue_WordResolved(t *testing.T) {
 	r, _ := NewRegistry()
-	r.PushType("Bbd", NewString("from-types"))
+	r.Types.PushType("Bbd", NewString("from-types"))
 	out, name, ok := r.ResolveTypedNameValue(NewWord("Bbd"))
 	if !ok || name != "Bbd" {
 		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)

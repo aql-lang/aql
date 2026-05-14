@@ -988,7 +988,7 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 	sub := New(r)
 	result, err := sub.Run(input)
 	if err != nil {
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "body_error",
 			Detail: "higher-order body analysis error: " + err.Error(),
 		})

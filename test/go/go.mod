@@ -1,15 +1,10 @@
-module github.com/aql-lang/aql/cmd/go
+module github.com/aql-lang/aql/test/go
 
 go 1.24.7
 
 require (
 	github.com/aql-lang/aql/eng v0.0.0
 	github.com/aql-lang/aql/lang v0.0.0
-	github.com/chzyer/readline v1.5.1
-	github.com/jsonicjs/jsonic/go v0.1.6
-	golang.org/x/crypto v0.32.0
-	golang.org/x/term v0.28.0
-	voxgiguniversalsdk v0.1.1
 )
 
 require (
@@ -17,6 +12,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jsonicjs/csv/go v0.1.2 // indirect
 	github.com/jsonicjs/directive/go v0.1.0 // indirect
+	github.com/jsonicjs/jsonic/go v0.1.6 // indirect
 	github.com/jsonicjs/multisource/go v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -29,13 +25,12 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
+	voxgiguniversalsdk v0.1.1 // indirect
 )
 
 replace github.com/aql-lang/aql/eng v0.0.0 => ../../eng/go
 
 replace github.com/aql-lang/aql/lang v0.0.0 => ../../lang
-
-replace github.com/aql-lang/aql/test/go v0.0.0 => ../../test/go
 
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 

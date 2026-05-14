@@ -29,8 +29,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if ops := HostFileOps(parent); ops != nil {
 		SetHostFileOps(modReg, ops)
 	}
-	if mem, ok := parent.Capability(CapMemFileOps); ok {
-		modReg.SetCapability(CapMemFileOps, mem)
+	if mem, ok := parent.Capabilities.Get(CapMemFileOps); ok {
+		modReg.Capabilities.Set(CapMemFileOps, mem)
 	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
@@ -46,15 +46,15 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// Let the native package (or other extension packages) register
 	// their words in the module's sub-registry. Propagate the hook
 	// so nested modules also get these words.
-	if parent.ModuleInitFunc != nil {
-		parent.ModuleInitFunc(modReg)
-		modReg.ModuleInitFunc = parent.ModuleInitFunc
+	if parent.Modules.InitFunc != nil {
+		parent.Modules.InitFunc(modReg)
+		modReg.Modules.InitFunc = parent.Modules.InitFunc
 	}
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
-	if parentCtx := parent.ContextStore(); parentCtx != nil {
-		modReg.PushExistingContext(parentCtx)
+	if parentCtx := parent.Contexts.Top(); parentCtx != nil {
+		modReg.Contexts.PushExisting(parentCtx)
 	}
 
 	exports := make(map[string]*OrderedMap)
@@ -120,7 +120,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		return ModuleDesc{}, err
 	}
 
-	modID := parent.NextModuleID()
+	modID := parent.Modules.NextID()
 	desc := ModuleDesc{
 		ID:      modID,
 		Exports: exports,
@@ -398,7 +398,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	// fn-def stash). Without the r.Types check, exports of named
 	// types (`export "color" {Color:Color}`) would leave the value
 	// side as an unresolved Word.
-	if tv, ok := modReg.TopOfTypeStack(name); ok {
+	if tv, ok := modReg.Types.TopBody(name); ok {
 		if fnDef, ok := tv.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg
@@ -410,7 +410,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		}
 		return tv
 	}
-	if val, ok := modReg.TopOfDefStack(name); ok {
+	if val, ok := modReg.Defs.Top(name); ok {
 		// Tag FnDef values with the module's registry so they can
 		// execute in the correct context (closure semantics).
 		if fnDef, ok := val.Data.(FnDefInfo); ok {
@@ -443,18 +443,18 @@ func resolveNativeMod(r *Registry, path string) error {
 	if name == "" {
 		return fmt.Errorf("import: empty native module name in %q", path)
 	}
-	if r.IsNativeModLoaded(name) {
+	if r.Modules.IsLoaded(name) {
 		return nil // already loaded
 	}
-	if r.NativeModResolver == nil {
+	if r.Modules.Resolver == nil {
 		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)
 	}
-	desc, err := r.NativeModResolver(name, r)
+	desc, err := r.Modules.Resolver(name, r)
 	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
 	installExports(r, desc, nil)
-	r.MarkNativeModLoaded(name)
+	r.Modules.MarkLoaded(name)
 	return nil
 }
 

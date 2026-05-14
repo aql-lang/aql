@@ -12,7 +12,7 @@ import (
 
 func TestSysStoreStructure(t *testing.T) {
 	r, _ := engine.DefaultRegistry(native.Register)
-	store := r.ContextStore()
+	store := r.Contexts.Top()
 	if store == nil {
 		t.Fatal("no context store")
 	}

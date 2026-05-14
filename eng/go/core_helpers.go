@@ -40,7 +40,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			fnDef.Signatures = append(fnDef.Signatures, Signature{
 				Fallback: true,
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					top, ok := r.TopOfDefStack(name)
+					top, ok := r.Defs.Top(name)
 					if !ok {
 						return nil, fmt.Errorf("undefined: %s", name)
 					}
@@ -71,7 +71,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// with the new definition. Without this, redefining a fn-based
 		// word with the same signature leaves stale handlers that win
 		// matching over the new ones (equal scores, first match wins).
-		if stack := r.DefStack(name); len(stack) > 0 {
+		if stack := r.Defs.Stack(name); len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
 			for _, entry := range stack {
@@ -83,7 +83,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 				filtered = append(filtered, entry)
 			}
 			if changed {
-				r.SetDefStack(name, filtered)
+				r.Defs.Set(name, filtered)
 				// Rebuild: clear Signatures on the top FnDefInfo (keep fallback),
 				// then re-register from remaining DefStack entries.
 				if top := r.Lookup(name); top != nil {
@@ -104,7 +104,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		}
 		// Push the FnDefInfo to DefStacks first, then InstallFnDef→Register→
 		// upsertFnDef will update its Signatures in place.
-		r.PushDef(name, NewFnDef(fnDef))
+		r.Defs.Push(name, NewFnDef(fnDef))
 		InstallFnDef(r, name, fnDef, isStackOnly)
 		return
 	}
@@ -145,24 +145,24 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			def = TObject
 		}
 		body = NewObjectType(def, info)
-		r.PushDef(name, body)
+		r.Defs.Push(name, body)
 		return
 	}
 
-	r.PushDef(name, body)
+	r.Defs.Push(name, body)
 }
 
 // UninstallDef removes the most recent def for a word. If no definitions
 // remain, the function entry is removed so the word falls through to
 // normal resolution (unknown word → string).
 func UninstallDef(r *Registry, name string) {
-	top, ok := r.TopOfDefStack(name)
+	top, ok := r.Defs.Top(name)
 	if !ok {
 		return
 	}
-	r.PopDef(name)
+	r.Defs.Pop(name)
 
-	if !r.HasDef(name) {
+	if !r.Defs.Has(name) {
 		return
 	}
 
@@ -175,7 +175,7 @@ func UninstallDef(r *Registry, name string) {
 	// Rebuild: clear Signatures on the (now-top) entry, keep fallback,
 	// then re-register from remaining DefStack entries.
 	r.clearSigsKeepFallback(name)
-	for _, entry := range r.DefStack(name) {
+	for _, entry := range r.Defs.Stack(name) {
 		if fd, ok := entry.Data.(FnDefInfo); ok {
 			InstallFnDef(r, name, fd)
 		}
@@ -219,7 +219,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
-			r.PushArgs(argsList)
+			r.Args.Push(argsList)
 
 			unnamedCount := 0
 			for i, p := range s.Params {
@@ -241,7 +241,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// Snapshot DefStacks lengths after installing named params
 			// so we can clean up any defs created during body execution
 			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := r.SnapshotDefDepths()
+			defSnapshot := r.Defs.Snapshot()
 
 			body := make([]Value, len(s.Body))
 			copy(body, s.Body)
@@ -323,7 +323,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					pv, _ := pMap.Get(key)
 					av, hasKey := vMap.Get(key)
 					if !hasKey {
-						r.AddCheckDiagnostic(CheckDiagnostic{
+						r.Check.AddDiagnostic(CheckDiagnostic{
 							Code:     "record_shape_mismatch",
 							Detail:   "argument to " + nameCopy + " missing field: " + key,
 							Word:     nameCopy,
@@ -332,7 +332,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 						continue
 					}
 					if pv.Data == nil && !av.VType.Matches(pv.VType) && !av.VType.Equal(TAny) {
-						r.AddCheckDiagnostic(CheckDiagnostic{
+						r.Check.AddDiagnostic(CheckDiagnostic{
 							Code:     "record_shape_mismatch",
 							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.VType.String() + ", got " + av.VType.String(),
 							Word:     nameCopy,
@@ -391,7 +391,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
-	r.PushArgs(argsList)
+	r.Args.Push(argsList)
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -412,7 +412,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// Snapshot DefStacks lengths before body execution so we can
 	// clean up any defs created during body execution (Issue 2
 	// from AQL-DX-REPORT: def leakage from fn bodies).
-	defSnapshot := r.SnapshotDefDepths()
+	defSnapshot := r.Defs.Snapshot()
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
@@ -420,7 +420,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 
 	// Cleanup: pop args stack, undef named params, then clean up
 	// any defs that were created during body execution.
-	r.PopArgs()
+	r.Args.Pop()
 	for i := len(names) - 1; i >= 0; i-- {
 		UninstallDef(r, names[i])
 	}
@@ -431,8 +431,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	// triggers InstallFnDef → Register → upsertFnDef which can
 	// modify DefStacks entries for other names).
 	var toClean []string
-	for _, name := range r.DefNames() {
-		if r.DefStackDepth(name) > defSnapshot[name] {
+	for _, name := range r.Defs.Names() {
+		if r.Defs.Depth(name) > defSnapshot[name] {
 			toClean = append(toClean, name)
 		}
 	}
@@ -441,7 +441,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 		// Pop entries down to the snapshot length. Use a bounded
 		// loop to avoid infinite looping if UninstallDef's rebuild
 		// creates new entries.
-		for attempts := 0; attempts < 100 && r.DefStackDepth(name) > target; attempts++ {
+		for attempts := 0; attempts < 100 && r.Defs.Depth(name) > target; attempts++ {
 			UninstallDef(r, name)
 		}
 	}
@@ -457,7 +457,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 // DefStack entry containing a matching signature, then rebuilds the
 // Function.Signatures slice from the remaining entries.
 func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
-	stack := r.DefStack(name)
+	stack := r.Defs.Stack(name)
 	if len(stack) == 0 {
 		return
 	}
@@ -484,7 +484,7 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		}
 	}
 
-	r.SetDefStack(name, stack)
+	r.Defs.Set(name, stack)
 
 	// If no DefStack entries remain, clean up entirely.
 	if len(stack) == 0 {
@@ -596,7 +596,7 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	if origRoot == nil {
 		origRoot = store
 	}
-	r.UpdateCtxStoreChain(origRoot, current)
+	r.Contexts.UpdateChain(origRoot, current)
 }
 
 // IsTypeBody reports whether a value is a valid type definition body

@@ -146,7 +146,7 @@ func registerCoreDef(r *Registry) {
 			installCoreFnDef(reg, name, sigs...)
 			return []Value{}, nil
 		}
-		reg.PushDef(name, args[1])
+		reg.Defs.Push(name, args[1])
 		return []Value{}, nil
 	}
 	typedHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -161,7 +161,7 @@ func registerCoreDef(r *Registry) {
 		if err := ValidateWordName(name); err != nil {
 			return nil, err
 		}
-		if reg.HasType(name) {
+		if reg.Types.Has(name) {
 			return nil, &AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
@@ -188,7 +188,7 @@ func registerCoreDef(r *Registry) {
 			installCoreFnDef(reg, name, sigs...)
 			return []Value{}, nil
 		}
-		reg.PushDef(name, body)
+		reg.Defs.Push(name, body)
 		return []Value{}, nil
 	}
 	r.RegisterNativeFunc(NativeFunc{
@@ -387,7 +387,7 @@ func registerCoreArgs(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				if top, ok := reg.TopArgs(); ok {
+				if top, ok := reg.Args.Top(); ok {
 					return []Value{top}, nil
 				}
 				return []Value{NewList(nil)}, nil
@@ -401,7 +401,7 @@ func registerCoreArgs(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				reg.PopArgs()
+				reg.Args.Pop()
 				return nil, nil
 			},
 			Returns: []*Type{},
@@ -628,14 +628,14 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 			Args: argTypes,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				for i, p := range sig.Params {
-					reg.PushDef(p.Name, args[i])
+					reg.Defs.Push(p.Name, args[i])
 				}
 				argsCopy := append([]Value{}, args...)
-				reg.PushArgs(NewList(argsCopy))
+				reg.Args.Push(NewList(argsCopy))
 				defer func() {
-					reg.PopArgs()
+					reg.Args.Pop()
 					for i := len(sig.Params) - 1; i >= 0; i-- {
-						reg.PopDef(sig.Params[i].Name)
+						reg.Defs.Pop(sig.Params[i].Name)
 					}
 				}()
 				sub := New(reg)

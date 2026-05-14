@@ -7,19 +7,20 @@ import (
 	"strconv"
 )
 
-// Registry maps function names to their definitions.
+// Registry is the kernel's shared state: function-name registrations,
+// def/type stacks, capabilities, IO writers, check-mode state, control
+// flow flags. Sub-engines share one Registry so state propagates
+// naturally across nested Run calls.
 //
-// The def-stack and type-stack registries are stored in unexported
-// fields. ALL access — read, write, snapshot, restore — goes through
-// the helper API in util.go (PushDef/PopDef/TopOfDefStack/HasDef/
-// DefStackDepth/SetDefStack/DefStack/DefNames/SnapshotDefDepths/
-// RestoreToDefDepths/TruncateDefStack/ReplaceDefTop/DeleteDef and the
-// matching *Type-side helpers PushType/PopType/HasType/TopOfTypeStack/
-// TypeStackDepth/TypeNames/SnapshotTypeStacks/RestoreTypeStacks). New
-// callers must use those methods; direct field access is deliberately
-// disabled by the lowercase identifiers.
+// Concerns are grouped into sub-stores rather than living as flat
+// fields:
+//   - r.Defs    (*DefTable)    — def-name shadowing stacks
+//   - r.Types   (*TypeTable)   — type-name shadowing stacks
+//   - r.Check   (CheckState)   — static-analysis state
+// New stack-like concerns should follow the same pattern.
 type Registry struct {
-	defStacks map[string][]Value // stacked bodies for def-defined words
+	// Defs holds the stacked bodies for `def`-defined words. See deftable.go.
+	Defs *DefTable
 	// types holds named type definitions installed by the `type` word —
 	// type literals, records, disjuncts, typed lists/maps, options,
 	// records, object types, dependent scalars (DepInteger, DepString,
@@ -37,14 +38,20 @@ type Registry struct {
 	// alias inside a sub-program and revert it without registry
 	// surgery.
 	Types             *TypeTable                                         // dynamic types installed by the `type` word; each push mints a fresh Type
-	capabilities      map[string]any                                     // host-installed plugin slots (see capability.go)
+	// Capabilities holds host-installed plugin slots. See capability.go.
+	Capabilities *CapabilityRegistry
 	Output            io.Writer                                          // output writer for print/printstr and stdout
 	ErrOutput         io.Writer                                          // error output writer for stderr
 	Input             io.Reader                                          // input reader for stdin
-	moduleSeq         int                                                // counter for generating module IDs
-	ParseFunc         func(string) ([]Value, error)                      // parser callback (set externally to avoid circular import)
-	ctxStack          []*StoreInstanceInfo                               // scoped context stack; top = current engine's context Store
-	argsStack         []Value                                            // stack of args lists for nested fn calls; access via PushArgs/PopArgs/TopArgs
+	// Modules owns module-loading state: the load set, the
+	// module-ID counter, the host's init callback, and the native-
+	// module resolver. See modules.go.
+	Modules *ModuleRegistry
+	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
+	// Contexts is the scoped context stack; top = current engine's context Store. See contextstack.go.
+	Contexts *ContextStack
+	// Args is the per-call args list stack. See argsstack.go.
+	Args *ArgsStack
 	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
 	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
 	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
@@ -52,9 +59,6 @@ type Registry struct {
 	errs              []error                                            // registration errors accumulated during setup
 	ready             bool                                               // true after initial setup; triggers dynamic help generation
 	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
-	NativeModResolver func(name string, r *Registry) (ModuleDesc, error) // resolves "aql:<name>" native module imports
-	ModuleInitFunc    func(*Registry)                                    // called when creating module sub-registries to register extension words
-	loadedNativeMods  map[string]bool                                    // tracks which native modules have been loaded
 
 	// Check holds all static type-checking state, bundled together
 	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
@@ -200,21 +204,18 @@ type CheckDiagnostic struct {
 // See capability.go for the plugin contract.
 func NewRegistry() (*Registry, error) {
 	r := &Registry{
-		defStacks:    make(map[string][]Value),
+		Defs:         NewDefTable(),
+		Contexts:     NewContextStack(),
+		Args:         NewArgsStack(),
 		Types:        NewDynamicTypeTable(),
-		capabilities: make(map[string]any),
+		Capabilities: NewCapabilityRegistry(),
+		Modules:      NewModuleRegistry(),
 		Output:       os.Stdout,
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
 	}
 	return r, nil
-}
-
-// NextModuleID generates a unique module identifier.
-func (r *Registry) NextModuleID() string {
-	r.moduleSeq++
-	return fmt.Sprintf("mod_%d", r.moduleSeq)
 }
 
 // SetParseFunc sets the parser callback used by file-based import.
@@ -226,66 +227,6 @@ func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 // calls will trigger dynamic help example generation via OnRegisterHook.
 func (r *Registry) MarkReady() {
 	r.ready = true
-}
-
-// PushContext pushes a new context Store whose prototype is the parent.
-// Key resolution walks the prototype chain, enabling scope-like lookup.
-func (r *Registry) PushContext(parent *StoreInstanceInfo) {
-	child := &StoreInstanceInfo{
-		TypeName:  "Object/Store",
-		Data:      make(map[string]Value),
-		Prototype: parent,
-	}
-	r.ctxStack = append(r.ctxStack, child)
-}
-
-// PopContext removes the top context layer, restoring the parent.
-func (r *Registry) PopContext() {
-	if len(r.ctxStack) > 0 {
-		r.ctxStack = r.ctxStack[:len(r.ctxStack)-1]
-	}
-}
-
-// Context returns the current (top) context as a map for handler compatibility.
-// Returns nil if no context is active.
-func (r *Registry) Context() map[string]Value {
-	si := r.ContextStore()
-	if si == nil {
-		return nil
-	}
-	return si.Data
-}
-
-// ContextStore returns the current (top) context Store, or nil if no context is active.
-func (r *Registry) ContextStore() *StoreInstanceInfo {
-	if len(r.ctxStack) == 0 {
-		return nil
-	}
-	return r.ctxStack[len(r.ctxStack)-1]
-}
-
-// UpdateCtxStoreChain updates ctxStack entries affected by a COW operation.
-// origRoot is the original Store that was COW'd (the prototype of the new
-// root). newRoot is the COW'd replacement. Scans from the top of the stack
-// (most likely match) and uses direct pointer comparison as a fast path
-// before walking prototype chains.
-func (r *Registry) UpdateCtxStoreChain(origRoot, newRoot *StoreInstanceInfo) {
-	for i := len(r.ctxStack) - 1; i >= 0; i-- {
-		entry := r.ctxStack[i]
-		// Fast path: direct match (the common case for top-of-stack COW).
-		if entry == origRoot {
-			r.ctxStack[i] = newRoot
-			continue
-		}
-		// Walk the prototype chain only if needed. Limit walk depth to
-		// short-circuit if the chain is long and doesn't contain origRoot.
-		for p := entry; p != nil; p = p.Prototype {
-			if p.Prototype == origRoot {
-				p.Prototype = newRoot
-				break
-			}
-		}
-	}
 }
 
 // Register adds one or more signatures to a named function. Sigs are
@@ -347,13 +288,13 @@ func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature)
 		}
 	}
 	// If the top of the stack is already a FnDefInfo, update it in place.
-	if top, ok := r.TopOfDefStack(name); ok {
+	if top, ok := r.Defs.Top(name); ok {
 		if fnDef, ok := top.Data.(FnDefInfo); ok {
 			fnDef.Signatures = append(fnDef.Signatures, sigs...)
 			SortSignatures(fnDef.Signatures)
 			fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
 			top.Data = fnDef
-			r.ReplaceDefTop(name, top)
+			r.Defs.Replace(name, top)
 			return
 		}
 	}
@@ -364,7 +305,7 @@ func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature)
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-	r.PushDef(name, NewFnDef(fnDef))
+	r.Defs.Push(name, NewFnDef(fnDef))
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args needed
@@ -392,7 +333,7 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // recorded by the engine.stepWord paths (simple-value substitution
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
-	stack := r.DefStack(name)
+	stack := r.Defs.Stack(name)
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			return &fnDef
@@ -415,14 +356,14 @@ func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *Mat
 // DefStacks[name] to only the Fallback entries (if any). Used during
 // rebuild after overlap filtering or undef.
 func (r *Registry) clearSigsKeepFallback(name string) {
-	top, ok := r.TopOfDefStack(name)
+	top, ok := r.Defs.Top(name)
 	if !ok {
 		return
 	}
 	if fnDef, ok := top.Data.(FnDefInfo); ok {
 		fnDef.Signatures = KeepFallback(fnDef.Signatures)
 		top.Data = fnDef
-		r.ReplaceDefTop(name, top)
+		r.Defs.Replace(name, top)
 	}
 }
 
@@ -458,7 +399,7 @@ func (r *Registry) InitRootContext() {
 	sysStore.Set("__val", NewStoreValue(TStore, valStore))
 
 	root.Set("__sys", NewStoreValue(TStore, sysStore))
-	r.PushExistingContext(root)
+	r.Contexts.PushExisting(root)
 }
 
 // Err returns the first registration error, or nil if none occurred.
@@ -467,22 +408,6 @@ func (r *Registry) Err() error {
 		return nil
 	}
 	return r.errs[0]
-}
-
-// IsNativeModLoaded returns true if the named native module has already been loaded.
-func (r *Registry) IsNativeModLoaded(name string) bool {
-	if r.loadedNativeMods == nil {
-		return false
-	}
-	return r.loadedNativeMods[name]
-}
-
-// MarkNativeModLoaded records that the named native module has been loaded.
-func (r *Registry) MarkNativeModLoaded(name string) {
-	if r.loadedNativeMods == nil {
-		r.loadedNativeMods = make(map[string]bool)
-	}
-	r.loadedNativeMods[name] = true
 }
 
 // --- Shared helpers used by multiple builtin files ---
@@ -596,7 +521,7 @@ func ValToString(v Value) string {
 // ContextStoreLookup looks up a key in the registry's context store,
 // walking the prototype chain. Returns the value and true if found.
 func ContextStoreLookup(r *Registry, key string) (Value, bool) {
-	store := r.ContextStore()
+	store := r.Contexts.Top()
 	if store == nil {
 		return Value{}, false
 	}
@@ -606,10 +531,10 @@ func ContextStoreLookup(r *Registry, key string) (Value, bool) {
 // ContextSet stores a key-value pair in the root context store.
 // Convenience method for programmatic setup (e.g. tests, query setup).
 func (r *Registry) ContextSet(key string, val Value) {
-	store := r.ContextStore()
+	store := r.Contexts.Top()
 	if store == nil {
 		r.InitRootContext()
-		store = r.ContextStore()
+		store = r.Contexts.Top()
 	}
 	store.Set(key, val)
 }
@@ -654,10 +579,10 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if tv, ok := reg.TopOfTypeStack(name); ok && tv.IsObjectType() {
+	if tv, ok := reg.Types.TopBody(name); ok && tv.IsObjectType() {
 		return tv
 	}
-	if top, ok := reg.TopOfDefStack(name); ok {
+	if top, ok := reg.Defs.Top(name); ok {
 		if top.IsObjectType() {
 			return top
 		}

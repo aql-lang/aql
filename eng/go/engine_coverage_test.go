@@ -118,42 +118,42 @@ func TestDefStackPushPopShadow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.HasDef("x") {
+	if r.Defs.Has("x") {
 		t.Error("fresh registry should not have x")
 	}
 
-	r.PushDef("x", NewInteger(1))
-	if !r.HasDef("x") {
+	r.Defs.Push("x", NewInteger(1))
+	if !r.Defs.Has("x") {
 		t.Error("after push, x should exist")
 	}
-	if d := r.DefStackDepth("x"); d != 1 {
+	if d := r.Defs.Depth("x"); d != 1 {
 		t.Errorf("depth = %d, want 1", d)
 	}
-	v, _ := r.TopOfDefStack("x")
+	v, _ := r.Defs.Top("x")
 	got, _ := v.AsInteger()
 	if got != 1 {
 		t.Errorf("top = %d, want 1", got)
 	}
 
 	// Shadow with a second push.
-	r.PushDef("x", NewInteger(2))
-	v, _ = r.TopOfDefStack("x")
+	r.Defs.Push("x", NewInteger(2))
+	v, _ = r.Defs.Top("x")
 	got, _ = v.AsInteger()
 	if got != 2 {
 		t.Errorf("after second push, top = %d, want 2", got)
 	}
 
 	// Pop reveals the original.
-	r.PopDef("x")
-	v, _ = r.TopOfDefStack("x")
+	r.Defs.Pop("x")
+	v, _ = r.Defs.Top("x")
 	got, _ = v.AsInteger()
 	if got != 1 {
 		t.Errorf("after pop, top = %d, want 1", got)
 	}
 
 	// Final pop empties the stack.
-	r.PopDef("x")
-	if r.HasDef("x") {
+	r.Defs.Pop("x")
+	if r.Defs.Has("x") {
 		t.Error("after final pop, x should be gone")
 	}
 }
@@ -163,20 +163,20 @@ func TestSnapshotRestoreDefDepths(t *testing.T) {
 	// truncates each name back to its captured depth. This is the
 	// mechanism fn-body sandboxing uses to drop temporary bindings.
 	r, _ := NewRegistry()
-	r.PushDef("a", NewInteger(1))
-	snap := r.SnapshotDefDepths()
+	r.Defs.Push("a", NewInteger(1))
+	snap := r.Defs.Snapshot()
 
-	r.PushDef("a", NewInteger(2))
-	r.PushDef("b", NewInteger(99))
-	if d := r.DefStackDepth("a"); d != 2 {
+	r.Defs.Push("a", NewInteger(2))
+	r.Defs.Push("b", NewInteger(99))
+	if d := r.Defs.Depth("a"); d != 2 {
 		t.Errorf("depth after pushes: a=%d, want 2", d)
 	}
 
-	r.RestoreToDefDepths(snap)
-	if d := r.DefStackDepth("a"); d != 1 {
+	r.Defs.Restore(snap)
+	if d := r.Defs.Depth("a"); d != 1 {
 		t.Errorf("depth after restore: a=%d, want 1", d)
 	}
-	if r.HasDef("b") {
+	if r.Defs.Has("b") {
 		t.Error("b should have been truncated to zero by restore")
 	}
 }
@@ -381,7 +381,7 @@ func TestRegistryFormatsStartEmpty(t *testing.T) {
 	// service in via Registry.SetCapability before running user
 	// code. Pinned here so future drift surfaces in CI.
 	r, _ := NewRegistry()
-	if names := r.CapabilityNames(); len(names) != 0 {
+	if names := r.Capabilities.Names(); len(names) != 0 {
 		t.Errorf("expected zero capabilities on a fresh registry, got %v", names)
 	}
 }

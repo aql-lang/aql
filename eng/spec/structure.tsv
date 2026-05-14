@@ -125,15 +125,15 @@ type Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	M
 # `( quote name )` captures `name` as an Atom — the clean way to put a		
 # symbolic value inside a structure.		
 		
-{ tag:( quote red ) }	{tag:atom(red)}	
-{ tags:[ ( quote red ) ( quote green ) ( quote blue ) ] }	{tags:[atom(red) atom(green) atom(blue)]}	
-[ ( quote x ) ( quote y ) ]	[atom(x) atom(y)]	
+{ tag:( quote red ) }	{tag:(quote red)}
+{ tags:[ ( quote red ) ( quote green ) ( quote blue ) ] }	{tags:[(quote red) (quote green) (quote blue)]}
+[ ( quote x ) ( quote y ) ]	[(quote x) (quote y)]
 		
 # def-bound atom referenced at depth.		
-def a ( quote red ) { tag:a }	{tag:atom(red)}	
-def a ( quote red ) { deep:{ inner:[ { x:a } ] } }	{deep:{inner:[{x:atom(red)}]}}	
-def a ( quote red ) lengthq [ a a a ]	3	
-def a ( quote red ) firstq [ a ( quote green ) ]	atom(red)	
+def a ( quote red ) { tag:a }	{tag:(quote red)}
+def a ( quote red ) { deep:{ inner:[ { x:a } ] } }	{deep:{inner:[{x:(quote red)}]}}
+def a ( quote red ) lengthq [ a a a ]	3
+def a ( quote red ) firstq [ a ( quote green ) ]	(quote red)
 		
 # ====================================================================		
 # 7. Def references at depth — the core 'go deeper' cases		
@@ -146,12 +146,12 @@ def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list �
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
 type Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a|b|c base:a|b|c}}}	type-named disjunct, three deep, twice
-def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:atom(red)}]}}}	atom, four deep
+def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:(quote red)}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 type Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:atom(red)} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 type Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:(quote red)} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		

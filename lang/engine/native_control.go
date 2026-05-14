@@ -108,7 +108,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	body := args[0]
 	if body.IsWord() {
 		w, _ := body.AsWord()
-		if v, ok := r.TopOfDefStack(w.Name); ok {
+		if v, ok := r.Defs.Top(w.Name); ok {
 			body = v
 		}
 	}
@@ -247,7 +247,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		if !lit {
 			branch = "then"
 		}
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:     "unreachable_branch",
 			Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
 			Severity: SeverityWarning,
@@ -287,7 +287,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 
 func if2ReturnsFn(args []Value, r *Registry) []Value {
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:     "unreachable_branch",
 			Detail:   "if condition is a constant false; then-branch is unreachable",
 			Severity: SeverityWarning,
@@ -387,9 +387,9 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 // the body's residual top-of-stack.
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value) []Value {
 	body := args[len(args)-1]
-	r.PushDef(iterName, NewCarrier(iterType))
+	r.Defs.Push(iterName, NewCarrier(iterType))
 	stk, _ := RunCarrierBodyWithDefs(r, body)
-	r.PopDef(iterName)
+	r.Defs.Pop(iterName)
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}

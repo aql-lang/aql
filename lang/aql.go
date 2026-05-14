@@ -115,7 +115,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
-	reg.NativeModResolver = nativemod.Resolve
+	reg.Modules.Resolver = nativemod.Resolve
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": o.Registry,
@@ -151,14 +151,14 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	}
 
 	a.registry.Source = src
-	defer a.registry.BeginCheckMode()()
+	defer a.registry.Check.Begin()()
 
 	eng := engine.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
 	// Emit unused-def warnings after all execution has completed
 	// so the Used map has been fully populated.
-	a.registry.EmitUnusedDefDiagnostics()
+	a.registry.Check.EmitUnusedDefDiagnostics()
 	if err != nil {
 		return CheckResult{Diagnostics: a.registry.Check.Diagnostics}, err
 	}

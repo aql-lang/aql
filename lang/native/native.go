@@ -13,7 +13,7 @@ func Register(r *engine.Registry) {
 	for _, n := range Natives {
 		r.RegisterNativeFunc(n)
 	}
-	r.ModuleInitFunc = func(child *engine.Registry) {
+	r.Modules.InitFunc = func(child *engine.Registry) {
 		for _, n := range Natives {
 			child.RegisterNativeFunc(n)
 		}

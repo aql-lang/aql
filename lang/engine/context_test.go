@@ -322,13 +322,13 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	}
 
 	// Initially no context
-	if r.ContextStore() != nil {
+	if r.Contexts.Top() != nil {
 		t.Fatal("expected nil context initially")
 	}
 
 	// Push empty context (nil parent)
-	r.PushContext(nil)
-	store := r.ContextStore()
+	r.Contexts.Push(nil)
+	store := r.Contexts.Top()
 	if store == nil {
 		t.Fatal("expected non-nil context store after push")
 	}
@@ -340,8 +340,8 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	store.Set("key1", engine.NewInteger(1))
 
 	// Push child — should inherit key1 via prototype
-	r.PushContext(store)
-	childStore := r.ContextStore()
+	r.Contexts.Push(store)
+	childStore := r.Contexts.Top()
 	v, ok := childStore.Get("key1")
 	_as13, _ := v.AsInteger()
 	if !ok || _as13 != 1 {
@@ -353,8 +353,8 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	childStore.Set("key2", engine.NewInteger(2))
 
 	// Pop child
-	r.PopContext()
-	restored := r.ContextStore()
+	r.Contexts.Pop()
+	restored := r.Contexts.Top()
 	v, ok = restored.Get("key1")
 	_as14, _ := v.AsInteger()
 	if !ok || _as14 != 1 {
@@ -365,8 +365,8 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	}
 
 	// Pop parent
-	r.PopContext()
-	if r.ContextStore() != nil {
+	r.Contexts.Pop()
+	if r.Contexts.Top() != nil {
 		t.Error("expected nil context after popping all layers")
 	}
 }

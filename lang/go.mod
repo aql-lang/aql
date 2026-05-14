@@ -4,7 +4,6 @@ go 1.24.7
 
 require (
 	github.com/aql-lang/aql/eng v0.0.0
-	github.com/aql-lang/aql/util/go v0.0.0
 	github.com/jsonicjs/csv/go v0.1.2
 	github.com/jsonicjs/jsonic/go v0.1.6
 	golang.org/x/text v0.21.0
@@ -36,5 +35,3 @@ replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 replace voxgiguniversalsdk v0.1.1 => github.com/voxgig/udk/go v0.1.1
 
 replace github.com/aql-lang/aql/eng v0.0.0 => ../eng/go
-
-replace github.com/aql-lang/aql/util/go v0.0.0 => ../util/go

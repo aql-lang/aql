@@ -182,7 +182,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// Explicit nil (no annotation) triggers the fallback. An empty but
 	// non-nil slice is a valid "returns nothing" declaration.
 	if sig.Returns == nil {
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
 			Word:   word,
@@ -348,146 +348,6 @@ func JoinCarriers(a, b Value) Value {
 	return v
 }
 
-// checkModeFallbackPositions returns up to n stack indices to use as
-// argument positions when a check-mode fallback fires (no signature
-// matched, assume first candidate). Values before the pointer are
-// preferred (normal stack order); any shortfall is filled from
-// values after the pointer, skipping control tokens. Types are not
-// verified — this is the "assume" path.
-func (e *Engine) checkModeFallbackPositions(n int) []int {
-	positions := e.resolvedIndicesBefore(n)
-	remaining := n - len(positions)
-	for i := e.pointer + 1; remaining > 0 && i < len(e.stack); i++ {
-		v := e.stack[i]
-		if v.IsForward() || v.IsMark() || v.IsMove() ||
-			v.IsOpenParen() || v.IsReturnCheck() || v.IsDefCleanup() {
-			continue
-		}
-		positions = append(positions, i)
-		remaining--
-	}
-	return positions
-}
-
-// checkModeAssumeSig is the recovery path for unmatched signatures in
-// check mode: emit a diagnostic (with pos attached), gather up to N
-// adjacent positions as synthetic args, synthesise carrier results
-// from the assumed signature, and splice them over the word +
-// consumed positions.
-//
-// This path deliberately bypasses forward collection and type
-// matching — both would cascade failures. The trade-off is that the
-// checker reports one diagnostic per site and keeps going with the
-// assumed signature's declared return types (or Any if unannotated).
-func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
-	// Gather candidate positions once and try to pick a signature
-	// whose arity matches and whose declared types are compatible
-	// with (or at least not contradicted by) the actual carrier
-	// args. TAny carriers are treated as wildcards.
-	best := fallback
-	bestMatch := -1
-	// Scan all signatures and pick the best fit. Scoring:
-	//  - compatible concrete-type matches count.
-	//  - ties break toward sigs with ReturnsFn (carry custom
-	//    check-mode logic) over plain Returns (static list).
-	// When nothing is concretely compatible, fall through to
-	// scanning by arity alone so we still land on a ReturnsFn-
-	// bearing sig when possible rather than a static catch-all.
-	bestHasFn := fallback.ReturnsFn != nil
-	for i := range fn.Signatures {
-		s := &fn.Signatures[i]
-		if s.Fallback {
-			continue
-		}
-		n := len(s.Args)
-		pos := e.checkModeFallbackPositions(n)
-		if len(pos) != n {
-			continue
-		}
-		score := 0
-		compatible := true
-		for j, p := range pos {
-			av := e.stack[p]
-			if av.VType.Equal(TAny) {
-				continue
-			}
-			if sigTypeMatches(av, s.Args[j]) {
-				score++
-				continue
-			}
-			compatible = false
-			break
-		}
-		if !compatible {
-			continue
-		}
-		hasFn := s.ReturnsFn != nil
-		if score > bestMatch || (score == bestMatch && hasFn && !bestHasFn) {
-			bestMatch = score
-			best = s
-			bestHasFn = hasFn
-		}
-	}
-	// Fallback pass: if no compatible sig was found at all, prefer
-	// a sig with a ReturnsFn over one without (all else equal).
-	if bestMatch < 0 {
-		for i := range fn.Signatures {
-			s := &fn.Signatures[i]
-			if s.Fallback {
-				continue
-			}
-			if s.ReturnsFn != nil && !bestHasFn {
-				best = s
-				break
-			}
-		}
-	}
-	sig := best
-	e.registry.AddCheckDiagnostic(CheckDiagnostic{
-		Code:   "no_signature",
-		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
-		Word:   w.Name,
-		Row:    pos.Row,
-		Col:    pos.Col,
-	})
-	n := len(sig.Args)
-	positions := e.checkModeFallbackPositions(n)
-	args := make([]Value, len(positions))
-	for i, p := range positions {
-		args[i] = e.stack[p]
-	}
-	results := carrierResults(e.registry, w.Name, sig, args, pos)
-
-	// Remove the word and any consumed positions, then splice results
-	// in at the word's slot. We rely on ascending order for removal.
-	indices := append([]int{e.pointer}, positions...)
-	// Insertion sort (small n).
-	for i := 1; i < len(indices); i++ {
-		for j := i; j > 0 && indices[j] < indices[j-1]; j-- {
-			indices[j], indices[j-1] = indices[j-1], indices[j]
-		}
-	}
-	// Deduplicate (defensive).
-	uniq := indices[:0]
-	prev := -1
-	for _, idx := range indices {
-		if idx != prev {
-			uniq = append(uniq, idx)
-			prev = idx
-		}
-	}
-	// Remove from highest to lowest to avoid shifting.
-	insertAt := e.pointer
-	for i := len(uniq) - 1; i >= 0; i-- {
-		if uniq[i] < insertAt {
-			insertAt--
-		}
-		e.stackRemove(uniq[i])
-	}
-	e.stackSplice(insertAt, 0, results...)
-	e.pointer = insertAt
-	return nil
-}
 
 // RunCarrierBody runs a list body (a Value with VType=TList) through a
 // fresh sub-engine in check mode and returns the residual carrier
@@ -521,14 +381,14 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	}
 
 	// Snapshot def-stack depths (all known names).
-	snapshot := r.SnapshotDefDepths()
+	snapshot := r.Defs.Snapshot()
 
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
 	sub := New(r)
 	result, err := sub.Run(tokens)
 	if err != nil {
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "branch_error",
 			Detail: "branch analysis error: " + err.Error(),
 		})
@@ -538,13 +398,13 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
 	adds := map[string]Value{}
-	for _, k := range r.DefNames() {
+	for _, k := range r.Defs.Names() {
 		before := snapshot[k] // zero for names not present before
-		depth := r.DefStackDepth(k)
+		depth := r.Defs.Depth(k)
 		if depth > before {
-			top, _ := r.TopOfDefStack(k)
+			top, _ := r.Defs.Top(k)
 			adds[k] = top
-			r.TruncateDefStack(k, before)
+			r.Defs.Truncate(k, before)
 		}
 	}
 	return result, adds
@@ -561,14 +421,14 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	for k, tv := range then {
 		seen[k] = true
 		if ev, ok := else_[k]; ok {
-			r.PushDef(k, JoinCarriers(tv, ev))
+			r.Defs.Push(k, JoinCarriers(tv, ev))
 			continue
 		}
 		// then-only: join with the pre-branch top-of-stack if any.
-		if pre, ok := r.TopOfDefStack(k); ok {
-			r.PushDef(k, JoinCarriers(tv, pre))
+		if pre, ok := r.Defs.Top(k); ok {
+			r.Defs.Push(k, JoinCarriers(tv, pre))
 		} else {
-			r.PushDef(k, tv)
+			r.Defs.Push(k, tv)
 		}
 	}
 	for k, ev := range else_ {
@@ -576,10 +436,10 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 			continue
 		}
 		// else-only: join with pre-branch top-of-stack.
-		if pre, ok := r.TopOfDefStack(k); ok {
-			r.PushDef(k, JoinCarriers(ev, pre))
+		if pre, ok := r.Defs.Top(k); ok {
+			r.Defs.Push(k, JoinCarriers(ev, pre))
 		} else {
-			r.PushDef(k, ev)
+			r.Defs.Push(k, ev)
 		}
 	}
 }
@@ -608,97 +468,6 @@ func JoinCarrierStacks(a, b []Value) []Value {
 		out[i] = JoinCarriers(ai, bi)
 	}
 	return out
-}
-
-// RecordContextSet records (key → carrier) for the given store-set
-// call. Called from `set`'s ReturnsFn. Repeated writes to the same
-// key join their carrier types via JoinCarriers so the recorded
-// type reflects every write. Safe to call outside check mode — it
-// becomes a no-op.
-func (r *Registry) RecordContextSet(key string, carrier Value) {
-	if !r.IsCheckMode() || key == "" {
-		return
-	}
-	if r.Check.ContextTypes == nil {
-		r.Check.ContextTypes = map[string]Value{}
-	}
-	if existing, ok := r.Check.ContextTypes[key]; ok {
-		r.Check.ContextTypes[key] = JoinCarriers(existing, carrier)
-		return
-	}
-	r.Check.ContextTypes[key] = carrier
-}
-
-// LookupContextType returns the carrier recorded for the given key
-// via a prior set, or an Any carrier + false when the key has not
-// been observed in this check run.
-func (r *Registry) LookupContextType(key string) (Value, bool) {
-	if v, ok := r.Check.ContextTypes[key]; ok {
-		return v, true
-	}
-	return NewCarrier(TAny), false
-}
-
-// RecordCheckDef is called by the def/undef handlers when running
-// under check mode. It remembers the name the user bound so that
-// end-of-run analysis can flag defs that were never referenced.
-// Names starting with "_" (engine internals) are ignored.
-func (r *Registry) RecordCheckDef(name string, pos SrcPos) {
-	if !r.IsCheckMode() || name == "" || strings.HasPrefix(name, "_") {
-		return
-	}
-	if r.Check.DefsInstalled == nil {
-		r.Check.DefsInstalled = map[string]SrcPos{}
-	}
-	r.Check.DefsInstalled[name] = pos
-	// Any prior "use" count for this name was against an older
-	// (now-shadowed) def or against a lookup during def setup —
-	// reset so only uses AFTER this install count.
-	delete(r.Check.DefsUsed, name)
-}
-
-// recordCheckUse marks a name as referenced during check mode. It is
-// safe to call unconditionally; when CheckMode is off the call is a
-// no-op. Used by Registry.Lookup and stepWord's simple-value path.
-func (r *Registry) recordCheckUse(name string) {
-	if !r.IsCheckMode() || name == "" {
-		return
-	}
-	if r.Check.DefsUsed == nil {
-		r.Check.DefsUsed = map[string]bool{}
-	}
-	r.Check.DefsUsed[name] = true
-}
-
-// EmitUnusedDefDiagnostics walks the set of defs installed during a
-// check run and emits an unused_def warning for any name that was
-// never referenced. Call this at the end of a check pass, before
-// returning the CheckResult.
-func (r *Registry) EmitUnusedDefDiagnostics() {
-	for name, pos := range r.Check.DefsInstalled {
-		if r.Check.DefsUsed[name] {
-			continue
-		}
-		r.AddCheckDiagnostic(CheckDiagnostic{
-			Code:     "unused_def",
-			Detail:   "def " + name + " is never used",
-			Word:     name,
-			Row:      pos.Row,
-			Col:      pos.Col,
-			Severity: SeverityWarning,
-		})
-	}
-}
-
-// addCheckDiagnostic appends a diagnostic to the registry. Safe to call
-// outside of check mode — it simply records the finding. If the
-// diagnostic's Severity is empty, the default mapping from its Code
-// is applied via SeverityFor.
-func (r *Registry) AddCheckDiagnostic(d CheckDiagnostic) {
-	if d.Severity == "" {
-		d.Severity = SeverityFor(d.Code)
-	}
-	r.Check.Diagnostics = append(r.Check.Diagnostics, d)
 }
 
 // GuardClause describes one `x is T` clause detected in a condition.
@@ -737,7 +506,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		tv := elems[i+2]
 		if tv.Data != nil && tv.VType.Equal(TWord) {
 			inner, _ := tv.AsWord()
-			if v, ok := r.TopOfDefStack(inner.Name); ok {
+			if v, ok := r.Defs.Top(inner.Name); ok {
 				tv = v
 			}
 		}
@@ -801,7 +570,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 // the narrowings after the then-branch runs.
 func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if !r.IsCheckMode() {
+	if !r.Check.IsActive() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -809,11 +578,11 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	for _, c := range clauses {
-		r.PushDef(c.Name, NewCarrier(c.Type))
+		r.Defs.Push(c.Name, NewCarrier(c.Type))
 	}
 	return func() {
 		for _, c := range clauses {
-			r.PopDef(c.Name)
+			r.Defs.Pop(c.Name)
 		}
 	}
 }
@@ -826,7 +595,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 // alternative is subtracted. Returns a restore func.
 func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	noop := func() {}
-	if !r.IsCheckMode() {
+	if !r.Check.IsActive() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
@@ -836,7 +605,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	type applied struct{ name string }
 	var pushed []applied
 	for _, c := range clauses {
-		cur, ok := r.TopOfDefStack(c.Name)
+		cur, ok := r.Defs.Top(c.Name)
 		if !ok {
 			continue
 		}
@@ -865,7 +634,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
 		}
-		r.PushDef(c.Name, narrowed)
+		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})
 	}
 	if len(pushed) == 0 {
@@ -873,7 +642,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	}
 	return func() {
 		for _, p := range pushed {
-			r.PopDef(p.name)
+			r.Defs.Pop(p.name)
 		}
 	}
 }
@@ -919,14 +688,14 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 
 	// Snapshot def-stack depths so we can unwind any defs the body
 	// or parameter binding created.
-	snapshot := r.SnapshotDefDepths()
+	snapshot := r.Defs.Snapshot()
 
 	// Bind named parameters as simple defs (carrier-typed). Unnamed
 	// parameters flow through the stack — push them before the body.
 	var input []Value
 	for i, arg := range args {
 		if i < len(paramNames) && paramNames[i] != "" {
-			r.PushDef(paramNames[i], arg)
+			r.Defs.Push(paramNames[i], arg)
 		} else {
 			input = append(input, arg)
 		}
@@ -936,7 +705,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	sub := New(r)
 	result, err := sub.Run(input)
 	if err != nil {
-		r.AddCheckDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "fn_body_error",
 			Detail: "fn body analysis error for " + name + ": " + err.Error(),
 			Word:   name,
@@ -945,7 +714,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 
 	// Restore def-stacks to snapshot.
-	r.RestoreToDefDepths(snapshot)
+	r.Defs.Restore(snapshot)
 
 	r.Check.FnSummaries[key] = result
 	return result

@@ -1,6 +1,6 @@
 .PHONY: test vet fmt lint vuln clean
 
-# This module (github.com/aql-lang/aql/util/go) is the shared TSV
+# This module (github.com/aql-lang/aql/test/go) is the shared TSV
 # spec-runner scaffolding used by eng/go and lang's spec tests.
 
 test:

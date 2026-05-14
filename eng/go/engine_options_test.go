@@ -26,10 +26,10 @@ func TestEngineOptionsDefaults(t *testing.T) {
 	// Both registries should have the same set of core word names.
 	want := CoreWordNames()
 	for _, name := range want {
-		if !r1.HasDef(name) {
+		if !r1.Defs.Has(name) {
 			t.Errorf("zero-options engine missing core word %q", name)
 		}
-		if !r2.HasDef(name) {
+		if !r2.Defs.Has(name) {
 			t.Errorf("defaults-options engine missing core word %q", name)
 		}
 	}
@@ -50,7 +50,7 @@ func TestEngineOptionsPartial(t *testing.T) {
 	// Words wasn't set, so it should default to "*" — all core
 	// words installed.
 	for _, name := range CoreWordNames() {
-		if !r.HasDef(name) {
+		if !r.Defs.Has(name) {
 			t.Errorf("partial-options engine missing core word %q (default Words should install all)", name)
 		}
 	}
@@ -69,7 +69,7 @@ func TestEngineOptionsWordWhitelist(t *testing.T) {
 	}
 	// The four named words must be present.
 	for _, name := range want {
-		if !r.HasDef(name) {
+		if !r.Defs.Has(name) {
 			t.Errorf("whitelisted core word %q not registered", name)
 		}
 	}
@@ -82,7 +82,7 @@ func TestEngineOptionsWordWhitelist(t *testing.T) {
 				break
 			}
 		}
-		if !inList && r.HasDef(name) {
+		if !inList && r.Defs.Has(name) {
 			t.Errorf("non-whitelisted core word %q should not be registered", name)
 		}
 	}
@@ -97,7 +97,7 @@ func TestEngineOptionsWildcardInList(t *testing.T) {
 		t.Fatalf("wildcard should short-circuit, but got: %v", err)
 	}
 	for _, name := range CoreWordNames() {
-		if !r.HasDef(name) {
+		if !r.Defs.Has(name) {
 			t.Errorf("wildcard install should have registered %q", name)
 		}
 	}
@@ -113,7 +113,7 @@ func TestEngineOptionsEmptyWords(t *testing.T) {
 		t.Fatalf("NewWithOptions: %v", err)
 	}
 	for _, name := range CoreWordNames() {
-		if r.HasDef(name) {
+		if r.Defs.Has(name) {
 			t.Errorf("empty Words should leave registry untouched, but %q is registered", name)
 		}
 	}
@@ -140,10 +140,10 @@ func TestEngineOptionsUnknownWord(t *testing.T) {
 	}
 	// Validation precedes registration: even the names BEFORE the
 	// bad one ("def" here) should not have been registered.
-	if r.HasDef("def") {
+	if r.Defs.Has("def") {
 		t.Errorf("registry should be untouched on validation failure, but %q is registered", "def")
 	}
-	if r.HasDef("fn") {
+	if r.Defs.Has("fn") {
 		t.Errorf("registry should be untouched on validation failure, but %q is registered", "fn")
 	}
 }

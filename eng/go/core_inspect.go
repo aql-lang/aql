@@ -56,10 +56,10 @@ func registerCoreInspect(r *Registry) {
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name, _ := args[0].AsConcreteAtom()
-	if tv, ok := r.TopOfTypeStack(name); ok {
+	if tv, ok := r.Types.TopBody(name); ok {
 		return []Value{buildTypeInspection(name, tv)}, nil
 	}
-	if top, ok := r.TopOfDefStack(name); ok {
+	if top, ok := r.Defs.Top(name); ok {
 		// FnDef / Function defs are functions, not types — report
 		// their sig structure via buildInspection instead of treating
 		// the def as a type body.
@@ -81,11 +81,11 @@ func buildInspection(r *Registry, name string) Value {
 
 	fn := r.Lookup(name)
 	if fn == nil {
-		if r.HasDef(name) {
+		if r.Defs.Has(name) {
 			result.Set("kind", NewAtom("defined"))
 			// A plain `def`-bound value (not a registered word): include
 			// the value itself, e.g. `def f 99; inspect f` → {…value:99…}.
-			if v, ok := r.TopOfDefStack(name); ok {
+			if v, ok := r.Defs.Top(name); ok {
 				result.Set("value", v)
 			}
 			result.Set("signatures", NewList(nil))

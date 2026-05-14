@@ -144,11 +144,11 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.HasType(name) {
+	if r.Types.Has(name) {
 		return nil, fmt.Errorf("def %s: name clash — already a type", name)
 	}
 	InstallDef(r, name, body, stackOnly)
-	r.RecordCheckDef(name, args[0].Pos)
+	r.Check.RecordDef(name, args[0].Pos)
 	return nil, nil
 }
 
@@ -167,7 +167,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.HasType(name) {
+	if r.Types.Has(name) {
 		return nil, fmt.Errorf("def %s: name clash — already a type", name)
 	}
 	constraint, _ := nameMap.Get(name)
@@ -185,7 +185,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	body := args[1]
 	if constraint.VType.Equal(TFnUndef) && body.IsAtom() {
 		atomName, _ := body.AsAtom()
-		if top, ok := r.TopOfDefStack(atomName); ok {
+		if top, ok := r.Defs.Top(atomName); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 				body = top
 			}
@@ -201,21 +201,21 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				name, body.String(), describeType())
 		}
 		InstallDef(r, name, out)
-		r.RecordCheckDef(name, args[0].Pos)
+		r.Check.RecordDef(name, args[0].Pos)
 		return nil, nil
 	}
-	if r.IsCheckMode() && constraint.IsDepScalar() {
+	if r.Check.IsActive() && constraint.IsDepScalar() {
 		leaf := DependentLeafFromType(constraint.VType)
 		if base, ok := DependentLeafBaseType(leaf); ok && body.VType.Matches(base) {
 			InstallDef(r, name, body)
-			r.RecordCheckDef(name, args[0].Pos)
+			r.Check.RecordDef(name, args[0].Pos)
 			return nil, nil
 		}
 	}
 	unified, ok := Unify(body, constraint)
 	if !ok {
-		if r.IsCheckMode() {
-			r.AddCheckDiagnostic(CheckDiagnostic{
+		if r.Check.IsActive() {
+			r.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "type_error",
 				Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
 					name, body.String(), describeType()),
@@ -224,14 +224,14 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				Col:  args[0].Pos.Col,
 			})
 			InstallDef(r, name, NewCarrier(constraint.VType))
-			r.RecordCheckDef(name, args[0].Pos)
+			r.Check.RecordDef(name, args[0].Pos)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
 	}
 	InstallDef(r, name, unified)
-	r.RecordCheckDef(name, args[0].Pos)
+	r.Check.RecordDef(name, args[0].Pos)
 	return nil, nil
 }
 
@@ -403,7 +403,7 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 // ---- args / __pa ----
 
 func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	top, ok := r.TopArgs()
+	top, ok := r.Args.Top()
 	if !ok {
 		return nil, fmt.Errorf("args: not inside a function")
 	}
@@ -411,6 +411,6 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 }
 
 func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	r.PopArgs()
+	r.Args.Pop()
 	return nil, nil
 }

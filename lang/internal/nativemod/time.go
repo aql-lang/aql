@@ -121,7 +121,7 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}, {Type: engine.TInteger}}, []*engine.Type{engine.TDate}, subReg))
 	}
 
-	modID := parent.NextModuleID()
+	modID := parent.Modules.NextID()
 	desc := engine.ModuleDesc{
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"time": exports},

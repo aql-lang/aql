@@ -244,15 +244,15 @@ func (e *Engine) stackSplice(i, count int, replacements ...Value) {
 // tape.
 func (e *Engine) Run(input []Value) ([]Value, error) {
 	// Push a scoped context Store whose prototype is the parent context.
-	parent := e.registry.ContextStore()
-	e.registry.PushContext(parent)
-	defer e.registry.PopContext()
+	parent := e.registry.Contexts.Top()
+	e.registry.Contexts.Push(parent)
+	defer e.registry.Contexts.Pop()
 
 	// In static type-check mode, convert concrete literal values to
 	// carriers before execution. The same dispatch/matching machinery
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
-	if e.registry.IsCheckMode() {
+	if e.registry.Check.IsActive() {
 		input = StripToCarriers(input)
 	}
 
@@ -280,7 +280,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// Check-mode global step budget: abort the whole run
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
-		if e.registry.IsCheckMode() {
+		if e.registry.Check.IsActive() {
 			budget := e.registry.Check.StepBudget
 			if budget == 0 {
 				budget = DefaultCheckStepBudget
@@ -289,7 +289,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			if e.registry.Check.StepCount > budget {
 				if !e.registry.Check.BudgetTripped {
 					e.registry.Check.BudgetTripped = true
-					e.registry.AddCheckDiagnostic(CheckDiagnostic{
+					e.registry.Check.AddDiagnostic(CheckDiagnostic{
 						Code:   "step_budget_exceeded",
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
 					})
@@ -421,7 +421,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		if !v.Undefined {
 			continue
 		}
-		if e.registry.IsCheckMode() {
+		if e.registry.Check.IsActive() {
 			e.stack[i] = NewCarrier(TAny)
 		}
 	}
@@ -658,7 +658,7 @@ func (e *Engine) stepWord(val Value) error {
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
-		stack := e.registry.DefStack(w.Name)
+		stack := e.registry.Defs.Stack(w.Name)
 		for i := len(stack) - 1; i >= 0; i-- {
 			if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 				e.stack[e.pointer] = NewFunction(fnDef)
@@ -682,7 +682,7 @@ func (e *Engine) stepWord(val Value) error {
 	// forward can still consume it (e.g. `Color` as the value side
 	// of an export map entry).
 	if e.registry != nil {
-		if tv, ok := e.registry.TopOfTypeStack(w.Name); ok {
+		if tv, ok := e.registry.Types.TopBody(w.Name); ok {
 			push := tv
 			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
 				push.Quoted = true
@@ -696,14 +696,14 @@ func (e *Engine) stepWord(val Value) error {
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
-	if top, ok := e.registry.TopOfDefStack(w.Name); ok {
+	if top, ok := e.registry.Defs.Top(w.Name); ok {
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
-			e.registry.recordCheckUse(w.Name)
+			e.registry.Check.recordUse(w.Name)
 			// For list bodies, expand onto the stack like the fallback handler does.
 			// Quoted lists are treated as data values (not expanded).
 			// Type literals (Data == nil) are values, not bodies — they
@@ -725,7 +725,7 @@ func (e *Engine) stepWord(val Value) error {
 	if fn != nil {
 		// User-code dispatch — record the name as "used" for
 		// unused-def analysis in check mode.
-		e.registry.recordCheckUse(w.Name)
+		e.registry.Check.recordUse(w.Name)
 	}
 
 	if fn == nil {
@@ -769,7 +769,7 @@ func (e *Engine) stepWord(val Value) error {
 		// operation (e.g. a checkModeAssumeSig for `add`) and never
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
-		if !e.registry.IsCheckMode() {
+		if !e.registry.Check.IsActive() {
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
@@ -779,7 +779,7 @@ func (e *Engine) stepWord(val Value) error {
 				fullSource: e.effectiveSource(),
 			}
 		}
-		e.registry.AddCheckDiagnostic(CheckDiagnostic{
+		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "undefined_word",
 			Detail: "undefined word: " + w.Name,
 			Word:   w.Name,
@@ -823,7 +823,7 @@ func (e *Engine) stepWord(val Value) error {
 	// typed signatures exist), treat it as an unmatched call and go
 	// through the assume-sig recovery path so the user gets a
 	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
-	if sig != nil && sig.Fallback && e.registry.IsCheckMode() {
+	if sig != nil && sig.Fallback && e.registry.Check.IsActive() {
 		hasTyped := false
 		for i := range fn.Signatures {
 			if !fn.Signatures[i].Fallback {
@@ -843,7 +843,7 @@ func (e *Engine) stepWord(val Value) error {
 		// in place of the word + up to N adjacent arg slots.
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
-		if e.registry.IsCheckMode() && len(fn.Signatures) > 0 {
+		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn)
@@ -944,7 +944,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry.IsCheckMode() && !match.Sig.RunInCheckMode {
+	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
@@ -987,7 +987,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	}
 
 	// Compute context (cheap O(1) call).
-	ctx := e.registry.Context()
+	ctx := e.registry.Contexts.TopData()
 
 	var fullStack []Value
 	if match.Sig.FullStack {
@@ -1729,7 +1729,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.PushArgs(NewList(argsCopy))
+	e.registry.Args.Push(NewList(argsCopy))
 
 	var names []string
 	unnamedCount := 0
@@ -1867,9 +1867,9 @@ func (e *Engine) stepEnd() error {
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := val.AsDefCleanup()
 	reg := info.Registry
-	for _, name := range reg.DefNames() {
+	for _, name := range reg.Defs.Names() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
-		for reg.DefStackDepth(name) > prevLen {
+		for reg.Defs.Depth(name) > prevLen {
 			UninstallDef(reg, name)
 		}
 	}
@@ -2587,4 +2587,526 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 		}
 	}
 	return false
+}
+
+// matchSignature is the unified signature matching function.
+//
+// Algorithm:
+//
+//	0.1 Using the ordered signatures, attempt to match in order,
+//	    stopping at the first match.
+//	1.1 If stack-only (or /s) and not /f: skip forward, go to step 2.
+//	    If stack-only but /f: override → do forward scan.
+//	1.2 Match each parameter in order against future tokens.
+//	1.3 Stop if all params matched, or if /N params reached.
+//	1.4 Move to step 2 if you hit a boundary condition:
+//	    a function word, a pipe barrier, or "end".
+//	1.5 If you hit an open paren, treat as boundary (pre-evaluated).
+//	2.1 Match the remaining parameters against the stack, working
+//	    backwards (top of stack first).
+//	2.2 Stop once all or /N params reached.
+//
+// This is implemented as one outer loop over signatures and one inner
+// loop over parameters. No separate functions are called for matching.
+//
+// Returns: matched signature and arg positions (absolute stack indices
+// in signature order). Positions > pointer are forward args that need
+// deferred collection. Positions < pointer are stack args. Returns nil
+// sig if no signature matches.
+//
+//nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.md
+func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
+	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
+	// dichotomy at the word level. Each sig declares its own boundary
+	// via BarrierPos — the count of leading args that may be collected
+	// from forward tokens. Args at sig[BarrierPos..N-1] always come
+	// from the stack, top-down. The /s and /f modifiers override
+	// BarrierPos at the call site:
+	//   - /s (ForceStack)   → boundary at 0, all stack
+	//   - /f (ForceForward) → boundary at N, all forward
+	insideForward := e.isInsidePendingForward()
+
+	// When the next forward token is a Word, prefer signatures with
+	// /q at position 0 (inspect-style name capture). The user wrote a
+	// Word, not a String — the /q sig captures the user's intent that
+	// the name is data, not a call site. The non-/q TString sister
+	// sig is for callers who pass a string literal. This also covers
+	// untype Foo (Foo in r.Types), `m.Color` after import (Color is a
+	// key in the imported map), and inspect-style name capture.
+	preferWordSig := false
+	if e.pointer+1 < len(e.stack) {
+		next := e.stack[e.pointer+1]
+		if next.IsWord() {
+			preferWordSig = true
+		}
+	}
+
+	// Build a map from resolved values to their absolute stack indices.
+	// This lets us record exact positions for stack-matched args.
+	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
+
+	// Track the best non-preferred match so that if no preferred sig
+	// matches, we can fall back to it without a second pass.
+	type matchResult struct {
+		sig       *Signature
+		positions []int
+	}
+	var bestDeferred *matchResult
+
+	// ── 0.1: one outer loop over sorted signatures ───────────────
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+
+		if sig.Fallback {
+			continue
+		}
+		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
+			continue
+		}
+
+		nArgs := len(sig.Args)
+
+		// 0-arg sigs are deferred to the fallback section at the bottom.
+		if nArgs == 0 {
+			continue
+		}
+
+		// Check if this is a preferred (/q at arg[0]) signature.
+		isPreferred := preferWordSig && nArgs > 0 &&
+			sig.QuoteArgs != nil && sig.QuoteArgs[0]
+
+		// Effective forward limit for this match attempt. /s and /f
+		// override the sig's declared boundary.
+		forwardLimit := sig.BarrierPos
+		switch {
+		case w.ForceStack:
+			forwardLimit = 0
+		case w.ForceForward:
+			forwardLimit = nArgs
+		}
+
+		// ── Step 1: forward matching ─────────────────────────────
+
+		positions := make([]int, nArgs)
+		fwd := 0 // number of params matched by forward tokens
+
+		// Always run the forward scan up to forwardLimit; if it's 0
+		// the loop simply doesn't execute and all args come from
+		// the stack below.
+		{
+			scanIdx := e.pointer + 1
+
+			// One inner loop over parameters, matching forward tokens.
+			for fwd < forwardLimit && scanIdx < len(e.stack) {
+
+				tok := e.stack[scanIdx]
+				expectedType := sig.Args[fwd]
+
+				// 1.4: structural boundaries — stop forward scan.
+				if tok.IsForward() || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
+					tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+					break
+				}
+
+				// 1.4: end, ) — boundary, stop.
+				if tok.IsEnd() || tok.IsCloseParen() {
+					break
+				}
+
+				// 1.5: open parens are pre-evaluated by preEvalParens
+				// before matching begins. If one remains, treat as boundary.
+				if tok.IsOpenParen() {
+					break
+				}
+
+				if tok.IsWord() {
+					ww, _ := tok.AsWord()
+					// /q modifier: capture the upcoming Word as an Atom
+					// (the conversion happens at insertForward / stepLiteral
+					// time; here we just count it as a match).
+					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
+						if TAtom.Matches(expectedType) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+
+					// Defined word: resolves to its def type.
+					if top, ok := e.registry.Defs.Top(ww.Name); ok {
+						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						if _, ok := top.Data.(FnDefInfo); !ok {
+							break // simple def, type mismatch
+						}
+					}
+
+					// Named type from r.Types: resolves to the type
+					// value (mirror of stepWord's r.Types lookup so the
+					// planner's expected type matches what stepWord
+					// will actually push at runtime). Predicate types
+					// arrive as TFnDef/TFunction values; plan against
+					// that VType for sig matching.
+					if tv, ok := e.registry.Types.TopBody(ww.Name); ok {
+						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break // named-type value doesn't fit this slot
+					}
+
+					// 1.4: function word — boundary, stop.
+					if e.registry.Lookup(ww.Name) != nil {
+						break
+					}
+
+					// Known literals: true/false → Boolean, type names → type literal.
+					if ww.Name == "true" || ww.Name == "false" {
+						if sigTypeMatches(Value{VType: TBoolean}, expectedType) || expectedType.Equal(TAny) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+					if tn, isType := typeNames[ww.Name]; isType {
+						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+					if tn, isType := ResolveTypePath(ww.Name); isType {
+						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
+						break
+					}
+
+					// Undefined word: always resolves to Atom.
+					if sigTypeMatches(Value{VType: TAtom}, expectedType) || expectedType.Equal(TAny) {
+						positions[fwd] = scanIdx
+						fwd++
+						scanIdx++
+						continue
+					}
+					break // type mismatch
+				}
+
+				// Open paren marker: boundary, stop forward scan.
+				if tok.IsOpenParen() {
+					break
+				}
+
+				// Literal value: direct type check.
+				if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
+					if rejectsTypeLiteral(tok, expectedType) {
+						break // reject type literal at concrete-payload sig
+					}
+					positions[fwd] = scanIdx
+					fwd++
+					scanIdx++
+					continue
+				}
+
+				// *Type mismatch — stop forward scanning.
+				break
+			}
+		}
+
+		// 1.3: all params matched by forward?
+		if fwd == nArgs {
+			// Pattern check (post §1.1 fix): scalar literals route
+			// through Signature.Patterns instead of value-tagged
+			// type paths, so the pattern check has to run for
+			// forward-matched positions too. The previous code
+			// short-circuited here without consulting Patterns,
+			// which made `def fact[0] (1)` fire for any integer.
+			if !patternsOk(sig, positions, e.stack, fwd) {
+				continue
+			}
+			if preferWordSig && !isPreferred {
+				if bestDeferred == nil {
+					bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+				}
+				continue
+			}
+			return sig, positions
+		}
+
+		// Inside a pending forward scope: all args must come from
+		// forward. Accept only if forward+stack would satisfy the sig.
+		if insideForward && fwd > 0 {
+			remaining := nArgs - fwd
+			if len(resolved) >= remaining {
+				canStack := true
+				for j := 0; j < remaining; j++ {
+					stackVal := resolved[len(resolved)-1-j]
+					if !sigTypeMatches(stackVal, sig.Args[fwd+j]) {
+						canStack = false
+						break
+					}
+				}
+				if canStack {
+					// Fill remaining positions from stack (nearest first).
+					for j := 0; j < remaining; j++ {
+						ri := len(resolvedIdx) - 1 - j
+						positions[fwd+j] = resolvedIdx[ri]
+					}
+					if preferWordSig && !isPreferred {
+						if bestDeferred == nil {
+							bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+						}
+						continue
+					}
+					return sig, positions
+				}
+			}
+			continue
+		}
+
+		// /f means all args must come from forward — if any args
+		// remain unmatched after the forward scan, this sig fails.
+		if w.ForceForward && fwd < nArgs {
+			continue
+		}
+
+		// ── Step 2: stack matching ───────────────────────────────
+
+		remaining := nArgs - fwd
+		if len(resolved) < remaining {
+			continue // not enough stack values
+		}
+
+		// 2.1: match remaining sig positions against the stack,
+		// top-down. sig[fwd] = top of stack, sig[fwd+1] = next deeper,
+		// etc. This is the "stack in reverse order" half of the
+		// unified rule — same for stack-only sigs (BarrierPos=0)
+		// as for partial-boundary sigs.
+
+		allMatch := true
+		for j := 0; j < remaining; j++ {
+			ri := len(resolvedIdx) - 1 - j
+			stackVal := resolved[ri]
+			sigIdx := fwd + j
+
+			// /q is a forward-only rule (see Signature.QuoteArgs doc).
+			// stackVal cannot be a Word in normal execution: stepWord
+			// has already resolved any Word at the pointer to a function
+			// call, defined value, or Atom, and quote produces Atoms.
+			// The branch below is defensive only — a stack Atom matches
+			// an [Atom/q, ...] sig via the regular sigTypeMatches path
+			// just below, no /q involvement required.
+			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
+				if !TAtom.Matches(sig.Args[sigIdx]) {
+					allMatch = false
+					break
+				}
+				positions[sigIdx] = resolvedIdx[ri]
+				continue
+			}
+			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
+				allMatch = false
+				break
+			}
+			if rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
+				allMatch = false
+				break
+			}
+			positions[sigIdx] = resolvedIdx[ri]
+		}
+		if !allMatch {
+			continue
+		}
+
+		// Check structural patterns on every matched position. Post
+		// §1.1 fix: scalar literals route through Patterns regardless
+		// of whether they came from forward or stack matching, so the
+		// pattern check no longer skips forward positions.
+		if !patternsOk(sig, positions, e.stack, fwd) {
+			continue
+		}
+
+		// Full match found.
+		if preferWordSig && !isPreferred {
+			if bestDeferred == nil {
+				bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+			}
+			continue
+		}
+		return sig, positions
+	}
+
+	// Return deferred non-preferred match if one was found.
+	if bestDeferred != nil {
+		return bestDeferred.sig, bestDeferred.positions
+	}
+
+	// Try fallback (0-arg or Fallback handler).
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
+			continue
+		}
+		if len(sig.Args) == 0 || sig.Fallback {
+			return sig, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// checkModeFallbackPositions returns up to n stack indices to use as
+// argument positions when a check-mode fallback fires (no signature
+// matched, assume first candidate). Values before the pointer are
+// preferred (normal stack order); any shortfall is filled from
+// values after the pointer, skipping control tokens. Types are not
+// verified — this is the "assume" path.
+func (e *Engine) checkModeFallbackPositions(n int) []int {
+	positions := e.resolvedIndicesBefore(n)
+	remaining := n - len(positions)
+	for i := e.pointer + 1; remaining > 0 && i < len(e.stack); i++ {
+		v := e.stack[i]
+		if v.IsForward() || v.IsMark() || v.IsMove() ||
+			v.IsOpenParen() || v.IsReturnCheck() || v.IsDefCleanup() {
+			continue
+		}
+		positions = append(positions, i)
+		remaining--
+	}
+	return positions
+}
+
+// checkModeAssumeSig is the recovery path for unmatched signatures in
+// check mode: emit a diagnostic (with pos attached), gather up to N
+// adjacent positions as synthetic args, synthesise carrier results
+// from the assumed signature, and splice them over the word +
+// consumed positions.
+//
+// This path deliberately bypasses forward collection and type
+// matching — both would cascade failures. The trade-off is that the
+// checker reports one diagnostic per site and keeps going with the
+// assumed signature's declared return types (or Any if unannotated).
+func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
+	// Gather candidate positions once and try to pick a signature
+	// whose arity matches and whose declared types are compatible
+	// with (or at least not contradicted by) the actual carrier
+	// args. TAny carriers are treated as wildcards.
+	best := fallback
+	bestMatch := -1
+	// Scan all signatures and pick the best fit. Scoring:
+	//  - compatible concrete-type matches count.
+	//  - ties break toward sigs with ReturnsFn (carry custom
+	//    check-mode logic) over plain Returns (static list).
+	// When nothing is concretely compatible, fall through to
+	// scanning by arity alone so we still land on a ReturnsFn-
+	// bearing sig when possible rather than a static catch-all.
+	bestHasFn := fallback.ReturnsFn != nil
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue
+		}
+		n := len(s.Args)
+		pos := e.checkModeFallbackPositions(n)
+		if len(pos) != n {
+			continue
+		}
+		score := 0
+		compatible := true
+		for j, p := range pos {
+			av := e.stack[p]
+			if av.VType.Equal(TAny) {
+				continue
+			}
+			if sigTypeMatches(av, s.Args[j]) {
+				score++
+				continue
+			}
+			compatible = false
+			break
+		}
+		if !compatible {
+			continue
+		}
+		hasFn := s.ReturnsFn != nil
+		if score > bestMatch || (score == bestMatch && hasFn && !bestHasFn) {
+			bestMatch = score
+			best = s
+			bestHasFn = hasFn
+		}
+	}
+	// Fallback pass: if no compatible sig was found at all, prefer
+	// a sig with a ReturnsFn over one without (all else equal).
+	if bestMatch < 0 {
+		for i := range fn.Signatures {
+			s := &fn.Signatures[i]
+			if s.Fallback {
+				continue
+			}
+			if s.ReturnsFn != nil && !bestHasFn {
+				best = s
+				break
+			}
+		}
+	}
+	sig := best
+	e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   "no_signature",
+		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+		Word:   w.Name,
+		Row:    pos.Row,
+		Col:    pos.Col,
+	})
+	n := len(sig.Args)
+	positions := e.checkModeFallbackPositions(n)
+	args := make([]Value, len(positions))
+	for i, p := range positions {
+		args[i] = e.stack[p]
+	}
+	results := carrierResults(e.registry, w.Name, sig, args, pos)
+
+	// Remove the word and any consumed positions, then splice results
+	// in at the word's slot. We rely on ascending order for removal.
+	indices := append([]int{e.pointer}, positions...)
+	// Insertion sort (small n).
+	for i := 1; i < len(indices); i++ {
+		for j := i; j > 0 && indices[j] < indices[j-1]; j-- {
+			indices[j], indices[j-1] = indices[j-1], indices[j]
+		}
+	}
+	// Deduplicate (defensive).
+	uniq := indices[:0]
+	prev := -1
+	for _, idx := range indices {
+		if idx != prev {
+			uniq = append(uniq, idx)
+			prev = idx
+		}
+	}
+	// Remove from highest to lowest to avoid shifting.
+	insertAt := e.pointer
+	for i := len(uniq) - 1; i >= 0; i-- {
+		if uniq[i] < insertAt {
+			insertAt--
+		}
+		e.stackRemove(uniq[i])
+	}
+	e.stackSplice(insertAt, 0, results...)
+	e.pointer = insertAt
+	return nil
 }

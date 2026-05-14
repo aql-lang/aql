@@ -34,7 +34,7 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	}
 
 	// Ensure native words (push, etc.) are available inside the module.
-	if parent.ModuleInitFunc == nil {
+	if parent.Modules.InitFunc == nil {
 		native.Register(parent)
 	}
 

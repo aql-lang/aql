@@ -3968,7 +3968,7 @@ func TestCallAQLBasic(t *testing.T) {
 	})
 
 	// Look up the function
-	fnVal, ok := r.TopOfDefStack("double")
+	fnVal, ok := r.Defs.Top("double")
 	if !ok {
 		t.Fatal("double not defined")
 	}
@@ -4013,7 +4013,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
-	fnVal, _ := r.TopOfDefStack("inc")
+	fnVal, _ := r.Defs.Top("inc")
 
 	// Call with wrong type — MatchFnSig returns nil
 	sig := MatchFnSig(fnVal, []Value{NewString("hello")})
@@ -4150,7 +4150,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Directly exercise the args stack by pushing and calling
-	r.PushArgs(NewList([]Value{NewInteger(42), NewString("hi")}))
+	r.Args.Push(NewList([]Value{NewInteger(42), NewString("hi")}))
 	e := New(r)
 	result, err := e.Run([]Value{NewWord("args")})
 	if err != nil {
@@ -4164,7 +4164,7 @@ func TestArgsDirectAccess(t *testing.T) {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}
 	// Clean up
-	r.PopArgs()
+	r.Args.Pop()
 }
 
 func TestArgsOutsideFnErrors(t *testing.T) {

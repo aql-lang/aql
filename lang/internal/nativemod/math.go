@@ -48,7 +48,7 @@ func BuildMathModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	exports.Set("pi", makeConstFnDef("math-pi", subReg))
 	exports.Set("e", makeConstFnDef("math-e", subReg))
 
-	modID := parent.NextModuleID()
+	modID := parent.Modules.NextID()
 	desc := engine.ModuleDesc{
 		ID:      modID,
 		Exports: map[string]*engine.OrderedMap{"math": exports},

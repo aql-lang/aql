@@ -294,12 +294,12 @@ func LookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
 	}
-	if tv, ok := r.TopOfTypeStack(name); ok {
+	if tv, ok := r.Types.TopBody(name); ok {
 		if IsTypeBody(tv) {
 			return &tv
 		}
 	}
-	val, ok := r.TopOfDefStack(name)
+	val, ok := r.Defs.Top(name)
 	if !ok {
 		return nil
 	}

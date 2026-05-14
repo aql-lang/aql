@@ -47,7 +47,7 @@ func InstallMathExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.PushDef(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func InstallTimeExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.PushDef(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -71,7 +71,7 @@ func InstallMatrixExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.PushDef(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, engine.NewMap(exportMap))
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func InstallDecisionExports(r *engine.Registry) error {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.PushDef(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, engine.NewMap(exportMap))
 	}
 	return nil
 }

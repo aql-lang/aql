@@ -1,12 +1,11 @@
-// Spec-runner test for the shared engine spec suite at eng/spec/
-// (sibling of eng/go/ and eng/ts/, so the Go and TypeScript ports run
-// the same .tsv files). Each TSV row is parsed with the AQL parser
-// (eng/parser, in this same module) and run against a fresh
-// eng.Registry pre-populated with eng.RegisterCoreWords plus a fixed
-// set of spec-runner test fixtures (q-suffixed). The runner tests the
-// engine kernel only — no production native words (add, upper, …) are
-// installed; the q-fixtures cover the same dispatch / value /
-// type-lattice ground in spec-stable minimal forms.
+// Spec-runner test for the engine kernel — runs the shared corpus at
+// aql/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
+// ports run the same .tsv files). Each row is parsed with the AQL parser
+// (eng/parser) and run against a fresh eng.Registry pre-populated with
+// eng.RegisterCoreWords plus a fixed set of spec-runner test fixtures
+// (q-suffixed). No production native words (add, upper, …) are installed
+// — the q-fixtures cover dispatch / value / type-lattice ground in
+// spec-stable minimal forms.
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
@@ -14,9 +13,9 @@
 // is, none, end, …) keep their bare names because what's being tested
 // IS the keyword itself, not a fixture for it.
 //
-// Both the runner and the parser it uses live in the eng module — eng
-// is completely standalone (it does not depend on lang).
-package eng_test
+// This file lives in the test module (not eng/go) so eng/go has no
+// dependency on test — the dep arrow points one way: test → eng.
+package engspec
 
 import (
 	"fmt"
@@ -27,17 +26,17 @@ import (
 
 	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/eng/parser"
-	"github.com/aql-lang/aql/util/go/specrunner"
+	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
-// specReplayCounter is bumped per call to the `replayq` test fixture
-// so each Mark/Move pair gets a unique ID across a spec file.
+// specReplayCounter is bumped per call to the `replayq` test fixture so
+// each Mark/Move pair gets a unique ID across a spec file.
 var specReplayCounter int
 
 // registerSpecWords installs the eng core words plus the spec-runner
-// test fixtures on a registry. The fixtures are minimal,
-// single-overload variants tailored for spec coverage of the
-// dispatch / value / type-lattice core.
+// test fixtures on a registry. The fixtures are minimal, single-overload
+// variants tailored for spec coverage of the dispatch / value /
+// type-lattice core.
 func registerSpecWords(r *eng.Registry) {
 	eng.RegisterCoreWords(r)
 
@@ -355,20 +354,19 @@ func registerSpecWords(r *eng.Registry) {
 		}},
 	})
 
-	r.PushDef("pi", eng.NewInteger(3))
-	r.PushDef("tau", eng.NewInteger(6))
-	r.PushDef("greeting", eng.NewString("hello"))
+	r.Defs.Push("pi", eng.NewInteger(3))
+	r.Defs.Push("tau", eng.NewInteger(6))
+	r.Defs.Push("greeting", eng.NewString("hello"))
 }
 
-// TestSpec runs eng/spec/*.tsv against the engine kernel — a fresh
+// TestSpec runs aql/eng/spec/*.tsv against the engine kernel — a fresh
 // eng.Registry populated with eng.RegisterCoreWords plus the spec-runner
-// fixtures registered by registerSpecWords above.
-//
-// The shared TSV scaffolding (file walk, row parsing, ERROR-prefix
-// handling, value rendering) lives in util/go/specrunner so this and
-// lang/test's TestSpecProd share one implementation.
+// fixtures registered by registerSpecWords above. The shared TSV
+// scaffolding (file walk, row parsing, ERROR handling, value rendering)
+// lives in test/go/specrunner.
 func TestSpec(t *testing.T) {
-	specrunner.RunDir(t, filepath.Join("..", "spec"), func(input string) ([]eng.Value, error) {
+	specDir := filepath.Join("..", "..", "..", "eng", "spec")
+	specrunner.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
 		values, err := parser.Parse(input)
 		if err != nil {
 			return nil, err

@@ -57,8 +57,8 @@ func TestTypedDefIntegerFailure(t *testing.T) {
 		t.Fatal("expected type-mismatch error for `def x:Integer \"not-an-integer\"`, got nil")
 	}
 	// x must NOT have been installed on a failed unify.
-	if r.HasDef("x") {
-		t.Errorf("x was installed despite unify failure (depth=%d)", r.DefStackDepth("x"))
+	if r.Defs.Has("x") {
+		t.Errorf("x was installed despite unify failure (depth=%d)", r.Defs.Depth("x"))
 	}
 }
 

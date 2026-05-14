@@ -3,14 +3,13 @@
 // `lang/test/spec_runner_test.go` (production language). Both walk a
 // directory of `.tsv` files and, for each non-blank/non-comment row,
 // parse the `<input><TAB><expected>[<TAB><note>]` columns, evaluate the
-// input through a caller-supplied engine, and compare a rendered output
-// string to `<expected>` (with a `ERROR:<wantSubstring>` form for
-// expected-error rows).
+// input through a caller-supplied engine, and compare the result stack
+// rendered through `eng.Canon` to `<expected>` (with a `ERROR:<wantSubstring>`
+// form for expected-error rows).
 //
 // The caller supplies a Run function that does the parse-and-evaluate
-// step. Rendering an eng.Value stack to the canonical spec format lives
-// here (RenderStack / RenderValue) so the two runners share the same
-// format.
+// step. Rendering lives in `eng.Canon`, which emits canonical AQL source
+// — a form that re-parses to the same stack.
 package specrunner
 
 import (
@@ -18,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -91,7 +89,7 @@ func RunFile(t *testing.T, path string, run Run) {
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := expected[len("ERROR:"):]
 				if runErr == nil {
-					t.Fatalf("expected error containing %q, got result %v", want, RenderStack(out))
+					t.Fatalf("expected error containing %q, got result %v", want, eng.Canon(out))
 				}
 				if want != "" && !strings.Contains(runErr.Error(), want) {
 					t.Errorf("error %q does not contain %q", runErr.Error(), want)
@@ -102,7 +100,7 @@ func RunFile(t *testing.T, path string, run Run) {
 			if runErr != nil {
 				t.Fatalf("unexpected error: %v", runErr)
 			}
-			got := RenderStack(out)
+			got := eng.Canon(out)
 			if got != expected {
 				t.Errorf("got %q, want %q", got, expected)
 			}
@@ -110,73 +108,6 @@ func RunFile(t *testing.T, path string, run Run) {
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("scanner error in %s: %v", path, err)
-	}
-}
-
-// RenderStack renders a slice of values as a single space-separated
-// string in spec format.
-func RenderStack(stack []eng.Value) string {
-	parts := make([]string, len(stack))
-	for i, v := range stack {
-		parts[i] = RenderValue(v)
-	}
-	return strings.Join(parts, " ")
-}
-
-// RenderValue renders one value in the spec format. The spec format
-// diverges from Value.String for clarity in expected columns: strings
-// single-quoted, atoms as `atom(name)`, lists as space-separated
-// `[a b c]`, maps as `{k:v k:v}`, type literals as their leaf, and
-// `none` lowercase.
-func RenderValue(v eng.Value) string {
-	switch {
-	case v.IsNone():
-		return "none"
-	case v.Data == nil:
-		if v.VType != nil {
-			if name := eng.TypeNameByID(v.VType.ID); name != "" {
-				return name
-			}
-		}
-		return v.VType.Leaf()
-	case v.VType.Matches(eng.TInteger):
-		n, _ := v.AsInteger()
-		return strconv.FormatInt(n, 10)
-	case v.VType.Matches(eng.TDecimal):
-		f, _ := v.AsDecimal()
-		return eng.FormatDecimal(f)
-	case v.VType.Matches(eng.TString):
-		s, _ := v.AsString()
-		return "'" + s + "'"
-	case v.VType.Matches(eng.TBoolean):
-		b, _ := v.AsBoolean()
-		if b {
-			return "true"
-		}
-		return "false"
-	case v.VType.Equal(eng.TAtom) && v.Data != nil:
-		s, _ := v.AsAtom()
-		return "atom(" + s + ")"
-	case v.VType.Matches(eng.TList) && v.Data != nil:
-		lst := v.AsList()
-		parts := make([]string, lst.Len())
-		for i := 0; i < lst.Len(); i++ {
-			parts[i] = RenderValue(lst.Get(i))
-		}
-		return "[" + strings.Join(parts, " ") + "]"
-	case v.VType.Equal(eng.TMap) && v.Data != nil:
-		m := v.AsMap()
-		if m == nil {
-			return v.String()
-		}
-		parts := make([]string, m.Len())
-		for i, k := range m.Keys() {
-			val, _ := m.Get(k)
-			parts[i] = k + ":" + RenderValue(val)
-		}
-		return "{" + strings.Join(parts, " ") + "}"
-	default:
-		return v.String()
 	}
 }
 

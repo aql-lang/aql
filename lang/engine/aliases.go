@@ -61,6 +61,7 @@ type (
 	ReadMap            = eng.ReadMap
 	RecordTypeInfo     = eng.RecordTypeInfo
 	Registry           = eng.Registry
+	DefTable           = eng.DefTable
 	ReturnCheckInfo    = eng.ReturnCheckInfo
 	ReturnsFunc        = eng.ReturnsFunc
 	Signature          = eng.Signature

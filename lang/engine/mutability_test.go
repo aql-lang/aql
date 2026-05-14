@@ -444,7 +444,7 @@ func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	r.InitRootContext()
 	// Put store in context
-	ctx := r.ContextStore()
+	ctx := r.Contexts.Top()
 	ctx.Set("s", NewStoreValue(TStore, store))
 
 	e := New(r)
@@ -473,7 +473,7 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 	// Set on child should COW child AND propagate to parent in context.
 	r, _ := DefaultRegistry()
 	r.InitRootContext()
-	ctx := r.ContextStore()
+	ctx := r.Contexts.Top()
 
 	child := &StoreInstanceInfo{
 		TypeName: "Object/Store",
@@ -518,7 +518,7 @@ func TestStoreCOWPrototypeResolution(t *testing.T) {
 	// After COW, unchanged keys resolve through the prototype chain.
 	r, _ := DefaultRegistry()
 	r.InitRootContext()
-	ctx := r.ContextStore()
+	ctx := r.Contexts.Top()
 
 	store := &StoreInstanceInfo{
 		TypeName: "Object/Store",
