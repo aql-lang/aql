@@ -45,13 +45,21 @@ func (o OriginKind) String() string {
 // from builtinDecls; the `type` word mints fresh Type values at
 // runtime (each declaration mints a new identity — even when its name
 // shadows an outer one).
+//
+// Behavior is the pluggable per-type operation set consulted by the
+// kernel's dispatch points (`v.Is(t)`, Value.String, ValuesEqual,
+// etc.). Every Type has a non-nil Behavior — the registration paths
+// install DefaultBehavior when the caller doesn't supply a custom
+// one. See typebehavior.go for the interface and the optional
+// capability sub-interfaces (Comparer, Hasher, Walker).
 type Type struct {
-	ID         string     // canonical identity (e.g. "S_000000000004")
-	Name       string     // last segment of path (e.g. "ProperString")
-	Parent     *Type      // nil for roots
-	FixedID    int        // >0 for builtins; 0 for dynamic
-	IsInternal bool       // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind // builtin / userdef
+	ID         string       // canonical identity (e.g. "S_000000000004")
+	Name       string       // last segment of path (e.g. "ProperString")
+	Parent     *Type        // nil for roots
+	FixedID    int          // >0 for builtins; 0 for dynamic
+	IsInternal bool         // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind   // builtin / userdef
+	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
 }
 
 // IsNative reports whether t is a built-in type seeded at init from
@@ -201,14 +209,31 @@ func (tt *TypeTable) mintID(parent *Type) string {
 // construct a body Value using the returned *Type as its VType, then
 // Bind. Anonymous types (e.g. `object {…}` not installed by name)
 // skip the Bind step and just keep the *Type as the Value's identity.
+//
+// Behavior defaults to DefaultBehavior. Callers needing custom
+// dispatch construct the *Type via this path then set def.Behavior
+// before exposing it, or use MintTypeWithBehavior.
 func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
-		Name:   name,
-		Parent: parent,
-		Origin: OriginUserDef,
+		Name:     name,
+		Parent:   parent,
+		Origin:   OriginUserDef,
+		Behavior: DefaultBehavior,
 	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
+	return def
+}
+
+// MintTypeWithBehavior is MintType plus a custom TypeBehavior. Used
+// by registration paths that want to install a domain-specific
+// Behavior at mint time (predicate types, dependent scalars, plugin
+// types). A nil behavior falls back to DefaultBehavior.
+func (tt *TypeTable) MintTypeWithBehavior(name string, parent *Type, behavior TypeBehavior) *Type {
+	def := tt.MintType(name, parent)
+	if behavior != nil {
+		def.Behavior = behavior
+	}
 	return def
 }
 
@@ -452,6 +477,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		FixedID:    d.FixedID,
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
+		Behavior:   DefaultBehavior,
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def
@@ -571,10 +597,11 @@ func MintTestType(path string) *Type {
 		}
 	}
 	def := &Type{
-		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
-		Name:   parts[len(parts)-1],
-		Parent: parent,
-		Origin: OriginUserDef,
+		ID:       fmt.Sprintf("%st%011x", prefix, testTypeSeq),
+		Name:     parts[len(parts)-1],
+		Parent:   parent,
+		Origin:   OriginUserDef,
+		Behavior: DefaultBehavior,
 	}
 	testTypePool[path] = def
 	return def
