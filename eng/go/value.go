@@ -1678,6 +1678,18 @@ func (v Value) AsMutableMap() *OrderedMap {
 
 // String returns a human-readable representation.
 func (v Value) String() string {
+	// Behavior-driven format delegation: types that supply a custom
+	// TypeBehavior route through their Format. The DefaultBehavior
+	// sentinel falls through to the kernel switch below, preserving
+	// the fast path for primitive / structural / loop-control values.
+	//
+	// Type literals (Data==nil) are NOT delegated — they render as
+	// their leaf type name uniformly across all types, including
+	// types with custom Behaviors. See the Data==nil arm in the
+	// switch below.
+	if v.Data != nil && v.VType != nil && v.VType.Behavior != nil && v.VType.Behavior != DefaultBehavior {
+		return v.VType.Behavior.Format(v)
+	}
 	switch {
 	case v.IsWord():
 		w, _ := v.AsWord()
@@ -1737,53 +1749,11 @@ func (v Value) String() string {
 			return "true"
 		}
 		return "false"
-	case v.VType.Matches(TInstant):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format(time.RFC3339Nano)
-		}
-		return "Instant(nil)"
-	case v.VType.Matches(TDateTime):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format("2006-01-02T15:04:05.999999999")
-		}
-		return "DateTime(nil)"
-	case v.VType.Matches(TDate):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format("2006-01-02")
-		}
-		return "Date(nil)"
-	case v.VType.Matches(TTimeOfDay):
-		if d, ok := v.Data.(time.Duration); ok {
-			h := int(d.Hours())
-			m := int(d.Minutes()) % 60
-			s := int(d.Seconds()) % 60
-			ns := d.Nanoseconds() % 1e9
-			if ns != 0 {
-				return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
-			}
-			return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
-		}
-		return "TimeOfDay(nil)"
-	case v.VType.Matches(TCalDuration):
-		if cd, ok := v.Data.(CalDurationData); ok {
-			return fmt.Sprintf("P%dY%dM%dD", cd.Years, cd.Months, cd.Days)
-		}
-		return "CalDuration(nil)"
-	case v.VType.Matches(TClkDuration):
-		if d, ok := v.Data.(time.Duration); ok {
-			return d.String()
-		}
-		return "ClkDuration(nil)"
-	case v.VType.Matches(TTimezone):
-		if loc, ok := v.Data.(*time.Location); ok {
-			return loc.String()
-		}
-		return "Timezone(nil)"
-	case v.VType.Matches(TMatrix):
-		if m, ok := v.Data.(MatrixData); ok {
-			return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
-		}
-		return "Matrix(nil)"
+	// Domain types (Instant, DateTime, Date, TimeOfDay, CalDuration,
+	// ClkDuration, Timezone, Matrix, Timeout, Interval) now render
+	// via their per-Type Behavior installed by
+	// coretype_format_behaviors.go and dispatched at the top of this
+	// function. Their old switch arms have been removed.
 	case v.IsPath():
 		_as6, _ := v.AsPath()
 		return _as6.String()
@@ -1833,12 +1803,9 @@ func (v Value) String() string {
 			parts[i] = e.String()
 		}
 		return "Array[" + strings.Join(parts, ",") + "]"
-	case v.IsTimeout():
-		ti, _ := v.AsTimeout()
-		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
-	case v.IsInterval():
-		ii, _ := v.AsInterval()
-		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
+	// Timeout / Interval render via their per-Type Behavior — see
+	// coretype_format_behaviors.go. Their arms have been removed
+	// from this switch.
 	case v.IsObjectInstance():
 		oi, _ := v.AsObjectInstance()
 		allFields := oi.AllFields()
