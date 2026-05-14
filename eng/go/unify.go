@@ -662,7 +662,23 @@ func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
 }
 
 // ValuesEqual compares the data payloads of two values with the same type.
+//
+// Routes through Behavior.Equal for the same-VType case so types
+// with normalisation semantics (CalDuration, DepScalar in a future
+// step, and plugin types) can supply their own equality. The
+// cross-VType case falls through to the default switch since
+// equality across types is a matching-strategy concern, not a
+// per-type concern.
 func ValuesEqual(a, b Value) bool {
+	// Pluggable equality: when both sides share a VType with a
+	// non-default Behavior, delegate. Type literals (Data==nil) are
+	// excluded — bare type equality is a lattice-identity check, not
+	// a per-type semantic compare.
+	if a.Data != nil && b.Data != nil &&
+		a.VType != nil && a.VType == b.VType &&
+		a.VType.Behavior != nil && a.VType.Behavior != DefaultBehavior {
+		return a.VType.Behavior.Equal(a, b)
+	}
 	// Type literals (Data == nil) with equal types are always equal.
 	if a.Data == nil && b.Data == nil {
 		return true

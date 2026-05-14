@@ -118,3 +118,45 @@ type rejectingBehavior struct{ matchCalled bool }
 func (r *rejectingBehavior) Match(Value, *Type) bool { r.matchCalled = true; return false }
 func (rejectingBehavior) Format(Value) string        { return "reject" }
 func (rejectingBehavior) Equal(Value, Value) bool    { return false }
+
+// TestValuesEqualRoutesThroughBehavior verifies that a same-VType
+// pair with a custom Behavior delegates to Behavior.Equal. The
+// custom Behavior here returns "always equal" regardless of
+// payload — proving the delegation is consulted instead of the
+// default deep-compare path.
+func TestValuesEqualRoutesThroughBehavior(t *testing.T) {
+	tt := NewDynamicTypeTable()
+	custom := tt.MintTypeWithBehavior("AlwaysEqual", TInteger, alwaysEqualBehavior{})
+
+	a := Value{VType: custom, Data: int64(1)}
+	b := Value{VType: custom, Data: int64(99)}
+
+	if !ValuesEqual(a, b) {
+		t.Error("ValuesEqual returned false; custom Behavior should report equal")
+	}
+}
+
+// TestValuesEqualSkipsBehaviorOnDifferentVTypes verifies the
+// delegation is only triggered when both sides share VType. With
+// different VTypes the historical default-path switch runs.
+func TestValuesEqualSkipsBehaviorOnDifferentVTypes(t *testing.T) {
+	tt := NewDynamicTypeTable()
+	custom := tt.MintTypeWithBehavior("AlwaysEqual", TInteger, alwaysEqualBehavior{})
+
+	a := Value{VType: custom, Data: int64(1)}
+	b := NewInteger(2)
+
+	// Different VTypes (custom vs TInteger): falls into the default
+	// switch, which compares Integer payloads — 1 != 2, so equal=false.
+	if ValuesEqual(a, b) {
+		t.Error("ValuesEqual returned true; default path should compare integers (1 != 2)")
+	}
+}
+
+// alwaysEqualBehavior reports true for every Equal call. Used to
+// prove the delegation route in ValuesEqual.
+type alwaysEqualBehavior struct{}
+
+func (alwaysEqualBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (alwaysEqualBehavior) Format(v Value) string       { return DefaultBehavior.Format(v) }
+func (alwaysEqualBehavior) Equal(Value, Value) bool     { return true }
