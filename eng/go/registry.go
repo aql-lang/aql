@@ -609,3 +609,247 @@ func StoreKey(v Value) string {
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
+
+// RegisterNativeFunc installs a NativeFunc into the registry, converts
+// NativeSig to Signature, and registers with the appropriate precedence.
+//
+// The function name is validated against the language-fundamental
+// word-name rule (ValidateWordName in word_name.go): must begin with
+// [a-z] and contain only [a-z0-9-]. Engine-internal markers (`__`-
+// prefixed) are exempt. A bad name accumulates into r.errs — callers
+// can check r.Err() before relying on the registration.
+func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
+	if err := ValidateWordName(fn.Name); err != nil {
+		r.errs = append(r.errs, err)
+		return
+	}
+	for _, sig := range fn.Signatures {
+		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
+		s := Signature{
+			Args:             sig.Args,
+			Handler:          sig.Handler,
+			FullStack:        sig.FullStack,
+			Patterns:         sig.Patterns,
+			QuoteArgs:        sig.QuoteArgs,
+			NoEvalArgs:       sig.NoEvalArgs,
+			NoEvalMapArgs:    sig.NoEvalMapArgs,
+			BarrierPos:       sig.BarrierPos,
+			Fallback:         sig.Fallback,
+			Returns:          sig.Returns,
+			ReturnsFn:        sig.ReturnsFn,
+			RunInCheckMode:   sig.RunInCheckMode,
+			CheckFullStackFn: sig.CheckFullStackFn,
+		}
+		if fn.ForwardArgs {
+			r.Register(fn.Name, s)
+		} else {
+			r.RegisterStackOnly(fn.Name, s)
+		}
+	}
+}
+
+// CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
+// signature and arguments in a sub-engine. The caller is responsible for
+// signature matching — use MatchFnSig to find the matching sig.
+//
+//	sig := MatchFnSig(fn, args)
+//	result, err := r.CallAQL(sig, args)
+func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
+	// Build token sequence (same as InstallFnDef handler).
+	var tokens []Value
+	var names []string
+
+	// Push args list onto the args stack.
+	argsCopy := make([]Value, len(args))
+	copy(argsCopy, args)
+	argsList := NewList(argsCopy)
+	r.Args.Push(argsList)
+
+	for i, p := range sig.Params {
+		if p.Name != "" {
+			arg := args[i]
+			if arg.VType.Equal(TList) && !arg.Quoted {
+				arg.Quoted = true
+			}
+			InstallDef(r, p.Name, arg)
+			names = append(names, p.Name)
+		} else {
+			tokens = append(tokens, args[i])
+		}
+	}
+	body := make([]Value, len(sig.Body))
+	copy(body, sig.Body)
+	tokens = append(tokens, body...)
+
+	// Snapshot DefStacks lengths before body execution so we can
+	// clean up any defs created during body execution (Issue 2
+	// from AQL-DX-REPORT: def leakage from fn bodies).
+	defSnapshot := r.Defs.Snapshot()
+
+	// Evaluate in a sub-engine with higher step limit for complex bodies.
+	sub := NewTop(r)
+	result, err := sub.Run(tokens)
+
+	// Cleanup: pop args stack, undef named params, then clean up
+	// any defs that were created during body execution.
+	r.Args.Pop()
+	for i := len(names) - 1; i >= 0; i-- {
+		UninstallDef(r, names[i])
+	}
+
+	// Remove defs that were added during body execution.
+	// Collect names first, then clean up outside the range loop
+	// to avoid mutating DefStacks during iteration (UninstallDef
+	// triggers InstallFnDef → Register → upsertFnDef which can
+	// modify DefStacks entries for other names).
+	var toClean []string
+	for _, name := range r.Defs.Names() {
+		if r.Defs.Depth(name) > defSnapshot[name] {
+			toClean = append(toClean, name)
+		}
+	}
+	for _, name := range toClean {
+		target := defSnapshot[name]
+		// Pop entries down to the snapshot length. Use a bounded
+		// loop to avoid infinite looping if UninstallDef's rebuild
+		// creates new entries.
+		for attempts := 0; attempts < 100 && r.Defs.Depth(name) > target; attempts++ {
+			UninstallDef(r, name)
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("CallAQL: %w", err)
+	}
+	return result, nil
+}
+
+// --- Error construction -------------------------------------------------
+
+// AqlError constructs an AqlError that picks up the registry's source
+// text automatically. Replaces the recurring `makeAqlError(code,
+// detail, name, r.Source, "")` pattern across handlers — handlers
+// just call `r.AqlError("signature_error", "no match for "+name,
+// name)` and source threading is handled centrally.
+//
+// Use AqlErrorHint when a hint string is needed.
+func (r *Registry) AqlError(code, detail, word string) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlError(code, detail, word, src, "")
+}
+
+// AqlErrorHint is AqlError with an explicit hint string.
+func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlError(code, detail, word, src, hint)
+}
+
+// ResolveTypedName resolves a name to its type value through the
+// type-resolution chain used by the typed-def handler and `is`:
+// r.types first (the dedicated type registry), then DefStacks (legacy
+// path for record/object/DepScalar definitions). Returns the resolved
+// value and true if found; zero Value and false otherwise.
+//
+// Centralises the lookup so future namespace changes (a single
+// type/def store, scoped types) only need to update one site.
+func (r *Registry) ResolveTypedName(name string) (Value, bool) {
+	if r == nil {
+		return Value{}, false
+	}
+	if tv, ok := r.Types.TopBody(name); ok {
+		return tv, true
+	}
+	return r.Defs.Top(name)
+}
+
+// ResolveTypedNameValue resolves a Value-shaped type reference to its
+// concrete type value, capturing the source name when the input was
+// a Word. Returns the resolved value, the source name (empty if v
+// wasn't a Word), and ok=false only when v WAS a Word but couldn't
+// be resolved through r.types or DefStacks.
+//
+// Replaces the
+// `if v.IsWord() { w, _ := v.AsWord(); typeName = w.Name; if tv, ok :=
+// r.types[w.Name]; ok { v = tv } else if ds := r.defStacks[w.Name];
+// len(ds) > 0 { v = ds[len(ds)-1] } }` pattern in `defTypedHandler`,
+// `is`, `inspect`, and `typeof` — extracting the name capture so
+// downstream error messages can surface "type Bbd" rather than the
+// rendered value form.
+func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, ok bool) {
+	if !v.IsWord() {
+		return v, "", true
+	}
+	w, _ := v.AsWord()
+	rv, hit := r.ResolveTypedName(w.Name)
+	if !hit {
+		return v, w.Name, false
+	}
+	return rv, w.Name, true
+}
+
+// RunPredicate invokes a predicate-type fn against a candidate
+// value, applying the None-or-value contract. Returns the
+// predicate's output, a `matched` flag (true when the result is
+// not-None), and an error for malformed predicates or invocation
+// failures.
+//
+// The constraint must be a TFnDef or TFunction value carrying
+// FnDefInfo with a single-arg first signature. Predicate types
+// from `type Foo fn [x:Any Any [body]]` always satisfy this; other
+// shapes return an error.
+//
+// CheckMode short-circuit: when r.Check.Mode is true the predicate
+// body would run against carrier-typed input, which the body's
+// `(x is String)`/`(x gte 10)`/etc. checks can't usefully evaluate
+// (carriers fail those checks → every typed binding errors). Under
+// CheckMode this helper returns (candidate, matched=true, nil) so
+// downstream typed-def installation proceeds; the predicate's real
+// behaviour is exercised at runtime.
+//
+// Sandboxing: predicate bodies are user-controlled fn bodies that
+// could otherwise mutate registry state during a unify check.
+// runPredicateSandboxed snapshots r.types and r.ctxStack before the
+// CallAQL invocation and restores them on return — additions to
+// r.types via `type Foo …` and pushes onto the context stack are
+// rolled back. r.defStacks is already protected by CallAQL's own
+// snapshot.
+func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
+	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.VType.String())
+	}
+	fnDef, ok := constraint.Data.(FnDefInfo)
+	if !ok {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint has invalid payload (got %T)", constraint.Data)
+	}
+	if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
+		return Value{}, false, fmt.Errorf("RunPredicate: predicate must take exactly one argument")
+	}
+	// CheckMode: accept the binding without running the body. Real
+	// predicate behaviour is asserted at runtime; here we only need
+	// the analyser to keep flowing past the typed slot.
+	if r != nil && r.Check.Mode {
+		return candidate, true, nil
+	}
+	// Sandbox the call so a mischievous predicate body can't mutate
+	// r.types or the context stack out from under the surrounding
+	// program.
+	saved := snapshotPredicateState(r)
+	defer restorePredicateState(r, saved)
+
+	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
+	if err != nil {
+		return Value{}, false, err
+	}
+	if len(result) != 1 {
+		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
+	}
+	out = result[0]
+	matched = !out.VType.Equal(TNone)
+	return out, matched, nil
+}

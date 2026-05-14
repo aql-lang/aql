@@ -273,9 +273,21 @@ viz-golds: $(GOLDS)
 
 # PlantUML class diagram from Go structs/interfaces. Renders straight to
 # SVG via plantuml.jar so the index page can embed it.
+#
+# goplantuml flags: by default it draws only fields/methods inside class
+# boxes — every relationship arrow (aggregation, composition, interface
+# impl) needs an explicit flag. We turn them all on plus
+# -aggregate-private-members so unexported fields contribute too.
 viz-plantuml: $(GOPLANTUML) $(PLANTUML_JAR)
 	@mkdir -p $(VIZ_DIR)
-	$(GOPLANTUML) -recursive . > $(VIZ_DIR)/uml.puml
+	$(GOPLANTUML) -recursive \
+	  -show-aggregations \
+	  -show-compositions \
+	  -show-implementations \
+	  -show-aliases \
+	  -show-connection-labels \
+	  -aggregate-private-members \
+	  . > $(VIZ_DIR)/uml.puml
 	java -jar $(PLANTUML_JAR) -tsvg -o $(abspath $(VIZ_DIR)) $(VIZ_DIR)/uml.puml
 
 # Built-in: full transitive dep list as JSON.

@@ -193,47 +193,6 @@ func traceSigStr(name string, sig *Signature) string {
 	return name + "(" + strings.Join(args, ", ") + ")"
 }
 
-// stackInsert inserts val at index i, shifting elements right.
-// Only allocates when capacity is exhausted.
-func (e *Engine) stackInsert(i int, val Value) {
-	e.stack = append(e.stack, Value{})
-	copy(e.stack[i+1:], e.stack[i:len(e.stack)-1])
-	e.stack[i] = val
-}
-
-// stackRemove removes the element at index i, shifting elements left.
-// Zeroes the freed slot to release interface references.
-func (e *Engine) stackRemove(i int) {
-	copy(e.stack[i:], e.stack[i+1:])
-	e.stack[len(e.stack)-1] = Value{}
-	e.stack = e.stack[:len(e.stack)-1]
-}
-
-// stackSplice removes count elements starting at index i and inserts
-// replacements in their place. Only allocates when net growth exceeds capacity.
-func (e *Engine) stackSplice(i, count int, replacements ...Value) {
-	delta := len(replacements) - count
-	oldLen := len(e.stack)
-	newLen := oldLen + delta
-
-	if delta > 0 {
-		// Grow: ensure capacity, then shift tail right.
-		for cap(e.stack) < newLen {
-			e.stack = append(e.stack, Value{})
-		}
-		e.stack = e.stack[:newLen]
-		copy(e.stack[i+len(replacements):], e.stack[i+count:oldLen])
-	} else if delta < 0 {
-		// Shrink: shift tail left, zero freed slots.
-		copy(e.stack[i+len(replacements):], e.stack[i+count:])
-		for j := newLen; j < oldLen; j++ {
-			e.stack[j] = Value{}
-		}
-		e.stack = e.stack[:newLen]
-	}
-	copy(e.stack[i:], replacements)
-}
-
 // Run executes the input values through the stack machine and returns
 // the residual stack — there is no single "result value". After the
 // pointer walks off the end, end-of-input cleanup runs (resolve
@@ -449,7 +408,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 		stackArgCount := fwd.StackArgs
 
 		// Remove the forward marker.
-		e.stackRemove(fwdIdx)
+		stackRemove(&e.stack, fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -713,7 +672,7 @@ func (e *Engine) stepWord(val Value) error {
 				elems := top.AsList()
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
-				e.stackSplice(e.pointer, 1, expanded...)
+				stackSplice(&e.stack, e.pointer, 1, expanded...)
 				return nil
 			}
 			e.stack[e.pointer] = top
@@ -977,7 +936,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
 			results := match.Sig.CheckFullStackFn(match.Args, preserved, e.registry)
-			e.stackSplice(base, end+1-base, results...)
+			stackSplice(&e.stack, base, end+1-base, results...)
 			e.pointer = base
 			return nil
 		}
@@ -1009,7 +968,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		// FullStack handler returns the complete replacement for
 		// everything from base through the pointer (inclusive).
-		e.stackSplice(base, e.pointer+1-base, results...)
+		stackSplice(&e.stack, base, e.pointer+1-base, results...)
 		e.pointer = base
 		return nil
 	}
@@ -1071,11 +1030,11 @@ func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n i
 			}
 		}
 		// Splice out the compacted garbage, insert results.
-		e.stackSplice(dst, e.pointer+1-dst, results...)
+		stackSplice(&e.stack, dst, e.pointer+1-dst, results...)
 		e.pointer = firstArgIdx
 	} else if n == 0 {
 		// No args, just replace the word with results.
-		e.stackSplice(e.pointer, 1, results...)
+		stackSplice(&e.stack, e.pointer, 1, results...)
 		// Pointer stays at same position to re-examine results.
 	} else {
 		// Fallback: simple contiguous splice.
@@ -1083,7 +1042,7 @@ func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n i
 		if argStart < 0 {
 			argStart = 0
 		}
-		e.stackSplice(argStart, e.pointer+1-argStart, results...)
+		stackSplice(&e.stack, argStart, e.pointer+1-argStart, results...)
 		e.pointer = argStart
 	}
 
@@ -1193,7 +1152,7 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 		Sig:          sig,
 	})
 
-	e.stackInsert(e.pointer+1, fwd)
+	stackInsert(&e.stack, e.pointer+1, fwd)
 
 	e.pointer += 2
 	return nil
@@ -1258,7 +1217,7 @@ func (e *Engine) stepLiteral() error {
 
 	// Remove the value from its current position.
 	val := e.stack[valIdx]
-	e.stackRemove(valIdx)
+	stackRemove(&e.stack, valIdx)
 
 	// After removal, adjust indices if valIdx was before them.
 	if valIdx < funcIdx {
@@ -1276,7 +1235,7 @@ func (e *Engine) stepLiteral() error {
 	// [..., fwd0, fwd1, ..., stack_reversed..., func_word]
 	insertIdx := funcIdx
 
-	e.stackInsert(insertIdx, val)
+	stackInsert(&e.stack, insertIdx, val)
 
 	funcIdx++
 	fwdIdx++
@@ -1289,7 +1248,7 @@ func (e *Engine) stepLiteral() error {
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All forward args collected. Remove forward, force stack, retry.
-		e.stackRemove(fwdIdx)
+		stackRemove(&e.stack, fwdIdx)
 		// Adjust funcIdx if forward was before it (shouldn't normally happen).
 		if fwdIdx < funcIdx {
 			funcIdx--
@@ -1708,16 +1667,16 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 					dst++
 				}
 			}
-			e.stackSplice(dst, valIdx+1-dst, result...)
+			stackSplice(&e.stack, dst, valIdx+1-dst, result...)
 			e.pointer = firstArgIdx
 		} else if nArgs == 0 {
-			e.stackSplice(valIdx, 1, result...)
+			stackSplice(&e.stack, valIdx, 1, result...)
 		} else {
 			argStart := valIdx - nArgs
 			if argStart < 0 {
 				argStart = 0
 			}
-			e.stackSplice(argStart, valIdx+1-argStart, result...)
+			stackSplice(&e.stack, argStart, valIdx+1-argStart, result...)
 			e.pointer = argStart
 		}
 		return nil
@@ -1776,16 +1735,16 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				dst++
 			}
 		}
-		e.stackSplice(dst, valIdx+1-dst, tokens...)
+		stackSplice(&e.stack, dst, valIdx+1-dst, tokens...)
 		e.pointer = firstArgIdx
 	} else if nArgs == 0 {
-		e.stackSplice(valIdx, 1, tokens...)
+		stackSplice(&e.stack, valIdx, 1, tokens...)
 	} else {
 		argStart := valIdx - nArgs
 		if argStart < 0 {
 			argStart = 0
 		}
-		e.stackSplice(argStart, valIdx+1-argStart, tokens...)
+		stackSplice(&e.stack, argStart, valIdx+1-argStart, tokens...)
 		e.pointer = argStart
 	}
 
@@ -1799,7 +1758,7 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 	collectedCount := fwd.CollectedArgs
 	stackArgCount := fwd.StackArgs
 
-	e.stackRemove(fwdIdx)
+	stackRemove(&e.stack, fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
@@ -1825,7 +1784,7 @@ func (e *Engine) stepEnd() error {
 	}
 
 	if fwdIdx < 0 {
-		e.stackRemove(endIdx)
+		stackRemove(&e.stack, endIdx)
 		return nil
 	}
 
@@ -1835,19 +1794,19 @@ func (e *Engine) stepEnd() error {
 	// Remove forward and end from the stack.
 	// Remove higher index first to preserve lower indices.
 	if endIdx > fwdIdx {
-		e.stackRemove(endIdx)
-		e.stackRemove(fwdIdx)
+		stackRemove(&e.stack, endIdx)
+		stackRemove(&e.stack, fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx-- // forward removal
 		}
 		// end was already removed (endIdx > fwdIdx), endIdx > funcIdx always
 	} else {
-		e.stackRemove(fwdIdx)
+		stackRemove(&e.stack, fwdIdx)
 		newEndIdx := endIdx
 		if fwdIdx < endIdx {
 			newEndIdx--
 		}
-		e.stackRemove(newEndIdx)
+		stackRemove(&e.stack, newEndIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -1913,7 +1872,7 @@ func (e *Engine) stepMove(val Value) error {
 		// Mark was removed from the stack (e.g. by a for-loop controller
 		// signalling loop completion). Remove this orphaned move quietly.
 		delete(e.marks, info.To)
-		e.stackRemove(e.pointer)
+		stackRemove(&e.stack, e.pointer)
 		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
 		return nil
 	}
@@ -1937,7 +1896,7 @@ func (e *Engine) stepMove(val Value) error {
 	// Replace everything from mark through move (inclusive) with the body copy.
 	body := make([]Value, len(markInfo.Body))
 	copy(body, markInfo.Body)
-	e.stackSplice(markIdx, moveIdx-markIdx+1, body...)
+	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, body...)
 
 	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
 
@@ -1984,7 +1943,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 
 		// Remove old mark ID, register new one.
 		delete(e.marks, info.To)
-		e.stackSplice(markIdx, moveIdx-markIdx+1, tokens...)
+		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, tokens...)
 		if e.marks == nil {
 			e.marks = make(map[string]bool)
 		}
@@ -1999,7 +1958,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	// Done — uninstall iterator, splice in accumulated results.
 	UninstallDef(cont.Registry, cont.IterName)
 	delete(e.marks, info.To)
-	e.stackSplice(markIdx, moveIdx-markIdx+1, cont.Results...)
+	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
 	e.traceNote = "for done"
 	return nil
@@ -2022,7 +1981,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 
 	// Check if condition produced a value.
 	if condResult.VType == nil {
-		e.stackSplice(markIdx, moveIdx-markIdx+1)
+		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
 		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
 	}
@@ -2038,7 +1997,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	}
 
 	// Splice chosen branch (or nothing) in place of mark+condition+move.
-	e.stackSplice(markIdx, moveIdx-markIdx+1, branch...)
+	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, branch...)
 	e.pointer = markIdx
 	e.traceNote = fmt.Sprintf("if %v", cond)
 	return nil
@@ -2106,7 +2065,7 @@ func (e *Engine) handleLoopBreak() bool {
 				// Uninstall iterator, splice in accumulated results.
 				UninstallDef(info.Cont.Registry, info.Cont.IterName)
 				delete(e.marks, info.To)
-				e.stackSplice(markIdx, i-markIdx+1, info.Cont.Results...)
+				stackSplice(&e.stack, markIdx, i-markIdx+1, info.Cont.Results...)
 				e.pointer = markIdx
 				return true
 			}
@@ -2141,7 +2100,7 @@ func (e *Engine) handleLoopContinue() bool {
 
 				// Remove values between mark and move (discard partial results).
 				if i-markIdx > 1 {
-					e.stackSplice(markIdx+1, i-markIdx-1)
+					stackSplice(&e.stack, markIdx+1, i-markIdx-1)
 					// Recalculate move position.
 					i = markIdx + 1
 				}
@@ -2159,7 +2118,7 @@ func (e *Engine) cleanMarks() {
 	i := 0
 	for i < len(e.stack) {
 		if e.stack[i].IsMark() || e.stack[i].IsMove() {
-			e.stackRemove(i)
+			stackRemove(&e.stack, i)
 		} else {
 			i++
 		}
@@ -2204,7 +2163,7 @@ func (e *Engine) stepCloseParen() error {
 				stackArgCount := fwd.StackArgs
 
 				// Remove the forward.
-				e.stackRemove(i)
+				stackRemove(&e.stack, i)
 				if i < funcIdx {
 					funcIdx--
 				}
@@ -2291,7 +2250,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsDefCleanup() {
 			e.stepDefCleanup(e.stack[i])
-			e.stackRemove(i)
+			stackRemove(&e.stack, i)
 			closeIdx--
 			i--
 		}
@@ -2301,7 +2260,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsReturnCheck() {
 			rc, _ := e.stack[i].AsReturnCheck()
-			e.stackRemove(i)
+			stackRemove(&e.stack, i)
 			closeIdx--
 
 			// Collect resolved values in scope.
@@ -2331,7 +2290,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {
-				e.stackRemove(openIdx + 1)
+				stackRemove(&e.stack, openIdx + 1)
 				closeIdx--
 			}
 			break
@@ -2340,8 +2299,8 @@ func (e *Engine) stepCloseParen() error {
 
 	// Remove the close paren (higher index first) and open paren.
 	// The values between them are already in place.
-	e.stackRemove(closeIdx)
-	e.stackRemove(openIdx)
+	stackRemove(&e.stack, closeIdx)
+	stackRemove(&e.stack, openIdx)
 
 	e.pointer = openIdx
 	return nil
@@ -2535,7 +2494,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 			elems = append(elems, e.stack[i])
 		}
 
-		e.stackSplice(startIdx, collectedCount+1, NewList(elems))
+		stackSplice(&e.stack, startIdx, collectedCount+1, NewList(elems))
 		e.pointer = startIdx
 		return
 	}
@@ -3104,9 +3063,9 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if uniq[i] < insertAt {
 			insertAt--
 		}
-		e.stackRemove(uniq[i])
+		stackRemove(&e.stack, uniq[i])
 	}
-	e.stackSplice(insertAt, 0, results...)
+	stackSplice(&e.stack, insertAt, 0, results...)
 	e.pointer = insertAt
 	return nil
 }
