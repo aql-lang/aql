@@ -90,8 +90,8 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 	}
 
 	if srcVal.VType.Equal(TMap) {
-		provided, ok := srcVal.Data.(*OrderedMap)
-		if !ok {
+		provided := srcVal.AsMutableMap()
+		if provided == nil {
 			return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
 		}
 		if err := fillFromMap(provided); err != nil {
@@ -110,7 +110,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 
 	isNamed := elems.Len() > 0 && elems.Get(0).VType.Equal(TMap)
 	if isNamed {
-		if _, ok := elems.Get(0).Data.(*OrderedMap); !ok {
+		if elems.Get(0).AsMutableMap() == nil {
 			isNamed = false
 		}
 	}
@@ -121,8 +121,8 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 			if !elem.VType.Equal(TMap) {
 				return nil, fmt.Errorf("make: mixed named and positional fields")
 			}
-			m, ok := elem.Data.(*OrderedMap)
-			if !ok {
+			m := elem.AsMutableMap()
+			if m == nil {
 				return nil, fmt.Errorf("make: expected concrete map pair, got %s", elem.String())
 			}
 			for _, key := range m.Keys() {
@@ -156,8 +156,8 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 	if !opts.VType.Equal(TMap) {
 		return false, fmt.Errorf("make: options must be a map, got %s", opts.String())
 	}
-	m, ok := opts.Data.(*OrderedMap)
-	if !ok {
+	m := opts.AsMutableMap()
+	if m == nil {
 		return false, fmt.Errorf("make: expected concrete options map")
 	}
 	if v, ok := m.Get("base"); ok {
@@ -209,8 +209,8 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	if !srcVal.VType.Equal(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
-	provided, ok := srcVal.Data.(*OrderedMap)
-	if !ok {
+	provided := srcVal.AsMutableMap()
+	if provided == nil {
 		return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
 	}
 
@@ -347,8 +347,8 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		if !srcVal.VType.Equal(TMap) || srcVal.Data == nil {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
-		src, ok := srcVal.Data.(*OrderedMap)
-		if !ok {
+		src := srcVal.AsMutableMap()
+		if src == nil {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
 		return []Value{NewOptionsType(src)}, nil
@@ -384,7 +384,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 			isNamed := rowElems.Len() > 0 && rowElems.Get(0).VType.Equal(TMap)
 			if isNamed {
-				if _, ok := rowElems.Get(0).Data.(*OrderedMap); !ok {
+				if rowElems.Get(0).AsMutableMap() == nil {
 					isNamed = false
 				}
 			}
@@ -396,8 +396,8 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 					if !elem.VType.Equal(TMap) {
 						return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
 					}
-					m, ok := elem.Data.(*OrderedMap)
-					if !ok {
+					m := elem.AsMutableMap()
+					if m == nil {
 						return nil, fmt.Errorf("make: table row %d: expected concrete map pair, got %s", rowIdx, elem.String())
 					}
 					for _, key := range m.Keys() {

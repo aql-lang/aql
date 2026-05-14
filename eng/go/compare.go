@@ -176,9 +176,9 @@ func DeepEqual(a, b Value) bool {
 
 	// Lists: same length, each element deeply equal.
 	if a.VType.Equal(TList) && b.VType.Equal(TList) {
-		aElems, aOk := a.Data.([]Value)
-		bElems, bOk := b.Data.([]Value)
-		if !aOk || !bOk {
+		aElems := a.AsMutableList()
+		bElems := b.AsMutableList()
+		if aElems == nil || bElems == nil {
 			// Typed lists, table types, etc. — compare structurally via String().
 			return a.String() == b.String()
 		}
@@ -195,9 +195,9 @@ func DeepEqual(a, b Value) bool {
 
 	// Maps: same keys, each value deeply equal.
 	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
-		aMap, aOk := a.Data.(*OrderedMap)
-		bMap, bOk := b.Data.(*OrderedMap)
-		if !aOk || !bOk {
+		aMap := a.AsMutableMap()
+		bMap := b.AsMutableMap()
+		if aMap == nil || bMap == nil {
 			// Record types, typed maps — compare structurally via String().
 			return a.String() == b.String()
 		}

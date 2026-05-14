@@ -146,7 +146,7 @@ func (f *LinesFormat) Decode(content string) ([]Value, error) {
 
 func (f *LinesFormat) Encode(v Value) (string, error) {
 	if v.VType.Equal(TList) {
-		if elems, ok := v.Data.([]Value); ok {
+		if elems := v.AsMutableList(); elems != nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
 				if e.VType.Matches(TString) {
@@ -280,10 +280,17 @@ func encodeDelimited(v Value, sep string) (string, error) {
 		}
 		columns = td.Record.Fields.Keys()
 		rows = td.Rows
+	case ListPayload:
+		rows = data.Elems
+		if len(rows) > 0 {
+			if m := rows[0].AsMutableMap(); m != nil {
+				columns = m.Keys()
+			}
+		}
 	case []Value:
 		rows = data
 		if len(rows) > 0 {
-			if m, ok := rows[0].Data.(*OrderedMap); ok {
+			if m := rows[0].AsMutableMap(); m != nil {
 				columns = m.Keys()
 			}
 		}
@@ -301,8 +308,8 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	sb.WriteByte('\n')
 	// Data rows.
 	for _, row := range rows {
-		m, ok := row.Data.(*OrderedMap)
-		if !ok {
+		m := row.AsMutableMap()
+		if m == nil {
 			continue
 		}
 		parts := make([]string, len(columns))

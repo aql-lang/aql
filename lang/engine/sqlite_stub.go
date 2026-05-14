@@ -110,8 +110,8 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 			strings.Join(placeholders, ", "))
 
 		for _, row := range td.Rows {
-			m, ok := row.Data.(*OrderedMap)
-			if !ok {
+			m := row.AsMutableMap()
+			if m == nil {
 				continue
 			}
 			params := js.Global().Get("Array").New(len(columns))

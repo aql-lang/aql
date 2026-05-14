@@ -647,13 +647,13 @@ func NewBoolean(b bool) Value {
 
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
-	return NewValueRaw(TList, elems)
+	return NewValueRaw(TList, ListPayload{Elems: elems})
 }
 
 // NewEvalList creates a list value that is marked for auto-evaluation
 // at the end of execution. Used by the parser for source-code lists.
 func NewEvalList(elems []Value) Value {
-	v := NewValueRaw(TList, elems)
+	v := NewValueRaw(TList, ListPayload{Elems: elems})
 	v.Eval = true
 	return v
 }
@@ -666,13 +666,13 @@ func NewTypedList(child Value) Value {
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
-	return NewValueRaw(TMap, entries)
+	return NewValueRaw(TMap, MapPayload{M: entries})
 }
 
 // NewEvalMap creates a map value marked for auto-evaluation at end of
 // execution. Used by the parser for source-code maps.
 func NewEvalMap(entries *OrderedMap) Value {
-	v := NewValueRaw(TMap, entries)
+	v := NewValueRaw(TMap, MapPayload{M: entries})
 	v.Eval = true
 	return v
 }
@@ -697,7 +697,7 @@ func NewTypedMapWithEntries(child Value, entries []ChildEntry) Value {
 // (e.g., [x:Integer]), while explicit maps are structural patterns.
 func NewImplicitMap(entries *OrderedMap) Value {
 	entries.Implicit = true
-	return NewValueRaw(TMap, entries)
+	return NewValueRaw(TMap, MapPayload{M: entries})
 }
 
 // IsImplicitMap reports whether v is a Map value whose backing
@@ -708,8 +708,13 @@ func (v Value) IsImplicitMap() bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	m, ok := v.Data.(*OrderedMap)
-	return ok && m != nil && m.Implicit
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M != nil && mp.M.Implicit
+	}
+	if m, ok := v.Data.(*OrderedMap); ok {
+		return m != nil && m.Implicit
+	}
+	return false
 }
 
 // NewTypedMap creates a typed map value with a child type constraint.
@@ -1599,6 +1604,10 @@ func (v Value) AsList() ReadList {
 	if v.Data == nil {
 		return ReadList{}
 	}
+	// Post Step 5c variant first; legacy []Value second.
+	if lp, ok := v.Data.(ListPayload); ok {
+		return ReadList{elems: lp.Elems}
+	}
 	if td, ok := v.Data.(TableData); ok {
 		return ReadList{elems: td.Rows}
 	}
@@ -1627,11 +1636,13 @@ func (v Value) AsMutableList() []Value {
 	if v.Data == nil {
 		return nil
 	}
-	elems, ok := v.Data.([]Value)
-	if !ok {
-		return nil
+	if lp, ok := v.Data.(ListPayload); ok {
+		return lp.Elems
 	}
-	return elems
+	if elems, ok := v.Data.([]Value); ok {
+		return elems
+	}
+	return nil
 }
 
 // AsMap returns a read-only view of the map payload, or nil if the data is
@@ -1640,6 +1651,9 @@ func (v Value) AsMutableList() []Value {
 func (v Value) AsMap() ReadMap {
 	if v.Data == nil {
 		return nil
+	}
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M
 	}
 	if om, ok := v.Data.(*OrderedMap); ok {
 		return om
@@ -1663,11 +1677,13 @@ func (v Value) AsMutableMap() *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}
-	om, ok := v.Data.(*OrderedMap)
-	if !ok {
-		return nil
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M
 	}
-	return om
+	if om, ok := v.Data.(*OrderedMap); ok {
+		return om
+	}
+	return nil
 }
 
 // String returns a human-readable representation.

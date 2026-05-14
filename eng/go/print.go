@@ -115,8 +115,8 @@ func FormatForPrint(v Value) string {
 
 // formatMapJSON formats a map value as a JSON-like string.
 func formatMapJSON(v Value) string {
-	om, ok := v.Data.(*OrderedMap)
-	if !ok {
+	om := v.AsMutableMap()
+	if om == nil {
 		return "{}"
 	}
 	parts := make([]string, 0, om.Len())

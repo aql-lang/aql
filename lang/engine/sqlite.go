@@ -136,8 +136,8 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 		defer stmt.Close()
 
 		for _, row := range td.Rows {
-			m, ok := row.Data.(*OrderedMap)
-			if !ok {
+			m := row.AsMutableMap()
+			if m == nil {
 				continue
 			}
 			vals := make([]interface{}, len(columns))

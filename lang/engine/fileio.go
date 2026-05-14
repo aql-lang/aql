@@ -183,17 +183,16 @@ func valueToJsonic(v Value) string {
 		_as4, _ := v.AsAtom()
 		return fmt.Sprintf("%q", _as4)
 	case v.VType.Equal(TList):
-		if _, ok := v.Data.([]Value); ok {
-			elems := v.AsList()
-			parts := make([]string, elems.Len())
-			for i, e := range elems.Slice() {
+		if elems := v.AsMutableList(); elems != nil {
+			parts := make([]string, len(elems))
+			for i, e := range elems {
 				parts[i] = valueToJsonic(e)
 			}
 			return "[" + strings.Join(parts, ",") + "]"
 		}
 		return "[]"
 	case v.VType.Equal(TMap):
-		if om, ok := v.Data.(*OrderedMap); ok {
+		if om := v.AsMutableMap(); om != nil {
 			parts := make([]string, 0, om.Len())
 			for _, k := range om.Keys() {
 				val, _ := om.Get(k)

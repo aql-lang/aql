@@ -24,6 +24,17 @@ type (
 	CheckState         = eng.CheckState
 	ChildTypeInfo      = eng.ChildTypeInfo
 	ChildEntry         = eng.ChildEntry
+	// Sealed Payload variants (post Step 5).
+	Payload            = eng.Payload
+	IntPayload         = eng.IntPayload
+	DecPayload         = eng.DecPayload
+	StrPayload         = eng.StrPayload
+	BoolPayload        = eng.BoolPayload
+	AtomPayload        = eng.AtomPayload
+	PathPayload        = eng.PathPayload
+	ListPayload        = eng.ListPayload
+	MapPayload         = eng.MapPayload
+	ExtensionPayload   = eng.ExtensionPayload
 	DefCleanupInfo     = eng.DefCleanupInfo
 	DepBound           = eng.DepBound
 	DepKind            = eng.DepKind
