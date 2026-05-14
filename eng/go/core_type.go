@@ -454,7 +454,11 @@ func IsValueOfType(v, t Value) bool {
 			}
 			return v.Data == nil || IsTypeBody(v) || IsRecordShape(v) || v.VType.Matches(TType)
 		}
-		return v.VType.Matches(t.VType)
+		// Canonical dispatch site: route through Behavior so custom
+		// type semantics (predicate types, dependent scalars, future
+		// plugin types) get consulted. Default Behavior delegates to
+		// the historical lattice walk.
+		return v.Is(t.VType)
 	}
 	_, ok := Unify(v, t)
 	return ok

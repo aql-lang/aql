@@ -769,6 +769,27 @@ func NewNone() Value {
 	return NewValueRaw(TNone, noneSentinel{})
 }
 
+// Is reports whether v satisfies type t, routed through t.Behavior.
+// The canonical dispatch point for "is v a T?" — used by handlers,
+// the matcher, and `is` / `guard`. Default Behavior delegates to the
+// lattice walk (v.VType.Matches(t)); types with custom Behavior
+// override (predicate types invoke their body, record types check
+// field-by-field conformance, etc.).
+//
+// Safe on nil t: returns false. Safe on nil Behavior: callers should
+// not encounter this state because every Type registered through
+// the kernel paths carries a non-nil Behavior, but the method
+// defends against it anyway.
+func (v Value) Is(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Behavior == nil {
+		return v.VType.Matches(t)
+	}
+	return t.Behavior.Match(v, t)
+}
+
 // IsNone reports whether v is the value `none` (not the None type
 // literal). The check distinguishes the inhabitant from the type.
 func (v Value) IsNone() bool {

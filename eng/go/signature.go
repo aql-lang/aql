@@ -257,7 +257,12 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
 // user-facing description of this rule.
 func sigTypeMatches(v Value, t *Type) bool {
-	if v.VType.Matches(t) {
+	// Canonical dispatch site: route the primary subtype check
+	// through Behavior so per-type custom Match implementations
+	// participate in signature matching. The metatype-promotion
+	// branches below remain — they are matching-strategy concerns
+	// (a type-literal at a metatype slot), not per-type behaviour.
+	if v.Is(t) {
 		return true
 	}
 	if v.Data == nil && !v.Carrier && IsMetaType(t) {

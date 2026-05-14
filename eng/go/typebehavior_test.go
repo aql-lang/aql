@@ -82,3 +82,39 @@ type fakeBehavior struct{}
 func (fakeBehavior) Match(Value, *Type) bool { return false }
 func (fakeBehavior) Format(Value) string     { return "fake" }
 func (fakeBehavior) Equal(Value, Value) bool { return false }
+
+// TestValueIsRoutesThroughBehavior verifies that v.Is(t) consults
+// t.Behavior — a custom Behavior whose Match returns false even on
+// a value whose VType matches t must produce v.Is(t) == false.
+func TestValueIsRoutesThroughBehavior(t *testing.T) {
+	tt := NewDynamicTypeTable()
+	rejecting := &rejectingBehavior{}
+	custom := tt.MintTypeWithBehavior("AlwaysReject", TInteger, rejecting)
+
+	// Construct an Integer value whose VType is the custom type so
+	// the lattice walk WOULD say yes; verify Behavior overrides.
+	v := Value{VType: custom, Data: int64(5)}
+	if v.Is(custom) {
+		t.Error("v.Is(custom) returned true; custom Behavior should reject")
+	}
+	if !rejecting.matchCalled {
+		t.Error("custom Behavior.Match was never called")
+	}
+}
+
+// TestValueIsHandlesNilType verifies v.Is(nil) returns false without
+// panicking. Safe-on-nil is a hard contract.
+func TestValueIsHandlesNilType(t *testing.T) {
+	v := NewInteger(42)
+	if v.Is(nil) {
+		t.Error("v.Is(nil) returned true; expected false")
+	}
+}
+
+// rejectingBehavior is a test Behavior whose Match always returns
+// false and records the call. Used to prove Behavior is consulted.
+type rejectingBehavior struct{ matchCalled bool }
+
+func (r *rejectingBehavior) Match(Value, *Type) bool { r.matchCalled = true; return false }
+func (rejectingBehavior) Format(Value) string        { return "reject" }
+func (rejectingBehavior) Equal(Value, Value) bool    { return false }
