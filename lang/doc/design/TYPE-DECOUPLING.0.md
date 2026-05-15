@@ -39,7 +39,7 @@ Status: **IMPLEMENTATION SUBSTANTIALLY COMPLETE — Steps 0-9 landed**.
 | 8b Migrate TFetch* | ✅ landed | First kernel-type migration via the new API. Owned by `lang/native/fetch.go`. |
 | 8c Migrate TMatrix | ✅ landed | Owned by `lang/internal/nativemod/matrix.go`. Format Behavior + `NewMatrix` constructor moved with it. |
 | 8d Migrate TTimeout / TInterval | ✅ landed | Owned by `lang/engine/native_misc.go`. `IsTimeout`/`IsInterval`/`AsTimeout`/`AsInterval` methods on Value removed (callers use direct payload assertion or `engine.NewTimeout` / `engine.NewInterval`). |
-| 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TCalDuration, TClkDuration, TTimezone) | ⏸ deferred | Blocked by `lang/engine/native_math.go`'s date-arithmetic signatures referencing these types at package-init. Resolution requires moving those handlers to nativemod/time and exposing a hook from lang/engine to register them — a follow-up structural change. See in-file note in `eng/go/types.go`. |
+| 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone, TTime) | ✅ landed | Owned by `lang/engine/native_temporal.go`. Resolved the `lang/engine/native_math.go` cycle by colocating in `lang/engine` (same package as the date-arithmetic handlers) rather than `lang/internal/nativemod/time`. Format Behaviors and `New*` constructors moved with the types. The `As*` methods on Value stay in eng since they assert against payload-only kernel structs. |
 | 9a Lattice cleanup — BaseType field | ✅ landed | `DependentLeafBaseType` switch replaced by per-Type field populated via `builtinDecl.BasePath`. |
 | 9b Lattice cleanup — Metatype field | ✅ landed | `MetatypeFor` switch replaced by per-Type field populated via `builtinDecl.MetatypePath`. |
 | 11 Parser hand-off | 📝 future proposal | Out of scope. |
@@ -47,10 +47,11 @@ Status: **IMPLEMENTATION SUBSTANTIALLY COMPLETE — Steps 0-9 landed**.
 The core invariant — **illegal `(VType, Data)` combinations are
 compile errors** — is enforced. The Behavior seam, the sealed
 Payload interface, the external-registration hook, the lattice
-field migration, and four of five domain-type externalisations
-are all in place. The remaining domain (Time family) is gated on
-a separate refactor of date-arithmetic handler placement; the
-constraint is documented at the eng/go/types.go declaration site.
+field migration, and ALL five domain-type families
+(Fetch, Matrix, Timeout, Interval, Time) are externalised. The
+kernel (`eng/`) no longer mentions any user-facing domain type
+identity — only parser-emitted / interpreter-loop kinds and the
+structural type system remain.
 
 ---
 
