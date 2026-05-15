@@ -524,59 +524,96 @@ func sortedKeys(m map[string]any) []string {
 
 // parseWord interprets an unquoted text token as an AQL word, handling
 // modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
-// and combinations like name/1f or name/2s.
+// name/q (quote → Atom), and combinations like name/1f, name/qs, name/f2.
+// Modifiers stack in any order; f and s are mutually exclusive; the argCount
+// digits form a single number; q produces an Atom and overrides the other
+// modifiers (they are accepted syntactically but ignored).
 func parseWord(text string) (eng.Value, error) {
 	name := text
 	argCount := -1
 	forceStack := false
 	forceForward := false
+	quoteFlag := false
 
 	// Check for /... modifier suffix.
 	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
 		mod := name[idx+1:]
-		name = name[:idx]
+		baseName := name[:idx]
 
-		// Parse optional digits followed by optional 'f' or 's'.
-		digits := ""
-		rest := mod
-		for i, c := range rest {
-			if c >= '0' && c <= '9' {
-				digits += string(c)
-			} else {
-				rest = rest[i:]
+		// Scan modifier chars in any order: digits, 'f', 's', 'q'.
+		// Each letter appears at most once; f/s are mutually exclusive;
+		// digits run contiguously and form a single argCount value.
+		valid := true
+		seenDigits := false
+		i := 0
+		for i < len(mod) {
+			c := mod[i]
+			switch {
+			case c >= '0' && c <= '9':
+				if seenDigits {
+					valid = false
+				} else {
+					j := i
+					for j < len(mod) && mod[j] >= '0' && mod[j] <= '9' {
+						j++
+					}
+					n, err := strconv.Atoi(mod[i:j])
+					if err != nil || n < 0 {
+						valid = false
+					} else {
+						argCount = n
+						seenDigits = true
+					}
+					i = j
+					continue
+				}
+			case c == 'f':
+				if forceForward || forceStack {
+					valid = false
+				} else {
+					forceForward = true
+				}
+			case c == 's':
+				if forceForward || forceStack {
+					valid = false
+				} else {
+					forceStack = true
+				}
+			case c == 'q':
+				if quoteFlag {
+					valid = false
+				} else {
+					quoteFlag = true
+				}
+			default:
+				valid = false
+			}
+			if !valid {
 				break
 			}
-			if i == len(rest)-1 {
-				rest = ""
-			}
+			i++
 		}
 
-		if digits != "" {
-			n, err := strconv.Atoi(digits)
-			if err == nil && n >= 0 {
-				argCount = n
-			}
-		}
-
-		switch rest {
-		case "f":
-			forceForward = true
-		case "s":
-			forceStack = true
-		case "":
-			// digits only, no mode flag
-			if digits == "" {
-				// No digits and no flag — not a valid modifier; restore name
-				name = text
-			}
-		default:
-			// Unrecognized modifier — treat entire token as plain word
-			name = text
+		if valid {
+			name = baseName
+		} else {
+			// Unrecognized / malformed modifier — treat entire token as plain word.
+			argCount = -1
+			forceStack = false
+			forceForward = false
+			quoteFlag = false
 		}
 	}
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")
+	}
+
+	// /q produces an Atom: equivalent to (quote name). Other modifiers
+	// in the same suffix are accepted but ignored — the atom is data,
+	// not a function call.
+	if quoteFlag {
+		return eng.NewAtom(name), nil
 	}
 
 	if forceStack || forceForward || argCount >= 0 {

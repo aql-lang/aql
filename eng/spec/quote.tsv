@@ -1,18 +1,43 @@
 # tokens	expected	note
-# `quote` — capture the next forward token as data.		
-#		
-# - `quote WORD` returns Atom(WORD), even when WORD is a registered		
-#   function (the TWord slot keeps the matcher from dispatching it).		
-# - `quote LITERAL` returns the value unchanged.		
-# - `quote LIST` returns the list as-is.		
-		
-quote a	(quote a)	bare undefined word becomes atom
-quote dup	(quote dup)	even though dup is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
+# `quote` — capture the next forward token as data.
+#
+# - `quote WORD` returns Atom(WORD), even when WORD is a registered
+#   function (the TWord slot keeps the matcher from dispatching it).
+# - `quote LITERAL` returns the value unchanged.
+# - `quote LIST` returns the list as-is.
+# - `WORD/q` is the preferred short form of `(quote WORD)` and the
+#   canonical render: it produces Atom(WORD) at parse time.
+
+quote a	a/q	bare undefined word becomes atom
+quote dup	dup/q	even though dup is a registered function — TWord slot suppresses dispatch and shouldDeferDispatch
 quote 5	5	scalar passes through
 quote 'hi'	'hi'	string passes through
-quote true	(quote true)	`true`/`false` parse as Words; quote captures the upcoming Word as an Atom
-quote [ 1 2 3 ]	(quote [1 2 3])	quoted list preserves the quote wrapper through rendering
+quote true	true/q	`true`/`false` parse as Words; quote captures the upcoming Word as an Atom
+quote [ 1 2 3 ]	(quote [1 2 3])	quoted list preserves the quote wrapper through rendering (the /q suffix is words-only)
 
 # Round-trip through def: x bound to (quote NAME), then resolved.
-def x quote a x	(quote a)	define x as (quote a), then resolve x → (quote a)
-def x quote dup x	(quote dup)	define x as (quote dup); resolving x yields the atom (dup is never dispatched)
+def x quote a x	a/q	define x as a/q, then resolve x → a/q
+def x quote dup x	dup/q	define x as dup/q; resolving x yields the atom (dup is never dispatched)
+
+# `/q` suffix on a word produces an Atom at parse time — equivalent to
+# `(quote NAME)`.
+a/q	a/q	/q suffix on a bare word produces an atom
+dup/q	dup/q	/q suffix on a registered function name still produces the atom (no dispatch)
+true/q	true/q	/q applies to any word, including reserved-looking ones like `true`
+foo/q bar/q	foo/q bar/q	multiple /q-quoted words stack on the result stack
+
+# `/q` round-trips through `def`/resolution like `(quote NAME)` does.
+def x a/q x	a/q	x bound to a/q, then resolved → a/q
+def x dup/q x	dup/q	x bound to dup/q resolves to the atom (dup is never dispatched)
+
+# The / suffix operators stack and are order-independent. With `q`
+# present, the result is an Atom — the other modifiers are accepted
+# syntactically but have no runtime effect on the atom.
+foo/qs	foo/q	/qs == /sq: q wins; result is the atom
+foo/sq	foo/q	/sq == /qs: same atom regardless of order
+foo/qf	foo/q	/qf: f is accepted but the atom is data, not a forward call
+foo/fq	foo/q	/fq == /qf
+foo/q1	foo/q	digits are accepted alongside q but ignored — atom only
+foo/1q	foo/q	/1q == /q1: order independent
+foo/2qs	foo/q	all three modifiers stack with q; q produces the atom
+foo/qs2	foo/q	digit can be at the tail

@@ -19,6 +19,7 @@ import {
   type NativeFunc,
   Registry,
   TAny,
+  TAtom,
   TBoolean,
   TDecimal,
   TInteger,
@@ -481,21 +482,18 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       out.push(newDecimal(Number.parseFloat(tok)))
       continue
     }
-    // /s and /f trailing modifiers — at the call site, force
-    // stack-only or forward-only dispatch regardless of the sig's
-    // declared barrierPos. Mirrors the lexer's handling of these
-    // modifiers in the full parser.
-    let name = tok
-    let forceStack = false
-    let forceForward = false
-    if (name.endsWith('/s')) {
-      forceStack = true
-      name = name.slice(0, -2)
-    } else if (name.endsWith('/f')) {
-      forceForward = true
-      name = name.slice(0, -2)
+    // /-suffix modifiers — at the call site, force stack-only or
+    // forward-only dispatch (/s, /f) regardless of the sig's declared
+    // barrierPos, and produce an Atom from a bare word (/q, the short
+    // form of `(quote name)`). Modifiers stack in any order: foo/sq ≡
+    // foo/qs ≡ foo/q (q dominates; other modifiers are accepted but
+    // ignored on the resulting Atom). Mirrors parseWord in eng/parser.
+    const parsed = parseModifierSuffix(tok)
+    if (parsed.quote) {
+      out.push(newAtom(parsed.name))
+    } else {
+      out.push(newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward))
     }
-    out.push(newWordWithModifiers(name, forceStack, forceForward))
   }
   if (until === ']') {
     throw new Error(`tokenize: unterminated list literal '['`)
@@ -509,6 +507,75 @@ function newWordWithModifiers(name: string, forceStack: boolean, forceForward: b
   if (forceStack) wi.forceStack = true
   if (forceForward) wi.forceForward = true
   return new Value(TWord, wi)
+}
+
+type ModifierSuffix = {
+  name: string
+  forceStack: boolean
+  forceForward: boolean
+  quote: boolean
+}
+
+// parseModifierSuffix scans the trailing /-suffix on a word token.
+// Mirrors parseWord in eng/parser/parse.go: digits (argCount), 'f'
+// (forceForward), 's' (forceStack), 'q' (quote → Atom). Modifiers can
+// appear in any order; f/s are mutually exclusive; each letter at most
+// once; digits run contiguously. If the suffix is unrecognised or
+// malformed, the entire token is treated as a plain word.
+function parseModifierSuffix(tok: string): ModifierSuffix {
+  const idx = tok.lastIndexOf('/')
+  const noop: ModifierSuffix = { name: tok, forceStack: false, forceForward: false, quote: false }
+  if (idx < 0 || idx >= tok.length - 1) return noop
+  const mod = tok.slice(idx + 1)
+  let forceStack = false
+  let forceForward = false
+  let quote = false
+  let seenDigits = false
+  let valid = true
+  let i = 0
+  while (i < mod.length) {
+    const c = mod[i]!
+    if (c >= '0' && c <= '9') {
+      if (seenDigits) {
+        valid = false
+        break
+      }
+      let j = i
+      while (j < mod.length && mod[j]! >= '0' && mod[j]! <= '9') j++
+      // The argCount value itself is not propagated to the TS spec
+      // tokenizer's Word — the kernel test fixtures don't exercise
+      // multi-arity /N dispatch through this path — but we still must
+      // consume the digit run so subsequent letters parse correctly.
+      seenDigits = true
+      i = j
+      continue
+    }
+    if (c === 'f') {
+      if (forceForward || forceStack) {
+        valid = false
+        break
+      }
+      forceForward = true
+    } else if (c === 's') {
+      if (forceForward || forceStack) {
+        valid = false
+        break
+      }
+      forceStack = true
+    } else if (c === 'q') {
+      if (quote) {
+        valid = false
+        break
+      }
+      quote = true
+    } else {
+      valid = false
+      break
+    }
+    i++
+  }
+  if (!valid) return noop
+  return { name: tok.slice(0, idx), forceStack, forceForward, quote }
 }
 
 /**
@@ -555,6 +622,9 @@ function renderValue(v: Value): string {
   if (v.vType.matches(TDecimal)) return String(v.asDecimal())
   if (v.vType.matches(TString)) return JSON.stringify(v.asString())
   if (v.vType.matches(TBoolean)) return String(v.asBoolean())
+  // Atoms render as `name/q` — the canonical short form (mirrors
+  // eng/canon.go::CanonValue).
+  if (v.vType.equal(TAtom)) return `${v.asAtom()}/q`
   return v.toString()
 }
 

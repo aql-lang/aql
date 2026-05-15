@@ -339,7 +339,7 @@ var exampleValues = map[string][]string{
 	"Number":  {"2", "3.5", "4", "5.25", "6", "7.5", "8", "9.25"},
 	"String":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},
 	"Scalar":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},
-	"Atom":    {"(quote a)", "(quote b)", "(quote c)", "(quote d)", "(quote e)", "(quote f)"},
+	"Atom":    {"a/q", "b/q", "c/q", "d/q", "e/q", "f/q"},
 	"Boolean": {"true", "false", "true", "false"},
 	"List":    {"['a','b']", "['c','d']", "['e','f']"},
 	"Map":     {"{a:1,b:2}", "{c:3,d:4}", "{e:5,f:6}"},

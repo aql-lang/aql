@@ -9,10 +9,11 @@ import (
 // that, when parsed and evaluated, reproduces the input stack. Where it
 // diverges from Value.String:
 //
-//   - atoms render as `(quote name)` (bare `name` would parse as a word
-//     lookup, not as an atom value)
+//   - atoms render as `name/q` (bare `name` would parse as a word
+//     lookup, not as an atom value; the /q suffix is the preferred
+//     short form over `(quote name)`)
 //   - quoted lists render as `(quote [...])` so the Quoted flag survives
-//     a round-trip
+//     a round-trip (the /q suffix is only defined for words)
 //   - lists and maps are space-separated, matching AQL source syntax
 //     instead of Value.String's comma-separated debug form
 //
@@ -58,7 +59,7 @@ func CanonValue(v Value) string {
 		return "false"
 	case v.VType.Equal(TAtom):
 		s, _ := AsAtom(v)
-		return "(quote " + s + ")"
+		return s + "/q"
 	case v.VType.Matches(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())

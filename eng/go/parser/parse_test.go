@@ -310,6 +310,133 @@ func TestParseModifierInExpression(t *testing.T) {
 	})
 }
 
+// --- /q quote-suffix modifier ---
+
+func TestParseQuoteSuffix(t *testing.T) {
+	// foo/q → Atom(foo), the canonical short form of (quote foo)
+	assertParse(t, "foo/q", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseQuoteSuffixOnRegisteredName(t *testing.T) {
+	// dup/q → Atom(dup) — /q produces an atom even when the bare name
+	// would dispatch as a function. Resolution happens at parse time.
+	assertParse(t, "dup/q", []eng.Value{
+		eng.NewAtom("dup"),
+	})
+}
+
+func TestParseQuoteSuffixOnReservedLikeName(t *testing.T) {
+	// true/q → Atom(true) — /q applies to any word, including
+	// reserved-looking names; the suffix wins over the literal path.
+	assertParse(t, "true/q", []eng.Value{
+		eng.NewAtom("true"),
+	})
+}
+
+func TestParseQuoteSuffixInExpression(t *testing.T) {
+	// foo/q bar/q → two atoms
+	assertParse(t, "foo/q bar/q", []eng.Value{
+		eng.NewAtom("foo"),
+		eng.NewAtom("bar"),
+	})
+}
+
+// --- Stacked modifiers: order independence ---
+
+func TestParseStackedQuoteAfterStack(t *testing.T) {
+	// foo/sq == foo/qs == foo/q — q dominates; result is an Atom.
+	assertParse(t, "foo/sq", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseStackedQuoteBeforeStack(t *testing.T) {
+	assertParse(t, "foo/qs", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseStackedQuoteAfterForward(t *testing.T) {
+	assertParse(t, "foo/fq", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseStackedQuoteBeforeForward(t *testing.T) {
+	assertParse(t, "foo/qf", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseStackedQuoteAndDigits(t *testing.T) {
+	// digits and q in any order produce an Atom — modifiers other than
+	// q are accepted syntactically but ignored for atoms.
+	assertParse(t, "foo/1q", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+	assertParse(t, "foo/q1", []eng.Value{
+		eng.NewAtom("foo"),
+	})
+}
+
+func TestParseStackedAllModifiers(t *testing.T) {
+	// All three modifier flavours (digits, s, q) in arbitrary orders
+	// produce the same atom — order independent including the barrier
+	// number.
+	want := []eng.Value{eng.NewAtom("foo")}
+	for _, src := range []string{"foo/2qs", "foo/qs2", "foo/sq2", "foo/s2q", "foo/q2s", "foo/2sq"} {
+		assertParse(t, src, want)
+	}
+}
+
+func TestParseForwardSuffixBeforeDigits(t *testing.T) {
+	// f and digits in either order produce the same word — /f1 == /1f.
+	assertParse(t, "lower/f1", []eng.Value{
+		eng.NewWordModified("lower", 1, false, true),
+	})
+}
+
+func TestParseStackSuffixBeforeDigits(t *testing.T) {
+	assertParse(t, "lower/s2", []eng.Value{
+		eng.NewWordModified("lower", 2, true, false),
+	})
+}
+
+func TestParseModifiersForwardAndStackMutuallyExclusive(t *testing.T) {
+	// f and s in the same suffix are invalid — the whole token falls
+	// back to a plain word with the slash in its name.
+	assertParse(t, "foo/fs", []eng.Value{
+		eng.NewWord("foo/fs"),
+	})
+}
+
+func TestParseModifiersDuplicateRejected(t *testing.T) {
+	// Duplicate modifiers reset the whole token to a plain word.
+	assertParse(t, "foo/qq", []eng.Value{
+		eng.NewWord("foo/qq"),
+	})
+	assertParse(t, "foo/ff", []eng.Value{
+		eng.NewWord("foo/ff"),
+	})
+	assertParse(t, "foo/ss", []eng.Value{
+		eng.NewWord("foo/ss"),
+	})
+	// Digits may not appear in two runs separated by a letter — the
+	// argCount is a single contiguous number.
+	assertParse(t, "foo/1q1", []eng.Value{
+		eng.NewWord("foo/1q1"),
+	})
+}
+
+func TestParseMultiDigitArgCount(t *testing.T) {
+	// Multi-digit numbers form a single contiguous argCount.
+	assertParse(t, "foo/12", []eng.Value{
+		eng.NewWordModified("foo", 12, false, false),
+	})
+}
+
 // --- String vs word distinction ---
 
 func TestParseQuotedFunctionName(t *testing.T) {

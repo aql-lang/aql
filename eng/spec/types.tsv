@@ -122,11 +122,11 @@ def t quote Integer t	Integer
 # =====================================================================		
 # 2. None and null		
 # =====================================================================		
-# `none` is the single inhabitant of the None type. Its VType is		
-# TNone, Data == nil. Renders back as 'none' via a dedicated branch in		
-# renderValue. `null`, by contrast, is reserved for JSON-null at the		
-# value level — the spec tokenizer parses it to Atom('null'), which		
-# renders as '(quote null)'.		
+# `none` is the single inhabitant of the None type. Its VType is
+# TNone, Data == nil. Renders back as 'none' via a dedicated branch in
+# renderValue. `null`, by contrast, is reserved for JSON-null at the
+# value level — the spec tokenizer parses it to Atom('null'), which
+# renders as 'null/q'.
 		
 none	none	bare none round-trips as the None type literal
 none none	none none	multiple nones coexist
@@ -134,8 +134,8 @@ none none	none none	multiple nones coexist
 typeof none	None	None is its own 'type' (no metatype lookup); typeof returns None
 		
 # null is an atom, not a type literal.		
-null	(quote null)	`null` tokenises to Atom('null')
-quote null	(quote null)	quoting an atom returns the atom unchanged
+null	null/q	`null` tokenises to Atom('null')
+quote null	null/q	quoting an atom returns the atom unchanged
 		
 # Dispatch — none at typed sigs fails (matcher rejects type literals);		
 # only Any-typed sigs accept it via the catch-all rule.		
@@ -796,7 +796,7 @@ def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 # function.tsv §2). `quote` would store as data instead.		
 def xs:[ :Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
 def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
-def xs:[ :Integer ] quote [ 1 2 3 ] xs	(quote [1 2 3])	quote stores the list as data; xs resolves to the quoted list (canonical render preserves the wrapper)
+def xs:[ :Integer ] quote [ 1 2 3 ] xs	(quote [1 2 3])	quote stores the list as data; xs resolves to the quoted list (canonical render preserves the (quote ...) wrapper — /q is for atoms only)
 		
 # =====================================================================		
 # 11k. enum — fixed enumeration of values		
@@ -893,10 +893,10 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 # `Color::Red`. The Color membership check happens at def-time; once		
 # bound, x is an Atom that *happens* to satisfy Color.		
 		
-# Atom-valued enum — typed binding admits members.		
-type Color enum [ red green blue ] def x:Color quote red x	(quote red)	red is a Color member; bind succeeds
-type Color enum [ red green blue ] def x:Color quote green x	(quote green)
-type Color enum [ red green blue ] def x:Color quote blue x	(quote blue)
+# Atom-valued enum — typed binding admits members.
+type Color enum [ red green blue ] def x:Color quote red x	red/q	red is a Color member; bind succeeds
+type Color enum [ red green blue ] def x:Color quote green x	green/q
+type Color enum [ red green blue ] def x:Color quote blue x	blue/q
 		
 # Non-member rejected.		
 type Color enum [ red green blue ] def x:Color quote pink	ERROR:type_error	pink is not in Color's alternatives
