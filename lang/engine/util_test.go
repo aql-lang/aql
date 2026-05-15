@@ -398,7 +398,7 @@ func TestTopOfDefStack_SingleEntry(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	n, _ := v.AsInteger()
+	n, _ := AsInteger(v)
 	if n != 42 {
 		t.Errorf("got %d, want 42", n)
 	}
@@ -413,7 +413,7 @@ func TestTopOfDefStack_StackedReturnsTop(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	n, _ := v.AsInteger()
+	n, _ := AsInteger(v)
 	if n != 3 {
 		t.Errorf("got %d, want 3 (top of stack)", n)
 	}
@@ -438,7 +438,7 @@ func TestResolveTypedName_TypesPriority(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	s, _ := v.AsString()
+	s, _ := AsString(v)
 	if s != "from-types" {
 		t.Errorf("got %q, want \"from-types\" (Types takes priority)", s)
 	}
@@ -451,7 +451,7 @@ func TestResolveTypedName_FallbackToDefStacks(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	s, _ := v.AsString()
+	s, _ := AsString(v)
 	if s != "from-defstacks" {
 		t.Errorf("got %q, want \"from-defstacks\"", s)
 	}
@@ -562,7 +562,7 @@ func TestResolveTypedNameValue_NotAWord(t *testing.T) {
 	if name != "" {
 		t.Errorf("non-word value: name=%q, want empty", name)
 	}
-	n, _ := out.AsInteger()
+	n, _ := AsInteger(out)
 	if n != 42 {
 		t.Errorf("non-word value: out modified (got %d)", n)
 	}
@@ -575,7 +575,7 @@ func TestResolveTypedNameValue_WordResolved(t *testing.T) {
 	if !ok || name != "Bbd" {
 		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)
 	}
-	s, _ := out.AsString()
+	s, _ := AsString(out)
 	if s != "from-types" {
 		t.Errorf("resolved value = %q, want \"from-types\"", s)
 	}
@@ -657,7 +657,7 @@ func TestFlattenDisjunctAlts_NotADisjunct(t *testing.T) {
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1", len(alts))
 	}
-	n, _ := alts[0].AsInteger()
+	n, _ := AsInteger(alts[0])
 	if n != 42 {
 		t.Errorf("got %d, want 42 (the original value)", n)
 	}

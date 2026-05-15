@@ -338,7 +338,7 @@ func numToClkDurationNative(name string, unit time.Duration) engine.NativeFunc {
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TNumber},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				n, err := args[0].AsNumber()
+				n, err := engine.AsNumber(args[0])
 				if err != nil {
 					return nil, err
 				}

@@ -68,7 +68,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	for i := 0; i < elems.Len(); i++ {
 		elem := elems.Get(i)
 
-		_as1, _ := elem.AsWord()
+		_as1, _ := AsWord(elem)
 		if elem.IsWord() && _as1.Name == "?" {
 			if len(params) > 0 {
 				params[len(params)-1].Optional = true
@@ -76,7 +76,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			continue
 		}
 
-		_as2, _ := elem.AsWord()
+		_as2, _ := AsWord(elem)
 		if elem.IsWord() && _as2.Name == "|" {
 			barrierPos = len(params)
 			continue
@@ -144,7 +144,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			}
 
 		case elem.IsWord():
-			_as4, _ := elem.AsWord()
+			_as4, _ := AsWord(elem)
 			name := _as4.Name
 			// `name:*Type` colon-delimited form. Used by minimal
 			// tokenizers (e.g. the aqleng spec runner, whose
@@ -233,7 +233,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return v.VType, nil, nil
 	}
 	if v.IsWord() {
-		_as5, _ := v.AsWord()
+		_as5, _ := AsWord(v)
 		name := _as5.Name
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
@@ -242,7 +242,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.VType.Matches(TString) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
 		}
@@ -250,7 +250,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
 		}

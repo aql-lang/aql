@@ -54,4 +54,3 @@ type NativeSig struct {
 	// CheckFullStackFn — see Signature.CheckFullStackFn.
 	CheckFullStackFn CheckFullStackFunc
 }
-

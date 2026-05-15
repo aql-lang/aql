@@ -708,16 +708,16 @@ func ValuesEqual(a, b Value) bool {
 	}
 	switch {
 	case a.VType.Matches(TString):
-		_as20, _ := a.AsString()
-		_as19, _ := b.AsString()
+		_as20, _ := AsString(a)
+		_as19, _ := AsString(b)
 		return _as20 == _as19
 	case a.VType.Matches(TInteger):
-		_as22, _ := a.AsInteger()
-		_as21, _ := b.AsInteger()
+		_as22, _ := AsInteger(a)
+		_as21, _ := AsInteger(b)
 		return _as22 == _as21
 	case a.VType.Matches(TBoolean):
-		_as24, _ := a.AsBoolean()
-		_as23, _ := b.AsBoolean()
+		_as24, _ := AsBoolean(a)
+		_as23, _ := AsBoolean(b)
 		return _as24 == _as23
 	case a.VType.Equal(TList):
 		aTT, aTbl := a.Data.(TableTypeInfo)

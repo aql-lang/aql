@@ -319,7 +319,7 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
 	if b.VType.Equal(TFnUndef) && a.IsAtom() {
-		name, _ := a.AsAtom()
+		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 				a = top
@@ -503,7 +503,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		if !src.VType.Matches(TInteger) {
 			return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 		}
-		n, _ := src.AsInteger()
+		n, _ := AsInteger(src)
 		var s string
 		switch base {
 		case "hex":

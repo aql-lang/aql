@@ -232,9 +232,9 @@ func selectStarInfixHandler(args []Value, _ map[string]Value, _ []Value, r *Regi
 	table := args[0]
 	colSpec := args[1]
 
-	_as0, _ := colSpec.AsAtom()
+	_as0, _ := AsAtom(colSpec)
 	if _as0 != "*" {
-		_as1, _ := colSpec.AsAtom()
+		_as1, _ := AsAtom(colSpec)
 		return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as1)
 	}
 
@@ -246,9 +246,9 @@ func selectStarForwardHandler(args []Value, _ map[string]Value, _ []Value, r *Re
 	colSpec := args[0]
 	table := args[1]
 
-	_as2, _ := colSpec.AsAtom()
+	_as2, _ := AsAtom(colSpec)
 	if _as2 != "*" {
-		_as3, _ := colSpec.AsAtom()
+		_as3, _ := AsAtom(colSpec)
 		return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as3)
 	}
 
@@ -322,7 +322,7 @@ func orderAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err != nil {
 		return nil, fmt.Errorf("order: %w", err)
 	}
-	_as4, _ := col.AsAtom()
+	_as4, _ := AsAtom(col)
 	qb.OrderBy = quoteIdent(_as4)
 	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
@@ -403,7 +403,7 @@ func groupAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err != nil {
 		return nil, fmt.Errorf("group: %w", err)
 	}
-	_as5, _ := col.AsAtom()
+	_as5, _ := AsAtom(col)
 	qb.GroupBy = quoteIdent(_as5)
 	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }

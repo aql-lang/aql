@@ -352,8 +352,8 @@ func ceilFloorNative(name string, fn func(float64) float64) engine.NativeFunc {
 // custom binary-num builder rather than engine.BinaryNumOpNative.
 func atan2Native() engine.NativeFunc {
 	numHandler := func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-		a, _ := args[0].AsNumber()
-		b, _ := args[1].AsNumber()
+		a, _ := engine.AsNumber(args[0])
+		b, _ := engine.AsNumber(args[1])
 		return []engine.Value{engine.NewDecimal(math.Atan2(b, a))}, nil
 	}
 	return engine.NativeFunc{

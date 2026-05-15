@@ -42,22 +42,22 @@ func CanonValue(v Value) string {
 	case v.IsDepScalar():
 		return v.String()
 	case v.VType.Matches(TInteger):
-		n, _ := v.AsInteger()
+		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	case v.VType.Matches(TDecimal):
-		f, _ := v.AsDecimal()
+		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	case v.VType.Matches(TString):
-		s, _ := v.AsString()
+		s, _ := AsString(v)
 		return "'" + s + "'"
 	case v.VType.Matches(TBoolean):
-		b, _ := v.AsBoolean()
+		b, _ := AsBoolean(v)
 		if b {
 			return "true"
 		}
 		return "false"
 	case v.VType.Equal(TAtom):
-		s, _ := v.AsAtom()
+		s, _ := AsAtom(v)
 		return "(quote " + s + ")"
 	case v.VType.Matches(TList) && v.Data != nil:
 		lst := v.AsList()

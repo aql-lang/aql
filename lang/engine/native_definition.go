@@ -184,7 +184,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	body := args[1]
 	if constraint.VType.Equal(TFnUndef) && body.IsAtom() {
-		atomName, _ := body.AsAtom()
+		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 				body = top
@@ -281,7 +281,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	for _, decl := range decls.Slice() {
 		switch {
 		case decl.IsWord():
-			_as0, _ := decl.AsWord()
+			_as0, _ := AsWord(decl)
 			name := _as0.Name
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
@@ -293,10 +293,10 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			}
 			var name string
 			if declElems.Get(0).IsWord() {
-				_as1, _ := declElems.Get(0).AsWord()
+				_as1, _ := AsWord(declElems.Get(0))
 				name = _as1.Name
 			} else if declElems.Get(0).VType.Matches(TString) {
-				name, _ = declElems.Get(0).AsString()
+				name, _ = AsString(declElems.Get(0))
 			} else {
 				return nil, fmt.Errorf("var: declaration name must be a word or string")
 			}
@@ -306,7 +306,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			result = append(result, NewEnd())
 
 		case decl.VType.Matches(TString):
-			name, _ := decl.AsString()
+			name, _ := AsString(decl)
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 

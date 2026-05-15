@@ -60,11 +60,11 @@ var (
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/native package init.
-	TError          = mustType("Object/Error")
-	TType           = mustType("Type")
-	TScalarType     = mustType("Type/ScalarType")
-	TNodeType       = mustType("Type/NodeType")
-	TObjectType     = mustType("Type/ObjectType")
+	TError      = mustType("Object/Error")
+	TType       = mustType("Type")
+	TScalarType = mustType("Type/ScalarType")
+	TNodeType   = mustType("Type/NodeType")
+	TObjectType = mustType("Type/ObjectType")
 	// Scalar/Time and descendants moved to
 	// lang/engine/native_temporal.go (Step 8). They live in
 	// lang/engine (not lang/internal/nativemod/time) because
@@ -73,8 +73,8 @@ var (
 	// avoids the import-cycle constraint.
 	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	// TTimeout moved to lang/engine/native_misc.go (Step 8).
-	TDependent      = mustType("Type/Dependent")
-	TDepInteger     = mustType("Type/Dependent/DepInteger")
+	TDependent  = mustType("Type/Dependent")
+	TDepInteger = mustType("Type/Dependent/DepInteger")
 	// TInterval moved to lang/engine/native_misc.go (Step 8).
 )
 

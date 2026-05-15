@@ -6,14 +6,14 @@ package engine
 // Words; quoted-string slots deliver Strings.
 func defName(v Value) string {
 	if v.IsWord() {
-		_as0, _ := v.AsWord()
+		_as0, _ := AsWord(v)
 		return _as0.Name
 	}
 	if v.IsAtom() {
-		s, _ := v.AsAtom()
+		s, _ := AsAtom(v)
 		return s
 	}
-	s, _ := v.AsString()
+	s, _ := AsString(v)
 	return s
 }
 
@@ -22,7 +22,7 @@ func defName(v Value) string {
 // precedence).
 func defStackOnly(v Value) bool {
 	if v.IsWord() {
-		_as2, _ := v.AsWord()
+		_as2, _ := AsWord(v)
 		return _as2.ForceStack
 	}
 	return false

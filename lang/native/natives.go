@@ -496,10 +496,10 @@ func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engin
 	parents := true
 	if optsMap := optsVal.AsMap(); optsMap != nil {
 		if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(engine.TBoolean) {
-			parents, _ = v.AsBoolean()
+			parents, _ = engine.AsBoolean(v)
 		}
 	}
-	_as0, _ := pathVal.AsPath()
+	_as0, _ := engine.AsPath(pathVal)
 	return doFolder(_as0, parents, reg)
 }
 
@@ -509,7 +509,7 @@ func folderHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Va
 	if !pathVal.IsPath() {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
-	_as1, _ := pathVal.AsPath()
+	_as1, _ := engine.AsPath(pathVal)
 	return doFolder(_as1, true, reg)
 }
 

@@ -53,25 +53,25 @@ func TestFetchStringHandler(t *testing.T) {
 	m := resp.AsMap()
 
 	okVal, _ := m.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if !okb {
 		t.Error("expected ok to be true")
 	}
 
 	statusVal, _ := m.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 200 {
 		t.Errorf("expected status 200, got %d", stati)
 	}
 
 	bodyVal, _ := m.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != `{"hello":"world"}` {
 		t.Errorf("expected body '{\"hello\":\"world\"}', got %q", bodys)
 	}
 
 	urlVal, _ := m.Get("url")
-	urls, _ := urlVal.AsString()
+	urls, _ := engine.AsString(urlVal)
 	if urls != ts.URL {
 		t.Errorf("expected url %q, got %q", ts.URL, urls)
 	}
@@ -82,7 +82,7 @@ func TestFetchStringHandler(t *testing.T) {
 	if !ok {
 		t.Error("expected x-custom header in response")
 	} else {
-		xcs, _ := xCustom.AsString()
+		xcs, _ := engine.AsString(xCustom)
 		if xcs != "test-value" {
 			t.Errorf("expected x-custom 'test-value', got %q", xcs)
 		}
@@ -133,17 +133,17 @@ func TestFetchMapHandler(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if !okb {
 		t.Error("expected ok to be true for 201")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 201 {
 		t.Errorf("expected status 201, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "created" {
 		t.Errorf("expected body 'created', got %q", bodys)
 	}
@@ -176,7 +176,7 @@ func TestFetchStringMapHandler(t *testing.T) {
 
 	resp := result[0].AsMap()
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 200 {
 		t.Errorf("expected status 200, got %d", stati)
 	}
@@ -239,17 +239,17 @@ func TestFetchResponseNotOk(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if okb {
 		t.Error("expected ok to be false for 404")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 404 {
 		t.Errorf("expected status 404, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "not found" {
 		t.Errorf("expected body 'not found', got %q", bodys)
 	}
@@ -279,12 +279,12 @@ func TestFetchRedirect(t *testing.T) {
 
 	resp := result[0].AsMap()
 	urlVal, _ := resp.Get("url")
-	urls, _ := urlVal.AsString()
+	urls, _ := engine.AsString(urlVal)
 	if urls != final.URL {
 		t.Errorf("expected final url %q, got %q", final.URL, urls)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "final" {
 		t.Errorf("expected body 'final', got %q", bodys)
 	}
@@ -335,7 +335,7 @@ func TestFetchResponseHeaders(t *testing.T) {
 	if !ok {
 		t.Error("expected content-type header")
 	} else {
-		cts, _ := ct.AsString()
+		cts, _ := engine.AsString(ct)
 		if cts != "application/json" {
 			t.Errorf("expected 'application/json', got %q", cts)
 		}
@@ -345,7 +345,7 @@ func TestFetchResponseHeaders(t *testing.T) {
 	if !ok {
 		t.Error("expected x-request-id header")
 	} else {
-		xrids, _ := xrid.AsString()
+		xrids, _ := engine.AsString(xrid)
 		if xrids != "abc123" {
 			t.Errorf("expected 'abc123', got %q", xrids)
 		}
@@ -393,12 +393,12 @@ func TestFetchServerError(t *testing.T) {
 
 	resp := result[0].AsMap()
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if okb {
 		t.Error("expected ok to be false for 500")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 500 {
 		t.Errorf("expected status 500, got %d", stati)
 	}

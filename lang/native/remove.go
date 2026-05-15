@@ -69,7 +69,7 @@ func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if !ok {
 		return nil, fmt.Errorf("remove: filter must contain an \"id\" field")
 	}
-	id, err := idVal.AsString()
+	id, err := engine.AsString(idVal)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		rec := row.AsMap()
 		existing, ok := rec.Get("id")
 		if ok {
-			existingStr, _ := existing.AsString()
+			existingStr, _ := engine.AsString(existing)
 			if existingStr == id {
 				found = true
 				continue // skip this record

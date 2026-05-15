@@ -17,7 +17,7 @@ func TestMakePathFromList(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if p.Abs {
 		t.Error("expected relative path")
 	}
@@ -35,9 +35,9 @@ func TestMakePathFromListAtoms(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as0, _ := result[0].AsPath()
+	_as0, _ := engine.AsPath(result[0])
 	if _as0.String() != "a/b/c" {
-		_as1, _ := result[0].AsPath()
+		_as1, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 }
@@ -52,7 +52,7 @@ func TestMakePathFromString(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if p.Abs {
 		t.Error("expected relative path")
 	}
@@ -69,7 +69,7 @@ func TestMakePathFromAbsString(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if !p.Abs {
 		t.Error("expected absolute path")
 	}
@@ -91,7 +91,7 @@ func TestMakePathAbsOption(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if !p.Abs {
 		t.Error("expected absolute path from abs option")
 	}
@@ -110,9 +110,9 @@ func TestMakePathAbsOptionString(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as2, _ := result[0].AsPath()
+	_as2, _ := engine.AsPath(result[0])
 	if _as2.String() != "/x/y" {
-		_as3, _ := result[0].AsPath()
+		_as3, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as3.String(), "/x/y")
 	}
 }

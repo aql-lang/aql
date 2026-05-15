@@ -69,7 +69,7 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if !ok {
 		return nil, fmt.Errorf("update: record must contain an \"id\" field")
 	}
-	id, err := idVal.AsString()
+	id, err := engine.AsString(idVal)
 	if err != nil {
 		return nil, fmt.Errorf("update: id: %w", err)
 	}
@@ -87,7 +87,7 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			result[i] = row
 			continue
 		}
-		existingStr, _ := existing.AsString()
+		existingStr, _ := engine.AsString(existing)
 		if existingStr != id {
 			result[i] = row
 			continue

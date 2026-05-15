@@ -625,7 +625,7 @@ func TestDotMapAtom(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("get")})
-	_as0, _ := result[0].AsInteger()
+	_as0, _ := AsInteger(result[0])
 	if len(result) != 1 || _as0 != 42 {
 		t.Errorf("expected 42, got %v", result)
 	}
@@ -639,7 +639,7 @@ func TestDotMapString(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("get")})
-	_as1, _ := result[0].AsInteger()
+	_as1, _ := AsInteger(result[0])
 	if len(result) != 1 || _as1 != 99 {
 		t.Errorf("expected 99, got %v", result)
 	}
@@ -652,7 +652,7 @@ func TestDotListIndex(t *testing.T) {
 	}
 	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
 	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
-	_as2, _ := result[0].AsString()
+	_as2, _ := AsString(result[0])
 	if len(result) != 1 || _as2 != "b" {
 		t.Errorf("expected 'b', got %v", result)
 	}
@@ -691,7 +691,7 @@ func TestDotMapIntegerKey(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("get")})
-	_as3, _ := result[0].AsString()
+	_as3, _ := AsString(result[0])
 	if len(result) != 1 || _as3 != "zero" {
 		t.Errorf("expected 'zero', got %v", result)
 	}
@@ -717,7 +717,7 @@ func TestDotListByIndex(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
 	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
-	_as4, _ := result[0].AsInteger()
+	_as4, _ := AsInteger(result[0])
 	if len(result) != 1 || _as4 != 20 {
 		t.Errorf("expected 20, got %v", result)
 	}
@@ -768,7 +768,7 @@ func TestDotNestedMapChain(t *testing.T) {
 		NewWord("get"), NewWord("b"),
 		NewWord("get"), NewWord("c"),
 	})
-	_as5, _ := result[0].AsInteger()
+	_as5, _ := AsInteger(result[0])
 	if len(result) != 1 || _as5 != 1 {
 		t.Errorf("expected 1, got %v", result)
 	}
@@ -789,7 +789,7 @@ func TestDotMapThenList(t *testing.T) {
 		NewAtom("items"), NewWord("get"),
 		NewInteger(1), NewWord("get"),
 	})
-	_as6, _ := result[0].AsInteger()
+	_as6, _ := AsInteger(result[0])
 	if len(result) != 1 || _as6 != 20 {
 		t.Errorf("expected 20, got %v", result)
 	}
@@ -813,7 +813,7 @@ func TestDotListThenMap(t *testing.T) {
 		NewInteger(0), NewWord("get"),
 		NewAtom("x"), NewWord("get"),
 	})
-	_as7, _ := result[0].AsInteger()
+	_as7, _ := AsInteger(result[0])
 	if len(result) != 1 || _as7 != 1 {
 		t.Errorf("expected 1, got %v", result)
 	}
@@ -835,7 +835,7 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 		NewInteger(1), NewWord("get"),
 		NewAtom("x"), NewWord("get"),
 	})
-	_as8, _ := result[0].AsInteger()
+	_as8, _ := AsInteger(result[0])
 	if len(result) != 1 || _as8 != 2 {
 		t.Errorf("expected 2, got %v", result)
 	}
@@ -851,7 +851,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("get")})
-	_as9, _ := result[0].AsInteger()
+	_as9, _ := AsInteger(result[0])
 	if len(result) != 1 || _as9 != 99 {
 		t.Errorf("expected 99 via . alias, got %v", result)
 	}
@@ -864,7 +864,7 @@ func TestDotAliasListAccess(t *testing.T) {
 	}
 	list := NewList([]Value{NewString("a"), NewString("b")})
 	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord("get")})
-	_as10, _ := result[0].AsString()
+	_as10, _ := AsString(result[0])
 	if len(result) != 1 || _as10 != "a" {
 		t.Errorf("expected 'a' via . alias, got %v", result)
 	}
@@ -893,7 +893,7 @@ func TestDotDeepListMapCombo(t *testing.T) {
 		NewAtom("b"), NewWord("get"),
 		NewInteger(0), NewWord("get"),
 	})
-	_as11, _ := result[0].AsInteger()
+	_as11, _ := AsInteger(result[0])
 	if len(result) != 1 || _as11 != 300 {
 		t.Errorf("expected 300, got %v", result)
 	}
@@ -907,7 +907,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("getr")})
-	_as12, _ := result[0].AsInteger()
+	_as12, _ := AsInteger(result[0])
 	if len(result) != 1 || _as12 != 42 {
 		t.Errorf("expected 42, got %v", result)
 	}
@@ -966,7 +966,7 @@ func TestDotrMapStringKey(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("getr")})
-	_as13, _ := result[0].AsInteger()
+	_as13, _ := AsInteger(result[0])
 	if len(result) != 1 || _as13 != 99 {
 		t.Errorf("expected 99, got %v", result)
 	}
@@ -993,7 +993,7 @@ func TestDotrMapIntegerKey(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("5", NewString("five"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("getr")})
-	_as14, _ := result[0].AsString()
+	_as14, _ := AsString(result[0])
 	if len(result) != 1 || _as14 != "five" {
 		t.Errorf("expected 'five', got %v", result)
 	}
@@ -1038,8 +1038,8 @@ func TestMakeRecordPositional(t *testing.T) {
 	m := result[0].AsMap()
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
-	_as16, _ := xVal.AsInteger()
-	_as15, _ := yVal.AsInteger()
+	_as16, _ := AsInteger(xVal)
+	_as15, _ := AsInteger(yVal)
 	if _as16 != 1 || _as15 != 2 {
 		t.Errorf("expected {x:1,y:2}, got %v", result[0])
 	}
@@ -1074,8 +1074,8 @@ func TestMakeRecordNamed(t *testing.T) {
 	m := result[0].AsMap()
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
-	_as18, _ := xVal.AsInteger()
-	_as17, _ := yVal.AsInteger()
+	_as18, _ := AsInteger(xVal)
+	_as17, _ := AsInteger(yVal)
 	if _as18 != 10 || _as17 != 20 {
 		t.Errorf("expected {x:10,y:20}, got %v", result[0])
 	}
@@ -1114,7 +1114,7 @@ func TestConvertIntToString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewWord("String"),
 	})
-	_as19, _ := result[0].AsString()
+	_as19, _ := AsString(result[0])
 	if len(result) != 1 || _as19 != "42" {
 		t.Errorf("expected '42', got %v", result)
 	}
@@ -1130,7 +1130,7 @@ func TestConvertIntToStringHex(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
-	_as20, _ := result[0].AsString()
+	_as20, _ := AsString(result[0])
 	if len(result) != 1 || _as20 != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
 	}
@@ -1146,7 +1146,7 @@ func TestConvertIntToStringBin(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
-	_as21, _ := result[0].AsString()
+	_as21, _ := AsString(result[0])
 	if len(result) != 1 || _as21 != "1010" {
 		t.Errorf("expected '1010', got %v", result)
 	}
@@ -1162,7 +1162,7 @@ func TestConvertIntToStringOct(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
-	_as22, _ := result[0].AsString()
+	_as22, _ := AsString(result[0])
 	if len(result) != 1 || _as22 != "10" {
 		t.Errorf("expected '10', got %v", result)
 	}
@@ -1176,7 +1176,7 @@ func TestConvertStringToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("99"), NewWord("convert"), NewWord("Number"),
 	})
-	_as23, _ := result[0].AsInteger()
+	_as23, _ := AsInteger(result[0])
 	if len(result) != 1 || _as23 != 99 {
 		t.Errorf("expected 99, got %v", result)
 	}
@@ -1190,7 +1190,7 @@ func TestConvertBoolToString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewWord("String"),
 	})
-	_as24, _ := result[0].AsString()
+	_as24, _ := AsString(result[0])
 	if len(result) != 1 || _as24 != "true" {
 		t.Errorf("expected 'true', got %v", result)
 	}
@@ -1204,7 +1204,7 @@ func TestConvertIntToBool(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
-	_as25, _ := result[0].AsBoolean()
+	_as25, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as25 {
 		t.Errorf("expected true, got %v", result)
 	}
@@ -1218,7 +1218,7 @@ func TestConvertIntToBoolZero(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
-	_as26, _ := result[0].AsBoolean()
+	_as26, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as26 {
 		t.Errorf("expected false, got %v", result)
 	}
@@ -1232,7 +1232,7 @@ func TestConvertStringToBool(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
-	_as27, _ := result[0].AsBoolean()
+	_as27, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as27 {
 		t.Errorf("expected true, got %v", result)
 	}
@@ -1248,7 +1248,7 @@ func TestConvertWithSettingsMap(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(settings),
 	})
-	_as28, _ := result[0].AsString()
+	_as28, _ := AsString(result[0])
 	if len(result) != 1 || _as28 != "ff" {
 		t.Errorf("expected 'ff', got %v", result)
 	}
@@ -1271,7 +1271,7 @@ func TestVarStringName(t *testing.T) {
 			NewWord("x"), NewWord("mul"), NewWord("x"),
 		}),
 	})
-	_as29, _ := result[0].AsInteger()
+	_as29, _ := AsInteger(result[0])
 	if len(result) != 1 || _as29 != 25 {
 		t.Errorf("expected 25, got %v", result)
 	}
@@ -1291,7 +1291,7 @@ func TestVarWithDefault(t *testing.T) {
 			NewWord("x"), NewWord("add"), NewInteger(1),
 		}),
 	})
-	_as30, _ := result[0].AsInteger()
+	_as30, _ := AsInteger(result[0])
 	if len(result) != 1 || _as30 != 11 {
 		t.Errorf("expected 11, got %v", result)
 	}
@@ -1492,7 +1492,7 @@ func TestRunTrace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunTrace error: %v", err)
 	}
-	_as31, _ := result[0].AsInteger()
+	_as31, _ := AsInteger(result[0])
 	if len(result) != 1 || _as31 != 3 {
 		t.Errorf("expected [3], got %v", result)
 	}
@@ -1541,7 +1541,7 @@ func TestStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
-	_as32, _ := result[0].AsInteger()
+	_as32, _ := AsInteger(result[0])
 	if len(result) != 1 || _as32 != 1 {
 		t.Errorf("expected [1], got %v", result)
 	}
@@ -1557,7 +1557,7 @@ func TestDefEndExplicit(t *testing.T) {
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewEnd(),
 		NewWord("foo"),
 	})
-	_as33, _ := result[0].AsInteger()
+	_as33, _ := AsInteger(result[0])
 	if len(result) != 1 || _as33 != 42 {
 		t.Errorf("expected 42, got %v", result)
 	}
@@ -1572,7 +1572,7 @@ func TestParenResolvesForward(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 	})
-	_as34, _ := result[0].AsInteger()
+	_as34, _ := AsInteger(result[0])
 	if len(result) != 1 || _as34 != 3 {
 		t.Errorf("expected 3, got %v", result)
 	}
@@ -1595,7 +1595,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 
 func TestResolveWordValueTrue(t *testing.T) {
 	v := ResolveWordValue(NewWord("true"))
-	_as35, _ := v.AsBoolean()
+	_as35, _ := AsBoolean(v)
 	if !v.VType.Matches(TBoolean) || !_as35 {
 		t.Errorf("expected boolean true, got %s", v)
 	}
@@ -1603,7 +1603,7 @@ func TestResolveWordValueTrue(t *testing.T) {
 
 func TestResolveWordValueFalse(t *testing.T) {
 	v := ResolveWordValue(NewWord("false"))
-	_as36, _ := v.AsBoolean()
+	_as36, _ := AsBoolean(v)
 	if !v.VType.Matches(TBoolean) || _as36 {
 		t.Errorf("expected boolean false, got %s", v)
 	}
@@ -1797,7 +1797,7 @@ func TestFnMultiSignature(t *testing.T) {
 		}),
 		NewInteger(5), NewWord("f"),
 	})
-	_as37, _ := result[0].AsInteger()
+	_as37, _ := AsInteger(result[0])
 	if len(result) != 1 || _as37 != 25 {
 		t.Errorf("expected 25, got %v", result)
 	}
@@ -2384,7 +2384,7 @@ func TestMakeConvertToString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as38, _ := v.AsString()
+	_as38, _ := AsString(v)
 	if _as38 != "42" {
 		t.Errorf("expected '42', got %s", v)
 	}
@@ -2395,7 +2395,7 @@ func TestMakeConvertToNumber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as39, _ := v.AsInteger()
+	_as39, _ := AsInteger(v)
 	if _as39 != 99 {
 		t.Errorf("expected 99, got %s", v)
 	}
@@ -2406,7 +2406,7 @@ func TestMakeConvertToBoolFromBool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as40, _ := v.AsBoolean()
+	_as40, _ := AsBoolean(v)
 	if !_as40 {
 		t.Error("expected true")
 	}
@@ -2417,7 +2417,7 @@ func TestMakeConvertToBoolFromInt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as41, _ := v.AsBoolean()
+	_as41, _ := AsBoolean(v)
 	if !_as41 {
 		t.Error("expected true")
 	}
@@ -2428,17 +2428,17 @@ func TestMakeConvertToBoolFromString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as42, _ := v.AsBoolean()
+	_as42, _ := AsBoolean(v)
 	if !_as42 {
 		t.Error("expected true")
 	}
 	v2, _ := makeConvert(NewString("false"), TBoolean)
-	_as43, _ := v2.AsBoolean()
+	_as43, _ := AsBoolean(v2)
 	if _as43 {
 		t.Error("expected false")
 	}
 	v3, _ := makeConvert(NewString(""), TBoolean)
-	_as44, _ := v3.AsBoolean()
+	_as44, _ := AsBoolean(v3)
 	if _as44 {
 		t.Error("expected false for empty string")
 	}
@@ -2466,7 +2466,7 @@ func TestMakeFieldValueAlreadyMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as45, _ := v.AsInteger()
+	_as45, _ := AsInteger(v)
 	if _as45 != 42 {
 		t.Errorf("expected 42, got %s", v)
 	}
@@ -2477,7 +2477,7 @@ func TestMakeFieldValueConvert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as46, _ := v.AsInteger()
+	_as46, _ := AsInteger(v)
 	if _as46 != 99 {
 		t.Errorf("expected 99, got %s", v)
 	}
@@ -2488,7 +2488,7 @@ func TestMakeFieldValueWordTrue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as47, _ := v.AsBoolean()
+	_as47, _ := AsBoolean(v)
 	if !_as47 {
 		t.Error("expected true")
 	}
@@ -2499,7 +2499,7 @@ func TestMakeFieldValueConstraintUnify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	_as48, _ := v.AsInteger()
+	_as48, _ := AsInteger(v)
 	if _as48 != 42 {
 		t.Errorf("expected 42, got %s", v)
 	}
@@ -2562,7 +2562,7 @@ func TestStepEndWithForwardBeforeEnd(t *testing.T) {
 		NewWord("def"), NewWord("myval"), NewInteger(42), NewEnd(),
 		NewInteger(1), NewWord("add"), NewWord("myval"),
 	})
-	_as49, _ := result[0].AsInteger()
+	_as49, _ := AsInteger(result[0])
 	if len(result) != 1 || _as49 != 43 {
 		t.Errorf("expected 43, got %v", result)
 	}
@@ -2580,7 +2580,7 @@ func TestStepEndTerminatesDef(t *testing.T) {
 		NewEnd(),
 		NewInteger(10), NewWord("a"),
 	})
-	_as50, _ := result[0].AsInteger()
+	_as50, _ := AsInteger(result[0])
 	if len(result) != 1 || _as50 != 11 {
 		t.Errorf("expected 11, got %v", result)
 	}
@@ -3310,7 +3310,7 @@ func TestScalarFromTableOneRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_as51, _ := val.AsInteger()
+	_as51, _ := AsInteger(val)
 	if !val.VType.Matches(TInteger) || _as51 != 42 {
 		t.Errorf("expected 42, got %v", val)
 	}
@@ -3358,7 +3358,7 @@ func TestResolveScalarValuePlain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_as52, _ := got.AsInteger()
+	_as52, _ := AsInteger(got)
 	if _as52 != 42 {
 		t.Errorf("expected 42, got %v", got)
 	}
@@ -3378,7 +3378,7 @@ func TestResolveScalarValueTableData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_as53, _ := got.AsInteger()
+	_as53, _ := AsInteger(got)
 	if _as53 != 99 {
 		t.Errorf("expected 99, got %v", got)
 	}
@@ -3789,7 +3789,7 @@ func TestPeekForwardValueInContext(t *testing.T) {
 	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward arg collection
 	// e.g., "add" with forward: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	_as54, _ := result[0].AsInteger()
+	_as54, _ := AsInteger(result[0])
 	if len(result) != 1 || _as54 != 3 {
 		t.Errorf("expected [3], got %v", result)
 	}
@@ -3809,7 +3809,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 		NewWord("def"), NewWord("dbl"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 		NewInteger(5), NewWord("dbl"),
 	})
-	_as55, _ := result[0].AsInteger()
+	_as55, _ := AsInteger(result[0])
 	if len(result) != 1 || _as55 != 10 {
 		t.Errorf("expected [10], got %v", result)
 	}
@@ -3982,7 +3982,7 @@ func TestCallAQLBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallAQL error: %v", err)
 	}
-	_as56, _ := result[0].AsInteger()
+	_as56, _ := AsInteger(result[0])
 	if len(result) != 1 || _as56 != 10 {
 		t.Errorf("CallAQL(double, 5) = %v, want [10]", result)
 	}
@@ -4036,7 +4036,7 @@ func TestDblcallBasic(t *testing.T) {
 		NewWord("dblcall"), NewInteger(5),
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
-	_as57, _ := result[0].AsInteger()
+	_as57, _ := AsInteger(result[0])
 	if len(result) != 1 || _as57 != 100 {
 		t.Errorf("dblcall 5 [dup mul] = %v, want [100]", result)
 	}
@@ -4052,7 +4052,7 @@ func TestDblcallWithAdd(t *testing.T) {
 		NewWord("dblcall"), NewInteger(3),
 		NewList([]Value{NewWord("add"), NewInteger(1)}),
 	})
-	_as58, _ := result[0].AsInteger()
+	_as58, _ := AsInteger(result[0])
 	if len(result) != 1 || _as58 != 7 {
 		t.Errorf("3 dblcall [add 1] = %v, want [7]", result)
 	}
@@ -4068,7 +4068,7 @@ func TestDblcallEmptyBody(t *testing.T) {
 		NewWord("dblcall"), NewInteger(4),
 		NewList([]Value{}),
 	})
-	_as59, _ := result[0].AsInteger()
+	_as59, _ := AsInteger(result[0])
 	if len(result) != 1 || _as59 != 8 {
 		t.Errorf("dblcall 4 [] = %v, want [8]", result)
 	}
@@ -4089,7 +4089,7 @@ func TestCallBasic(t *testing.T) {
 		NewList([]Value{NewWord("dup"), NewWord("mul")}),
 		NewWord("call"),
 	})
-	_as60, _ := result[0].AsInteger()
+	_as60, _ := AsInteger(result[0])
 	if len(result) != 1 || _as60 != 25 {
 		t.Errorf("5 [dup mul] call = %v, want [25]", result)
 	}
@@ -4106,7 +4106,7 @@ func TestCallEmptyList(t *testing.T) {
 		NewList([]Value{}),
 		NewWord("call"),
 	})
-	_as61, _ := result[0].AsInteger()
+	_as61, _ := AsInteger(result[0])
 	if len(result) != 1 || _as61 != 42 {
 		t.Errorf("42 [] call = %v, want [42]", result)
 	}
@@ -4138,7 +4138,7 @@ func TestArgsInsideFn(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("sum2"), NewInteger(3), NewInteger(7),
 	})
-	_as62, _ := result[0].AsInteger()
+	_as62, _ := AsInteger(result[0])
 	if len(result) != 1 || _as62 != 10 {
 		t.Errorf("sum2 3 7 = %v, want [10]", result)
 	}
@@ -4256,7 +4256,7 @@ func TestResolveFieldTypeStringUnknown(t *testing.T) {
 	// Unknown name should pass through
 	v := NewString("NotAType")
 	result := ResolveFieldType(r, v)
-	_as63, _ := result.AsString()
+	_as63, _ := AsString(result)
 	if _as63 != "NotAType" {
 		t.Errorf("expected pass-through, got %v", result)
 	}
@@ -4319,7 +4319,7 @@ func TestSetParseFunc(t *testing.T) {
 	if !called {
 		t.Error("ParseFunc was not called")
 	}
-	_as64, _ := result[0].AsInteger()
+	_as64, _ := AsInteger(result[0])
 	if len(result) != 1 || _as64 != 99 {
 		t.Errorf("ParseFunc result = %v, want [99]", result)
 	}
@@ -4362,7 +4362,7 @@ func TestResolveSigTypeDecimalLiteral(t *testing.T) {
 	if pattern == nil {
 		t.Fatal("expected pattern to carry the literal value, got nil")
 	}
-	if got, _ := pattern.AsDecimal(); got != 3.14 {
+	if got, _ := AsDecimal(*pattern); got != 3.14 {
 		t.Errorf("pattern value = %v, want 3.14", got)
 	}
 }
@@ -4434,9 +4434,9 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 		t.Fatal("expected fallback match")
 	}
 	out, _ := result.Sig.Handler(result.Args, nil, nil, nil)
-	_as65, _ := out[0].AsString()
+	_as65, _ := AsString(out[0])
 	if _as65 != "fallback" {
-		_as66, _ := out[0].AsString()
+		_as66, _ := AsString(out[0])
 		t.Errorf("expected fallback, got %s", _as66)
 	}
 }
@@ -4479,7 +4479,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 	if callErr != nil {
 		t.Fatalf("expected match, got error: %v", callErr)
 	}
-	_as67, _ := result[0].AsString()
+	_as67, _ := AsString(result[0])
 	if len(result) != 1 || _as67 != "yes" {
 		t.Errorf("expected [yes], got %v", result)
 	}
@@ -4646,7 +4646,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 		// Call with {x:99} — should match overload 1
 		NewMap(patternMap), NewWord("foo"),
 	})
-	_as68, _ := result[0].AsString()
+	_as68, _ := AsString(result[0])
 	if len(result) != 1 || _as68 != "A" {
 		t.Errorf("expected 'A' for {x:99}, got %v", result)
 	}
@@ -4657,7 +4657,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	result2 := runAQL(t, r, []Value{
 		NewMap(noMatchMap), NewWord("foo"),
 	})
-	_as69, _ := result2[0].AsString()
+	_as69, _ := AsString(result2[0])
 	if len(result2) != 1 || _as69 != "B" {
 		t.Errorf("expected 'B' for {x:100}, got %v", result2)
 	}

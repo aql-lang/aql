@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/aql-lang/aql/lang/engine"
 	"testing"
 )
 
@@ -39,8 +40,8 @@ func TestResourceTypeMakePositional(t *testing.T) {
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	meta, _ := m.Get("meta")
-	nameS, _ := name.AsString()
-	kindS, _ := kind.AsString()
+	nameS, _ := engine.AsString(name)
+	kindS, _ := engine.AsString(kind)
 	if nameS != "users" {
 		t.Errorf("expected name='users', got %s", name)
 	}
@@ -49,7 +50,7 @@ func TestResourceTypeMakePositional(t *testing.T) {
 	}
 	mm := meta.AsMap()
 	tbl, _ := mm.Get("table")
-	tblS, _ := tbl.AsString()
+	tblS, _ := engine.AsString(tbl)
 	if tblS != "usr" {
 		t.Errorf("expected meta.table='usr', got %s", tbl)
 	}
@@ -67,8 +68,8 @@ func TestResourceTypeMakeNamed(t *testing.T) {
 	m := result[0].AsMap()
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
-	nameS2, _ := name.AsString()
-	kindS2, _ := kind.AsString()
+	nameS2, _ := engine.AsString(name)
+	kindS2, _ := engine.AsString(kind)
 	if nameS2 != "users" {
 		t.Errorf("expected name='users', got %s", name)
 	}
@@ -91,8 +92,8 @@ func TestResourceTypeMakeNamedReorder(t *testing.T) {
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	meta, _ := m.Get("meta")
-	nameS3, _ := name.AsString()
-	kindS3, _ := kind.AsString()
+	nameS3, _ := engine.AsString(name)
+	kindS3, _ := engine.AsString(kind)
 	if nameS3 != "foo" {
 		t.Errorf("expected name='foo', got %s", name)
 	}
@@ -101,7 +102,7 @@ func TestResourceTypeMakeNamedReorder(t *testing.T) {
 	}
 	mm := meta.AsMap()
 	x, _ := mm.Get("x")
-	xi, _ := x.AsInteger()
+	xi, _ := engine.AsInteger(x)
 	if xi != 1 {
 		t.Errorf("expected meta.x=1, got %v", x)
 	}
@@ -126,13 +127,13 @@ func TestResourceTypeTable(t *testing.T) {
 	}
 	r0 := rows[0].AsMap()
 	name0, _ := r0.Get("name")
-	name0S, _ := name0.AsString()
+	name0S, _ := engine.AsString(name0)
 	if name0S != "users" {
 		t.Errorf("expected row 0 name='users', got %s", name0)
 	}
 	r1 := rows[1].AsMap()
 	name1, _ := r1.Get("name")
-	name1S, _ := name1.AsString()
+	name1S, _ := engine.AsString(name1)
 	if name1S != "roles" {
 		t.Errorf("expected row 1 name='roles', got %s", name1)
 	}
@@ -179,8 +180,8 @@ func TestEntityTypeMakePositional(t *testing.T) {
 	meta, _ := m.Get("meta")
 	ent, _ := m.Get("entity")
 	model, _ := m.Get("model")
-	nameS4, _ := name.AsString()
-	kindS4, _ := kind.AsString()
+	nameS4, _ := engine.AsString(name)
+	kindS4, _ := engine.AsString(kind)
 	if nameS4 != "users" {
 		t.Errorf("expected name='users', got %s", name)
 	}
@@ -189,19 +190,19 @@ func TestEntityTypeMakePositional(t *testing.T) {
 	}
 	mm := meta.AsMap()
 	tbl, _ := mm.Get("table")
-	tblS4, _ := tbl.AsString()
+	tblS4, _ := engine.AsString(tbl)
 	if tblS4 != "usr" {
 		t.Errorf("expected meta.table='usr', got %s", tbl)
 	}
 	em := ent.AsMap()
 	pk, _ := em.Get("pk")
-	pkS4, _ := pk.AsString()
+	pkS4, _ := engine.AsString(pk)
 	if pkS4 != "id" {
 		t.Errorf("expected entity.pk='id', got %s", pk)
 	}
 	mdl := model.AsMap()
 	base, _ := mdl.Get("base")
-	baseS4, _ := base.AsString()
+	baseS4, _ := engine.AsString(base)
 	if baseS4 != "user" {
 		t.Errorf("expected model.base='user', got %s", base)
 	}
@@ -220,8 +221,8 @@ func TestEntityTypeMakeNamed(t *testing.T) {
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	ent, _ := m.Get("entity")
-	nameS5, _ := name.AsString()
-	kindS5, _ := kind.AsString()
+	nameS5, _ := engine.AsString(name)
+	kindS5, _ := engine.AsString(kind)
 	if nameS5 != "orders" {
 		t.Errorf("expected name='orders', got %s", name)
 	}
@@ -230,7 +231,7 @@ func TestEntityTypeMakeNamed(t *testing.T) {
 	}
 	em := ent.AsMap()
 	pk, _ := em.Get("pk")
-	pkS5, _ := pk.AsString()
+	pkS5, _ := engine.AsString(pk)
 	if pkS5 != "id" {
 		t.Errorf("expected entity.pk='id', got %s", pk)
 	}
@@ -264,8 +265,8 @@ func TestEntityTypeTable(t *testing.T) {
 	r0 := rows[0].AsMap()
 	name0, _ := r0.Get("name")
 	kind0, _ := r0.Get("kind")
-	name0S2, _ := name0.AsString()
-	kind0S, _ := kind0.AsString()
+	name0S2, _ := engine.AsString(name0)
+	kind0S, _ := engine.AsString(kind0)
 	if name0S2 != "users" {
 		t.Errorf("expected row 0 name='users', got %s", name0)
 	}
@@ -274,7 +275,7 @@ func TestEntityTypeTable(t *testing.T) {
 	}
 	r1 := rows[1].AsMap()
 	name1, _ := r1.Get("name")
-	name1S2, _ := name1.AsString()
+	name1S2, _ := engine.AsString(name1)
 	if name1S2 != "roles" {
 		t.Errorf("expected row 1 name='roles', got %s", name1)
 	}
@@ -293,7 +294,7 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 	}
 	rm := result[0].AsMap()
 	rk, _ := rm.Get("kind")
-	rkS, _ := rk.AsString()
+	rkS, _ := engine.AsString(rk)
 	if rkS != "setting" {
 		t.Errorf("Resrc kind should be 'setting', got %s", rk)
 	}
@@ -308,7 +309,7 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 	}
 	em := result2[0].AsMap()
 	ek, _ := em.Get("kind")
-	ekS, _ := ek.AsString()
+	ekS, _ := engine.AsString(ek)
 	if ekS != "entity" {
 		t.Errorf("entity kind should be 'entity', got %s", ek)
 	}

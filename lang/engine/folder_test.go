@@ -37,9 +37,9 @@ func TestFolderCreatesDir(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	_as0, _ := result[0].AsPath()
+	_as0, _ := engine.AsPath(result[0])
 	if _as0.String() != "a/b/c" {
-		_as1, _ := result[0].AsPath()
+		_as1, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 	// Check that the directory was created in mem FS
@@ -59,9 +59,9 @@ func TestFolderAbsolutePath(t *testing.T) {
 	if len(result) != 1 || !result[0].IsPath() {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as2, _ := result[0].AsPath()
+	_as2, _ := engine.AsPath(result[0])
 	if _as2.String() != "/tmp/data" {
-		_as3, _ := result[0].AsPath()
+		_as3, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as3.String(), "/tmp/data")
 	}
 	if !mem.Dirs["/tmp/data"] {

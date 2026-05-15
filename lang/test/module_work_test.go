@@ -3,6 +3,8 @@ package test
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/aql-lang/aql/lang/engine"
 )
 
 func moduleWorkDir(t *testing.T) string {
@@ -41,9 +43,9 @@ func TestColorHex2rgbComponents(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	rvi, _ := rv.AsInteger()
-	gvi, _ := gv.AsInteger()
-	bvi, _ := bv.AsInteger()
+	rvi, _ := engine.AsInteger(rv)
+	gvi, _ := engine.AsInteger(gv)
+	bvi, _ := engine.AsInteger(bv)
 	if rvi != 255 {
 		t.Errorf("r = %d, want 255", rvi)
 	}
@@ -235,7 +237,7 @@ func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sunset.%s.hex: %v", field, err)
 		}
-		s, _ := result[0].AsString()
+		s, _ := engine.AsString(result[0])
 		if len(s) != 7 || s[0] != '#' {
 			t.Errorf("sunset.%s.hex = %q, want #XXXXXX format", field, s)
 		}
@@ -247,7 +249,7 @@ func TestColorSchemeHasBothHexAndRGB(t *testing.T) {
 		if err != nil {
 			t.Fatalf("sunset.%s.r: %v", field, err)
 		}
-		r, _ := result[0].AsInteger()
+		r, _ := engine.AsInteger(result[0])
 		if r < 0 || r > 255 {
 			t.Errorf("sunset.%s.r = %d, want 0-255", field, r)
 		}
@@ -285,9 +287,9 @@ func TestDoMapWordValuesResolve(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	rvi2, _ := rv.AsInteger()
-	gvi2, _ := gv.AsInteger()
-	bvi2, _ := bv.AsInteger()
+	rvi2, _ := engine.AsInteger(rv)
+	gvi2, _ := engine.AsInteger(gv)
+	bvi2, _ := engine.AsInteger(bv)
 	if rvi2 != 100 {
 		t.Errorf("r = %d, want 100", rvi2)
 	}
@@ -311,9 +313,9 @@ func TestDoMapLiteralValues(t *testing.T) {
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
 	zv, _ := m.Get("z")
-	xvi, _ := xv.AsInteger()
-	yvs, _ := yv.AsString()
-	zvb, _ := zv.AsBoolean()
+	xvi, _ := engine.AsInteger(xv)
+	yvs, _ := engine.AsString(yv)
+	zvb, _ := engine.AsBoolean(zv)
 	if xvi != 1 {
 		t.Errorf("x = %v, want 1", xv)
 	}
@@ -336,11 +338,11 @@ func TestDoMapListValuesStillWork(t *testing.T) {
 	m := result[0].AsMap()
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
-	xvi2, _ := xv.AsInteger()
+	xvi2, _ := engine.AsInteger(xv)
 	if xvi2 != 7 {
 		t.Errorf("x = %v, want 7", xv)
 	}
-	yvs2, _ := yv.AsString()
+	yvs2, _ := engine.AsString(yv)
 	if yvs2 != "A" {
 		t.Errorf("y = %v, want A", yv)
 	}
@@ -401,9 +403,9 @@ func TestColorHex2rgbBlack(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	rvb, _ := rv.AsInteger()
-	gvb, _ := gv.AsInteger()
-	bvb, _ := bv.AsInteger()
+	rvb, _ := engine.AsInteger(rv)
+	gvb, _ := engine.AsInteger(gv)
+	bvb, _ := engine.AsInteger(bv)
 	if rvb != 0 || gvb != 0 || bvb != 0 {
 		t.Errorf("want {r:0 g:0 b:0}, got {r:%d g:%d b:%d}", rvb, gvb, bvb)
 	}
@@ -422,9 +424,9 @@ func TestColorHex2rgbWhite(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	rvw, _ := rv.AsInteger()
-	gvw, _ := gv.AsInteger()
-	bvw, _ := bv.AsInteger()
+	rvw, _ := engine.AsInteger(rv)
+	gvw, _ := engine.AsInteger(gv)
+	bvw, _ := engine.AsInteger(bv)
 	if rvw != 255 || gvw != 255 || bvw != 255 {
 		t.Errorf("want {r:255 g:255 b:255}, got {r:%d g:%d b:%d}", rvw, gvw, bvw)
 	}
@@ -499,7 +501,7 @@ func TestColorSchemeOceanSecondaryRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hex, _ := result[0].AsString()
+	hex, _ := engine.AsString(result[0])
 
 	result, err = runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
@@ -526,9 +528,9 @@ func TestDoMapMixedWordAndListValues(t *testing.T) {
 	av, _ := m.Get("a")
 	bv, _ := m.Get("b")
 	cv, _ := m.Get("c")
-	avi, _ := av.AsInteger()
-	bvi3, _ := bv.AsInteger()
-	cvs, _ := cv.AsString()
+	avi, _ := engine.AsInteger(av)
+	bvi3, _ := engine.AsInteger(bv)
+	cvs, _ := engine.AsString(cv)
 	if avi != 10 {
 		t.Errorf("a = %d, want 10", avi)
 	}
@@ -559,7 +561,7 @@ func TestColorMakeColorTypeFields(t *testing.T) {
 			t.Errorf("missing field %s in Color record", key)
 			continue
 		}
-		_, err := v.AsInteger()
+		_, err := engine.AsInteger(v)
 		if err != nil {
 			t.Errorf("Color field %s should be Integer, got %s", key, v.String())
 		}
@@ -596,7 +598,7 @@ func TestColorMakeColorTypeHasHex(t *testing.T) {
 		}
 	}
 	hexv, _ := m.Get("hex")
-	s, _ := hexv.AsString()
+	s, _ := engine.AsString(hexv)
 	if s != "#DEADBE" {
 		t.Errorf("hex = %q, want #DEADBE", s)
 	}
@@ -616,9 +618,9 @@ func TestColorClampRgbEvaluatedMapValues(t *testing.T) {
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
-	rvi, _ := rv.AsInteger()
-	gvi, _ := gv.AsInteger()
-	bvi, _ := bv.AsInteger()
+	rvi, _ := engine.AsInteger(rv)
+	gvi, _ := engine.AsInteger(gv)
+	bvi, _ := engine.AsInteger(bv)
 	if rvi != 255 {
 		t.Errorf("r = %d, want 255", rvi)
 	}
@@ -690,7 +692,7 @@ func TestColorSchemeEachSchemeHasColorFields(t *testing.T) {
 					t.Errorf("Schemes.%s.%s.%s: %v", scheme, field, comp, err)
 					continue
 				}
-				v, ierr := result[0].AsInteger()
+				v, ierr := engine.AsInteger(result[0])
 				if ierr != nil {
 					t.Errorf("Schemes.%s.%s.%s: expected Integer, got %s", scheme, field, comp, result[0].String())
 				}
@@ -732,8 +734,8 @@ func TestColorDefAndMapExpr(t *testing.T) {
 	m := result[0].AsMap()
 	r1, _ := m.Get("r1")
 	b2, _ := m.Get("b2")
-	r1i, _ := r1.AsInteger()
-	b2i, _ := b2.AsInteger()
+	r1i, _ := engine.AsInteger(r1)
+	b2i, _ := engine.AsInteger(b2)
 	if r1i != 255 {
 		t.Errorf("r1 = %d, want 255", r1i)
 	}

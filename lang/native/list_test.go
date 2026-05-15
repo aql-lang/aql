@@ -85,7 +85,7 @@ func TestListFilterHandler(t *testing.T) {
 	for _, row := range list {
 		m := row.AsMap()
 		nameVal, _ := m.Get("name")
-		name, _ := nameVal.AsString()
+		name, _ := engine.AsString(nameVal)
 		if name != "alice" && name != "carol" {
 			t.Errorf("unexpected name: %s", name)
 		}
@@ -121,7 +121,7 @@ func TestListFilterMultipleKeys(t *testing.T) {
 	if len(list) > 0 {
 		m := list[0].AsMap()
 		nameVal, _ := m.Get("name")
-		ns, _ := nameVal.AsString()
+		ns, _ := engine.AsString(nameVal)
 		if ns != "alice" {
 			t.Errorf("expected alice, got %s", ns)
 		}

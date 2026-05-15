@@ -49,8 +49,8 @@ func TestDecimalFormat(t *testing.T) {
 // and does not pretend the result is 0.3. Honest arithmetic, ugly
 // output for this specific input.
 func TestDecimalArithmeticIsFloat64(t *testing.T) {
-	a, _ := NewDecimal(0.1).AsDecimal()
-	b, _ := NewDecimal(0.2).AsDecimal()
+	a, _ := AsDecimal(NewDecimal(0.1))
+	b, _ := AsDecimal(NewDecimal(0.2))
 	got := a + b
 
 	// Surface form: render via formatDecimal and assert the canonical

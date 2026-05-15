@@ -130,8 +130,8 @@ func unaryStringNative(name string, fn func(string) string) NativeFunc {
 		// (StrPayload / AtomPayload) are surfaced correctly.
 		var s string
 		if args[0].IsAtom() {
-			s, _ = args[0].AsAtom()
-		} else if as, err := args[0].AsString(); err == nil {
+			s, _ = AsAtom(args[0])
+		} else if as, err := AsString(args[0]); err == nil {
 			s = as
 		} else {
 			return nil, fmt.Errorf("%s: expected string, got %s", name, args[0].String())

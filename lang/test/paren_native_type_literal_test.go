@@ -37,8 +37,8 @@ func TestNativeFnInFnBody(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				x, _ := m.Get("x")
-				ai1, _ := a.AsInteger()
-				xi1, _ := x.AsInteger()
+				ai1, _ := engine.AsInteger(a)
+				xi1, _ := engine.AsInteger(x)
 				if ai1 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -74,7 +74,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := result[0].AsString()
+				s, _ := engine.AsString(result[0])
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -140,8 +140,8 @@ func TestNativeInExplicitParens(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				b, _ := m.Get("b")
-				ai2, _ := a.AsInteger()
-				bi2, _ := b.AsInteger()
+				ai2, _ := engine.AsInteger(a)
+				bi2, _ := engine.AsInteger(b)
 				if ai2 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -174,7 +174,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := result[0].AsString()
+				s, _ := engine.AsString(result[0])
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -484,8 +484,8 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 				m := result[0].AsMap()
 				a, _ := m.Get("a")
 				e, _ := m.Get("extra")
-				ai3, _ := a.AsInteger()
-				ei3, _ := e.AsInteger()
+				ai3, _ := engine.AsInteger(a)
+				ei3, _ := engine.AsInteger(e)
 				if ai3 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -512,7 +512,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := result[0].AsString()
+				s, _ := engine.AsString(result[0])
 				if !strings.Contains(s, "a") || !strings.Contains(s, "b") {
 					t.Errorf("expected JSON with 'a' and 'b', got %q", s)
 				}

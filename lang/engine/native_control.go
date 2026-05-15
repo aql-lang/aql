@@ -107,7 +107,7 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 func doListReturnsFn(args []Value, r *Registry) []Value {
 	body := args[0]
 	if body.IsWord() {
-		w, _ := body.AsWord()
+		w, _ := AsWord(body)
 		if v, ok := r.Defs.Top(w.Name); ok {
 			body = v
 		}
@@ -155,7 +155,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // names a registered function.
 func doPromoteToWord(r *Registry, v Value) Value {
 	if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)
 		}

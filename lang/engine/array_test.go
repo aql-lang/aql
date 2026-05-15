@@ -16,9 +16,9 @@ func TestIota(t *testing.T) {
 		t.Fatalf("iota 5: length = %d, want 5", list.Len())
 	}
 	for i := 0; i < 5; i++ {
-		_as0, _ := list.Get(i).AsInteger()
+		_as0, _ := engine.AsInteger(list.Get(i))
 		if _as0 != int64(i) {
-			_as1, _ := list.Get(i).AsInteger()
+			_as1, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("iota 5[%d] = %d, want %d", i, _as1, i)
 		}
 	}
@@ -42,7 +42,7 @@ func TestShapeFlat(t *testing.T) {
 		engine.NewWord("shape"),
 	})
 	list := result[0].AsList()
-	_as2, _ := list.Get(0).AsInteger()
+	_as2, _ := engine.AsInteger(list.Get(0))
 	if list.Len() != 1 || _as2 != 3 {
 		t.Errorf("shape [1,2,3] = %v, want [3]", result[0])
 	}
@@ -57,8 +57,8 @@ func TestShapeNested(t *testing.T) {
 	})
 	result := runAQL(t, r, []engine.Value{input, engine.NewWord("shape")})
 	list := result[0].AsList()
-	_as4, _ := list.Get(0).AsInteger()
-	_as3, _ := list.Get(1).AsInteger()
+	_as4, _ := engine.AsInteger(list.Get(0))
+	_as3, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as4 != 3 || _as3 != 2 {
 		t.Errorf("shape [[1,2],[3,4],[5,6]] = %v, want [3,2]", result[0])
 	}
@@ -72,9 +72,9 @@ func TestRank(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)}),
 		engine.NewWord("rank"),
 	})
-	_as5, _ := result[0].AsInteger()
+	_as5, _ := engine.AsInteger(result[0])
 	if _as5 != 1 {
-		_as6, _ := result[0].AsInteger()
+		_as6, _ := engine.AsInteger(result[0])
 		t.Errorf("rank [1,2] = %d, want 1", _as6)
 	}
 
@@ -83,9 +83,9 @@ func TestRank(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	result = runAQL(t, r, []engine.Value{input, engine.NewWord("rank")})
-	_as7, _ := result[0].AsInteger()
+	_as7, _ := engine.AsInteger(result[0])
 	if _as7 != 2 {
-		_as8, _ := result[0].AsInteger()
+		_as8, _ := engine.AsInteger(result[0])
 		t.Errorf("rank [[1,2],[3,4]] = %d, want 2", _as8)
 	}
 }
@@ -98,9 +98,9 @@ func TestLength(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30)}),
 		engine.NewWord("length"),
 	})
-	_as9, _ := result[0].AsInteger()
+	_as9, _ := engine.AsInteger(result[0])
 	if _as9 != 3 {
-		_as10, _ := result[0].AsInteger()
+		_as10, _ := engine.AsInteger(result[0])
 		t.Errorf("length = %d, want 3", _as10)
 	}
 }
@@ -119,8 +119,8 @@ func TestReshape(t *testing.T) {
 		t.Fatalf("reshape rows = %d, want 2", outer.Len())
 	}
 	row0 := outer.Get(0).AsList()
-	_as12, _ := row0.Get(0).AsInteger()
-	_as11, _ := row0.Get(2).AsInteger()
+	_as12, _ := engine.AsInteger(row0.Get(0))
+	_as11, _ := engine.AsInteger(row0.Get(2))
 	if row0.Len() != 3 || _as12 != 1 || _as11 != 3 {
 		t.Errorf("reshape row 0 = %v, want [1,2,3]", outer.Get(0))
 	}
@@ -140,9 +140,9 @@ func TestArrFlatten(t *testing.T) {
 		t.Fatalf("arr-flatten length = %d, want 4", list.Len())
 	}
 	for i := 0; i < 4; i++ {
-		_as13, _ := list.Get(i).AsInteger()
+		_as13, _ := engine.AsInteger(list.Get(i))
 		if _as13 != int64(i+1) {
-			_as14, _ := list.Get(i).AsInteger()
+			_as14, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("arr-flatten[%d] = %d, want %d", i, _as14, i+1)
 		}
 	}
@@ -163,8 +163,8 @@ func TestArrTranspose(t *testing.T) {
 	}
 	// First column: [1,4]
 	col0 := outer.Get(0).AsList()
-	_as16, _ := col0.Get(0).AsInteger()
-	_as15, _ := col0.Get(1).AsInteger()
+	_as16, _ := engine.AsInteger(col0.Get(0))
+	_as15, _ := engine.AsInteger(col0.Get(1))
 	if _as16 != 1 || _as15 != 4 {
 		t.Errorf("transpose col 0 = %v, want [1,4]", outer.Get(0))
 	}
@@ -179,9 +179,9 @@ func TestReverse(t *testing.T) {
 		engine.NewWord("reverse"),
 	})
 	list := result[0].AsList()
-	_as19, _ := list.Get(0).AsInteger()
-	_as18, _ := list.Get(1).AsInteger()
-	_as17, _ := list.Get(2).AsInteger()
+	_as19, _ := engine.AsInteger(list.Get(0))
+	_as18, _ := engine.AsInteger(list.Get(1))
+	_as17, _ := engine.AsInteger(list.Get(2))
 	if _as19 != 3 || _as18 != 2 || _as17 != 1 {
 		t.Errorf("reverse [1,2,3] = %v, want [3,2,1]", result[0])
 	}
@@ -196,8 +196,8 @@ func TestTake(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
-	_as21, _ := list.Get(0).AsInteger()
-	_as20, _ := list.Get(1).AsInteger()
+	_as21, _ := engine.AsInteger(list.Get(0))
+	_as20, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as21 != 10 || _as20 != 20 {
 		t.Errorf("take 2 = %v, want [10,20]", result[0])
 	}
@@ -210,8 +210,8 @@ func TestTakeNegative(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
-	_as23, _ := list.Get(0).AsInteger()
-	_as22, _ := list.Get(1).AsInteger()
+	_as23, _ := engine.AsInteger(list.Get(0))
+	_as22, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as23 != 30 || _as22 != 40 {
 		t.Errorf("take -2 = %v, want [30,40]", result[0])
 	}
@@ -226,7 +226,7 @@ func TestShed(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
 	list := result[0].AsList()
-	_as24, _ := list.Get(0).AsInteger()
+	_as24, _ := engine.AsInteger(list.Get(0))
 	if list.Len() != 3 || _as24 != 20 {
 		t.Errorf("shed 1 = %v, want [20,30,40]", result[0])
 	}
@@ -241,9 +241,9 @@ func TestWhere(t *testing.T) {
 		engine.NewWord("where"),
 	})
 	list := result[0].AsList()
-	_as27, _ := list.Get(0).AsInteger()
-	_as26, _ := list.Get(1).AsInteger()
-	_as25, _ := list.Get(2).AsInteger()
+	_as27, _ := engine.AsInteger(list.Get(0))
+	_as26, _ := engine.AsInteger(list.Get(1))
+	_as25, _ := engine.AsInteger(list.Get(2))
 	if list.Len() != 3 || _as27 != 0 || _as26 != 2 || _as25 != 4 {
 		t.Errorf("where = %v, want [0,2,4]", result[0])
 	}
@@ -263,9 +263,9 @@ func TestUnique(t *testing.T) {
 	}
 	expected := []int64{3, 1, 4, 5}
 	for i, want := range expected {
-		_as28, _ := list.Get(i).AsInteger()
+		_as28, _ := engine.AsInteger(list.Get(i))
 		if _as28 != want {
-			_as29, _ := list.Get(i).AsInteger()
+			_as29, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("unique[%d] = %d, want %d", i, _as29, want)
 		}
 	}
@@ -283,9 +283,9 @@ func TestGrade(t *testing.T) {
 	// Sorted order: 10(1), 20(3), 30(0), 40(2)
 	expected := []int64{1, 3, 0, 2}
 	for i, want := range expected {
-		_as30, _ := list.Get(i).AsInteger()
+		_as30, _ := engine.AsInteger(list.Get(i))
 		if _as30 != want {
-			_as31, _ := list.Get(i).AsInteger()
+			_as31, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("grade[%d] = %d, want %d", i, _as31, want)
 		}
 	}
@@ -301,9 +301,9 @@ func TestAt(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewString("a"), engine.NewString("b"), engine.NewString("c")}),
 	})
 	list := result[0].AsList()
-	_as34, _ := list.Get(0).AsString()
-	_as33, _ := list.Get(1).AsString()
-	_as32, _ := list.Get(2).AsString()
+	_as34, _ := engine.AsString(list.Get(0))
+	_as33, _ := engine.AsString(list.Get(1))
+	_as32, _ := engine.AsString(list.Get(2))
 	if _as34 != "c" || _as33 != "a" || _as32 != "b" {
 		t.Errorf("at [2,0,1] = %v, want [c,a,b]", result[0])
 	}
@@ -319,9 +319,9 @@ func TestSortby(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewString("c"), engine.NewString("a"), engine.NewString("b")}),
 	})
 	list := result[0].AsList()
-	_as37, _ := list.Get(0).AsString()
-	_as36, _ := list.Get(1).AsString()
-	_as35, _ := list.Get(2).AsString()
+	_as37, _ := engine.AsString(list.Get(0))
+	_as36, _ := engine.AsString(list.Get(1))
+	_as35, _ := engine.AsString(list.Get(2))
 	if _as37 != "a" || _as36 != "b" || _as35 != "c" {
 		t.Errorf("sortby = %v, want [a,b,c]", result[0])
 	}
@@ -337,11 +337,11 @@ func TestMember(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(4), engine.NewInteger(6)}),
 	})
 	list := result[0].AsList()
-	_as38, _ := list.Get(1).AsBoolean()
+	_as38, _ := engine.AsBoolean(list.Get(1))
 	if !_as38 {
 		t.Error("member: 2 should be in [2,4,6]")
 	}
-	_as39, _ := list.Get(0).AsBoolean()
+	_as39, _ := engine.AsBoolean(list.Get(0))
 	if _as39 {
 		t.Error("member: 1 should NOT be in [2,4,6]")
 	}
@@ -360,8 +360,8 @@ func TestWindow(t *testing.T) {
 		t.Fatalf("window 2: length = %d, want 3", list.Len())
 	}
 	w0 := list.Get(0).AsList()
-	_as41, _ := w0.Get(0).AsInteger()
-	_as40, _ := w0.Get(1).AsInteger()
+	_as41, _ := engine.AsInteger(w0.Get(0))
+	_as40, _ := engine.AsInteger(w0.Get(1))
 	if _as41 != 1 || _as40 != 2 {
 		t.Errorf("window[0] = %v, want [1,2]", list.Get(0))
 	}
@@ -397,9 +397,9 @@ func TestReplicate(t *testing.T) {
 	}
 	expected := []int64{10, 10, 30, 30, 30}
 	for i, want := range expected {
-		_as42, _ := list.Get(i).AsInteger()
+		_as42, _ := engine.AsInteger(list.Get(i))
 		if _as42 != want {
-			_as43, _ := list.Get(i).AsInteger()
+			_as43, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("replicate[%d] = %d, want %d", i, _as43, want)
 		}
 	}
@@ -420,8 +420,8 @@ func TestGroupTwoArgs(t *testing.T) {
 		t.Fatal("group: key 'a' not found")
 	}
 	aList := aVal.AsList()
-	_as45, _ := aList.Get(0).AsInteger()
-	_as44, _ := aList.Get(1).AsInteger()
+	_as45, _ := engine.AsInteger(aList.Get(0))
+	_as44, _ := engine.AsInteger(aList.Get(1))
 	if aList.Len() != 2 || _as45 != 1 || _as44 != 3 {
 		t.Errorf("group a = %v, want [1,3]", aVal)
 	}
@@ -439,9 +439,9 @@ func TestEach(t *testing.T) {
 	list := result[0].AsList()
 	expected := []int64{2, 4, 6}
 	for i, want := range expected {
-		_as46, _ := list.Get(i).AsInteger()
+		_as46, _ := engine.AsInteger(list.Get(i))
 		if _as46 != want {
-			_as47, _ := list.Get(i).AsInteger()
+			_as47, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("each[%d] = %d, want %d", i, _as47, want)
 		}
 	}
@@ -456,7 +456,7 @@ func TestFoldSum(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("add")}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	_as48, _ := result[0].AsInteger()
+	_as48, _ := engine.AsInteger(result[0])
 	if _as48 != 10 {
 		t.Errorf("fold [add] = %v, want 10", result[0])
 	}
@@ -469,7 +469,7 @@ func TestFoldProduct(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("mul")}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	_as49, _ := result[0].AsInteger()
+	_as49, _ := engine.AsInteger(result[0])
 	if _as49 != 24 {
 		t.Errorf("fold [mul] = %v, want 24", result[0])
 	}
@@ -487,9 +487,9 @@ func TestScan(t *testing.T) {
 	list := result[0].AsList()
 	expected := []int64{1, 3, 6, 10}
 	for i, want := range expected {
-		_as50, _ := list.Get(i).AsInteger()
+		_as50, _ := engine.AsInteger(list.Get(i))
 		if _as50 != want {
-			_as51, _ := list.Get(i).AsInteger()
+			_as51, _ := engine.AsInteger(list.Get(i))
 			t.Errorf("scan[%d] = %d, want %d", i, _as51, want)
 		}
 	}
@@ -511,15 +511,15 @@ func TestOuterMul(t *testing.T) {
 		t.Fatalf("outer rows = %d, want 3", outer.Len())
 	}
 	row0 := outer.Get(0).AsList()
-	_as52, _ := row0.Get(3).AsInteger()
+	_as52, _ := engine.AsInteger(row0.Get(3))
 	if _as52 != 4 {
-		_as53, _ := row0.Get(3).AsInteger()
+		_as53, _ := engine.AsInteger(row0.Get(3))
 		t.Errorf("outer[0][3] = %d, want 4", _as53)
 	}
 	row2 := outer.Get(2).AsList()
-	_as54, _ := row2.Get(2).AsInteger()
+	_as54, _ := engine.AsInteger(row2.Get(2))
 	if _as54 != 9 {
-		_as55, _ := row2.Get(2).AsInteger()
+		_as55, _ := engine.AsInteger(row2.Get(2))
 		t.Errorf("outer[2][2] = %d, want 9", _as55)
 	}
 }
@@ -546,18 +546,18 @@ func TestInnerMatMul(t *testing.T) {
 	outer := result[0].AsList()
 	r0 := outer.Get(0).AsList()
 	r1 := outer.Get(1).AsList()
-	_as57, _ := r0.Get(0).AsInteger()
-	_as56, _ := r0.Get(1).AsInteger()
+	_as57, _ := engine.AsInteger(r0.Get(0))
+	_as56, _ := engine.AsInteger(r0.Get(1))
 	if _as57 != 19 || _as56 != 22 {
-		_as59, _ := r0.Get(0).AsInteger()
-		_as58, _ := r0.Get(1).AsInteger()
+		_as59, _ := engine.AsInteger(r0.Get(0))
+		_as58, _ := engine.AsInteger(r0.Get(1))
 		t.Errorf("inner row 0 = [%d,%d], want [19,22]", _as59, _as58)
 	}
-	_as61, _ := r1.Get(0).AsInteger()
-	_as60, _ := r1.Get(1).AsInteger()
+	_as61, _ := engine.AsInteger(r1.Get(0))
+	_as60, _ := engine.AsInteger(r1.Get(1))
 	if _as61 != 43 || _as60 != 50 {
-		_as63, _ := r1.Get(0).AsInteger()
-		_as62, _ := r1.Get(1).AsInteger()
+		_as63, _ := engine.AsInteger(r1.Get(0))
+		_as62, _ := engine.AsInteger(r1.Get(1))
 		t.Errorf("inner row 1 = [%d,%d], want [43,50]", _as63, _as62)
 	}
 }
@@ -577,7 +577,7 @@ func TestCompositionSumOfSquares(t *testing.T) {
 		engine.NewOpenParen(), engine.NewWord("iota"), engine.NewInteger(5), engine.NewCloseParen(),
 		engine.NewCloseParen(),
 	})
-	_as64, _ := result[0].AsInteger()
+	_as64, _ := engine.AsInteger(result[0])
 	if _as64 != 30 {
 		t.Errorf("sum of squares = %v, want 30", result[0])
 	}

@@ -90,14 +90,20 @@ type InterpStringPayload struct{ Parts []InterpPart }
 // here so the eng package doesn't pull the `time` import; the
 // dedicated NewDate / NewDateTime / NewInstant constructors handle
 // the typed wrapping.
-type TimePayload struct{ T any /* time.Time */ }
+type TimePayload struct {
+	T any /* time.Time */
+}
 
 // DurationPayload carries a time.Duration for TimeOfDay /
 // ClkDuration; same VType-discriminator pattern as TimePayload.
-type DurationPayload struct{ D any /* time.Duration */ }
+type DurationPayload struct {
+	D any /* time.Duration */
+}
 
 // TimezonePayload carries a *time.Location for Scalar/Time/Timezone.
-type TimezonePayload struct{ Loc any /* *time.Location */ }
+type TimezonePayload struct {
+	Loc any /* *time.Location */
+}
 
 // MaterializerPayload wraps an external Materializer (e.g. the
 // production engine's QueryBuilder) into a payload-satisfying
@@ -178,22 +184,22 @@ func NewExtension(t *Type, body any) Value {
 // the catalogue centralised; the methods are dispatch-free.
 
 // Wrapper-variant markers.
-func (IntPayload) payloadMarker()         {}
-func (DecPayload) payloadMarker()         {}
-func (StrPayload) payloadMarker()         {}
-func (BoolPayload) payloadMarker()        {}
-func (AtomPayload) payloadMarker()        {}
-func (PathPayload) payloadMarker()        {}
-func (ListPayload) payloadMarker()        {}
-func (MapPayload) payloadMarker()         {}
-func (ParenExprPayload) payloadMarker()   {}
+func (IntPayload) payloadMarker()          {}
+func (DecPayload) payloadMarker()          {}
+func (StrPayload) payloadMarker()          {}
+func (BoolPayload) payloadMarker()         {}
+func (AtomPayload) payloadMarker()         {}
+func (PathPayload) payloadMarker()         {}
+func (ListPayload) payloadMarker()         {}
+func (MapPayload) payloadMarker()          {}
+func (ParenExprPayload) payloadMarker()    {}
 func (InterpStringPayload) payloadMarker() {}
-func (TimePayload) payloadMarker()        {}
-func (DurationPayload) payloadMarker()    {}
-func (TimezonePayload) payloadMarker()    {}
+func (TimePayload) payloadMarker()         {}
+func (DurationPayload) payloadMarker()     {}
+func (TimezonePayload) payloadMarker()     {}
 func (MaterializerPayload) payloadMarker() {}
-func (NonePayload) payloadMarker()        {}
-func (ExtensionPayload) payloadMarker()   {}
+func (NonePayload) payloadMarker()         {}
+func (ExtensionPayload) payloadMarker()    {}
 
 // Direct eng-defined struct markers.
 func (WordInfo) payloadMarker()           {}

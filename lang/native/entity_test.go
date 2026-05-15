@@ -34,7 +34,7 @@ func TestCreateHandler(t *testing.T) {
 	}
 	m := rows[1].AsMap()
 	v, _ := m.Get("name")
-	vs, _ := v.AsString()
+	vs, _ := engine.AsString(v)
 	if vs != "Bob" {
 		t.Errorf("expected Bob, got %s", vs)
 	}
@@ -85,7 +85,7 @@ func TestLoadHandler(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, _ := m.Get("name")
-	vs, _ := v.AsString()
+	vs, _ := engine.AsString(v)
 	if vs != "Bob" {
 		t.Errorf("expected Bob, got %s", vs)
 	}
@@ -126,20 +126,20 @@ func TestUpdateHandler(t *testing.T) {
 	// Check first row was updated.
 	m := rows[0].AsMap()
 	city, _ := m.Get("city")
-	cs, _ := city.AsString()
+	cs, _ := engine.AsString(city)
 	if cs != "Berlin" {
 		t.Errorf("expected Berlin, got %s", cs)
 	}
 	// Name should be preserved.
 	name, _ := m.Get("name")
-	ns, _ := name.AsString()
+	ns, _ := engine.AsString(name)
 	if ns != "Alice" {
 		t.Errorf("expected Alice, got %s", ns)
 	}
 	// Second row should be unchanged.
 	m2 := rows[1].AsMap()
 	city2, _ := m2.Get("city")
-	cs2, _ := city2.AsString()
+	cs2, _ := engine.AsString(city2)
 	if cs2 != "Paris" {
 		t.Errorf("expected Paris, got %s", cs2)
 	}
@@ -194,7 +194,7 @@ func TestRemoveHandler(t *testing.T) {
 	for _, row := range rows {
 		m := row.AsMap()
 		v, _ := m.Get("name")
-		vs, _ := v.AsString()
+		vs, _ := engine.AsString(v)
 		if vs == "Bob" {
 			t.Error("Bob should have been removed")
 		}

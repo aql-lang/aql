@@ -20,8 +20,8 @@ func CompareValues(a, b Value) (int, error) {
 	}
 	// Numeric comparisons: both operands are some form of Number.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		_as1, _ := a.AsNumber()
-		_as0, _ := b.AsNumber()
+		_as1, _ := AsNumber(a)
+		_as0, _ := AsNumber(b)
 		af, bf := _as1, _as0
 		if af < bf {
 			return -1, nil
@@ -33,8 +33,8 @@ func CompareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		_as3, _ := a.AsString()
-		_as2, _ := b.AsString()
+		_as3, _ := AsString(a)
+		_as2, _ := AsString(b)
 		as, bs := _as3, _as2
 		if as < bs {
 			return -1, nil
@@ -46,8 +46,8 @@ func CompareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		_as5, _ := a.AsBoolean()
-		_as4, _ := b.AsBoolean()
+		_as5, _ := AsBoolean(a)
+		_as4, _ := AsBoolean(b)
 		ab, bb := _as5, _as4
 		if ab == bb {
 			return 0, nil
@@ -59,8 +59,8 @@ func CompareValues(a, b Value) (int, error) {
 	}
 
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		_as7, _ := a.AsAtom()
-		_as6, _ := b.AsAtom()
+		_as7, _ := AsAtom(a)
+		_as6, _ := AsAtom(b)
 		as, bs := _as7, _as6
 		if as < bs {
 			return -1, nil
@@ -103,23 +103,23 @@ func ExactEqual(a, b Value) bool {
 
 	// Scalars: compare by value.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		_as9, _ := a.AsNumber()
-		_as8, _ := b.AsNumber()
+		_as9, _ := AsNumber(a)
+		_as8, _ := AsNumber(b)
 		return _as9 == _as8
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		_as11, _ := a.AsString()
-		_as10, _ := b.AsString()
+		_as11, _ := AsString(a)
+		_as10, _ := AsString(b)
 		return _as11 == _as10
 	}
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		_as13, _ := a.AsBoolean()
-		_as12, _ := b.AsBoolean()
+		_as13, _ := AsBoolean(a)
+		_as12, _ := AsBoolean(b)
 		return _as13 == _as12
 	}
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		_as15, _ := a.AsAtom()
-		_as14, _ := b.AsAtom()
+		_as15, _ := AsAtom(a)
+		_as14, _ := AsAtom(b)
 		return _as15 == _as14
 	}
 
@@ -154,23 +154,23 @@ func DeepEqual(a, b Value) bool {
 
 	// Scalars.
 	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		_as17, _ := a.AsNumber()
-		_as16, _ := b.AsNumber()
+		_as17, _ := AsNumber(a)
+		_as16, _ := AsNumber(b)
 		return _as17 == _as16
 	}
 	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		_as19, _ := a.AsString()
-		_as18, _ := b.AsString()
+		_as19, _ := AsString(a)
+		_as18, _ := AsString(b)
 		return _as19 == _as18
 	}
 	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		_as21, _ := a.AsBoolean()
-		_as20, _ := b.AsBoolean()
+		_as21, _ := AsBoolean(a)
+		_as20, _ := AsBoolean(b)
 		return _as21 == _as20
 	}
 	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		_as23, _ := a.AsAtom()
-		_as22, _ := b.AsAtom()
+		_as23, _ := AsAtom(a)
+		_as22, _ := AsAtom(b)
 		return _as23 == _as22
 	}
 

@@ -376,7 +376,6 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	}
 }
 
-
 // UninstallFnSigs removes specific function signatures from a word's DefStack.
 // For each spec in the FnUndefInfo, it finds and removes the most recent
 // DefStack entry containing a matching signature, then rebuilds the
@@ -433,10 +432,10 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 func CoerceBoolean(v Value) bool {
 	switch {
 	case v.VType.Matches(TBoolean):
-		b, _ := v.AsBoolean()
+		b, _ := AsBoolean(v)
 		return b
 	case v.VType.Matches(TNumber):
-		n, _ := v.AsNumber()
+		n, _ := AsNumber(v)
 		return n != 0
 	case v.VType.Equal(TNone):
 		return false
@@ -628,7 +627,7 @@ func ResolveWordValue(v Value) Value {
 	if !v.IsWord() {
 		return v
 	}
-	_as1, _ := v.AsWord()
+	_as1, _ := AsWord(v)
 	name := _as1.Name
 	switch name {
 	case "true":

@@ -70,7 +70,7 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if !ok {
 		return nil, fmt.Errorf("create: record must contain an \"id\" field")
 	}
-	id, err := idVal.AsString()
+	id, err := engine.AsString(idVal)
 	if err != nil {
 		return nil, fmt.Errorf("create: id: %w", err)
 	}
@@ -82,7 +82,7 @@ func createHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 		}
 		m := row.AsMap()
 		if existing, ok := m.Get("id"); ok {
-			existingStr, _ := existing.AsString()
+			existingStr, _ := engine.AsString(existing)
 			if existingStr == id {
 				return nil, fmt.Errorf("create: record with id %q already exists", id)
 			}

@@ -43,7 +43,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	// Integer key on list.
 	if key.VType.Matches(TInteger) {
 		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
-			_as3, _ := key.AsInteger()
+			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {
 				return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, list.Len())

@@ -20,9 +20,9 @@ func RunTimerCallback(r *Registry, callback Value, isList bool) {
 		// either yields a word name to invoke.
 		var name string
 		if callback.IsAtom() {
-			name, _ = callback.AsAtom()
+			name, _ = AsAtom(callback)
 		} else {
-			name, _ = callback.AsString()
+			name, _ = AsString(callback)
 		}
 		input = []Value{NewWord(name)}
 	}

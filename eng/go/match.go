@@ -1,6 +1,5 @@
 package eng
 
-
 // patternsOk runs Signature.Patterns against the matched arg
 // positions. `fwd` is the count of positions filled from forward
 // tokens; positions [0..fwd) are forward args and [fwd..) are stack

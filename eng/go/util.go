@@ -97,7 +97,7 @@ func MapFieldString(m ReadMap, key string) (string, bool) {
 	if !ok || !v.VType.Matches(TString) {
 		return "", false
 	}
-	s, err := v.AsString()
+	s, err := AsString(v)
 	if err != nil {
 		return "", false
 	}
@@ -114,7 +114,7 @@ func MapFieldInteger(m ReadMap, key string) (int64, bool) {
 	if !ok || !v.VType.Matches(TInteger) || v.IsDepScalar() {
 		return 0, false
 	}
-	n, err := v.AsInteger()
+	n, err := AsInteger(v)
 	if err != nil {
 		return 0, false
 	}
@@ -130,7 +130,7 @@ func MapFieldBoolean(m ReadMap, key string) (bool, bool) {
 	if !ok || !v.VType.Matches(TBoolean) {
 		return false, false
 	}
-	b, err := v.AsBoolean()
+	b, err := AsBoolean(v)
 	if err != nil {
 		return false, false
 	}
@@ -146,13 +146,12 @@ func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
 	if !ok || !v.VType.Matches(TDecimal) || v.IsDepScalar() {
 		return 0, false
 	}
-	f, err := v.AsDecimal()
+	f, err := AsDecimal(v)
 	if err != nil {
 		return 0, false
 	}
 	return f, true
 }
-
 
 // --- Pos threading ------------------------------------------------------
 
@@ -164,7 +163,6 @@ func WithPos(v, src Value) Value {
 	v.Pos = src.Pos
 	return v
 }
-
 
 // predicateSandbox holds the slice/map state that RunPredicate
 // snapshots before invoking a predicate body. DefStacks is NOT
@@ -218,9 +216,9 @@ func (v Value) AsConcreteString() (string, error) {
 	// AtomPayload; accept it here so the "textual content" semantic
 	// of AsConcreteString is preserved for those handlers.
 	if v.IsAtom() {
-		return v.AsAtom()
+		return AsAtom(v)
 	}
-	return v.AsString()
+	return AsString(v)
 }
 
 // AsConcreteInteger — DepScalar-rejecting accessor. See AsConcreteString.
@@ -228,7 +226,7 @@ func (v Value) AsConcreteInteger() (int64, error) {
 	if v.IsDepScalar() {
 		return 0, fmt.Errorf("AsConcreteInteger: value is a dependent-type constraint (%s), not a concrete Integer", v.VType.String())
 	}
-	return v.AsInteger()
+	return AsInteger(v)
 }
 
 // AsConcreteDecimal — DepScalar-rejecting accessor. See AsConcreteString.
@@ -236,7 +234,7 @@ func (v Value) AsConcreteDecimal() (float64, error) {
 	if v.IsDepScalar() {
 		return 0, fmt.Errorf("AsConcreteDecimal: value is a dependent-type constraint (%s), not a concrete Decimal", v.VType.String())
 	}
-	return v.AsDecimal()
+	return AsDecimal(v)
 }
 
 // AsConcreteBoolean — DepScalar-rejecting accessor. See AsConcreteString.
@@ -244,7 +242,7 @@ func (v Value) AsConcreteBoolean() (bool, error) {
 	if v.IsDepScalar() {
 		return false, fmt.Errorf("AsConcreteBoolean: value is a dependent-type constraint (%s), not a concrete Boolean", v.VType.String())
 	}
-	return v.AsBoolean()
+	return AsBoolean(v)
 }
 
 // AsConcreteAtom — DepScalar-rejecting accessor. See AsConcreteString.
@@ -252,7 +250,7 @@ func (v Value) AsConcreteAtom() (string, error) {
 	if v.IsDepScalar() {
 		return "", fmt.Errorf("AsConcreteAtom: value is a dependent-type constraint (%s), not a concrete Atom", v.VType.String())
 	}
-	return v.AsAtom()
+	return AsAtom(v)
 }
 
 // FlattenDisjunctAlts returns the alternatives of a disjunct value

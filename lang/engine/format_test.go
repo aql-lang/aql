@@ -16,7 +16,7 @@ func TestTextFormatDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as0, _ := result[0].AsString()
+	_as0, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as0 != "hello world" {
 		t.Errorf("got %v, want ['hello world']", result)
 	}
@@ -129,9 +129,9 @@ func TestLinesFormatDecode(t *testing.T) {
 	if len(elems) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(elems))
 	}
-	_as3, _ := elems[0].AsString()
-	_as2, _ := elems[1].AsString()
-	_as1, _ := elems[2].AsString()
+	_as3, _ := engine.AsString(elems[0])
+	_as2, _ := engine.AsString(elems[1])
+	_as1, _ := engine.AsString(elems[2])
 	if _as3 != "a" || _as2 != "b" || _as1 != "c" {
 		t.Errorf("got %v", elems)
 	}
@@ -209,27 +209,27 @@ func TestCSVFormatDecode(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'name' key")
 	}
-	_as4, _ := nameVal.AsString()
+	_as4, _ := engine.AsString(nameVal)
 	if _as4 != "Alice" {
-		_as5, _ := nameVal.AsString()
+		_as5, _ := engine.AsString(nameVal)
 		t.Errorf("name = %q, want %q", _as5, "Alice")
 	}
 	ageVal, ok := r0.Get("age")
 	if !ok {
 		t.Fatal("expected 'age' key")
 	}
-	_as6, _ := ageVal.AsString()
+	_as6, _ := engine.AsString(ageVal)
 	if _as6 != "30" {
-		_as7, _ := ageVal.AsString()
+		_as7, _ := engine.AsString(ageVal)
 		t.Errorf("age = %q, want %q", _as7, "30")
 	}
 
 	// Check second row
 	r1 := rows[1].AsMap()
 	nameVal, _ = r1.Get("name")
-	_as8, _ := nameVal.AsString()
+	_as8, _ := engine.AsString(nameVal)
 	if _as8 != "Bob" {
-		_as9, _ := nameVal.AsString()
+		_as9, _ := engine.AsString(nameVal)
 		t.Errorf("name = %q, want %q", _as9, "Bob")
 	}
 }
@@ -261,9 +261,9 @@ func TestCSVFormatDecodeQuoted(t *testing.T) {
 	}
 	m := rows[0].AsMap()
 	aVal, _ := m.Get("a")
-	_as10, _ := aVal.AsString()
+	_as10, _ := engine.AsString(aVal)
 	if _as10 != "hello, world" {
-		_as11, _ := aVal.AsString()
+		_as11, _ := engine.AsString(aVal)
 		t.Errorf("a = %q, want %q", _as11, "hello, world")
 	}
 }
@@ -366,9 +366,9 @@ func TestTSVFormatDecode(t *testing.T) {
 
 	r0 := rows[0].AsMap()
 	nameVal, _ := r0.Get("name")
-	_as12, _ := nameVal.AsString()
+	_as12, _ := engine.AsString(nameVal)
 	if _as12 != "Alice" {
-		_as13, _ := nameVal.AsString()
+		_as13, _ := engine.AsString(nameVal)
 		t.Errorf("name = %q, want %q", _as13, "Alice")
 	}
 }
@@ -423,7 +423,7 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'x' from resolved file")
 	}
-	_as14, _ := xVal.AsInteger()
+	_as14, _ := engine.AsInteger(xVal)
 	if _as14 != 1 {
 		t.Errorf("x = %v, want 1", xVal)
 	}
@@ -431,7 +431,7 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'y'")
 	}
-	_as15, _ := yVal.AsInteger()
+	_as15, _ := engine.AsInteger(yVal)
 	if _as15 != 2 {
 		t.Errorf("y = %v, want 2", yVal)
 	}
@@ -457,7 +457,7 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'outer'")
 	}
-	_as16, _ := outerVal.AsInteger()
+	_as16, _ := engine.AsInteger(outerVal)
 	if _as16 != 99 {
 		t.Errorf("outer = %v, want 99", outerVal)
 	}
@@ -466,7 +466,7 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'top' from a.jsonic")
 	}
-	_as17, _ := topVal.AsInteger()
+	_as17, _ := engine.AsInteger(topVal)
 	if _as17 != 1 {
 		t.Errorf("top = %v, want 1", topVal)
 	}
@@ -475,7 +475,7 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'nested' from b.jsonic")
 	}
-	_as18, _ := nestedVal.AsBoolean()
+	_as18, _ := engine.AsBoolean(nestedVal)
 	if !_as18 {
 		t.Errorf("nested = %v, want true", nestedVal)
 	}
@@ -507,9 +507,9 @@ func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key '@ref' in JSON output")
 	}
-	_as19, _ := v.AsString()
+	_as19, _ := engine.AsString(v)
 	if _as19 != "value" {
-		_as20, _ := v.AsString()
+		_as20, _ := engine.AsString(v)
 		t.Errorf("got %q, want %q", _as20, "value")
 	}
 }
@@ -522,9 +522,9 @@ func TestJsonicFormatMultisourceNotUsedForText(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Text format returns raw string, no resolution.
-	_as21, _ := result[0].AsString()
+	_as21, _ := engine.AsString(result[0])
 	if _as21 != `@"somefile.jsonic"` {
-		_as22, _ := result[0].AsString()
+		_as22, _ := engine.AsString(result[0])
 		t.Errorf("text format should return raw content, got %q", _as22)
 	}
 }
@@ -632,7 +632,7 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'val' from resolved test.jsonic")
 	}
-	_as23, _ := v.AsInteger()
+	_as23, _ := engine.AsInteger(v)
 	if _as23 != 42 {
 		t.Errorf("val = %v, want 42", v)
 	}

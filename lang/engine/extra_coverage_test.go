@@ -168,7 +168,7 @@ func TestExtraStringInteger(t *testing.T) {
 
 func TestExtraAsNumberInteger(t *testing.T) {
 	v := NewInteger(42)
-	n, _ := v.AsNumber()
+	n, _ := AsNumber(v)
 	if n != 42.0 {
 		t.Errorf("AsNumber() on integer = %f, want 42.0", n)
 	}
@@ -176,7 +176,7 @@ func TestExtraAsNumberInteger(t *testing.T) {
 
 func TestExtraAsNumberDecimal(t *testing.T) {
 	v := NewDecimal(3.14)
-	n, _ := v.AsNumber()
+	n, _ := AsNumber(v)
 	if n != 3.14 {
 		t.Errorf("AsNumber() on decimal = %f, want 3.14", n)
 	}
@@ -426,7 +426,7 @@ func TestExtraUnifyMapsSuccess(t *testing.T) {
 	}
 	m := result.AsMap()
 	v, _ := m.Get("x")
-	_as0, _ := v.AsNumber()
+	_as0, _ := AsNumber(v)
 	if _as0 != 1.0 {
 		t.Errorf("unified map x = %v, want 1", v)
 	}
@@ -727,7 +727,7 @@ func TestExtraStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
-	_as1, _ := result[0].AsNumber()
+	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 1.0 {
 		t.Errorf("end with no forward: got %v, want [1]", result)
 	}
@@ -742,7 +742,7 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 	})
-	_as2, _ := result[0].AsNumber()
+	_as2, _ := AsNumber(result[0])
 	if len(result) != 1 || _as2 != 3.0 {
 		t.Errorf("1 add 2 end: got %v, want [3]", result)
 	}
@@ -934,7 +934,7 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 		t.Fatalf("unify: got %d results", len(result))
 	}
 	// Should succeed (subtype relationship)
-	_as3, _ := result[1].AsBoolean()
+	_as3, _ := AsBoolean(result[1])
 	if !_as3 {
 		t.Error("integer type literal should unify with concrete integer")
 	}
@@ -954,7 +954,7 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 	}
 	// Different decimals should fail to unify (same type, different values)
 	// ValuesEqual falls through to default fmt.Sprintf comparison
-	_as4, _ := result[1].AsBoolean()
+	_as4, _ := AsBoolean(result[1])
 	if _as4 {
 		t.Error("different decimals should not unify")
 	}
@@ -995,7 +995,7 @@ func TestExtraUnifyDisjunct(t *testing.T) {
 	if !ok {
 		t.Fatal("disjunct should unify with matching alternative")
 	}
-	_as5, _ := result.AsNumber()
+	_as5, _ := AsNumber(result)
 	if _as5 != 2.0 {
 		t.Errorf("unified value = %v, want 2", result)
 	}
@@ -1015,7 +1015,7 @@ func TestExtraUnifyDisjunctReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("value should unify with disjunct containing it")
 	}
-	_as6, _ := result.AsString()
+	_as6, _ := AsString(result)
 	if _as6 != "b" {
 		t.Errorf("unified value = %v, want 'b'", result)
 	}

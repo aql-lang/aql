@@ -30,7 +30,7 @@ func TestNewDepScalarDecimal(t *testing.T) {
 	if info.Hi != nil {
 		t.Errorf("Hi = %+v, want nil for single-bound DepScalar", info.Hi)
 	}
-	bv, _ := info.Lo.Value.AsDecimal()
+	bv, _ := AsDecimal(info.Lo.Value)
 	if bv != 1.5 {
 		t.Errorf("Lo.Value = %v, want 1.5", bv)
 	}
@@ -48,7 +48,7 @@ func TestNewDepScalarString(t *testing.T) {
 	if info.Lo != nil {
 		t.Errorf("Lo = %+v, want nil for single-bound DepScalar", info.Lo)
 	}
-	bv, _ := info.Hi.Value.AsString()
+	bv, _ := AsString(info.Hi.Value)
 	if bv != "z" {
 		t.Errorf("Hi.Value = %q, want \"z\"", bv)
 	}
@@ -133,7 +133,7 @@ func TestUnifyDepDecimal(t *testing.T) {
 			t.Errorf("Unify(%v, Decimal gte 1.5) = %v; want %v", tc.val, ok, tc.expect)
 		}
 		if ok {
-			f, _ := got.AsDecimal()
+			f, _ := AsDecimal(got)
 			if f != tc.val {
 				t.Errorf("Unify result = %v, want %v", f, tc.val)
 			}
@@ -275,7 +275,7 @@ func TestIsCheckWithDepDecimal(t *testing.T) {
 		NewDecimal(1.5),
 		NewCloseParen(),
 	})
-	got, _ := result[0].AsBoolean()
+	got, _ := AsBoolean(result[0])
 	if !got {
 		t.Errorf("2.0 is (Decimal gte 1.5) = false; want true")
 	}
@@ -295,7 +295,7 @@ func TestIsCheckWithDepString(t *testing.T) {
 		NewString("banana"),
 		NewCloseParen(),
 	})
-	got, _ := result[0].AsBoolean()
+	got, _ := AsBoolean(result[0])
 	if !got {
 		t.Errorf("\"apple\" is (String lt \"banana\") = false; want true")
 	}

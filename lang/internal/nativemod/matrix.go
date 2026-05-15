@@ -317,7 +317,7 @@ var MatrixNatives = []engine.NativeFunc{
 						return nil, fmt.Errorf("make: row %d has %d elements, expected %d", i, row.Len(), cols)
 					}
 					for j := 0; j < cols; j++ {
-						n, err := row.Get(j).AsNumber()
+						n, err := engine.AsNumber(row.Get(j))
 						if err != nil {
 							return nil, err
 						}
@@ -410,7 +410,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				val, err := args[2].AsNumber()
+				val, err := engine.AsNumber(args[2])
 				if err != nil {
 					return nil, err
 				}
@@ -603,7 +603,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TNumber, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				s, err := args[0].AsNumber()
+				s, err := engine.AsNumber(args[0])
 				if err != nil {
 					return nil, err
 				}
@@ -741,11 +741,11 @@ var MatrixNatives = []engine.NativeFunc{
 				}
 				s := 0.0
 				for i := 0; i < a.Len(); i++ {
-					av, err := a.Get(i).AsNumber()
+					av, err := engine.AsNumber(a.Get(i))
 					if err != nil {
 						return nil, err
 					}
-					bv, err := b.Get(i).AsNumber()
+					bv, err := engine.AsNumber(b.Get(i))
 					if err != nil {
 						return nil, err
 					}

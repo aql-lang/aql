@@ -382,7 +382,7 @@ func reshapeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	shapeList := args[0].AsList()
 	dims := make([]int, shapeList.Len())
 	for i := 0; i < shapeList.Len(); i++ {
-		_as1, _ := shapeList.Get(i).AsInteger()
+		_as1, _ := AsInteger(shapeList.Get(i))
 		dims[i] = int(_as1)
 		if dims[i] < 0 {
 			return nil, fmt.Errorf("reshape: negative dimension %d", dims[i])
@@ -662,7 +662,7 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	dataLen := data.Len()
 	result := make([]Value, indices.Len())
 	for i := 0; i < indices.Len(); i++ {
-		_as4, _ := indices.Get(i).AsInteger()
+		_as4, _ := AsInteger(indices.Get(i))
 		idx := int(_as4)
 		if idx < 0 || idx >= dataLen {
 			return nil, fmt.Errorf("at: index %d out of bounds (length %d)", idx, dataLen)
@@ -821,7 +821,7 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	}
 	var result []Value
 	for i := 0; i < counts.Len(); i++ {
-		_as5, _ := counts.Get(i).AsInteger()
+		_as5, _ := AsInteger(counts.Get(i))
 		c := int(_as5)
 		if c < 0 {
 			return nil, fmt.Errorf("replicate: negative count %d at index %d", c, i)

@@ -130,7 +130,7 @@ func TestDefStackPushPopShadow(t *testing.T) {
 		t.Errorf("depth = %d, want 1", d)
 	}
 	v, _ := r.Defs.Top("x")
-	got, _ := v.AsInteger()
+	got, _ := AsInteger(v)
 	if got != 1 {
 		t.Errorf("top = %d, want 1", got)
 	}
@@ -138,7 +138,7 @@ func TestDefStackPushPopShadow(t *testing.T) {
 	// Shadow with a second push.
 	r.Defs.Push("x", NewInteger(2))
 	v, _ = r.Defs.Top("x")
-	got, _ = v.AsInteger()
+	got, _ = AsInteger(v)
 	if got != 2 {
 		t.Errorf("after second push, top = %d, want 2", got)
 	}
@@ -146,7 +146,7 @@ func TestDefStackPushPopShadow(t *testing.T) {
 	// Pop reveals the original.
 	r.Defs.Pop("x")
 	v, _ = r.Defs.Top("x")
-	got, _ = v.AsInteger()
+	got, _ = AsInteger(v)
 	if got != 1 {
 		t.Errorf("after pop, top = %d, want 1", got)
 	}
@@ -195,7 +195,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 			{
 				Args: []*Type{TInteger},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					n, _ := args[0].AsInteger()
+					n, _ := AsInteger(args[0])
 					if n == 0 {
 						return []Value{NewString("zero-int")}, nil
 					}
@@ -206,7 +206,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 			{
 				Args: []*Type{TString},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					s, _ := args[0].AsString()
+					s, _ := AsString(args[0])
 					return []Value{NewString("string:" + s)}, nil
 				},
 				Returns: []*Type{TString},
@@ -229,7 +229,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 			t.Errorf("%v: error %v", c.input, err)
 			continue
 		}
-		got, _ := out[0].AsString()
+		got, _ := AsString(out[0])
 		if got != c.want {
 			t.Errorf("%v: got %q, want %q", c.input, got, c.want)
 		}
@@ -295,7 +295,7 @@ func TestOutputCapture(t *testing.T) {
 		Signatures: []NativeSig{{
 			Args: []*Type{TString},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				s, _ := args[0].AsString()
+				s, _ := AsString(args[0])
 				reg.Output.Write([]byte(s))
 				return nil, nil
 			},
@@ -366,7 +366,7 @@ func TestNewReadList(t *testing.T) {
 	if rl.Len() != 3 {
 		t.Fatalf("len = %d, want 3", rl.Len())
 	}
-	got, _ := rl.Get(1).AsInteger()
+	got, _ := AsInteger(rl.Get(1))
 	if got != 2 {
 		t.Errorf("Get(1) = %d, want 2", got)
 	}

@@ -93,7 +93,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	if !ok {
 		return nil, fmt.Errorf("fetch: missing required \"url\" field")
 	}
-	urlStr, err := urlVal.AsString()
+	urlStr, err := engine.AsString(urlVal)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: url: %w", err)
 	}
@@ -101,7 +101,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract method (default GET).
 	method := "GET"
 	if mv, ok := reqOM.Get("method"); ok {
-		mvStr, err := mv.AsString()
+		mvStr, err := engine.AsString(mv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: method: %w", err)
 		}
@@ -111,7 +111,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract body.
 	var bodyReader io.Reader
 	if bv, ok := reqOM.Get("body"); ok {
-		bvStr, err := bv.AsString()
+		bvStr, err := engine.AsString(bv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: body: %w", err)
 		}
@@ -129,7 +129,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 		hm := hv.AsMap()
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)
-			valStr, err := val.AsString()
+			valStr, err := engine.AsString(val)
 			if err != nil {
 				return nil, fmt.Errorf("fetch: header %q: %w", key, err)
 			}
@@ -140,7 +140,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Timeout.
 	timeout := defaultFetchTimeout
 	if tv, ok := reqOM.Get("timeout"); ok {
-		tvInt, err := tv.AsInteger()
+		tvInt, err := engine.AsInteger(tv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: timeout: %w", err)
 		}

@@ -252,13 +252,13 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 // range so cross-version ID stability survives reorderings and
 // plugin loadings. Reserved ranges:
 //
-//	   100-999    eng-internal future-builtins
-//	  1000-1999   lang/internal/nativemod/time   (Date, DateTime, Instant, …)
-//	  2000-2999   lang/internal/nativemod/matrix (Matrix)
-//	  3000-3999   lang/native/fetch              (Fetch, Request, Response)
-//	  4000-4999   lang/engine (Timeout, Interval)
-//	  5000-9999   reserved for future kernel use
-//	 10000+       host / third-party plugin types
+//	  100-999    eng-internal future-builtins
+//	 1000-1999   lang/internal/nativemod/time   (Date, DateTime, Instant, …)
+//	 2000-2999   lang/internal/nativemod/matrix (Matrix)
+//	 3000-3999   lang/native/fetch              (Fetch, Request, Response)
+//	 4000-4999   lang/engine (Timeout, Interval)
+//	 5000-9999   reserved for future kernel use
+//	10000+       host / third-party plugin types
 //
 // Callers register at module init (e.g. nativemod.RegisterTypes(r))
 // and capture the returned *Type into a package-level variable. The

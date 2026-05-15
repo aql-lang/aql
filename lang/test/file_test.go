@@ -195,7 +195,7 @@ func TestFileReadCSVWithTextOverride(t *testing.T) {
 	if v.IsTableType() {
 		t.Fatal("expected plain string with text override, got table")
 	}
-	s, _ := v.AsString()
+	s, _ := engine.AsString(v)
 	if !strings.Contains(s, "x,y") {
 		t.Errorf("expected raw CSV content, got %q", s)
 	}
@@ -292,7 +292,7 @@ func assertField(t *testing.T, om engine.ReadMap, key, want string) {
 		t.Errorf("missing field %q", key)
 		return
 	}
-	got, _ := val.AsString()
+	got, _ := engine.AsString(val)
 	if got != want {
 		t.Errorf("field %q = %q, want %q", key, got, want)
 	}

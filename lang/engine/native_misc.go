@@ -281,10 +281,10 @@ func init() {
 // extractPath returns the path string from a String or Path value.
 func extractPath(v Value) string {
 	if v.IsPath() {
-		_as5, _ := v.AsPath()
+		_as5, _ := AsPath(v)
 		return _as5.String()
 	}
-	_as6, _ := v.AsString()
+	_as6, _ := AsString(v)
 	return _as6
 }
 
@@ -564,17 +564,17 @@ func awaitWithOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 	mode := "all"
 	if oi, err := args[0].AsOptionsType(); err == nil {
 		if v, ok := oi.Fields.Get("mode"); ok {
-			if s, err := v.AsString(); err == nil {
+			if s, err := AsString(v); err == nil {
 				mode = s
-			} else if a, err := v.AsAtom(); err == nil {
+			} else if a, err := AsAtom(v); err == nil {
 				mode = a
 			}
 		}
 	} else if optsMap := args[0].AsMap(); optsMap != nil {
 		if v, ok := optsMap.Get("mode"); ok {
-			if s, err := v.AsString(); err == nil {
+			if s, err := AsString(v); err == nil {
 				mode = s
-			} else if a, err := v.AsAtom(); err == nil {
+			} else if a, err := AsAtom(v); err == nil {
 				mode = a
 			}
 		}

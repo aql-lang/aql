@@ -280,10 +280,10 @@ func (a *AQL) Run(src string) ([]any, error) {
 	for i, v := range result {
 		switch {
 		case v.VType.Matches(engine.TInteger):
-			n, _ := v.AsInteger()
+			n, _ := engine.AsInteger(v)
 			out[i] = n
 		case v.VType.Matches(engine.TString):
-			s, _ := v.AsString()
+			s, _ := engine.AsString(v)
 			out[i] = s
 		default:
 			out[i] = v.String()

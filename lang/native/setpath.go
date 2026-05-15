@@ -25,7 +25,7 @@ func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if pathIdx < 0 {
 		return nil, fmt.Errorf("setpath: path argument must be a string")
 	}
-	path, err := args[pathIdx].AsString()
+	path, err := engine.AsString(args[pathIdx])
 	if err != nil {
 		return nil, fmt.Errorf("setpath: path: %w", err)
 	}

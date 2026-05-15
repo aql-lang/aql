@@ -38,8 +38,8 @@ func TestAwaitAllDefault(t *testing.T) {
 	}
 	v0 := list.Get(0)
 	v1 := list.Get(1)
-	i0, _ := v0.AsInteger()
-	i1, _ := v1.AsInteger()
+	i0, _ := engine.AsInteger(v0)
+	i1, _ := engine.AsInteger(v1)
 	if i0 != 3 || i1 != 7 {
 		t.Errorf("expected [3, 7], got [%d, %d]", i0, i1)
 	}
@@ -159,12 +159,12 @@ func TestAwaitFull(t *testing.T) {
 		t.Fatalf("expected map for result[0], got %v", r0)
 	}
 	status0, _ := m0.Get("status")
-	s0, _ := status0.AsAtom()
+	s0, _ := engine.AsAtom(status0)
 	if s0 != "ok" {
 		t.Errorf("expected status 'ok', got %q", s0)
 	}
 	val0, _ := m0.Get("value")
-	iv0, _ := val0.AsInteger()
+	iv0, _ := engine.AsInteger(val0)
 	if iv0 != 3 {
 		t.Errorf("expected value 3, got %d", iv0)
 	}
@@ -176,7 +176,7 @@ func TestAwaitFull(t *testing.T) {
 		t.Fatalf("expected map for result[1], got %v", r1)
 	}
 	status1, _ := m1.Get("status")
-	s1, _ := status1.AsAtom()
+	s1, _ := engine.AsAtom(status1)
 	if s1 != "error" {
 		t.Errorf("expected status 'error', got %q", s1)
 	}
@@ -223,7 +223,7 @@ func TestAwaitFirst(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
 	// The fast branch (42) should win.
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 42 {
 		t.Errorf("expected 42, got %d", v)
 	}
@@ -281,7 +281,7 @@ func TestAwaitAny(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
 	// Should get the successful result (42), not the error.
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 42 {
 		t.Errorf("expected 42, got %d", v)
 	}
@@ -330,7 +330,7 @@ func TestAwaitAnyFirstSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 7 {
 		t.Errorf("expected 7, got %d", v)
 	}
@@ -360,8 +360,8 @@ func TestAwaitWithSleep(t *testing.T) {
 	list := result[0].AsList()
 	v0 := list.Get(0)
 	v1 := list.Get(1)
-	i0, _ := v0.AsInteger()
-	i1, _ := v1.AsInteger()
+	i0, _ := engine.AsInteger(v0)
+	i1, _ := engine.AsInteger(v1)
 	if i0 != 1 || i1 != 2 {
 		t.Errorf("expected [1, 2], got [%d, %d]", i0, i1)
 	}
@@ -418,7 +418,7 @@ func TestAwaitFullAllSucceed(t *testing.T) {
 			t.Fatalf("expected map at [%d], got %v", i, v)
 		}
 		st, _ := m.Get("status")
-		s, _ := st.AsAtom()
+		s, _ := engine.AsAtom(st)
 		if s != "ok" {
 			t.Errorf("expected status ok at [%d], got %q", i, s)
 		}
@@ -491,12 +491,12 @@ func TestAwaitNonListElement(t *testing.T) {
 		t.Fatalf("expected list of 2, got %v", result[0])
 	}
 	v0 := list.Get(0)
-	i0, _ := v0.AsInteger()
+	i0, _ := engine.AsInteger(v0)
 	if i0 != 42 {
 		t.Errorf("expected 42, got %d", i0)
 	}
 	v1 := list.Get(1)
-	s1, _ := v1.AsString()
+	s1, _ := engine.AsString(v1)
 	if s1 != "hello" {
 		t.Errorf("expected 'hello', got %q", s1)
 	}
@@ -536,7 +536,7 @@ func TestAwaitMultiValueBranch(t *testing.T) {
 
 	// Second result: single value → unwrapped
 	v1 := list.Get(1)
-	i1, _ := v1.AsInteger()
+	i1, _ := engine.AsInteger(v1)
 	if i1 != 42 {
 		t.Errorf("expected 42, got %d", i1)
 	}

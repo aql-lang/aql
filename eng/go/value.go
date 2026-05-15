@@ -521,11 +521,11 @@ type Value struct {
 	ID        string
 	VType     *Type
 	Data      Payload // the kernel-known data payload; see payload.go for variants
-	Quoted    bool   // true when value was produced by the quote word; prevents auto-evaluation
-	Eval      bool   // true for parser-created lists that should auto-evaluate at end of Run
-	Pos       SrcPos // source position for error reporting (zero value = unknown)
-	Undefined bool   // true when atom was created from an undefined word (error if left on result stack)
-	Carrier   bool   // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
+	Quoted    bool    // true when value was produced by the quote word; prevents auto-evaluation
+	Eval      bool    // true for parser-created lists that should auto-evaluate at end of Run
+	Pos       SrcPos  // source position for error reporting (zero value = unknown)
+	Undefined bool    // true when atom was created from an undefined word (error if left on result stack)
+	Carrier   bool    // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -1300,7 +1300,7 @@ func (v Value) IsPath() bool {
 }
 
 // AsPath returns the PathInfo, or an error if the value is not a path.
-func (v Value) AsPath() (PathInfo, error) {
+func AsPath(v Value) (PathInfo, error) {
 	if pp, ok := v.Data.(PathPayload); ok {
 		return pp.Info, nil
 	}
@@ -1312,7 +1312,7 @@ func (v Value) IsAtom() bool {
 }
 
 // AsAtom returns the string payload. Returns "" if Data is nil.
-func (v Value) AsAtom() (string, error) {
+func AsAtom(v Value) (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsAtom: nil data")
 	}
@@ -1411,7 +1411,7 @@ func (v Value) AsChildType() (ChildTypeInfo, error) {
 }
 
 // AsWord returns the WordInfo, panics if not a word.
-func (v Value) AsWord() (WordInfo, error) {
+func AsWord(v Value) (WordInfo, error) {
 	info, ok := v.Data.(WordInfo)
 	if !ok {
 		return WordInfo{}, fmt.Errorf("AsWord: not a word value (got %T)", v.Data)
@@ -1420,7 +1420,7 @@ func (v Value) AsWord() (WordInfo, error) {
 }
 
 // AsForward returns the ForwardInfo, panics if not a forward.
-func (v Value) AsForward() (ForwardInfo, error) {
+func AsForward(v Value) (ForwardInfo, error) {
 	info, ok := v.Data.(ForwardInfo)
 	if !ok {
 		return ForwardInfo{}, fmt.Errorf("AsForward: not a forward value (got %T)", v.Data)
@@ -1429,7 +1429,7 @@ func (v Value) AsForward() (ForwardInfo, error) {
 }
 
 // AsString returns the string payload. Returns "" if Data is nil (type literal).
-func (v Value) AsString() (string, error) {
+func AsString(v Value) (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsString: nil data")
 	}
@@ -1440,7 +1440,7 @@ func (v Value) AsString() (string, error) {
 }
 
 // AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
-func (v Value) AsInteger() (int64, error) {
+func AsInteger(v Value) (int64, error) {
 	if v.Data == nil {
 		return 0, fmt.Errorf("AsInteger: nil data")
 	}
@@ -1451,7 +1451,7 @@ func (v Value) AsInteger() (int64, error) {
 }
 
 // AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
-func (v Value) AsDecimal() (float64, error) {
+func AsDecimal(v Value) (float64, error) {
 	if v.Data == nil {
 		return 0.0, fmt.Errorf("AsDecimal: nil data")
 	}
@@ -1463,17 +1463,17 @@ func (v Value) AsDecimal() (float64, error) {
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
-func (v Value) AsNumber() (float64, error) {
+func AsNumber(v Value) (float64, error) {
 	if v.VType.Matches(TDecimal) {
-		f, err := v.AsDecimal()
+		f, err := AsDecimal(v)
 		return f, err
 	}
-	n, err := v.AsInteger()
+	n, err := AsInteger(v)
 	return float64(n), err
 }
 
 // AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
-func (v Value) AsBoolean() (bool, error) {
+func AsBoolean(v Value) (bool, error) {
 	if v.Data == nil {
 		return false, fmt.Errorf("AsBoolean: nil data")
 	}
@@ -1585,10 +1585,10 @@ func (v Value) String() string {
 	}
 	switch {
 	case v.IsWord():
-		w, _ := v.AsWord()
+		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)
 	case v.IsForward():
-		f, _ := v.AsForward()
+		f, _ := AsForward(v)
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
 	case v.IsOpenParen():
 		return "("
@@ -1627,19 +1627,19 @@ func (v Value) String() string {
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
 	case v.VType.Matches(TString):
-		s, _ := v.AsString()
+		s, _ := AsString(v)
 		return fmt.Sprintf("'%s'", s)
 	case v.VType.Equal(TAtom):
-		s, _ := v.AsAtom()
+		s, _ := AsAtom(v)
 		return s
 	case v.VType.Matches(TDecimal):
-		_as4, _ := v.AsDecimal()
+		_as4, _ := AsDecimal(v)
 		return formatDecimal(_as4)
 	case v.VType.Matches(TInteger):
-		n, _ := v.AsInteger()
+		n, _ := AsInteger(v)
 		return fmt.Sprintf("%d", n)
 	case v.VType.Matches(TBoolean):
-		_as5, _ := v.AsBoolean()
+		_as5, _ := AsBoolean(v)
 		if _as5 {
 			return "true"
 		}
@@ -1650,7 +1650,7 @@ func (v Value) String() string {
 	// coretype_format_behaviors.go and dispatched at the top of this
 	// function. Their old switch arms have been removed.
 	case v.IsPath():
-		_as6, _ := v.AsPath()
+		_as6, _ := AsPath(v)
 		return _as6.String()
 	case v.VType.Equal(TList):
 		if tt, ok := v.Data.(TableTypeInfo); ok {

@@ -92,7 +92,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // returned unchanged.
 func doPromoteToWord(r *Registry, v Value) Value {
 	if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)
 		}

@@ -112,7 +112,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		if !e.stack[i].IsForward() {
 			continue
 		}
-		fwd, _ := e.stack[i].AsForward()
+		fwd, _ := AsForward(e.stack[i])
 		if fwd.FuncName != "def" || fwd.Sig == nil {
 			return false
 		}
@@ -137,7 +137,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		}
 		constraint, _ := m.Get(m.Keys()[0])
 		if constraint.IsWord() {
-			cw, _ := constraint.AsWord()
+			cw, _ := AsWord(constraint)
 			if tv, ok := e.registry.ResolveTypedName(cw.Name); ok {
 				constraint = tv
 			}
@@ -402,7 +402,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 			return nil
 		}
 
-		fwd, _ := e.stack[fwdIdx].AsForward()
+		fwd, _ := AsForward(e.stack[fwdIdx])
 		funcIdx := fwd.FuncIndex
 		collectedCount := fwd.CollectedArgs
 		stackArgCount := fwd.StackArgs
@@ -574,7 +574,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		}
 
 		if tok.IsWord() {
-			ww, _ := tok.AsWord()
+			ww, _ := AsWord(tok)
 			// Function word: count as resolved (may be captured by
 			// QuoteArgs/TWord matching). Don't stop — continue scanning
 			// so that parens beyond function words are pre-evaluated
@@ -600,7 +600,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 // values, and the Run-loop switch dispatches them directly. stepWord
 // therefore deals only with regular named words.
 func (e *Engine) stepWord(val Value) error {
-	w, _ := val.AsWord()
+	w, _ := AsWord(val)
 
 	// If there is a pending forward whose next slot is /q-marked
 	// (QuoteArgs), capture this Word as data (converted to an Atom
@@ -908,7 +908,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		var pos SrcPos
 		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
 			pos = e.stack[e.pointer].Pos
-			if w, err := e.stack[e.pointer].AsWord(); err == nil {
+			if w, err := AsWord(e.stack[e.pointer]); err == nil {
 				name = w.Name
 			}
 		}
@@ -1188,7 +1188,7 @@ func (e *Engine) stepLiteral() error {
 		return nil
 	}
 
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 
 	// Check if the value matches the next expected arg positionally.
@@ -1205,7 +1205,7 @@ func (e *Engine) stepLiteral() error {
 		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
-			w, _ := val.AsWord()
+			w, _ := AsWord(val)
 			e.stack[valIdx] = NewAtom(w.Name)
 			matches = true
 		}
@@ -1255,7 +1255,7 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-			w, _ := e.stack[funcIdx].AsWord()
+			w, _ := AsWord(e.stack[funcIdx])
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
@@ -1386,9 +1386,9 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			}
 			if len(keyResult) == 1 {
 				if keyResult[0].VType.Matches(TString) {
-					resolvedKey, _ = keyResult[0].AsString()
+					resolvedKey, _ = AsString(keyResult[0])
 				} else if keyResult[0].IsAtom() {
-					resolvedKey, _ = keyResult[0].AsAtom()
+					resolvedKey, _ = AsAtom(keyResult[0])
 				} else {
 					resolvedKey = ValToString(keyResult[0])
 				}
@@ -1753,7 +1753,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
 func (e *Engine) implicitEnd(fwdIdx int) error {
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 	collectedCount := fwd.CollectedArgs
 	stackArgCount := fwd.StackArgs
@@ -1788,7 +1788,7 @@ func (e *Engine) stepEnd() error {
 		return nil
 	}
 
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 
 	// Remove forward and end from the stack.
@@ -2157,7 +2157,7 @@ func (e *Engine) stepCloseParen() error {
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if e.stack[i].IsForward() {
 				hasFwd = true
-				fwd, _ := e.stack[i].AsForward()
+				fwd, _ := AsForward(e.stack[i])
 				funcIdx := fwd.FuncIndex
 				collectedCount := fwd.CollectedArgs
 				stackArgCount := fwd.StackArgs
@@ -2241,7 +2241,7 @@ func (e *Engine) stepCloseParen() error {
 	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+			fwd, _ := AsForward(e.stack[i])
 			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs)
 		}
 	}
@@ -2290,7 +2290,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {
-				stackRemove(&e.stack, openIdx + 1)
+				stackRemove(&e.stack, openIdx+1)
 				closeIdx--
 			}
 			break
@@ -2336,7 +2336,7 @@ func (e *Engine) effectiveResolved() []Value {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+			fwd, _ := AsForward(e.stack[i])
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -2398,7 +2398,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		return
 	}
 
-	w, _ := e.stack[funcIdx].AsWord()
+	w, _ := AsWord(e.stack[funcIdx])
 	fn := e.registry.Lookup(w.Name)
 
 	// Check if stack match exists with current resolved values.
@@ -2415,7 +2415,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 				break
 			}
 			if e.stack[i].IsForward() {
-				fwd, _ := e.stack[i].AsForward()
+				fwd, _ := AsForward(e.stack[i])
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
 				// Exclude collected forward args (before function word).
@@ -2515,7 +2515,7 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
@@ -2536,7 +2536,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 			break
 		}
 		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
@@ -2679,7 +2679,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				if tok.IsWord() {
-					ww, _ := tok.AsWord()
+					ww, _ := AsWord(tok)
 					// /q modifier: capture the upcoming Word as an Atom
 					// (the conversion happens at insertForward / stepLiteral
 					// time; here we just count it as a match).

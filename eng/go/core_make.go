@@ -162,7 +162,7 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 	}
 	if v, ok := m.Get("base"); ok {
 		v = ResolveWordValue(v)
-		if b, bErr := v.AsBoolean(); bErr == nil && b {
+		if b, bErr := AsBoolean(v); bErr == nil && b {
 			useBase = true
 		}
 	}
@@ -310,7 +310,7 @@ func makePath(srcVal Value, abs bool) ([]Value, error) {
 		}
 		return []Value{NewPath(parts, abs)}, nil
 	case srcVal.VType.Matches(TString) && srcVal.Data != nil:
-		s, _ := srcVal.AsString()
+		s, _ := AsString(srcVal)
 		if len(s) > 0 && s[0] == '/' {
 			abs = true
 			s = s[1:]
@@ -528,7 +528,7 @@ func makeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		abs := false
 		if optsMap := optsVal.AsMap(); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
-				abs, _ = v.AsBoolean()
+				abs, _ = AsBoolean(v)
 			}
 		}
 		return makePath(srcVal, abs)
@@ -584,7 +584,7 @@ func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 		abs := false
 		if optsMap := optsVal.AsMap(); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
-				abs, _ = v.AsBoolean()
+				abs, _ = AsBoolean(v)
 			}
 		}
 		return makePath(srcVal, abs)
@@ -625,7 +625,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		case src.VType.Matches(TBoolean):
 			return src, nil
 		case src.VType.Matches(TNumber):
-			_as0, _ := src.AsNumber()
+			_as0, _ := AsNumber(src)
 			return NewBoolean(_as0 != 0), nil
 		default:
 			text := ValToString(src)
@@ -681,10 +681,10 @@ func ResolveFieldType(r *Registry, v Value) Value {
 	if v.Data != nil && (v.VType.Matches(TString) || v.VType.Matches(TAtom) || v.IsWord()) {
 		var name string
 		if v.IsWord() {
-			_as2, _ := v.AsWord()
+			_as2, _ := AsWord(v)
 			name = _as2.Name
 		} else {
-			name, _ = v.AsString()
+			name, _ = AsString(v)
 		}
 		if tv, ok := r.Types.TopBody(name); ok {
 			if IsTypeBody(tv) {
@@ -704,7 +704,7 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		input := make([]Value, elems.Len())
 		for i, e := range elems.Slice() {
 			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
-				name, _ := e.AsString()
+				name, _ := AsString(e)
 				if r.Lookup(name) != nil {
 					input[i] = NewWord(name)
 					continue

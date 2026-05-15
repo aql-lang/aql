@@ -348,7 +348,6 @@ func JoinCarriers(a, b Value) Value {
 	return v
 }
 
-
 // RunCarrierBody runs a list body (a Value with VType=TList) through a
 // fresh sub-engine in check mode and returns the residual carrier
 // stack. Returns nil if the body is not a concrete list. Requires
@@ -495,17 +494,17 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		if !elems[i].VType.Equal(TWord) || !elems[i+1].VType.Equal(TWord) {
 			continue
 		}
-		wx, err := elems[i].AsWord()
+		wx, err := AsWord(elems[i])
 		if err != nil {
 			continue
 		}
-		wis, err := elems[i+1].AsWord()
+		wis, err := AsWord(elems[i+1])
 		if err != nil || wis.Name != "is" {
 			continue
 		}
 		tv := elems[i+2]
 		if tv.Data != nil && tv.VType.Equal(TWord) {
-			inner, _ := tv.AsWord()
+			inner, _ := AsWord(tv)
 			if v, ok := r.Defs.Top(inner.Name); ok {
 				tv = v
 			}
@@ -545,7 +544,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	// resolve to booleans in engine.stepWord; in check mode the
 	// words stay as Words until the branch runs).
 	if only.VType.Equal(TWord) {
-		w, err := only.AsWord()
+		w, err := AsWord(only)
 		if err == nil {
 			if w.Name == "true" {
 				return true, true
@@ -557,7 +556,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
 	if only.VType.Matches(TBoolean) && only.Data != nil {
-		b, err := only.AsBoolean()
+		b, err := AsBoolean(only)
 		if err == nil {
 			return b, true
 		}

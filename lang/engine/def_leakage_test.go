@@ -34,7 +34,7 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 
 	// Call the fn: 1 myfn → 100
 	result := runAQL(t, r, []engine.Value{engine.NewInteger(1), engine.NewWord("myfn")})
-	_as0, _ := result[0].AsNumber()
+	_as0, _ := engine.AsNumber(result[0])
 	if len(result) != 1 || _as0 != 100 {
 		t.Errorf("1 myfn = %v, want 100", result)
 	}
@@ -79,7 +79,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	m := engine.NewOrderedMap()
 	m.Set("op", engine.NewString("add"))
 	result := runAQL(t, r, []engine.Value{engine.NewMap(m), engine.NewWord("process")})
-	_as1, _ := result[0].AsString()
+	_as1, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as1 != "add" {
 		t.Errorf("{op:'add'} process = %v, want 'add'", result)
 	}
@@ -96,7 +96,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	result2 := runAQL(t, r, []engine.Value{
 		engine.NewMap(m2), engine.NewWord("get"), engine.NewWord("op"),
 	})
-	_as2, _ := result2[0].AsString()
+	_as2, _ := engine.AsString(result2[0])
 	if len(result2) != 1 || _as2 != "mul" {
 		t.Errorf("{op:'mul'} get op = %v, want 'mul'", result2)
 	}
@@ -132,7 +132,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		result := runAQL(t, r, []engine.Value{engine.NewInteger(int64(i)), engine.NewWord("counter")})
 		expected := int64(i + 1)
-		_as3, _ := result[0].AsNumber()
+		_as3, _ := engine.AsNumber(result[0])
 		if len(result) != 1 || _as3 != float64(expected) {
 			t.Errorf("call %d: counter(%d) = %v, want %d", i, i, result, expected)
 		}

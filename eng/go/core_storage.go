@@ -108,30 +108,30 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 // rules as the kernel's `get`.
 func GetKey(v Value) string {
 	if v.IsWord() {
-		_as0, _ := v.AsWord()
+		_as0, _ := AsWord(v)
 		return _as0.Name
 	}
 	if v.VType.Matches(TString) {
-		_as1, _ := v.AsString()
+		_as1, _ := AsString(v)
 		return _as1
 	}
 	if v.IsAtom() {
-		_as2, _ := v.AsAtom()
+		_as2, _ := AsAtom(v)
 		return _as2
 	}
 	// Primitive scalar fallbacks: render the payload via the
 	// dedicated accessors rather than `%v` on the boxed payload
 	// (post Step 5b: Data is e.g. IntPayload{N:5}, not int64(5)).
 	if v.VType.Matches(TInteger) {
-		n, _ := v.AsInteger()
+		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
 	if v.VType.Matches(TDecimal) {
-		f, _ := v.AsDecimal()
+		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	}
 	if v.VType.Matches(TBoolean) {
-		b, _ := v.AsBoolean()
+		b, _ := AsBoolean(v)
 		if b {
 			return "true"
 		}
@@ -148,7 +148,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// Integer key: list index access.
 	if key.VType.Matches(TInteger) {
-		idx, _ := key.AsInteger()
+		idx, _ := AsInteger(key)
 		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {

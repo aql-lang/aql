@@ -20,7 +20,7 @@ func TestIntegVarWithValueAssignment(t *testing.T) {
 		NewWord("x"),
 	})
 	result := runAQL(t, r, []Value{NewWord("var"), varBody})
-	_as0, _ := result[0].AsInteger()
+	_as0, _ := AsInteger(result[0])
 	if len(result) != 1 || _as0 != 10 {
 		t.Errorf("var [[x 10]] x = %v, want 10", result)
 	}
@@ -52,7 +52,7 @@ func TestIntegVarMultipleDecls(t *testing.T) {
 		NewWord("x"), NewWord("add"), NewWord("y"),
 	})
 	result := runAQL(t, r, []Value{NewWord("var"), varBody})
-	_as1, _ := result[0].AsNumber()
+	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 5 {
 		t.Errorf("var [[[x 2] [y 3]] x add y] = %v, want 5", result)
 	}
@@ -66,7 +66,7 @@ func TestIntegVarStringName(t *testing.T) {
 		NewWord("myvar"),
 	})
 	result := runAQL(t, r, []Value{NewInteger(42), NewWord("var"), varBody})
-	_as2, _ := result[0].AsInteger()
+	_as2, _ := AsInteger(result[0])
 	if len(result) != 1 || _as2 != 42 {
 		t.Errorf("42 var [[\"myvar\"] myvar] = %v, want 42", result)
 	}
@@ -82,7 +82,7 @@ func TestIntegVarNestedDoBlock(t *testing.T) {
 		NewWord("do"), NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(5)}),
 	})
 	result := runAQL(t, r, []Value{NewWord("var"), varBody})
-	_as3, _ := result[0].AsNumber()
+	_as3, _ := AsNumber(result[0])
 	if len(result) != 1 || _as3 != 15 {
 		t.Errorf("var [[[x 10]] do [x add 5]] = %v, want 15", result)
 	}
@@ -136,7 +136,7 @@ func TestIntegUndefRemovesDef(t *testing.T) {
 		NewWord("def"), NewWord("my-val"), NewInteger(99), NewEnd(),
 		NewWord("my-val"),
 	})
-	_as4, _ := result[0].AsInteger()
+	_as4, _ := AsInteger(result[0])
 	if len(result) != 1 || _as4 != 99 {
 		t.Fatalf("def my-val 99 end my-val = %v, want 99", result)
 	}
@@ -181,7 +181,7 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 
 	// Verify my-fn works: 5 my-fn => 6
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("my-fn")})
-	_as5, _ := result[0].AsNumber()
+	_as5, _ := AsNumber(result[0])
 	if len(result) != 1 || _as5 != 6 {
 		t.Fatalf("5 my-fn = %v, want 6", result)
 	}
@@ -212,7 +212,7 @@ func TestIntegFnMultipleParams(t *testing.T) {
 
 	// 3 5 add-two => 8
 	result := runAQL(t, r, []Value{NewInteger(3), NewInteger(5), NewWord("add-two")})
-	_as6, _ := result[0].AsNumber()
+	_as6, _ := AsNumber(result[0])
 	if len(result) != 1 || _as6 != 8 {
 		t.Errorf("3 5 add-two = %v, want 8", result)
 	}
@@ -236,7 +236,7 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 	}
 
 	result = runAQL(t, r, []Value{NewInteger(10), NewWord("inc")})
-	_as7, _ := result[0].AsNumber()
+	_as7, _ := AsNumber(result[0])
 	if len(result) != 1 || _as7 != 11 {
 		t.Errorf("10 inc = %v, want 11", result)
 	}
@@ -297,7 +297,7 @@ func TestIntegFnSingleValueAbbreviation(t *testing.T) {
 	})
 
 	result := runAQL(t, r, []Value{NewInteger(7), NewWord("inc2")})
-	_as8, _ := result[0].AsNumber()
+	_as8, _ := AsNumber(result[0])
 	if len(result) != 1 || _as8 != 8 {
 		t.Errorf("7 inc2 = %v, want 8", result)
 	}
@@ -354,7 +354,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 	}
 	m := result[0].AsMap()
 	v, ok := m.Get("val")
-	_as9, _ := v.AsInteger()
+	_as9, _ := AsInteger(v)
 	if !ok || _as9 != 99 {
 		t.Errorf("stuff.val = %v, want 99", v)
 	}
@@ -527,7 +527,7 @@ func TestIntegConvertIntegerToString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString),
 	})
-	_as10, _ := result[0].AsString()
+	_as10, _ := AsString(result[0])
 	if len(result) != 1 || _as10 != "42" {
 		t.Errorf("42 convert String = %v, want '42'", result)
 	}
@@ -538,7 +538,7 @@ func TestIntegConvertStringToInteger(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("123"), NewWord("convert"), NewTypeLiteral(TInteger),
 	})
-	_as11, _ := result[0].AsInteger()
+	_as11, _ := AsInteger(result[0])
 	if len(result) != 1 || _as11 != 123 {
 		t.Errorf("'123' convert Integer = %v, want 123", result)
 	}
@@ -549,7 +549,7 @@ func TestIntegConvertStringToDecimal(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("3.14"), NewWord("convert"), NewTypeLiteral(TDecimal),
 	})
-	_as12, _ := result[0].AsDecimal()
+	_as12, _ := AsDecimal(result[0])
 	if len(result) != 1 || _as12 != 3.14 {
 		t.Errorf("'3.14' convert Decimal = %v, want 3.14", result)
 	}
@@ -561,7 +561,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as13, _ := result[0].AsBoolean()
+	_as13, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as13 {
 		t.Errorf("1 convert Boolean = %v, want true", result)
 	}
@@ -570,7 +570,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as14, _ := result[0].AsBoolean()
+	_as14, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as14 {
 		t.Errorf("0 convert Boolean = %v, want false", result)
 	}
@@ -579,7 +579,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as15, _ := result[0].AsBoolean()
+	_as15, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as15 {
 		t.Errorf("'true' convert Boolean = %v, want true", result)
 	}
@@ -588,7 +588,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("false"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as16, _ := result[0].AsBoolean()
+	_as16, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as16 {
 		t.Errorf("'false' convert Boolean = %v, want false", result)
 	}
@@ -597,7 +597,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString("hello"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as17, _ := result[0].AsBoolean()
+	_as17, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as17 {
 		t.Errorf("'hello' convert Boolean = %v, want true", result)
 	}
@@ -606,7 +606,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewString(""), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as18, _ := result[0].AsBoolean()
+	_as18, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as18 {
 		t.Errorf("'' convert Boolean = %v, want false", result)
 	}
@@ -620,7 +620,7 @@ func TestIntegConvertIntToHexString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
-	_as19, _ := result[0].AsString()
+	_as19, _ := AsString(result[0])
 	if len(result) != 1 || _as19 != "ff" {
 		t.Errorf("255 convert String {base:hex} = %v, want 'ff'", result)
 	}
@@ -633,7 +633,7 @@ func TestIntegConvertIntToHEXString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
-	_as20, _ := result[0].AsString()
+	_as20, _ := AsString(result[0])
 	if len(result) != 1 || _as20 != "FF" {
 		t.Errorf("255 convert String {base:HEX} = %v, want 'FF'", result)
 	}
@@ -646,7 +646,7 @@ func TestIntegConvertIntToBinString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewTypeLiteral(TString), NewMap(binOpts),
 	})
-	_as21, _ := result[0].AsString()
+	_as21, _ := AsString(result[0])
 	if len(result) != 1 || _as21 != "1010" {
 		t.Errorf("10 convert String {base:bin} = %v, want '1010'", result)
 	}
@@ -659,7 +659,7 @@ func TestIntegConvertIntToOctString(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewTypeLiteral(TString), NewMap(octOpts),
 	})
-	_as22, _ := result[0].AsString()
+	_as22, _ := AsString(result[0])
 	if len(result) != 1 || _as22 != "10" {
 		t.Errorf("8 convert String {base:oct} = %v, want '10'", result)
 	}
@@ -673,7 +673,7 @@ func TestIntegConvertHexStringToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(hexOpts),
 	})
-	_as23, _ := result[0].AsInteger()
+	_as23, _ := AsInteger(result[0])
 	if len(result) != 1 || _as23 != 255 {
 		t.Errorf("'ff' convert Number {base:hex} = %v, want 255", result)
 	}
@@ -686,7 +686,7 @@ func TestIntegConvertBinStringToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("1010"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(binOpts),
 	})
-	_as24, _ := result[0].AsInteger()
+	_as24, _ := AsInteger(result[0])
 	if len(result) != 1 || _as24 != 10 {
 		t.Errorf("'1010' convert Number {base:bin} = %v, want 10", result)
 	}
@@ -699,7 +699,7 @@ func TestIntegConvertOctStringToNumber(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewString("10"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(octOpts),
 	})
-	_as25, _ := result[0].AsInteger()
+	_as25, _ := AsInteger(result[0])
 	if len(result) != 1 || _as25 != 8 {
 		t.Errorf("'10' convert Number {base:oct} = %v, want 8", result)
 	}
@@ -716,7 +716,7 @@ func TestIntegConvertWithSettingsMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	_as26, _ := result[0].AsString()
+	_as26, _ := AsString(result[0])
 	if _as26 != "ff" {
 		t.Errorf("255 convert String {base:hex} = %v, want 'ff'", result)
 	}
@@ -727,7 +727,7 @@ func TestIntegConvertBooleanPassthrough(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
-	_as27, _ := result[0].AsBoolean()
+	_as27, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as27 {
 		t.Errorf("true convert Boolean = %v, want true", result)
 	}
@@ -797,7 +797,7 @@ func TestIntegDoList(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("do"), NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 	})
-	_as28, _ := result[0].AsNumber()
+	_as28, _ := AsNumber(result[0])
 	if len(result) != 1 || _as28 != 3 {
 		t.Errorf("do [1 add 2] = %v, want 3", result)
 	}
@@ -815,7 +815,7 @@ func TestIntegDoMap(t *testing.T) {
 	}
 	rm := result[0].AsMap()
 	xVal, ok := rm.Get("x")
-	_as29, _ := xVal.AsNumber()
+	_as29, _ := AsNumber(xVal)
 	if !ok || _as29 != 7 {
 		t.Errorf("do {x:[3 add 4]}.x = %v, want 7", xVal)
 	}
@@ -837,7 +837,7 @@ func TestIntegDoNestedMap(t *testing.T) {
 	innerVal, _ := outer.Get("outer")
 	innerResult := innerVal.AsMap()
 	v, _ := innerResult.Get("inner")
-	_as30, _ := v.AsNumber()
+	_as30, _ := AsNumber(v)
 	if _as30 != 5 {
 		t.Errorf("do nested map inner = %v, want 5", v)
 	}
@@ -866,7 +866,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("write"), NewString("test.txt"), NewString("hello world"),
 	})
-	_as31, _ := result[0].AsString()
+	_as31, _ := AsString(result[0])
 	if len(result) != 1 || _as31 != "test.txt" {
 		t.Errorf("write should return path, got %v", result)
 	}
@@ -875,7 +875,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 	result = runAQL(t, r, []Value{
 		NewWord("read"), NewString("test.txt"),
 	})
-	_as32, _ := result[0].AsString()
+	_as32, _ := AsString(result[0])
 	if len(result) != 1 || _as32 != "hello world" {
 		t.Errorf("read test.txt = %v, want 'hello world'", result)
 	}
@@ -902,7 +902,7 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("test.txt"),
 	})
-	_as33, _ := result[0].AsString()
+	_as33, _ := AsString(result[0])
 	if len(result) != 1 || _as33 != "hello world" {
 		t.Errorf("read after append = %v, want 'hello world'", result)
 	}
@@ -931,7 +931,7 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	}
 	rm := result[0].AsMap()
 	v, ok := rm.Get("x")
-	_as34, _ := v.AsInteger()
+	_as34, _ := AsInteger(v)
 	if !ok || _as34 != 1 {
 		t.Errorf("read data.json x = %v, want 1", v)
 	}
@@ -946,7 +946,7 @@ func TestIntegFileIOWriteStdout(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("write"), NewString("<stdout>"), NewString("printed text"),
 	})
-	_as35, _ := result[0].AsString()
+	_as35, _ := AsString(result[0])
 	if len(result) != 1 || _as35 != "<stdout>" {
 		t.Errorf("write stdout should return path, got %v", result)
 	}
@@ -963,7 +963,7 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("write"), NewString("<stderr>"), NewString("error text"),
 	})
-	_as36, _ := result[0].AsString()
+	_as36, _ := AsString(result[0])
 	if len(result) != 1 || _as36 != "<stderr>" {
 		t.Errorf("write stderr should return path, got %v", result)
 	}
@@ -1149,7 +1149,7 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewBoolean(false), NewWord("or"), NewBoolean(true),
 	})
-	_as41, _ := result[0].AsBoolean()
+	_as41, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as41 {
 		t.Errorf("false or true = %v, want true", result)
 	}
@@ -1164,28 +1164,28 @@ func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if v, _ := result[0].AsInteger(); v != 1 {
+	if v, _ := AsInteger(result[0]); v != 1 {
 		t.Errorf("1 or 0 = %v, want 1", result[0])
 	}
 	// 0 or 5 → 5 (second wins because first is falsy)
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("or"), NewInteger(5),
 	})
-	if v, _ := result[0].AsInteger(); v != 5 {
+	if v, _ := AsInteger(result[0]); v != 5 {
 		t.Errorf("0 or 5 = %v, want 5", result[0])
 	}
 	// 0 or 0 → 0 (last falsy)
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("or"), NewInteger(0),
 	})
-	if v, _ := result[0].AsInteger(); v != 0 {
+	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("0 or 0 = %v, want 0", result[0])
 	}
 	// "" or "x" → "x"
 	result = runAQL(t, r, []Value{
 		NewString(""), NewWord("or"), NewString("x"),
 	})
-	if s, _ := result[0].AsString(); s != "x" {
+	if s, _ := AsString(result[0]); s != "x" {
 		t.Errorf("\"\" or \"x\" = %v, want \"x\"", result[0])
 	}
 }
@@ -1196,28 +1196,28 @@ func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(2),
 	})
-	if v, _ := result[0].AsInteger(); v != 2 {
+	if v, _ := AsInteger(result[0]); v != 2 {
 		t.Errorf("1 and 2 = %v, want 2", result[0])
 	}
 	// 0 and 5 → 0 (first falsy short-circuits)
 	result = runAQL(t, r, []Value{
 		NewInteger(0), NewWord("and"), NewInteger(5),
 	})
-	if v, _ := result[0].AsInteger(); v != 0 {
+	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("0 and 5 = %v, want 0", result[0])
 	}
 	// 1 and 0 → 0 (second is falsy)
 	result = runAQL(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(0),
 	})
-	if v, _ := result[0].AsInteger(); v != 0 {
+	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("1 and 0 = %v, want 0", result[0])
 	}
 	// "x" and "y" → "y"
 	result = runAQL(t, r, []Value{
 		NewString("x"), NewWord("and"), NewString("y"),
 	})
-	if s, _ := result[0].AsString(); s != "y" {
+	if s, _ := AsString(result[0]); s != "y" {
 		t.Errorf("\"x\" and \"y\" = %v, want \"y\"", result[0])
 	}
 }
@@ -1248,7 +1248,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	if !okX {
 		t.Fatalf("missing key x")
 	}
-	if xi, _ := x.AsInteger(); xi != 1 {
+	if xi, _ := AsInteger(x); xi != 1 {
 		t.Errorf("x = %v, want 1", x)
 	}
 	y, okY := merged.Get("y")
@@ -1278,7 +1278,7 @@ func TestIntegTandMergeOverlap(t *testing.T) {
 		t.Fatalf("expected single-key merged map, got %v", result[0])
 	}
 	x, _ := merged.Get("x")
-	if xi, _ := x.AsInteger(); xi != 1 {
+	if xi, _ := AsInteger(x); xi != 1 {
 		t.Errorf("x = %v, want 1", x)
 	}
 }
@@ -1292,7 +1292,7 @@ func TestIntegTandUnifyScalars(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if v, _ := result[0].AsInteger(); v != 1 {
+	if v, _ := AsInteger(result[0]); v != 1 {
 		t.Errorf("1 tand Integer = %v, want 1", result[0])
 	}
 }
@@ -1306,7 +1306,7 @@ func TestIntegContextSetGet(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewString("mykey"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("mykey"),
 	})
-	_as42, _ := result[0].AsInteger()
+	_as42, _ := AsInteger(result[0])
 	if len(result) != 1 || _as42 != 42 {
 		t.Errorf("context set/get = %v, want 42", result)
 	}
@@ -1330,7 +1330,7 @@ func TestIntegContextSetWithWord(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewWord("wkey"), NewInteger(99),
 		NewWord("context"), NewWord("get"), NewWord("wkey"),
 	})
-	_as43, _ := result[0].AsInteger()
+	_as43, _ := AsInteger(result[0])
 	if len(result) != 1 || _as43 != 99 {
 		t.Errorf("context set/get with word key = %v, want 99", result)
 	}
@@ -1344,7 +1344,7 @@ func TestIntegContextOverwrite(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
 		NewWord("context"), NewWord("get"), NewString("k"),
 	})
-	_as44, _ := result[0].AsInteger()
+	_as44, _ := AsInteger(result[0])
 	if len(result) != 1 || _as44 != 2 {
 		t.Errorf("context overwrite = %v, want 2", result)
 	}
@@ -1417,7 +1417,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 	}
 	rm := result[0].AsMap()
 	xVal, _ := rm.Get("x")
-	_as45, _ := xVal.AsInteger()
+	_as45, _ := AsInteger(xVal)
 	if _as45 != 42 {
 		t.Errorf("do {x:42}.x = %v, want 42", xVal)
 	}
@@ -1434,7 +1434,7 @@ func TestIntegVarWithDoBlock(t *testing.T) {
 		NewWord("do"), NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
 	result := runAQL(t, r, []Value{NewWord("var"), varBody})
-	_as46, _ := result[0].AsNumber()
+	_as46, _ := AsNumber(result[0])
 	if len(result) != 1 || _as46 != 7 {
 		t.Errorf("var [[[a 3] [b 4]] do [a add b]] = %v, want 7", result)
 	}

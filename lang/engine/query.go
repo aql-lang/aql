@@ -390,15 +390,15 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 	for _, e := range elems {
 		switch {
 		case e.VType.Equal(TAtom):
-			_as6, _ := e.AsAtom()
+			_as6, _ := AsAtom(e)
 			cols = append(cols, columnSpec{Name: _as6})
 		case e.VType.Matches(TString):
-			_as7, _ := e.AsString()
+			_as7, _ := AsString(e)
 			cols = append(cols, columnSpec{Name: _as7})
 		case e.IsWord():
 			// A word that appears in the column list without evaluation
 			// is treated as a column name OR as an aggregate function name.
-			_as8, _ := e.AsWord()
+			_as8, _ := AsWord(e)
 			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
@@ -468,15 +468,15 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 // Unlike valueToColName, this also recognizes unevaluated word values.
 func nameFromValue(v Value) string {
 	if v.VType.Equal(TAtom) {
-		_as9, _ := v.AsAtom()
+		_as9, _ := AsAtom(v)
 		return _as9
 	}
 	if v.VType.Matches(TString) {
-		_as10, _ := v.AsString()
+		_as10, _ := AsString(v)
 		return _as10
 	}
 	if v.IsWord() {
-		_as11, _ := v.AsWord()
+		_as11, _ := AsWord(v)
 		return _as11.Name
 	}
 	return ""
@@ -574,15 +574,15 @@ func sqlTypeToAQLType(sqlType string) *Type {
 // valueToColName extracts the string content from an atom, string, or word value.
 func valueToColName(v Value) string {
 	if v.VType.Equal(TAtom) {
-		_as12, _ := v.AsAtom()
+		_as12, _ := AsAtom(v)
 		return _as12
 	}
 	if v.VType.Matches(TString) {
-		_as13, _ := v.AsString()
+		_as13, _ := AsString(v)
 		return _as13
 	}
 	if v.IsWord() {
-		_as14, _ := v.AsWord()
+		_as14, _ := AsWord(v)
 		return _as14.Name
 	}
 	return ""
@@ -1203,24 +1203,24 @@ func resolveScalarValue(v Value) (Value, error) {
 func valueToSQL(v Value) (string, error) {
 	switch {
 	case v.VType.Matches(TString):
-		_as23, _ := v.AsString()
+		_as23, _ := AsString(v)
 		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
 	case v.VType.Matches(TInteger):
-		_as24, _ := v.AsInteger()
+		_as24, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as24), nil
 	case v.VType.Matches(TBoolean):
-		_as25, _ := v.AsBoolean()
+		_as25, _ := AsBoolean(v)
 		if _as25 {
 			return "'true'", nil
 		}
 		return "'false'", nil
 	case v.VType.Equal(TAtom):
-		_as26, _ := v.AsAtom()
+		_as26, _ := AsAtom(v)
 		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
 	case v.VType.Equal(TWord):
-		_as27, _ := v.AsWord()
+		_as27, _ := AsWord(v)
 		return "'" + strings.ReplaceAll(_as27.Name, "'", "''") + "'", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
@@ -1349,7 +1349,7 @@ func buildOrderClause(colList Value) (string, error) {
 		e := elems[i]
 
 		if e.VType.Matches(TInteger) {
-			_as28, _ := e.AsInteger()
+			_as28, _ := AsInteger(e)
 			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++
 			continue

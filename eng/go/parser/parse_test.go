@@ -13,8 +13,8 @@ func valuesEqual(a, b eng.Value) bool {
 	}
 	switch {
 	case a.IsWord():
-		aw, _ := a.AsWord()
-		bw, _ := b.AsWord()
+		aw, _ := eng.AsWord(a)
+		bw, _ := eng.AsWord(b)
 		return aw.Name == bw.Name &&
 			aw.ArgCount == bw.ArgCount &&
 			aw.ForceStack == bw.ForceStack &&
@@ -22,12 +22,12 @@ func valuesEqual(a, b eng.Value) bool {
 	case a.IsOpenParen():
 		return true
 	case a.VType.Matches(eng.TString):
-		as, _ := a.AsString()
-		bs, _ := b.AsString()
+		as, _ := eng.AsString(a)
+		bs, _ := eng.AsString(b)
 		return as == bs
 	case a.VType.Matches(eng.TInteger):
-		an, _ := a.AsInteger()
-		bn, _ := b.AsInteger()
+		an, _ := eng.AsInteger(a)
+		bn, _ := eng.AsInteger(b)
 		return an == bn
 	default:
 		return a.String() == b.String()
@@ -770,12 +770,12 @@ func TestParseMapWithBooleans(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	aVal, _ := m.Get("a")
-	aw, _ := aVal.AsWord()
+	aw, _ := eng.AsWord(aVal)
 	if !aVal.IsWord() || aw.Name != "true" {
 		t.Errorf("expected word(true), got %s", aVal)
 	}
 	bVal, _ := m.Get("b")
-	bw, _ := bVal.AsWord()
+	bw, _ := eng.AsWord(bVal)
 	if !bVal.IsWord() || bw.Name != "false" {
 		t.Errorf("expected word(false), got %s", bVal)
 	}
@@ -918,13 +918,13 @@ func TestParseDataMapWithNil(t *testing.T) {
 	m := got[0].AsMap()
 	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
-	bw2, _ := bVal.AsWord()
+	bw2, _ := eng.AsWord(bVal)
 	if !bVal.IsWord() || bw2.Name != "true" {
 		t.Errorf("expected word(true), got %s", bVal)
 	}
 	// c should be word "false" (word context)
 	cVal, _ := m.Get("c")
-	cw2, _ := cVal.AsWord()
+	cw2, _ := eng.AsWord(cVal)
 	if !cVal.IsWord() || cw2.Name != "false" {
 		t.Errorf("expected word(false), got %s", cVal)
 	}
@@ -985,9 +985,9 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 	// With word context in lists, true/false become words (resolved at runtime),
 	// and null becomes a word (resolved to atom at runtime).
-	ew0, _ := elems[0].AsWord()
-	ew1, _ := elems[1].AsWord()
-	ew2, _ := elems[2].AsWord()
+	ew0, _ := eng.AsWord(elems[0])
+	ew1, _ := eng.AsWord(elems[1])
+	ew2, _ := eng.AsWord(elems[2])
 	if !elems[0].IsWord() || ew0.Name != "true" {
 		t.Errorf("expected word(true), got %s", elems[0])
 	}
@@ -1252,7 +1252,7 @@ func TestParseMapWithStringValues(t *testing.T) {
 	}
 	m := got[0].AsMap()
 	xVal, _ := m.Get("x")
-	xValS, _ := xVal.AsString()
+	xValS, _ := eng.AsString(xVal)
 	if !xVal.VType.Matches(eng.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
@@ -1461,11 +1461,11 @@ func TestResolveTextValueTypes(t *testing.T) {
 		input string
 		check func(eng.Value) bool
 	}{
-		{"true", func(v eng.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(eng.TBoolean) && b }},
-		{"false", func(v eng.Value) bool { b, _ := v.AsBoolean(); return v.VType.Matches(eng.TBoolean) && !b }},
+		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.VType.Matches(eng.TBoolean) && b }},
+		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.VType.Matches(eng.TBoolean) && !b }},
 		{"Number", func(v eng.Value) bool { return v.VType.Equal(eng.TNumber) }},
 		{"String", func(v eng.Value) bool { return v.VType.Equal(eng.TString) }},
-		{"hello", func(v eng.Value) bool { s, _ := v.AsAtom(); return v.VType.Matches(eng.TAtom) && s == "hello" }},
+		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.VType.Matches(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -1482,7 +1482,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b1, _ := v.AsBoolean()
+	b1, _ := eng.AsBoolean(v)
 	if !v.VType.Matches(eng.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
@@ -1490,7 +1490,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b2, _ := v.AsBoolean()
+	b2, _ := eng.AsBoolean(v)
 	if !v.VType.Matches(eng.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
@@ -1504,7 +1504,7 @@ func TestConvertTopLevelValueNil(t *testing.T) {
 	if !v.IsAtom() {
 		t.Fatalf("expected atom for null, got %s", v.VType)
 	}
-	name, _ := v.AsAtom()
+	name, _ := eng.AsAtom(v)
 	if name != "null" {
 		t.Errorf("expected atom('null'), got atom(%q)", name)
 	}
@@ -1522,7 +1522,7 @@ func TestConvertDataValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b3, _ := v.AsBoolean()
+	b3, _ := eng.AsBoolean(v)
 	if !v.VType.Matches(eng.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
@@ -1536,7 +1536,7 @@ func TestConvertDataValueNil(t *testing.T) {
 	if !v.IsAtom() {
 		t.Fatalf("expected atom for null, got %s", v.VType)
 	}
-	name, _ := v.AsAtom()
+	name, _ := eng.AsAtom(v)
 	if name != "null" {
 		t.Errorf("expected atom('null'), got atom(%q)", name)
 	}
@@ -1612,7 +1612,7 @@ func TestParseWordDirectCoverage(t *testing.T) {
 			t.Errorf("parseWord(%q) expected error", tt.input)
 		}
 		if tt.ok {
-			vw, _ := v.AsWord()
+			vw, _ := eng.AsWord(v)
 			if vw.Name != tt.name {
 				t.Errorf("parseWord(%q) name = %q, want %q", tt.input, vw.Name, tt.name)
 			}

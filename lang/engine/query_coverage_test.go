@@ -231,7 +231,7 @@ func TestQueryCovSelectSumAggregate(t *testing.T) {
 	if !ok {
 		t.Fatal("missing total_price column")
 	}
-	_as0, _ := val.AsInteger()
+	_as0, _ := engine.AsInteger(val)
 	if _as0 != 85 {
 		t.Errorf("expected sum=85, got %v", val)
 	}
@@ -280,11 +280,11 @@ func TestQueryCovSelectMinMax(t *testing.T) {
 	row := td.Rows[0].AsMap()
 	minVal, _ := row.Get("cheapest")
 	maxVal, _ := row.Get("most_expensive")
-	_as1, _ := minVal.AsInteger()
+	_as1, _ := engine.AsInteger(minVal)
 	if _as1 != 5 {
 		t.Errorf("expected min=5, got %v", minVal)
 	}
-	_as2, _ := maxVal.AsInteger()
+	_as2, _ := engine.AsInteger(maxVal)
 	if _as2 != 30 {
 		t.Errorf("expected max=30, got %v", maxVal)
 	}
@@ -941,7 +941,7 @@ func TestQueryCovOrderByDesc(t *testing.T) {
 	// First row should be the most expensive (30)
 	first := td.Rows[0].AsMap()
 	price, _ := first.Get("price")
-	_as3, _ := price.AsNumber()
+	_as3, _ := engine.AsNumber(price)
 	if _as3 != 30 {
 		t.Errorf("expected first price=30 (desc), got %v", price)
 	}

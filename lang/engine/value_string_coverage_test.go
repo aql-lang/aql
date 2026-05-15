@@ -88,15 +88,15 @@ func TestValueStringTableDataCov(t *testing.T) {
 
 func TestValueAsNumberCov(t *testing.T) {
 	v := engine.NewInteger(42)
-	_as0, _ := v.AsNumber()
+	_as0, _ := engine.AsNumber(v)
 	if _as0 != 42.0 {
-		_as1, _ := v.AsNumber()
+		_as1, _ := engine.AsNumber(v)
 		t.Errorf("expected 42.0, got %f", _as1)
 	}
 	v = engine.NewDecimal(3.14)
-	_as2, _ := v.AsNumber()
+	_as2, _ := engine.AsNumber(v)
 	if _as2 != 3.14 {
-		_as3, _ := v.AsNumber()
+		_as3, _ := engine.AsNumber(v)
 		t.Errorf("expected 3.14, got %f", _as3)
 	}
 }

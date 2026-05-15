@@ -1290,17 +1290,17 @@ func TestTypedIntegerColumn(t *testing.T) {
 	if !ageVal.VType.Matches(engine.TInteger) {
 		t.Errorf("expected age to be integer type, got %s", ageVal.VType)
 	}
-	_v1, _ := ageVal.AsInteger()
+	_v1, _ := engine.AsInteger(ageVal)
 	if _v1 != 30 {
-		_v2, _ := ageVal.AsInteger()
+		_v2, _ := engine.AsInteger(ageVal)
 		t.Errorf("expected age 30, got %d", _v2)
 	}
 
 	// Ordered by age: 30, 35.
 	age2, _ := rows[1].AsMap().Get("age")
-	_v3, _ := age2.AsInteger()
+	_v3, _ := engine.AsInteger(age2)
 	if _v3 != 35 {
-		_v4, _ := age2.AsInteger()
+		_v4, _ := engine.AsInteger(age2)
 		t.Errorf("expected second row age 35, got %d", _v4)
 	}
 }
@@ -1356,7 +1356,7 @@ func TestTypedBooleanColumn(t *testing.T) {
 	if !activeVal.VType.Matches(engine.TBoolean) {
 		t.Errorf("expected active to be boolean type, got %s", activeVal.VType)
 	}
-	_v5, _ := activeVal.AsBoolean()
+	_v5, _ := engine.AsBoolean(activeVal)
 	if !_v5 {
 		t.Error("expected active to be true")
 	}
@@ -1405,13 +1405,13 @@ func TestTypedIntegerOrdering(t *testing.T) {
 	v0, _ := rows[0].AsMap().Get("val")
 	v1, _ := rows[1].AsMap().Get("val")
 	v2, _ := rows[2].AsMap().Get("val")
-	_v6, _ := v0.AsInteger()
-	_v7, _ := v1.AsInteger()
-	_v8, _ := v2.AsInteger()
+	_v6, _ := engine.AsInteger(v0)
+	_v7, _ := engine.AsInteger(v1)
+	_v8, _ := engine.AsInteger(v2)
 	if _v6 != 9 || _v7 != 25 || _v8 != 100 {
-		_v9, _ := v0.AsInteger()
-		_v10, _ := v1.AsInteger()
-		_v11, _ := v2.AsInteger()
+		_v9, _ := engine.AsInteger(v0)
+		_v10, _ := engine.AsInteger(v1)
+		_v11, _ := engine.AsInteger(v2)
 		t.Errorf("expected [9, 25, 100], got [%d, %d, %d]", _v9, _v10, _v11)
 	}
 }
@@ -1446,9 +1446,9 @@ func TestWhereNotIn(t *testing.T) {
 	}
 	r0 := rows[0].AsMap()
 	name, _ := r0.Get("name")
-	_v12, _ := name.AsString()
+	_v12, _ := engine.AsString(name)
 	if _v12 != "Bob" {
-		_v13, _ := name.AsString()
+		_v13, _ := engine.AsString(name)
 		t.Errorf("expected Bob, got %s", _v13)
 	}
 }
@@ -1625,22 +1625,22 @@ func TestGroupByWithCount(t *testing.T) {
 	r0 := rows[0].AsMap()
 	dept0, _ := r0.Get("dept")
 	cnt0, _ := r0.Get("cnt")
-	_v14, _ := dept0.AsString()
+	_v14, _ := engine.AsString(dept0)
 	if _v14 != "eng" {
-		_v15, _ := dept0.AsString()
+		_v15, _ := engine.AsString(dept0)
 		t.Errorf("expected dept eng, got %s", _v15)
 	}
-	_v16, _ := cnt0.AsInteger()
+	_v16, _ := engine.AsInteger(cnt0)
 	if _v16 != 3 {
-		_v17, _ := cnt0.AsInteger()
+		_v17, _ := engine.AsInteger(cnt0)
 		t.Errorf("expected count 3, got %d", _v17)
 	}
 
 	r1 := rows[1].AsMap()
 	cnt1, _ := r1.Get("cnt")
-	_v18, _ := cnt1.AsInteger()
+	_v18, _ := engine.AsInteger(cnt1)
 	if _v18 != 2 {
-		_v19, _ := cnt1.AsInteger()
+		_v19, _ := engine.AsInteger(cnt1)
 		t.Errorf("expected count 2, got %d", _v19)
 	}
 }
@@ -1690,9 +1690,9 @@ func TestHaving(t *testing.T) {
 	}
 	r0 := rows[0].AsMap()
 	dept, _ := r0.Get("dept")
-	_v20, _ := dept.AsString()
+	_v20, _ := engine.AsString(dept)
 	if _v20 != "eng" {
-		_v21, _ := dept.AsString()
+		_v21, _ := engine.AsString(dept)
 		t.Errorf("expected eng, got %s", _v21)
 	}
 }
@@ -1783,14 +1783,14 @@ func TestInnerJoin(t *testing.T) {
 	r0 := rows[0].AsMap()
 	oid, _ := r0.Get("order_id")
 	price, _ := r0.Get("price")
-	_v22, _ := oid.AsString()
+	_v22, _ := engine.AsString(oid)
 	if _v22 != "1" {
-		_v23, _ := oid.AsString()
+		_v23, _ := engine.AsString(oid)
 		t.Errorf("expected order_id 1, got %s", _v23)
 	}
-	_v24, _ := price.AsString()
+	_v24, _ := engine.AsString(price)
 	if _v24 != "9.99" {
-		_v25, _ := price.AsString()
+		_v25, _ := engine.AsString(price)
 		t.Errorf("expected price 9.99, got %s", _v25)
 	}
 }
@@ -1860,9 +1860,9 @@ func TestLeftJoin(t *testing.T) {
 	// Charlie should have NULL dept_name.
 	r2 := rows[2].AsMap()
 	name2, _ := r2.Get("name")
-	_v26, _ := name2.AsString()
+	_v26, _ := engine.AsString(name2)
 	if _v26 != "Charlie" {
-		_v27, _ := name2.AsString()
+		_v27, _ := engine.AsString(name2)
 		t.Errorf("expected Charlie, got %s", _v27)
 	}
 }
@@ -1984,9 +1984,9 @@ func TestIntersect(t *testing.T) {
 		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
 	}
 	name, _ := rows[0].AsMap().Get("name")
-	_v28, _ := name.AsString()
+	_v28, _ := engine.AsString(name)
 	if _v28 != "Bob" {
-		_v29, _ := name.AsString()
+		_v29, _ := engine.AsString(name)
 		t.Errorf("expected Bob, got %s", _v29)
 	}
 }
@@ -2028,9 +2028,9 @@ func TestExcept(t *testing.T) {
 		t.Fatalf("expected 1 row (Alice), got %d", len(rows))
 	}
 	name, _ := rows[0].AsMap().Get("name")
-	_v30, _ := name.AsString()
+	_v30, _ := engine.AsString(name)
 	if _v30 != "Alice" {
-		_v31, _ := name.AsString()
+		_v31, _ := engine.AsString(name)
 		t.Errorf("expected Alice, got %s", _v31)
 	}
 }
@@ -2054,13 +2054,13 @@ func TestCast(t *testing.T) {
 	v0, _ := rows[0].AsMap().Get("age_int")
 	v1, _ := rows[1].AsMap().Get("age_int")
 	v2, _ := rows[2].AsMap().Get("age_int")
-	_v32, _ := v0.AsInteger()
-	_v33, _ := v1.AsInteger()
-	_v34, _ := v2.AsInteger()
+	_v32, _ := engine.AsInteger(v0)
+	_v33, _ := engine.AsInteger(v1)
+	_v34, _ := engine.AsInteger(v2)
 	if _v32 != 25 || _v33 != 30 || _v34 != 35 {
-		_v35, _ := v0.AsInteger()
-		_v36, _ := v1.AsInteger()
-		_v37, _ := v2.AsInteger()
+		_v35, _ := engine.AsInteger(v0)
+		_v36, _ := engine.AsInteger(v1)
+		_v37, _ := engine.AsInteger(v2)
 		t.Errorf("expected [25, 30, 35], got [%d, %d, %d]", _v35, _v36, _v37)
 	}
 }
@@ -2080,9 +2080,9 @@ func TestCountStar(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	cnt, _ := rows[0].AsMap().Get("total")
-	_v38, _ := cnt.AsInteger()
+	_v38, _ := engine.AsInteger(cnt)
 	if _v38 != 3 {
-		_v39, _ := cnt.AsInteger()
+		_v39, _ := engine.AsInteger(cnt)
 		t.Errorf("expected count 3, got %d", _v39)
 	}
 }
@@ -2123,9 +2123,9 @@ func TestSumAggregate(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	total, _ := rows[0].AsMap().Get("total")
-	_v40, _ := total.AsInteger()
+	_v40, _ := engine.AsInteger(total)
 	if _v40 != 60 {
-		_v41, _ := total.AsInteger()
+		_v41, _ := engine.AsInteger(total)
 		t.Errorf("expected sum 60, got %d", _v41)
 	}
 }
@@ -2192,14 +2192,14 @@ func TestJoinWithOnCondition(t *testing.T) {
 	r0 := rows[0].AsMap()
 	empName, _ := r0.Get("emp_name")
 	deptName, _ := r0.Get("dept_name")
-	_v42, _ := empName.AsString()
+	_v42, _ := engine.AsString(empName)
 	if _v42 != "Alice" {
-		_v43, _ := empName.AsString()
+		_v43, _ := engine.AsString(empName)
 		t.Errorf("expected Alice, got %s", _v43)
 	}
-	_v44, _ := deptName.AsString()
+	_v44, _ := engine.AsString(deptName)
 	if _v44 != "Engineering" {
-		_v45, _ := deptName.AsString()
+		_v45, _ := engine.AsString(deptName)
 		t.Errorf("expected Engineering, got %s", _v45)
 	}
 }
@@ -2362,9 +2362,9 @@ func TestCastToText(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	v, _ := rows[0].AsMap().Get("t")
-	_v46, _ := v.AsString()
+	_v46, _ := engine.AsString(v)
 	if _v46 != "42" {
-		_v47, _ := v.AsString()
+		_v47, _ := engine.AsString(v)
 		t.Errorf("expected '42', got %q", _v47)
 	}
 }
@@ -2386,9 +2386,9 @@ func TestCastWithoutAlias(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'age' field in result")
 	}
-	_v48, _ := v.AsInteger()
+	_v48, _ := engine.AsInteger(v)
 	if _v48 != 30 {
-		_v49, _ := v.AsInteger()
+		_v49, _ := engine.AsInteger(v)
 		t.Errorf("expected 30, got %d", _v49)
 	}
 }
@@ -2431,9 +2431,9 @@ func TestAvgAggregate(t *testing.T) {
 	}
 	avg, _ := rows[0].AsMap().Get("average")
 	// AVG of 10,20,30 = 20
-	_v50, _ := avg.AsInteger()
+	_v50, _ := engine.AsInteger(avg)
 	if _v50 != 20 {
-		_v51, _ := avg.AsInteger()
+		_v51, _ := engine.AsInteger(avg)
 		t.Errorf("expected avg 20, got %d", _v51)
 	}
 }
@@ -2474,14 +2474,14 @@ func TestMinMaxAggregate(t *testing.T) {
 	}
 	lo, _ := rows[0].AsMap().Get("lo")
 	hi, _ := rows[0].AsMap().Get("hi")
-	_v52, _ := lo.AsInteger()
+	_v52, _ := engine.AsInteger(lo)
 	if _v52 != 10 {
-		_v53, _ := lo.AsInteger()
+		_v53, _ := engine.AsInteger(lo)
 		t.Errorf("expected min 10, got %d", _v53)
 	}
-	_v54, _ := hi.AsInteger()
+	_v54, _ := engine.AsInteger(hi)
 	if _v54 != 30 {
-		_v55, _ := hi.AsInteger()
+		_v55, _ := engine.AsInteger(hi)
 		t.Errorf("expected max 30, got %d", _v55)
 	}
 }
@@ -2503,9 +2503,9 @@ func TestAggregateWithoutAlias(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'count_name' field (default alias)")
 	}
-	_v56, _ := cnt.AsInteger()
+	_v56, _ := engine.AsInteger(cnt)
 	if _v56 != 3 {
-		_v57, _ := cnt.AsInteger()
+		_v57, _ := engine.AsInteger(cnt)
 		t.Errorf("expected 3, got %d", _v57)
 	}
 }
@@ -2555,9 +2555,9 @@ func TestWhereIsNullActual(t *testing.T) {
 		t.Fatalf("expected 1 row with NULL score, got %d", len(rows))
 	}
 	name, _ := rows[0].AsMap().Get("name")
-	_v58, _ := name.AsString()
+	_v58, _ := engine.AsString(name)
 	if _v58 != "Bob" {
-		_v59, _ := name.AsString()
+		_v59, _ := engine.AsString(name)
 		t.Errorf("expected Bob, got %s", _v59)
 	}
 }
@@ -2610,9 +2610,9 @@ func TestMultiColumnGroupBy(t *testing.T) {
 	}
 	// eng/dev = 2, eng/mgr = 1, sales/dev = 1
 	cnt0, _ := rows[0].AsMap().Get("cnt")
-	_v60, _ := cnt0.AsInteger()
+	_v60, _ := engine.AsInteger(cnt0)
 	if _v60 != 2 {
-		_v61, _ := cnt0.AsInteger()
+		_v61, _ := engine.AsInteger(cnt0)
 		t.Errorf("expected count 2 for eng/dev, got %d", _v61)
 	}
 }
@@ -2663,9 +2663,9 @@ func TestOrderNullsLast(t *testing.T) {
 	// With NULLS LAST, Bob (null score) should be last.
 	lastRow := rows[2].AsMap()
 	name, _ := lastRow.Get("name")
-	_v62, _ := name.AsString()
+	_v62, _ := engine.AsString(name)
 	if _v62 != "Bob" {
-		_v63, _ := name.AsString()
+		_v63, _ := engine.AsString(name)
 		t.Errorf("expected Bob last (null score), got %s", _v63)
 	}
 }
@@ -3046,19 +3046,19 @@ func TestMixedTypeStorage(t *testing.T) {
 	// Check Alice's values came back correctly
 	r0 := rows[0].AsMap()
 	name, _ := r0.Get("name")
-	_v64, _ := name.AsString()
+	_v64, _ := engine.AsString(name)
 	if _v64 != "Alice" {
-		_v65, _ := name.AsString()
+		_v65, _ := engine.AsString(name)
 		t.Errorf("expected Alice, got %s", _v65)
 	}
 	count, _ := r0.Get("count")
-	_v66, _ := count.AsInteger()
+	_v66, _ := engine.AsInteger(count)
 	if _v66 != 42 {
-		_v67, _ := count.AsInteger()
+		_v67, _ := engine.AsInteger(count)
 		t.Errorf("expected count 42, got %d", _v67)
 	}
 	active, _ := r0.Get("active")
-	_v68, _ := active.AsBoolean()
+	_v68, _ := engine.AsBoolean(active)
 	if !_v68 {
 		t.Error("expected active true")
 	}
@@ -3079,15 +3079,15 @@ func TestCastWithTypeAliases(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	i1, _ := rows[0].AsMap().Get("i1")
-	_v69, _ := i1.AsInteger()
+	_v69, _ := engine.AsInteger(i1)
 	if _v69 != 30 {
-		_v70, _ := i1.AsInteger()
+		_v70, _ := engine.AsInteger(i1)
 		t.Errorf("expected 30, got %d", _v70)
 	}
 	s1, _ := rows[0].AsMap().Get("s1")
-	_v71, _ := s1.AsString()
+	_v71, _ := engine.AsString(s1)
 	if _v71 != "Alice" {
-		_v72, _ := s1.AsString()
+		_v72, _ := engine.AsString(s1)
 		t.Errorf("expected Alice, got %s", _v72)
 	}
 }
@@ -3274,9 +3274,9 @@ func TestAggregateWithStringColName(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	cnt, _ := rows[0].AsMap().Get("cnt")
-	_v73, _ := cnt.AsInteger()
+	_v73, _ := engine.AsInteger(cnt)
 	if _v73 != 3 {
-		_v74, _ := cnt.AsInteger()
+		_v74, _ := engine.AsInteger(cnt)
 		t.Errorf("expected 3, got %d", _v74)
 	}
 }

@@ -17,14 +17,14 @@ func getSDK(apiMap engine.ReadMap, opName string, r *engine.Registry) (*udk.Univ
 		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
 	}
 
-	spec, err := specVal.AsString()
+	spec, err := engine.AsString(specVal)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: spec: %w", opName, err)
 	}
 
 	var entityName string
 	if entityVal, ok := apiMap.Get("entity"); ok {
-		entityName, err = entityVal.AsString()
+		entityName, err = engine.AsString(entityVal)
 		if err != nil {
 			return nil, "", fmt.Errorf("%s: entity: %w", opName, err)
 		}

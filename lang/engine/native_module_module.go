@@ -102,7 +102,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// Promote strings to words for code evaluation inside module.
 	promoteToWord := func(v Value) Value {
 		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-			name, _ := v.AsString()
+			name, _ := AsString(v)
 			if modReg.Lookup(name) != nil {
 				return NewWord(name)
 			}
@@ -384,12 +384,12 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 func resolveModuleExport(modReg *Registry, v Value) Value {
 	var name string
 	if v.IsWord() {
-		_as3, _ := v.AsWord()
+		_as3, _ := AsWord(v)
 		name = _as3.Name
 	} else if v.VType.Matches(TString) {
-		name, _ = v.AsString()
+		name, _ = AsString(v)
 	} else if v.IsAtom() {
-		name, _ = v.AsAtom()
+		name, _ = AsAtom(v)
 	} else {
 		return v
 	}
@@ -461,15 +461,15 @@ func resolveNativeMod(r *Registry, path string) error {
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.
 func valToAtomOrString(v Value) string {
 	if v.IsWord() {
-		_as4, _ := v.AsWord()
+		_as4, _ := AsWord(v)
 		return _as4.Name
 	}
 	if v.IsAtom() {
-		_as5, _ := v.AsAtom()
+		_as5, _ := AsAtom(v)
 		return _as5
 	}
 	if v.VType.Matches(TString) {
-		_as6, _ := v.AsString()
+		_as6, _ := AsString(v)
 		return _as6
 	}
 	return v.String()

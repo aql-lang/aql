@@ -39,7 +39,7 @@ type decisionTestCase struct {
 func checkBool(want bool) func(t *testing.T, result []engine.Value) {
 	return func(t *testing.T, result []engine.Value) {
 		t.Helper()
-		b, _ := result[0].AsBoolean()
+		b, _ := engine.AsBoolean(result[0])
 		if b != want {
 			t.Errorf("got %v, want %v", b, want)
 		}
@@ -54,7 +54,7 @@ func checkMapField(key, want string) func(t *testing.T, result []engine.Value) {
 			t.Fatalf("expected map, got %s", result[0].VType.String())
 		}
 		v, _ := m.Get(key)
-		s, _ := v.AsString()
+		s, _ := engine.AsString(v)
 		if s != want {
 			t.Errorf("%s = %q, want %q", key, s, want)
 		}
@@ -64,7 +64,7 @@ func checkMapField(key, want string) func(t *testing.T, result []engine.Value) {
 func checkString(want string) func(t *testing.T, result []engine.Value) {
 	return func(t *testing.T, result []engine.Value) {
 		t.Helper()
-		s, _ := result[0].AsString()
+		s, _ := engine.AsString(result[0])
 		if s != want {
 			t.Errorf("got %q, want %q", s, want)
 		}

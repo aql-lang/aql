@@ -88,7 +88,7 @@ func registerCoreEnum(r *Registry) {
 					// produces Words. Convert here so users don't need
 					// to wrap each element in `quote`.
 					if e.IsWord() {
-						w, _ := e.AsWord()
+						w, _ := AsWord(e)
 						e = NewAtom(w.Name)
 					}
 					if hasChild && !IsValueOfType(e, childType) {

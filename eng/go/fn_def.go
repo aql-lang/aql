@@ -169,7 +169,7 @@ func IsSigTypeValue(v Value) bool {
 		return true
 	}
 	if v.IsWord() {
-		_as0, _ := v.AsWord()
+		_as0, _ := AsWord(v)
 		name := _as0.Name
 		if _, ok := TypeNameTable()[name]; ok {
 			return true
@@ -180,7 +180,7 @@ func IsSigTypeValue(v Value) bool {
 		return false
 	}
 	if v.VType.Matches(TAtom) || v.VType.Matches(TString) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if _, ok := TypeNameTable()[name]; ok {
 			return true
 		}

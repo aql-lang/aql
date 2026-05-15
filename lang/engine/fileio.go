@@ -163,16 +163,16 @@ func sortedMapKeys(m map[string]any) []string {
 func valueToJsonic(v Value) string {
 	switch {
 	case v.VType.Matches(TString):
-		_as0, _ := v.AsString()
+		_as0, _ := AsString(v)
 		return fmt.Sprintf("%q", _as0)
 	case v.VType.Matches(TDecimal):
-		_as1, _ := v.AsDecimal()
+		_as1, _ := AsDecimal(v)
 		return strconv.FormatFloat(_as1, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
-		_as2, _ := v.AsInteger()
+		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		_as3, _ := v.AsBoolean()
+		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"
 		}
@@ -180,7 +180,7 @@ func valueToJsonic(v Value) string {
 	case v.VType.Equal(TNone):
 		return "null"
 	case v.VType.Equal(TAtom):
-		_as4, _ := v.AsAtom()
+		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
 	case v.VType.Equal(TList):
 		if elems := v.AsMutableList(); elems != nil {

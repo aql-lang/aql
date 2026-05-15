@@ -49,7 +49,7 @@ func TestNewString(t *testing.T) {
 	if !v.VType.Matches(TString) {
 		t.Errorf("ProperString should match TString")
 	}
-	_as0, _ := v.AsString()
+	_as0, _ := AsString(v)
 	if _as0 != "hello" {
 		t.Errorf("data = %q, want %q", _as0, "hello")
 	}
@@ -68,9 +68,9 @@ func TestNewInteger(t *testing.T) {
 	if !v.VType.Matches(TInteger) {
 		t.Errorf("type = %s, want matches number/integer", v.VType)
 	}
-	_as2, _ := v.AsInteger()
+	_as2, _ := AsInteger(v)
 	if _as2 != 42 {
-		_as3, _ := v.AsInteger()
+		_as3, _ := AsInteger(v)
 		t.Errorf("data = %d, want 42", _as3)
 	}
 }
@@ -80,9 +80,9 @@ func TestNewWord(t *testing.T) {
 	if !v.IsWord() {
 		t.Errorf("IsWord() = false")
 	}
-	_as4, _ := v.AsWord()
+	_as4, _ := AsWord(v)
 	if _as4.Name != "upper" {
-		_as5, _ := v.AsWord()
+		_as5, _ := AsWord(v)
 		t.Errorf("name = %q, want %q", _as5.Name, "upper")
 	}
 }
@@ -136,9 +136,9 @@ func TestPrefixUpper(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as6, _ := result[0].AsString()
+	_as6, _ := AsString(result[0])
 	if _as6 != "A" {
-		_as7, _ := result[0].AsString()
+		_as7, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as7, "A")
 	}
 }
@@ -157,9 +157,9 @@ func TestPrefixLower(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as8, _ := result[0].AsString()
+	_as8, _ := AsString(result[0])
 	if _as8 != "c" {
-		_as9, _ := result[0].AsString()
+		_as9, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as9, "c")
 	}
 }
@@ -180,9 +180,9 @@ func TestForwardLower(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as10, _ := result[0].AsString()
+	_as10, _ := AsString(result[0])
 	if _as10 != "b" {
-		_as11, _ := result[0].AsString()
+		_as11, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as11, "b")
 	}
 }
@@ -217,8 +217,8 @@ func TestDup(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as13, _ := result[0].AsInteger()
-	_as12, _ := result[1].AsInteger()
+	_as13, _ := AsInteger(result[0])
+	_as12, _ := AsInteger(result[1])
 	if _as13 != 1 || _as12 != 1 {
 		t.Errorf("got [%v, %v], want [1, 1]", result[0], result[1])
 	}
@@ -237,8 +237,8 @@ func TestSwap(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as15, _ := result[0].AsInteger()
-	_as14, _ := result[1].AsInteger()
+	_as15, _ := AsInteger(result[0])
+	_as14, _ := AsInteger(result[1])
 	if _as15 != 2 || _as14 != 1 {
 		t.Errorf("got [%v, %v], want [2, 1]", result[0], result[1])
 	}
@@ -278,8 +278,8 @@ func TestDupForward(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as17, _ := result[0].AsInteger()
-	_as16, _ := result[1].AsInteger()
+	_as17, _ := AsInteger(result[0])
+	_as16, _ := AsInteger(result[1])
 	if _as17 != 1 || _as16 != 1 {
 		t.Errorf("got [%v, %v], want [1, 1]", result[0], result[1])
 	}
@@ -309,8 +309,8 @@ func TestSwapForward(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as19, _ := result[0].AsInteger()
-	_as18, _ := result[1].AsInteger()
+	_as19, _ := AsInteger(result[0])
+	_as18, _ := AsInteger(result[1])
 	if _as19 != 1 || _as18 != 2 {
 		t.Errorf("got [%v, %v], want [1, 2]", result[0], result[1])
 	}
@@ -360,9 +360,9 @@ func TestOver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as22, _ := result[0].AsInteger()
-	_as21, _ := result[1].AsInteger()
-	_as20, _ := result[2].AsInteger()
+	_as22, _ := AsInteger(result[0])
+	_as21, _ := AsInteger(result[1])
+	_as20, _ := AsInteger(result[2])
 	if len(result) != 3 || _as22 != 1 || _as21 != 2 || _as20 != 1 {
 		t.Errorf("got %v, want [1, 2, 1]", result)
 	}
@@ -378,9 +378,9 @@ func TestRot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as25, _ := result[0].AsInteger()
-	_as24, _ := result[1].AsInteger()
-	_as23, _ := result[2].AsInteger()
+	_as25, _ := AsInteger(result[0])
+	_as24, _ := AsInteger(result[1])
+	_as23, _ := AsInteger(result[2])
 	if len(result) != 3 || _as25 != 2 || _as24 != 3 || _as23 != 1 {
 		t.Errorf("got %v, want [2, 3, 1]", result)
 	}
@@ -396,7 +396,7 @@ func TestNip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as26, _ := result[0].AsInteger()
+	_as26, _ := AsInteger(result[0])
 	if len(result) != 1 || _as26 != 2 {
 		t.Errorf("got %v, want [2]", result)
 	}
@@ -412,9 +412,9 @@ func TestTuck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as29, _ := result[0].AsInteger()
-	_as28, _ := result[1].AsInteger()
-	_as27, _ := result[2].AsInteger()
+	_as29, _ := AsInteger(result[0])
+	_as28, _ := AsInteger(result[1])
+	_as27, _ := AsInteger(result[2])
 	if len(result) != 3 || _as29 != 2 || _as28 != 1 || _as27 != 2 {
 		t.Errorf("got %v, want [2, 1, 2]", result)
 	}
@@ -430,10 +430,10 @@ func Test2Dup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as33, _ := result[0].AsInteger()
-	_as32, _ := result[1].AsInteger()
-	_as31, _ := result[2].AsInteger()
-	_as30, _ := result[3].AsInteger()
+	_as33, _ := AsInteger(result[0])
+	_as32, _ := AsInteger(result[1])
+	_as31, _ := AsInteger(result[2])
+	_as30, _ := AsInteger(result[3])
 	if len(result) != 4 || _as33 != 1 || _as32 != 2 || _as31 != 1 || _as30 != 2 {
 		t.Errorf("got %v, want [1, 2, 1, 2]", result)
 	}
@@ -449,10 +449,10 @@ func Test2Swap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as37, _ := result[0].AsInteger()
-	_as36, _ := result[1].AsInteger()
-	_as35, _ := result[2].AsInteger()
-	_as34, _ := result[3].AsInteger()
+	_as37, _ := AsInteger(result[0])
+	_as36, _ := AsInteger(result[1])
+	_as35, _ := AsInteger(result[2])
+	_as34, _ := AsInteger(result[3])
 	if len(result) != 4 || _as37 != 3 || _as36 != 4 || _as35 != 1 || _as34 != 2 {
 		t.Errorf("got %v, want [3, 4, 1, 2]", result)
 	}
@@ -483,12 +483,12 @@ func Test2Over(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as43, _ := result[0].AsInteger()
-	_as42, _ := result[1].AsInteger()
-	_as41, _ := result[2].AsInteger()
-	_as40, _ := result[3].AsInteger()
-	_as39, _ := result[4].AsInteger()
-	_as38, _ := result[5].AsInteger()
+	_as43, _ := AsInteger(result[0])
+	_as42, _ := AsInteger(result[1])
+	_as41, _ := AsInteger(result[2])
+	_as40, _ := AsInteger(result[3])
+	_as39, _ := AsInteger(result[4])
+	_as38, _ := AsInteger(result[5])
 	if len(result) != 6 || _as43 != 1 || _as42 != 2 || _as41 != 3 || _as40 != 4 || _as39 != 1 || _as38 != 2 {
 		t.Errorf("got %v, want [1, 2, 3, 4, 1, 2]", result)
 	}
@@ -504,7 +504,7 @@ func TestDepthEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as44, _ := result[0].AsInteger()
+	_as44, _ := AsInteger(result[0])
 	if len(result) != 1 || _as44 != 0 {
 		t.Errorf("got %v, want [0]", result)
 	}
@@ -520,7 +520,7 @@ func TestDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as45, _ := result[3].AsInteger()
+	_as45, _ := AsInteger(result[3])
 	if len(result) != 4 || _as45 != 3 {
 		t.Errorf("got %v, want [1, 2, 3, 3]", result)
 	}
@@ -537,10 +537,10 @@ func TestPick0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as49, _ := result[0].AsInteger()
-	_as48, _ := result[1].AsInteger()
-	_as47, _ := result[2].AsInteger()
-	_as46, _ := result[3].AsInteger()
+	_as49, _ := AsInteger(result[0])
+	_as48, _ := AsInteger(result[1])
+	_as47, _ := AsInteger(result[2])
+	_as46, _ := AsInteger(result[3])
 	if len(result) != 4 || _as49 != 1 || _as48 != 2 || _as47 != 3 || _as46 != 3 {
 		t.Errorf("got %v, want [1, 2, 3, 3]", result)
 	}
@@ -557,10 +557,10 @@ func TestPick2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as53, _ := result[0].AsInteger()
-	_as52, _ := result[1].AsInteger()
-	_as51, _ := result[2].AsInteger()
-	_as50, _ := result[3].AsInteger()
+	_as53, _ := AsInteger(result[0])
+	_as52, _ := AsInteger(result[1])
+	_as51, _ := AsInteger(result[2])
+	_as50, _ := AsInteger(result[3])
 	if len(result) != 4 || _as53 != 1 || _as52 != 2 || _as51 != 3 || _as50 != 1 {
 		t.Errorf("got %v, want [1, 2, 3, 1]", result)
 	}
@@ -589,9 +589,9 @@ func TestRoll2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as56, _ := result[0].AsInteger()
-	_as55, _ := result[1].AsInteger()
-	_as54, _ := result[2].AsInteger()
+	_as56, _ := AsInteger(result[0])
+	_as55, _ := AsInteger(result[1])
+	_as54, _ := AsInteger(result[2])
 	if len(result) != 3 || _as56 != 2 || _as55 != 3 || _as54 != 1 {
 		t.Errorf("got %v, want [2, 3, 1]", result)
 	}
@@ -608,9 +608,9 @@ func TestRoll1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as59, _ := result[0].AsInteger()
-	_as58, _ := result[1].AsInteger()
-	_as57, _ := result[2].AsInteger()
+	_as59, _ := AsInteger(result[0])
+	_as58, _ := AsInteger(result[1])
+	_as57, _ := AsInteger(result[2])
 	if len(result) != 3 || _as59 != 1 || _as58 != 3 || _as57 != 2 {
 		t.Errorf("got %v, want [1, 3, 2]", result)
 	}
@@ -627,9 +627,9 @@ func TestRoll0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as62, _ := result[0].AsInteger()
-	_as61, _ := result[1].AsInteger()
-	_as60, _ := result[2].AsInteger()
+	_as62, _ := AsInteger(result[0])
+	_as61, _ := AsInteger(result[1])
+	_as60, _ := AsInteger(result[2])
 	if len(result) != 3 || _as62 != 1 || _as61 != 2 || _as60 != 3 {
 		t.Errorf("got %v, want [1, 2, 3]", result)
 	}
@@ -656,9 +656,9 @@ func TestForceForward(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as63, _ := result[0].AsString()
+	_as63, _ := AsString(result[0])
 	if _as63 != "e" {
-		_as64, _ := result[0].AsString()
+		_as64, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as64, "e")
 	}
 }
@@ -680,9 +680,9 @@ func TestForceStack(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as65, _ := result[0].AsString()
+	_as65, _ := AsString(result[0])
 	if _as65 != "f" {
-		_as66, _ := result[0].AsString()
+		_as66, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as66, "f")
 	}
 }
@@ -704,9 +704,9 @@ func TestArgCountForward(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as67, _ := result[0].AsString()
+	_as67, _ := AsString(result[0])
 	if _as67 != "d" {
-		_as68, _ := result[0].AsString()
+		_as68, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as68, "d")
 	}
 }
@@ -762,9 +762,9 @@ func TestArithmeticPrefix(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as71, _ := result[0].AsInteger()
+			_as71, _ := AsInteger(result[0])
 			if _as71 != tt.want {
-				_as72, _ := result[0].AsInteger()
+				_as72, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as72, tt.want)
 			}
 		})
@@ -806,9 +806,9 @@ func TestArithmeticInfix(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as73, _ := result[0].AsInteger()
+			_as73, _ := AsInteger(result[0])
 			if _as73 != tt.want {
-				_as74, _ := result[0].AsInteger()
+				_as74, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as74, tt.want)
 			}
 		})
@@ -885,9 +885,9 @@ func TestArithmeticChaining(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as75, _ := result[0].AsInteger()
+			_as75, _ := AsInteger(result[0])
 			if _as75 != tt.want {
-				_as76, _ := result[0].AsInteger()
+				_as76, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as76, tt.want)
 			}
 		})
@@ -935,9 +935,9 @@ func TestLeftToRightMulAndAdd(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as77, _ := result[0].AsInteger()
+			_as77, _ := AsInteger(result[0])
 			if _as77 != tt.want {
-				_as78, _ := result[0].AsInteger()
+				_as78, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as78, tt.want)
 			}
 		})
@@ -973,9 +973,9 @@ func TestLeftToRightSameLevel(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as79, _ := result[0].AsInteger()
+			_as79, _ := AsInteger(result[0])
 			if _as79 != tt.want {
-				_as80, _ := result[0].AsInteger()
+				_as80, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as80, tt.want)
 			}
 		})
@@ -999,9 +999,9 @@ func TestLeftToRightPrefixUnaffected(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as81, _ := result[0].AsInteger()
+	_as81, _ := AsInteger(result[0])
 	if _as81 != 10 {
-		_as82, _ := result[0].AsInteger()
+		_as82, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 10", _as82)
 	}
 }
@@ -1026,9 +1026,9 @@ func TestSetGetForward(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as83, _ := result[0].AsInteger()
+	_as83, _ := AsInteger(result[0])
 	if _as83 != 99 {
-		_as84, _ := result[0].AsInteger()
+		_as84, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 99", _as84)
 	}
 }
@@ -1050,9 +1050,9 @@ func TestSetGetWithoutEnd(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as85, _ := result[0].AsInteger()
+	_as85, _ := AsInteger(result[0])
 	if _as85 != 99 {
-		_as86, _ := result[0].AsInteger()
+		_as86, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 99", _as86)
 	}
 }
@@ -1074,9 +1074,9 @@ func TestSetGetPrefix(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as87, _ := result[0].AsInteger()
+	_as87, _ := AsInteger(result[0])
 	if _as87 != 42 {
-		_as88, _ := result[0].AsInteger()
+		_as88, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 42", _as88)
 	}
 }
@@ -1099,9 +1099,9 @@ func TestSetGetString(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as89, _ := result[0].AsString()
+	_as89, _ := AsString(result[0])
 	if _as89 != "hello" {
-		_as90, _ := result[0].AsString()
+		_as90, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as90, "hello")
 	}
 }
@@ -1126,9 +1126,9 @@ func TestSetOverwrite(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as91, _ := result[0].AsInteger()
+	_as91, _ := AsInteger(result[0])
 	if _as91 != 2 {
-		_as92, _ := result[0].AsInteger()
+		_as92, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 2", _as92)
 	}
 }
@@ -1159,9 +1159,9 @@ func TestEndNoOp(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as93, _ := result[0].AsInteger()
+	_as93, _ := AsInteger(result[0])
 	if _as93 != 42 {
-		_as94, _ := result[0].AsInteger()
+		_as94, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 42", _as94)
 	}
 }
@@ -1185,9 +1185,9 @@ func TestEndMultiple(t *testing.T) {
 		t.Fatalf("got %d values, want 3: %v", len(result), result)
 	}
 	for i, want := range []int64{1, 2, 3} {
-		_as95, _ := result[i].AsInteger()
+		_as95, _ := AsInteger(result[i])
 		if _as95 != want {
-			_as96, _ := result[i].AsInteger()
+			_as96, _ := AsInteger(result[i])
 			t.Errorf("result[%d] = %d, want %d", i, _as96, want)
 		}
 	}
@@ -1209,9 +1209,9 @@ func TestEndTerminatesForward(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as97, _ := result[0].AsInteger()
+	_as97, _ := AsInteger(result[0])
 	if _as97 != 88 {
-		_as98, _ := result[0].AsInteger()
+		_as98, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 88", _as98)
 	}
 }
@@ -1234,9 +1234,9 @@ func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as99, _ := result[0].AsInteger()
+	_as99, _ := AsInteger(result[0])
 	if _as99 != 99 {
-		_as100, _ := result[0].AsInteger()
+		_as100, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 99", _as100)
 	}
 }
@@ -1271,7 +1271,7 @@ func TestSetGetStorePersistsWithinRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as101, _ := result[0].AsInteger()
+	_as101, _ := AsInteger(result[0])
 	if len(result) != 1 || _as101 != 100 {
 		t.Errorf("got %v, want [100]", result)
 	}
@@ -1297,8 +1297,8 @@ func TestChainedOps(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as103, _ := result[0].AsString()
-	_as102, _ := result[1].AsString()
+	_as103, _ := AsString(result[0])
+	_as102, _ := AsString(result[1])
 	if _as103 != "A" || _as102 != "A" {
 		t.Errorf("got [%v, %v], want ['A', 'A']", result[0], result[1])
 	}
@@ -1346,9 +1346,9 @@ func TestParenSimpleArithmetic(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as104, _ := result[0].AsInteger()
+			_as104, _ := AsInteger(result[0])
 			if _as104 != tt.want {
-				_as105, _ := result[0].AsInteger()
+				_as105, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as105, tt.want)
 			}
 		})
@@ -1374,9 +1374,9 @@ func TestParenWithSet(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as106, _ := result[0].AsInteger()
+	_as106, _ := AsInteger(result[0])
 	if _as106 != 3 {
-		_as107, _ := result[0].AsInteger()
+		_as107, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 3", _as107)
 	}
 }
@@ -1400,9 +1400,9 @@ func TestParenNested(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as108, _ := result[0].AsInteger()
+	_as108, _ := AsInteger(result[0])
 	if _as108 != 7 {
-		_as109, _ := result[0].AsInteger()
+		_as109, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 7", _as109)
 	}
 }
@@ -1423,9 +1423,9 @@ func TestParenLiteral(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as110, _ := result[0].AsInteger()
+	_as110, _ := AsInteger(result[0])
 	if _as110 != 42 {
-		_as111, _ := result[0].AsInteger()
+		_as111, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 42", _as111)
 	}
 }
@@ -1489,9 +1489,9 @@ func TestParenWithLeftToRight(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d values, want 1: %v", len(result), result)
 			}
-			_as112, _ := result[0].AsInteger()
+			_as112, _ := AsInteger(result[0])
 			if _as112 != tt.want {
-				_as113, _ := result[0].AsInteger()
+				_as113, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as113, tt.want)
 			}
 		})
@@ -1583,42 +1583,42 @@ func TestEdgeTypeSelfMatch(t *testing.T) {
 
 func TestEdgeNewIntegerZero(t *testing.T) {
 	v := NewInteger(0)
-	_as114, _ := v.AsInteger()
+	_as114, _ := AsInteger(v)
 	if _as114 != 0 {
-		_as115, _ := v.AsInteger()
+		_as115, _ := AsInteger(v)
 		t.Errorf("got %d, want 0", _as115)
 	}
 }
 
 func TestEdgeNewIntegerNegative(t *testing.T) {
 	v := NewInteger(-999)
-	_as116, _ := v.AsInteger()
+	_as116, _ := AsInteger(v)
 	if _as116 != -999 {
-		_as117, _ := v.AsInteger()
+		_as117, _ := AsInteger(v)
 		t.Errorf("got %d, want -999", _as117)
 	}
 }
 
 func TestEdgeNewIntegerMaxMin(t *testing.T) {
 	vMax := NewInteger(9223372036854775807) // max int64
-	_as118, _ := vMax.AsInteger()
+	_as118, _ := AsInteger(vMax)
 	if _as118 != 9223372036854775807 {
-		_as119, _ := vMax.AsInteger()
+		_as119, _ := AsInteger(vMax)
 		t.Errorf("got %d, want max int64", _as119)
 	}
 	vMin := NewInteger(-9223372036854775808) // min int64
-	_as120, _ := vMin.AsInteger()
+	_as120, _ := AsInteger(vMin)
 	if _as120 != -9223372036854775808 {
-		_as121, _ := vMin.AsInteger()
+		_as121, _ := AsInteger(vMin)
 		t.Errorf("got %d, want min int64", _as121)
 	}
 }
 
 func TestEdgeNewStringSpecialChars(t *testing.T) {
 	v := NewString("hello\nworld\ttab")
-	_as122, _ := v.AsString()
+	_as122, _ := AsString(v)
 	if _as122 != "hello\nworld\ttab" {
-		_as123, _ := v.AsString()
+		_as123, _ := AsString(v)
 		t.Errorf("got %q, want string with newline and tab", _as123)
 	}
 }
@@ -1729,9 +1729,9 @@ func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as126, _ := result[0].AsString()
+	_as126, _ := AsString(result[0])
 	if _as126 != "foo" {
-		_as127, _ := result[0].AsString()
+		_as127, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as127, "foo")
 	}
 }
@@ -1751,7 +1751,7 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as128, _ := result[0].AsInteger()
+	_as128, _ := AsInteger(result[0])
 	if len(result) != 1 || _as128 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -1769,9 +1769,9 @@ func TestEdgeUpperAlreadyUpper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as129, _ := result[0].AsString()
+	_as129, _ := AsString(result[0])
 	if _as129 != "ABC" {
-		_as130, _ := result[0].AsString()
+		_as130, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as130, "ABC")
 	}
 }
@@ -1786,9 +1786,9 @@ func TestEdgeUpperEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as131, _ := result[0].AsString()
+	_as131, _ := AsString(result[0])
 	if _as131 != "" {
-		_as132, _ := result[0].AsString()
+		_as132, _ := AsString(result[0])
 		t.Errorf("got %q, want empty", _as132)
 	}
 }
@@ -1818,9 +1818,9 @@ func TestEdgeLowerAlreadyLower(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as133, _ := result[0].AsString()
+	_as133, _ := AsString(result[0])
 	if _as133 != "abc" {
-		_as134, _ := result[0].AsString()
+		_as134, _ := AsString(result[0])
 		t.Errorf("got %q, want %q", _as134, "abc")
 	}
 }
@@ -1853,8 +1853,8 @@ func TestEdgeDupString(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2", len(result))
 	}
-	_as136, _ := result[0].AsString()
-	_as135, _ := result[1].AsString()
+	_as136, _ := AsString(result[0])
+	_as135, _ := AsString(result[1])
 	if _as136 != "hello" || _as135 != "hello" {
 		t.Errorf("got [%v, %v], want ['hello', 'hello']", result[0], result[1])
 	}
@@ -1889,11 +1889,11 @@ func TestEdgeSwapMixedTypes(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2", len(result))
 	}
-	_as137, _ := result[0].AsInteger()
+	_as137, _ := AsInteger(result[0])
 	if _as137 != 42 {
 		t.Errorf("result[0] = %v, want 42", result[0])
 	}
-	_as138, _ := result[1].AsString()
+	_as138, _ := AsString(result[1])
 	if _as138 != "hello" {
 		t.Errorf("result[1] = %v, want 'hello'", result[1])
 	}
@@ -1968,8 +1968,8 @@ func TestEdgeDropPreservesOthers(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as140, _ := result[0].AsInteger()
-	_as139, _ := result[1].AsInteger()
+	_as140, _ := AsInteger(result[0])
+	_as139, _ := AsInteger(result[1])
 	if _as140 != 1 || _as139 != 2 {
 		t.Errorf("got [%v, %v], want [1, 2]", result[0], result[1])
 	}
@@ -1990,9 +1990,9 @@ func TestEdgeArithmeticLargeNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as141, _ := result[0].AsInteger()
+	_as141, _ := AsInteger(result[0])
 	if _as141 != 1000000000000 {
-		_as142, _ := result[0].AsInteger()
+		_as142, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 1000000000000", _as142)
 	}
 }
@@ -2023,9 +2023,9 @@ func TestEdgeArithmeticNegativeResults(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			_as143, _ := result[0].AsInteger()
+			_as143, _ := AsInteger(result[0])
 			if _as143 != tt.want {
-				_as144, _ := result[0].AsInteger()
+				_as144, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as144, tt.want)
 			}
 		})
@@ -2056,9 +2056,9 @@ func TestEdgeArithmeticZeroOperations(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			_as145, _ := result[0].AsInteger()
+			_as145, _ := AsInteger(result[0])
 			if _as145 != tt.want {
-				_as146, _ := result[0].AsInteger()
+				_as146, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as146, tt.want)
 			}
 		})
@@ -2087,9 +2087,9 @@ func TestEdgeArithmeticIdentity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			_as147, _ := result[0].AsInteger()
+			_as147, _ := AsInteger(result[0])
 			if _as147 != tt.want {
-				_as148, _ := result[0].AsInteger()
+				_as148, _ := AsInteger(result[0])
 				t.Errorf("got %d, want %d", _as148, tt.want)
 			}
 		})
@@ -2134,7 +2134,7 @@ func TestEdgeArithmeticStringOperands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as149, _ := result[0].AsString()
+	_as149, _ := AsString(result[0])
 	if len(result) != 1 || _as149 != "helloworld" {
 		t.Fatalf("got %v, want 'helloworld'", result)
 	}
@@ -2161,9 +2161,9 @@ func TestEdgeLongInfixChain(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as150, _ := result[0].AsInteger()
+	_as150, _ := AsInteger(result[0])
 	if _as150 != 15 {
-		_as151, _ := result[0].AsInteger()
+		_as151, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 15", _as151)
 	}
 }
@@ -2185,9 +2185,9 @@ func TestEdgeLongMixedLeftToRight(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as152, _ := result[0].AsInteger()
+	_as152, _ := AsInteger(result[0])
 	if _as152 != 65 {
-		_as153, _ := result[0].AsInteger()
+		_as153, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 65", _as153)
 	}
 }
@@ -2211,9 +2211,9 @@ func TestEdgePrefixChain(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1: %v", len(result), result)
 	}
-	_as154, _ := result[0].AsInteger()
+	_as154, _ := AsInteger(result[0])
 	if _as154 != 9 {
-		_as155, _ := result[0].AsInteger()
+		_as155, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 9", _as155)
 	}
 }
@@ -2254,14 +2254,14 @@ func TestEdgeForceForwardWithPrefixAvailable(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as156, _ := result[0].AsString()
+	_as156, _ := AsString(result[0])
 	if _as156 != "A" {
-		_as157, _ := result[0].AsString()
+		_as157, _ := AsString(result[0])
 		t.Errorf("result[0] = %q, want 'A'", _as157)
 	}
-	_as158, _ := result[1].AsString()
+	_as158, _ := AsString(result[1])
 	if _as158 != "b" {
-		_as159, _ := result[1].AsString()
+		_as159, _ := AsString(result[1])
 		t.Errorf("result[1] = %q, want 'b'", _as159)
 	}
 }
@@ -2296,7 +2296,7 @@ func TestEdgeForceStackAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as160, _ := result[0].AsInteger()
+	_as160, _ := AsInteger(result[0])
 	if len(result) != 1 || _as160 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -2354,7 +2354,7 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// get collects 1 forward arg (mykey), Store from stack; end is no-op
-	_as161, _ := result[0].AsInteger()
+	_as161, _ := AsInteger(result[0])
 	if len(result) != 1 || _as161 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -2381,14 +2381,14 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as162, _ := result[0].AsInteger()
+	_as162, _ := AsInteger(result[0])
 	if _as162 != 99 {
-		_as163, _ := result[0].AsInteger()
+		_as163, _ := AsInteger(result[0])
 		t.Errorf("result[0] = %d, want 99", _as163)
 	}
-	_as164, _ := result[1].AsInteger()
+	_as164, _ := AsInteger(result[1])
 	if _as164 != 88 {
-		_as165, _ := result[1].AsInteger()
+		_as165, _ := AsInteger(result[1])
 		t.Errorf("result[1] = %d, want 88", _as165)
 	}
 }
@@ -2429,7 +2429,7 @@ func TestEdgeSetWithIntegerKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as166, _ := result[0].AsInteger()
+	_as166, _ := AsInteger(result[0])
 	if len(result) != 1 || _as166 != 100 {
 		t.Errorf("got %v, want [100]", result)
 	}
@@ -2449,9 +2449,9 @@ func TestEdgeSetEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as167, _ := result[0].AsInteger()
+	_as167, _ := AsInteger(result[0])
 	if _as167 != 1 {
-		_as168, _ := result[0].AsInteger()
+		_as168, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 1", _as168)
 	}
 }
@@ -2471,9 +2471,9 @@ func TestEdgeSetValueIsString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as169, _ := result[0].AsString()
+	_as169, _ := AsString(result[0])
 	if _as169 != "hello" {
-		_as170, _ := result[0].AsString()
+		_as170, _ := AsString(result[0])
 		t.Errorf("got %q, want 'hello'", _as170)
 	}
 }
@@ -2494,7 +2494,7 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as171, _ := result[0].AsInteger()
+	_as171, _ := AsInteger(result[0])
 	if len(result) != 1 || _as171 != 15 {
 		t.Errorf("got %v, want [15]", result)
 	}
@@ -2516,7 +2516,7 @@ func TestEdgeSetComputedValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as172, _ := result[0].AsInteger()
+	_as172, _ := AsInteger(result[0])
 	if len(result) != 1 || _as172 != 21 {
 		t.Errorf("got %v, want [21]", result)
 	}
@@ -2537,9 +2537,9 @@ func TestEdgeLeftToRightSubMul(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as173, _ := result[0].AsInteger()
+	_as173, _ := AsInteger(result[0])
 	if _as173 != 24 {
-		_as174, _ := result[0].AsInteger()
+		_as174, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 24", _as174)
 	}
 }
@@ -2557,9 +2557,9 @@ func TestEdgeLeftToRightMulSub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as175, _ := result[0].AsInteger()
+	_as175, _ := AsInteger(result[0])
 	if _as175 != 5 {
-		_as176, _ := result[0].AsInteger()
+		_as176, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 5", _as176)
 	}
 }
@@ -2577,9 +2577,9 @@ func TestEdgeLeftToRightDivAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as177, _ := result[0].AsInteger()
+	_as177, _ := AsInteger(result[0])
 	if _as177 != 5 {
-		_as178, _ := result[0].AsInteger()
+		_as178, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 5", _as178)
 	}
 }
@@ -2597,9 +2597,9 @@ func TestEdgeLeftToRightModAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as179, _ := result[0].AsInteger()
+	_as179, _ := AsInteger(result[0])
 	if _as179 != 2 {
-		_as180, _ := result[0].AsInteger()
+		_as180, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 2", _as180)
 	}
 }
@@ -2618,9 +2618,9 @@ func TestEdgeLeftToRightAllOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as181, _ := result[0].AsInteger()
+	_as181, _ := AsInteger(result[0])
 	if _as181 != 2 {
-		_as182, _ := result[0].AsInteger()
+		_as182, _ := AsInteger(result[0])
 		t.Errorf("got %d, want 2", _as182)
 	}
 }
@@ -2662,9 +2662,9 @@ func TestEdgeParenMultipleValues(t *testing.T) {
 		t.Fatalf("got %d values, want 3: %v", len(result), result)
 	}
 	for i, want := range []int64{1, 2, 3} {
-		_as183, _ := result[i].AsInteger()
+		_as183, _ := AsInteger(result[i])
 		if _as183 != want {
-			_as184, _ := result[i].AsInteger()
+			_as184, _ := AsInteger(result[i])
 			t.Errorf("result[%d] = %d, want %d", i, _as184, want)
 		}
 	}
@@ -2685,7 +2685,7 @@ func TestEdgeParenDeeplyNested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as185, _ := result[0].AsInteger()
+	_as185, _ := AsInteger(result[0])
 	if len(result) != 1 || _as185 != 5 {
 		t.Errorf("got %v, want [5]", result)
 	}
@@ -2708,7 +2708,7 @@ func TestEdgeParenNestedArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as186, _ := result[0].AsInteger()
+	_as186, _ := AsInteger(result[0])
 	if len(result) != 1 || _as186 != 15 {
 		t.Errorf("got %v, want [15]", result)
 	}
@@ -2727,7 +2727,7 @@ func TestEdgeParenWithFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as187, _ := result[0].AsString()
+	_as187, _ := AsString(result[0])
 	if len(result) != 1 || _as187 != "HELLO" {
 		t.Errorf("got %v, want ['HELLO']", result)
 	}
@@ -2767,8 +2767,8 @@ func TestEdgeParenAfterLiteral(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("got %d values, want 2: %v", len(result), result)
 	}
-	_as189, _ := result[0].AsInteger()
-	_as188, _ := result[1].AsInteger()
+	_as189, _ := AsInteger(result[0])
+	_as188, _ := AsInteger(result[1])
 	if _as189 != 10 || _as188 != 5 {
 		t.Errorf("got %v, want [10, 5]", result)
 	}
@@ -2817,7 +2817,7 @@ func TestEdgeParenConsecutive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as190, _ := result[0].AsInteger()
+	_as190, _ := AsInteger(result[0])
 	if len(result) != 1 || _as190 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -2869,7 +2869,7 @@ func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as192, _ := result[0].AsInteger()
+	_as192, _ := AsInteger(result[0])
 	if len(result) != 1 || _as192 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -2888,7 +2888,7 @@ func TestEdgeParenWithEndNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as193, _ := result[0].AsInteger()
+	_as193, _ := AsInteger(result[0])
 	if len(result) != 1 || _as193 != 1 {
 		t.Errorf("got %v, want [1]", result)
 	}
@@ -2908,7 +2908,7 @@ func TestEdgeParenComplexExpression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as194, _ := result[0].AsInteger()
+	_as194, _ := AsInteger(result[0])
 	if len(result) != 1 || _as194 != 70 {
 		t.Errorf("got %v, want [70]", result)
 	}
@@ -2929,7 +2929,7 @@ func TestEdgeParenSiblingExpressions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as195, _ := result[0].AsInteger()
+	_as195, _ := AsInteger(result[0])
 	if len(result) != 1 || _as195 != 21 {
 		t.Errorf("got %v, want [21]", result)
 	}
@@ -2955,7 +2955,7 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as196, _ := result[0].AsInteger()
+	_as196, _ := AsInteger(result[0])
 	if len(result) != 1 || _as196 != 5 {
 		t.Errorf("got %v, want [5]", result)
 	}
@@ -2974,7 +2974,7 @@ func TestEdgeDupThenAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as197, _ := result[0].AsInteger()
+	_as197, _ := AsInteger(result[0])
 	if len(result) != 1 || _as197 != 10 {
 		t.Errorf("got %v, want [10]", result)
 	}
@@ -2993,7 +2993,7 @@ func TestEdgeSwapThenSub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as198, _ := result[0].AsInteger()
+	_as198, _ := AsInteger(result[0])
 	if len(result) != 1 || _as198 != 7 {
 		t.Errorf("got %v, want [7]", result)
 	}
@@ -3012,7 +3012,7 @@ func TestEdgeDropThenOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as199, _ := result[0].AsInteger()
+	_as199, _ := AsInteger(result[0])
 	if len(result) != 1 || _as199 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -3031,7 +3031,7 @@ func TestEdgeUpperInParens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as200, _ := result[0].AsString()
+	_as200, _ := AsString(result[0])
 	if len(result) != 1 || _as200 != "ABC" {
 		t.Errorf("got %v, want ['ABC']", result)
 	}
@@ -3068,7 +3068,7 @@ func TestEdgeChainUpperLower(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as201, _ := result[0].AsString()
+	_as201, _ := AsString(result[0])
 	if len(result) != 1 || _as201 != "hello" {
 		t.Errorf("got %v, want ['hello']", result)
 	}
@@ -3088,7 +3088,7 @@ func TestEdgeForwardUpperThenLower(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as202, _ := result[0].AsString()
+	_as202, _ := AsString(result[0])
 	if len(result) != 1 || _as202 != "abc" {
 		t.Errorf("got %v, want ['abc']", result)
 	}
@@ -3109,7 +3109,7 @@ func TestEdgeAddWithStringAndInt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as203, _ := result[0].AsString()
+	_as203, _ := AsString(result[0])
 	if len(result) != 1 || _as203 != "hello1" {
 		t.Fatalf("got %v, want 'hello1'", result)
 	}
@@ -3127,9 +3127,9 @@ func TestEdgePrefixMatchSpecificity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as204, _ := result[0].AsString()
+	_as204, _ := AsString(result[0])
 	if _as204 != "TEST" {
-		_as205, _ := result[0].AsString()
+		_as205, _ := AsString(result[0])
 		t.Errorf("got %q, want 'TEST'", _as205)
 	}
 }
@@ -3191,7 +3191,7 @@ func TestEdgeEmptyRegistryEndStillWorks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as208, _ := result[0].AsInteger()
+	_as208, _ := AsInteger(result[0])
 	if len(result) != 1 || _as208 != 1 {
 		t.Errorf("got %v, want [1]", result)
 	}
@@ -3209,7 +3209,7 @@ func TestEdgeEmptyRegistryParensStillWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as209, _ := result[0].AsInteger()
+	_as209, _ := AsInteger(result[0])
 	if len(result) != 1 || _as209 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -3232,7 +3232,7 @@ func TestEdgeResultCollectedByPendingForward(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as210, _ := result[0].AsString()
+	_as210, _ := AsString(result[0])
 	if len(result) != 1 || _as210 != "abc" {
 		t.Errorf("got %v, want ['abc']", result)
 	}
@@ -3254,7 +3254,7 @@ func TestEdgePrefixResultFeedsInfix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as211, _ := result[0].AsInteger()
+	_as211, _ := AsInteger(result[0])
 	if len(result) != 1 || _as211 != 9 {
 		t.Errorf("got %v, want [9]", result)
 	}
@@ -3284,7 +3284,7 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error on set+get: %v", err)
 	}
-	_as212, _ := result[0].AsInteger()
+	_as212, _ := AsInteger(result[0])
 	if len(result) != 1 || _as212 != 111 {
 		t.Fatalf("got %v, want [111]", result)
 	}
@@ -3310,7 +3310,7 @@ func TestEdgeSingleInteger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as213, _ := result[0].AsInteger()
+	_as213, _ := AsInteger(result[0])
 	if len(result) != 1 || _as213 != 0 {
 		t.Errorf("got %v, want [0]", result)
 	}
@@ -3326,7 +3326,7 @@ func TestEdgeSingleString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as214, _ := result[0].AsString()
+	_as214, _ := AsString(result[0])
 	if len(result) != 1 || _as214 != "x" {
 		t.Errorf("got %v, want ['x']", result)
 	}
@@ -3342,7 +3342,7 @@ func TestEdgeSingleEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as215, _ := result[0].AsString()
+	_as215, _ := AsString(result[0])
 	if len(result) != 1 || _as215 != "" {
 		t.Errorf("got %v, want ['']", result)
 	}
@@ -3358,7 +3358,7 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 		FuncIndex:     5,
 	}
 	v := NewForward(info)
-	got, _ := v.AsForward()
+	got, _ := AsForward(v)
 	if got.FuncName != "test" {
 		t.Errorf("FuncName = %q, want 'test'", got.FuncName)
 	}
@@ -3390,7 +3390,7 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as216, _ := result[0].AsInteger()
+	_as216, _ := AsInteger(result[0])
 	if len(result) != 1 || _as216 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -3441,9 +3441,9 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 		t.Fatalf("got %d values, want 3: %v", len(result), result)
 	}
 	for i, v := range result {
-		_as217, _ := v.AsInteger()
+		_as217, _ := AsInteger(v)
 		if _as217 != 7 {
-			_as218, _ := v.AsInteger()
+			_as218, _ := AsInteger(v)
 			t.Errorf("result[%d] = %d, want 7", i, _as218)
 		}
 	}
@@ -3482,7 +3482,7 @@ func TestEdgeEndInsideParenNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as219, _ := result[0].AsInteger()
+	_as219, _ := AsInteger(result[0])
 	if len(result) != 1 || _as219 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -3505,7 +3505,7 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as220, _ := result[0].AsInteger()
+	_as220, _ := AsInteger(result[0])
 	if len(result) != 1 || _as220 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -3537,7 +3537,7 @@ func TestDefBasicListBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as221, _ := result[0].AsInteger()
+	_as221, _ := AsInteger(result[0])
 	if len(result) != 1 || _as221 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -3564,7 +3564,7 @@ func TestDefScalarBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as222, _ := result[0].AsInteger()
+	_as222, _ := AsInteger(result[0])
 	if len(result) != 1 || _as222 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -3592,7 +3592,7 @@ func TestDefStringName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as223, _ := result[0].AsInteger()
+	_as223, _ := AsInteger(result[0])
 	if len(result) != 1 || _as223 != 10 {
 		t.Errorf("got %v, want [10]", result)
 	}
@@ -3620,7 +3620,7 @@ func TestDefPrefixBodyStringName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as224, _ := result[0].AsInteger()
+	_as224, _ := AsInteger(result[0])
 	if len(result) != 1 || _as224 != 11 {
 		t.Errorf("got %v, want [11]", result)
 	}
@@ -3648,7 +3648,7 @@ func TestDefPrefixBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as225, _ := result[0].AsInteger()
+	_as225, _ := AsInteger(result[0])
 	if len(result) != 1 || _as225 != 2 {
 		t.Errorf("got %v, want [2]", result)
 	}
@@ -3670,7 +3670,7 @@ func TestDefAndUseSameRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as226, _ := result[0].AsInteger()
+	_as226, _ := AsInteger(result[0])
 	if len(result) != 1 || _as226 != 12 {
 		t.Errorf("got %v, want [12]", result)
 	}
@@ -3690,7 +3690,7 @@ func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as227, _ := result[0].AsString()
+	_as227, _ := AsString(result[0])
 	if len(result) != 1 || _as227 != "A" {
 		t.Errorf("got %v, want ['A']", result)
 	}
@@ -3712,7 +3712,7 @@ func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as228, _ := result[0].AsInteger()
+	_as228, _ := AsInteger(result[0])
 	if len(result) != 1 || _as228 != 99 {
 		t.Errorf("got %v, want [99]", result)
 	}
@@ -3733,7 +3733,7 @@ func TestDefStringBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as229, _ := result[0].AsString()
+	_as229, _ := AsString(result[0])
 	if len(result) != 1 || _as229 != "hello" {
 		t.Errorf("got %v, want ['hello']", result)
 	}
@@ -3755,7 +3755,7 @@ func TestDefUsedMultipleTimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as230, _ := result[0].AsInteger()
+	_as230, _ := AsInteger(result[0])
 	if len(result) != 1 || _as230 != 4 {
 		t.Errorf("got %v, want [4]", result)
 	}
@@ -3781,7 +3781,7 @@ func TestDefForthSquare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as231, _ := result[0].AsInteger()
+	_as231, _ := AsInteger(result[0])
 	if len(result) != 1 || _as231 != 25 {
 		t.Errorf("got %v, want [25]", result)
 	}
@@ -3805,7 +3805,7 @@ func TestDefForthNegate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as232, _ := result[0].AsInteger()
+	_as232, _ := AsInteger(result[0])
 	if len(result) != 1 || _as232 != -7 {
 		t.Errorf("got %v, want [-7]", result)
 	}
@@ -3835,9 +3835,9 @@ func TestDefForthOver(t *testing.T) {
 		t.Fatalf("got %d values, want 3: %v", len(result), result)
 	}
 	for i, v := range result {
-		_as233, _ := v.AsInteger()
+		_as233, _ := AsInteger(v)
 		if _as233 != 3 {
-			_as234, _ := v.AsInteger()
+			_as234, _ := AsInteger(v)
 			t.Errorf("result[%d] = %d, want 3", i, _as234)
 		}
 	}
@@ -3879,7 +3879,7 @@ func TestDefForthComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as235, _ := result[0].AsInteger()
+	_as235, _ := AsInteger(result[0])
 	if len(result) != 1 || _as235 != 12 {
 		t.Errorf("got %v, want [12]", result)
 	}
@@ -3926,7 +3926,7 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as236, _ := result[0].AsInteger()
+	_as236, _ := AsInteger(result[0])
 	if len(result) != 1 || _as236 != 6 {
 		t.Errorf("got %v, want [6]", result)
 	}
@@ -3962,7 +3962,7 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as237, _ := result[0].AsInteger()
+	_as237, _ := AsInteger(result[0])
 	if len(result) != 1 || _as237 != 147 {
 		t.Errorf("got %v, want [147]", result)
 	}
@@ -4001,7 +4001,7 @@ func TestDefForthCube(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as238, _ := result[0].AsInteger()
+	_as238, _ := AsInteger(result[0])
 	if len(result) != 1 || _as238 != 27 {
 		t.Errorf("got %v, want [27]", result)
 	}
@@ -4032,7 +4032,7 @@ func TestDefForthWithInfixOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as239, _ := result[0].AsInteger()
+	_as239, _ := AsInteger(result[0])
 	if len(result) != 1 || _as239 != 12 {
 		t.Errorf("got %v, want [12]", result)
 	}
@@ -4054,7 +4054,7 @@ func TestDefForthConstant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as240, _ := result[0].AsInteger()
+	_as240, _ := AsInteger(result[0])
 	if len(result) != 1 || _as240 != 6 {
 		t.Errorf("got %v, want [6]", result)
 	}
@@ -4078,7 +4078,7 @@ func TestDefForthStackEffectMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as241, _ := result[0].AsInteger()
+	_as241, _ := AsInteger(result[0])
 	if len(result) != 1 || _as241 != 3 {
 		t.Errorf("got %v, want [3]", result)
 	}
@@ -4102,7 +4102,7 @@ func TestDefForthSwapSub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as242, _ := result[0].AsInteger()
+	_as242, _ := AsInteger(result[0])
 	if len(result) != 1 || _as242 != 20 {
 		t.Errorf("got %v, want [20]", result)
 	}
@@ -4131,7 +4131,7 @@ func TestDefForthAbsDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as243, _ := result[0].AsInteger()
+	_as243, _ := AsInteger(result[0])
 	if len(result) != 1 || _as243 != 4 {
 		t.Errorf("got %v, want [4]", result)
 	}
@@ -4158,7 +4158,7 @@ func TestDefForthMultipleDefsInSameRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as244, _ := result[0].AsInteger()
+	_as244, _ := AsInteger(result[0])
 	if len(result) != 1 || _as244 != 11 {
 		t.Errorf("got %v, want [11]", result)
 	}
@@ -4182,7 +4182,7 @@ func TestDefForthStringWord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as245, _ := result[0].AsString()
+	_as245, _ := AsString(result[0])
 	if len(result) != 1 || _as245 != "HELLO" {
 		t.Errorf("got %v, want ['HELLO']", result)
 	}
@@ -4222,7 +4222,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as246, _ := result[0].AsInteger()
+	_as246, _ := AsInteger(result[0])
 	if len(result) != 1 || _as246 != 8 {
 		t.Errorf("got %v, want [8]", result)
 	}
@@ -4234,7 +4234,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as247, _ := result[0].AsInteger()
+	_as247, _ := AsInteger(result[0])
 	if len(result) != 1 || _as247 != 49 {
 		t.Errorf("got %v, want [49]", result)
 	}
@@ -4258,7 +4258,7 @@ func TestDefForthDefWithEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as248, _ := result[0].AsInteger()
+	_as248, _ := AsInteger(result[0])
 	if len(result) != 1 || _as248 != 10 {
 		t.Errorf("got %v, want [10]", result)
 	}
@@ -4287,7 +4287,7 @@ func TestDefForthFactorial5(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as249, _ := result[0].AsInteger()
+	_as249, _ := AsInteger(result[0])
 	if len(result) != 1 || _as249 != 120 {
 		t.Errorf("got %v, want [120]", result)
 	}
@@ -4310,7 +4310,7 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error on load-x: %v", err)
 	}
-	_as250, _ := result[0].AsInteger()
+	_as250, _ := AsInteger(result[0])
 	if len(result) != 1 || _as250 != 42 {
 		t.Errorf("got %v, want [42]", result)
 	}
@@ -4955,7 +4955,7 @@ func TestErrorWordWithList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as263, _ := result[0].AsInteger()
+	_as263, _ := AsInteger(result[0])
 	if len(result) != 1 || _as263 != 12 {
 		t.Errorf("expected [12], got %v", result)
 	}
@@ -4980,7 +4980,7 @@ func TestErrorWordContinuesExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as264, _ := result[0].AsInteger()
+	_as264, _ := AsInteger(result[0])
 	if len(result) != 1 || _as264 != 12 {
 		t.Errorf("expected [12], got %v", result)
 	}
@@ -4997,7 +4997,7 @@ func TestDoBlockSuccessNoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	_as265, _ := result[0].AsInteger()
+	_as265, _ := AsInteger(result[0])
 	if len(result) != 1 || _as265 != 3 {
 		t.Errorf("expected [3], got %v", result)
 	}
@@ -5024,7 +5024,7 @@ func TestUnhandledErrorOnStack(t *testing.T) {
 	if !result[0].IsError() {
 		t.Errorf("result[0] should be error, got %s", result[0].String())
 	}
-	_as266, _ := result[1].AsInteger()
+	_as266, _ := AsInteger(result[1])
 	if _as266 != 12 {
 		t.Errorf("result[1] = %v, want 12", result[1])
 	}

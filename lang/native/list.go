@@ -124,29 +124,29 @@ func recordMatches(rec engine.ReadMap, filter engine.ReadMap) bool {
 func valuesEqual(a, b engine.Value) bool {
 	switch {
 	case a.VType.Matches(engine.TInteger) && b.VType.Matches(engine.TInteger):
-		ai, _ := a.AsInteger()
-		bi, _ := b.AsInteger()
+		ai, _ := engine.AsInteger(a)
+		bi, _ := engine.AsInteger(b)
 		return ai == bi
 	case a.VType.Matches(engine.TString) && b.VType.Matches(engine.TString):
-		as, _ := a.AsString()
-		bs, _ := b.AsString()
+		as, _ := engine.AsString(a)
+		bs, _ := engine.AsString(b)
 		return as == bs
 	case a.VType.Matches(engine.TBoolean) && b.VType.Matches(engine.TBoolean):
-		ab, _ := a.AsBoolean()
-		bb, _ := b.AsBoolean()
+		ab, _ := engine.AsBoolean(a)
+		bb, _ := engine.AsBoolean(b)
 		return ab == bb
 	case a.VType.Equal(engine.TAtom) && b.VType.Equal(engine.TAtom):
-		aa, _ := a.AsAtom()
-		ba, _ := b.AsAtom()
+		aa, _ := engine.AsAtom(a)
+		ba, _ := engine.AsAtom(b)
 		return aa == ba
 	// Cross-type: atom and string are interchangeable for equality.
 	case a.VType.Equal(engine.TAtom) && b.VType.Matches(engine.TString):
-		aa, _ := a.AsAtom()
-		bs, _ := b.AsString()
+		aa, _ := engine.AsAtom(a)
+		bs, _ := engine.AsString(b)
 		return aa == bs
 	case a.VType.Matches(engine.TString) && b.VType.Equal(engine.TAtom):
-		as, _ := a.AsString()
-		ba, _ := b.AsAtom()
+		as, _ := engine.AsString(a)
+		ba, _ := engine.AsAtom(b)
 		return as == ba
 	default:
 		return a.String() == b.String()
