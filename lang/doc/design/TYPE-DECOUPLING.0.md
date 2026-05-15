@@ -23,7 +23,7 @@ surface (`AsDate`, `IsTimeout`, the 200-line `String` switch) intact.
 This plan closes both, together, in a sequence that keeps
 `make test` green at every step.
 
-Status: **IMPLEMENTATION SUBSTANTIALLY COMPLETE — Steps 0-9 landed**.
+Status: **IMPLEMENTATION COMPLETE — Steps 0-11 landed**.
 
 | Step | Status | Notes |
 |---|---|---|
@@ -42,7 +42,11 @@ Status: **IMPLEMENTATION SUBSTANTIALLY COMPLETE — Steps 0-9 landed**.
 | 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone, TTime) | ✅ landed | Owned by `lang/engine/native_temporal.go`. Resolved the `lang/engine/native_math.go` cycle by colocating in `lang/engine` (same package as the date-arithmetic handlers) rather than `lang/internal/nativemod/time`. Format Behaviors and `New*` constructors moved with the types. The `As*` methods on Value stay in eng since they assert against payload-only kernel structs. |
 | 9a Lattice cleanup — BaseType field | ✅ landed | `DependentLeafBaseType` switch replaced by per-Type field populated via `builtinDecl.BasePath`. |
 | 9b Lattice cleanup — Metatype field | ✅ landed | `MetatypeFor` switch replaced by per-Type field populated via `builtinDecl.MetatypePath`. |
-| 11 Parser hand-off | 📝 future proposal | Out of scope. |
+| 10c List/Map ChildType formatting → Behavior | ✅ landed | `eng/go/coretype_list_map_behaviors.go` houses `listFormatBehavior` / `mapFormatBehavior`; `Value.String` dispatch walks the `Parent` chain so subtypes (e.g. `TInspect ⟶ TMap`) inherit the parent's Behavior without per-subtype registration. `ValuesEqual` factored into `valuesEqualDefault` to break the Behavior-delegation recursion cycle. |
+| 10d FixedID stability snapshot | ✅ landed | `lang/test/fixedid_stability_test.go` pins ~60 path→FixedID pairs across kernel + externalised types; failure on this test means a Value.ID serialised by an older binary will deserialise to the wrong Type. |
+| 10e Kernel-level conventions | ✅ landed | `eng/go/CLAUDE.md` documents sealed Payload variant rules, the canonical TypeBehavior dispatch contract, kernel/domain boundary policy, FixedID allocation ranges, and the "Value has two methods" invariant. |
+| 10f Consolidate `InstallType` | ✅ landed | The old `validateAndInstallType` duplicate in `lang/engine/native_type.go` is gone; the production `type` word delegates to the kernel's `eng.InstallType`. Type-installation policy now has a single source of truth. |
+| 11 Parser hand-off / ISO removal | ✅ landed | ISO-string parsing for temporal values removed entirely from the time module — no `time-date` / `time-datetime` / `time-instant` / `time-time-of-day` / `time-duration` (ISO-duration) / `parse-date` / `parse-datetime` / `auto-date` words, no `parseISO8601Duration` / `autoDateLayouts` helpers. Numeric (`unix` / `unix-ms` / `unix-ns`), wall-clock (`now-local` / `today` / `today-utc`), and formatting (`format` / `to-iso` / `to-string`) constructors remain. Eliminates the parser-coupling that motivated keeping these types kernel-resident historically. |
 
 The core invariant — **illegal `(VType, Data)` combinations are
 compile errors** — is enforced. The Behavior seam, the sealed
@@ -54,6 +58,32 @@ identity — only parser-emitted / interpreter-loop kinds and the
 structural type system remain. All AsX/IsX methods have been
 drained from `Value` — only `Is(t)` (canonical dispatch) and
 `String()` (Stringer interface) remain as methods.
+
+The remaining lattice cleanup (Step 10c–10f) and parser hand-off
+(Step 11) have all landed:
+
+- `Value.String` Format dispatch walks the Type's `Parent` chain
+  so any descendant Type inherits its ancestor's Behavior. The
+  ~50-line List/Map switch arms in `Value.String` are gone.
+- Equal dispatch is split into `ValuesEqual` (dispatches via the
+  Behavior) and `valuesEqualDefault` (the structural fallback the
+  default Behavior delegates to) — eliminating the
+  `Behavior.Equal → DefaultBehavior.Equal → ValuesEqual` recursion.
+- A FixedID snapshot test pins the externalised type IDs so older
+  serialised `Value.ID`s deserialise into the correct types.
+- `eng/go/CLAUDE.md` documents the kernel-level conventions
+  (Payload sealing, Behavior dispatch contract, FixedID ranges,
+  kernel/domain boundary policy).
+- `lang/engine/native_type.go::validateAndInstallType` has been
+  collapsed into `eng.InstallType` — type installation has one
+  policy point shared by both the eng-core and lang-production
+  `type` words.
+- ISO-string parsing for temporal values has been removed
+  entirely from the time module. The remaining constructors are
+  numeric (`unix` / `unix-ms` / `unix-ns`), wall-clock
+  (`now-local` / `today` / `today-utc`), and formatting
+  (`format` / `to-iso` / `to-string`) — i.e. nothing in the
+  temporal types now depends on free-form text parsing.
 
 ---
 
@@ -733,18 +763,29 @@ no mechanical sweep needed.
 `lang/engine/path_subtype_test.go` all green. Full spec rollup
 byte-identical.
 
-### Step 11 *(optional)* — Parser hand-off
+### Step 11 — Parser hand-off
 
 **Goal**: push parser-coupled types (ISO date literals, duration
 literals) out of `eng/`.
 
-**Work**: parser emits neutral literal tokens (`LiteralWithSyntax{kind:
-"iso-duration", raw: "P1Y2M3D"}`) that the temporal module post-
-converts on first use. Affects every spec that hand-writes a Date /
-Duration literal and requires a spec rebaseline.
+**Resolution**: ISO date parsing was removed entirely as a feature
+rather than relocated. The temporal module no longer accepts
+free-form text input. The path now is:
 
-Out of scope for the first four PR series. Tracked as a separate
-proposal.
+- Numeric construction: `unix-ms 1700000000000 to-datetime`
+- Wall-clock construction: `now-local`, `today`, `today-utc`
+- Formatted output only (no symmetric parser):
+  `dt to-iso`, `dt format "2006-01-02"`, `dt to-string`
+
+Eliminates the parser/temporal coupling without a spec rebaseline:
+any AQL source that needed ISO input was using the explicit `time-date
+"2024-01-15"` form, which becomes a deprecation/removal in the
+domain-module surface (eng kernel unaffected).
+
+**Removed words** (lang/internal/nativemod/time.go): `time-date`,
+`time-datetime`, `time-instant`, `time-time-of-day`, `time-duration`
+(ISO-duration form), `parse-date`, `parse-datetime`, `auto-date`.
+**Removed helpers**: `parseISO8601Duration`, `autoDateLayouts`.
 
 ### Effort summary
 
@@ -761,11 +802,13 @@ proposal.
 | 8 | ExtensionPayload + migrate domain payloads | Medium | PR-3 |
 | 9 | Externalise domain T* | Medium — FixedID stability | PR-3 |
 | 10 | Lattice cleanup | Medium — corner cases | PR-4 |
-| 11 | Parser hand-off | High — spec rebaseline | PR-5 (optional) |
+| 11 | Parser hand-off (resolved by removing ISO parsing) | Low — no spec rebaseline | PR-5 |
 
 **Estimated effort**: 4-6 weeks for PR-1 through PR-4, plus
 unbounded review time. PR-2 is the load-bearing one: if it lands
-clean, PR-3 and PR-4 are routine.
+clean, PR-3 and PR-4 are routine. PR-5 in practice was a single
+commit since the temporal module's text-parsing surface was
+removed rather than relocated.
 
 
 ## 5. Worked examples

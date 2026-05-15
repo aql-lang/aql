@@ -49,7 +49,7 @@ func TestTimeModuleExports(t *testing.T) {
 		t.Fatal("expected 'time' export")
 	}
 	expected := []string{
-		"date", "datetime", "instant", "time-of-day", "tz",
+		"tz",
 		"unix", "unix-ms", "unix-ns",
 		"now-local", "today", "today-utc",
 		"year", "month", "day", "weekday", "year-day",
@@ -68,54 +68,9 @@ func TestTimeModuleExports(t *testing.T) {
 }
 
 // --- Construction ---
-
-func TestTimeDateParse(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("date", engine.NewString("2024-03-15")))
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	d := engine.AsDate(result[0])
-	if d.Year() != 2024 || d.Month() != time.March || d.Day() != 15 {
-		t.Errorf("expected 2024-03-15, got %v", d)
-	}
-}
-
-func TestTimeDateTimeParse(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("datetime", engine.NewString("2024-03-15T10:30:00")))
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	dt := engine.AsDateTime(result[0])
-	if dt.Year() != 2024 || dt.Hour() != 10 || dt.Minute() != 30 {
-		t.Errorf("expected 2024-03-15T10:30:00, got %v", dt)
-	}
-}
-
-func TestTimeInstantParse(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("instant", engine.NewString("2024-03-15T10:30:00Z")))
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	ins := engine.AsInstant(result[0])
-	if ins.Year() != 2024 || ins.Hour() != 10 {
-		t.Errorf("expected 2024-03-15T10:30:00Z, got %v", ins)
-	}
-}
-
-func TestTimeTimeOfDayParse(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("time-of-day", engine.NewString("14:30:00")))
-	if len(result) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(result))
-	}
-	tod := engine.AsTimeOfDay(result[0])
-	if tod != 14*time.Hour+30*time.Minute {
-		t.Errorf("expected 14h30m, got %v", tod)
-	}
-}
+// ISO 8601 date / datetime / instant / time-of-day parsing tests
+// removed alongside the corresponding word handlers. Construct
+// dates via current-time / numeric helpers instead.
 
 func TestTimeTz(t *testing.T) {
 	r := timeRegistry(t)
@@ -550,23 +505,8 @@ func TestTimeCalDur(t *testing.T) {
 	}
 }
 
-func TestTimeDurationParseISO(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("duration", engine.NewString("P1Y6M")))
-	cd, ok := engine.AsCalDuration(result[0])
-	if !ok || cd.Years != 1 || cd.Months != 6 {
-		t.Errorf("P1Y6M = %+v, want {1 6 0}", cd)
-	}
-}
-
-func TestTimeDurationParseISOTime(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("duration", engine.NewString("PT2H30M")))
-	d, ok := engine.AsClkDuration(result[0])
-	if !ok || d != 2*time.Hour+30*time.Minute {
-		t.Errorf("PT2H30M = %v, want %v", d, 2*time.Hour+30*time.Minute)
-	}
-}
+// ISO 8601 duration parsing tests removed alongside the
+// time-duration word.
 
 // --- Duration Extraction ---
 
@@ -876,45 +816,8 @@ func TestTimeTzOffset(t *testing.T) {
 }
 
 // --- Parsing ---
-
-func TestTimeParseDate(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("parse-date", engine.NewString("15/03/2024"), engine.NewString("02/01/2006")))
-	got := engine.AsDate(result[0])
-	if got.Year() != 2024 || got.Month() != 3 || got.Day() != 15 {
-		t.Errorf("parse-date = %v, want 2024-03-15", got)
-	}
-}
-
-func TestTimeParseDatetime(t *testing.T) {
-	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("parse-datetime", engine.NewString("Mar 15, 2024 2:30PM"), engine.NewString("Jan 02, 2006 3:04PM")))
-	got := engine.AsDateTime(result[0])
-	if got.Hour() != 14 || got.Minute() != 30 {
-		t.Errorf("parse-datetime = %v, want 14:30", got)
-	}
-}
-
-func TestTimeAutoDate(t *testing.T) {
-	r := timeRegistry(t)
-	tests := []struct {
-		input string
-		year  int
-		month time.Month
-		day   int
-	}{
-		{"2024-03-15", 2024, 3, 15},
-		{"03/15/2024", 2024, 3, 15},
-		{"March 15, 2024", 2024, 3, 15},
-	}
-	for _, tt := range tests {
-		result := runAQL(t, r, callTimeDot("auto-date", engine.NewString(tt.input)))
-		got := engine.AsDate(result[0])
-		if got.Year() != tt.year || got.Month() != tt.month || got.Day() != tt.day {
-			t.Errorf("auto-date(%q) = %v, want %d-%02d-%02d", tt.input, got, tt.year, tt.month, tt.day)
-		}
-	}
-}
+// parse-date, parse-datetime, auto-date tests removed alongside
+// the corresponding word handlers.
 
 // --- add/sub with temporal types (core engine) ---
 
