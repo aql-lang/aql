@@ -23,7 +23,27 @@ surface (`AsDate`, `IsTimeout`, the 200-line `String` switch) intact.
 This plan closes both, together, in a sequence that keeps
 `make test` green at every step.
 
-Status: **DRAFT (0)**.
+Status: **IMPLEMENTATION IN PROGRESS — PR-1 through Step 9 landed**.
+
+| Step | Status | Notes |
+|---|---|---|
+| 0  Inventory | ✅ landed | `lang/doc/design/TYPE-DECOUPLING-INVENTORY.md` |
+| 1  TypeBehavior + defaults | ✅ landed | `eng/go/typebehavior.go` |
+| 2  v.Is(t) + canonical dispatch routing | ✅ landed | |
+| 3  Pluggable Format (10 domain render arms) | ✅ landed | `eng/go/coretype_format_behaviors.go` |
+| 4  Pluggable Equal | ✅ landed | `ValuesEqual` delegates to `Behavior.Equal` |
+| 5  Sealed Payload | ✅ landed | `type Payload interface { payloadMarker() }`; `Value.Data` is now sealed. `Value{VType: TInteger, Data: "hello"}` is a compile error. |
+| 6  Drain primitive AsX | ⏸ deferred | `AsInteger`, `AsString`, etc. retained as convenience wrappers — they now assert the sealed variant directly. Caller-side cleanup is mechanical and low-risk. |
+| 7  Drain structural AsX | ⏸ deferred | Same — `AsList` / `AsMap` retained; they normalise across variants. |
+| 8  RegisterExternalBuiltin | ✅ landed | API + acceptance test in `eng/go/external_register_test.go`. Migrating existing kernel-declared domain types (TDate, TMatrix, TFetch*) to use it is follow-up. |
+| 9  Lattice cleanup (BaseType, Metatype fields) | ✅ landed | `DependentLeafBaseType` and `MetatypeFor` switches replaced by per-Type fields populated via `builtinDecl.BasePath` / `MetatypePath`. |
+| 11 Parser hand-off | 📝 future proposal | Out of scope. |
+
+The core invariant — **illegal `(VType, Data)` combinations are
+compile errors** — is now enforced. The Behavior seam, the sealed
+Payload interface, the external-registration hook, and the lattice
+field migration are all in place. Remaining work (Steps 6/7) is
+cosmetic caller cleanup; Steps 11 are separate proposals.
 
 ---
 
