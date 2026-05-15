@@ -622,9 +622,9 @@ func startInterval(args []engine.Value, r *engine.Registry, isList bool) ([]engi
 
 // cancelTimeoutHandler stops a pending Timeout timer.
 func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ti, err := args[0].AsTimeout()
-	if err != nil {
-		return nil, err
+	ti, ok := args[0].Data.(*engine.TimeoutInfo)
+	if !ok {
+		return nil, fmt.Errorf("cancel-timeout: not a Timeout value (got %s)", args[0].VType)
 	}
 	if ti.Timer != nil {
 		ti.Timer.Stop()
@@ -636,9 +636,9 @@ func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []en
 // cancelIntervalHandler stops a running Interval ticker and signals its
 // goroutine to exit.
 func cancelIntervalHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ii, err := args[0].AsInterval()
-	if err != nil {
-		return nil, err
+	ii, ok := args[0].Data.(*engine.IntervalInfo)
+	if !ok {
+		return nil, fmt.Errorf("cancel-interval: not an Interval value (got %s)", args[0].VType)
 	}
 	if ii.Ticker != nil {
 		ii.Ticker.Stop()

@@ -4,8 +4,66 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/lang/engine/help"
 )
+
+// TTimeout / TInterval are owned by the lang/engine package — the
+// timeout/interval handlers live in this file. Registered via
+// eng.Builtin.RegisterExternalBuiltin in the var initialisers so
+// any package-level vars (signature slices) that reference them
+// see a non-nil pointer at slice-init time. FixedIDs 4000-4001
+// come from the documented lang/engine range (4000-4999).
+var (
+	TTimeout  = registerTimerType("Object/Timeout", 4000, timeoutFormatBehavior{})
+	TInterval = registerTimerType("Object/Interval", 4001, intervalFormatBehavior{})
+)
+
+func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
+	if err != nil {
+		panic(fmt.Sprintf("native_misc: register %s: %v", path, err))
+	}
+	return t
+}
+
+// NewTimeout constructs a Timeout value carrying the given
+// TimeoutInfo payload. Moved out of eng at Step 8 — the kernel
+// no longer carries a constructor for a type it doesn't own.
+func NewTimeout(info *TimeoutInfo) Value {
+	return eng.NewValueRaw(TTimeout, info)
+}
+
+// NewInterval constructs an Interval value carrying the given
+// IntervalInfo payload. See NewTimeout.
+func NewInterval(info *IntervalInfo) Value {
+	return eng.NewValueRaw(TInterval, info)
+}
+
+// timeoutFormatBehavior renders a Timeout as "Timeout(id,Nms)".
+// Moved from eng/coretype_format_behaviors.go at Step 8.
+type timeoutFormatBehavior struct{}
+
+func (timeoutFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (timeoutFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (timeoutFormatBehavior) Format(v Value) string {
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
+	}
+	return "Timeout(nil)"
+}
+
+// intervalFormatBehavior renders an Interval as "Interval(id,Nms)".
+type intervalFormatBehavior struct{}
+
+func (intervalFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (intervalFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (intervalFormatBehavior) Format(v Value) string {
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
+	}
+	return "Interval(nil)"
+}
 
 // miscNatives covers the smaller engine word groupings: file I/O
 // (read, write, stdin, stdout, stderr), help, module/import,

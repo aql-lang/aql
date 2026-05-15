@@ -74,10 +74,10 @@ var (
 	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
 	TTimezone       = mustType("Scalar/Time/Timezone")
 	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
-	TTimeout        = mustType("Object/Timeout")
+	// TTimeout moved to lang/engine/native_misc.go (Step 8).
 	TDependent      = mustType("Type/Dependent")
 	TDepInteger     = mustType("Type/Dependent/DepInteger")
-	TInterval       = mustType("Object/Interval")
+	// TInterval moved to lang/engine/native_misc.go (Step 8).
 )
 
 // typeNames is the user-facing name → Type map for bare-word type

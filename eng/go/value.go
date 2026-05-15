@@ -1175,24 +1175,10 @@ type TimeoutInfo struct {
 	Timer *time.Timer // underlying Go timer (nil after cancel)
 }
 
-// NewTimeout creates a Timeout value.
-func NewTimeout(info *TimeoutInfo) Value {
-	return NewValueRaw(TTimeout, info)
-}
-
-// IsTimeout reports whether this value is a Timeout.
-func (v Value) IsTimeout() bool {
-	return v.VType.Equal(TTimeout)
-}
-
-// AsTimeout returns the TimeoutInfo for a Timeout value.
-func (v Value) AsTimeout() (*TimeoutInfo, error) {
-	info, ok := v.Data.(*TimeoutInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsTimeout: not a timeout value (got %T)", v.Data)
-	}
-	return info, nil
-}
+// NewTimeout, IsTimeout, AsTimeout moved to lang/engine/native_misc.go
+// (Step 8). Callers that need them use engine.NewTimeout /
+// engine.AsTimeout, etc. The IsTimeout method is replaced by
+// `v.VType.Equal(engine.TTimeout)` at call sites.
 
 // IntervalInfo holds a repeating interval handle.
 type IntervalInfo struct {
@@ -1202,24 +1188,9 @@ type IntervalInfo struct {
 	Done   chan struct{} // closed to signal cancellation
 }
 
-// NewInterval creates an Interval value.
-func NewInterval(info *IntervalInfo) Value {
-	return NewValueRaw(TInterval, info)
-}
+// NewInterval moved to lang/engine/native_misc.go (Step 8).
 
-// IsInterval reports whether this value is an Interval.
-func (v Value) IsInterval() bool {
-	return v.VType.Equal(TInterval)
-}
-
-// AsInterval returns the IntervalInfo for an Interval value.
-func (v Value) AsInterval() (*IntervalInfo, error) {
-	info, ok := v.Data.(*IntervalInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsInterval: not an interval value (got %T)", v.Data)
-	}
-	return info, nil
-}
+// IsInterval and AsInterval moved to lang/engine/native_misc.go (Step 8).
 
 // IsWord reports whether this value is a word (function reference).
 func (v Value) IsWord() bool {

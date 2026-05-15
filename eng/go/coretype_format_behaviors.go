@@ -28,8 +28,7 @@ func init() {
 	TClkDuration.Behavior = clkDurationFormatBehavior{}
 	TTimezone.Behavior = timezoneFormatBehavior{}
 	// TMatrix Behavior moved to lang/internal/nativemod/matrix.go (Step 8).
-	TTimeout.Behavior = timeoutFormatBehavior{}
-	TInterval.Behavior = intervalFormatBehavior{}
+	// TTimeout / TInterval Behaviors moved to lang/engine/native_misc.go (Step 8).
 }
 
 // instantFormatBehavior renders Instant values as RFC3339Nano.
@@ -139,27 +138,5 @@ func (timezoneFormatBehavior) Format(v Value) string {
 }
 
 // matrixFormatBehavior moved to lang/internal/nativemod/matrix.go (Step 8).
-
-// timeoutFormatBehavior renders Timeout as Timeout(id,Nms).
-type timeoutFormatBehavior struct{}
-
-func (timeoutFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (timeoutFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (timeoutFormatBehavior) Format(v Value) string {
-	if ti, ok := v.Data.(*TimeoutInfo); ok {
-		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
-	}
-	return "Timeout(nil)"
-}
-
-// intervalFormatBehavior renders Interval as Interval(id,Nms).
-type intervalFormatBehavior struct{}
-
-func (intervalFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (intervalFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (intervalFormatBehavior) Format(v Value) string {
-	if ii, ok := v.Data.(*IntervalInfo); ok {
-		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
-	}
-	return "Interval(nil)"
-}
+// timeoutFormatBehavior + intervalFormatBehavior moved to
+// lang/engine/native_misc.go (Step 8).

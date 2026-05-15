@@ -122,7 +122,7 @@ var (
 	TInteger        = eng.TInteger
 	TInternal       = eng.TInternal
 	TInterpString   = eng.TInterpString
-	TInterval       = eng.TInterval
+	// TInterval moved to lang/engine/native_misc.go (Step 8).
 	TList           = eng.TList
 	TListArgs       = eng.TListArgs
 	TMap            = eng.TMap
@@ -154,7 +154,7 @@ var (
 	TStringProper   = eng.TStringProper
 	TTable          = eng.TTable
 	TTimeOfDay      = eng.TTimeOfDay
-	TTimeout        = eng.TTimeout
+	// TTimeout moved to lang/engine/native_misc.go (Step 8).
 	TTimezone       = eng.TTimezone
 	TType           = eng.TType
 	TWord           = eng.TWord
@@ -296,7 +296,7 @@ var (
 	NewInstant                 = eng.NewInstant
 	NewInteger                 = eng.NewInteger
 	NewInterpString            = eng.NewInterpString
-	NewInterval                = eng.NewInterval
+	// NewInterval moved to lang/engine/native_misc.go (Step 8).
 	NewList                    = eng.NewList
 	NewMap                     = eng.NewMap
 	NewMark                    = eng.NewMark
@@ -323,7 +323,7 @@ var (
 	NewString                  = eng.NewString
 	NewTableType               = eng.NewTableType
 	NewTimeOfDay               = eng.NewTimeOfDay
-	NewTimeout                 = eng.NewTimeout
+	// NewTimeout moved to lang/engine/native_misc.go (Step 8).
 	NewTimezone                = eng.NewTimezone
 	NewTop                     = eng.NewTop
 	NewType                    = eng.NewType

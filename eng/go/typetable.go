@@ -515,8 +515,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Object/Resource/Entity", FixedID: 37},
 	// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response
 	// moved to lang/native/fetch.go (Step 8 migration).
-	{Path: "Object/Timeout", FixedID: 59},
-	{Path: "Object/Interval", FixedID: 60},
+	// Object/Timeout and Object/Interval moved to lang/engine/native_misc.go (Step 8).
 
 	// Word branch — Word/__XX entries are internal runtime markers.
 	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)
