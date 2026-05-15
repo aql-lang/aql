@@ -56,9 +56,12 @@ type TypeBehavior interface {
 // support compare" error rather than a silent miscompile.
 //
 // Conventions match cmp.Compare: negative if a < b, zero if a == b,
-// positive if a > b.
+// positive if a > b. The error return surfaces failures from
+// user-defined comparator bodies (the `cmp` word installs a
+// Comparer that may return errors propagated from the body); kernel
+// and native Comparers return a nil error.
 type Comparer interface {
-	Compare(a, b Value) int
+	Compare(a, b Value) (int, error)
 }
 
 // Hasher is an optional capability interface. Types implementing it
@@ -98,7 +101,12 @@ func (defaultBehavior) Match(v Value, t *Type) bool {
 }
 
 func (defaultBehavior) Format(v Value) string {
-	return v.String()
+	// Bypass Value.String's Behavior walk: the walk skips
+	// DefaultBehavior and types tagged formatDelegatesToDefault, so
+	// it would always fall through here anyway. Calling
+	// kernelFormatDefault directly avoids any chance of recursion
+	// via embedded-defaultBehavior Format inheritance.
+	return kernelFormatDefault(v)
 }
 
 func (defaultBehavior) Equal(a, b Value) bool {

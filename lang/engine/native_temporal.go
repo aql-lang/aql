@@ -170,6 +170,13 @@ func (dateFormatBehavior) Format(v Value) string {
 	return "Date(nil)"
 }
 
+// Compare orders Date values chronologically (earlier < later).
+// Implements eng.Comparer so `lt`/`gt`/`sort` work on Dates via the
+// canonical CompareValues lattice dispatch.
+func (dateFormatBehavior) Compare(a, b Value) (int, error) {
+	return compareTimePayloads(a, b), nil
+}
+
 type dateTimeFormatBehavior struct{}
 
 func (dateTimeFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
@@ -183,6 +190,10 @@ func (dateTimeFormatBehavior) Format(v Value) string {
 	return "DateTime(nil)"
 }
 
+func (dateTimeFormatBehavior) Compare(a, b Value) (int, error) {
+	return compareTimePayloads(a, b), nil
+}
+
 type instantFormatBehavior struct{}
 
 func (instantFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
@@ -194,6 +205,10 @@ func (instantFormatBehavior) Format(v Value) string {
 		}
 	}
 	return "Instant(nil)"
+}
+
+func (instantFormatBehavior) Compare(a, b Value) (int, error) {
+	return compareTimePayloads(a, b), nil
 }
 
 type timeOfDayFormatBehavior struct{}
@@ -217,6 +232,61 @@ func (timeOfDayFormatBehavior) Format(v Value) string {
 		return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
 	}
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func (timeOfDayFormatBehavior) Compare(a, b Value) (int, error) {
+	return compareDurationPayloads(a, b), nil
+}
+
+// compareTimePayloads returns -1/0/1 for two values whose Data is an
+// eng.TimePayload wrapping a time.Time. Non-Time payloads compare as
+// equal — the matching dispatch already filters by VType, so this
+// only fires on well-formed temporal values.
+func compareTimePayloads(a, b Value) int {
+	ta, _ := timeFromValue(a)
+	tb, _ := timeFromValue(b)
+	switch {
+	case ta.Before(tb):
+		return -1
+	case ta.After(tb):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func compareDurationPayloads(a, b Value) int {
+	da := durationFromValue(a)
+	db := durationFromValue(b)
+	switch {
+	case da < db:
+		return -1
+	case da > db:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func timeFromValue(v Value) (time.Time, bool) {
+	tp, ok := v.Data.(eng.TimePayload)
+	if !ok {
+		return time.Time{}, false
+	}
+	t, ok := tp.T.(time.Time)
+	return t, ok
+}
+
+func durationFromValue(v Value) time.Duration {
+	dp, ok := v.Data.(eng.DurationPayload)
+	if !ok {
+		return 0
+	}
+	d, ok := dp.D.(time.Duration)
+	if !ok {
+		return 0
+	}
+	return d
 }
 
 type calDurationFormatBehavior struct{}

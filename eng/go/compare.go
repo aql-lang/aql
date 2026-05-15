@@ -3,75 +3,57 @@ package eng
 import "fmt"
 
 // CompareValues returns -1, 0, or 1 for natural ordering of two values.
-// Comparison rules:
-//   - Integers: numeric order
-//   - Strings: lexicographic order
-//   - Booleans: false < true
-//   - Atoms: lexicographic order on atom name
-//   - Cross-type: ordered by type name (atom < boolean < number < string)
-//   - Lists, maps, and other types: not orderable, returns error
+//
+// Dispatch is type-driven: the compare logic for a pair of values lives
+// on the type's Behavior (Comparer capability), not in a switch ladder
+// here. The dispatch routes through the lowest common ancestor of the
+// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number, which
+// owns the numeric ordering; Date-vs-Date stays on Date.
+//
+// Types without a Comparer in their lattice surface a clear
+// "type X does not support compare" error. Two values rooted in
+// disjoint branches (Integer-vs-String) also error: the lattice walk
+// finds no shared ancestor below Any/Scalar that owns a Comparer.
+//
+// DepScalar values represent type-level constraints, not concrete
+// scalars — they are rejected up front to avoid silently coercing
+// zero values through AsNumber/AsString.
 func CompareValues(a, b Value) (int, error) {
-	// DepScalar values represent type-level constraints, not concrete
-	// scalars. Ordering them as if they were scalar values is a
-	// category error — refuse rather than silently coerce zero
-	// values through the Matches(TNumber)/AsNumber() path.
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
 	}
-	// Numeric comparisons: both operands are some form of Number.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		_as1, _ := AsNumber(a)
-		_as0, _ := AsNumber(b)
-		af, bf := _as1, _as0
-		if af < bf {
-			return -1, nil
-		}
-		if af > bf {
-			return 1, nil
-		}
-		return 0, nil
+	if a.VType == nil || b.VType == nil {
+		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		_as3, _ := AsString(a)
-		_as2, _ := AsString(b)
-		as, bs := _as3, _as2
-		if as < bs {
-			return -1, nil
-		}
-		if as > bs {
-			return 1, nil
-		}
-		return 0, nil
+	lca := lowestCommonAncestor(a.VType, b.VType)
+	if lca == nil {
+		return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
 	}
-
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		_as5, _ := AsBoolean(a)
-		_as4, _ := AsBoolean(b)
-		ab, bb := _as5, _as4
-		if ab == bb {
-			return 0, nil
+	for t := lca; t != nil; t = t.Parent {
+		cmp, ok := t.Behavior.(Comparer)
+		if !ok {
+			continue
 		}
-		if !ab {
-			return -1, nil // false < true
-		}
-		return 1, nil
+		return cmp.Compare(a, b)
 	}
-
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		_as7, _ := AsAtom(a)
-		_as6, _ := AsAtom(b)
-		as, bs := _as7, _as6
-		if as < bs {
-			return -1, nil
-		}
-		if as > bs {
-			return 1, nil
-		}
-		return 0, nil
-	}
-
 	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
+}
+
+// lowestCommonAncestor returns the closest type that is an ancestor
+// of both a and b on the parent chain. Returns nil only if a and b
+// share no common ancestor (the type tables guarantee a single root,
+// so in practice this returns at worst the root type).
+func lowestCommonAncestor(a, b *Type) *Type {
+	seen := make(map[*Type]bool)
+	for t := a; t != nil; t = t.Parent {
+		seen[t] = true
+	}
+	for t := b; t != nil; t = t.Parent {
+		if seen[t] {
+			return t
+		}
+	}
+	return nil
 }
 
 // ExactEqual returns true if two values are exactly equal.
