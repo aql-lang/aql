@@ -149,6 +149,11 @@ func makeTimeFnDef(wordName string, params []engine.FnParam, returns []*engine.T
 
 // extractTime returns the time.Time from a Date, DateTime, or Instant value.
 func extractTime(v engine.Value) time.Time {
+	if tp, ok := v.Data.(engine.TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t
 	}

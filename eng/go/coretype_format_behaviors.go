@@ -38,6 +38,11 @@ type instantFormatBehavior struct{}
 func (instantFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (instantFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (instantFormatBehavior) Format(v Value) string {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t.Format(time.RFC3339Nano)
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t.Format(time.RFC3339Nano)
 	}
@@ -50,6 +55,11 @@ type dateTimeFormatBehavior struct{}
 func (dateTimeFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (dateTimeFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (dateTimeFormatBehavior) Format(v Value) string {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t.Format("2006-01-02T15:04:05.999999999")
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t.Format("2006-01-02T15:04:05.999999999")
 	}
@@ -62,6 +72,11 @@ type dateFormatBehavior struct{}
 func (dateFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (dateFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (dateFormatBehavior) Format(v Value) string {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t.Format("2006-01-02")
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t.Format("2006-01-02")
 	}
@@ -74,17 +89,24 @@ type timeOfDayFormatBehavior struct{}
 func (timeOfDayFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (timeOfDayFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (timeOfDayFormatBehavior) Format(v Value) string {
-	if d, ok := v.Data.(time.Duration); ok {
-		h := int(d.Hours())
-		m := int(d.Minutes()) % 60
-		s := int(d.Seconds()) % 60
-		ns := d.Nanoseconds() % 1e9
-		if ns != 0 {
-			return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
-		}
-		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	var d time.Duration
+	var ok bool
+	if dp, dok := v.Data.(DurationPayload); dok {
+		d, ok = dp.D.(time.Duration)
+	} else {
+		d, ok = v.Data.(time.Duration)
 	}
-	return "TimeOfDay(nil)"
+	if !ok {
+		return "TimeOfDay(nil)"
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	ns := d.Nanoseconds() % 1e9
+	if ns != 0 {
+		return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
+	}
+	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 }
 
 // calDurationFormatBehavior renders CalDuration as PnYnMnD.
@@ -105,6 +127,11 @@ type clkDurationFormatBehavior struct{}
 func (clkDurationFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (clkDurationFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (clkDurationFormatBehavior) Format(v Value) string {
+	if dp, ok := v.Data.(DurationPayload); ok {
+		if d, ok := dp.D.(time.Duration); ok {
+			return d.String()
+		}
+	}
 	if d, ok := v.Data.(time.Duration); ok {
 		return d.String()
 	}
@@ -117,6 +144,11 @@ type timezoneFormatBehavior struct{}
 func (timezoneFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (timezoneFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (timezoneFormatBehavior) Format(v Value) string {
+	if tp, ok := v.Data.(TimezonePayload); ok {
+		if loc, ok := tp.Loc.(*time.Location); ok {
+			return loc.String()
+		}
+	}
 	if loc, ok := v.Data.(*time.Location); ok {
 		return loc.String()
 	}

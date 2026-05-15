@@ -36,6 +36,9 @@ type (
 	MapPayload         = eng.MapPayload
 	ExtensionPayload    = eng.ExtensionPayload
 	MaterializerPayload = eng.MaterializerPayload
+	TimePayload         = eng.TimePayload
+	DurationPayload     = eng.DurationPayload
+	TimezonePayload     = eng.TimezonePayload
 	DefCleanupInfo     = eng.DefCleanupInfo
 	DepBound           = eng.DepBound
 	DepKind            = eng.DepKind

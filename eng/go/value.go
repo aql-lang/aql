@@ -771,7 +771,7 @@ type noneSentinel struct{}
 // NewNone creates the value `none` — the unique inhabitant of the
 // None type. Distinct from NewTypeLiteral(TNone) (the type itself).
 func NewNone() Value {
-	return NewValueRaw(TNone, noneSentinel{})
+	return NewValueRaw(TNone, NonePayload{})
 }
 
 // Is reports whether v satisfies type t, routed through t.Behavior.
@@ -800,6 +800,9 @@ func (v Value) Is(t *Type) bool {
 func (v Value) IsNone() bool {
 	if !v.VType.Equal(TNone) {
 		return false
+	}
+	if _, ok := v.Data.(NonePayload); ok {
+		return true
 	}
 	_, ok := v.Data.(noneSentinel)
 	return ok
@@ -1021,11 +1024,16 @@ type MatrixData struct {
 
 // NewDate creates a Date value from a time.Time (date only, midnight UTC).
 func NewDate(t time.Time) Value {
-	return NewValueRaw(TDate, t)
+	return NewValueRaw(TDate, TimePayload{T: t})
 }
 
 // AsDate returns the time.Time for a Date value.
 func (v Value) AsDate() time.Time {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t
 	}
@@ -1034,11 +1042,16 @@ func (v Value) AsDate() time.Time {
 
 // NewDateTime creates a DateTime value from a time.Time (date+time, no timezone).
 func NewDateTime(t time.Time) Value {
-	return NewValueRaw(TDateTime, t)
+	return NewValueRaw(TDateTime, TimePayload{T: t})
 }
 
 // AsDateTime returns the time.Time for a DateTime value.
 func (v Value) AsDateTime() time.Time {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t
 	}
@@ -1047,11 +1060,16 @@ func (v Value) AsDateTime() time.Time {
 
 // NewInstant creates an Instant value from a time.Time (absolute UTC timestamp).
 func NewInstant(t time.Time) Value {
-	return NewValueRaw(TInstant, t.UTC())
+	return NewValueRaw(TInstant, TimePayload{T: t.UTC()})
 }
 
 // AsInstant returns the time.Time for an Instant value.
 func (v Value) AsInstant() time.Time {
+	if tp, ok := v.Data.(TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
 	if t, ok := v.Data.(time.Time); ok {
 		return t
 	}
@@ -1060,11 +1078,16 @@ func (v Value) AsInstant() time.Time {
 
 // NewTimeOfDay creates a TimeOfDay value from a time.Duration (offset from midnight).
 func NewTimeOfDay(d time.Duration) Value {
-	return NewValueRaw(TTimeOfDay, d)
+	return NewValueRaw(TTimeOfDay, DurationPayload{D: d})
 }
 
 // AsTimeOfDay returns the time.Duration for a TimeOfDay value.
 func (v Value) AsTimeOfDay() time.Duration {
+	if dp, ok := v.Data.(DurationPayload); ok {
+		if d, ok := dp.D.(time.Duration); ok {
+			return d
+		}
+	}
 	if d, ok := v.Data.(time.Duration); ok {
 		return d
 	}
@@ -1093,11 +1116,16 @@ func (v Value) AsCalDuration() (CalDurationData, bool) {
 
 // NewClkDuration creates a ClkDuration value from a time.Duration.
 func NewClkDuration(d time.Duration) Value {
-	return NewValueRaw(TClkDuration, d)
+	return NewValueRaw(TClkDuration, DurationPayload{D: d})
 }
 
 // AsClkDuration returns the time.Duration for a ClkDuration value.
 func (v Value) AsClkDuration() (time.Duration, bool) {
+	if dp, ok := v.Data.(DurationPayload); ok {
+		if d, ok := dp.D.(time.Duration); ok {
+			return d, true
+		}
+	}
 	if d, ok := v.Data.(time.Duration); ok {
 		return d, true
 	}
@@ -1106,11 +1134,16 @@ func (v Value) AsClkDuration() (time.Duration, bool) {
 
 // NewTimezone creates a Timezone value from a *time.Location.
 func NewTimezone(loc *time.Location) Value {
-	return NewValueRaw(TTimezone, loc)
+	return NewValueRaw(TTimezone, TimezonePayload{Loc: loc})
 }
 
 // AsTimezone returns the *time.Location for a Timezone value.
 func (v Value) AsTimezone() *time.Location {
+	if tp, ok := v.Data.(TimezonePayload); ok {
+		if loc, ok := tp.Loc.(*time.Location); ok {
+			return loc
+		}
+	}
 	if loc, ok := v.Data.(*time.Location); ok {
 		return loc
 	}
