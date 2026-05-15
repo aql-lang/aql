@@ -173,7 +173,7 @@ func TestMatrixRow(t *testing.T) {
 	// mat 1 matrix.row → [4, 5, 6]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("row")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.Len() != 3 {
 		t.Fatalf("row length = %d, want 3", list.Len())
 	}
@@ -191,7 +191,7 @@ func TestMatrixCol(t *testing.T) {
 	// mat 1 matrix.col → [2, 5]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("col")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.Len() != 2 {
 		t.Fatalf("col length = %d, want 2", list.Len())
 	}
@@ -290,7 +290,7 @@ func TestMatrixFlatten(t *testing.T) {
 	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("flatten")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.Len() != 4 {
 		t.Fatalf("flatten length = %d, want 4", list.Len())
 	}

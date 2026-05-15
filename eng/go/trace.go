@@ -24,7 +24,7 @@ const (
 // TraceColorize returns a colored string representation of a Value for trace output.
 func TraceColorize(v Value) string {
 	switch {
-	case v.IsWord():
+	case IsWord(v):
 		w, _ := AsWord(v)
 		if w.ForceStack {
 			return cYellow + w.Name + "/s" + cReset
@@ -33,10 +33,10 @@ func TraceColorize(v Value) string {
 			return cYellow + w.Name + "/f" + cReset
 		}
 		return cYellow + w.Name + cReset
-	case v.IsForward():
+	case IsForward(v):
 		f, _ := AsForward(v)
 		return cMagenta + fmt.Sprintf("→%s(%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs) + cReset
-	case v.IsOpenParen():
+	case IsOpenParen(v):
 		return cDim + "(" + cReset
 	case v.Data == nil:
 		// Type literal
@@ -58,14 +58,14 @@ func TraceColorize(v Value) string {
 		}
 		return cRed + s + cReset
 	case v.VType.Equal(TList):
-		elems := v.AsList().Slice()
+		elems := AsList(v).Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
 	case v.VType.Equal(TMap):
-		m := v.AsMap()
+		m := AsMap(v)
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)
@@ -119,7 +119,7 @@ func traceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 	}
-	elems := args[0].AsList().Slice()
+	elems := AsList(args[0]).Slice()
 	return RunTrace(r, elems, r.Output)
 }
 

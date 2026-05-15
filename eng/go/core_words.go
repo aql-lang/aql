@@ -150,7 +150,7 @@ func registerCoreDef(r *Registry) {
 		return []Value{}, nil
 	}
 	typedHandler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-		nameMap := args[0].AsMap()
+		nameMap := AsMap(args[0])
 		if nameMap == nil || nameMap.Len() == 0 {
 			return nil, &AqlError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
 		}
@@ -269,7 +269,7 @@ func registerCoreFn(r *Registry) {
 						Detail: "fn: argument must be a concrete list",
 					}
 				}
-				spec := args[0].AsList().Slice()
+				spec := AsList(args[0]).Slice()
 				if len(spec) == 0 || len(spec)%3 != 0 {
 					return nil, &AqlError{
 						Code:   "fn_invalid_spec",
@@ -314,7 +314,7 @@ func registerCoreFnSig(r *Registry) {
 						Detail: "fnsig: argument must be a concrete list",
 					}
 				}
-				spec := args[0].AsList().Slice()
+				spec := AsList(args[0]).Slice()
 				if len(spec) == 0 || len(spec)%2 != 0 {
 					return nil, &AqlError{
 						Code:   "fnsig_invalid_spec",

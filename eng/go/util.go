@@ -56,7 +56,7 @@ func RequireConcreteList(v Value, op string) (ReadList, error) {
 	if v.Carrier {
 		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got carrier %s", op, v.VType.String())
 	}
-	list := v.AsList()
+	list := AsList(v)
 	if list.IsNil() {
 		return ReadList{}, fmt.Errorf("%s: value is not a list (got %s)", op, v.VType.String())
 	}
@@ -74,7 +74,7 @@ func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 	if v.Carrier {
 		return nil, fmt.Errorf("%s: expected a concrete map, got carrier %s", op, v.VType.String())
 	}
-	m := v.AsMap()
+	m := AsMap(v)
 	if m == nil {
 		return nil, fmt.Errorf("%s: value is not a concrete map (got %s)", op, v.VType.String())
 	}
@@ -215,7 +215,7 @@ func (v Value) AsConcreteString() (string, error) {
 	// shared between strings and atoms. Post Step 5, atoms carry
 	// AtomPayload; accept it here so the "textual content" semantic
 	// of AsConcreteString is preserved for those handlers.
-	if v.IsAtom() {
+	if IsAtom(v) {
 		return AsAtom(v)
 	}
 	return AsString(v)

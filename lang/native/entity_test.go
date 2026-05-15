@@ -28,11 +28,11 @@ func TestCreateHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	m := rows[1].AsMap()
+	m := engine.AsMap(rows[1])
 	v, _ := m.Get("name")
 	vs, _ := engine.AsString(v)
 	if vs != "Bob" {
@@ -83,7 +83,7 @@ func TestLoadHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, _ := m.Get("name")
 	vs, _ := engine.AsString(v)
 	if vs != "Bob" {
@@ -119,12 +119,12 @@ func TestUpdateHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 	// Check first row was updated.
-	m := rows[0].AsMap()
+	m := engine.AsMap(rows[0])
 	city, _ := m.Get("city")
 	cs, _ := engine.AsString(city)
 	if cs != "Berlin" {
@@ -137,7 +137,7 @@ func TestUpdateHandler(t *testing.T) {
 		t.Errorf("expected Alice, got %s", ns)
 	}
 	// Second row should be unchanged.
-	m2 := rows[1].AsMap()
+	m2 := engine.AsMap(rows[1])
 	city2, _ := m2.Get("city")
 	cs2, _ := engine.AsString(city2)
 	if cs2 != "Paris" {
@@ -186,13 +186,13 @@ func TestRemoveHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 	// Verify Bob is gone.
 	for _, row := range rows {
-		m := row.AsMap()
+		m := engine.AsMap(row)
 		v, _ := m.Get("name")
 		vs, _ := engine.AsString(v)
 		if vs == "Bob" {

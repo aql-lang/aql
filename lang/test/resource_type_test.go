@@ -36,7 +36,7 @@ func TestResourceTypeMakePositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	meta, _ := m.Get("meta")
@@ -48,7 +48,7 @@ func TestResourceTypeMakePositional(t *testing.T) {
 	if kindS != "entity" {
 		t.Errorf("expected kind='entity', got %s", kind)
 	}
-	mm := meta.AsMap()
+	mm := engine.AsMap(meta)
 	tbl, _ := mm.Get("table")
 	tblS, _ := engine.AsString(tbl)
 	if tblS != "usr" {
@@ -65,7 +65,7 @@ func TestResourceTypeMakeNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	nameS2, _ := engine.AsString(name)
@@ -88,7 +88,7 @@ func TestResourceTypeMakeNamedReorder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	meta, _ := m.Get("meta")
@@ -100,7 +100,7 @@ func TestResourceTypeMakeNamedReorder(t *testing.T) {
 	if kindS3 != "bar" {
 		t.Errorf("expected kind='bar', got %s", kind)
 	}
-	mm := meta.AsMap()
+	mm := engine.AsMap(meta)
 	x, _ := mm.Get("x")
 	xi, _ := engine.AsInteger(x)
 	if xi != 1 {
@@ -121,17 +121,17 @@ func TestResourceTypeTable(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	r0 := rows[0].AsMap()
+	r0 := engine.AsMap(rows[0])
 	name0, _ := r0.Get("name")
 	name0S, _ := engine.AsString(name0)
 	if name0S != "users" {
 		t.Errorf("expected row 0 name='users', got %s", name0)
 	}
-	r1 := rows[1].AsMap()
+	r1 := engine.AsMap(rows[1])
 	name1, _ := r1.Get("name")
 	name1S, _ := engine.AsString(name1)
 	if name1S != "roles" {
@@ -174,7 +174,7 @@ func TestEntityTypeMakePositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	meta, _ := m.Get("meta")
@@ -188,19 +188,19 @@ func TestEntityTypeMakePositional(t *testing.T) {
 	if kindS4 != "entity" {
 		t.Errorf("expected kind='entity', got %s", kind)
 	}
-	mm := meta.AsMap()
+	mm := engine.AsMap(meta)
 	tbl, _ := mm.Get("table")
 	tblS4, _ := engine.AsString(tbl)
 	if tblS4 != "usr" {
 		t.Errorf("expected meta.table='usr', got %s", tbl)
 	}
-	em := ent.AsMap()
+	em := engine.AsMap(ent)
 	pk, _ := em.Get("pk")
 	pkS4, _ := engine.AsString(pk)
 	if pkS4 != "id" {
 		t.Errorf("expected entity.pk='id', got %s", pk)
 	}
-	mdl := model.AsMap()
+	mdl := engine.AsMap(model)
 	base, _ := mdl.Get("base")
 	baseS4, _ := engine.AsString(base)
 	if baseS4 != "user" {
@@ -217,7 +217,7 @@ func TestEntityTypeMakeNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	name, _ := m.Get("name")
 	kind, _ := m.Get("kind")
 	ent, _ := m.Get("entity")
@@ -229,7 +229,7 @@ func TestEntityTypeMakeNamed(t *testing.T) {
 	if kindS5 != "entity" {
 		t.Errorf("expected kind='entity', got %s", kind)
 	}
-	em := ent.AsMap()
+	em := engine.AsMap(ent)
 	pk, _ := em.Get("pk")
 	pkS5, _ := engine.AsString(pk)
 	if pkS5 != "id" {
@@ -258,11 +258,11 @@ func TestEntityTypeTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	r0 := rows[0].AsMap()
+	r0 := engine.AsMap(rows[0])
 	name0, _ := r0.Get("name")
 	kind0, _ := r0.Get("kind")
 	name0S2, _ := engine.AsString(name0)
@@ -273,7 +273,7 @@ func TestEntityTypeTable(t *testing.T) {
 	if kind0S != "entity" {
 		t.Errorf("expected row 0 kind='entity', got %s", kind0)
 	}
-	r1 := rows[1].AsMap()
+	r1 := engine.AsMap(rows[1])
 	name1, _ := r1.Get("name")
 	name1S2, _ := engine.AsString(name1)
 	if name1S2 != "roles" {
@@ -292,7 +292,7 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rm := result[0].AsMap()
+	rm := engine.AsMap(result[0])
 	rk, _ := rm.Get("kind")
 	rkS, _ := engine.AsString(rk)
 	if rkS != "setting" {
@@ -307,7 +307,7 @@ func TestEntityTypeWithResourceType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	em := result2[0].AsMap()
+	em := engine.AsMap(result2[0])
 	ek, _ := em.Get("kind")
 	ekS, _ := engine.AsString(ek)
 	if ekS != "entity" {
@@ -330,7 +330,7 @@ func TestEntityTypeList(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -344,7 +344,7 @@ func TestEntityTypeListFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -358,7 +358,7 @@ func TestEntityTypeCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -376,7 +376,7 @@ func TestEntityTypeLoad(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	// load on record type returns empty map
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	if len(m.Keys()) != 0 {
 		t.Errorf("expected empty map, got %d keys", len(m.Keys()))
 	}
@@ -390,7 +390,7 @@ func TestEntityTypeUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -404,7 +404,7 @@ func TestEntityTypeRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -419,7 +419,7 @@ func TestResourceTypeListEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}
@@ -433,7 +433,7 @@ func TestResourceTypeCreateEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected empty table, got %d rows", len(rows))
 	}

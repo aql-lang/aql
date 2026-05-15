@@ -168,7 +168,7 @@ func TestBoolTorNonBoolean(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if !result[0].IsDisjunct() {
+	if !engine.IsDisjunct(result[0]) {
 		t.Errorf("expected disjunct, got %s", result[0])
 	}
 }

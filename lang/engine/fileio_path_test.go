@@ -34,7 +34,7 @@ func TestWriteWithPath(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("write"), path, engine.NewString("hello world"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
 	_as0, _ := engine.AsPath(result[0])
@@ -57,7 +57,7 @@ func TestWriteWithAbsPath(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("write"), path, engine.NewString("abs content"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
 	if string(mem.Files["/tmp/out.txt"]) != "abs content" {
@@ -128,7 +128,7 @@ func TestWriteWithPathAndOptions(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("write"), path, engine.NewString("line1"), engine.NewMap(opts),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("log.txt")

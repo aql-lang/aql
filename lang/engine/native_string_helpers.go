@@ -71,7 +71,7 @@ func parseStrOpts(v Value) strOpts {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return o
 	}
-	m := v.AsMap()
+	m := AsMap(v)
 
 	if b, ok := MapFieldBoolean(m, "u"); ok {
 		o.u = b
@@ -82,7 +82,7 @@ func parseStrOpts(v Value) strOpts {
 			if _as1 {
 				o.normForm = "NFC"
 			}
-		} else if val.VType.Matches(TString) || val.IsAtom() {
+		} else if val.VType.Matches(TString) || IsAtom(val) {
 			o.normForm = strings.ToUpper(ValToString(val))
 		}
 	}

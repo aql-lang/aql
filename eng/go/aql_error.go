@@ -202,10 +202,10 @@ func describeStackTypes(stack []Value, pointer int) string {
 	for i := start; i < end; i++ {
 		v := stack[i]
 		label := v.VType.String()
-		if v.IsWord() {
+		if IsWord(v) {
 			w, _ := AsWord(v)
 			label = "word(" + w.Name + ")"
-		} else if v.IsAtom() {
+		} else if IsAtom(v) {
 			a, _ := AsAtom(v)
 			label = "atom(" + a + ")"
 		} else if s := renderDepScalar(v); s != "" {

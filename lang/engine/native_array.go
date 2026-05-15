@@ -328,7 +328,7 @@ func shapeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 }
 
 func computeShape(v Value) []int {
-	list := v.AsList()
+	list := AsList(v)
 	if list.IsNil() {
 		return nil
 	}
@@ -340,10 +340,10 @@ func computeShape(v Value) []int {
 	if !first.VType.Matches(TList) || first.Data == nil {
 		return dims
 	}
-	firstLen := first.AsList().Len()
+	firstLen := AsList(first).Len()
 	for i := 1; i < list.Len(); i++ {
 		sub := list.Get(i)
-		if !sub.VType.Matches(TList) || sub.Data == nil || sub.AsList().Len() != firstLen {
+		if !sub.VType.Matches(TList) || sub.Data == nil || AsList(sub).Len() != firstLen {
 			return dims
 		}
 	}
@@ -366,7 +366,7 @@ func lengthHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("length: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	return []Value{NewInteger(int64(list.Len()))}, nil
 }
 
@@ -379,7 +379,7 @@ func reshapeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("reshape: expected concrete data list")
 	}
-	shapeList := args[0].AsList()
+	shapeList := AsList(args[0])
 	dims := make([]int, shapeList.Len())
 	for i := 0; i < shapeList.Len(); i++ {
 		_as1, _ := AsInteger(shapeList.Get(i))
@@ -401,7 +401,7 @@ func reshapeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 }
 
 func flattenList(v Value) []Value {
-	list := v.AsList()
+	list := AsList(v)
 	if list.IsNil() {
 		return nil
 	}
@@ -457,7 +457,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registr
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("arr-transpose: expected concrete list")
 	}
-	outer := args[0].AsList()
+	outer := AsList(args[0])
 	if outer.Len() == 0 {
 		return []Value{NewList(nil)}, nil
 	}
@@ -465,10 +465,10 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registr
 	if !first.VType.Matches(TList) || first.Data == nil {
 		return nil, fmt.Errorf("arr-transpose: expected rank-2 list")
 	}
-	cols := first.AsList().Len()
+	cols := AsList(first).Len()
 	for i := 1; i < outer.Len(); i++ {
 		sub := outer.Get(i)
-		if !sub.VType.Matches(TList) || sub.Data == nil || sub.AsList().Len() != cols {
+		if !sub.VType.Matches(TList) || sub.Data == nil || AsList(sub).Len() != cols {
 			return nil, fmt.Errorf("arr-transpose: expected rectangular rank-2 list")
 		}
 	}
@@ -477,7 +477,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registr
 	for c := 0; c < cols; c++ {
 		row := make([]Value, rows)
 		for r := 0; r < rows; r++ {
-			row[r] = outer.Get(r).AsList().Get(c)
+			row[r] = AsList(outer.Get(r)).Get(c)
 		}
 		result[c] = NewList(row)
 	}
@@ -490,7 +490,7 @@ func reverseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("reverse: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
@@ -507,7 +507,7 @@ func takeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	}
 	_as2, _ := args[0].AsConcreteInteger()
 	n := int(_as2)
-	list := args[1].AsList()
+	list := AsList(args[1])
 	length := list.Len()
 	var start, end int
 	if n >= 0 {
@@ -539,7 +539,7 @@ func shedHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	}
 	_as3, _ := args[0].AsConcreteInteger()
 	n := int(_as3)
-	list := args[1].AsList()
+	list := AsList(args[1])
 	length := list.Len()
 	var start, end int
 	if n >= 0 {
@@ -569,7 +569,7 @@ func whereHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("where: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
@@ -589,7 +589,7 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("unique: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	seen := make(map[string]bool)
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
@@ -612,7 +612,7 @@ func gradeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("grade: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	indices := make([]int, n)
 	for i := 0; i < n; i++ {
@@ -657,8 +657,8 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("at: expected concrete data list")
 	}
-	indices := args[0].AsList()
-	data := args[1].AsList()
+	indices := AsList(args[0])
+	data := AsList(args[1])
 	dataLen := data.Len()
 	result := make([]Value, indices.Len())
 	for i := 0; i < indices.Len(); i++ {
@@ -681,8 +681,8 @@ func sortbyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("sortby: expected concrete data list")
 	}
-	keys := args[0].AsList()
-	data := args[1].AsList()
+	keys := AsList(args[0])
+	data := AsList(args[1])
 	if keys.Len() != data.Len() {
 		return nil, fmt.Errorf("sortby: keys length %d does not match data length %d", keys.Len(), data.Len())
 	}
@@ -710,8 +710,8 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("member: expected concrete haystack list")
 	}
-	needles := args[0].AsList()
-	haystack := args[1].AsList()
+	needles := AsList(args[0])
+	haystack := AsList(args[1])
 	haystackSet := make(map[string]bool, haystack.Len())
 	for i := 0; i < haystack.Len(); i++ {
 		haystackSet[haystack.Get(i).String()] = true
@@ -732,8 +732,8 @@ func arrIndexofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("arr-indexof: expected concrete haystack list")
 	}
-	needles := args[0].AsList()
-	haystack := args[1].AsList()
+	needles := AsList(args[0])
+	haystack := AsList(args[1])
 	haystackLen := haystack.Len()
 	indexMap := make(map[string]int, haystackLen)
 	for i := 0; i < haystackLen; i++ {
@@ -763,8 +763,8 @@ func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("group: expected concrete values list")
 	}
-	keys := args[0].AsList()
-	values := args[1].AsList()
+	keys := AsList(args[0])
+	values := AsList(args[1])
 	if keys.Len() != values.Len() {
 		return nil, fmt.Errorf("group: keys length %d does not match values length %d", keys.Len(), values.Len())
 	}
@@ -788,7 +788,7 @@ func groupOneHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("group: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	om := NewOrderedMap()
 	groups := make(map[string][]Value)
 	order := make([]string, 0)
@@ -814,8 +814,8 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("replicate: expected concrete data list")
 	}
-	counts := args[0].AsList()
-	data := args[1].AsList()
+	counts := AsList(args[0])
+	data := AsList(args[1])
 	if counts.Len() != data.Len() {
 		return nil, fmt.Errorf("replicate: counts length %d does not match data length %d", counts.Len(), data.Len())
 	}
@@ -846,8 +846,8 @@ func expandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("expand: expected concrete data list")
 	}
-	mask := args[0].AsList()
-	data := args[1].AsList()
+	mask := AsList(args[0])
+	data := AsList(args[1])
 	result := make([]Value, mask.Len())
 	dataIdx := 0
 	for i := 0; i < mask.Len(); i++ {
@@ -872,7 +872,7 @@ func windowHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	}
 	_as6, _ := args[0].AsConcreteInteger()
 	size := int(_as6)
-	list := args[1].AsList()
+	list := AsList(args[1])
 	length := list.Len()
 	if size <= 0 {
 		return nil, fmt.Errorf("window: size must be positive, got %d", size)
@@ -905,7 +905,7 @@ func pairsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("pairs: expected concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	length := list.Len()
 	if length < 2 {
 		return []Value{NewList([]Value{})}, nil
@@ -931,8 +931,8 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("each: expected concrete lists")
 	}
-	bodySlice := args[0].AsList().Slice()
-	dataList := args[1].AsList()
+	bodySlice := AsList(args[0]).Slice()
+	dataList := AsList(args[1])
 
 	results := make([]Value, dataList.Len())
 	for i := 0; i < dataList.Len(); i++ {
@@ -976,7 +976,7 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 	if body.Data == nil {
 		return nil
 	}
-	bodyList := body.AsList()
+	bodyList := AsList(body)
 	if bodyList.IsNil() {
 		return nil
 	}
@@ -1004,8 +1004,8 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("fold: expected concrete lists")
 	}
-	bodySlice := args[0].AsList().Slice()
-	dataList := args[1].AsList()
+	bodySlice := AsList(args[0]).Slice()
+	dataList := AsList(args[1])
 	init := args[2]
 	return doFold(reg, init, bodySlice, dataList)
 }
@@ -1028,8 +1028,8 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("fold: expected concrete lists")
 	}
-	bodySlice := args[0].AsList().Slice()
-	dataList := args[1].AsList()
+	bodySlice := AsList(args[0]).Slice()
+	dataList := AsList(args[1])
 	if dataList.Len() == 0 {
 		return nil, fmt.Errorf("fold: empty list with no initial value")
 	}
@@ -1082,8 +1082,8 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("scan: expected concrete lists")
 	}
-	bodySlice := args[0].AsList().Slice()
-	dataList := args[1].AsList()
+	bodySlice := AsList(args[0]).Slice()
+	dataList := AsList(args[1])
 	if dataList.Len() == 0 {
 		return []Value{NewList(nil)}, nil
 	}
@@ -1128,9 +1128,9 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) {
 		return nil, fmt.Errorf("outer: expected concrete lists")
 	}
-	bodySlice := args[0].AsList().Slice()
-	left := args[1].AsList()
-	right := args[2].AsList()
+	bodySlice := AsList(args[0]).Slice()
+	left := AsList(args[1])
+	right := AsList(args[2])
 
 	rows := make([]Value, left.Len())
 	for i := 0; i < left.Len(); i++ {
@@ -1175,10 +1175,10 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) || !IsConcrete(args[3]) {
 		return nil, fmt.Errorf("inner: expected concrete lists")
 	}
-	pairOp := args[0].AsList().Slice()
-	aggOp := args[1].AsList().Slice()
-	left := args[2].AsList()
-	right := args[3].AsList()
+	pairOp := AsList(args[0]).Slice()
+	aggOp := AsList(args[1]).Slice()
+	left := AsList(args[2])
+	right := AsList(args[3])
 
 	// 1D case: zip then fold
 	if left.Len() > 0 && !left.Get(0).VType.Matches(TList) {
@@ -1229,7 +1229,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	rows := make([]Value, left.Len())
 	for i := 0; i < left.Len(); i++ {
-		leftRow := left.Get(i).AsList()
+		leftRow := AsList(left.Get(i))
 		cols := make([]Value, len(rightCols))
 		for j := 0; j < len(rightCols); j++ {
 			rightCol := rightCols[j]
@@ -1292,14 +1292,14 @@ func transposeListOfLists(rows ReadList) [][]Value {
 	if rows.Len() == 0 {
 		return nil
 	}
-	firstRow := rows.Get(0).AsList()
+	firstRow := AsList(rows.Get(0))
 	cols := firstRow.Len()
 	result := make([][]Value, cols)
 	for j := 0; j < cols; j++ {
 		result[j] = make([]Value, rows.Len())
 	}
 	for i := 0; i < rows.Len(); i++ {
-		row := rows.Get(i).AsList()
+		row := AsList(rows.Get(i))
 		for j := 0; j < cols && j < row.Len(); j++ {
 			result[j][i] = row.Get(j)
 		}

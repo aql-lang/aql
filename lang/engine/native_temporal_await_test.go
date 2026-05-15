@@ -32,7 +32,7 @@ func TestAwaitAllDefault(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.IsNil() || list.Len() != 2 {
 		t.Fatalf("expected list of 2, got %v", result[0])
 	}
@@ -64,7 +64,7 @@ func TestAwaitAllWithError(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if !result[0].IsError() {
+	if !engine.IsError(result[0]) {
 		t.Fatalf("expected error value, got %s", result[0].String())
 	}
 }
@@ -91,7 +91,7 @@ func TestAwaitAllRunsInParallel(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.IsNil() || list.Len() != 3 {
 		t.Fatalf("expected list of 3, got %v", result[0])
 	}
@@ -114,7 +114,7 @@ func TestAwaitAllEmpty(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.Len() != 0 {
 		t.Fatalf("expected empty list, got %v", result[0])
 	}
@@ -147,14 +147,14 @@ func TestAwaitFull(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
 
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.IsNil() || list.Len() != 2 {
 		t.Fatalf("expected list of 2 results, got %v", result[0])
 	}
 
 	// First result: {status:ok, value:3}
 	r0 := list.Get(0)
-	m0 := r0.AsMap()
+	m0 := engine.AsMap(r0)
 	if m0 == nil {
 		t.Fatalf("expected map for result[0], got %v", r0)
 	}
@@ -171,7 +171,7 @@ func TestAwaitFull(t *testing.T) {
 
 	// Second result: {status:error, value:error(...)}
 	r1 := list.Get(1)
-	m1 := r1.AsMap()
+	m1 := engine.AsMap(r1)
 	if m1 == nil {
 		t.Fatalf("expected map for result[1], got %v", r1)
 	}
@@ -181,7 +181,7 @@ func TestAwaitFull(t *testing.T) {
 		t.Errorf("expected status 'error', got %q", s1)
 	}
 	val1, _ := m1.Get("value")
-	if !val1.IsError() {
+	if !engine.IsError(val1) {
 		t.Errorf("expected error value, got %v", val1)
 	}
 }
@@ -249,7 +249,7 @@ func TestAwaitFirstWithError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// First (the error) should win since it finishes first.
-	if len(result) != 1 || !result[0].IsError() {
+	if len(result) != 1 || !engine.IsError(result[0]) {
 		t.Fatalf("expected error value from first-to-finish, got %v", result)
 	}
 }
@@ -306,7 +306,7 @@ func TestAwaitAnyAllReject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].IsError() {
+	if len(result) != 1 || !engine.IsError(result[0]) {
 		t.Fatalf("expected error when all reject, got %v", result)
 	}
 }
@@ -357,7 +357,7 @@ func TestAwaitWithSleep(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	v0 := list.Get(0)
 	v1 := list.Get(1)
 	i0, _ := engine.AsInteger(v0)
@@ -386,7 +386,7 @@ func TestAwaitAllMultipleErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].IsError() {
+	if len(result) != 1 || !engine.IsError(result[0]) {
 		t.Fatalf("expected error, got %v", result)
 	}
 }
@@ -410,10 +410,10 @@ func TestAwaitFullAllSucceed(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	for i := 0; i < list.Len(); i++ {
 		v := list.Get(i)
-		m := v.AsMap()
+		m := engine.AsMap(v)
 		if m == nil {
 			t.Fatalf("expected map at [%d], got %v", i, v)
 		}
@@ -486,7 +486,7 @@ func TestAwaitNonListElement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.IsNil() || list.Len() != 2 {
 		t.Fatalf("expected list of 2, got %v", result[0])
 	}
@@ -522,14 +522,14 @@ func TestAwaitMultiValueBranch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.IsNil() || list.Len() != 2 {
 		t.Fatalf("expected list of 2, got %v", result[0])
 	}
 
 	// First result: multi-value → wrapped in a list [1,2,3]
 	v0 := list.Get(0)
-	sublist := v0.AsList()
+	sublist := engine.AsList(v0)
 	if sublist.IsNil() || sublist.Len() != 3 {
 		t.Fatalf("expected sub-list of 3 for multi-value branch, got %v", v0)
 	}

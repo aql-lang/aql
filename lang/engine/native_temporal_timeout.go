@@ -13,13 +13,13 @@ func RunTimerCallback(r *Registry, callback Value, isList bool) {
 		if callback.Data == nil {
 			return
 		}
-		input = make([]Value, len(callback.AsList().Slice()))
-		copy(input, callback.AsList().Slice())
+		input = make([]Value, len(AsList(callback).Slice()))
+		copy(input, AsList(callback).Slice())
 	} else {
 		// Callback is an Atom (from /q) or String (quoted form);
 		// either yields a word name to invoke.
 		var name string
-		if callback.IsAtom() {
+		if IsAtom(callback) {
 			name, _ = AsAtom(callback)
 		} else {
 			name, _ = AsString(callback)

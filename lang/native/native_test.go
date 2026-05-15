@@ -42,7 +42,7 @@ func TestCloneHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, _ := m.Get("a")
 	vi, _ := engine.AsInteger(v)
 	if vi != 1 {
@@ -61,7 +61,7 @@ func TestCloneHandlerList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -76,7 +76,7 @@ func TestFlattenDefaultHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 4 {
 		t.Errorf("expected 4 elements, got %d", len(list))
 	}
@@ -92,7 +92,7 @@ func TestFlattenDepthHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	// [1, 3, [4]] -> 3 elements
 	if len(list) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(list))
@@ -134,7 +134,7 @@ func TestSetpathHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, ok := m.Get("b")
 	if !ok {
 		t.Fatal("expected key 'b'")
@@ -171,7 +171,7 @@ func TestInjectHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, _ := m.Get("greeting")
 	vs, _ := engine.AsString(v)
 	if vs != "Alice" {
@@ -187,12 +187,12 @@ func TestItemsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 pairs, got %d", len(list))
 	}
 	// Each item is [key, value]
-	pair := list[0].AsList().Slice()
+	pair := engine.AsList(list[0]).Slice()
 	if len(pair) != 2 {
 		t.Fatalf("expected pair of 2, got %d", len(pair))
 	}
@@ -260,7 +260,7 @@ func TestMergeHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, ok := m.Get("x")
 	vi, _ := engine.AsInteger(v)
 	if !ok || vi != 1 {
@@ -280,7 +280,7 @@ func TestMergeHandlerOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, _ := m.Get("x")
 	vi, _ := engine.AsInteger(v)
 	if vi != 99 {
@@ -374,7 +374,7 @@ func TestSliceAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3, got %d", len(list))
 	}
@@ -386,7 +386,7 @@ func TestSliceStartHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -398,7 +398,7 @@ func TestSliceStartEndHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2, got %d", len(list))
 	}
@@ -429,13 +429,13 @@ func TestWalkHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) < 2 {
 		t.Errorf("expected at least 2 leaf nodes, got %d", len(list))
 	}
 	// Each leaf should have "path" and "value" keys
 	for _, leaf := range list {
-		m := leaf.AsMap()
+		m := engine.AsMap(leaf)
 		if _, ok := m.Get("path"); !ok {
 			t.Error("missing 'path' key")
 		}
@@ -451,7 +451,7 @@ func TestWalkHandlerEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 leaves for empty map, got %d", len(list))
 	}
@@ -501,7 +501,7 @@ func TestListRecordAllHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -514,7 +514,7 @@ func TestListRecordFilterHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -528,7 +528,7 @@ func TestCreateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -543,7 +543,7 @@ func TestLoadRecordHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Returns an empty map
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	if m.Len() != 0 {
 		t.Errorf("expected empty map, got %d keys", m.Len())
 	}
@@ -557,7 +557,7 @@ func TestUpdateRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -571,7 +571,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := result[0].AsList().Slice()
+	list := engine.AsList(result[0]).Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}
@@ -618,12 +618,12 @@ func TestFilterHandler(t *testing.T) {
 	// All items should pass the filter (fn always returns true).
 	// voxgigstruct.Filter on a map may return a map or list; just check non-nil.
 	if result[0].VType.Equal(engine.TList) {
-		list := result[0].AsList().Slice()
+		list := engine.AsList(result[0]).Slice()
 		if len(list) != 2 {
 			t.Errorf("expected 2 entries, got %d", len(list))
 		}
 	} else {
-		m := result[0].AsMap()
+		m := engine.AsMap(result[0])
 		if m.Len() != 2 {
 			t.Errorf("expected 2 keys, got %d", m.Len())
 		}

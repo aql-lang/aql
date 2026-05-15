@@ -200,7 +200,7 @@ func fromHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if !ok {
 		return nil, fmt.Errorf("from: unknown table %q", name)
 	}
-	if !val.IsTableType() {
+	if !IsTableType(val) {
 		return nil, fmt.Errorf("from: %q is not a table", name)
 	}
 
@@ -460,7 +460,7 @@ func usingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	table := args[0]
 	colList := args[1]
 
-	elems := colList.AsList().Slice()
+	elems := AsList(colList).Slice()
 	cols := make([]string, 0, len(elems))
 	for _, e := range elems {
 		name := valueToColName(e)

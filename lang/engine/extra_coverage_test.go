@@ -192,7 +192,7 @@ func TestExtraAsListTableData(t *testing.T) {
 	row.Set("col", NewString("val"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 	v := Value{VType: TList, Data: td}
-	list := v.AsList().Slice()
+	list := AsList(v).Slice()
 	if len(list) != 1 {
 		t.Fatalf("AsList() on TableData got %d rows, want 1", len(list))
 	}
@@ -206,7 +206,7 @@ func TestExtraAsTableTypeTableData(t *testing.T) {
 	rec := RecordTypeInfo{Fields: fields}
 	td := TableData{Record: rec, Rows: []Value{}}
 	v := Value{VType: TList, Data: td}
-	tt, _ := v.AsTableType()
+	tt, _ := AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableData: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -217,7 +217,7 @@ func TestExtraAsTableTypeTableTypeInfo(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TString))
 	tti := TableTypeInfo{Record: RecordTypeInfo{Fields: fields}}
 	v := Value{VType: TList, Data: tti}
-	tt, _ := v.AsTableType()
+	tt, _ := AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableTypeInfo: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -226,14 +226,14 @@ func TestExtraAsTableTypeTableTypeInfo(t *testing.T) {
 func TestExtraIsTableTypeNonTable(t *testing.T) {
 	// A plain list is not a table type.
 	v := NewList([]Value{NewInteger(1)})
-	if v.IsTableType() {
+	if IsTableType(v) {
 		t.Error("plain list should not be a table type")
 	}
 	// A map is not a table type.
 	om := NewOrderedMap()
 	om.Set("x", NewInteger(1))
 	vm := NewMap(om)
-	if vm.IsTableType() {
+	if IsTableType(vm) {
 		t.Error("map should not be a table type")
 	}
 }
@@ -250,10 +250,10 @@ func TestExtraCSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("CSV decode: got %d values, want 1", len(vals))
 	}
-	if !vals[0].IsTableType() {
+	if !IsTableType(vals[0]) {
 		t.Fatal("CSV decode: result should be a table type")
 	}
-	rows := vals[0].AsList().Slice()
+	rows := AsList(vals[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("CSV decode: got %d rows, want 2", len(rows))
 	}
@@ -278,7 +278,7 @@ func TestExtraTSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("TSV decode: got %d values, want 1", len(vals))
 	}
-	rows := vals[0].AsList().Slice()
+	rows := AsList(vals[0]).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("TSV decode: got %d rows, want 2", len(rows))
 	}
@@ -409,7 +409,7 @@ func TestExtraUnifyListsSameSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical lists should unify")
 	}
-	elems := result.AsList().Slice()
+	elems := AsList(result).Slice()
 	if len(elems) != 2 {
 		t.Errorf("unified list has %d elems, want 2", len(elems))
 	}
@@ -424,7 +424,7 @@ func TestExtraUnifyMapsSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical maps should unify")
 	}
-	m := result.AsMap()
+	m := AsMap(result)
 	v, _ := m.Get("x")
 	_as0, _ := AsNumber(v)
 	if _as0 != 1.0 {
@@ -506,7 +506,7 @@ func TestExtraUnifyListTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("list type literal should unify with concrete list")
 	}
-	if len(result.AsList().Slice()) != 1 {
+	if len(AsList(result).Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -519,7 +519,7 @@ func TestExtraUnifyListTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete list should unify with list type literal")
 	}
-	if len(result.AsList().Slice()) != 1 {
+	if len(AsList(result).Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -533,7 +533,7 @@ func TestExtraUnifyMapTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("map type literal should unify with concrete map")
 	}
-	if result.AsMap().Len() != 1 {
+	if AsMap(result).Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }
@@ -547,7 +547,7 @@ func TestExtraUnifyMapTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete map should unify with map type literal")
 	}
-	if result.AsMap().Len() != 1 {
+	if AsMap(result).Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }

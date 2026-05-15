@@ -48,7 +48,7 @@ func TestQueryFrom(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if !result[0].IsTableType() {
+	if !IsTableType(result[0]) {
 		t.Fatalf("expected table type, got %s", result[0])
 	}
 }
@@ -382,7 +382,7 @@ func TestUnifyDisjunctWithAny(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.IsDisjunct() {
+	if !IsDisjunct(result) {
 		t.Errorf("expected disjunct, got %s", result)
 	}
 }
@@ -537,7 +537,7 @@ func TestUnifyTypedMaps(t *testing.T) {
 	if !ok {
 		t.Fatal("expected typed map unification to succeed")
 	}
-	if !result.IsTypedMap() {
+	if !IsTypedMap(result) {
 		t.Errorf("expected typed map, got %s", result)
 	}
 }
@@ -1035,7 +1035,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	m := result[0].AsMap()
+	m := AsMap(result[0])
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
 	_as16, _ := AsInteger(xVal)
@@ -1071,7 +1071,7 @@ func TestMakeRecordNamed(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := AsMap(result[0])
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
 	_as18, _ := AsInteger(xVal)
@@ -1836,7 +1836,7 @@ func TestDecodeCSV(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if !result[0].IsTableType() {
+	if !IsTableType(result[0]) {
 		t.Fatalf("expected table type, got %s", result[0])
 	}
 	td := result[0].Data.(TableData)
@@ -2542,7 +2542,7 @@ func TestAsListQueryBuilder(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	// Accessing AsList on a QueryBuilder triggers materialization
-	list := result[0].AsList().Slice()
+	list := AsList(result[0]).Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3 rows via AsList, got %d", len(list))
 	}
@@ -4159,7 +4159,7 @@ func TestArgsDirectAccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	argsList := result[0].AsList().Slice()
+	argsList := AsList(result[0]).Slice()
 	if len(argsList) != 2 {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}
@@ -4273,7 +4273,7 @@ func TestResolveFieldTypeList(t *testing.T) {
 		NewWord("String"), NewWord("tor"), NewWord("None"),
 	}))
 	// Should be a disjunct type, not a raw list
-	if result.VType.Matches(TList) && !result.IsTypedList() {
+	if result.VType.Matches(TList) && !IsTypedList(result) {
 		t.Error("expected resolved type, not raw list")
 	}
 }

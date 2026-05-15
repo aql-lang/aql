@@ -57,7 +57,7 @@ func entityToAPIMap(v engine.Value) *engine.OrderedMap {
 	if v.Data == nil {
 		return m
 	}
-	inst, _ := v.AsObjectInstance()
+	inst, _ := engine.AsObjectInstance(v)
 	if kind, ok := inst.GetField("kind"); ok {
 		m.Set("kind", kind)
 	}
@@ -135,7 +135,7 @@ func mergeAPIOptions(base engine.ReadMap, opts engine.ReadMap, field string) *en
 	// Get existing field map or create a new one.
 	existing := engine.NewOrderedMap()
 	if v, ok := merged.Get(field); ok && v.VType.Matches(engine.TMap) {
-		if src := v.AsMap(); src != nil {
+		if src := engine.AsMap(v); src != nil {
 			for _, k := range src.Keys() {
 				val, _ := src.Get(k)
 				existing.Set(k, val)

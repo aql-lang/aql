@@ -94,7 +94,7 @@ func TestObjectTypeParentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 total fields (a,b,d), got %d", all.Len())
@@ -116,7 +116,7 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Fields.Len() != 1 {
 		t.Fatalf("expected 1 own field (d), got %d", ot.Fields.Len())
 	}
@@ -144,7 +144,7 @@ func TestObjectTypeDeepInheritance(t *testing.T) {
 	if !strings.Contains(s, "Object/Foo/Bar/Baz") {
 		t.Errorf("expected type name 'Object/Foo/Bar/Baz', got %s", s)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 fields (a,b,c), got %d", all.Len())
@@ -165,7 +165,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp1, _ := result[0].AsObjectType()
+	_tmp1, _ := engine.AsObjectType(result[0])
 	fooID := _tmp1.ID
 
 	result2, err := runNativeSteps(t, nil, []string{
@@ -176,7 +176,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp2, _ := result2[0].AsObjectType()
+	_tmp2, _ := engine.AsObjectType(result2[0])
 	barID := _tmp2.ID
 
 	if fooID == barID {
@@ -199,7 +199,7 @@ func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Parent != nil {
 		t.Errorf("expected nil parent for root object type, got %+v", ot.Parent)
 	}
@@ -218,7 +218,7 @@ func TestObjectTypeParentReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Parent == nil {
 		t.Fatal("expected non-nil parent for child object type")
 	}
@@ -237,7 +237,7 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	// a should be narrowed to Integer, b inherited as Boolean
 	if all.Len() != 2 {
@@ -441,10 +441,10 @@ func objFields(t *testing.T, result []engine.Value) *engine.OrderedMap {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !v.IsObjectInstance() {
+	if !engine.IsObjectInstance(v) {
 		t.Fatalf("expected object instance, got %s", v.String())
 	}
-	oi, _ := v.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(v)
 	return oi.AllFields()
 }
 
@@ -458,10 +458,10 @@ func TestMakeObjectBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	inst := result[0]
-	if !inst.IsObjectInstance() {
+	if !engine.IsObjectInstance(inst) {
 		t.Fatalf("expected object instance, got %s", inst.String())
 	}
-	oi, _ := inst.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Object/Foo" {
 		t.Errorf("expected type ref Object/Foo, got %s", oi.TypeRef.Name)
 	}
@@ -923,7 +923,7 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 	if !inst.VType.Matches(engine.TObject) {
 		t.Errorf("expected instance type to match TObject, got %s", inst.VType)
 	}
-	oi, _ := inst.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Object/Foo" {
 		t.Errorf("expected TypeRef.Name='Object/Foo', got %s", oi.TypeRef.Name)
 	}
@@ -939,7 +939,7 @@ func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.TypeRef.Name != "Object/Foo/Bar" {
 		t.Errorf("expected TypeRef.Name='Object/Foo/Bar', got %s", oi.TypeRef.Name)
 	}
@@ -982,7 +982,7 @@ func TestMakeObjectPrototypeBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	allF := oi.AllFields()
 	y, _ := allF.Get("y")
 	x, _ := allF.Get("x")
@@ -1009,7 +1009,7 @@ func TestMakeObjectPrototypeChainRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.Prototype == nil {
 		t.Fatal("expected prototype to be set")
 	}
@@ -1035,7 +1035,7 @@ func TestMakeObjectAutoPrototypeBaseValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.Prototype == nil {
 		t.Fatal("expected auto-created prototype")
 	}
@@ -1059,7 +1059,7 @@ func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp55, _ := result[0].AsObjectInstance()
+	_tmp55, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp55.AllFields()
 	x, _ := allF.Get("x")
 	_v56, _ := engine.AsInteger(x)
@@ -1080,7 +1080,7 @@ func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp58, _ := result[0].AsObjectInstance()
+	_tmp58, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp58.AllFields()
 	x, _ := allF.Get("x")
 	_v59, _ := engine.AsInteger(x)
@@ -1101,7 +1101,7 @@ func TestMakeObjectPrototypeGetField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	x, ok := oi.GetField("x")
 	if !ok {
 		t.Fatal("expected GetField to find x via prototype")
@@ -1211,7 +1211,7 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp65, _ := result[0].AsObjectInstance()
+	_tmp65, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp65.AllFields()
 	checks := map[string]interface{}{
 		"a": int64(1), "b": "two", "c": true, "d": int64(4),
@@ -1265,7 +1265,7 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	allF := oi.AllFields()
 	checks := map[string]interface{}{
 		"a": int64(10), "b": "twenty", "c": true, "d": int64(40),
@@ -1319,7 +1319,7 @@ func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	depth := 0
 	for p := oi.Prototype; p != nil; p = p.Prototype {
 		depth++
@@ -1344,7 +1344,7 @@ func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 
 	// GetField should find a from great-grandparent (L1).
 	a, ok := oi.GetField("a")
@@ -1383,7 +1383,7 @@ func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp78, _ := result[0].AsObjectInstance()
+	_tmp78, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp78.AllFields()
 	a, _ := allF.Get("a")
 	_v79, _ := engine.AsInteger(a)
@@ -1405,7 +1405,7 @@ func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp81, _ := result[0].AsObjectInstance()
+	_tmp81, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp81.AllFields()
 	x, _ := allF.Get("x")
 	_v82, _ := engine.AsInteger(x)
@@ -1585,7 +1585,7 @@ func TestObjectTypeNonObjectParentIgnored(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results (object type + 42), got %d", len(result))
 	}
-	if !result[0].IsObjectType() {
+	if !engine.IsObjectType(result[0]) {
 		t.Errorf("expected first result to be object type, got %s", result[0].String())
 	}
 }

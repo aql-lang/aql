@@ -125,7 +125,7 @@ func TestLinesFormatDecode(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	elems := result[0].AsList().Slice()
+	elems := engine.AsList(result[0]).Slice()
 	if len(elems) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(elems))
 	}
@@ -194,17 +194,17 @@ func TestCSVFormatDecode(t *testing.T) {
 	}
 
 	v := result[0]
-	if !v.IsTableType() {
+	if !engine.IsTableType(v) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList().Slice()
+	rows := engine.AsList(v).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
 	// Check first row
-	r0 := rows[0].AsMap()
+	r0 := engine.AsMap(rows[0])
 	nameVal, ok := r0.Get("name")
 	if !ok {
 		t.Fatal("expected 'name' key")
@@ -225,7 +225,7 @@ func TestCSVFormatDecode(t *testing.T) {
 	}
 
 	// Check second row
-	r1 := rows[1].AsMap()
+	r1 := engine.AsMap(rows[1])
 	nameVal, _ = r1.Get("name")
 	_as8, _ := engine.AsString(nameVal)
 	if _as8 != "Bob" {
@@ -243,7 +243,7 @@ func TestCSVFormatDecodeEmpty(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -255,11 +255,11 @@ func TestCSVFormatDecodeQuoted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	rows := result[0].AsList().Slice()
+	rows := engine.AsList(result[0]).Slice()
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	m := rows[0].AsMap()
+	m := engine.AsMap(rows[0])
 	aVal, _ := m.Get("a")
 	_as10, _ := engine.AsString(aVal)
 	if _as10 != "hello, world" {
@@ -275,7 +275,7 @@ func TestCSVFormatDecodeTableSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := result[0]
-	tt, _ := v.AsTableType()
+	tt, _ := engine.AsTableType(v)
 	fields := tt.Record.Fields
 	if fields.Len() != 2 {
 		t.Errorf("expected 2 fields, got %d", fields.Len())
@@ -355,16 +355,16 @@ func TestTSVFormatDecode(t *testing.T) {
 	}
 
 	v := result[0]
-	if !v.IsTableType() {
+	if !engine.IsTableType(v) {
 		t.Fatalf("expected table type, got %s", v)
 	}
 
-	rows := v.AsList().Slice()
+	rows := engine.AsList(v).Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0 := rows[0].AsMap()
+	r0 := engine.AsMap(rows[0])
 	nameVal, _ := r0.Get("name")
 	_as12, _ := engine.AsString(nameVal)
 	if _as12 != "Alice" {
@@ -418,7 +418,7 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' from resolved file")
@@ -451,7 +451,7 @@ func TestJsonicFormatMultisourceNested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 
 	outerVal, ok := m.Get("outer")
 	if !ok {
@@ -502,7 +502,7 @@ func TestJsonicFormatMultisourceNotUsedForJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, ok := m.Get("@ref")
 	if !ok {
 		t.Fatal("expected key '@ref' in JSON output")
@@ -627,7 +627,7 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, ok := m.Get("val")
 	if !ok {
 		t.Fatal("expected key 'val' from resolved test.jsonic")

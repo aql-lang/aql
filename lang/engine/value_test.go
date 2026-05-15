@@ -114,23 +114,23 @@ func TestNewFnDef(t *testing.T) {
 
 func TestNewDisjunct(t *testing.T) {
 	v := engine.NewDisjunct([]engine.Value{engine.NewTypeLiteral(engine.TString)})
-	if !v.IsDisjunct() {
+	if !engine.IsDisjunct(v) {
 		t.Error("expected IsDisjunct to be true")
 	}
-	di, _ := v.AsDisjunct()
+	di, _ := engine.AsDisjunct(v)
 	if len(di.Alternatives) != 1 {
 		t.Errorf("expected 1 alternative, got %d", len(di.Alternatives))
 	}
 }
 
 func TestIsBoolean(t *testing.T) {
-	if !engine.NewBoolean(true).IsBoolean() {
+	if !engine.IsBoolean(engine.NewBoolean(true)) {
 		t.Error("expected true to be boolean")
 	}
-	if !engine.NewBoolean(false).IsBoolean() {
+	if !engine.IsBoolean(engine.NewBoolean(false)) {
 		t.Error("expected false to be boolean")
 	}
-	if engine.NewInteger(1).IsBoolean() {
+	if engine.IsBoolean(engine.NewInteger(1)) {
 		t.Error("integer should not be boolean")
 	}
 }
@@ -139,7 +139,7 @@ func TestAsTableType(t *testing.T) {
 	fields := engine.NewOrderedMap()
 	fields.Set("x", engine.NewTypeLiteral(engine.TNumber))
 	v := engine.NewTableType(engine.RecordTypeInfo{Fields: fields})
-	tt, _ := v.AsTableType()
+	tt, _ := engine.AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("expected 1 field, got %d", tt.Record.Fields.Len())
 	}
@@ -147,7 +147,7 @@ func TestAsTableType(t *testing.T) {
 
 func TestAsChildType(t *testing.T) {
 	v := engine.NewTypedList(engine.NewTypeLiteral(engine.TString))
-	ct, _ := v.AsChildType()
+	ct, _ := engine.AsChildType(v)
 	if !ct.Child.VType.Equal(engine.TString) {
 		t.Errorf("expected string child, got %s", ct.Child.VType)
 	}

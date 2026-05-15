@@ -145,9 +145,9 @@ func buildTypeInspection(name string, tv Value) Value {
 	}
 
 	switch {
-	case tv.IsRecordType():
+	case IsRecordType(tv):
 		result.Set("kind", NewAtom("record"))
-		rt, _ := tv.AsRecordType()
+		rt, _ := AsRecordType(tv)
 		fields := NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
@@ -157,7 +157,7 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	case IsRecordShape(tv):
 		result.Set("kind", NewAtom("record"))
-		m := tv.AsMap()
+		m := AsMap(tv)
 		fields := NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
@@ -165,9 +165,9 @@ func buildTypeInspection(name string, tv Value) Value {
 		}
 		result.Set("fields", NewMap(fields))
 
-	case tv.IsObjectType():
+	case IsObjectType(tv):
 		result.Set("kind", NewAtom("object"))
-		oi, _ := tv.AsObjectType()
+		oi, _ := AsObjectType(tv)
 		if oi.Parent != nil {
 			result.Set("parent", NewString(oi.Parent.Name))
 		}
@@ -179,9 +179,9 @@ func buildTypeInspection(name string, tv Value) Value {
 		}
 		result.Set("fields", NewMap(fields))
 
-	case tv.IsTableType():
+	case IsTableType(tv):
 		result.Set("kind", NewAtom("table"))
-		tt, _ := tv.AsTableType()
+		tt, _ := AsTableType(tv)
 		fields := NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
@@ -189,23 +189,23 @@ func buildTypeInspection(name string, tv Value) Value {
 		}
 		result.Set("fields", NewMap(fields))
 
-	case tv.IsDisjunct():
+	case IsDisjunct(tv):
 		result.Set("kind", NewAtom("disjunct"))
-		di, _ := tv.AsDisjunct()
+		di, _ := AsDisjunct(tv)
 		alts := make([]Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			alts[i] = NewString(alt.VType.String())
 		}
 		result.Set("alternatives", NewList(alts))
 
-	case tv.IsTypedList():
+	case IsTypedList(tv):
 		result.Set("kind", NewAtom("typed_list"))
-		ci, _ := tv.AsChildType()
+		ci, _ := AsChildType(tv)
 		result.Set("child", NewString(ci.Child.VType.String()))
 
-	case tv.IsTypedMap():
+	case IsTypedMap(tv):
 		result.Set("kind", NewAtom("typed_map"))
-		ci, _ := tv.AsChildType()
+		ci, _ := AsChildType(tv)
 		result.Set("child", NewString(ci.Child.VType.String()))
 
 	case tv.VType.Equal(TFnUndef):

@@ -31,8 +31,8 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 		val := stack[positions[idx]]
 		if pattern.VType.Equal(TMap) && val.VType.Equal(TMap) &&
 			pattern.Data != nil && val.Data != nil &&
-			!pattern.IsOptionsType() &&
-			!val.IsRecordType() && !val.IsTypedMap() && !val.IsOptionsType() {
+			!IsOptionsType(pattern) &&
+			!IsRecordType(val) && !IsTypedMap(val) && !IsOptionsType(val) {
 			if isForward {
 				// Legacy: structural map patterns only enforced on
 				// stack positions. See doc comment.

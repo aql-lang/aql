@@ -34,7 +34,7 @@ func TestFolderCreatesDir(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewPath([]string{"a", "b", "c"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
 	_as0, _ := engine.AsPath(result[0])
@@ -56,7 +56,7 @@ func TestFolderAbsolutePath(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewPath([]string{"tmp", "data"}, true),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	_as2, _ := engine.AsPath(result[0])
@@ -77,7 +77,7 @@ func TestFolderIdempotent(t *testing.T) {
 	// Create twice — should not error
 	runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
 	result := runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("idempotent call failed: got %v", result)
 	}
 }
@@ -93,7 +93,7 @@ func TestFolderWithParentsTrue(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"deep", "nested", "dir"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("deep/nested/dir")
@@ -112,7 +112,7 @@ func TestFolderWithParentsFalse(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"single"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 }
@@ -130,7 +130,7 @@ func TestFolderWithMakePath(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewString("foo"), engine.NewString("bar")}),
 		engine.NewCloseParen(),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("foo/bar")

@@ -324,7 +324,7 @@ func TestIntegModuleWithExport(t *testing.T) {
 		t.Fatalf("expected TModule, got %s", result[0].VType)
 	}
 
-	desc, _ := result[0].AsModule()
+	desc, _ := AsModule(result[0])
 	if _, ok := desc.Exports["myExport"]; !ok {
 		t.Error("expected 'myExport' in module exports")
 	}
@@ -352,7 +352,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("stuff should be a map, got %v", result)
 	}
-	m := result[0].AsMap()
+	m := AsMap(result[0])
 	v, ok := m.Get("val")
 	_as9, _ := AsInteger(v)
 	if !ok || _as9 != 99 {
@@ -424,7 +424,7 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	desc, _ := result[0].AsModule()
+	desc, _ := AsModule(result[0])
 	if _, ok := desc.Exports["wrdexp"]; !ok {
 		t.Error("expected 'wrdexp' in module exports")
 	}
@@ -813,7 +813,7 @@ func TestIntegDoMap(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("do map should return a map, got %v", result)
 	}
-	rm := result[0].AsMap()
+	rm := AsMap(result[0])
 	xVal, ok := rm.Get("x")
 	_as29, _ := AsNumber(xVal)
 	if !ok || _as29 != 7 {
@@ -833,9 +833,9 @@ func TestIntegDoNestedMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	outer := result[0].AsMap()
+	outer := AsMap(result[0])
 	innerVal, _ := outer.Get("outer")
-	innerResult := innerVal.AsMap()
+	innerResult := AsMap(innerVal)
 	v, _ := innerResult.Get("inner")
 	_as30, _ := AsNumber(v)
 	if _as30 != 5 {
@@ -929,7 +929,7 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("read data.json should return map, got %v", result)
 	}
-	rm := result[0].AsMap()
+	rm := AsMap(result[0])
 	v, ok := rm.Get("x")
 	_as34, _ := AsInteger(v)
 	if !ok || _as34 != 1 {
@@ -1085,10 +1085,10 @@ func TestIntegTorDisjunctValues(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewString("hello"), NewWord("tor"), NewBoolean(true),
 	})
-	if len(result) != 1 || !result[0].IsDisjunct() {
+	if len(result) != 1 || !IsDisjunct(result[0]) {
 		t.Fatalf("1 tor 'hello' tor true should be disjunct, got %v", result)
 	}
-	_as37, _ := result[0].AsDisjunct()
+	_as37, _ := AsDisjunct(result[0])
 	alts := _as37.Alternatives
 	if len(alts) != 3 {
 		t.Errorf("disjunct should have 3 alternatives, got %d", len(alts))
@@ -1100,10 +1100,10 @@ func TestIntegTorDisjunctTwoValues(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("tor"), NewString("hello"),
 	})
-	if len(result) != 1 || !result[0].IsDisjunct() {
+	if len(result) != 1 || !IsDisjunct(result[0]) {
 		t.Fatalf("42 tor 'hello' should be disjunct, got %v", result)
 	}
-	_as38, _ := result[0].AsDisjunct()
+	_as38, _ := AsDisjunct(result[0])
 	alts := _as38.Alternatives
 	if len(alts) != 2 {
 		t.Errorf("disjunct should have 2 alternatives, got %d", len(alts))
@@ -1116,10 +1116,10 @@ func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewInteger(2), NewWord("tor"), NewInteger(3),
 	})
-	if len(result) != 1 || !result[0].IsDisjunct() {
+	if len(result) != 1 || !IsDisjunct(result[0]) {
 		t.Fatalf("chained tor should produce disjunct, got %v", result)
 	}
-	_as39, _ := result[0].AsDisjunct()
+	_as39, _ := AsDisjunct(result[0])
 	alts := _as39.Alternatives
 	if len(alts) != 3 {
 		t.Errorf("should flatten to 3 alternatives, got %d", len(alts))
@@ -1133,10 +1133,10 @@ func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tor"), rightDisjunct,
 	})
-	if len(result) != 1 || !result[0].IsDisjunct() {
+	if len(result) != 1 || !IsDisjunct(result[0]) {
 		t.Fatalf("tor with right disjunct should produce disjunct, got %v", result)
 	}
-	_as40, _ := result[0].AsDisjunct()
+	_as40, _ := AsDisjunct(result[0])
 	alts := _as40.Alternatives
 	if len(alts) != 3 {
 		t.Errorf("should flatten right disjunct to 3 alternatives, got %d", len(alts))
@@ -1237,7 +1237,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	merged := result[0].AsMap()
+	merged := AsMap(result[0])
 	if merged == nil {
 		t.Fatalf("expected merged map, got %v", result[0])
 	}
@@ -1273,7 +1273,7 @@ func TestIntegTandMergeOverlap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	merged := result[0].AsMap()
+	merged := AsMap(result[0])
 	if merged == nil || merged.Len() != 1 {
 		t.Fatalf("expected single-key merged map, got %v", result[0])
 	}
@@ -1399,7 +1399,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TList) {
 		t.Fatalf("read lines should return list, got %v", result)
 	}
-	elems := result[0].AsList().Slice()
+	elems := AsList(result[0]).Slice()
 	if len(elems) != 3 {
 		t.Errorf("read lines should have 3 elements, got %d", len(elems))
 	}
@@ -1415,7 +1415,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("do map should return map, got %v", result)
 	}
-	rm := result[0].AsMap()
+	rm := AsMap(result[0])
 	xVal, _ := rm.Get("x")
 	_as45, _ := AsInteger(xVal)
 	if _as45 != 42 {

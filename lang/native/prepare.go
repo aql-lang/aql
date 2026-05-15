@@ -13,7 +13,7 @@ import (
 // prepareAPIHandler handles prepare with {kind:"api", spec:String, path:String, method:String, ...}.
 // It calls SDK.Prepare() and returns the fetch definition as a map.
 func prepareAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap := args[0].AsMap()
+	apiMap := engine.AsMap(args[0])
 
 	sdkInst, _, err := getSDK(apiMap, "prepare", r)
 	if err != nil {

@@ -63,7 +63,7 @@ func TestDecisionModuleExports(t *testing.T) {
 func TestDecisionCond(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `18 "gte" quote age decision.cond`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	if m == nil {
 		t.Fatalf("expected map, got %s", result[0].VType.String())
 	}
@@ -165,7 +165,7 @@ func TestDecisionTableFirst(t *testing.T) {
 		] decision.make-table)
 		{age:25} tbl decision.eval-table
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	cat, _ := m.Get("category")
 	s, _ := engine.AsString(cat)
 	if s != "adult" {
@@ -182,7 +182,7 @@ func TestDecisionTableFirstMinor(t *testing.T) {
 		] decision.make-table)
 		{age:12} tbl decision.eval-table
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	cat, _ := m.Get("category")
 	s, _ := engine.AsString(cat)
 	if s != "minor" {
@@ -200,7 +200,7 @@ func TestDecisionTableUnique(t *testing.T) {
 		def tbl (rawtbl "unique" decision.with-policy)
 		{score:75} tbl decision.eval-table
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	grade, _ := m.Get("grade")
 	s, _ := engine.AsString(grade)
 	if s != "pass" {
@@ -218,7 +218,7 @@ func TestDecisionTableCollect(t *testing.T) {
 		def tbl (rawtbl "collect" decision.with-policy)
 		{age:25} tbl decision.eval-table
 	`)
-	list := result[0].AsList()
+	list := engine.AsList(result[0])
 	if list.Len() != 2 {
 		t.Fatalf("expected 2 collected, got %d: %v", list.Len(), result[0])
 	}
@@ -230,7 +230,7 @@ func TestDecisionTableNoMatch(t *testing.T) {
 		def tbl ([{when:{field:"age",op:"gt",value:100}, then:{x:1}}] decision.make-table)
 		{age:25} tbl decision.eval-table
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	errVal, _ := m.Get("error")
 	s, _ := engine.AsString(errVal)
 	if s != "no-match" {
@@ -247,7 +247,7 @@ func TestDecisionTableCompound(t *testing.T) {
 		]})
 		{age:25,score:95} tbl decision.eval-table
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	tier, _ := m.Get("tier")
 	s, _ := engine.AsString(tier)
 	if s != "premium" {
@@ -270,7 +270,7 @@ func TestDecisionTree(t *testing.T) {
 		]})
 		{age:25} tree decision.eval-tree
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	cat, _ := m.Get("category")
 	s, _ := engine.AsString(cat)
 	if s != "adult" {
@@ -332,7 +332,7 @@ func TestDecideTable(t *testing.T) {
 		]})
 		{x:5} model decision.decide
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	sign, _ := m.Get("sign")
 	s, _ := engine.AsString(sign)
 	if s != "positive" {
@@ -461,7 +461,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
 				`+tc.input+` tbl decision.eval-table
 			`)
-			m := result[0].AsMap()
+			m := engine.AsMap(result[0])
 			if m == nil {
 				t.Fatalf("expected map result, got %s", result[0].VType.String())
 			}
@@ -565,7 +565,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 		]})
 		{x:5} model decision.decide
 	`)
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	if m == nil {
 		t.Fatalf("expected map result, got %s", result[0].VType.String())
 	}
@@ -575,7 +575,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 		t.Errorf("sign = %q, want positive", s)
 	}
 	detail, _ := m.Get("detail")
-	dm := detail.AsMap()
+	dm := engine.AsMap(detail)
 	if dm == nil {
 		t.Fatalf("expected detail map, got %s", detail.VType.String())
 	}
@@ -584,7 +584,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 		t.Errorf("detail.bucket = %q, want high", bs)
 	}
 	nested, _ := dm.Get("nested")
-	nm := nested.AsMap()
+	nm := engine.AsMap(nested)
 	if nm == nil {
 		t.Fatalf("expected nested map, got %s", nested.VType.String())
 	}

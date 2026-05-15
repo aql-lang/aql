@@ -79,7 +79,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as1, _ := eargs[0].AsConcreteAtom()
-					exportHandler(_as1, eargs[1].AsMap())
+					exportHandler(_as1, AsMap(eargs[1]))
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -91,7 +91,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as2, _ := eargs[0].AsConcreteString()
-					exportHandler(_as2, eargs[1].AsMap())
+					exportHandler(_as2, AsMap(eargs[1]))
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -335,7 +335,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if renameList[0].VType.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
-			pairElems := pair.AsList()
+			pairElems := AsList(pair)
 			if pairElems.Len() != 2 {
 				return fmt.Errorf("import: rename pair must have exactly 2 elements")
 			}
@@ -383,12 +383,12 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 // the def body is returned. Otherwise the value is returned as-is.
 func resolveModuleExport(modReg *Registry, v Value) Value {
 	var name string
-	if v.IsWord() {
+	if IsWord(v) {
 		_as3, _ := AsWord(v)
 		name = _as3.Name
 	} else if v.VType.Matches(TString) {
 		name, _ = AsString(v)
-	} else if v.IsAtom() {
+	} else if IsAtom(v) {
 		name, _ = AsAtom(v)
 	} else {
 		return v
@@ -460,11 +460,11 @@ func resolveNativeMod(r *Registry, path string) error {
 
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.
 func valToAtomOrString(v Value) string {
-	if v.IsWord() {
+	if IsWord(v) {
 		_as4, _ := AsWord(v)
 		return _as4.Name
 	}
-	if v.IsAtom() {
+	if IsAtom(v) {
 		_as5, _ := AsAtom(v)
 		return _as5
 	}

@@ -50,7 +50,7 @@ func TestLinesFormatDecodeCov(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := vals[0].AsList().Slice()
+	list := AsList(vals[0]).Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(list))
 	}
@@ -123,7 +123,7 @@ func TestJsonicToValueList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := v.AsList().Slice()
+	list := AsList(v).Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -134,7 +134,7 @@ func TestJsonicToValueMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := v.AsMap()
+	m := AsMap(v)
 	if m.Len() != 2 {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
@@ -294,7 +294,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := AsMap(result[0])
 	v, ok := m.Get("a")
 	if !ok {
 		t.Fatal("expected key 'a'")
@@ -711,7 +711,7 @@ func TestMakeTable(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := result[0].AsList().Slice()
+	list := AsList(result[0]).Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(list))
 	}
@@ -740,7 +740,7 @@ func TestMakeRecordWithBase(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := AsMap(result[0])
 	if m.Len() != 2 {
 		t.Errorf("expected 2 fields, got %d", m.Len())
 	}

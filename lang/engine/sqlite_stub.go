@@ -110,7 +110,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 			strings.Join(placeholders, ", "))
 
 		for _, row := range td.Rows {
-			m := row.AsMutableMap()
+			m := AsMutableMap(row)
 			if m == nil {
 				continue
 			}

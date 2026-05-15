@@ -14,7 +14,7 @@ func TestMakePathFromList(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"),
 		engine.NewList([]engine.Value{engine.NewString("usr"), engine.NewString("local"), engine.NewString("bin")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	p, _ := engine.AsPath(result[0])
@@ -32,7 +32,7 @@ func TestMakePathFromListAtoms(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"),
 		engine.NewList([]engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("c")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	_as0, _ := engine.AsPath(result[0])
@@ -49,7 +49,7 @@ func TestMakePathFromString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("usr/local/bin"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	p, _ := engine.AsPath(result[0])
@@ -66,7 +66,7 @@ func TestMakePathFromAbsString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("/usr/local/bin"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	p, _ := engine.AsPath(result[0])
@@ -88,7 +88,7 @@ func TestMakePathAbsOption(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts),
 		engine.NewList([]engine.Value{engine.NewString("x"), engine.NewString("y")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	p, _ := engine.AsPath(result[0])
@@ -107,7 +107,7 @@ func TestMakePathAbsOptionString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts), engine.NewString("x/y"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	_as2, _ := engine.AsPath(result[0])

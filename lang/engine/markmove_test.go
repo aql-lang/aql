@@ -230,18 +230,18 @@ func TestMarkMoveString(t *testing.T) {
 // TestMarkMoveIsMethods tests IsMark/IsMove type checks.
 func TestMarkMoveIsMethods(t *testing.T) {
 	m := engine.NewMark("x", engine.NewInteger(1))
-	if !m.IsMark() {
+	if !engine.IsMark(m) {
 		t.Error("NewMark should be IsMark()")
 	}
-	if m.IsMove() {
+	if engine.IsMove(m) {
 		t.Error("NewMark should not be IsMove()")
 	}
 
 	mv := engine.NewMove("x", "reason")
-	if !mv.IsMove() {
+	if !engine.IsMove(mv) {
 		t.Error("NewMove should be IsMove()")
 	}
-	if mv.IsMark() {
+	if engine.IsMark(mv) {
 		t.Error("NewMove should not be IsMark()")
 	}
 

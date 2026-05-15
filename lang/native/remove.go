@@ -18,7 +18,7 @@ func removeEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // removeEntityOptsHandler handles remove with an Entity object instance and an options map.
 // Sig is opts-first: args[0]=opts, args[1]=entity.
 func removeEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
+	merged := entityToAPIMapWithOpts(args[1], engine.AsMap(args[0]), "query")
 	return removeAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -26,13 +26,13 @@ func removeEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, s
 // The options map is merged into the query field of the API map.
 // Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func removeAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
+	merged := mergeAPIOptions(engine.AsMap(args[1]), engine.AsMap(args[0]), "query")
 	return removeAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
 // removeAPIHandler handles remove with {kind:"api", spec:String, entity:String, query:{...}}.
 func removeAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap := args[0].AsMap()
+	apiMap := engine.AsMap(args[0])
 
 	sdkInst, entityName, err := getSDK(apiMap, "remove", r)
 	if err != nil {
@@ -62,8 +62,8 @@ func removeRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // removeHandler finds a record by its "id" field and removes it from the table.
 // Returns the updated table. The map must contain an "id" field.
 func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	filter := args[0].AsMap()
-	rows := args[1].AsList().Slice()
+	filter := engine.AsMap(args[0])
+	rows := engine.AsList(args[1]).Slice()
 
 	idVal, ok := filter.Get("id")
 	if !ok {
@@ -81,7 +81,7 @@ func removeHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			result = append(result, row)
 			continue
 		}
-		rec := row.AsMap()
+		rec := engine.AsMap(row)
 		existing, ok := rec.Get("id")
 		if ok {
 			existingStr, _ := engine.AsString(existing)

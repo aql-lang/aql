@@ -493,7 +493,7 @@ func ValToString(v Value) string {
 	case v.VType.Matches(TString):
 		_as8, _ := AsString(v)
 		return _as8
-	case v.IsAtom():
+	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
 	case v.VType.Matches(TDecimal):
@@ -508,10 +508,10 @@ func ValToString(v Value) string {
 			return "true"
 		}
 		return "false"
-	case v.IsPath():
+	case IsPath(v):
 		_as13, _ := AsPath(v)
 		return _as13.String()
-	case v.IsWord():
+	case IsWord(v):
 		_as14, _ := AsWord(v)
 		return _as14.Name
 	default:
@@ -580,11 +580,11 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if tv, ok := reg.Types.TopBody(name); ok && tv.IsObjectType() {
+	if tv, ok := reg.Types.TopBody(name); ok && IsObjectType(tv) {
 		return tv
 	}
 	if top, ok := reg.Defs.Top(name); ok {
-		if top.IsObjectType() {
+		if IsObjectType(top) {
 			return top
 		}
 	}
@@ -596,7 +596,7 @@ func StoreKey(v Value) string {
 	if v.Data == nil {
 		return v.VType.String()
 	}
-	if v.IsWord() {
+	if IsWord(v) {
 		_as15, _ := AsWord(v)
 		return _as15.Name
 	}
@@ -604,7 +604,7 @@ func StoreKey(v Value) string {
 		_as16, _ := AsString(v)
 		return _as16
 	}
-	if v.IsAtom() {
+	if IsAtom(v) {
 		_as17, _ := AsAtom(v)
 		return _as17
 	}
@@ -798,7 +798,7 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 // downstream error messages can surface "type Bbd" rather than the
 // rendered value form.
 func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, ok bool) {
-	if !v.IsWord() {
+	if !IsWord(v) {
 		return v, "", true
 	}
 	w, _ := AsWord(v)

@@ -593,7 +593,7 @@ func TestResolveTypedNameValue_WordUnresolved(t *testing.T) {
 	}
 	// out should be the original Word (unchanged) so callers can
 	// continue with it.
-	if !out.IsWord() {
+	if !IsWord(out) {
 		t.Errorf("unresolved word: out.IsWord=false")
 	}
 }

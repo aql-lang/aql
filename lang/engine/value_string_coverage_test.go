@@ -106,7 +106,7 @@ func TestValueAsTableTypeCov(t *testing.T) {
 	fields.Set("x", engine.NewTypeLiteral(engine.TInteger))
 	tti := engine.TableTypeInfo{Record: engine.RecordTypeInfo{Fields: fields}}
 	v := engine.Value{VType: engine.TList, Data: tti}
-	tt, _ := v.AsTableType()
+	tt, _ := engine.AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("expected 1 field, got %d", tt.Record.Fields.Len())
 	}
@@ -114,7 +114,7 @@ func TestValueAsTableTypeCov(t *testing.T) {
 
 func TestValueAsListCov(t *testing.T) {
 	v := engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)})
-	list := v.AsList().Slice()
+	list := engine.AsList(v).Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -128,7 +128,7 @@ func TestValueAsListCov(t *testing.T) {
 		Rows:   []engine.Value{engine.NewMap(row)},
 	}
 	v = engine.Value{VType: engine.TList, Data: td}
-	list = v.AsList().Slice()
+	list = engine.AsList(v).Slice()
 	if len(list) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(list))
 	}

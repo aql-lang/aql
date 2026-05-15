@@ -185,8 +185,8 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			for idx, pattern := range sig.Patterns {
 				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
 					pattern.Data != nil && ordered[idx].Data != nil &&
-					!pattern.IsOptionsType() &&
-					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
+					!IsOptionsType(pattern) &&
+					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
 					if !OpenUnifyMap(pattern, ordered[idx]) {
 						patternOk = false
 						break
@@ -271,13 +271,13 @@ func sigTypeMatches(v Value, t *Type) bool {
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
 		return MetatypeFor(v.VType).Matches(t)
 	}
-	if v.IsRecordType() || v.IsTableType() || v.IsOptionsType() {
+	if IsRecordType(v) || IsTableType(v) || IsOptionsType(v) {
 		if IsMetaType(t) {
 			return MetatypeFor(v.VType).Matches(t)
 		}
 	}
 	// Options values have VType=TMap but should match TOptions signatures.
-	if v.IsOptionsType() && t.Equal(TOptions) {
+	if IsOptionsType(v) && t.Equal(TOptions) {
 		return true
 	}
 	return false

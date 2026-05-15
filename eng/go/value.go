@@ -709,7 +709,7 @@ func NewImplicitMap(entries *OrderedMap) Value {
 // OrderedMap was constructed from implicit-pair syntax (e.g.
 // `{x:Integer}` or `[x:Integer]` inside an fn sig). Used to
 // discriminate record-shape patterns from concrete maps.
-func (v Value) IsImplicitMap() bool {
+func IsImplicitMap(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
@@ -799,7 +799,7 @@ func (v Value) Is(t *Type) bool {
 
 // IsNone reports whether v is the value `none` (not the None type
 // literal). The check distinguishes the inhabitant from the type.
-func (v Value) IsNone() bool {
+func IsNone(v Value) bool {
 	if !v.VType.Equal(TNone) {
 		return false
 	}
@@ -1052,12 +1052,12 @@ func NewError(err error) Value {
 }
 
 // IsError reports whether this value is an error.
-func (v Value) IsError() bool {
+func IsError(v Value) bool {
 	return v.VType.Equal(TError)
 }
 
 // AsError returns the ErrorInfo for an error value.
-func (v Value) AsError() (ErrorInfo, error) {
+func AsError(v Value) (ErrorInfo, error) {
 	info, ok := v.Data.(ErrorInfo)
 	if !ok {
 		return ErrorInfo{}, fmt.Errorf("AsError: not an error value (got %T)", v.Data)
@@ -1090,42 +1090,42 @@ type IntervalInfo struct {
 // IsInterval and AsInterval moved to lang/engine/native_misc.go (Step 8).
 
 // IsWord reports whether this value is a word (function reference).
-func (v Value) IsWord() bool {
+func IsWord(v Value) bool {
 	return v.VType.Equal(TWord)
 }
 
 // IsForward reports whether this value is a forward primitive.
-func (v Value) IsForward() bool {
+func IsForward(v Value) bool {
 	return v.VType.Equal(TForward)
 }
 
 // IsBoolean reports whether this value is a boolean type.
-func (v Value) IsBoolean() bool {
+func IsBoolean(v Value) bool {
 	return v.VType.Matches(TBoolean)
 }
 
 // IsOpenParen reports whether this value is an open-paren marker.
-func (v Value) IsOpenParen() bool {
+func IsOpenParen(v Value) bool {
 	return v.VType.Equal(TOpenParen)
 }
 
 // IsCloseParen reports whether this value is a close-paren marker.
-func (v Value) IsCloseParen() bool {
+func IsCloseParen(v Value) bool {
 	return v.VType.Equal(TCloseParen)
 }
 
 // IsEnd reports whether this value is an end-marker.
-func (v Value) IsEnd() bool {
+func IsEnd(v Value) bool {
 	return v.VType.Equal(TEnd)
 }
 
 // IsParenExpr reports whether this value is a paren expression.
-func (v Value) IsParenExpr() bool {
+func IsParenExpr(v Value) bool {
 	return v.VType.Equal(TParenExpr)
 }
 
 // AsParenExpr returns the items in a paren expression value.
-func (v Value) AsParenExpr() []Value {
+func AsParenExpr(v Value) []Value {
 	if pp, ok := v.Data.(ParenExprPayload); ok {
 		return pp.Toks
 	}
@@ -1133,12 +1133,12 @@ func (v Value) AsParenExpr() []Value {
 }
 
 // IsInterpString reports whether this value is an interpolated string.
-func (v Value) IsInterpString() bool {
+func IsInterpString(v Value) bool {
 	return v.VType.Equal(TInterpString)
 }
 
 // AsInterpString returns the parts of an interpolated string value.
-func (v Value) AsInterpString() []InterpPart {
+func AsInterpString(v Value) []InterpPart {
 	if ip, ok := v.Data.(InterpStringPayload); ok {
 		return ip.Parts
 	}
@@ -1146,12 +1146,12 @@ func (v Value) AsInterpString() []InterpPart {
 }
 
 // IsMark reports whether this value is a mark.
-func (v Value) IsMark() bool {
+func IsMark(v Value) bool {
 	return v.VType.Equal(TMark)
 }
 
 // AsMark returns the MarkInfo, panics if not a mark.
-func (v Value) AsMark() (MarkInfo, error) {
+func AsMark(v Value) (MarkInfo, error) {
 	info, ok := v.Data.(MarkInfo)
 	if !ok {
 		return MarkInfo{}, fmt.Errorf("AsMark: not a mark value (got %T)", v.Data)
@@ -1160,12 +1160,12 @@ func (v Value) AsMark() (MarkInfo, error) {
 }
 
 // IsMove reports whether this value is a move.
-func (v Value) IsMove() bool {
+func IsMove(v Value) bool {
 	return v.VType.Equal(TMove)
 }
 
 // AsMove returns the MoveInfo, panics if not a move.
-func (v Value) AsMove() (MoveInfo, error) {
+func AsMove(v Value) (MoveInfo, error) {
 	info, ok := v.Data.(MoveInfo)
 	if !ok {
 		return MoveInfo{}, fmt.Errorf("AsMove: not a move value (got %T)", v.Data)
@@ -1174,12 +1174,12 @@ func (v Value) AsMove() (MoveInfo, error) {
 }
 
 // IsReturnCheck reports whether this value is a return-check marker.
-func (v Value) IsReturnCheck() bool {
+func IsReturnCheck(v Value) bool {
 	return v.VType.Equal(TReturnCheck)
 }
 
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
-func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
+func AsReturnCheck(v Value) (ReturnCheckInfo, error) {
 	info, ok := v.Data.(ReturnCheckInfo)
 	if !ok {
 		return ReturnCheckInfo{}, fmt.Errorf("AsReturnCheck: not a return-check value (got %T)", v.Data)
@@ -1188,12 +1188,12 @@ func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
 }
 
 // IsDefCleanup reports whether this value is a def-cleanup marker.
-func (v Value) IsDefCleanup() bool {
+func IsDefCleanup(v Value) bool {
 	return v.VType.Equal(TDefCleanup)
 }
 
 // AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
-func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
+func AsDefCleanup(v Value) (DefCleanupInfo, error) {
 	info, ok := v.Data.(DefCleanupInfo)
 	if !ok {
 		return DefCleanupInfo{}, fmt.Errorf("AsDefCleanup: not a def-cleanup value (got %T)", v.Data)
@@ -1204,13 +1204,13 @@ func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
 // IsDisjunct reports whether this value is a disjunction type — a
 // plain Disjunct (Type/Disjunct) or any subtype such as an Enum
 // (Type/Disjunct/Enum).
-func (v Value) IsDisjunct() bool {
+func IsDisjunct(v Value) bool {
 	_, ok := v.Data.(DisjunctInfo)
 	return ok && v.VType.Matches(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
-func (v Value) AsDisjunct() (DisjunctInfo, error) {
+func AsDisjunct(v Value) (DisjunctInfo, error) {
 	info, ok := v.Data.(DisjunctInfo)
 	if !ok {
 		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
@@ -1219,13 +1219,13 @@ func (v Value) AsDisjunct() (DisjunctInfo, error) {
 }
 
 // IsObjectType reports whether this value is an object type definition.
-func (v Value) IsObjectType() bool {
+func IsObjectType(v Value) bool {
 	_, ok := v.Data.(ObjectTypeInfo)
 	return ok && v.VType.Matches(TObject)
 }
 
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func (v Value) AsObjectType() (ObjectTypeInfo, error) {
+func AsObjectType(v Value) (ObjectTypeInfo, error) {
 	info, ok := v.Data.(ObjectTypeInfo)
 	if !ok {
 		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
@@ -1234,13 +1234,13 @@ func (v Value) AsObjectType() (ObjectTypeInfo, error) {
 }
 
 // IsStore reports whether this value is a Store instance.
-func (v Value) IsStore() bool {
+func IsStore(v Value) bool {
 	_, ok := v.Data.(*StoreInstanceInfo)
 	return ok && v.VType.Matches(TStore)
 }
 
 // AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
-func (v Value) AsStore() *StoreInstanceInfo {
+func AsStore(v Value) *StoreInstanceInfo {
 	si, ok := v.Data.(*StoreInstanceInfo)
 	if !ok {
 		return nil
@@ -1249,13 +1249,13 @@ func (v Value) AsStore() *StoreInstanceInfo {
 }
 
 // IsArray reports whether this value is an Array instance.
-func (v Value) IsArray() bool {
+func IsArray(v Value) bool {
 	_, ok := v.Data.(*ArrayInstanceInfo)
 	return ok && v.VType.Matches(TArray)
 }
 
 // AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
-func (v Value) AsArray() *ArrayInstanceInfo {
+func AsArray(v Value) *ArrayInstanceInfo {
 	ai, ok := v.Data.(*ArrayInstanceInfo)
 	if !ok {
 		return nil
@@ -1264,13 +1264,13 @@ func (v Value) AsArray() *ArrayInstanceInfo {
 }
 
 // IsObjectInstance reports whether this value is an object instance.
-func (v Value) IsObjectInstance() bool {
+func IsObjectInstance(v Value) bool {
 	_, ok := v.Data.(ObjectInstanceInfo)
 	return ok && v.VType.Matches(TObject)
 }
 
 // AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
+func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
 	info, ok := v.Data.(ObjectInstanceInfo)
 	if !ok {
 		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
@@ -1279,12 +1279,12 @@ func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
 }
 
 // IsModule reports whether this value is a module descriptor.
-func (v Value) IsModule() bool {
+func IsModule(v Value) bool {
 	return v.VType.Equal(TModule)
 }
 
 // AsModule returns the ModuleDesc, panics if not a module.
-func (v Value) AsModule() (ModuleDesc, error) {
+func AsModule(v Value) (ModuleDesc, error) {
 	info, ok := v.Data.(ModuleDesc)
 	if !ok {
 		return ModuleDesc{}, fmt.Errorf("AsModule: not a module value (got %T)", v.Data)
@@ -1294,7 +1294,7 @@ func (v Value) AsModule() (ModuleDesc, error) {
 
 // IsAtom reports whether this value is an atom.
 // IsPath reports whether this value is a Path.
-func (v Value) IsPath() bool {
+func IsPath(v Value) bool {
 	_, ok := v.Data.(PathPayload)
 	return ok && v.VType.Equal(TPath)
 }
@@ -1307,7 +1307,7 @@ func AsPath(v Value) (PathInfo, error) {
 	return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
 }
 
-func (v Value) IsAtom() bool {
+func IsAtom(v Value) bool {
 	return v.VType.Equal(TAtom)
 }
 
@@ -1323,25 +1323,25 @@ func AsAtom(v Value) (string, error) {
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
-func (v Value) IsTypedList() bool {
+func IsTypedList(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
 	return ok && v.VType.Equal(TList)
 }
 
 // IsTypedMap reports whether this value is a typed map (has child type constraint).
-func (v Value) IsTypedMap() bool {
+func IsTypedMap(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // IsRecordType reports whether this value is a record type (map with field schema).
-func (v Value) IsRecordType() bool {
+func IsRecordType(v Value) bool {
 	_, ok := v.Data.(RecordTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // AsRecordType returns the RecordTypeInfo, panics if not a record type.
-func (v Value) AsRecordType() (RecordTypeInfo, error) {
+func AsRecordType(v Value) (RecordTypeInfo, error) {
 	info, ok := v.Data.(RecordTypeInfo)
 	if !ok {
 		return RecordTypeInfo{}, fmt.Errorf("AsRecordType: not a record type value (got %T)", v.Data)
@@ -1350,13 +1350,13 @@ func (v Value) AsRecordType() (RecordTypeInfo, error) {
 }
 
 // IsOptionsType reports whether this value is an options type (map with defaults/constraints).
-func (v Value) IsOptionsType() bool {
+func IsOptionsType(v Value) bool {
 	_, ok := v.Data.(OptionsTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
-func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
+func AsOptionsType(v Value) (OptionsTypeInfo, error) {
 	info, ok := v.Data.(OptionsTypeInfo)
 	if !ok {
 		return OptionsTypeInfo{}, fmt.Errorf("AsOptionsType: not an options type value (got %T)", v.Data)
@@ -1365,7 +1365,7 @@ func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
 }
 
 // IsTableType reports whether this value is a table type (list with record schema).
-func (v Value) IsTableType() bool {
+func IsTableType(v Value) bool {
 	if v.VType.Equal(TList) {
 		if _, ok := v.Data.(TableTypeInfo); ok {
 			return true
@@ -1384,7 +1384,7 @@ func (v Value) IsTableType() bool {
 }
 
 // AsTableType returns the TableTypeInfo, panics if not a table type.
-func (v Value) AsTableType() (TableTypeInfo, error) {
+func AsTableType(v Value) (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return TableTypeInfo{Record: td.Record}, nil
 	}
@@ -1402,7 +1402,7 @@ func (v Value) AsTableType() (TableTypeInfo, error) {
 }
 
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
-func (v Value) AsChildType() (ChildTypeInfo, error) {
+func AsChildType(v Value) (ChildTypeInfo, error) {
 	info, ok := v.Data.(ChildTypeInfo)
 	if !ok {
 		return ChildTypeInfo{}, fmt.Errorf("AsChildType: not a child type value (got %T)", v.Data)
@@ -1488,7 +1488,7 @@ func AsBoolean(v Value) (bool, error) {
 // For Materializer, this triggers materialization.
 // AsList returns a read-only view of the list payload.
 // Returns a ReadList with nil backing if the data is not a list.
-func (v Value) AsList() ReadList {
+func AsList(v Value) ReadList {
 	if v.Data == nil {
 		return ReadList{}
 	}
@@ -1524,7 +1524,7 @@ func (v Value) AsList() ReadList {
 
 // AsMutableList returns the underlying []Value slice for mutation.
 // Only valid for internal construction paths — never for immutable Node values.
-func (v Value) AsMutableList() []Value {
+func AsMutableList(v Value) []Value {
 	if v.Data == nil {
 		return nil
 	}
@@ -1537,7 +1537,7 @@ func (v Value) AsMutableList() []Value {
 // AsMap returns a read-only view of the map payload, or nil if the data is
 // not an *OrderedMap. Node values (Map, Options) are immutable — use this
 // for all read access.
-func (v Value) AsMap() ReadMap {
+func AsMap(v Value) ReadMap {
 	if v.Data == nil {
 		return nil
 	}
@@ -1559,7 +1559,7 @@ func (v Value) AsMap() ReadMap {
 
 // AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
 // for Object instances and internal construction — never for Node values.
-func (v Value) AsMutableMap() *OrderedMap {
+func AsMutableMap(v Value) *OrderedMap {
 	if v.Data == nil {
 		return nil
 	}
@@ -1584,36 +1584,36 @@ func (v Value) String() string {
 		return v.VType.Behavior.Format(v)
 	}
 	switch {
-	case v.IsWord():
+	case IsWord(v):
 		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)
-	case v.IsForward():
+	case IsForward(v):
 		f, _ := AsForward(v)
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
-	case v.IsOpenParen():
+	case IsOpenParen(v):
 		return "("
-	case v.IsCloseParen():
+	case IsCloseParen(v):
 		return ")"
-	case v.IsEnd():
+	case IsEnd(v):
 		return "end"
-	case v.IsParenExpr():
-		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
-	case v.IsMark():
-		_as2, _ := v.AsMark()
+	case IsParenExpr(v):
+		return fmt.Sprintf("paren(%v)", AsParenExpr(v))
+	case IsMark(v):
+		_as2, _ := AsMark(v)
 		return fmt.Sprintf("mark(%s)", _as2.ID)
-	case v.IsMove():
-		m, _ := v.AsMove()
+	case IsMove(v):
+		m, _ := AsMove(v)
 		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
-	case v.IsReturnCheck():
-		rc, _ := v.AsReturnCheck()
+	case IsReturnCheck(v):
+		rc, _ := AsReturnCheck(v)
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
-	case v.IsDefCleanup():
+	case IsDefCleanup(v):
 		return "__dc"
-	case v.IsModule():
-		md, _ := v.AsModule()
+	case IsModule(v):
+		md, _ := AsModule(v)
 		return fmt.Sprintf("module(%s)", md.ID)
-	case v.IsError():
-		_as3, _ := v.AsError()
+	case IsError(v):
+		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "Integer", "List").
@@ -1649,7 +1649,7 @@ func (v Value) String() string {
 	// via their per-Type Behavior installed by
 	// coretype_format_behaviors.go and dispatched at the top of this
 	// function. Their old switch arms have been removed.
-	case v.IsPath():
+	case IsPath(v):
 		_as6, _ := AsPath(v)
 		return _as6.String()
 	case v.VType.Equal(TList):
@@ -1692,14 +1692,14 @@ func (v Value) String() string {
 		if ct, ok := v.Data.(ChildTypeInfo); ok {
 			return "[:" + ct.Child.String() + "]"
 		}
-		elems := v.AsList().Slice()
+		elems := AsList(v).Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = e.String()
 		}
 		return "[" + strings.Join(parts, ",") + "]"
-	case v.IsArray():
-		arr := v.AsArray()
+	case IsArray(v):
+		arr := AsArray(v)
 		parts := make([]string, arr.Len())
 		for i := 0; i < arr.Len(); i++ {
 			e, _ := arr.Get(i)
@@ -1709,8 +1709,8 @@ func (v Value) String() string {
 	// Timeout / Interval render via their per-Type Behavior — see
 	// coretype_format_behaviors.go. Their arms have been removed
 	// from this switch.
-	case v.IsObjectInstance():
-		oi, _ := v.AsObjectInstance()
+	case IsObjectInstance(v):
+		oi, _ := AsObjectInstance(v)
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1722,8 +1722,8 @@ func (v Value) String() string {
 			name = "Object/" + oi.TypeRef.ID
 		}
 		return name + "{" + strings.Join(parts, ",") + "}"
-	case v.IsObjectType():
-		ot, _ := v.AsObjectType()
+	case IsObjectType(v):
+		ot, _ := AsObjectType(v)
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1735,8 +1735,8 @@ func (v Value) String() string {
 			name = "Object/" + ot.ID
 		}
 		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
-	case v.IsDisjunct():
-		di, _ := v.AsDisjunct()
+	case IsDisjunct(v):
+		di, _ := AsDisjunct(v)
 		parts := make([]string, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()
@@ -1762,7 +1762,7 @@ func (v Value) String() string {
 			}
 			return "options{" + strings.Join(parts, ",") + "}"
 		}
-		m := v.AsMap()
+		m := AsMap(v)
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)
@@ -1783,14 +1783,14 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Options type, record type, typed list/map, table type, object type.
-	if v.IsOptionsType() || v.IsRecordType() || v.IsTypedList() ||
-		v.IsTypedMap() || v.IsTableType() || v.IsObjectType() {
+	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
+		IsTypedMap(v) || IsTableType(v) || IsObjectType(v) {
 		return true
 	}
 
 	// Concrete list: check each element recursively.
 	if v.VType.Matches(TList) && v.Data != nil {
-		elems := v.AsList()
+		elems := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
 				if IsTypeValue(elem) {
@@ -1802,7 +1802,7 @@ func IsTypeValue(v Value) bool {
 
 	// Concrete map: check each value recursively.
 	if v.VType.Matches(TMap) && v.Data != nil {
-		m := v.AsMap()
+		m := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {
 				val, _ := m.Get(key)

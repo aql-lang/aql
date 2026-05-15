@@ -29,7 +29,7 @@ func Canon(stack []Value) string {
 // CanonValue renders one value as canonical AQL source. See Canon.
 func CanonValue(v Value) string {
 	switch {
-	case v.IsNone():
+	case IsNone(v):
 		return "none"
 	case v.Data == nil:
 		if v.VType != nil {
@@ -60,7 +60,7 @@ func CanonValue(v Value) string {
 		s, _ := AsAtom(v)
 		return "(quote " + s + ")"
 	case v.VType.Matches(TList) && v.Data != nil:
-		lst := v.AsList()
+		lst := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
 			parts[i] = CanonValue(lst.Get(i))
@@ -71,7 +71,7 @@ func CanonValue(v Value) string {
 		}
 		return body
 	case v.VType.Equal(TMap) && v.Data != nil:
-		m := v.AsMap()
+		m := AsMap(v)
 		if m == nil {
 			return v.String()
 		}

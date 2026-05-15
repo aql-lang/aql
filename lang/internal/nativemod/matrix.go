@@ -291,7 +291,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TList},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				rl := args[0].AsList()
+				rl := engine.AsList(args[0])
 				if rl.IsNil() {
 					return nil, fmt.Errorf("make: expected list of row lists")
 				}
@@ -299,7 +299,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if rows == 0 {
 					return nil, fmt.Errorf("make: empty list")
 				}
-				firstRow := rl.Get(0).AsList()
+				firstRow := engine.AsList(rl.Get(0))
 				if firstRow.IsNil() {
 					return nil, fmt.Errorf("make: first element is not a list")
 				}
@@ -309,7 +309,7 @@ var MatrixNatives = []engine.NativeFunc{
 				}
 				data := make([]float64, 0, rows*cols)
 				for i := 0; i < rows; i++ {
-					row := rl.Get(i).AsList()
+					row := engine.AsList(rl.Get(i))
 					if row.IsNil() {
 						return nil, fmt.Errorf("make: row %d is not a list", i)
 					}
@@ -731,8 +731,8 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TList, engine.TList},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				a := args[0].AsList()
-				b := args[1].AsList()
+				a := engine.AsList(args[0])
+				b := engine.AsList(args[1])
 				if a.IsNil() || b.IsNil() {
 					return nil, fmt.Errorf("dot: expected two lists")
 				}

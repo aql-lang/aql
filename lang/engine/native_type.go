@@ -188,7 +188,7 @@ func installResourceTypes(r *Registry) {
 	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
 
 	resourceVal, _ := r.Defs.Top("Resource")
-	installedResource, _ := resourceVal.AsObjectType()
+	installedResource, _ := AsObjectType(resourceVal)
 
 	entityFields := NewOrderedMap()
 	entityFields.Set("spec", NewTypeLiteral(TString))
@@ -207,10 +207,10 @@ func installResourceTypes(r *Registry) {
 
 func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	target := args[0]
-	if !target.IsRecordType() {
+	if !IsRecordType(target) {
 		return nil, fmt.Errorf("table: argument must be a record type, got %s", target.String())
 	}
-	_as0, _ := target.AsRecordType()
+	_as0, _ := AsRecordType(target)
 	return []Value{NewTableType(_as0)}, nil
 }
 
@@ -236,8 +236,8 @@ func validateAndInstallType(r *Registry, name string, body Value) error {
 	if r.Defs.Has(name) {
 		return fmt.Errorf("type %s: name clash — already a def'd value", name)
 	}
-	if body.IsObjectType() {
-		info, _ := body.AsObjectType()
+	if IsObjectType(body) {
+		info, _ := AsObjectType(body)
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {
@@ -318,7 +318,7 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
-	if b.VType.Equal(TFnUndef) && a.IsAtom() {
+	if b.VType.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
@@ -405,7 +405,7 @@ func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(false)}, nil
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(false)}, nil
@@ -425,7 +425,7 @@ func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(true)}, nil
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(true)}, nil
@@ -445,7 +445,7 @@ func tanyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tany: expected a concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TNever)}, nil
@@ -471,7 +471,7 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tall: expected a concrete list")
 	}
-	list := args[0].AsList()
+	list := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TAny)}, nil
@@ -587,7 +587,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 
 	base := ""
 	if opts.Data != nil {
-		m := opts.AsMap()
+		m := AsMap(opts)
 		if m != nil {
 			if bv, ok := m.Get("base"); ok {
 				base = ValToString(bv)

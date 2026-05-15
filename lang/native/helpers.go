@@ -16,7 +16,7 @@ func valueToSliceArg(v engine.Value) interface{} {
 		return _as3
 	}
 	if v.VType.Matches(engine.TList) {
-		list := v.AsList()
+		list := engine.AsList(v)
 		result := make([]interface{}, list.Len())
 		for i, elem := range list.Slice() {
 			result[i] = valueToSliceArg(elem)

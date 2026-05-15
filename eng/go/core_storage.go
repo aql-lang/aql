@@ -87,7 +87,7 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := args[2].AsArray()
+	arr := AsArray(args[2])
 	if arr == nil {
 		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
 	}
@@ -107,7 +107,7 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 // the production Store-side set/get reuse the same key-coercion
 // rules as the kernel's `get`.
 func GetKey(v Value) string {
-	if v.IsWord() {
+	if IsWord(v) {
 		_as0, _ := AsWord(v)
 		return _as0.Name
 	}
@@ -115,7 +115,7 @@ func GetKey(v Value) string {
 		_as1, _ := AsString(v)
 		return _as1
 	}
-	if v.IsAtom() {
+	if IsAtom(v) {
 		_as2, _ := AsAtom(v)
 		return _as2
 	}
@@ -149,7 +149,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	// Integer key: list index access.
 	if key.VType.Matches(TInteger) {
 		idx, _ := AsInteger(key)
-		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
+		if list := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
@@ -160,7 +160,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// String/atom/word key: map property access.
 	k := GetKey(key)
-	if m := container.AsMap(); m != nil {
+	if m := AsMap(container); m != nil {
 		val, ok := m.Get(k)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -177,14 +177,14 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		return nil, fmt.Errorf("get: cannot access property on type literal")
 	}
 	k := GetKey(key)
-	if m := container.AsMutableMap(); m != nil {
+	if m := AsMutableMap(container); m != nil {
 		val, found := m.Get(k)
 		if !found {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := container.AsObjectInstance()
+	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return []Value{NewTypeLiteral(TNone)}, nil
@@ -193,7 +193,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := args[1].AsArray()
+	arr := AsArray(args[1])
 	if arr == nil {
 		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
 	}

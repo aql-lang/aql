@@ -77,7 +77,7 @@ func TestNewInteger(t *testing.T) {
 
 func TestNewWord(t *testing.T) {
 	v := NewWord("upper")
-	if !v.IsWord() {
+	if !IsWord(v) {
 		t.Errorf("IsWord() = false")
 	}
 	_as4, _ := AsWord(v)
@@ -1625,13 +1625,13 @@ func TestEdgeNewStringSpecialChars(t *testing.T) {
 
 func TestEdgeNewOpenParen(t *testing.T) {
 	v := NewOpenParen()
-	if !v.IsOpenParen() {
+	if !IsOpenParen(v) {
 		t.Error("IsOpenParen() = false for NewOpenParen()")
 	}
-	if v.IsWord() {
+	if IsWord(v) {
 		t.Error("IsWord() = true for open paren")
 	}
-	if v.IsForward() {
+	if IsForward(v) {
 		t.Error("IsForward() = true for open paren")
 	}
 	if v.String() != "(" {
@@ -4339,7 +4339,7 @@ func TestRecordTypeCreation(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1", len(result))
 	}
-	if !result[0].IsRecordType() {
+	if !IsRecordType(result[0]) {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
 	if result[0].String() != "record{x:Number,y:Number}" {
@@ -4373,7 +4373,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1", len(result))
 	}
-	if !result[0].IsRecordType() {
+	if !IsRecordType(result[0]) {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
 	if result[0].String() != "record{x:Number,y:Number}" {
@@ -4519,10 +4519,10 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d values, want 1", len(result))
 	}
-	if !result[0].IsRecordType() {
+	if !IsRecordType(result[0]) {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	rt, _ := result[0].AsRecordType()
+	rt, _ := AsRecordType(result[0])
 	if rt.Fields.Len() != 2 {
 		t.Errorf("got %d fields, want 2", rt.Fields.Len())
 	}
@@ -4598,10 +4598,10 @@ func TestModuleBasic(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module: got %d results, want 1", len(result))
 	}
-	if !result[0].IsModule() {
+	if !IsModule(result[0]) {
 		t.Fatalf("module: result is not a module, got %s", result[0].VType)
 	}
-	desc, _ := result[0].AsModule()
+	desc, _ := AsModule(result[0])
 	fooExport, ok := desc.Exports["Foo"]
 	if !ok {
 		t.Fatal("module: export 'Foo' not found")
@@ -4713,7 +4713,7 @@ func TestModuleDefSubject(t *testing.T) {
 
 	// my-mod should resolve to a module descriptor.
 	result := runAQL(t, r, []Value{NewWord("my-mod")})
-	if len(result) != 1 || !result[0].IsModule() {
+	if len(result) != 1 || !IsModule(result[0]) {
 		t.Fatalf("def my-mod: expected module descriptor, got %v", result)
 	}
 
@@ -4736,7 +4736,7 @@ func TestModuleImportRename(t *testing.T) {
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
 	modResult := runAQL(t, r, []Value{NewWord("module"), body})
-	if len(modResult) != 1 || !modResult[0].IsModule() {
+	if len(modResult) != 1 || !IsModule(modResult[0]) {
 		t.Fatal("expected module descriptor")
 	}
 
@@ -4790,10 +4790,10 @@ func TestModuleFreshRegistry(t *testing.T) {
 		NewWord("export"), NewAtom("M"), makeMap("val", NewWord("foo")),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), body})
-	if len(result) != 1 || !result[0].IsModule() {
+	if len(result) != 1 || !IsModule(result[0]) {
 		t.Fatal("expected module")
 	}
-	desc, _ := result[0].AsModule()
+	desc, _ := AsModule(result[0])
 	mExport, ok := desc.Exports["M"]
 	if !ok {
 		t.Fatal("module: export 'M' not found")
@@ -4863,12 +4863,12 @@ func BenchmarkRepeatedRun(b *testing.B) {
 func TestErrorValueType(t *testing.T) {
 	err := fmt.Errorf("something went wrong")
 	v := NewError(err)
-	if !v.IsError() {
+	if !IsError(v) {
 		t.Fatal("expected IsError() == true")
 	}
-	_as259, _ := v.AsError()
+	_as259, _ := AsError(v)
 	if _as259.Message != "something went wrong" {
-		_as260, _ := v.AsError()
+		_as260, _ := AsError(v)
 		t.Errorf("message = %q, want %q", _as260.Message, "something went wrong")
 	}
 	if v.String() != "error(something went wrong)" {
@@ -4906,12 +4906,12 @@ func TestDoBlockCatchesError(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	if !result[0].IsError() {
+	if !IsError(result[0]) {
 		t.Fatalf("expected error value, got %s", result[0].String())
 	}
-	_as261, _ := result[0].AsError()
+	_as261, _ := AsError(result[0])
 	if !strings.Contains(_as261.Message, "division by zero") {
-		_as262, _ := result[0].AsError()
+		_as262, _ := AsError(result[0])
 		t.Errorf("error message = %q", _as262.Message)
 	}
 }
@@ -5021,7 +5021,7 @@ func TestUnhandledErrorOnStack(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
 	}
-	if !result[0].IsError() {
+	if !IsError(result[0]) {
 		t.Errorf("result[0] should be error, got %s", result[0].String())
 	}
 	_as266, _ := AsInteger(result[1])

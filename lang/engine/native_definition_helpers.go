@@ -5,11 +5,11 @@ package engine
 // /q-marked sig positions deliver Atoms; bare-word slots deliver
 // Words; quoted-string slots deliver Strings.
 func defName(v Value) string {
-	if v.IsWord() {
+	if IsWord(v) {
 		_as0, _ := AsWord(v)
 		return _as0.Name
 	}
-	if v.IsAtom() {
+	if IsAtom(v) {
 		s, _ := AsAtom(v)
 		return s
 	}
@@ -21,7 +21,7 @@ func defName(v Value) string {
 // indicating the defined word should be stack-only (not forward
 // precedence).
 func defStackOnly(v Value) bool {
-	if v.IsWord() {
+	if IsWord(v) {
 		_as2, _ := AsWord(v)
 		return _as2.ForceStack
 	}

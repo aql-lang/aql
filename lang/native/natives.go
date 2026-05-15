@@ -490,11 +490,11 @@ func quoteAnyHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.
 func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
 	optsVal := args[0]
 	pathVal := args[1]
-	if !pathVal.IsPath() {
+	if !engine.IsPath(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
 	parents := true
-	if optsMap := optsVal.AsMap(); optsMap != nil {
+	if optsMap := engine.AsMap(optsVal); optsMap != nil {
 		if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(engine.TBoolean) {
 			parents, _ = engine.AsBoolean(v)
 		}
@@ -506,7 +506,7 @@ func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engin
 // folderHandler implements `folder` with a single Path arg (parents=true).
 func folderHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
 	pathVal := args[0]
-	if !pathVal.IsPath() {
+	if !engine.IsPath(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
 	_as1, _ := engine.AsPath(pathVal)

@@ -80,7 +80,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	if !opts.VType.Equal(TMap) || opts.Data == nil {
 		return
 	}
-	m := opts.AsMap()
+	m := AsMap(opts)
 
 	if s, ok := MapFieldString(m, "enc"); ok {
 		enc = s
@@ -183,7 +183,7 @@ func valueToJsonic(v Value) string {
 		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
 	case v.VType.Equal(TList):
-		if elems := v.AsMutableList(); elems != nil {
+		if elems := AsMutableList(v); elems != nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
 				parts[i] = valueToJsonic(e)
@@ -192,7 +192,7 @@ func valueToJsonic(v Value) string {
 		}
 		return "[]"
 	case v.VType.Equal(TMap):
-		if om := v.AsMutableMap(); om != nil {
+		if om := AsMutableMap(v); om != nil {
 			parts := make([]string, 0, om.Len())
 			for _, k := range om.Keys() {
 				val, _ := om.Get(k)

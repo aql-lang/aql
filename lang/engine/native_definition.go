@@ -153,7 +153,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 }
 
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	nameMap := args[0].AsMap()
+	nameMap := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
 		return nil, fmt.Errorf("def: typed-name map must have exactly one key, got empty/non-concrete map")
 	}
@@ -183,7 +183,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
-	if constraint.VType.Equal(TFnUndef) && body.IsAtom() {
+	if constraint.VType.Equal(TFnUndef) && IsAtom(body) {
 		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
@@ -263,7 +263,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if list.Data == nil {
 		return nil, fmt.Errorf("var: argument must be a concrete list, got type literal")
 	}
-	elems := list.AsList()
+	elems := AsList(list)
 	if elems.Len() == 0 {
 		return nil, fmt.Errorf("var: empty list")
 	}
@@ -272,7 +272,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !declVal.VType.Equal(TList) || declVal.Data == nil {
 		return nil, fmt.Errorf("var: first element must be a list of variable declarations")
 	}
-	decls := declVal.AsList()
+	decls := AsList(declVal)
 	body := elems.Slice()[1:]
 
 	var result []Value
@@ -280,19 +280,19 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 	for _, decl := range decls.Slice() {
 		switch {
-		case decl.IsWord():
+		case IsWord(decl):
 			_as0, _ := AsWord(decl)
 			name := _as0.Name
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 
 		case decl.VType.Equal(TList) && decl.Data != nil:
-			declElems := decl.AsList()
+			declElems := AsList(decl)
 			if declElems.Len() < 2 {
 				return nil, fmt.Errorf("var: declaration list must have name and value")
 			}
 			var name string
-			if declElems.Get(0).IsWord() {
+			if IsWord(declElems.Get(0)) {
 				_as1, _ := AsWord(declElems.Get(0))
 				name = _as1.Name
 			} else if declElems.Get(0).VType.Matches(TString) {
@@ -339,7 +339,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if list.Data == nil {
 		return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
 	}
-	elems := list.AsList().Slice()
+	elems := AsList(list).Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
 		return nil, fmt.Errorf("fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form")
 	}
@@ -358,11 +358,11 @@ func callHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if body.Data == nil {
 		return nil, fmt.Errorf("call: argument must be a concrete list, got type literal")
 	}
-	if body.IsTypedList() || body.IsTableType() {
+	if IsTypedList(body) || IsTableType(body) {
 		return nil, fmt.Errorf("call: argument must be a plain list")
 	}
 
-	bodyElems := body.AsList()
+	bodyElems := AsList(body)
 	if bodyElems.Len() == 0 {
 		return nil, nil
 	}
@@ -380,13 +380,13 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	if body.Data == nil {
 		return nil, fmt.Errorf("dblcall: callback must be a concrete list, got type literal")
 	}
-	if body.IsTypedList() || body.IsTableType() {
+	if IsTypedList(body) || IsTableType(body) {
 		return nil, fmt.Errorf("dblcall: callback must be a plain list")
 	}
 
 	doubled := NewInteger(n * 2)
 
-	bodyElems := body.AsList()
+	bodyElems := AsList(body)
 	if bodyElems.Len() == 0 {
 		return []Value{doubled}, nil
 	}

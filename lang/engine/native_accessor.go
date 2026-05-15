@@ -42,7 +42,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// Integer key on list.
 	if key.VType.Matches(TInteger) {
-		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
+		if list := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {
@@ -52,7 +52,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		}
 	}
 	k := getKey(key)
-	m := container.AsMap()
+	m := AsMap(container)
 	if m == nil {
 		return nil, fmt.Errorf("getr: expected a map, got %s", container.VType.String())
 	}
@@ -70,14 +70,14 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 		return nil, fmt.Errorf("getr: cannot access property on type literal")
 	}
 	k := getKey(key)
-	if m := container.AsMutableMap(); m != nil {
+	if m := AsMutableMap(container); m != nil {
 		val, found := m.Get(k)
 		if !found {
 			return nil, fmt.Errorf("getr: key %q not found in object", k)
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := container.AsObjectInstance()
+	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return nil, fmt.Errorf("getr: field %q not found in object", k)

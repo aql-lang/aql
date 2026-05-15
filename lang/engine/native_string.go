@@ -129,7 +129,7 @@ func unaryStringNative(name string, fn func(string) string) NativeFunc {
 		// type-specific accessor so the post-Step-5 payload variants
 		// (StrPayload / AtomPayload) are surfaced correctly.
 		var s string
-		if args[0].IsAtom() {
+		if IsAtom(args[0]) {
 			s, _ = AsAtom(args[0])
 		} else if as, err := AsString(args[0]); err == nil {
 			s = as
@@ -163,7 +163,7 @@ func doConcat(listVal Value, o strOpts) ([]Value, error) {
 	if listVal.Data == nil {
 		return nil, fmt.Errorf("concat: argument must be a concrete list, got type literal")
 	}
-	elems := listVal.AsList()
+	elems := AsList(listVal)
 	var parts []string
 	for _, e := range elems.Slice() {
 		if e.VType.Equal(TNone) {
@@ -867,7 +867,7 @@ func padOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		opts.fill = " "
 	}
 	// Default side for pad is "right", not "both" from parseStrOpts.
-	if m := args[1].AsMap(); m != nil {
+	if m := AsMap(args[1]); m != nil {
 		if _, ok := m.Get("side"); !ok {
 			opts.side = "right"
 		}

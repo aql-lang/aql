@@ -74,12 +74,12 @@ func registerCoreEnum(r *Registry) {
 				}
 				var childType Value
 				hasChild := false
-				if list.IsTypedList() {
-					ci, _ := list.AsChildType()
+				if IsTypedList(list) {
+					ci, _ := AsChildType(list)
 					childType = ci.Child
 					hasChild = childType.VType != nil
 				}
-				elems := list.AsList()
+				elems := AsList(list)
 				alts := make([]Value, 0, elems.Len())
 				for i := 0; i < elems.Len(); i++ {
 					e := elems.Get(i)
@@ -87,7 +87,7 @@ func registerCoreEnum(r *Registry) {
 					// typically named, and in word context the parser
 					// produces Words. Convert here so users don't need
 					// to wrap each element in `quote`.
-					if e.IsWord() {
+					if IsWord(e) {
 						w, _ := AsWord(e)
 						e = NewAtom(w.Name)
 					}
@@ -257,7 +257,7 @@ func PathOf(t Value) Value {
 // registerCoreTypeof for the dispatch rules.
 func TypeOf(v Value) Value {
 	// The VALUE `none` (Data != nil, VType == TNone) → None type literal.
-	if v.IsNone() {
+	if IsNone(v) {
 		return NewTypeLiteral(TNone)
 	}
 	// A type literal (Data == nil) → `Type`. Metatypes are collapsed:
@@ -269,7 +269,7 @@ func TypeOf(v Value) Value {
 	// Typed list `[:T]` or typed map `{:T}` — Node-family TYPE
 	// declarations carrying a child-type constraint, not concrete
 	// containers. They are types → `Type`.
-	if v.IsTypedList() || v.IsTypedMap() {
+	if IsTypedList(v) || IsTypedMap(v) {
 		return NewTypeLiteral(TType)
 	}
 	// An implicit-map record shape (every entry's value is itself a
@@ -300,7 +300,7 @@ func IsRecordShape(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	m := v.AsMap()
+	m := AsMap(v)
 	if m == nil || m.Len() == 0 {
 		return false
 	}
@@ -369,12 +369,12 @@ func registerCoreIs(r *Registry) {
 //     subtype of T's via the type lattice.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
-	if t.IsTypedList() {
+	if IsTypedList(t) {
 		if !v.VType.Equal(TList) || v.Data == nil {
 			return false
 		}
-		ci, _ := t.AsChildType()
-		lst := v.AsList()
+		ci, _ := AsChildType(t)
+		lst := AsList(v)
 		if lst.IsNil() {
 			return false
 		}
@@ -385,12 +385,12 @@ func IsValueOfType(v, t Value) bool {
 		}
 		return true
 	}
-	if t.IsTypedMap() {
+	if IsTypedMap(t) {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}
-		ci, _ := t.AsChildType()
-		vMap := v.AsMap()
+		ci, _ := AsChildType(t)
+		vMap := AsMap(v)
 		if vMap == nil {
 			return false
 		}
@@ -408,12 +408,12 @@ func IsValueOfType(v, t Value) bool {
 	// fields via the Unify fallback when t's field is a literal.
 	// Subtypes like RecordTypeInfo / OptionsTypeInfo (whose AsMap
 	// returns nil) fall through to Unify below.
-	if t.VType.Equal(TMap) && t.Data != nil && t.AsMap() != nil {
+	if t.VType.Equal(TMap) && t.Data != nil && AsMap(t) != nil {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}
-		vMap := v.AsMap()
-		tMap := t.AsMap()
+		vMap := AsMap(v)
+		tMap := AsMap(t)
 		if vMap == nil || tMap == nil {
 			return false
 		}
@@ -507,8 +507,8 @@ func installType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": name clash — already a def'd value",
 		}
 	}
-	if body.IsObjectType() {
-		info, _ := body.AsObjectType()
+	if IsObjectType(body) {
+		info, _ := AsObjectType(body)
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {

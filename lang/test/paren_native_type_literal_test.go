@@ -34,7 +34,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m := result[0].AsMap()
+				m := engine.AsMap(result[0])
 				a, _ := m.Get("a")
 				x, _ := m.Get("x")
 				ai1, _ := engine.AsInteger(a)
@@ -89,7 +89,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				items := result[0].AsList().Slice()
+				items := engine.AsList(result[0]).Slice()
 				if len(items) != 1 {
 					t.Errorf("expected 1 item pair, got %d", len(items))
 				}
@@ -137,7 +137,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m := result[0].AsMap()
+				m := engine.AsMap(result[0])
 				a, _ := m.Get("a")
 				b, _ := m.Get("b")
 				ai2, _ := engine.AsInteger(a)
@@ -188,7 +188,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				items := result[0].AsList().Slice()
+				items := engine.AsList(result[0]).Slice()
 				if len(items) != 3 {
 					t.Errorf("expected 3 elements, got %d", len(items))
 				}
@@ -481,7 +481,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m := result[0].AsMap()
+				m := engine.AsMap(result[0])
 				a, _ := m.Get("a")
 				e, _ := m.Get("extra")
 				ai3, _ := engine.AsInteger(a)
@@ -576,7 +576,7 @@ func TestNativeFnInFnBodyRepeatedCalls(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m := engine.AsMap(result[0])
 	v, ok := m.Get("added")
 	if !ok {
 		t.Fatal("expected 'added' key in result")
